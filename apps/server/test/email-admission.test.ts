@@ -18,16 +18,20 @@ afterEach(restoreMocks);
 function joined(sequence: number, memberId = 'person'): StoredEvent {
   const data = { memberId, displayName: 'Person', email: 'person@example.test',
     role: 'member', identity: { issuer, sub: account } };
+  const principal: NonNullable<StoredEvent['event']['principal']> = { kind: 'human', id: account };
   const record = { ...event(`join-${sequence}`, `member-${memberId}`, 'member.joined'),
-    silo: 'acme', principal: { kind: 'human', id: account }, data };
+    silo: 'acme', principal, data };
   return { sequence, event: record };
 }
 
+function unexpectedQuery(): Promise<never> {
+  return Promise.reject(new Error('No query result configured'));
+}
+
 function projection(rows: CandidateRow[]): Query {
-  async function query<Row extends Record<string, unknown>>() {
-    return { rows: rows as Row[] };
-  }
-  return { query };
+  const db: Query = { query: unexpectedQuery };
+  vi.spyOn(db, 'query').mockResolvedValue({ rows });
+  return db;
 }
 
 function store(memberPosition: number, recent: StoredEvent[], candidates: StoredEvent[],
@@ -40,11 +44,10 @@ function store(memberPosition: number, recent: StoredEvent[], candidates: Stored
       // Refuse an unbounded read to model a stalled event-store request.
       if (deadline !== requiredDeadline) throw new Error('Missing history deadline');
     }
-    if (subject === 'member-*') {
-      yield* recent;
-    } else {
-      yield* candidates;
-    }
+    let rows = candidates;
+    if (subject === 'member-*') rows = recent;
+    const available = await Promise.resolve(rows);
+    yield* available;
   }
   return { head, readStream };
 }
@@ -96,7 +99,8 @@ function unrelatedRows(count: number): StoredEvent[] {
   const rows: StoredEvent[] = [];
   for (let index = 1; index <= count; index += 1) {
     const row = joined(index, 'unrelated');
-    row.event.data = { memberId: 'unrelated' };
+    row.event.data = { memberId: 'unrelated', displayName: 'Unrelated',
+      email: 'unrelated@example.test', role: 'member' };
     rows.push(row);
   }
   return rows;
@@ -142,7 +146,8 @@ it('refuses more than ten thousand events in one candidate history',
 async function refusesConflictingBindings() {
   const first = joined(1);
   const second = joined(2);
-  second.event.data = { identity: { issuer, sub: 'someone-else' } };
+  second.event.data = { memberId: 'person', displayName: 'Person',
+    email: 'person@example.test', role: 'member', identity: { issuer, sub: 'someone-else' } };
   await expect(readIdentity(store(2, [], [first, second]),
     projection([{ sequence: 2, member_id: 'person' }])))
     .rejects.toThrow('Identity history mismatch');

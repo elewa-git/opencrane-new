@@ -259,10 +259,8 @@ async function confirmInvitation(store: JoinStore, events: StoredEvent[], input:
   if ('status' in invitation) return invitation;
   let memberSequence: number | undefined;
   if (!invitation.invitedIdentity) {
-    if (!db) return { status: 'unavailable' };
-    const identity = await readActiveIdentity(
-      store, db, context.silo, context.issuer, context.sub, now());
-    if (identity.active) return { status: 'refused', reason: 'already_member' };
+    const identity = await confirmEmailIdentity(store, events, input, context, now, db);
+    if ('status' in identity) return identity;
     memberSequence = identity.memberSequence;
   }
   const subjects = [
@@ -305,6 +303,26 @@ async function confirmInvitation(store: JoinStore, events: StoredEvent[], input:
   if ('status' in checked) return checked;
   // Keep the same member position in the append so another invitation cannot join this account.
   return { invitation: checked, memberSequence, deadline: fresh.deadline };
+}
+
+async function confirmEmailIdentity(
+  store: JoinStore, events: StoredEvent[], input: JoinInput,
+  context: JoinContext, now: () => Date, db?: Query,
+): Promise<{ memberSequence: number } | JoinResult> {
+  if (!db) return { status: 'unavailable' };
+  const identity = await readActiveIdentity(
+    store, db, context.silo, context.issuer, context.sub, now());
+  if (identity.active) return { status: 'refused', reason: 'already_member' };
+  // Keep the invitation unchanged through the account check. Its captured member
+  // position protects later changes, but cannot detect an earlier renewal.
+  const invitationSequence = events.at(-1)?.sequence ?? 0;
+  const latestInvitation = await store.head(`member-${input.memberId}`,
+    performance.now() + 10_000);
+  if (latestInvitation !== invitationSequence) {
+    const rechecked = await changedEmailInvitation(store, input, context, now());
+    return rechecked ?? { status: 'refused', reason: 'concurrent_change' };
+  }
+  return { memberSequence: identity.memberSequence };
 }
 
 async function changedEmailInvitation(store: JoinStore, input: JoinInput,

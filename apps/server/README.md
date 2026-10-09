@@ -94,6 +94,8 @@ use it to refuse calls if the tool changes to Ask during the turn.
    Acceptance finds account records in the member table and checks their events.
    It reads newer events too, so delayed background work cannot hide an active account.
    It records the signed-in account and keeps concurrent invitations from admitting it twice.
+   If an admin renews the invitation during acceptance, the person must accept the
+   renewed invitation. The old invitation cannot grant its earlier role.
 4. **A person chats with an assistant.** The server sends the turn to that person's
    computer and passes the assistant's progress back to the browser as it arrives. The
   person can stop the turn. A personal turn may include a short list of reviewed

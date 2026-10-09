@@ -885,12 +885,14 @@ it.each([false, true])('refuses a changed invitation id on a saved command (emai
   refusesChangedSavedInvitation);
 
 async function refusesNonAsciiInvitation() {
-  await invite({ email: 'alKce@example.test' });
-  const response = await accept();
-  expect(response.json()).toEqual({ status: 'refused', reason: 'unsupported_email' });
-  expect(await history()).toHaveLength(1);
+  const record = invitation({ email: 'alKce@example.test' });
+  const before = await nats.store.head();
+  const command = { event: record, expectedSequence: 0 };
+  expect((await nats.store.append(command)).status).toBe('rejected');
+  expect(await nats.store.head()).toBe(before);
+  expect(await history()).toEqual([]);
 }
-it('refuses a non-ASCII address in the saved invitation', refusesNonAsciiInvitation);
+it('refuses a non-ASCII invitation before it enters the event log', refusesNonAsciiInvitation);
 
 async function refusesMissingAcceptanceDatabase() {
   await invite({ invitedIdentity: undefined });

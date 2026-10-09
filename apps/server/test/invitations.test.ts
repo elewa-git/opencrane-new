@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
-import { memberInvitedDataSchema } from '@opencrane/events';
+import { memberInvitedDataSchema, parseEventByType } from '@opencrane/events';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
@@ -818,7 +818,8 @@ async function refusesRenewedInvitation(interval: string) {
   }
   const appendEvent = nats.store.append.bind(nats.store);
   async function renewBeforeAppend(command: Parameters<typeof appendEvent>[0]) {
-    if (command.event.type === 'member.joined' && interval === 'before_append') {
+    const parsed = parseEventByType(command.event);
+    if (parsed.success && parsed.event.type === 'member.joined' && interval === 'before_append') {
       await renewInvitation();
     }
     return appendEvent(command);

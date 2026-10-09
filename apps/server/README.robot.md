@@ -1137,12 +1137,23 @@ unapplied events or more than 10,000 events in one candidate stream. Its event r
 have a ten-second deadline and finish before the two-second access check.
 Older unrelated member history does not count towards these limits.
 It keeps the invitation’s member id and records issuer and subject on `member.joined`.
+After the account read, acceptance checks that the invitation stream still has
+the position read at the start. This check finishes before the two-second access
+check. A renewal returns 409 `unknown_invitation`; another unexplained change
+returns 409 `concurrent_change`. No join uses the old role or assistant choice.
 The final check confirms the member position has not moved, and the conditional
 append uses that position across `member-*`. Concurrent accepts on different
 invitations cannot admit the same account twice. Other member changes also require
 a retry with the same command. The projection can rebuild the account binding.
 Bound acceptance needs no database and retains its own member-stream append.
 See the [email acceptance contract](../../docs/api/members.md#email-only-invitation-acceptance).
+`test/invitations.test.ts` covers renewal before and after the account position
+is read, during the access check and just before append. Each case checks the
+saved events and the renewed role in PostgreSQL.
+`test/email-admission.test.ts` checks invalid checkpoints, candidate and history
+limits, conflicting account bindings, bounded reads and events after the saved
+member position. `test/member-joined.test.ts` also checks saved invitation ids,
+missing databases, expired append deadlines and rejected join identity projection.
 
 ## Waiting tool calls
 

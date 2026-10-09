@@ -213,6 +213,13 @@ member and ownership events; otherwise the response is 403 with
 `{ status: refused, reason: inviter_authority_ended }`.
 The final access check watches the joining member, inviter and ownership streams
 for at most two seconds. Email-only acceptance also checks the latest member position.
+Before starting that access check, email-only acceptance checks that the invitation
+stream still has the position read at the start of the request. A renewal saved
+before the account read finishes therefore cannot grant the old role or assistant
+choice. A superseded invitation id returns 409 `unknown_invitation`; another
+unexplained invitation change returns 409 `concurrent_change`. The person must
+accept the current invitation. Later member changes are refused by the final
+position check or the conditional append.
 A changed watched stream or unavailable check returns
 503 and saves no join in that attempt, except a confirmed inviter demotion or
 removal returns 403 `inviter_authority_ended`. Email-only acceptance also reloads

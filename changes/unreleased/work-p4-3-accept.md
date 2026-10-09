@@ -6,3 +6,6 @@ Repeating the same command recovers a saved join after a lost reply.
 Concurrent invitations cannot admit the same account twice. Acceptance looks up
 account records and recent events, so older unrelated member history no longer
 stops new people from joining.
+
+Renewing an invitation during acceptance refuses the old invitation. Acceptance
+cannot grant its earlier role or assistant choice.
