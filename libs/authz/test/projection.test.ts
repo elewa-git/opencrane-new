@@ -596,7 +596,6 @@ interface OldPermissionCase {
   data: Record<string, unknown>;
   laterType: string;
   laterData: Record<string, unknown>;
-  initial?: EventEnvelope[];
 }
 function savedPermission(id: string, type: string, subject: string,
   data: Record<string, unknown>): EventEnvelope {
@@ -647,7 +646,13 @@ async function oldPermissionKeepsLaterChange(test: OldPermissionCase) {
   try {
     const old = savedPermission('old-permission', test.type, test.subject, test.data);
     const later = savedPermission('later-permission', test.laterType, test.subject, test.laterData);
-    await nats.seed([old, later]);
+    const events = [old, later];
+    if (test.type.startsWith('ownership.') && test.type !== 'ownership.seeded') {
+      const seed = savedPermission('earlier-ownership-seed', 'ownership.seeded', 'ownership-test',
+        { ownerIds: ['alice', 'bob'] });
+      events.unshift(seed);
+    }
+    await nats.seed(events);
     const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'), nats.store);
     if (test.type.startsWith('ownership.')) {
       await apply(projection, [member('owner-alice', 'member.joined', 'alice', { role: 'owner' }),
@@ -808,3 +813,43 @@ async function oldTransferAfterActorStepdown(removed: boolean) {
 it.each([false, true])(
   'keeps a valid old ownership transfer after its actor steps down (removed: %s)',
   oldTransferAfterActorStepdown);
+
+async function oldMemberRoleBeforeOwnershipSeed(promoted: boolean) {
+  const nats = await natsFixture();
+  try {
+    const alice = member('legacy-alice', 'member.joined', 'alice', { role: 'owner' });
+    const bob = member('legacy-bob', 'member.joined', 'bob', { role: 'owner' });
+    const oldRole = member('legacy-role-change', 'member.role_changed', 'alice', {
+      previousRole: promoted ? 'admin' : 'owner', newRole: promoted ? 'owner' : 'member' });
+    const earlierDemotion = member('legacy-admin', 'member.role_changed', 'alice', {
+      previousRole: 'owner', newRole: 'admin' });
+    const ownerIds = promoted ? ['alice', 'bob'] : ['bob'];
+    const seed = savedPermission('ownership-seed-test', 'ownership.seeded', 'ownership-test', {
+      ownerIds });
+    const stepdown = savedPermission('current-alice-stepdown', 'ownership.stepped_down',
+      'ownership-test', { memberId: 'alice' });
+    const events = [alice, bob];
+    if (promoted) {
+      events.push(earlierDemotion);
+    }
+    events.push(oldRole, seed);
+    if (promoted) {
+      events.push(stepdown);
+    }
+    await nats.seed(events);
+    const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'), nats.store);
+    await apply(projection, [alice, bob, seed]);
+    if (promoted) {
+      await apply(projection, [stepdown]);
+    }
+    await apply(projection, [oldRole]);
+    expect(await projection.check('alice', 'owner')).toMatchObject({ allowed: false });
+    expect(await projection.check('alice', 'admin')).toMatchObject({ allowed: promoted });
+    expect(await projection.applied(oldRole.id)).toBe(true);
+  } finally {
+    await nats.close();
+  }
+}
+it.each([false, true])(
+  'an old member role keeps ownership changes that followed it (old owner role: %s)',
+  oldMemberRoleBeforeOwnershipSeed);
