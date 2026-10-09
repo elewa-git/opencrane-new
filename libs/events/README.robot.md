@@ -106,6 +106,8 @@ shapes, the subject, command/principal ids, personal-only
 preferences, unique same-scope dependencies and the 16,384-byte event limit.
 Each dependency identifies a memory id and revision; repeating that pair is refused. Expiry
 must follow the recorded event time, so replay does not depend on today's clock.
-Text validation limits UTF-8 to 1–4,096 bytes and refuses NUL and lone surrogates.
+Write text validation limits UTF-8 to 1–4,096 bytes and refuses C0 controls except tab
+and newline, plus lone surrogates. Saved encrypted events still parse; the memory
+projection quarantines earlier refused text after decryption.
 Source/dependency limits are 8/32; ids use 1–200 ASCII letters, digits, `_` or `-`.
 Storage commands and their whole-command size limit are not implemented yet.

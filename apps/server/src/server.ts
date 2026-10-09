@@ -26,6 +26,7 @@ import { registerComputerRoutes, type ComputerOptions } from './computers/routes
 
 import { registerAuditRoutes, type AuditOptions } from './audit/routes.ts';
 import { registerChatRoutes, type ChatOptions } from './chat/routes.ts';
+import { registerMemoryReads } from './memory/routes.ts';
 
 export interface BuildServerOptions {
   /** Where log lines go; defaults to stdout. A test passes an in-memory stream to read them back. */
@@ -37,6 +38,7 @@ export interface BuildServerOptions {
   ownership?: GroupOptions;
   providers?: ProviderOptions;
   modelAccess?: ModelAccessOptions;
+  memory?: ModelAccessOptions;
   audit?: AuditOptions;
   chat?: ChatOptions;
   files?: FileOptions;
@@ -80,6 +82,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerOwnershipRoutes(app, authConfig, options.ownership);
   registerProviderRoutes(app, authConfig, options.providers);
   registerModelAccessRoutes(app, authConfig, options.modelAccess);
+  registerMemoryReads(app, authConfig, options.memory);
 
   registerBootstrapRoutes(app, authConfig, options.membership);
   registerIntegrationRoutes(app, authConfig, options.integrations);

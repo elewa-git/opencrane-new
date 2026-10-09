@@ -136,6 +136,15 @@ outside this stack: `npm run worker -w apps/ops -- members|mcp-catalogue|compute
 It uses the same settings as replay; dispatcher also requires the silo and OpenFGA
 binding. Shutdown aborts readers, stops jobs and closes connections.
 
+## Memory reads
+
+Startup launches the `memory` ops worker with the projection reader settings. Set
+`MEMORY_KEY_DIRECTORY` before startup to pass the existing private directory to both
+worker and server. The stack never creates this directory or its revision keys.
+Without it, the worker logs one message and exits; it is then excluded from the list
+of required running processes, and memory HTTP routes return `503 memory_unavailable`.
+With it, startup requires the memory process to stay running like the other workers.
+
 ## Daily fresh run
 
 `daily-fresh-run.sh` fetches `origin`, checks out `origin/main` detached in

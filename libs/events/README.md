@@ -5,6 +5,7 @@
 The list of every kind of event OpenCrane records, and the exact data each one carries.
 An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened.
 This package says which event types exist and what information each one carries.
+It checks new memory text and still accepts older encrypted events for replay.
 It checks event data, but it does not save events or decide whether a person may act.
 
 ## Where it fits
@@ -21,7 +22,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.-> events["libs/events<br/>checked events and memory dependencies"]
+  server["apps/server<br/>back end"] -.-> events["libs/events<br/>event and memory text checks"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant choices| events

@@ -1,4 +1,4 @@
-import { parseEventByType, memoryWrittenEventSchema, type EventEnvelope,
+import { parseEventByType, memoryWrittenEventSchema, memoryTextSchema, type EventEnvelope,
   type MemoryIdentity } from '@opencrane/events';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
@@ -126,9 +126,13 @@ export function memoryProjection(custody: {
     let status = 'quarantined';
     if (identity !== null) {
       text = await custody.decrypt(identity, data);
+      if (text !== null) text = text.normalize('NFC');
       status = 'available';
       if (text === null) {
         status = 'unavailable';
+      } else if (!memoryTextSchema.safeParse(text).success) {
+        text = null;
+        status = 'quarantined';
       }
     }
     const current = 'schemaVersion' in data ? data : null;

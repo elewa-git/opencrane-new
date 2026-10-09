@@ -2,6 +2,43 @@
 
 For people, read [README.md](README.md) first.
 
+## Memory scope and search reads
+
+`GET /api/memory/scopes?assistantId=...&groupId=...` returns the requester's own
+scope and permitted selected scopes, their audiences, separate operation rights and limits.
+`GET /api/memory/:scopeId/facts?q=...&cursor=...` returns current, unexpired facts.
+Session identity uses the existing member binding. Roles and labels grant no memory access.
+Notes require their current assistant audience, `actsFor`, and an explicit `memory_read`
+grant checked as OpenFGA `resource#use`. Missing grants deny. Only unapplied grants for the caller, their groups or the selected
+assistant return 503. Grant kinds stay separate even when their ids match. Applied checks
+and group checks are reused within one request and are checked again on the next request.
+Reads check permission once, without a write fence or conversation history.
+
+Queries allow 256 UTF-8 bytes after NFC normalisation and eight Unicode words.
+Words contain Unicode letters, combining marks and numbers. Stored search text uses NFC too. TypeScript builds
+literal full-text terms and prefixes. PostgreSQL ranks pins, exact matches, prefix rank,
+then memory id. Pages contain up to 20 whole facts and 16 KiB, with no totals or sources.
+A fact that cannot fit alone is replaced by `{memoryId, revision, reason: "page_limit"}`.
+Destroyed and quarantined content is excluded. Expiry is compared using `Date` instants.
+Signed cursors use the existing cookie secret with a separate signing prefix. They bind
+requester, silo, scope, normalised query, order, scope position and projection generation.
+The signed cursor also keeps the first page time, so expiry cannot shift later pages.
+Changes reset paging with 409. Memory or setup-table lag and a concurrent rebuild return 503.
+Scope lookup uses the same setup-table path with or without stored facts and skips old id formats.
+Unknown, foreign and forbidden scopes return the same 404. Invalid input returns 422.
+All responses use `Cache-Control: no-store`. Startup uses the existing database,
+NATS and OpenFGA settings. Set `MEMORY_KEY_DIRECTORY` on the server and memory worker.
+Without it, the server returns `{status: "unavailable", reason: "memory_unavailable"}`
+with HTTP 503. The worker needs the existing directory; it never creates missing custody.
+The [worker instructions](../ops/README.robot.md#run-the-live-memory-worker) cover setup.
+
+`test/memory.test.ts` runs HTTP reads with real NATS, PostgreSQL and OpenFGA.
+Set `PG_TEST_URL` to a PostgreSQL service that permits disposable databases.
+Detail, source links, command status and storage are the second part of P4-12 PR 2.
+Its write checks, shared-source rules, idempotency and unused-key reconciliation remain
+unimplemented. The fresh empty runner and HTTP read test passes with real services.
+Full fresh-install memory journeys and native turns remain NOT RUN.
+
 The Node service exposes sign-in routes, invitation acceptance, the organisation MCP
 register, a health check and authenticated WebSocket routes. It does not serve static
 files: `GET /` returns 404. The [web app](../web/README.md) is built and served separately;

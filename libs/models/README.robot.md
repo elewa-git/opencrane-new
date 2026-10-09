@@ -637,6 +637,10 @@ requests still keep their original body bytes and public headers.
 
 `readActiveMember(..., requiredRole = 'member')` checks events, ownership and IAM once.
 `'admin'` requires Owner/Admin; reads use no `authorityFence` or conversation activity.
+`readActiveMember` and `groupMembership` accept an optional last argument that checks
+whether OpenFGA has applied a saved event. Memory reads use it to avoid asking about
+the same event twice in one request. The next request checks again. Other callers
+ask OpenFGA directly; spending and write deadlines remain unchanged.
 
 ## Confirmed tool refusals
 

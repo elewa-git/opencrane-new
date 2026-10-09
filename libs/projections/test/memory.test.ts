@@ -72,6 +72,26 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
     return identity;
   }
 
+  it('quarantines earlier control text without stopping replay', async function controls() {
+    await append('old-controls');
+    function decrypt() {
+      return 'Before\u0001after';
+    }
+    const earlier = memoryProjection({ decrypt });
+    await runner.run(earlier);
+    expect(await runner.checkpoint(earlier)).toBe(1);
+    const rows = await storage.db.query(
+      'SELECT content_status, search_text, search_vector FROM memory_facts');
+    expect(rows.rows).toEqual([
+      { content_status: 'quarantined', search_text: null, search_vector: null },
+    ]);
+    await runner.rebuild(earlier);
+    expect(await runner.checkpoint(earlier)).toBe(1);
+    const rebuilt = await storage.db.query(
+      'SELECT content_status, search_text, search_vector FROM memory_facts');
+    expect(rebuilt.rows).toEqual(rows.rows);
+  });
+
   async function state() {
     const facts = await storage.db.query('SELECT * FROM memory_facts ORDER BY silo, scope_id, position');
     const dependencies = await storage.db.query('SELECT * FROM memory_dependencies ORDER BY memory_id');

@@ -14,8 +14,8 @@ flowchart LR
   server -.->|checks organisation, access, invitation choices and spending| libs["libs/*<br/>shared code"]
   server -->|records changes, model grants, chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
-  ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, chat rows, model access and computer state| postgres
+  ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
+  server -->|reads members, chat rows, memory, model access and computer state| postgres
   server -->|sends turns, tool lists and approval outcomes; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -27,6 +27,9 @@ flowchart LR
   Production refuses extra sign-in identities. Development can allow named identities
   from another organisation, but session routes still need a configured organisation.
 - Checks permissions before returning private information or changing data.
+- Lists and searches a person's own memory and permitted group or assistant notes.
+  These reads need the memory worker and its existing private key directory.
+  It returns current facts only after the read table has caught up with their events.
 - Accepts bound invitations after a recent sign-in with a verified email, while
   the inviter is still an owner or admin. Records whether a personal assistant was requested.
 - Checks an invitation email and explains that the person is confirmed when they accept.
@@ -69,7 +72,7 @@ flowchart LR
 
 Private team turns receive earlier completed replies from the same member. The
 computer starts a fresh Codex process for each private team turn. Disk isolation is
-not yet proven on a live computer; memory features stay off until it is.
+not yet proven on a live computer; private chat memory stays off until it is.
 
 The reviewed tool list includes each tool's Allow mode. The computer and gateway
 use it to refuse calls if the tool changes to Ask during the turn.
