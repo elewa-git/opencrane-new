@@ -809,4 +809,30 @@ live turns, requester/assistant `memory_read` and `mcp_server` grants, and Allow
 Claims bind silo, requester, assistant, computer/generation, conversation, turn, thread,
 operation, person scope, private content class, call/decision ids, body digest and event position.
 The server verifies ES256, issuer, audience, expiry within two seconds and body/thread binding,
-then rechecks live rights and policy. Memory-free turns and shared-only contexts are refused.
+then rechecks live rights and policy. Only an explicitly recorded `restricted` turn is allowed.
+Legacy starts without a mode, `memory_free` starts and shared-only contexts are refused.
+Both `memory_read` and `mcp_server` need current recorded `grant.given` events for
+the requester as `member` and the assistant as `assistant`, as well as OpenFGA permission.
+A revocation without a kind removes both matching identity kinds. Leftover OpenFGA
+permissions and grants for another identity kind cannot replace these recorded grants.
+
+### Review correction evidence
+
+The regression tests were committed in `abecb5d3` before the fix in `f11c3fd1`.
+The real-service run returned HTTP 200 for both an absent recorded memory grant
+and a legacy mode-less turn, where HTTP 403 was required. Both now refuse before
+any fact query. The successful fixture records `restricted` explicitly.
+
+`test/memory-context.test.ts` checks a well-formed wrong-key signature, issuer,
+audience, algorithm, required and bounded claims, lifetimes, independent request
+bindings, strict recall arguments and request limits. `apps/server/test/memory-mcp.test.ts`
+checks backend identities and starts, current permissions and revocations, missing
+keys, concurrent access and activity changes, the original deadline, the complete
+thread proxy → real gateway → backend call and model header removal.
+
+The global `contextPosition` is recorded in the signed context. It is not a
+content-context generation or a set of per-grant positions. Current recorded
+access is checked again at both admission points. Network isolation of the backend
+and fresh-install journeys remain NOT RUN. A matching signed context can be used
+directly at the backend while it is still valid. This does not establish complete
+section-3 qualification of the memory specification.

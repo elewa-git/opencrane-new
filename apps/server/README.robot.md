@@ -1226,4 +1226,13 @@ Deployment keeps the backend behind the gateway; unsigned direct requests are re
 The [memory capability contract](../../libs/models/README.robot.md) explains signature,
 scope, policy and current grant checks. Replies fit within 16 KiB.
 `test/memory-mcp.test.ts` uses real agentgateway, NATS, PostgreSQL and OpenFGA.
+<<<<<<< HEAD
 The fixture warms service clients. Fresh-install journeys remain NOT RUN.
+=======
+Its first commit failed because governed memory routing was absent.
+The successful fixture records a `restricted` execution mode. A legacy start without
+a mode is refused, as is `memory_free`. Both the requester and assistant need
+recorded grants of the right identity kind and current OpenFGA permission.
+The fixture warms service clients. Fresh-install journeys and backend network
+isolation remain NOT RUN. A valid signed context may be replayed during its short lifetime.
+>>>>>>> 8a29ea6f (📖 Explain saved memory access and the remaining qualification limits)

@@ -25,7 +25,8 @@ flowchart LR
 - Lets owners and admins save provider choices and pauses, count affected assistants
   and recover saved results. Conflicting requests cannot report an unsaved change
   as saved. Ordinary calls keep their existing setup.
-- Serves personal facts after checking the gateway pass and current permissions.
+- Serves personal facts after checking the gateway pass, saved grants,
+  current permissions and the recorded turn mode.
 - Signs people in and keeps their browser session.
 - Uses the shared organisation check for session routes and WebSocket connections.
   Production refuses extra sign-in identities. Development can allow named identities
