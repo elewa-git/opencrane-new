@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables and server content keys"]
+  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables, scope queries and content keys"]
   server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
   projections -->|writes tables| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
@@ -44,6 +44,8 @@ flowchart LR
 - Store the per-conversation encryption keys used on the dev stack, so chat text
   is only saved in encrypted form.
 - Build current memory rows and searchable text without copying text into change history.
+  Keep newer revisions when an older or repeated write arrives.
+- Read memory ids and search matches within one silo and scope. Callers check permission first.
 - Keep each memory revision key separately, with a permanent marker when it is deleted.
   Refuse a missing store or key, so a storage failure cannot look like deliberate deletion.
 - Send member-change notices after the table update commits.
@@ -66,7 +68,8 @@ runs with readers and workers stopped. Customer deployment and backup recovery s
    stay marked as not available yet.
 4. **Memory text is encrypted.** The internal helper uses an existing private key
    directory on the server. An empty deletion marker means the text was forgotten;
-   a missing key means storage failed. Replay reads keys before each database update.
+   a missing key means storage failed. Replay checks every required key before replacing memory tables.
+   It reads keys again before each database update.
    It saves current text for search, or marks destroyed content unavailable.
    The application does not expose memory yet.
 5. **An operator rebuilds a table.** They run `npm run replay -- members`. The

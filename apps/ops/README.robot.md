@@ -73,9 +73,13 @@ npm run replay -- memory --confirm-memory-stopped
 Set `DATABASE_URL`, the projection-reader NATS settings above and
 `MEMORY_KEY_DIRECTORY`. The key directory must exist with mode 0700 and contain
 its permanent deletion markers. The command replays the complete `EVENTS` stream
-through ProjectionRunner under the `memory` advisory lock. It drops and creates the
+through ProjectionRunner under the `memory` advisory lock. It checks every saved
+event and required key through a fixed event position before dropping any tables.
+A failed check leaves rows, processed ids, checkpoint and generation unchanged.
+It then drops and creates the
 three memory tables, resets their processed ids/checkpoint and increases their
-generation, then commits one event at a time. A failure leaves a rebuilt prefix;
+generation, then commits one event at a time through that checked position.
+A storage failure during the second read can still leave a rebuilt prefix;
 readers remain stopped and a rerun starts again. This offline command does not
 preserve table grants; reapply any separately configured grants before restarting readers.
 `--verify` is refused. `--dry-run` only checks complete event history; it does not

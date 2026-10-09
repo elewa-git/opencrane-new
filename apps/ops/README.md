@@ -13,10 +13,10 @@ flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>workers and replay tools"]
   ops -.->|uses| libs["libs/*<br/>shared code"]
-  ops -->|reads revision keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
   ops -->|checks and updates computers| kube["Kubernetes<br/>computer manager"]
+  kube -->|runs| computer["apps/computer<br/>assistant runtime"]
 ```
 
 ## What it is responsible for
@@ -27,7 +27,8 @@ flowchart LR
 - Starts computers, gives them short-lived access keys and pauses idle ones.
 - Settles model spending after a model request.
 - Rebuilds tables and permissions for operator recovery.
-- Rebuilds current memory and search text while readers and workers are stopped.
+- Checks all saved memory keys before rebuilding current memory and search text.
+  Readers and workers stay stopped during this process.
 - Runs one-off upgrades for model access and the default budget group.
 
 ## Processes it handles

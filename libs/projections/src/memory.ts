@@ -59,6 +59,17 @@ async function writeMemory(
   const fact = [event.silo, data.scopeId, data.memoryId];
   const fields = metadata(current);
   const values = [...fact, ...fields, data.ciphertext, data.keyId, status, text, position, event.time];
+  const previous = await db.query<{ revision: string | number | null }>(
+    'SELECT revision FROM memory_facts WHERE silo=$1 AND scope_id=$2 AND memory_id=$3', fact,
+  );
+  // Keep a newer or equal revision, including when an old event has no known owner.
+  const previousRevision = previous.rows[0]?.revision;
+  if (previousRevision !== undefined && previousRevision !== null) {
+    if (current === null || Number(previousRevision) >= current.revision) {
+      await writeChange(db, event, data, current, position);
+      return;
+    }
+  }
   // Build the search vector explicitly from the current text. Keep SQL limited to indexing.
   await db.query(`INSERT INTO memory_facts VALUES
     ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,to_tsvector('simple',$14),$15,$16)
@@ -74,9 +85,21 @@ async function writeMemory(
       await db.query('INSERT INTO memory_dependencies VALUES ($1,$2,$3,$4,$5,$6)', edge);
     }
   }
+  await writeChange(db, event, data, current, position);
+}
+
+async function writeChange(
+  db: Query, event: EventEnvelope, data: SavedMemoryWrite, current: MemoryWrite | null,
+  position: number,
+): Promise<void> {
+  // Record what the event changed, so deleting a key cannot rewrite this history.
+  let outcome = 'written';
+  if (current === null) {
+    outcome = 'quarantined';
+  }
   const change = [event.silo, data.scopeId, event.id, event.commandId ?? null,
     event.principal?.kind ?? null, event.principal?.id ?? null, data.memoryId,
-    current?.revision ?? null, status, position, event.time];
+    current?.revision ?? null, outcome, position, event.time];
   await db.query('INSERT INTO memory_changes VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', change);
 }
 
@@ -115,4 +138,19 @@ export function memoryProjection(custody: {
     return apply;
   }
   return { name: 'memory', create, drop, prepare, apply: requiresPreparation };
+}
+
+/** Read only one silo and scope; callers must check permission before using this query. */
+export async function readMemoryFactIds(
+  db: Query, silo: string, scopeId: string, search?: string,
+): Promise<{ memory_id: string }[]> {
+  const parameters = [silo, scopeId];
+  let searchClause = '';
+  if (search !== undefined) {
+    parameters.push(search);
+    searchClause = " AND search_vector @@ to_tsquery('simple', $3)";
+  }
+  const result = await db.query<{ memory_id: string }>(`SELECT memory_id FROM memory_facts
+    WHERE silo=$1 AND scope_id=$2${searchClause} ORDER BY position, memory_id`, parameters);
+  return result.rows;
 }

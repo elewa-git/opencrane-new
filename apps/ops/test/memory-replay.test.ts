@@ -19,18 +19,25 @@ it('refuses memory replay without a database lock before any table writes',
   async function lockRefused() {
     const nats = await natsFixture();
     const directory = await mkdtemp('/tmp/memory-replay-lock-');
-    const query = vi.fn<Db['query']>();
-    const transaction = vi.fn<Db['transaction']>();
+    const databaseWork = vi.fn();
+    function query<Row extends Record<string, unknown>>(): Promise<{ rows: Row[] }> {
+      databaseWork();
+      return Promise.reject(new Error('Unexpected database query'));
+    }
+    function transaction<Result>(): Promise<Result> {
+      databaseWork();
+      return Promise.reject(new Error('Unexpected database transaction'));
+    }
     const close = vi.fn().mockResolvedValue(undefined);
-    const database = { db: { query, transaction }, close };
+    const db: Db = { query, transaction };
+    const database = { db, close };
     vi.spyOn(projections, 'connectProjectionDb').mockReturnValue(database);
     try {
       const env = { ...nats.env('projection'), DATABASE_URL: 'fixture',
         MEMORY_KEY_DIRECTORY: directory };
       await expect(replay(['memory', '--confirm-memory-stopped'], env))
         .rejects.toThrow('requires projection locking');
-      expect(query).not.toHaveBeenCalled();
-      expect(transaction).not.toHaveBeenCalled();
+      expect(databaseWork).not.toHaveBeenCalled();
       expect(close).toHaveBeenCalledOnce();
     } finally {
       await nats.close();

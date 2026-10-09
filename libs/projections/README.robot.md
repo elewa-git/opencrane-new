@@ -41,8 +41,8 @@ The source must provide every event in global order; filtering is a handler
 concern in this slice. Poll or call again for later events. An abort stops
 between transactions; an already running transaction may finish.
 
-Every handler attempt uses observability's `runHandler`, including the
-transaction commit. Start telemetry in the host to obtain real `trace_id`
+Every handler attempt uses observability's `runHandler`, including preparation and
+the transaction commit. Start telemetry in the host to obtain real `trace_id`
 values; the helper deliberately omits that field with a no-op tracer.
 
 The low-level `rebuild` method is destructive and remains for tests and offline
@@ -227,9 +227,12 @@ metadata, ciphertext, key reference, event position and time. `search_text` and
 as a parameter to explicit `to_tsvector('simple', $14)` calls; there are no triggers,
 views, generated columns or stored procedures. The order index is
 `(silo, scope_id, position, memory_id)`; a GIN index supports full-text queries.
-`memory_dependencies` stores current same-scope fact/revision references.
+`memory_dependencies` stores current same-scope fact/revision references without duplicates.
+TypeScript checks the existing revision before replacing a fact or its dependencies.
+A stale or repeated write keeps the current row and still records the saved event.
 `memory_changes` stores only command, principal, fact, revision, outcome, position
-and time. It never stores plaintext, ciphertext, keys or source payloads.
+and time. Its outcome is `written` or `quarantined`, independent of key availability.
+It never stores plaintext, ciphertext, keys or source payloads.
 
 Only a destroyed key yields `unavailable`, with null search text/vector. Missing
 or damaged keys and temporary custody failures stop replay without advancing that
@@ -237,7 +240,15 @@ event's checkpoint. Legacy writes retain ciphertext and references as `quarantin
 with unknown ownership and no searchable content. Parsing uses `parseEventByType`
 and the full replay schema, plus `memoryIdentity` / `memoryWrittenIdentity`.
 Other memory event types stop replay until their projection rules are implemented;
-correction, forgetting, dependency invalidation and public reads remain later work.
+correction, forgetting, dependency invalidation and the public memory API remain later work.
+`readMemoryFactIds(db, silo, scopeId, search?)` returns ids in saved-event order.
+Its optional search uses PostgreSQL `to_tsquery` syntax. Both paths restrict silo and
+scope; callers must check permission before calling it.
+Rebuild prepares the entire saved history before dropping any tables, then prepares
+each event again before its transaction. It discards each prepared result during the
+first pass to avoid holding all plaintext in memory. It rebuilds only through the
+position it checked. A failure during that first pass preserves live tables and
+runner records. A later storage failure can still stop the second pass.
 Replay never provisions or deletes keys, calls models or runs cleanup reactions.
 
 The offline operator command is documented in [apps/ops](../../apps/ops/README.robot.md#rebuild-memory-offline).

@@ -2,10 +2,15 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, readdir, rename, rm, readFile, writeFile } from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readEventAt } from '@opencrane/event-store';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { getEventDefinition, type EventEnvelope, type MemoryIdentity } from '@opencrane/events';
-import { memoryKeys, memoryProjection, memoryScopeId, ProjectionRunner, readMemoryFacts } from '../src/index.ts';
+import {
+  getEventDefinition, memoryWrittenEventSchema, type EventEnvelope, type MemoryIdentity,
+} from '@opencrane/events';
+import {
+  memoryKeys, memoryProjection, memoryScopeId, ProjectionRunner, readMemoryFactIds,
+} from '../src/index.ts';
 import type { Db, Projection, Query } from '../src/index.ts';
 import { database } from './database.ts';
 
@@ -98,17 +103,17 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
       expect(JSON.stringify(before.changes)).not.toContain('ciphertext');
       expect(JSON.stringify(before.changes)).not.toContain('Deliveries');
       const scopeParameters = [first.silo, first.scopeId];
-      const ordered = await readMemoryFacts(storage.db, first.silo, first.scopeId);
+      const ordered = await readMemoryFactIds(storage.db, first.silo, first.scopeId);
       expect(ordered).toEqual([{ memory_id: 'first' }, { memory_id: 'last' }]);
       const search = await storage.db.query(`SELECT memory_id FROM memory_facts
         WHERE silo = $1 AND scope_id = $2 AND search_vector @@ to_tsquery('simple', $3)
         ORDER BY position`, [...scopeParameters, 'deliver:* & café']);
       expect(search.rows).toEqual(ordered);
-      const excluded = await readMemoryFacts(storage.db, first.silo, first.scopeId, 'banana');
+      const excluded = await readMemoryFactIds(storage.db, first.silo, first.scopeId, 'banana');
       expect(excluded).toEqual([]);
-      expect(await readMemoryFacts(storage.db, 'other', first.scopeId)).toEqual([]);
+      expect(await readMemoryFactIds(storage.db, 'other', first.scopeId)).toEqual([]);
       const bobScope = memoryScopeId('test', 'person', 'bob');
-      expect(await readMemoryFacts(storage.db, 'test', bobScope, 'banana'))
+      expect(await readMemoryFactIds(storage.db, 'test', bobScope, 'banana'))
         .toEqual([{ memory_id: 'foreign' }]);
       const indexResult = await storage.db.query<{ indexdef: string }>(
         "SELECT indexdef FROM pg_indexes WHERE indexname = 'memory_facts_search'",
@@ -256,11 +261,11 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
   it.each(['invalid', 'dependencies', 'key', 'damaged', 'tag'])(
     '%s stops preparation without a transaction or checkpoint advance', async function refused(kind) {
       const identity = await append('first');
-      const history = await Array.fromAsync(nats.reader.readStream(`scope-${identity.scopeId}`));
-      const original = history[0]!.event;
+      const saved = await readEventAt(nats.reader, `scope-${identity.scopeId}`, 1, Infinity);
+      const original = memoryWrittenEventSchema.parse(saved!.event);
       const encrypted = keys.encrypt(identity, 'private fixture text');
       const dependency = { scopeId: identity.scopeId, memoryId: 'parent', revision: 1 };
-      let data = { ...original.data };
+      const data: Record<string, unknown> = { ...original.data };
       let message = 'Invalid saved memory event';
       if (kind === 'invalid') {
         data['pinned'] = 'invalid';
@@ -283,6 +288,7 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
       const source = {
         head: () => Promise.resolve(1),
         async *subscribe() {
+          await Promise.resolve();
           yield { event: envelope, sequence: 1 };
         },
       };
@@ -303,23 +309,27 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
 
   it('keeps a newer row and its dependencies when a stale or repeated write arrives',
     async function revisions() {
-      const first = await append('first');
+      const scopeId = memoryScopeId('test', 'person', 'alice');
+      const dependencies = [{ scopeId, memoryId: 'original-parent', revision: 1 }];
+      const first = await append('first', 'alice', 'Original text', dependencies);
       await runner.run(projection);
-      const rows = await Array.fromAsync(nats.reader.readStream(`scope-${first.scopeId}`));
-      const original = rows[0]!.event;
+      const saved = await readEventAt(nats.reader, `scope-${first.scopeId}`, 1, Infinity);
+      const original = memoryWrittenEventSchema.parse(saved!.event);
       const encrypted = keys.encrypt(first, 'Replacement text');
       for (const revision of [1, 2]) {
         // Represent a row from a later correction without accepting a new write schema here.
         await storage.db.query('UPDATE memory_facts SET revision=$1', [revision]);
-        const before = (await state()).facts;
+        await storage.db.query('UPDATE memory_dependencies SET revision=$1', [revision]);
+        const before = await state();
         const dependency = { scopeId: first.scopeId, memoryId: 'parent', revision: 1 };
         const data = { ...original.data, ...encrypted, dependsOn: [dependency] };
         const envelope = { ...original, id: `repeat-${revision}`,
           commandId: `repeat-${revision}`, data };
         await nats.seed([envelope]);
         await runner.run(projection);
-        expect((await state()).facts).toEqual(before);
-        expect((await state()).dependencies).toEqual([]);
+        const after = await state();
+        expect(after.facts).toEqual(before.facts);
+        expect(after.dependencies).toEqual(before.dependencies);
       }
       expect(await runner.checkpoint(projection)).toBe(3);
       expect((await state()).changes).toHaveLength(3);

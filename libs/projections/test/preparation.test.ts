@@ -1,13 +1,16 @@
 import { expect, it, vi } from 'vitest';
 import * as observability from '@opencrane/observability';
 import { event } from '@opencrane/event-store/testing';
-import { ProjectionRunner, memoryProjection, memoryKeys, memoryScopeId } from '../src/index.ts';
+import {
+  ProjectionRunner, memoryProjection, memoryKeys, memoryScopeId,
+} from '../src/index.ts';
 import type { EventSource } from '../src/index.ts';
 import { mkdtemp, readFile, rename, rm } from 'node:fs/promises';
 import { database } from './database.ts';
 
-it('logs key-store failure inside the handler span without text or key bytes',
-  async function preparationFailure() {
+it.each(['store', 'tag'])(
+  'logs %s failure inside the handler span without text or key bytes',
+  async function preparationFailure(kind) {
     const storage = await database('pglite');
     const directory = await mkdtemp('/tmp/memory-handler-');
     const keys = memoryKeys(directory);
@@ -16,6 +19,13 @@ it('logs key-store failure inside the handler span without text or key bytes',
     const keyId = keys.provision(identity);
     const bytes = await readFile(`${directory}/${keyId.slice(4)}`);
     const encrypted = keys.encrypt(identity, 'Private delivery instructions');
+    let message = 'Memory key store unavailable';
+    if (kind === 'tag') {
+      const ciphertextBytes = Buffer.from(encrypted.ciphertext, 'base64');
+      ciphertextBytes[12] = ciphertextBytes[12]! ^ 1;
+      encrypted.ciphertext = ciphertextBytes.toString('base64');
+      message = 'authenticate';
+    }
     const { silo: _silo, ...fields } = identity;
     const data = { ...fields, ...encrypted, schemaVersion: 1, kind: 'fact', pinned: false,
       expiresAt: null, sources: [], dependsOn: [] };
@@ -24,6 +34,7 @@ it('logs key-store failure inside the handler span without text or key bytes',
     const source: EventSource = {
       head: () => Promise.resolve(1),
       async *subscribe() {
+        await Promise.resolve();
         yield { event: envelope, sequence: 1 };
       },
     };
@@ -60,8 +71,10 @@ it('logs key-store failure inside the handler span without text or key bytes',
     const runner = new ProjectionRunner(storage.db, source, logger);
     try {
       await runner.initialise(projection);
-      await rename(directory, `${directory}-away`);
-      await expect(runner.run(projection)).rejects.toThrow('Memory key store unavailable');
+      if (kind === 'store') {
+        await rename(directory, `${directory}-away`);
+      }
+      await expect(runner.run(projection)).rejects.toThrow(message);
       expect(preparedInsideHandler).toBe(true);
       expect(handlerSpy).toHaveBeenCalledOnce();
       function parseLog(line: string): unknown {
