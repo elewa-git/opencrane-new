@@ -392,6 +392,24 @@ it('moves the capture line announcement to LiveView when the session panel opens
   context.fixture.destroy();
 });
 
+it('moves between session tabs with the arrow keys', async () => {
+  Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 1280 });
+  const context = await createCaptureWorkspace();
+  const tabs = [...context.root.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  const activityTab = tabs.find(tab => tab.textContent?.includes('Activity'));
+  const memoryTab = tabs.find(tab => tab.textContent?.includes('Memory'));
+  if (!activityTab || !memoryTab) throw new Error('Missing session tabs');
+  activityTab.focus();
+  const arrow = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true,
+    cancelable: true });
+  activityTab.dispatchEvent(arrow);
+  context.fixture.detectChanges();
+  expect(arrow.defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(memoryTab);
+  expect(context.fixture.componentInstance['panelTab']()).toBe('memory');
+  context.fixture.destroy();
+});
+
 it('clears the preview, screenshot rows and counts when access is denied', async () => {
   Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 1280 });
   const context = await createCaptureWorkspace([screenshotRow(1)]);

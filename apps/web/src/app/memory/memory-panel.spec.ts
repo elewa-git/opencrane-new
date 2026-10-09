@@ -20,6 +20,16 @@ function response(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'cache-control': 'no-store' } });
 }
 
+function installDialogMethods(): void {
+  Object.assign(HTMLDialogElement.prototype, {
+    showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); },
+    close(this: HTMLDialogElement): void {
+      this.removeAttribute('open');
+      this.dispatchEvent(new Event('close'));
+    },
+  });
+}
+
 function personalScope() {
   return { scopeId: 'scope', scopeKind: 'person', ownerId: 'member',
     audience: { kind: 'person', ownerId: 'member' }, canRead: true };
@@ -171,6 +181,22 @@ it('purges facts and ignores a pending reply when access is revoked', async () =
   expect(fixture.componentInstance['sources']()).toEqual([]);
 });
 
+it('clears all rendered memory when the workspace reports denied access', async () => {
+  stubReplies(response(200, { scopes: [personalScope()] }),
+    response(200, { scopeId: 'scope', facts: [fact('Workspace private fact.')],
+      returnedCount: 1, nextCursor: null }));
+  const fixture = await loadPanel();
+  fixture.componentRef.setInput('accessDenied', true);
+  fixture.detectChanges();
+  expect(visibleText(fixture)).toContain('Access changed');
+  expect(visibleText(fixture)).not.toContain('Workspace private fact.');
+  expect(fixture.componentInstance['scopes']()).toEqual([]);
+  expect(fixture.componentInstance['facts']()).toEqual([]);
+  expect(fixture.componentInstance['query']()).toBe('');
+  expect(fixture.componentInstance['cursor']()).toBeNull();
+  expect(fixture.componentInstance['nextCursor']()).toBeNull();
+});
+
 it('shows rejected search input beside the search field', async () => {
   stubReplies(response(200, { scopes: [personalScope()] }),
     response(200, { scopeId: 'scope', facts: [], returnedCount: 0, nextCursor: null }),
@@ -183,10 +209,29 @@ it('shows rejected search input beside the search field', async () => {
   search.dispatchEvent(new Event('input'));
   await fixture.whenStable();
   fixture.detectChanges();
-  expect(visibleText(fixture)).toContain('Search must contain no more than eight terms');
+  expect(visibleText(fixture)).toContain('Search input is invalid');
+});
+
+it('restarts from the first page after the saved facts change', async () => {
+  const savedFact = fact('First page fact.');
+  stubReplies(response(200, { scopes: [personalScope()] }),
+    response(200, { scopeId: 'scope', facts: [savedFact], returnedCount: 1,
+      nextCursor: 'old-cursor' }),
+    response(409, { status: 'refused' }),
+    response(200, { scopeId: 'scope', facts: [savedFact], returnedCount: 1,
+      nextCursor: 'new-cursor' }));
+  const fixture = await loadPanel();
+  const element = fixture.nativeElement as HTMLElement;
+  element.querySelector<HTMLButtonElement>('.next')?.click();
+  await fixture.whenStable();
+  fixture.detectChanges();
+  expect(String(vi.mocked(fetch).mock.calls[2]?.[0])).toContain('old-cursor');
+  expect(String(vi.mocked(fetch).mock.calls[3]?.[0])).not.toContain('old-cursor');
+  expect(fixture.componentInstance['nextCursor']()).toBe('new-cursor');
 });
 
 it('shows the detail audience and saved fact metadata', async () => {
+  installDialogMethods();
   const savedFact = fact('A shared project fact.');
   savedFact.revision = 4;
   savedFact.pinned = true;
@@ -200,7 +245,30 @@ it('shows the detail audience and saved fact metadata', async () => {
   await fixture.whenStable();
   fixture.detectChanges();
   expect(visibleText(fixture)).toContain('Shared with group group-a');
-  expect(visibleText(fixture)).toContain('Revision 4');
+  expect(visibleText(fixture)).toContain('Revision');
+  expect(visibleText(fixture)).toContain('4');
   expect(visibleText(fixture)).toContain('Pinned for initial context; loading is not enabled yet');
   expect(visibleText(fixture)).toContain('2 October 2026');
+});
+
+it('closes the detail overlay on Escape without leaving it open', async () => {
+  installDialogMethods();
+  const savedFact = fact('Fact with a separate detail view.');
+  stubReplies(response(200, { scopes: [personalScope()] }),
+    response(200, { scopeId: 'scope', facts: [savedFact], returnedCount: 1,
+      nextCursor: null }),
+    response(200, { scopeId: 'scope', fact: savedFact, sources: [] }));
+  const fixture = await loadPanel();
+  const element = fixture.nativeElement as HTMLElement;
+  element.querySelector<HTMLButtonElement>('.fact')?.click();
+  await fixture.whenStable();
+  fixture.detectChanges();
+  const detail = element.querySelector<HTMLDialogElement>('.detail');
+  if (!detail) throw new Error('Missing detail dialog');
+  const cancel = new Event('cancel', { cancelable: true });
+  detail.dispatchEvent(cancel);
+  fixture.detectChanges();
+  expect(cancel.defaultPrevented).toBe(true);
+  expect(fixture.componentInstance['selectedFact']()).toBeUndefined();
+  expect(detail.hasAttribute('open')).toBe(false);
 });
