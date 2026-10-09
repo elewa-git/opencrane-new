@@ -5,6 +5,7 @@ import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { fixture } from '@opencrane/models/testing';
+import { envelope, parseMemoryRequest } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -51,7 +52,8 @@ function mode(target: Awaited<ReturnType<typeof fixture>>, value: 'allow' | 'ask
     mode: value, setBy: 'alice' });
 }
 async function prepare() {
-  setup = await fixture();
+  setup = await fixture(2000, 20000, false, 'gpt-6-luna', false, 'manual', 'sales',
+    'restricted');
   await setup.stopDispatch();
   await setup.runtime.stop();
   await govern(setup);
@@ -107,6 +109,107 @@ async function close() {
 }
 beforeAll(prepare, 120_000);
 afterAll(close);
+
+async function grantMemory(target: typeof setup, kind: string, granteeId: string,
+  recorded = true) {
+  const subject = grantStream('memory_read', scopeId);
+  const fields = { resourceType: 'memory_read', resourceId: scopeId,
+    granteeKind: kind, granteeId, grantedBy: 'alice' };
+  let grant = envelope('test', subject, 'grant.given', fields);
+  if (recorded) grant = await target.append(subject, 'grant.given', fields);
+  await target.auth.handler.handle(grant, target.db);
+}
+
+async function isolatedBackend(target: typeof setup) {
+  const memory = { silo: 'test', store: target.nats.store, db: setup.db,
+    binding: target.binding, feed: { memberId }, identity: target.identity };
+  const backend = buildServer(testAuthConfig(), { memory });
+  const address = await backend.listen({ host: '127.0.0.1', port: 0 });
+  const upstream = new URL(address).host;
+  target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream });
+  await target.restart();
+  return backend;
+}
+
+async function signedRecall(target: typeof setup) {
+  const parsed = parseMemoryRequest(JSON.stringify(call), headers);
+  const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
+    computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
+    thread: 'thread', operation: 'recall', scopes: [scopeId], contentAccess: 'private',
+    bodyDigest: parsed.bodyDigest, callId: metadata.callId,
+    requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
+  return target.tokens.memoryContext(claims, Date.now() + 2000);
+}
+
+async function assertRecallRefused(target: typeof setup, backend: typeof app) {
+  const token = await signedRecall(target);
+  const database = vi.spyOn(setup.db, 'query');
+  try {
+    const requestHeaders = { ...headers, 'x-memory-context': token };
+    const request = { method: 'POST' as const, url: route,
+      headers: requestHeaders, payload: call };
+    const response = await backend.inject(request);
+    expect(response.statusCode, response.body).toBe(403);
+    expect(database).not.toHaveBeenCalled();
+    const gateway = await target.call(headers, call, route);
+    expect(gateway.status, gateway.text).toBe(403);
+    expect(database).not.toHaveBeenCalled();
+  } finally {
+    database.mockRestore();
+  }
+}
+
+it('requires recorded member and assistant grants despite leftover OpenFGA permission',
+  async function recordedGrants() {
+    const target = await fixture(2000, 20000, false, 'gpt-6-luna', false, 'manual',
+      'sales', 'restricted');
+    let backend: typeof app | undefined;
+    try {
+      await target.stopDispatch();
+      await target.runtime.stop();
+      await govern(target);
+      backend = await isolatedBackend(target);
+      // Leave real permissions without matching events, as after an incorrect rebuild.
+      await grantMemory(target, 'member', 'alice', false);
+      await grantMemory(target, 'assistant', 'assistant', false);
+      expect(await target.auth.use('person', 'alice', 'memory_read', scopeId))
+        .toMatchObject({ allowed: true });
+      expect(await target.auth.use('assistant', 'assistant', 'memory_read', scopeId))
+        .toMatchObject({ allowed: true });
+      await assertRecallRefused(target, backend);
+      await grantMemory(target, 'assistant', 'alice');
+      await grantMemory(target, 'member', 'assistant');
+      await assertRecallRefused(target, backend);
+      await grantMemory(target, 'assistant', 'assistant');
+      await assertRecallRefused(target, backend);
+      await grantMemory(target, 'member', 'alice');
+      const allowed = await target.call(headers, call, route);
+      expect(allowed.status, allowed.text).toBe(200);
+    } finally {
+      await backend?.close();
+      await target.close();
+    }
+  }, 120_000);
+
+it.each([undefined, 'memory_free'] as const)(
+  'refuses memory for a recorded turn with execution mode %s',
+  async function refusedExecutionMode(executionMode) {
+    const target = await fixture(2000, 20000, false, 'gpt-6-luna', false, 'manual',
+      'sales', executionMode);
+    let backend: typeof app | undefined;
+    try {
+      await target.stopDispatch();
+      await target.runtime.stop();
+      await govern(target);
+      await grantMemory(target, 'member', 'alice');
+      await grantMemory(target, 'assistant', 'assistant');
+      backend = await isolatedBackend(target);
+      await assertRecallRefused(target, backend);
+    } finally {
+      await backend?.close();
+      await target.close();
+    }
+  }, 120_000);
 
 it('replaces caller context and returns bounded facts as data through the real gateway',
   async function recall() {

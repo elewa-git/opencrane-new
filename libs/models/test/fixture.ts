@@ -62,7 +62,7 @@ export async function waitForModelGrants(auth: ReturnType<typeof memberAuthorisa
     auth.use('person', memberId, 'model', model.id), auth.use('assistant', assistantId, 'model', model.id),
   ]))).every(result => result.allowed));
 }
-export async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel = 'gpt-6-luna', team = false, grants: 'manual' | 'reactions' | 'legacy' = 'manual', teamPayer: string | null = 'sales') {
+export async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel = 'gpt-6-luna', team = false, grants: 'manual' | 'reactions' | 'legacy' = 'manual', teamPayer: string | null = 'sales', executionMode?: 'restricted' | 'memory_free') {
   const directory = await mkdtemp(`${tmpdir()}/oc-models-`);
   const dbs = await databases(), nats = await natsFixture();
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });
@@ -91,7 +91,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
     ...(team ? { payingGroupId: 'sales' } : {}) });
   await append('conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', assistantId: 'assistant', turnId: 'turn' });
-  await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', payingGroupId: team ? 'sales' : 'personal-default' });
+  await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', payingGroupId: team ? 'sales' : 'personal-default',
+    ...(executionMode === undefined ? {} : { executionMode }) });
   const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...await exportJWK(publicKey), kid: 'lifecycle' };
   const issuer = 'https://lifecycle.test/';
