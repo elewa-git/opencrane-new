@@ -148,3 +148,22 @@ async function refusesRecordedChoiceOnStaticRoute() {
 }
 it('refuses even a matching recorded provider choice on the static-key route without holding money',
   refusesRecordedChoiceOnStaticRoute);
+
+async function refusesLegacyTrafficAfterSwitch() {
+  const setup = await fixture();
+  try {
+    await setup.append('provider-primary', 'provider.created', {
+      providerId: 'primary', provider: 'openai', name: 'Primary', revision: 1, changedBy: 'alice',
+    });
+    await setup.append('provider-primary', 'provider.managed_calls_enabled', {
+      providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+    });
+    expect((await setup.call()).status).toBe(403);
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses old tokens after switch-on before holding money or contacting a provider',
+  refusesLegacyTrafficAfterSwitch);
