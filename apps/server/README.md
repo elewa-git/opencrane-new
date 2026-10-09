@@ -12,7 +12,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and permission checks"]
   server -.->|checks organisation, access, invitation choices and spending| libs["libs/*<br/>shared code"]
-  server -->|records changes and updates chat and computer facts| nats["NATS<br/>event log"]
+  server -->|records changes, model grants, chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, chat rows, model access and computer state| postgres
@@ -59,7 +59,8 @@ flowchart LR
 - Lets admins connect a model provider, store its key safely and check that the key works.
 - Lets owners hand over ownership and admins manage groups. The website has no page for this yet.
 - Lets owners and admins read model grants and list same-silo people, groups or assistants
-  that a grant could name. Grant changes are not available yet.
+  that a grant could name. HTTP clients can give or revoke one grant and check its result.
+  Admins can remove a departed person's grant. An empty revoke saves no change.
   Provider choices and configured uses say “Not available yet” until those records exist.
 - Lets admins create a group assistant with selected tools and a fixed paying group.
 - Keeps each member's group chat private while they share the assistant's computer.

@@ -109,3 +109,7 @@ The response keeps provider binding, enabled-model, key and verification facts a
 `not_available_yet` until those event-backed records are available.
 Candidate reads require a kind and use an optional id cursor and a limit from 1 to
 100. Group candidates include only the count of current joined members.
+
+Model grant writes use `modelAccessCommandSchema` and return
+`modelAccessReceiptSchema`. The [HTTP contract](../../apps/server/README.robot.md#model-grant-changes)
+defines permission checks, conflicts and recovery.

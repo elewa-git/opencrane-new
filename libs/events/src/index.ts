@@ -31,7 +31,7 @@ export {
 export { parseEventByType, type ParseEventByTypeResult } from './parse.ts';
 
 export { handlerSubscriptions, type HandlerName } from './handlers.ts';
-export { memberInvitedDataSchema } from './data.ts';
+export { memberInvitedDataSchema, grantRevokedDataSchema } from './data.ts';
 
 export { budgetCeilingSetDataSchema, decisionRecordedDataSchema } from './data.ts';
 

@@ -267,7 +267,7 @@ export class EventStore {
     if (!event) {
       return { status: "rejected", reason: "invalid_event" };
     }
-    const deadline = performance.now() + appendMs;
+    const deadline = Math.min(performance.now() + appendMs, command.deadline ?? Infinity);
     let cause: unknown;
     let backoff = 25;
     while (performance.now() < deadline) {

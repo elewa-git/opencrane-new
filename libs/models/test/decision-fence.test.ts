@@ -777,3 +777,19 @@ async function releasesHoldAfterHarmlessGrantAndStop(stopped: Injection) {
 it.each(lateTurnClosures)(
   'releases the unsent hold when $label after a harmless grant during the final check',
   releasesHoldAfterHarmlessGrantAndStop, 40_000);
+
+const typedAuditRevocations = [
+  ['member', 'alice', false],
+  ['assistant', 'assistant', false],
+  ['assistant', 'alice', true],
+] as const;
+async function typedRevokeDuringAudit(kind: string, granteeId: string, allowed: boolean) {
+  const injection: Injection = {
+    label: `typed ${kind} revoke`, subject: grantStream('model', 'gpt-6-luna'),
+    type: 'grant.revoked', data: { resourceType: 'model', resourceId: 'gpt-6-luna',
+      granteeKind: kind, granteeId, revokedBy: 'alice' },
+  };
+  await handlesEventDuringAudit(injection, allowed);
+}
+it.each(typedAuditRevocations)('handles a typed %s revoke of %s during the call with IAM delayed',
+  typedRevokeDuringAudit, 40_000);

@@ -33,6 +33,14 @@ it('requires participation and an explicit desktop grant before opening an audit
     expect((await history(nats.store, `view-${refusalId}`, 'test')).map(r => r.event.type)).toEqual(['computer.view_refused']);
     await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'bob', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
+      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
+      granteeKind: 'team', grantedBy: 'owner',
+    }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', {
+      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
+      granteeKind: 'team', revokedBy: 'owner',
+    }, true);
     const bobHeaders = { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'bob', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(403);
     await append('conversation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' });

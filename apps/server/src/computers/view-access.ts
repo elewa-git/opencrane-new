@@ -222,14 +222,19 @@ async function currentComputer({ store, silo, deadline }: ViewAccessOptions, ass
 
 async function desktopGrants(store: EventStore, silo: string, resource: string, deadline?: number) {
   const grants = await history(store, resource, silo, deadline);
-  const current = new Map<string, { kind: string; eventId: string }>();
+  const current = new Map<string, { id: string; kind: string; eventId: string }>();
   for (const { event } of grants) {
     const data = grant.parse(event.data);
     if (event.type === 'grant.revoked') {
-      current.delete(data.granteeId);
+      const revoked = z.object({ granteeKind: z.string().optional() }).parse(event.data);
+      const kinds = revoked.granteeKind ? [revoked.granteeKind] : ['member', 'team', 'assistant'];
+      for (const kind of kinds) {
+        current.delete(`${kind}:${data.granteeId}`);
+      }
     } else {
       const grantee = z.object({ granteeKind: z.string() }).parse(event.data);
-      current.set(data.granteeId, { kind: grantee.granteeKind, eventId: event.id });
+      current.set(`${grantee.granteeKind}:${data.granteeId}`,
+        { id: data.granteeId, kind: grantee.granteeKind, eventId: event.id });
     }
   }
   return current;
@@ -270,12 +275,13 @@ async function desktopAccess(options: ViewAccessOptions, memberId: string,
   const subjects = [`member-${memberId}`, `conversation-${conversationId}`, resource];
   const fresh = await authorityFence(store, performance.now(), subjects, options.deadline);
   const current = await desktopGrants(store, silo, resource, options.deadline);
-  const direct = current.get(memberId);
+  const direct = current.get(`member:${memberId}`);
   if (direct?.kind === 'member') return { receipts: [direct.eventId], fresh };
   const groupFences: (() => Promise<void>)[] = [];
   const receipts: string[] = [];
   let unconfirmedTeam: ViewCheckUnavailable | undefined;
-  for (const [groupId, source] of current) {
+  for (const source of current.values()) {
+    const groupId = source.id;
     if (source.kind !== 'team') continue;
     // Use current event membership even when IAM has not applied a removal yet.
     if (!await belongsToGroup(options, groupId, memberId)) continue;

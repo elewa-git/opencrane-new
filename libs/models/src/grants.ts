@@ -27,8 +27,8 @@ async function seedGrant(store: EventStore, trigger: EventEnvelope, resourceId: 
   function matchesGrantee(row: typeof rows[number]) {
     const previous = data(row.event);
     if (previous['granteeId'] !== granteeId) return false;
-    // Existing revocations have no kind and must keep denying every matching id on replay.
-    if (row.event.type === 'grant.revoked') return true;
+    // Keep old revocations denying every matching id when reactions run again.
+    if (row.event.type === 'grant.revoked' && previous['granteeKind'] === undefined) return true;
     return previous['granteeKind'] === granteeKind;
   }
   if (rows.some(matchesGrantee)) return;

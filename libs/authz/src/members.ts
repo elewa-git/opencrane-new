@@ -1,6 +1,6 @@
 import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
   ownershipSteppedDownSchema, conversationCreatedDataSchema,
-  handlerSubscriptions, parseEventByType, type EventEnvelope } from "@opencrane/events";
+  grantRevokedDataSchema, handlerSubscriptions, parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { registerHandler } from "@opencrane/handlers";
 import { objectId, TupleClient, type Binding, type Tuple } from "./client.ts";
 
@@ -114,7 +114,8 @@ function createMemberAuthorisation(binding: Binding) {
     if (event.subject !== grantStream(resourceType, resourceId)) throw new Error('Grant subject mismatch');
     const target = objectId('resource', binding.silo, resourceType, resourceId);
     const grantee = field(event.data, 'granteeId');
-    const kind = event.type === 'grant.given' ? field(event.data, 'granteeKind') : undefined;
+    const kind = event.type === 'grant.given' ? field(event.data, 'granteeKind')
+      : grantRevokedDataSchema.parse(event.data).granteeKind;
     let identityKinds = ['member', 'assistant', 'team'];
     if (kind) identityKinds = [kind];
     const users = new Set<string>();
@@ -128,7 +129,7 @@ function createMemberAuthorisation(binding: Binding) {
     const current = await client.read({ object: target, relation: 'use' });
     const existing = current.filter(matchesGrantee);
     const desired: Tuple[] = [];
-    if (kind) {
+    if (event.type === 'grant.given' && kind) {
       const user = granteeUser(kind, grantee);
       desired.push({ object: target, relation: 'use', user });
     }

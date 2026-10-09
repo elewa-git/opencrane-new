@@ -20,6 +20,8 @@ never contain key values, upstream error bodies or model answer text.
 | `GET /api/org/providers/:providerId/changes/:commandId` | Original ids | Receipt, content and IAM projection status, current revision, verification validity and recorded attempt outcome |
 | `GET /api/org/models/:modelId/access` | Registry model id | Current grant rows and direct, group or assistant source labels |
 | `GET /api/org/models/:modelId/access/candidates?kind=member\|team\|assistant` | Optional `after` id and `limit` from 1 to 100 | Bounded same-silo choices; group rows include current joined-member count |
+| `POST /api/org/models/:modelId/access` | `{ commandId, expectedSequence, action: "grant"\|"revoke", granteeKind, granteeId }` | Saved grant receipt, or `{ status: "no_effect" }` |
+| `GET /api/org/models/:modelId/access/changes/:commandId` | Original ids | Original receipt, current stream position and content/IAM status |
 
 Provider is `openai` or `anthropic`. Names are trimmed, required, at most 200
 characters and cannot contain NUL. Entity and command ids contain 1–200 letters,
@@ -133,6 +135,41 @@ bindings, enabled-model state, key facts, verification facts and configured
 assistant uses. Do not show invented users, assistant counts, retirement
 consequences or access completion. The Claude Design screens and fresh-install
 qualification remain pending on the UI foundation.
+
+## Changing model grants
+
+A model grant write has a strict body of at most 2 KiB. The server checks current
+Owner/Admin access before reading grant history. A grant requires an active
+registry model and a same-silo person, group or assistant. The person must be a
+joined member. Revokes can remove a departed person's grant and grants on retired
+registry models. A model id absent from the registry is refused for both actions.
+
+Target problems return 409 with `status: "refused"` and a `reason`:
+
+- `model_unavailable`: the model is unknown, or a grant names a retired model.
+- `target_unavailable`: the grantee is missing, in another silo or has the wrong kind.
+- `target_changed`: the person or assistant changed during the grant check.
+
+Caller authority problems return 403 with `{ status: "refused" }`. A stale
+`expectedSequence` or a changed repeat returns 409 with `{ status: "refused" }`.
+Group membership activity does not refuse a grant: the server reads only the
+group's creation event before checking the caller and does not watch that stream.
+
+A revoke with no current grant returns `{ status: "no_effect" }` without saving an
+event. There is one exception: revoking a starting grant before its worker has
+saved it records the revoke, so that worker cannot restore access later. Starting
+grants cover active registry models for joined people and personal assistants,
+and the selected models of shared assistants and their owning groups. A second
+revoke with a new command id returns `no_effect`. An identical repeat of a saved command returns its original
+receipt. A `no_effect` reply has no change receipt to recover through GET.
+
+A typed revoke changes only the named grantee kind. Older revokes without a kind
+still cover all kinds with the same id. Grant writes make one conditional append
+and never write OpenFGA tuples. The status GET checks current caller access once
+and reports whether content and IAM have applied the saved event. A missing
+command returns 404 `unknown`; a request still running may yet save it. An
+uncertain append returns 503 `unknown`, while a failed check before append returns
+503 `unavailable`. The browser grant editor and fresh-install journey remain pending.
 
 ## Known design and dev-stack gaps
 
