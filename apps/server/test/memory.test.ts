@@ -10,6 +10,8 @@ import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memo
   pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
 import { memoryWrittenEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
+import type { MemoryOptions } from '../src/memory/access.ts';
+import { reconcileCommands } from '../src/memory/commands.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -23,6 +25,8 @@ let runner: ProjectionRunner;
 let keys: ReturnType<typeof memoryKeys>;
 let directory: string;
 let memory: import('../src/memory/access.ts').MemoryOptions;
+import type { MemoryOptions } from '../src/memory/access.ts';
+import { reconcileCommands } from '../src/memory/commands.ts';
 let count = 0;
 const projection = memoryProjection({ decrypt });
 function decrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
@@ -1110,11 +1114,11 @@ it('reconciles a prepared key and its temporary copy after restart', async funct
   await app.close();
   app = buildServer(config, { memory });
   expect((await get(`${path('bob')}/changes/restart-prepared`)).json())
-    .toMatchObject({ outcome: 'unknown' });
+    .toMatchObject({ outcome: 'failed' });
   expect(function deleted() { keys.provision(identity); }).toThrow('destroyed');
   await expect(access(`${directory}/${reference}-pending`)).rejects.toThrow();
   expect((await remember('bob', 'person', 'unavailable-write')).json())
-    .toMatchObject({ outcome: 'unknown' });
+    .toMatchObject({ outcome: 'failed' });
 });
 
 it('conflicts when a reconciled command has different saved input', async function changedSaved() {
@@ -1133,4 +1137,317 @@ it('conflicts when a reconciled command has different saved input', async functi
     expect((await remember('bob', 'person', 'different-saved-input')).statusCode).toBe(409);
   } finally { spy.mockRestore(); }
   await runner.run(projection);
+});
+
+
+it('checks write permission before content checks or taking a command lock', async function permissionFirst() {
+  const lock = vi.spyOn(memory.db, 'lock');
+  const read = vi.spyOn(nats.store, 'readStream');
+  const invalid = { kind: 'preference', dependsOn: [{
+    scopeId: memoryScopeId('acme', 'group', 'write-sales'), memoryId: 'missing', revision: 1,
+  }] };
+  try {
+    for (const owner of ['write-sales', 'unknown']) {
+      const response = await remember(owner, 'group', `forbidden-${owner}`, 'admin', invalid);
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ status: 'refused' });
+    }
+    expect(lock).not.toHaveBeenCalled();
+    for (const [subject] of read.mock.calls) expect(subject).not.toMatch(/^scope-/u);
+  } finally {
+    lock.mockRestore();
+    read.mockRestore();
+  }
+});
+
+it.each(['other_scope', 'stale', 'destroyed', 'expired'] as const)(
+  'refuses a %s dependency without appending', async function dependencyRefusal(kind) {
+    const memoryId = `dependency-${kind}`;
+    const record = await write('bob', 'person', memoryId);
+    const scopeId = memoryScopeId('acme', 'person', 'bob');
+    const identity = { silo: 'acme', scopeId, scopeKind: 'person' as const,
+      ownerId: 'bob', memoryId, revision: 1 };
+    if (kind === 'destroyed') keys.delete(identity);
+    if (kind === 'expired') {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      const saved = memoryWrittenEventSchema.parse(record);
+      if (!('schemaVersion' in saved.data)) throw new Error('Expected current memory');
+      const data = { ...saved.data, expiresAt: '2029-01-01T00:00:00Z' };
+      const updated = { ...saved, id: `expired-${memoryId}`, commandId: `expired-${memoryId}`, data };
+      const command = { event: updated, expectedSequence: await nats.store.head(saved.subject),
+        historyChecked: true as const };
+      expect((await nats.store.append(command)).status).toBe('appended');
+    }
+    const dependency = { scopeId, memoryId, revision: 1 };
+    if (kind === 'other_scope') dependency.scopeId = memoryScopeId('acme', 'group', 'sales');
+    if (kind === 'stale') dependency.revision = 2;
+    const spy = vi.spyOn(nats.store, 'append');
+    try {
+      const response = await remember('bob', 'person', `refuse-${kind}`, 'bob',
+        { dependsOn: [dependency] });
+      expect(response.statusCode).toBe(409);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+it('ignores other event types when checking live dependencies', async function otherRows() {
+  const record = await write('bob', 'person', 'dependency-live');
+  const scopeId = memoryScopeId('acme', 'person', 'bob');
+  const original = nats.store.readStream.bind(nats.store);
+  async function* withOtherRow(subject: string, from?: number, deadline?: number) {
+    yield* original(subject, from, deadline);
+    if (subject === `scope-${scopeId}`) {
+      yield { sequence: 0, event: { ...record, type: 'memory.forgotten', data: {} } };
+    }
+  }
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(withOtherRow);
+  try {
+    const dependency = { scopeId, memoryId: 'dependency-live', revision: 1 };
+    expect((await remember('bob', 'person', 'dependency-other-row', 'bob',
+      { dependsOn: [dependency] })).statusCode).toBe(200);
+  } finally { spy.mockRestore(); }
+});
+
+it('refuses past expiry and oversized commands', async function limitsBeforeKeys() {
+  expect((await remember('bob', 'person', 'past-expiry', 'bob',
+    { expiresAt: '2020-01-01T00:00:00Z' })).statusCode).toBe(422);
+  const extra = { text: 'x'.repeat(17000) };
+  expect((await remember('bob', 'person', 'oversized-body', 'bob', extra)).statusCode).toBe(422);
+});
+
+it('checks the complete event size before creating a revision key', async function eventSize() {
+  const scopeId = memoryScopeId('acme', 'person', 'bob');
+  const dependsOn = [];
+  for (let index = 0; index < 32; index++) {
+    const memoryId = `${String(index).padStart(2, '0')}_${'x'.repeat(197)}`;
+    await write('bob', 'person', memoryId);
+    dependsOn.push({ scopeId, memoryId, revision: 1 });
+  }
+  const sources = [];
+  const commandId = 'event-size_' + 'c'.repeat(180);
+  for (let index = 0; index < 8; index++) sources.push({ memberId: 'bob', commandId });
+  const tooLarge = { text: 'x'.repeat(4096), sources, dependsOn };
+  expect((await remember('bob', 'person', commandId, 'bob', tooLarge)).statusCode).toBe(422);
+  expect((await remember('bob', 'person', commandId)).statusCode).toBe(200);
+});
+
+it('refuses a wrong Origin before doing memory work', async function origin() {
+  const session = { sub: 'idp-bob', orgId: 'org-acme', roles: ['owner'],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+    origin: 'https://other.example.test' };
+  const spy = vi.spyOn(nats.store, 'readStream');
+  try {
+    const response = await app.inject({ method: 'POST', url: `${path('bob')}/facts`,
+      headers, payload: {} });
+    expect(response.statusCode).toBe(403);
+    expect(spy).not.toHaveBeenCalled();
+  } finally { spy.mockRestore(); }
+});
+
+it.each(['team', 'grant', 'assistant'] as const)(
+  'refuses a %s change during the final write check', async function changedAuthority(kind) {
+    const assistantId = `write-changing-${kind}`;
+    await append('team-changing', 'team.created',
+      { teamId: 'changing', name: 'Changing', createdBy: 'owner' });
+    await append('team-changing', 'team.member_added',
+      { teamId: 'changing', memberId: 'bob', addedBy: 'owner' });
+    await append(`assistant-${assistantId}`, 'assistant.created',
+      { assistantId, kind: 'team', ownerId: 'changing' });
+    await writeGrant(assistantId);
+    await runner.run(groups);
+    await runner.run(computers);
+    const scopeId = memoryScopeId('acme', 'assistant_notes', assistantId);
+    const subject = { team: 'team-changing', grant: grantStream('memory_write', scopeId),
+      assistant: `assistant-${assistantId}` }[kind];
+    const original = nats.store.head.bind(nats.store);
+    let checks = 0;
+    async function move(target?: string, deadline?: number) {
+      const position = await original(target, deadline);
+      if (target === subject && ++checks === 1) {
+        if (kind === 'team') {
+          await append(subject, 'team.member_removed',
+            { teamId: 'changing', memberId: 'bob', removedBy: 'owner' }, false);
+        } else if (kind === 'assistant') {
+          await append(subject, 'assistant.settings_changed', { assistantId, changedBy: 'owner',
+            active: false, changedFields: ['active'] }, false);
+        } else {
+          await append(subject, 'grant.revoked', { resourceType: 'memory_write',
+            resourceId: scopeId, granteeKind: 'member', granteeId: 'bob', revokedBy: 'owner' }, false);
+        }
+        return original(target, deadline);
+      }
+      return position;
+    }
+    const spy = vi.spyOn(nats.store, 'head').mockImplementation(move);
+    try {
+      expect((await remember(assistantId, 'assistant_notes', `changed-${kind}`)).statusCode)
+        .toBe(503);
+    } finally { spy.mockRestore(); }
+  });
+
+it('lets a notes writer check their command without a read grant', async function writerStatus() {
+  await append('assistant-write-only', 'assistant.created',
+    { assistantId: 'write-only', kind: 'personal', ownerId: 'bob' });
+  await writeGrant('write-only');
+  await runner.run(computers);
+  expect((await remember('write-only', 'assistant_notes', 'write-only-command')).statusCode).toBe(200);
+  await runner.run(projection);
+  expect((await get(`${path('write-only', 'assistant_notes')}/facts`)).statusCode).toBe(404);
+  expect((await get(`${path('write-only', 'assistant_notes')}/changes/write-only-command`)).json())
+    .toMatchObject({ outcome: 'saved' });
+});
+
+it('keeps no text or text hash in a journal and removes resolved records', async function journalPrivacy() {
+  const unavailable = { status: 'unavailable' as const, cause: new Error('Reply lost') };
+  const spy = vi.spyOn(nats.store, 'append').mockResolvedValue(unavailable);
+  let response;
+  try { response = await remember('bob', 'person', 'journal-private'); }
+  finally { spy.mockRestore(); }
+  const memoryId = response.json<{ memoryId: string }>().memoryId;
+  const journalPath = `${directory}/command-${memoryId}.json`;
+  const raw = await readFile(journalPath, 'utf8');
+  expect(raw).not.toContain('A human statement');
+  const entry = z.object({ inputDigest: z.string() }).parse(JSON.parse(raw));
+  const hash = await import('node:crypto');
+  const input = { kind: 'fact', pinned: false, expiresAt: null,
+    sources: [{ memberId: 'bob', commandId: 'journal-private' }], dependsOn: [],
+    commandId: 'journal-private', text: 'A human statement' };
+  const digest = hash.createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  expect(entry.inputDigest).not.toBe(digest);
+  await new Promise(function appendWindow(resolve) { setTimeout(resolve, 2100); });
+  await reconcileCommands(memory);
+  expect((await get(`${path('bob')}/changes/journal-private`)).json())
+    .toMatchObject({ outcome: 'failed' });
+  await expect(access(journalPath)).rejects.toThrow();
+  const saved = await remember('bob', 'person', 'journal-saved');
+  const savedId = saved.json<{ memoryId: string }>().memoryId;
+  await expect(access(`${directory}/command-${savedId}.json`)).rejects.toThrow();
+});
+
+it('starts despite damaged journals and a failed recovery read', async function bootRecovery() {
+  const badPath = `${directory}/command-${'f'.repeat(64)}.json`;
+  await writeFile(badPath, '{damaged');
+  await app.close();
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(brokenRead);
+  async function* brokenRead(): AsyncGenerator<never> {
+    throw new Error('NATS unavailable');
+  }
+  try {
+    app = buildServer(config, { memory });
+    await app.ready();
+  } finally {
+    spy.mockRestore();
+    await rm(badPath);
+  }
+});
+
+
+it('accepts accessible personal chat messages and refuses missing or private messages',
+  async function personalSources() {
+    for (const [conversationId, participantIds] of [
+      ['memory-source', ['bob', 'owner']], ['memory-private', ['owner', 'admin']],
+    ] as const) {
+      await append(`conversation-${conversationId}`, 'conversation.created',
+        { conversationId, mode: 'direct', participantIds, createdBy: participantIds[0] });
+    }
+    const posted = await append('conversation-memory-source', 'message.posted', {
+      conversationId: 'memory-source', authorId: 'bob', authorKind: 'human',
+      ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text',
+    });
+    await runner.run(conversations);
+    const original = nats.store.readStream.bind(nats.store);
+    async function* bounded(subject: string, from?: number, deadline?: number) {
+      let rows = 0;
+      for await (const row of original(subject, from, deadline)) {
+        if (subject.startsWith('conversation-')) expect(++rows).toBeLessThanOrEqual(1);
+        yield row;
+      }
+    }
+    const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(bounded);
+    const lock = memory.db.lock!.bind(memory.db);
+    let locked = false;
+    async function trackedLock<T>(name: string, work: (db: import('@opencrane/projections').Db) => Promise<T>) {
+      async function tracked(db: import('@opencrane/projections').Db) {
+        locked = true;
+        try { return await work(db); }
+        finally { locked = false; }
+      }
+      return lock(name, tracked);
+    }
+    const lockSpy = vi.spyOn(memory.db, 'lock').mockImplementation(trackedLock);
+    const query = memory.db.query.bind(memory.db);
+    async function outsideLock<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+      if (sql.includes('conversation_feed')) expect(locked).toBe(false);
+      return query<Row>(sql, values);
+    }
+    const querySpy = vi.spyOn(memory.db, 'query').mockImplementation(outsideLock);
+    try {
+      const accessible = { sources: [{ conversationId: 'memory-source', messageId: posted.id }] };
+      expect((await remember('bob', 'person', 'chat-source', 'bob', accessible)).statusCode).toBe(200);
+      const missing = { sources: [{ conversationId: 'memory-source', messageId: 'missing' }] };
+      expect((await remember('bob', 'person', 'missing-source', 'bob', missing)).statusCode).toBe(404);
+      const privateMessage = { sources: [{ conversationId: 'memory-private', messageId: 'private' }] };
+      expect((await remember('bob', 'person', 'private-source', 'bob', privateMessage)).statusCode).toBe(404);
+    } finally {
+      spy.mockRestore(); lockSpy.mockRestore(); querySpy.mockRestore();
+    }
+  });
+
+it('refuses a busy command lock promptly and keeps the database usable', async function busyLock() {
+  const crypto = await import('node:crypto');
+  const hash = crypto.createHash('sha256');
+  hash.update(JSON.stringify(['acme', 'human', 'bob', memoryScopeId('acme', 'person', 'bob'),
+    'busy-command']));
+  const reference = hash.digest('hex');
+  const client = await storage.queue.connect();
+  const name = `opencrane:projection:memory-command:${reference}`;
+  await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [name]);
+  let pending;
+  try {
+    pending = remember('bob', 'person', 'busy-command');
+    function timeout(): Promise<never> {
+      return new Promise(function wait(_resolve, reject) {
+        setTimeout(function fail() { reject(new Error('Command waited for its lock')); }, 1500);
+      });
+    }
+    const response = await Promise.race([pending, timeout()]);
+    expect([409, 503]).toContain(response.statusCode);
+    expect((await storage.queue.query('SELECT 1')).rows).toHaveLength(1);
+  } finally {
+    await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [name]);
+    client.release();
+    await pending;
+  }
+});
+
+
+it('resolves an unknown saved command across restart without resending', async function unknownRestart() {
+  const original = nats.store.append.bind(nats.store);
+  async function lostReply(command: Parameters<typeof original>[0]) {
+    await original(command);
+    return { status: 'unavailable' as const, cause: new Error('Reply lost') };
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(lostReply);
+  let response;
+  try { response = await remember('bob', 'person', 'unknown-restart'); }
+  finally { spy.mockRestore(); }
+  expect(response.json()).toMatchObject({ outcome: 'unknown' });
+  const memoryId = response.json<{ memoryId: string }>().memoryId;
+  await app.close();
+  await new Promise(function appendWindow(resolve) { setTimeout(resolve, 2100); });
+  app = buildServer(config, { memory });
+  await app.ready();
+  await runner.run(projection);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  try {
+    expect((await get(`${path('bob')}/changes/unknown-restart`)).json())
+      .toMatchObject({ outcome: 'saved', memoryId });
+    await expect(access(`${directory}/command-${memoryId}.json`)).rejects.toThrow();
+    expect(appendSpy).not.toHaveBeenCalled();
+  } finally { appendSpy.mockRestore(); }
 });
