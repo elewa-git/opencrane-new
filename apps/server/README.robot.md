@@ -1276,10 +1276,18 @@ desktop grant. A late participant can list and download screenshots saved after 
 latest join. Older previews and downloads are refused, including after projection replay.
 Private team sessions still refuse participant capture.
 
-## Governed personal recall
+## Governed memory recall
 
-`POST /mcp/memory/server` serves stateless 2026-07-28 discovery, listing and personal recall.
+`POST /mcp/memory/server` serves stateless 2026-07-28 discovery, listing and scoped recall.
 Only recall is advertised. Remember and other memory operations remain separate work.
+Recall selects the requester's person scope, the bound assistant's notes, or its
+owner group's scope. Another assistant or membership cannot add a scope. Notes
+and group reads require the live assistant audience, current group membership
+where applicable, and recorded requester/assistant operation grants. A grant to
+the assistant's owner group can supply requester read rights after membership checks.
+Discovery requires MCP access without requiring a personal memory read grant.
+Private remember calls are refused even with plausible shared source references.
+Shared-only execution remains unavailable, and native turns receive no memory tools.
 
 The models process needs `TOKEN_SIGNING_KEY_FILE`. `MODEL_MCP_ROUTES` must include
 `{ "serverId": "memory", "connectionId": "server", "upstream": "<server-host>:<port>" }`.

@@ -134,7 +134,10 @@ async function seedScopedFacts(target: typeof setup, team: boolean) {
     { scopeKind: 'person' as const, ownerId: 'alice' },
     { scopeKind: 'assistant_notes' as const, ownerId: 'assistant' },
   ];
-  if (team) scopes.push({ scopeKind: 'group' as const, ownerId: 'sales' });
+  if (team) {
+    const groupScope = { scopeKind: 'group' as const, ownerId: 'sales' };
+    scopes.push(groupScope);
+  }
   for (const scope of scopes) {
     const selectedId = memoryScopeId('test', scope.scopeKind, scope.ownerId);
     const identity = { silo: 'test', ...scope, scopeId: selectedId,
@@ -195,9 +198,12 @@ async function scopedRecall(team: boolean) {
       const response = await target.call(headers, body, route);
       expect(response.status, `${scope.scopeKind}: ${response.text}`).toBe(200);
       const result: unknown = JSON.parse(response.text);
-      expect(result).toMatchObject({ result: { structuredContent: { returnedCount: 1,
-        facts: [{ memoryId: scope.scopeKind, text: `Only ${scope.scopeKind} facts` }] } } });
-      expect(decodeJwt(issued)).toMatchObject({ scopes: [selectedId], contentAccess: 'private' });
+      const expectedFact = { memoryId: scope.scopeKind, text: `Only ${scope.scopeKind} facts` };
+      const expectedPage = { returnedCount: 1, facts: [expectedFact] };
+      const expectedReply = { result: { structuredContent: expectedPage } };
+      expect(result).toMatchObject(expectedReply);
+      const expectedContext = { scopes: [selectedId], contentAccess: 'private' };
+      expect(decodeJwt(issued)).toMatchObject(expectedContext);
       await refuseInactiveAssistant(target, backend, body, selectedId);
       await refuseScopedRemember(target, backend, body, issued);
       if (team) {
@@ -213,8 +219,10 @@ async function scopedRecall(team: boolean) {
         ...requester, revokedBy: 'alice' };
       const revoked = await target.append(grantStream('memory_read', selectedId),
         'grant.revoked', revokedFields);
+      const scopeClaims = { scopes: [selectedId] };
+      const revokedToken = await signedRecall(target, scopeClaims, body);
       const direct = { method: 'POST' as const, url: route,
-        headers: { ...headers, 'x-memory-context': issued }, payload: body };
+        headers: { ...headers, 'x-memory-context': revokedToken }, payload: body };
       expect((await backend.inject(direct)).statusCode).toBe(403);
       expect((await target.call(headers, body, route)).status).toBe(403);
       await target.auth.handler.handle(revoked, target.db);
@@ -265,12 +273,12 @@ async function refuseScopedRemember(target: typeof setup, backend: typeof app,
 }
 
 async function refuseUnboundScopes(target: typeof setup, backend: typeof app) {
-  await target.append('team-other', 'team.created',
-    { teamId: 'other', name: 'Other', createdBy: 'alice' });
-  await target.append('team-other', 'team.member_added',
-    { teamId: 'other', memberId: 'alice', addedBy: 'alice' });
-  await target.append('assistant-other', 'assistant.created',
-    { assistantId: 'other', kind: 'personal', ownerId: 'alice' });
+  const group = { teamId: 'other', name: 'Other', createdBy: 'alice' };
+  await target.append('team-other', 'team.created', group);
+  const membership = { teamId: 'other', memberId: 'alice', addedBy: 'alice' };
+  await target.append('team-other', 'team.member_added', membership);
+  const assistant = { assistantId: 'other', kind: 'personal', ownerId: 'alice' };
+  await target.append('assistant-other', 'assistant.created', assistant);
   const unboundScopes = [memoryScopeId('test', 'group', 'other'),
     memoryScopeId('test', 'assistant_notes', 'other')];
   for (const selectedId of unboundScopes) {
@@ -283,7 +291,8 @@ async function refuseUnboundScopes(target: typeof setup, backend: typeof app) {
 
 async function assertScopedRefused(target: typeof setup, backend: typeof app,
   body: typeof call, selectedId: string) {
-  const token = await signedRecall(target, { scopes: [selectedId] }, body);
+  const scopeClaims = { scopes: [selectedId] };
+  const token = await signedRecall(target, scopeClaims, body);
   const database = vi.spyOn(target.db, 'query');
   try {
     const direct = { method: 'POST' as const, url: route,

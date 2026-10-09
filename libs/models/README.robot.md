@@ -805,16 +805,57 @@ event identity checks.
 ## Memory recall capabilities (P4-12 PR 3a)
 
 Only `/mcp/memory/server` receives signed `x-memory-context` after ext_authz checks
-live turns, requester/assistant `memory_read` and `mcp_server` grants, and Allow recall policy.
+live turns, requester/assistant `mcp_server` grants, and Allow recall policy.
+Recall also requires current `memory_read` grants for its selected scope.
 Claims bind silo, requester, assistant, computer/generation, conversation, turn, thread,
-operation, person scope, private content class, call/decision ids, body digest and event position.
+operation, selected scope, private content class, call/decision ids, body digest and event position.
 The server verifies ES256, issuer, audience, expiry within two seconds and body/thread binding,
 then rechecks live rights and policy. Only an explicitly recorded `restricted` turn is allowed.
 Legacy starts without a mode, `memory_free` starts and shared-only contexts are refused.
 Both `memory_read` and `mcp_server` need current recorded `grant.given` events for
 the requester as `member` and the assistant as `assistant`, as well as OpenFGA permission.
+For memory reads by a team assistant, a recorded `team` grant to its owner group can
+also supply requester rights after current recorded membership and OpenFGA membership checks.
 A revocation without a kind removes both matching identity kinds. Leftover OpenFGA
 permissions and grants for another identity kind cannot replace these recorded grants.
+
+### Notes and group recall (P4-12 PR 3b)
+
+Choices come from the server-recorded assistant: the requester's person scope,
+the bound assistant's notes, and a team assistant's owner-group scope. Another
+group membership or another assistant owned by the requester cannot expand this list.
+A personal assistant must belong to the requester. A team assistant requires current
+recorded owner-group membership and OpenFGA permission, including for personal recall.
+Inactive assistants and pending membership removals refuse before any fact query.
+Only small assistant, member, team and grant streams supply these access checks.
+
+Discovery and listing need the recorded MCP grants and current live audience, but
+do not read facts or require a personal memory grant. Recall checks the selected
+scope's operation grants separately at both gateway and backend admission.
+Remember remains unadvertised and refused, including private calls with plausible
+shared source references. Native turns still receive no memory tools.
+
+This is the first recall-only slice of the row-3 remainder. PR #292's command path
+was unmerged when work began. Governed remember and server-recorded shared-only
+execution remain separate work. A caller's `shared_only` claim is still refused;
+this slice does not establish isolation of shared execution inputs.
+
+Review follow-ups now cover fractional-second expiry, independent discovery
+version/name headers, and the issuer's two-second cap and shorter caller deadline.
+Reversed lifetimes also fail through future issuance or expiry; that check is redundant.
+The remaining snapshot-filtering and independent recorded-identity/closure guard
+cases from verify1 remain follow-ups. The earlier qualification limits below still apply.
+
+Source checks on 9 October 2026: PASS for `npm run lint` (including Knip),
+`npm run typecheck`, `npm run check:events` (99 types) and `npm run lint:changelog`.
+Both five-file targeted runs passed 164 tests with `PG_TEST_URL` set. An additional
+MCP-only run passed 34 tests after revocation checks gained fresh signed passes.
+Final checks of the changed TypeScript files and the models package also passed.
+All lint, typecheck and Vitest commands used `nice -n 10`. Dependencies were installed
+with `npm ci`; NATS and Lychee use the requested shared-tool symlinks.
+The test commits precede implementation. The full root suite and live fresh-install
+qualification are NOT RUN. PR #299 was still unmerged at this receipt, so this branch
+uses its source and needs rebasing onto main after it lands.
 
 ### Review correction evidence
 
