@@ -365,7 +365,9 @@ async function leavesQuietEntriesUnread() {
   await poll(approvals);
   expect(head.mock.calls).toEqual([[]]);
   // Check positions once a new event appears, even if it concerns another stream.
-  await append('fixture-unrelated', 'fixture.changed', {});
+  await append('member-other', 'member.joined', {
+    memberId: 'other', email: 'other@example.test', displayName: 'Other', role: 'member',
+  });
   head.mockClear();
   await poll(approvals);
   expect(head).toHaveBeenCalledWith(`approval-${approvalId}`, expect.any(Number));
