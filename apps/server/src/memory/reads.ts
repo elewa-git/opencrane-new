@@ -88,6 +88,9 @@ const factSchema = z.object({ memory_id: identifier, revision: z.coerce.number()
   expires_at: z.string().nullable(), content_status: z.string(), saved_at: z.string() });
 const factColumns = `memory_id, revision, search_text, kind, pinned, expires_at,
   content_status, saved_at`;
+const detailMetadataSchema = z.object({ memory_id: identifier,
+  revision: z.coerce.number().nullable(), expires_at: z.string().nullable(),
+  content_status: z.string() });
 function publicFact(raw: unknown) {
   const row = factSchema.parse(raw);
   if (row.content_status !== 'available' || row.search_text === null) {
@@ -185,7 +188,7 @@ export async function detailFact(options: MemoryOptions, requester: string, scop
   if (!row) {
     throw new MemoryRefused();
   }
-  const saved = factSchema.parse(row);
+  const saved = detailMetadataSchema.parse(row);
   if (saved.expires_at !== null && Date.parse(saved.expires_at) <= Date.now()) {
     throw new MemoryRefused();
   }
@@ -200,7 +203,7 @@ export async function detailFact(options: MemoryOptions, requester: string, scop
     return { status: 'unavailable' as const, scopeId: scope.scopeId,
       memoryId: saved.memory_id, revision: saved.revision, reason };
   }
-  const fact = publicFact(saved);
+  const fact = publicFact(row);
   const sources = await sourceStatuses(options, requester, row['sources']);
   const response = { scopeId: scope.scopeId, fact, sources };
   if (Buffer.byteLength(JSON.stringify(response)) > limits.pageBytes) {

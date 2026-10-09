@@ -7,3 +7,6 @@ fresh-install qualification remain pending.
 Fact detail now checks chat access before looking up one source message. Destroyed
 and quarantined facts return an unavailable result without text. Member statements
 show a neutral label without the author's id or command id.
+
+Older quarantined facts return the same unavailable result even when their revision
+metadata is missing.

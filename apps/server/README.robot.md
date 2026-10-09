@@ -39,6 +39,8 @@ and separately checked source statuses within 16 KiB. Unknown, foreign and forbi
 fact ids use the same 404. Expired facts also return 404. Destroyed and quarantined facts
 return HTTP 200 with `{status: "unavailable", scopeId, memoryId, revision, reason}`.
 The reason is `destroyed` or `quarantined`; this result contains no fact text or sources.
+Older quarantined rows can have `revision: null`. Detail reads only their identity,
+expiry and content status, so missing text metadata cannot turn this into a service error.
 Projection lag or a changed generation still returns 503.
 
 Source checks use existing conversation permissions before looking up content. An indexed
