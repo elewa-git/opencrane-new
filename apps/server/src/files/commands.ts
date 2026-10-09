@@ -7,10 +7,10 @@ import {
 } from '@opencrane/events';
 import { z } from 'zod';
 import { creationEvent } from '../chat/private-session.ts';
+import { participation, ParticipationRefused } from '../chat/participation.ts';
 import { chatHistory } from '../chat/commands.ts';
 import { FileRefusal, parseFileInput } from './refusals.ts';
 
-const participantDetails = z.object({ participantId: z.string() });
 const memberDetails = z.object({ memberId: z.string() });
 const fileContext = z.object({
   conversationId: z.string(),
@@ -40,10 +40,13 @@ export async function ownConversation(
     if (uploading) throw new FileRefusal('team_files_refused');
     allowParticipant = false;
   }
-  let allowed = data.createdBy === memberId;
-  if (allowParticipant) {
-    allowed = currentParticipant(rows, memberId, allowed);
+  try {
+    await participation(store, silo, conversationId, memberId, rows);
+  } catch (error) {
+    if (!(error instanceof ParticipationRefused)) throw error;
+    throw new FileRefusal('conversation_refused');
   }
+  const allowed = allowParticipant || data.createdBy === memberId;
   const closed = findEventOfType(rows, 'conversation.closed');
   if (!allowed || closed) {
     throw new FileRefusal('conversation_refused');
@@ -88,20 +91,6 @@ function findEventOfType(rows: StoredEvent[], type: string) {
     }
   }
   return undefined;
-}
-
-function currentParticipant(rows: StoredEvent[], memberId: string, isOwner: boolean) {
-  let participates = isOwner;
-  for (const { event } of rows) {
-    if (event.type !== 'participant.added' && event.type !== 'participant.removed') {
-      continue;
-    }
-    const participant = participantDetails.parse(event.data);
-    if (participant.participantId === memberId) {
-      participates = event.type === 'participant.added';
-    }
-  }
-  return participates;
 }
 
 /** Only writes one conditional append. Storage and delivery are IO reactions. */

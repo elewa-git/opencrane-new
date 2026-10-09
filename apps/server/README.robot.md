@@ -1160,8 +1160,8 @@ missing databases, expired append deadlines and rejected join identity projectio
 Turn lists now include reviewed, zero-cost Ask tools only when discovery carries a review.
 Allow tools still fail if policy changes to Ask mid-turn.
 
-Human group events are now valid stored records. Existing chat reads, lists and
-subscriptions refuse group mode until its bounded access reader is introduced.
+Human group events are now valid stored records. Chat reads, lists and
+subscriptions check saved participation and the caller’s latest join position.
 Creation and participant commands for that mode are not exposed yet.
 
 Provider binding POSTs use the existing organisation, exact Origin and current Owner/Admin checks with a 4,096-byte limit. GET reads checked event histories, reports real default counts and marks routine history as absent or unsupported. Reader failure or changing history returns 503. See [the provider API](../../docs/api/providers.md).
@@ -1171,3 +1171,18 @@ one saved receipt and one 409 response. Both must finish their final access chec
 before the test lets either append. `changes/:commandId` returns the saved operation
 and its original event id. Configuration replies also read the saved event before
 reporting success, so a binding cannot be mistaken for a saved model change.
+
+## Conversation participation reads
+
+Chat, approvals, files and desktop checks share the current audience and latest join
+position from NATS. Removal refuses access before OpenFGA applies it; joins need their
+applied receipt. Sockets watch member and participation streams, plus the actual team
+for private team sessions. They keep polling during blocked content reads and drain
+full pages before ready. History, titles and saved change status start at the latest join.
+Legacy event positions come from the rebuilt feed and are checked against NATS.
+File reads and desktop checks use indexed records, so their access checks do not scan
+conversation history. File commands load their history before checking participation.
+The offline upgrade must finish with old workers stopped before readers restart.
+No participant mutation endpoint is available. Real-service regression tests cover
+removal, blocked delivery, re-joins, other access readers and 100,000 messages.
+Fresh-install browser qualification remains NOT RUN.

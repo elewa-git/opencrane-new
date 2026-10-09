@@ -10,7 +10,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and permission checks"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and permission and participation checks"]
   server -.->|checks organisation, access, invitation accounts and spending| libs["libs/*<br/>shared code"]
   server -->|records changes, model grants, chat, computer facts and confirmed provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
@@ -44,6 +44,7 @@ flowchart LR
   Keeps checking their access while a live member connection is open.
 - Records changes as events and reads the current state from PostgreSQL.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
+  Checks saved participation changes before returning private content.
 - Offers a personal assistant only reviewed, free tools that both the person and assistant can use.
 - Returns spending records to current owners and admins. It reads the records first,
   then checks access, so a longer read does not use up the write access time limit.
@@ -125,6 +126,8 @@ use it to refuse calls if the tool changes to Ask during the turn.
    loses spending access can still read and stop their work.
 6. **Two people chat.** The server checks who can read their direct conversation,
    then returns messages and live updates. Busy chats and slow reads keep working.
+   A removed participant loses access even before the permissions service catches up.
+   A person who joins later sees messages from their latest join onwards.
 7. **An admin adds a tool server.** The server checks the remote address, lists its
    tools and leaves them blocked until an admin reviews them.
 8. **An assistant asks an AI model for help.** The request goes through agentgateway, the

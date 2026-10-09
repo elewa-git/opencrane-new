@@ -38,6 +38,9 @@ async function createConversationTables(db: Query): Promise<void> {
   await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_message_reply
     ON conversation_feed (silo, conversation_id, (data->>'messageId'))
     WHERE type='agent.message_completed'`);
+  await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_participation
+    ON conversation_feed (silo, conversation_id, position)
+    WHERE type IN ('participant.added', 'participant.removed')`);
 }
 
 async function refuseMissingParticipation(db: Query): Promise<void> {
@@ -104,12 +107,16 @@ export async function readConversation(db: Query, silo: string, conversationId: 
     rows: result.rows.map(row => ({ position: Number(row.position), id: row.event_id, type: row.type, data: row.data, time: row.time })) };
 }
 
-export async function listConversations(db: Query, silo: string) {
+export async function listConversations(db: Query, silo: string, memberId?: string) {
   const rows = await db.query<{ conversation_id: string; data: unknown; time: string;
     kind: 'personal' | 'team' | null }>(
     `SELECT f.conversation_id, f.data, f.time, c.kind FROM conversation_feed f
       LEFT JOIN computers c ON c.silo = f.silo AND c.assistant_id = f.data->>'assistantId'
-      WHERE f.silo = $1 AND f.type = 'conversation.created' ORDER BY f.position DESC`, [silo]);
+      WHERE f.silo = $1 AND f.type = 'conversation.created'
+        AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM conversation_participants p
+          WHERE p.silo = f.silo AND p.conversation_id = f.conversation_id
+            AND p.participant_id = $2 AND p.end_position IS NULL))
+      ORDER BY f.position DESC`, [silo, memberId ?? null]);
   function conversationRow(row: (typeof rows.rows)[number]) {
     const data = conversationCreatedDataSchema.parse(row.data);
     return { ...data, conversationId: row.conversation_id, createdAt: row.time,

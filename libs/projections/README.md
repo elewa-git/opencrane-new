@@ -23,7 +23,7 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills tables, including configured memory| projections["libs/projections<br/>read tables, message lookups, provider choices and content keys"]
-  server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
+  server["apps/server<br/>back end"] -->|reads tables and current chat candidates| pg["PostgreSQL<br/>database"]
   projections -->|writes tables and account bindings| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions"]
@@ -58,6 +58,8 @@ flowchart LR
 Memory encryption and searchable text stay on the server. The memory rebuild command
 runs with readers and workers stopped. Customer deployment and backup recovery still need testing.
 
+Conversation lists can first select a person's current participation rows. The server
+checks saved events and permissions before returning any candidate.
 Conversation tables keep each person's join and removal positions, so replay can
 restore their periods of participation. Conversation tables are rebuilt with readers
 and workers stopped. The worker names the replay command when an upgrade needs it.

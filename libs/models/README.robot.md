@@ -754,6 +754,9 @@ that id from the current tool review, arguments and turn before writing anything
 A mismatch is refused and creates no approval card. The existing approval remains
 bound to its original action.
 
+Approval card reads accept an inclusive `fromSequence` from the caller’s current join.
+`readApproval` also returns `requestPosition`, so decisions can refuse an older request.
+
 ## Historical computer losses and initial model grants
 
 A saved `computer.lost` changes held money only while it remains the latest computer

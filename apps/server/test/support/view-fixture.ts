@@ -35,7 +35,7 @@ export async function viewFixture(
   const serverOptions = {
     ...(logDestination ? { logDestination } : {}),
     chat: { silo: 'test', store: nats.store, binding, feed, db, keys },
-    liveView: { silo: 'test', store: nats.store, binding, feed, open },
+    liveView: { silo: 'test', store: nats.store, binding, feed, db, open },
   };
   const app = buildServer(config, serverOptions);
     await append('member-alice', 'member.invited', { memberId: 'alice', invitationId: 'invite', email: 'a@example.test', role: 'member', invitedBy: 'owner', invitedIdentity: { issuer: config.issuerUrl, sub: 'alice' } });

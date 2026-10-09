@@ -286,7 +286,7 @@ metadata or participant tables and names the command:
 workers before running it. Replay takes the projection lock, replaces all three tables,
 resets event ids and the checkpoint, increases the generation and replays the log.
 A failure may leave a rebuilt prefix; keep readers stopped and rerun. It runs no
-reactions and does not offer `--verify`. Group history filtering remains pending.
+reactions and does not offer `--verify`. The server filters group history using the caller’s latest join position.
 
 Inconsistent events stop the projection and leave that event's changes and checkpoint
 uncommitted. The runner logs an apply failure with its event id and subject. Existing readers
@@ -295,3 +295,8 @@ access history. Safe per-conversation quarantine must wait for every read path t
 refuse a marked conversation. Storage errors and event-log gaps also remain failures.
 
 The providers runner also writes `model_bindings`, keyed by silo, kind, dependant and task. Binding events retain the configuration revision. Provider rebuild compares and switches both tables together without reactions. Existing installations initialise the new table before replaying providers.
+
+`listConversations` accepts an optional member id to select projected current participants.
+These rows are candidates; the server still checks events and OpenFGA before returning them.
+
+File list reads accept an inclusive join position and query only records at or after it.

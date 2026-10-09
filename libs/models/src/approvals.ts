@@ -17,6 +17,7 @@ type Request = z.infer<typeof toolApprovalRequestedDataSchema>;
 type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assistantId' | 'serverId' | 'connectionId'>;
 type FreshAuthority = (() => Promise<void>) & { deadline?: number };
 interface ApprovalReadOptions {
+  fromSequence?: number;
   now?: Date;
   deadline?: number;
   conversationRows?: StoredEvent[] | undefined;
@@ -92,7 +93,7 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
 
 export async function readApproval(store: EventStore, silo: string, approvalId: string,
   options: ApprovalReadOptions = {}):
-  Promise<{ request: Request; state: ApprovalCard['state']; sequence: number }> {
+  Promise<{ request: Request; state: ApprovalCard['state']; sequence: number; requestPosition: number }> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
   const rows = await history(store, `approval-${approvalId}`, silo, deadline);
@@ -115,7 +116,7 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
       return readApproval(store, silo, approvalId, readOptions);
     }
   }
-  return { request, state, sequence };
+  return { request, state, sequence, requestPosition: rows[0]!.sequence };
 }
 
 function approvalTerminalState(closed: boolean, expiresAt: string, now: Date) {
@@ -203,7 +204,7 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
     const remaining = Math.max(0, Math.ceil(deadline - performance.now()));
     signal = AbortSignal.timeout(remaining);
   }
-  for await (const { event } of readEvents(store, 1, head, signal)) {
+  for await (const { event } of readEvents(store, options.fromSequence ?? 1, head, signal)) {
     if (event.silo !== silo || event.type !== 'tool.approval_requested') continue;
     const request = toolApprovalRequestedDataSchema.parse(event.data);
     if (request.conversationId === conversationId) ids.push(request.approvalId);

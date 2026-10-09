@@ -12,7 +12,7 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { wireSubject } from '@opencrane/event-store';
 import {
-  members, computers, conversations, pgDb, ProjectionRunner, connectMemberFeed,
+  members, computers, conversations, files, pgDb, ProjectionRunner, connectMemberFeed,
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { envelope } from '@opencrane/models';
@@ -21,7 +21,8 @@ import type { ChatOptions } from '../src/chat/routes.ts';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer } from '../src/websocket.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
-import { ownConversation } from '../src/files/commands.ts';
+import { Client } from 'minio/dist/esm/minio.mjs';
+import { ownConversation, fileCommand } from '../src/files/commands.ts';
 import { viewAccess } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -77,7 +78,11 @@ async function fixture(countChecks = false) {
   const runner = new ProjectionRunner(db, nats.store, createLogger('review'));
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
   const options: ChatOptions = { silo: 'test', store: nats.store, db, keys, binding, feed };
-  const app = buildServer(config, { chat: options });
+  const objects = new Client({ endPoint: '127.0.0.1' });
+  function unusedScan(): Promise<'clean'> {
+    throw new Error('Reads must not scan a file');
+  }
+  const app = buildServer(config, { chat: options, files: { ...options, objects, scan: unusedScan } });
   async function append(subject: string, type: string, data: unknown, iam = true) {
     const event = envelope('test', subject, type, data);
     let actorId = 'alice';
@@ -102,7 +107,7 @@ async function fixture(countChecks = false) {
   await append('assistant-assistant', 'assistant.created', {
     assistantId: 'assistant', ownerId: 'alice', kind: 'personal',
   });
-  for (const projection of [members, conversations, computers]) {
+  for (const projection of [members, conversations, computers, files]) {
     await runner.initialise(projection);
     await runner.run(projection);
   }
@@ -278,7 +283,7 @@ async function idleDirectChatSocket() {
     await delay(2000);
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
     expect(storeReads.readStream).toBe(0);
-    expect(storeReads.head).toBeLessThanOrEqual(30);
+    expect(storeReads.head).toBeLessThanOrEqual(50);
   } finally {
     await client?.close();
     await context.close();
@@ -414,7 +419,7 @@ async function teamSocketAccessChanges() {
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
     expect(context.fgaProxy!.checkCount()).toBe(initialChecks);
     expect(storeReads.readStream).toBe(0);
-    expect(storeReads.head).toBeLessThanOrEqual(50);
+    expect(storeReads.head).toBeLessThanOrEqual(70);
     const roleChange = await context.append('member-alice', 'member.role_changed', {
       memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob',
     }, false);
@@ -484,13 +489,13 @@ async function idleSocketChecks() {
     }
     await until(ready);
     const initialChecks = context.fgaProxy!.checkCount();
-    expect(initialChecks - checksBeforeSubscription).toBe(2);
+    expect(initialChecks - checksBeforeSubscription).toBe(3);
     const storeReads = countStoreReads(context);
     await delay(2000);
     expect(socket.readyState).toBe(WebSocket.OPEN);
     expect(context.fgaProxy!.checkCount() - initialChecks).toBe(0);
     expect(storeReads.readStream).toBe(0);
-    expect(storeReads.head).toBeLessThanOrEqual(30);
+    expect(storeReads.head).toBeLessThanOrEqual(50);
 
     await context.append('conversation-agent', 'agent.turn_started', {
       conversationId: 'agent', turnId: 'agent-turn', assistantId: 'assistant',
@@ -504,12 +509,12 @@ async function idleSocketChecks() {
       memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob',
     }, false);
     function accessRechecked() {
-      return context.fgaProxy!.checkCount() >= initialChecks + 2;
+      return context.fgaProxy!.checkCount() >= initialChecks + 3;
     }
     await until(accessRechecked);
     await delay(300);
     expect(socket.readyState).toBe(WebSocket.OPEN);
-    expect(context.fgaProxy!.checkCount()).toBe(initialChecks + 2);
+    expect(context.fgaProxy!.checkCount()).toBe(initialChecks + 3);
 
     const closed = once(socket, 'close');
     const started = performance.now();
@@ -524,7 +529,7 @@ async function idleSocketChecks() {
     expect(performance.now() - started).toBeLessThan(2000);
     expect(closure[0]).toBe(1008);
     expect(received.some(isRefused)).toBe(true);
-    expect(context.fgaProxy!.checkCount()).toBe(initialChecks + 2);
+    expect(context.fgaProxy!.checkCount()).toBe(initialChecks + 3);
   } finally {
     socket?.terminate();
     if (wss) {
@@ -1184,7 +1189,7 @@ async function lateParticipantHistory() {
   const context = await fixture();
   try {
     context.keys.provision('test', 'group');
-    await context.append('conversation-group', 'conversation.created', {
+    const creation = await context.append('conversation-group', 'conversation.created', {
       conversationId: 'group', mode: 'group', createdBy: 'alice',
       participantIds: ['alice', 'hidden-person'],
     });
@@ -1214,16 +1219,25 @@ async function lateParticipantHistory() {
     expect((await context.app.inject(request)).statusCode).toBe(425);
     await context.auth.handler.handle(join, context.db);
     await message('Visible first message');
+    await context.append('participation-group', 'participant.added', {
+      conversationId: 'group', participantId: 'bob', addedBy: 'alice',
+    }, false);
     await context.runner.run(conversations);
     const response = await context.app.inject(request);
     expect(response.statusCode, response.body).toBe(200);
     expect(response.body).toContain('Visible first message');
     expect(response.body).not.toMatch(/Secret original title|Old interval|hidden-person/);
+    const oldStatus = { url: `/api/conversations/group/changes/${creation.id}`,
+      headers: context.headers('bob') };
+    expect((await context.app.inject(oldStatus)).statusCode).toBe(404);
     const list = await context.app.inject({ url: '/api/conversations',
       headers: context.headers('bob') });
     expect(list.statusCode, list.body).toBe(200);
     expect(list.body).toContain('visible-first-message');
     expect(list.body).not.toMatch(/Secret original title|hidden-person/);
+    const posting = { method: 'POST' as const, url: '/api/conversations/group/messages',
+      headers: context.headers('bob'), payload: { id: 'group-post', text: 'Not available yet' } };
+    expect((await context.app.inject(posting)).statusCode).toBe(403);
   } finally {
     await context.close();
   }
@@ -1258,7 +1272,15 @@ async function removedParticipantReaders() {
       headers: context.headers() });
     expect(approvals.statusCode, approvals.body).toBe(403);
     await expect(ownConversation(context.nats.store, 'test', 'agent', 'alice', true))
-      .rejects.toThrow('conversation_refused');
+      .rejects.toMatchObject({ kind: 'conversation_refused' });
+    const file = { conversationId: 'agent', fileId: 'not-saved', uploadedBy: 'alice',
+      name: 'notes.txt', size: 5, sha256: 'a'.repeat(64), mime: 'text/plain',
+      objectKey: 'test/agent/not-saved' };
+    const before = await context.nats.store.head('conversation-agent');
+    const writing = fileCommand(context.nats.store, 'test', 'alice', 'file-command',
+      'file.uploaded', file);
+    await expect(writing).rejects.toMatchObject({ kind: 'conversation_refused' });
+    expect(await context.nats.store.head('conversation-agent')).toBe(before);
     await expect(viewAccess(context.options, 'alice', 'agent')).rejects.toThrow();
   } finally {
     await context.close();
@@ -1275,10 +1297,21 @@ async function participationVolume() {
   let streaming: Promise<void> | undefined;
   try {
     await context.agentSession('volume');
+    await context.append('computer-assistant', 'computer.claimed', {
+      assistantId: 'assistant', computerId: 'desktop', generation: 1, tokenId: 'token:test',
+    }, false);
+    await context.append('computer-assistant', 'computer.ready', {
+      assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
+    }, false);
+    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
+      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
+      granteeKind: 'member', grantedBy: 'alice',
+    });
     const encrypted = context.keys.encrypt('test', 'volume', 'Saved history');
-    for (let offset = 0; offset < 100_000; offset += 500) {
+    const previousHead = await context.nats.store.head();
+    for (let offset = 0; offset < 100_000; offset += 100) {
       const batch = [];
-      for (let index = offset; index < offset + 500; index++) {
+      for (let index = offset; index < offset + 100; index++) {
         const data = { conversationId: 'volume', authorId: 'alice', authorKind: 'human',
           contentType: 'text', ...encrypted };
         batch.push(envelope('test', 'conversation-volume', 'message.posted', data,
@@ -1286,6 +1319,15 @@ async function participationVolume() {
       }
       await context.nats.seed(batch);
     }
+    expect(await context.nats.store.head()).toBe(previousHead + 100_000);
+    const savedMessage = { conversationId: 'volume', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...encrypted };
+    // Seed the matching read table in one batch so this measures reads, not replay speed.
+    await context.db.query(`INSERT INTO conversation_feed
+      SELECT 'test', 'volume', $1::bigint + position, 'volume-' || (position - 1)::text,
+        'message.posted', $2::jsonb, '2026-10-01T00:00:00Z'
+      FROM generate_series(1, 100000) AS fixture(position)`,
+    [previousHead, JSON.stringify(savedMessage)]);
     async function stream() {
       while (!stopped) {
         await context.append('conversation-volume', 'agent.turn_started', {
@@ -1303,6 +1345,12 @@ async function participationVolume() {
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).toContain('Hello');
       expect(performance.now() - started).toBeLessThan(1500);
+      await expect(viewAccess(context.options, 'alice', 'volume')).resolves.toMatchObject({
+        computerId: 'desktop',
+      });
+      const fileRead = { url: '/api/conversations/volume/files', headers: context.headers() };
+      const fileResponse = await context.app.inject(fileRead);
+      expect(fileResponse.statusCode, fileResponse.body).toBe(200);
     }
   } finally {
     stopped = true;
