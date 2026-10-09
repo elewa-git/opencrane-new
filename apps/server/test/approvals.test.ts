@@ -367,6 +367,38 @@ it('refuses decisions and consumption when the encrypted review cannot be read',
   } finally { await f.close(); }
 }, 40_000);
 
+it('refuses approval reads and decisions when the stored review digest does not match', async () => {
+  const f = await approvalFixture();
+  try {
+    await f.call();
+    const headers = f.headers();
+    const { cards, csrf } = await f.read(headers);
+    const changedReviewText = JSON.stringify({
+      ...cards[0]!.review,
+      action: 'Changed after storage',
+    });
+    const changedReview = vi.spyOn(f.keys, 'decrypt').mockReturnValue(changedReviewText);
+    try {
+      const read = await f.app.inject({ url: '/api/conversations/conversation/approvals',
+        headers });
+      expect(read.statusCode).toBe(503);
+
+      const decision = await f.app.inject({
+        method: 'POST',
+        url: '/api/conversations/conversation/approvals',
+        headers: { ...headers, 'x-csrf-token': csrf },
+        payload: { approvalId: cards[0]!.approvalId, decision: 'approved' },
+      });
+      expect(decision.statusCode).toBe(503);
+    } finally {
+      changedReview.mockRestore();
+    }
+    expect((await f.read()).cards[0]?.state).toBe('requested');
+  } finally {
+    await f.close();
+  }
+}, 40_000);
+
 it('refuses review reads after conversation access is removed even while OpenFGA lags', async () => {
   const f = await approvalFixture();
   try {
