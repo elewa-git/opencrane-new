@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { parseEventByType } from '@opencrane/events';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { history, seedOwnership } from '../src/index.ts';
+import { history, seedOwnership, ownershipSeedHandler } from '../src/index.ts';
 
 async function fencesMigration() {
   const nats = await natsFixture();
@@ -81,3 +81,18 @@ async function boundsSeedConflicts() {
 }
 it('seed conflicts stop after five attempts and competing fresh seeds append only once',
   boundsSeedConflicts);
+
+async function oldBootstrapDoesNotRestoreOwnership() {
+  const nats = await natsFixture();
+  try {
+    const owner = event('old-bootstrap', 'member-bootstrap-owner', 'silo.owner_bootstrapped');
+    const removed = event('removed-bootstrap', owner.subject, 'member.removed');
+    await nats.seed([owner, removed]);
+    const noSql = { query: () => Promise.reject(new Error('Unexpected SQL')) };
+    await ownershipSeedHandler(nats.store).handle(owner, noSql);
+    expect(await history(nats.store, 'ownership-test', 'test')).toEqual([]);
+  } finally {
+    await nats.close();
+  }
+}
+it('checks current owners before handling an old bootstrap event', oldBootstrapDoesNotRestoreOwnership);

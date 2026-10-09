@@ -571,17 +571,15 @@ it('rejects alternate grant streams and keeps grant then revoke denied through t
 async function oldMemberEventAfterRemoval(type: string) {
   const nats = await natsFixture();
   try {
-    const old = member(`old-${type}`, type, 'alice', {
-      previousRole: 'member', newRole: 'admin', email: 'alice@example.test',
-      displayName: 'Alice', identityIssuer: 'test', identitySub: 'alice',
-    });
-    const joined = member('first-join');
-    const removal = member('later-removal', 'member.removed');
+        const memberId = type === 'silo.owner_bootstrapped' ? 'bootstrap-owner' : 'alice';
+    const old = member(`old-${type}`, type, memberId);
+    const joined = member('first-join', 'member.joined', memberId);
+    const removal = member('later-removal', 'member.removed', memberId);
     await nats.seed([joined, old, removal]);
     const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'), nats.store);
     await apply(projection, [joined, removal]);
     await apply(projection, [old]);
-    expect(await projection.check('alice', 'member')).toMatchObject({ allowed: false });
+    expect(await projection.check(memberId, 'member')).toMatchObject({ allowed: false });
     expect(await projection.applied(old.id)).toBe(true);
   } finally {
     await nats.close();

@@ -259,9 +259,11 @@ function upgradeTests() {
 
   async function resumesSavedChunk() {
     const runtime = await prepare();
+    const history = [];
     for (let index = 0; index < 260; index++) {
-      await current.append(`history-${index}`, 'member-alice', 'member.role_changed');
+      history.push(event(`history-${index}`, 'member-alice', 'member.role_changed'));
     }
+    await current.nats.seed(history);
     await current.db.query('UPDATE handler_dispatcher SET sequence = 264');
     await runtime.stop();
     const original = current.nats.store.subscribe.bind(current.nats.store);
@@ -311,9 +313,27 @@ function upgradeTests() {
     const source = { head: current.nats.store.head.bind(current.nats.store), subscribe: stalled };
     await upgradeHandlers(runtime, source);
     expect(attempts).toBe(2);
-    expect((await snapshot()).jobs).toHaveLength(8);
+    expect((await snapshot()).jobs).toHaveLength(7);
   }
   it('backs off and retries a transient history timeout', retriesReadTimeout);
+
+  async function operatesFailedJobs() {
+    const runtime = await prepare();
+    await runtime.enqueue(runtime.options.handlers[0]!, event('failed-original'), current.db);
+    await current.db.query("UPDATE pgboss.job SET state = 'failed'");
+    const failed = await current.db.query<{ id: string }>('SELECT id FROM pgboss.job');
+    const jobId = failed.rows[0]!.id;
+    const env = { ...process.env, DATABASE_URL: current.connectionString };
+    const listed = await execute('npm', ['run', 'ops', '--', 'jobs'], { env });
+    expect(listed.stdout).toContain(jobId);
+    await execute('npm', ['run', 'ops', '--', 'jobs', '--cancel', jobId], { env });
+    const result = await current.db.query<{ state: string }>('SELECT state FROM pgboss.job');
+    expect(result.rows[0]?.state).toBe('cancelled');
+    await expect(execute('npm', ['run', 'ops', '--', 'jobs', '--cancel', jobId], { env }))
+      .rejects.toThrow('failed job');
+    expect((await current.db.query('SELECT * FROM handler_receipts')).rows).toHaveLength(3);
+  }
+  it('lists and cancels one failed original without changing receipts', operatesFailedJobs);
 
 }
 describe.skipIf(!process.env["PG_TEST_URL"])("handler subscription upgrade / real services", upgradeTests);
