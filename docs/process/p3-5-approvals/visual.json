@@ -9,7 +9,7 @@
     "no-preference",
     "reduce"
   ],
-  "captures": 88,
+  "captures": 94,
   "files": [
     "approval-requested-1280-no-preference.png",
     "approval-requested-1280-reduce.png",
@@ -17,6 +17,12 @@
     "approval-requested-390-reduce.png",
     "approval-requested-320-no-preference.png",
     "approval-requested-320-reduce.png",
+    "approval-waiting-1280-no-preference.png",
+    "approval-waiting-1280-reduce.png",
+    "approval-waiting-390-no-preference.png",
+    "approval-waiting-390-reduce.png",
+    "approval-waiting-320-no-preference.png",
+    "approval-waiting-320-reduce.png",
     "approval-details-1280-no-preference.png",
     "approval-details-1280-reduce.png",
     "approval-details-390-no-preference.png",
@@ -165,6 +171,78 @@
       "file": "approval-requested-320-reduce.png",
       "frames": [
         "WRK-10-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-waiting-1280-no-preference.png",
+      "frames": [
+        "WRK-12-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-waiting-1280-reduce.png",
+      "frames": [
+        "WRK-12-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-waiting-390-no-preference.png",
+      "frames": [
+        "WRK-12-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-waiting-390-reduce.png",
+      "frames": [
+        "WRK-12-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-waiting-320-no-preference.png",
+      "frames": [
+        "WRK-12-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-waiting-320-reduce.png",
+      "frames": [
+        "WRK-12-320"
       ],
       "width": 320,
       "motion": "reduce",
@@ -1241,6 +1319,9 @@
     "WRK-10-1280",
     "WRK-10-390",
     "WRK-10-320",
+    "WRK-12-1280",
+    "WRK-12-390",
+    "WRK-12-320",
     "WRK-11-1280",
     "WRK-11-390",
     "WRK-11-320",
@@ -1282,7 +1363,8 @@
     "WRK-22-320"
   ],
   "checks": [
-    "12 scenes captured at 1280, 390 and 320 pixels with both motion settings",
+    "13 scenes captured at 1280, 390 and 320 pixels with both motion settings",
+    "WRK-12 shows a non-requester approval without decision buttons",
     "Running and completed governed tool calls match WRK-02 and WRK-03",
     "A 200-character tool name wraps inside the transcript at every width",
     "No horizontal overflow in any capture",

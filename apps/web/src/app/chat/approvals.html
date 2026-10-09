@@ -18,9 +18,9 @@
             <strong>{{ presentation.headerMessage(card) }}</strong>
           </header>
           <h2>{{ card.review.action }}</h2>
+          <oc-approval-ledger [card]="card" [viewerId]="viewerId()" />
+          <p class="consequence"><strong>What happens</strong> · {{ card.review.consequence }}</p>
           @if (card.canDecide) {
-            <oc-approval-ledger [card]="card" [viewerId]="viewerId()" />
-            <p class="consequence"><strong>What happens</strong> · {{ card.review.consequence }}</p>
             @if (card.stepUp) {
               <p class="step-up">This action needs a recent sign-in. If yours is too old, you’ll be asked to sign in again.</p>
             }
@@ -52,7 +52,8 @@
               <button class="details" type="button" (click)="openDrawerFromEvent(card, $event)">Details</button>
             </div>
           } @else {
-            <p class="only-requester">Only the requester can decide.</p>
+            <p class="only-requester"><strong>Waiting for the requester</strong><br>
+              Only the requester can decide.</p>
           }
         </article>
       } @else {

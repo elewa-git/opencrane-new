@@ -15,6 +15,7 @@ const motions = ['no-preference', 'reduce'];
 const captures = [];
 const sceneFrames = {
   'approval-requested': ['WRK-10'],
+  'approval-waiting': ['WRK-12'],
   'approval-details': ['WRK-11'],
   'approval-submitting': ['WRK-14'],
   'approval-step-up': ['WRK-21'],
@@ -72,8 +73,10 @@ async function waitForAnimations(page) {
 }
 
 async function openPage(browser, width, motion, scenario, cards, postHandler, readHandler) {
+  let viewportHeight = 900;
+  if (scenario === 'approval-context' && width < 700) viewportHeight = 1100;
   const page = await browser.newPage({
-    viewport: { width, height: 900 },
+    viewport: { width, height: viewportHeight },
     reducedMotion: motion,
   });
   await page.route(`${origin}/**`, serveAssets);
@@ -126,6 +129,9 @@ async function captureScene(browser, scene, width, motion) {
   }
   let cards = [approvalCard(0)];
   let scenario = 'tools';
+  if (scene === 'approval-waiting') {
+    cards = [approvalCard(0, 'requested', false, 'another-member')];
+  }
   if (scene === 'tool-activity-running') scenario = 'governed-tool-running';
   if (scene === 'tool-activity-completed') scenario = 'governed-tool-completed';
   if (scene === 'tool-activity-long-name') scenario = 'governed-tool-long-name';
@@ -144,6 +150,7 @@ async function captureScene(browser, scene, width, motion) {
     || scene.startsWith('tool-activity-') || scene === 'stop-not-confirmed') {
     cards = undefined;
   }
+  if (scene === 'approval-waiting') scenario = 'approval-context';
   const { page, chat } = await openPage(browser, width, motion, scenario, cards, postResponseForScene(scene));
   try {
     if (scene === 'approval-requested') {
@@ -152,6 +159,19 @@ async function captureScene(browser, scene, width, motion) {
       await approval.scrollIntoViewIfNeeded();
       await checkFocusedOutline(page.getByRole('button', { name: /^Approve:/ }).first());
       assert(await page.getByText('Waiting on you', { exact: true }).isVisible());
+    } else if (scene === 'approval-waiting') {
+      const card = page.getByRole('region', { name: 'Approval needed' });
+      await card.waitFor();
+      assert(await card.getByText('Only the requester can decide.').isVisible());
+      assert(await card.locator('.approval-ledger').isVisible());
+      assert(await card.getByText('Changes the draft note immediately; does not confirm the order.')
+        .isVisible());
+      assert.equal(await card.getByRole('button', { name: /^Approve:/ }).count(), 0);
+      assert.equal(await card.getByRole('button', { name: /^Deny:/ }).count(), 0);
+      if (width < 700) await checkPhoneTargets(page, scene);
+      await page.evaluate(scrollPageToTop);
+      await capture(page, scene, width, motion);
+      return;
     } else if (scene === 'approval-details') {
       const dialog = await openDetails(page);
       if (motion === 'reduce') {
@@ -297,6 +317,10 @@ function getAnimationName(element) {
 
 function getActiveElement() {
   return globalThis.document.activeElement;
+}
+
+function scrollPageToTop() {
+  globalThis.scrollTo(0, 0);
 }
 
 function isActiveElement(element) {
@@ -455,7 +479,7 @@ try {
   await mkdir(output, { recursive: true });
   await removeOldPhoneTerminalCaptures();
   const scenes = [
-    'approval-requested', 'approval-details', 'approval-submitting',
+    'approval-requested', 'approval-waiting', 'approval-details', 'approval-submitting',
     'approval-step-up', 'approval-terminal', 'tool-activity-running',
     'tool-activity-completed', 'tool-activity-long-name', 'tool-details',
     'activity-jump', 'reconnected', 'stop-not-confirmed',
@@ -483,7 +507,8 @@ try {
     environment: 'Built Angular assets; Chromium; intercepted fixtures; no live governed turn',
     frames: framesForAllCaptures(captureFiles),
     checks: [
-      '12 scenes captured at 1280, 390 and 320 pixels with both motion settings',
+      '13 scenes captured at 1280, 390 and 320 pixels with both motion settings',
+      'WRK-12 shows a non-requester approval without decision buttons',
       'Running and completed governed tool calls match WRK-02 and WRK-03',
       'A 200-character tool name wraps inside the transcript at every width',
       'No horizontal overflow in any capture',

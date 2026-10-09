@@ -116,10 +116,12 @@ it('shows requester fields in order and posts one named decision', async () => {
   fixture.destroy();
 });
 
-it('shows that only the requester can decide without decision buttons', async () => {
+it('shows the WRK-12 waiting card without decision buttons', async () => {
   const fixture = await mount(() => Promise.resolve(response([card('requested', false)])));
   const root = rootOf(fixture);
   expect(root.textContent).toContain('Only the requester can decide.');
+  expect(root.querySelector('.approval-ledger')?.textContent).toContain('Draft order SO-1042');
+  expect(root.textContent).toContain('Changes the draft note immediately.');
   expect(root.querySelector('[aria-label^="Approve:"]')).toBeNull();
   expect(root.querySelector('[aria-label^="Deny:"]')).toBeNull();
   fixture.destroy();

@@ -38,10 +38,13 @@ export async function chatFixture(page, scenario = 'live') {
     lost.time = '2026-10-02T10:03:00Z';
     failed.time = '2026-10-02T10:03:00Z';
   } else if (!['draft', 'empty-selected', 'attach', 'no-agent', 'queued', 'private-team-draft'].includes(scenario)) {
-    const human = add('message.posted', { text: scenario === 'long-title' ? 'M'.repeat(500) : 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.', authorId: 'me' });
+    const humanText = messageTextForScenario(scenario);
+    const human = add('message.posted', { text: humanText, authorId: 'me' });
     add('agent.turn_started', { turnId: human.id });
     if (scenario === 'stop-not-confirmed') {
       add('agent.message_delta', { turnId: human.id, messageId: 'reply', text: 'Still working.' });
+    } else if (scenario === 'approval-context') {
+      addApprovalContextRows(add, human.id);
     } else if (scenario === 'governed-tool-running') {
       addGovernedToolStart(add, human.id);
     } else if (scenario === 'governed-tool-long-name') {
@@ -165,6 +168,33 @@ export async function chatFixture(page, scenario = 'live') {
 function addGovernedToolStart(addRow, turnId) {
   return addRow('agent.tool_call_started', { turnId, callId: 'tool-call-1',
     serverId: 'fixture-erp', toolName: 'read_order' });
+}
+
+function messageTextForScenario(scenario) {
+  if (scenario === 'long-title') return 'M'.repeat(500);
+  if (scenario === 'approval-context') {
+    return 'Read draft order SO-1042, then change its note to “Deliver after 10:00 on Tuesday”.';
+  }
+  return 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.';
+}
+
+function addApprovalContextRows(addRow, turnId) {
+  addGovernedToolStart(addRow, turnId);
+  addRow('agent.tool_call_finished', {
+    turnId,
+    callId: 'tool-call-1',
+    serverId: 'fixture-erp',
+    toolName: 'read_order',
+    status: 'completed',
+    durationMs: 240,
+  });
+  addRow('agent.message_delta', {
+    turnId,
+    messageId: 'reply',
+    text: 'Draft order SO-1042 has 12 cartons of printer paper. The current note is empty. '
+      + 'Changing it needs your approval.',
+  });
+  addRow('agent.turn_completed', { turnId });
 }
 
 function fixtureComputerState(scenario) {

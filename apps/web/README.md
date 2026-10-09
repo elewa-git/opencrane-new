@@ -10,7 +10,11 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
+<<<<<<< HEAD
   web["apps/web<br/>chat, saved drafts, missing-link recovery and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+=======
+  web["apps/web<br/>chat with honest Stop status, reviewed approvals, tool updates and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+>>>>>>> 60689eb5 (🧾 Show approval details to every participant)
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
@@ -64,7 +68,8 @@ flowchart LR
    arrives, it says “Stop not confirmed” and keeps the reply active so Stop can be tried again.
    Team turns are private by default. A memory-free choice applies to one turn and
    explains that it uses the shared disk. Recovery pauses sending and explains why.
-   A reply whose output was lost stays incomplete.
+   A reply whose output was lost stays incomplete. Approval cards show the reviewed
+   change to every participant, while only the requester can approve or deny it.
 4. **Colleagues start a human chat.** One person searches joined colleagues and chooses
    one for a direct chat, or adds several people for a group. They can also review the
    current members of one of their groups. The server creates the conversation only when
@@ -73,6 +78,16 @@ flowchart LR
    on each message and continue from the last message shown. A saved message means the
    server recorded it; it does not claim that anyone received it. The server records human
    messages and starts no assistant, computer, memory or model work.
+=======
+   A reply whose output was lost stays incomplete. Approval cards show the reviewed
+   change to every participant, while only the requester can approve or deny it.
+4. **Two colleagues start a direct chat.** One person searches the joined colleagues,
+   chooses one person and sends text. The server records a two-person conversation and
+   human messages. The website keeps the typed message while permissions are being
+   applied. It checks an uncertain reply using the original request reference, a unique
+   value that lets the server recognise the same change if it is sent again.
+   No assistant, computer, memory or model work starts.
+>>>>>>> 60689eb5 (🧾 Show approval details to every participant)
 5. **An admin adds a tool server.** MCP (Model Context Protocol) lets an assistant use tools from another server. The website accepts a remote HTTPS address and shows the discovery result. When tools are ready, the admin can continue to set each tool to Allow automatically, Ask or Block. If a save reply is lost, the website checks the saved modes before offering another action. It never sends the save again.
 6. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. Connection, access grants and publishing wait for their server support.
 7. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.
