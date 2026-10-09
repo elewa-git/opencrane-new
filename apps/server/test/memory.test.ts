@@ -101,7 +101,7 @@ async function setup() {
   await write('bob', 'person', 'foreign', 'Foreign secret', false, 'foreign');
   for (const target of [projection, groups, computers]) await runner.run(target);
   memory = { silo: 'acme', store: nats.store, db, binding,
-    feed: { memberId: resolveMember } };
+    feed: { memberId: resolveMember }, keyDirectory: directory };
   memory.chat = { ...memory, keys: conversationKeys(directory) };
   app = buildServer(config, { memory });
 }
@@ -906,3 +906,174 @@ it('returns unavailable legacy metadata without decoding fact text', async funct
   expect(response.body).not.toContain('Legacy private text');
   expect(response.json()).not.toHaveProperty('fact');
 });
+
+function remember(owner: string, kind: MemoryIdentity['scopeKind'], commandId: string,
+  member = 'bob', extra: Record<string, unknown> = {}) {
+  const session = { sub: `idp-${member}`, orgId: 'org-acme', roles: ['owner'],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+    origin: new URL(config.redirectUri).origin };
+  const payload = { commandId, text: 'A human statement', kind: 'fact', pinned: false,
+    expiresAt: null, sources: [], dependsOn: [], ...extra };
+  return app.inject({ method: 'POST', url: `${path(owner, kind)}/facts`, headers, payload });
+}
+async function writeGrant(assistantId: string) {
+  const scopeId = memoryScopeId('acme', 'assistant_notes', assistantId);
+  await append(grantStream('memory_write', scopeId), 'grant.given', {
+    resourceType: 'memory_write', resourceId: scopeId, granteeKind: 'member',
+    granteeId: 'bob', grantedBy: 'owner',
+  });
+}
+
+it('stores human facts with separate write rights and no administrative bypass', async function writes() {
+  await append('team-write-sales', 'team.created',
+    { teamId: 'write-sales', name: 'Writers', createdBy: 'owner' });
+  await append('team-write-sales', 'team.member_added',
+    { teamId: 'write-sales', memberId: 'bob', addedBy: 'owner' });
+  for (const [assistantId, kind, ownerId] of [
+    ['write-personal', 'personal', 'bob'], ['write-shared', 'team', 'write-sales'],
+  ]) {
+    await append(`assistant-${assistantId}`, 'assistant.created', { assistantId, kind, ownerId });
+    const scopeId = memoryScopeId('acme', 'assistant_notes', assistantId!);
+    await append(grantStream('memory_read', scopeId), 'grant.given', {
+      resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'member',
+      granteeId: 'bob', grantedBy: 'owner',
+    });
+  }
+  await runner.run(groups);
+  await runner.run(computers);
+  expect((await remember('bob', 'person', 'own-write')).statusCode).toBe(200);
+  expect((await remember('write-sales', 'group', 'group-write')).statusCode).toBe(200);
+  expect((await remember('write-personal', 'assistant_notes', 'read-only')).statusCode).toBe(404);
+  await writeGrant('write-personal');
+  await writeGrant('write-shared');
+  for (const assistant of ['write-personal', 'write-shared']) {
+    expect((await remember(assistant, 'assistant_notes', `notes-${assistant}`)).statusCode).toBe(200);
+  }
+  for (const member of ['owner', 'admin']) {
+    expect((await remember('bob', 'person', `denied-${member}`, member)).statusCode).toBe(404);
+    expect((await remember('write-shared', 'assistant_notes', `notes-denied-${member}`, member))
+      .statusCode).toBe(404);
+  }
+  await runner.run(projection);
+});
+it('refuses private sources, shared preferences, forged statements and controls', async function inputs() {
+  const privateSource = { sources: [{ conversationId: 'busy', messageId: 'private' }] };
+  for (const [owner, kind] of [['write-sales', 'group'], ['write-shared', 'assistant_notes']] as const) {
+    expect((await remember(owner, kind, `private-${owner}`, 'bob', privateSource)).statusCode).toBe(404);
+    expect((await remember(owner, kind, `preference-${owner}`, 'bob', { kind: 'preference' }))
+      .statusCode).toBe(422);
+  }
+  const forged = { sources: [{ memberId: 'owner', commandId: 'forged' }] };
+  expect((await remember('bob', 'person', 'forged', 'bob', forged)).statusCode).toBe(404);
+  for (const text of ['\u0001', '\u0000', '\r', 'x'.repeat(4097)]) {
+    expect((await remember('bob', 'person', `invalid-${++count}`, 'bob', { text }))
+      .statusCode).toBe(422);
+  }
+});
+it('converges identical concurrent commands and conflicts on changed input', async function duplicate() {
+  function send() { return remember('bob', 'person', 'concurrent'); }
+  const replies = await Promise.all([send(), send()]);
+  const receipts = replies.map(function receipt(response) { return response.json(); });
+  // A pending caller checks status instead of submitting another append.
+  await runner.run(projection);
+  const original = await get(`${path('bob')}/changes/concurrent`);
+  expect(original.json()).toMatchObject({ outcome: 'saved', revision: 1 });
+  const saved = original.json<{ memoryId: string }>();
+  for (const receipt of receipts) {
+    expect(receipt).toMatchObject({ memoryId: saved.memoryId });
+  }
+  expect((await send()).json()).toEqual(original.json());
+  expect((await remember('bob', 'person', 'concurrent', 'bob', { pinned: true })).statusCode).toBe(409);
+  const changed = await Promise.all([
+    remember('bob', 'person', 'changed-race'),
+    remember('bob', 'person', 'changed-race', 'bob', { text: 'Changed statement' }),
+  ]);
+  const statuses = changed.map(function status(response) { return response.statusCode; });
+  expect(statuses.sort()).toEqual([200, 409]);
+  await runner.run(projection);
+  const detail = await get(`${path('bob')}/facts/${saved.memoryId}`);
+  expect(detail.json()).toMatchObject({ fact: { text: 'A human statement', revision: 1 },
+    sources: [{ status: 'available' }] });
+  expect(Buffer.byteLength(detail.body)).toBeLessThanOrEqual(16384);
+  expect((await get(`${path('bob')}/changes/concurrent`, 'admin')).statusCode).toBe(404);
+  expect((await get(`${path('bob')}/changes/unseen`)).json()).toMatchObject({ outcome: 'unknown' });
+  for (const url of [`${path('bob')}/facts/unseen`, `${path('owner')}/facts/private`,
+    `/api/memory/${memoryScopeId('foreign', 'person', 'bob')}/facts/foreign`]) {
+    expect((await get(url)).json()).toEqual({ status: 'refused' });
+  }
+});
+it('keeps unknown append keys and resolves a lost reply without another append', async function lost() {
+  const original = nats.store.append.bind(nats.store);
+  async function lose(command: Parameters<typeof original>[0]) {
+    await original(command);
+    return { status: 'unavailable' as const, cause: new Error('Reply lost') };
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(lose);
+  let response;
+  try {
+    response = await remember('bob', 'person', 'lost-reply');
+    expect(response.json()).toMatchObject({ outcome: 'unknown' });
+    expect(spy).toHaveBeenCalledTimes(1);
+  } finally { spy.mockRestore(); }
+  expect((await get(`${path('bob')}/changes/lost-reply`)).statusCode).toBe(503);
+  await runner.run(projection);
+  const status = await get(`${path('bob')}/changes/lost-reply`);
+  expect(status.json()).toMatchObject({ outcome: 'saved' });
+  expect((await remember('bob', 'person', 'lost-reply')).json()).toEqual(status.json());
+  const id = status.json<{ memoryId: string }>().memoryId;
+  expect((await get(`${path('bob')}/facts/${id}`)).json())
+    .toMatchObject({ fact: { text: 'A human statement' } });
+});
+it('keeps keys while unavailable and reconciles unused keys after definite failure', async function failure() {
+  const unavailable = { status: 'unavailable' as const, cause: new Error('Unavailable') };
+  const spy = vi.spyOn(nats.store, 'append').mockResolvedValue(unavailable);
+  try {
+    const response = await remember('bob', 'person', 'unavailable-write');
+    expect(response.json()).toMatchObject({ outcome: 'unknown' });
+    const memoryId = response.json<{ memoryId: string }>().memoryId;
+    const scopeId = memoryScopeId('acme', 'person', 'bob');
+    const identity = { silo: 'acme', scopeId, scopeKind: 'person' as const,
+      ownerId: 'bob', memoryId, revision: 1 };
+    expect(keys.provision(identity)).toMatch(/^key:/u);
+    expect((await remember('bob', 'person', 'unavailable-write')).json())
+      .toMatchObject({ outcome: 'unknown' });
+    expect(spy).toHaveBeenCalledTimes(1);
+  } finally { spy.mockRestore(); }
+  const rejected = { status: 'conflict' as const };
+  const failed = vi.spyOn(nats.store, 'append').mockResolvedValue(rejected);
+  let response;
+  try { response = await remember('bob', 'person', 'failed-write'); }
+  finally { failed.mockRestore(); }
+  const memoryId = response.json<{ memoryId: string }>().memoryId;
+  const scopeId = memoryScopeId('acme', 'person', 'bob');
+  const identity = { silo: 'acme', scopeId, scopeKind: 'person' as const,
+    ownerId: 'bob', memoryId, revision: 1 };
+  expect(response.statusCode).toBe(409);
+  expect(function provisionDeleted() { keys.provision(identity); }).toThrow('destroyed');
+});
+it('refuses an unapplied write revoke', async function revokedWrite() {
+  const scopeId = memoryScopeId('acme', 'assistant_notes', 'write-shared');
+  await append(grantStream('memory_write', scopeId), 'grant.revoked', {
+    resourceType: 'memory_write', resourceId: scopeId, granteeKind: 'member',
+    granteeId: 'bob', revokedBy: 'owner',
+  }, false);
+  expect((await remember('write-shared', 'assistant_notes', 'unapplied-revoke')).statusCode).toBe(503);
+});
+it('loads long history before the write time limit and ignores chat activity', async function writeActivity() {
+  const original = nats.store.readStream.bind(nats.store);
+  let once = false;
+  async function* delayed(subject: string, from?: number, deadline?: number) {
+    if (subject.startsWith('scope-') && !once) {
+      once = true;
+      await new Promise(function pause(resolve) { setTimeout(resolve, 2100); });
+    }
+    expect(subject).not.toMatch(/^conversation-/u);
+    yield* original(subject, from, deadline);
+  }
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(delayed);
+  try { expect((await remember('bob', 'person', 'long-history')).statusCode).toBe(200); }
+  finally { spy.mockRestore(); }
+  await runner.run(projection);
+});
+
