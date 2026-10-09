@@ -721,3 +721,28 @@ async function oldOwnershipAfterMemberRemoval(type: string) {
 }
 it.each(['ownership.seeded', 'ownership.transferred', 'ownership.stepped_down'])(
   'receipts old %s after its member removal was applied', oldOwnershipAfterMemberRemoval);
+
+async function grantAfterRejoinWaitsForCurrentMembership() {
+  const nats = await natsFixture();
+  try {
+    const joined = member('first-membership');
+    const removed = member('old-removal', 'member.removed');
+    const rejoined = member('current-membership');
+    const given = savedPermission('current-grant', 'grant.given',
+      grantStream('model', 'gpt-6-luna'), { resourceType: 'model', resourceId: 'gpt-6-luna',
+        granteeId: 'alice', granteeKind: 'member', grantedBy: 'bob' });
+    await nats.seed([joined, removed, rejoined, given]);
+    const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'), nats.store);
+    await apply(projection, [joined, removed, given]);
+    // Keep the new grant even when the separate member queue has not applied the rejoin yet.
+    expect(await projection.use('person', 'alice', 'model', 'gpt-6-luna'))
+      .toMatchObject({ allowed: true });
+    expect(await projection.check('alice', 'member')).toMatchObject({ allowed: false });
+    await apply(projection, [rejoined]);
+    expect(await projection.check('alice', 'member')).toMatchObject({ allowed: true });
+  } finally {
+    await nats.close();
+  }
+}
+it('keeps a current grant when membership projection is still catching up after a rejoin',
+  grantAfterRejoinWaitsForCurrentMembership);
