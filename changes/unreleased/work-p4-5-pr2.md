@@ -8,3 +8,5 @@ Closed sessions refuse files and desktop access even when a later report arrives
 read tables catch up. Approval decisions reuse checked history, and repeated access
 reads check each old participation record once. Late participants can download only
 screenshots saved since their latest join.
+
+Memory source links also hide messages saved before the caller's latest join.

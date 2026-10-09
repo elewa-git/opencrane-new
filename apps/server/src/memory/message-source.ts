@@ -7,7 +7,8 @@ export async function messageAccess(options: MemoryOptions, requester: string,
   if (!options.chat) {
     throw new Error('Source access unavailable');
   }
-  await chatAccess(options.chat, { memberId: requester, conversationId: source.conversationId });
+  const request = { memberId: requester, conversationId: source.conversationId };
+  const access = await chatAccess(options.chat, request);
   const deadline = performance.now() + 1000;
   const subject = `conversation-${source.conversationId}`;
   const position = await options.store.head(subject, deadline);
@@ -18,9 +19,10 @@ export async function messageAccess(options: MemoryOptions, requester: string,
   }
   const result = await options.db.query<{ position: string }>(`
     SELECT position FROM conversation_feed WHERE silo=$1 AND conversation_id=$2
+      AND position >= $4
       AND ((type='message.posted' AND event_id=$3)
         OR (type='agent.message_completed' AND data->>'messageId'=$3)) LIMIT 1`,
-    [options.silo, source.conversationId, source.messageId]);
+    [options.silo, source.conversationId, source.messageId, access.joinPosition]);
   const candidate = result.rows[0];
   if (!candidate) {
     throw new MemoryRefused();

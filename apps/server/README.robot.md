@@ -44,7 +44,8 @@ expiry and content status, so missing text metadata cannot turn this into a serv
 Projection lag or a changed generation still returns 503.
 
 Source checks use existing conversation permissions before looking up content. An indexed
-lookup finds one message id after the conversation worker has caught up, then confirms one
+lookup finds one message id within the caller's latest participation period after the
+conversation worker has caught up, then confirms one
 event at that position in NATS. No source check replays a whole conversation.
 A denied or missing source returns only `{status: "refused"}`. A service failure returns
 only `{status: "unavailable"}` while the readable fact remains available. Neither result

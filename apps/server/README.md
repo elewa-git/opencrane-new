@@ -32,7 +32,7 @@ flowchart LR
 - Checks permissions before returning private information or changing data.
 - Lists and searches a person's own memory and permitted group or assistant notes.
   Returns fact detail and checks each source separately, hiding denied references.
-  Checks chat access before looking up one source message. Describes a member statement
+  Checks chat access and the latest join before looking up one source message. Describes a member statement
   without naming its author. Reports destroyed or quarantined facts without text.
   These reads need the memory worker and its existing private key directory.
   It returns current facts only after the read table has caught up with their events.
