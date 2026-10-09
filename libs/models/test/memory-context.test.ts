@@ -29,10 +29,9 @@ async function prepare() {
 }
 beforeAll(prepare);
 
-async function sign(payload: JWTPayload, wrongKey = false, algorithm = 'ES256') {
+async function sign(payload: JWTPayload, wrongKey = false) {
   const token = new SignJWT(payload);
-  token.setProtectedHeader({ alg: algorithm });
-  if (algorithm === 'HS256') return token.sign(new Uint8Array(32));
+  token.setProtectedHeader({ alg: 'ES256' });
   return token.sign(wrongKey ? wrongKeys.privateKey : keys.privateKey);
 }
 function timedClaims(): JWTPayload {
@@ -68,8 +67,14 @@ it.each(restrictions)('refuses $field independently of the matching request dige
   refusesRestriction);
 
 async function refusesAlgorithm() {
-  const token = await sign(timedClaims(), false, 'HS256');
-  await expect(verifyMemoryContext(token, identity, parsed)).rejects.toThrow();
+  const otherKeys = await generateKeyPair('ES384');
+  const publicKey = await exportJWK(otherKeys.publicKey);
+  const otherIdentity = { ...identity, jwks: { keys: [publicKey] } };
+  const token = new SignJWT(timedClaims());
+  token.setProtectedHeader({ alg: 'ES384' });
+  const signed = await token.sign(otherKeys.privateKey);
+  // Trust this key in the fixture so only the algorithm restriction can refuse it.
+  await expect(verifyMemoryContext(signed, otherIdentity, parsed)).rejects.toThrow();
 }
 it('refuses a token using another signing algorithm', refusesAlgorithm);
 
