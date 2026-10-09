@@ -1014,3 +1014,44 @@ async function savedInvitationWinsOverRefusal() {
 }
 it('prefers a saved invitation over earlier refusal evidence for the same command',
   savedInvitationWinsOverRefusal);
+
+async function refusesAnotherCreatorsReceipt() {
+  const created = await request('POST');
+  expect(created.statusCode).toBe(200);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  const legacy = await request('GET', undefined, 'owner');
+  const full = await changeRead('owner');
+  expect(legacy.statusCode).toBe(404);
+  expect(legacy.json()).toEqual({ status: 'not_found' });
+  expect(full.statusCode).toBe(404);
+  expect(full.json()).toEqual({ status: 'not_found', commandId: input.commandId });
+  expect((await request('GET')).json()).toEqual(created.json());
+  expect((await changeRead()).statusCode).toBe(200);
+  expect(appendSpy).not.toHaveBeenCalled();
+}
+it('returns no original command receipt to another current admin on either route',
+  refusesAnotherCreatorsReceipt);
+
+async function refusesNonHumanCreator(kind: 'agent' | 'system') {
+  expect((await request('POST')).statusCode).toBe(200);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* changePrincipal(...args: Parameters<typeof read>) {
+    for await (const row of read(...args)) {
+      if (args[0] === `member-${memberId}`) {
+        const principal = { kind, id: 'admin' };
+        const event = { ...row.event, principal };
+        yield { ...row, event };
+      } else {
+        yield row;
+      }
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(changePrincipal);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  expect((await request('GET')).statusCode).toBe(404);
+  expect((await changeRead()).statusCode).toBe(404);
+  expect(appendSpy).not.toHaveBeenCalled();
+}
+it.each(['agent', 'system'] as const)(
+  'refuses a saved invitation with a %s principal even when its id matches',
+  refusesNonHumanCreator);
