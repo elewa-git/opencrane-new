@@ -12,7 +12,7 @@ it('keeps created and modified workspace files but omits deleted files', () => {
   ] as ChatRow[];
 
   const turns = transcript(rows, 'me');
-  const agentTurn = turns.find(turn => turn.author === 'agent');
+  const agentTurn = turns.find(isAgentTurn);
 
   expect(agentTurn?.files).toEqual(['report.md']);
 });
@@ -74,7 +74,7 @@ it('keeps a completed turn incomplete when the private reply output was lost', (
       data: { turnId: 'message' } },
   ] as ChatRow[];
 
-  const agentTurn = transcript(rows, 'me').find(turn => turn.author === 'agent');
+  const agentTurn = transcript(rows, 'me').find(isAgentTurn);
 
   expect(agentTurn?.state).toBe('lost');
   expect(agentTurn?.executionMode).toBe('restricted');
@@ -117,7 +117,7 @@ function assertFinishedToolState(
         durationMs: 240 } },
   ];
 
-  const tool = transcript(rows, 'me').find(turn => turn.author === 'agent')?.tools[0];
+  const tool = transcript(rows, 'me').find(isAgentTurn)?.tools[0];
 
   expect(tool).toMatchObject({ id: 'started', callId: 'call-1', label: 'read_order',
     status: status ?? 'finished', failed, detail, durationMs: 240 });
@@ -135,7 +135,7 @@ it('keeps a finished tool visible when the saved history has no start row', () =
         serverId: 'erp', toolName: 'read_order', status: 'completed' } },
   ];
 
-  const tool = transcript(rows, 'me').find(turn => turn.author === 'agent')?.tools[0];
+  const tool = transcript(rows, 'me').find(isAgentTurn)?.tools[0];
 
   expect(tool).toMatchObject({ id: 'finished', label: 'read_order', status: 'completed',
     detail: 'Tool call completed' });
@@ -149,7 +149,7 @@ it('describes a restricted tool refusal without exposing its internal reason', (
       data: { turnId: 'message', reason: 'restricted_tool_refused' } },
   ];
 
-  const tool = transcript(rows, 'me').find(turn => turn.author === 'agent')?.tools[0];
+  const tool = transcript(rows, 'me').find(isAgentTurn)?.tools[0];
 
   expect(tool?.detail).toBe('Tool access refused');
   expect(JSON.stringify(tool)).not.toContain('restricted_tool_refused');
@@ -187,7 +187,7 @@ function isCallOne(tool: { callId?: string }): boolean {
 
 const endedTurnCases = [
   { eventType: 'agent.turn_completed', state: 'done' },
-  { eventType: 'agent.turn_stop_requested', state: 'stopped' },
+  { eventType: 'agent.turn_failed', state: 'failed' },
   { eventType: 'agent.output_lost', state: 'lost' },
 ] as const;
 
@@ -217,6 +217,33 @@ it.each(endedTurnCases)(
   'marks an unfinished tool unconfirmed when its turn ends',
   assertUnconfirmedToolAfterEnd,
 );
+
+it('keeps a stop request pending and accepts tool finishes until the turn ends', () => {
+  const rows: ChatRow[] = [
+    { id: 'message', position: 1, type: 'message.posted', time: '2026-10-09T10:00:00Z',
+      data: { authorId: 'me', text: 'Read the order' } },
+    { id: 'started', position: 2, type: 'agent.tool_call_started',
+      time: '2026-10-09T10:00:01Z', data: { turnId: 'message', callId: 'call-1',
+        serverId: 'erp', toolName: 'read_order' } },
+    { id: 'stop-requested', position: 3, type: 'agent.turn_stop_requested',
+      time: '2026-10-09T10:00:02Z', data: { turnId: 'message' } },
+    { id: 'finished', position: 4, type: 'agent.tool_call_finished',
+      time: '2026-10-09T10:00:03Z', data: { turnId: 'message', callId: 'call-1',
+        serverId: 'erp', toolName: 'read_order', status: 'completed' } },
+  ];
+
+  const turn = transcript(rows, 'me').find(isAgentTurn);
+
+  expect(turn?.state).toBe('stopping');
+  expect(turn?.endedAt).toBeUndefined();
+  expect(turn?.tools[0]?.status).toBe('completed');
+
+  rows.push({ id: 'ended', position: 5, type: 'agent.turn_failed',
+    time: '2026-10-09T10:00:04Z', data: { turnId: 'message' } });
+  const stoppedTurn = transcript(rows, 'me').find(isAgentTurn);
+  expect(stoppedTurn?.state).toBe('stopped');
+  expect(stoppedTurn?.endedAt).toBe('2026-10-09T10:00:04Z');
+});
 
 function isAgentTurn(turn: { author: string }): boolean {
   return turn.author === 'agent';

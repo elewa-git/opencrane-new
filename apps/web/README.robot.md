@@ -184,10 +184,14 @@ first send; message ids stay stable across explicit retries. Pending messages ar
 kept only on this page and the UI warns that reload discards an unsent draft.
 No conversation content or credentials are stored in browser persistent storage.
 
-Stop records `agent.turn_stop_requested`, interrupts the computer and keeps text
-through that position on replay. HTTP reads page through history; realtime consumes
-every validated envelope, including several deltas in one zoneless render. Access
-refusal clears protected content. The computer state announces wake progress.
+Stop records `agent.turn_stop_requested` to ask the computer to interrupt the turn.
+The transcript says “Stopping…” until `agent.turn_failed` or `agent.turn_completed`
+confirms that the turn ended. Tool finishes still update the transcript while it is
+stopping. The socket sends saved rows before its `ready` message; those replayed tool
+transitions stay quiet, while new transitions after `ready` are announced. HTTP reads
+page through history; realtime consumes every validated envelope, including several
+deltas in one zoneless render. Access refusal clears protected content. The computer
+state announces wake progress.
 
 Keyboard paths: Enter sends, Shift+Enter adds a line, Ctrl/Cmd+N opens a draft,
 Ctrl/Cmd+Shift+A asks the personal Agent, Ctrl/Cmd+K finds a session. Native panel

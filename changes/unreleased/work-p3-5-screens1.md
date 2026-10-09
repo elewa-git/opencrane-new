@@ -3,9 +3,12 @@
 The chat transcript now shows when a reported tool call starts, finishes or
 fails. If the turn ends before a finish report arrives, it says that the result
 was not confirmed. The details drawer follows a call as its saved status changes.
-Live starts and results are announced once to screen readers. Long tool names
-wrap inside the transcript on phone screens. A restricted tool refusal is shown
-as an access refusal without guessing its cause.
+Live starts and results are announced once to screen readers after the socket is
+ready. Replayed history stays quiet. Pressing Stop shows “Stopping…” until the
+server confirms that the turn ended, and tool finishes can still update the
+transcript while it stops. Long tool names wrap inside the transcript on phone
+screens. A restricted tool refusal is shown as an access refusal without
+guessing its cause.
 
 The existing approval cards continue to show pending decisions, approved but
 unused approvals, used approvals with unknown outcomes, denials, expiry and

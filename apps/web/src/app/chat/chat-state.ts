@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import type { ChatRow } from '@opencrane/protocol';
+import type { ChatConversation, ChatRow } from '@opencrane/protocol';
 
 export interface Turn {
   id: string; author: 'you' | 'person' | 'agent'; text: string; time: string; endedAt?: string;
-  state: 'working' | 'done' | 'failed' | 'stopped' | 'lost';
+  state: 'working' | 'stopping' | 'done' | 'failed' | 'stopped' | 'lost';
   tools: ToolActivityRecord[];
   files: string[]; budgetStop?: 'budget_exhausted'; screenshotRejected?: true;
   reason?: string; executionMode?: 'restricted' | 'memory_free';
@@ -14,6 +14,7 @@ export function turnContent(turn: Turn): string {
 }
 
 export function turnOutcome(turn: Turn): string {
+  if (turn.state === 'stopping') return 'Stopping…';
   if (turn.state === 'done') return 'Done';
   if (!turn.text) return "Didn't complete · nothing was repeated";
   if (turn.state === 'stopped') return 'Stopped · partial reply kept';
@@ -21,7 +22,17 @@ export function turnOutcome(turn: Turn): string {
 }
 export function turnStatusIcon(turn: Turn): string {
   if (turn.state === 'lost') return 'failed';
+  if (turn.state === 'stopping') return 'working';
   return turn.state;
+}
+
+export function conversationStatus(state: Turn['state'] | undefined): ChatConversation['status'] {
+  if (state === 'stopping') return 'working';
+  return state ?? 'open';
+}
+
+export function isActiveTurn(turn: Turn): boolean {
+  return turn.author === 'agent' && (turn.state === 'working' || turn.state === 'stopping');
 }
 
 export interface ChatAttachment {
@@ -78,24 +89,15 @@ export function toolActivityResultLabel(record: ToolActivityRecord): string {
   return 'Result';
 }
 
-/** Render saved server rows. Stop freezes that turn at the saved event position. */
-export function transcript(rows: ChatRow[], memberId: string): Turn[] {
+/** Build turns from saved rows. A stop request waits for a report that ends the turn. */
+export function transcript(rows: ChatRow[], memberId: string, stoppingTurnId = ''): Turn[] {
   const turns: Turn[] = [], agents = new Map<string, Turn>(), messages = new Map<string, Map<string, string>>();
   const seen = new Set<string>();
   const lostOutput = new Set<string>();
   for (const row of rows) {
     if (seen.has(row.id)) continue;
     seen.add(row.id);
-    const file = uploadedFile(row);
-    if (file) {
-      turns.push({ id: row.id, author: file.uploadedBy === memberId ? 'you' : 'person', text: '', time: row.time, state: 'done', tools: [], files: [file.path] });
-      continue;
-    }
-    const rejected = rejectedScreenshotTurn(row, memberId);
-    if (rejected) {
-      turns.push(rejected);
-      continue;
-    }
+    if (addStandaloneTurn(row, memberId, turns)) continue;
     const data = row.data;
     if (row.type === 'message.posted') {
       turns.push({ id: row.id, author: data.authorId === memberId ? 'you' : 'person', text: data.text ?? '', time: row.time, state: 'done', tools: [], files: [] });
@@ -106,9 +108,7 @@ export function transcript(rows: ChatRow[], memberId: string): Turn[] {
     const turn = agents.get(data.turnId ?? '');
     if (!turn || turn.state === 'stopped') continue;
     if (row.type === 'agent.turn_stop_requested') {
-      turn.state = 'stopped';
-      turn.endedAt = row.time;
-      markRunningCallsUnconfirmed(turn);
+      turn.state = 'stopping';
       continue;
     }
     if (row.type === 'decision.recorded' && data.reason === 'budget_exhausted') {
@@ -116,7 +116,30 @@ export function transcript(rows: ChatRow[], memberId: string): Turn[] {
     }
     updateTurn(turn, row, messages.get(turn.id)!, lostOutput);
   }
+  markStoppingTurn(turns, stoppingTurnId);
   return turns;
+}
+
+function addStandaloneTurn(row: ChatRow, memberId: string, turns: Turn[]): boolean {
+  const file = uploadedFile(row);
+  if (file) {
+    turns.push({ id: row.id, author: file.uploadedBy === memberId ? 'you' : 'person',
+      text: '', time: row.time, state: 'done', tools: [], files: [file.path] });
+    return true;
+  }
+  const rejected = rejectedScreenshotTurn(row, memberId);
+  if (!rejected) return false;
+  turns.push(rejected);
+  return true;
+}
+
+function markStoppingTurn(turns: Turn[], stoppingTurnId: string): void {
+  if (!stoppingTurnId) return;
+  for (const turn of turns) {
+    if (turn.id === stoppingTurnId && turn.state === 'working') {
+      turn.state = 'stopping';
+    }
+  }
 }
 
 function updateTurn(turn: Turn, row: ChatRow, parts: Map<string, string>,
@@ -141,7 +164,7 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
     return;
   }
   if (row.type === 'agent.turn_failed') {
-    turn.state = 'failed';
+    turn.state = turn.state === 'stopping' ? 'stopped' : 'failed';
     turn.endedAt = row.time;
     markRunningCallsUnconfirmed(turn);
     if (row.data.reason) turn.reason = row.data.reason;
@@ -170,7 +193,7 @@ function failureDetail(reason: string | undefined): string {
 
 function updateTurnTools(turn: Turn, row: ChatRow): void {
   if ((row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished')
-    && turn.state !== 'working') return;
+    && turn.state !== 'working' && turn.state !== 'stopping') return;
   if (row.type === 'agent.turn_failed') {
     turn.tools.push({ id: row.id, label: 'Reply failed',
       detail: failureDetail(row.data.reason), failed: true, time: row.time });

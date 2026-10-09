@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>chat with live tool updates, recovery, shared sessions and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>chat with confirmed stopping, tool updates, shared sessions and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
@@ -50,6 +50,7 @@ flowchart LR
    it brings them back to the start page, where they can open the workspace.
 2. **The first owner claims a new installation.** They sign in and enter its one-time token. The server records them as the owner.
 3. **A person sends a message.** The website opens a conversation and sends the message to the server. It shows the reply as it arrives and offers Stop.
+   After Stop, it says “Stopping…” until the server confirms the reply has ended.
    Team turns are private by default. A memory-free choice applies to one turn and
    explains that it uses the shared disk. Recovery pauses sending and explains why.
    A reply whose output was lost stays incomplete.

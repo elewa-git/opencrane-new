@@ -106,7 +106,11 @@ export async function chatFixture(page, scenario = 'live') {
       if (offline) return route.abort('connectionfailed');
       if (url.pathname === '/api/conversations') { conversations.unshift({ ...conversations[0], conversationId: command.conversationId }); return fulfil({ status: 'appended', sequence: 1 }); }
       if (command.stopTurnId && stopConflict) { stopConflict = false; return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'conflict' }) }); }
-      if (command.stopTurnId) { add('agent.turn_stop_requested', { turnId: command.stopTurnId }); return fulfil({ status: 'appended', sequence: rows.length }); }
+      if (command.stopTurnId) {
+        add('agent.turn_stop_requested', { turnId: command.stopTurnId });
+        add('agent.turn_failed', { turnId: command.stopTurnId, reason: 'interrupted' });
+        return fulfil({ status: 'appended', sequence: rows.length });
+      }
       if (!rows.some(row => row.id === command.id)) {
         const row = add('message.posted', { text: command.text, authorId: 'me' }); row.id = command.id;
       }

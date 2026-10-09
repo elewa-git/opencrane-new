@@ -175,6 +175,7 @@
         }
       <oc-chat-composer [draft]="draft()" [placeholder]="composerPlaceholder()"
         [working]="!!chat.active()"
+        [stopping]="chat.active()?.state === 'stopping'"
         [busy]="chat.busy() || chat.uploading() || chat.uploadPending()"
         (attached)="chat.upload($event)" [reason]="reason()" [queued]="chat.queued()"
         [teamSession]="teamSession()" [memoryFree]="chat.executionMode() === 'memory_free'"

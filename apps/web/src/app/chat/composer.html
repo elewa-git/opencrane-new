@@ -30,9 +30,11 @@
       } @else if (!directMode()) {
         <span class="mode"><oc-icon name="agent" /> Agent session</span>
       }
-      <span class="spacer"></span><span class="hint"><kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline @if (working()) { · <kbd>esc</kbd> stop reply }</span>
-      @if (!directMode() && working()) {
+      <span class="spacer"></span><span class="hint"><kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline @if (working() && !stopping()) { · <kbd>esc</kbd> stop reply }</span>
+      @if (!directMode() && working() && !stopping()) {
         <button type="button" class="stop" [disabled]="busy()" (click)="stopped.emit()"><oc-icon name="stop" /> Stop</button>
+      } @else if (stopping()) {
+        <span class="mode" aria-hidden="true">Stopping…</span>
       } @else {
         <button type="submit" class="send" [disabled]="!draft().trim() || busy()" [attr.aria-label]="queued() ? 'Retry queued message' : 'Send message'"><oc-icon name="send" /><span class="sr-only">{{ queued() ? 'Retry' : 'Send' }}</span></button>
       }

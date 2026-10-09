@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { sessionSlug, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import type { ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
-import { transcript, uploadedFile } from './chat-state';
+import { conversationStatus, isActiveTurn, transcript, uploadedFile } from './chat-state';
 import { shortTime } from './file-presentation';
 
 class ReadFailure extends Error {
@@ -36,19 +36,21 @@ export class ChatSession implements OnDestroy {
   readonly waitSeconds = signal(0);
   readonly waiting = computed(() => this.queued() ? 'queued' : this.active() && this.computer() !== 'ready' ? 'starting' : this.selected() && !this.connected() && !this.loading() ? 'reconnecting' : '');
   readonly busy = signal(false);
+  private readonly stoppingTurnId = signal('');
   readonly error = signal('');
   readonly announcement = signal('');
   readonly reconnectedAt = signal('');
   readonly denied = signal(false);
   readonly queued = signal(false);
   readonly connected = this.socket.isConnected;
-  readonly turns = computed(() => transcript(this.rows(), this.memberId()));
+  readonly turns = computed(() =>
+    transcript(this.rows(), this.memberId(), this.stoppingTurnId()));
   readonly selectedConversation = computed(() =>
     this.conversations().find(row => row.conversationId === this.selected()));
   readonly teamSession = computed(this.isTeamSession.bind(this));
   readonly selectedAssistantId = computed(this.assistantForSelectedSession.bind(this));
   readonly lastConfirmedTurnAt = computed(this.confirmedTurnAt.bind(this));
-  readonly active = computed(() => this.turns().filter(turn => turn.author === 'agent' && turn.state === 'working').at(-1));
+  readonly active = computed(() => this.turns().filter(isActiveTurn).at(-1));
   readonly attachments = computed(() => this.rows().flatMap(row => { const file = uploadedFile(row); return file ? [file] : []; }));
   readonly uploadName = signal('');
   readonly uploadProgress = signal(0);
@@ -67,6 +69,7 @@ export class ChatSession implements OnDestroy {
   /** Change on session switch or destroy so old async work can be ignored. */
   private revision = 0;
   private sawReconnecting = false;
+  private conversationReady = false;
   private reconnectCount = 0;
   private pending: { id: string; conversationId: string; text: string;
     executionMode?: 'memory_free' } | undefined;
@@ -113,6 +116,8 @@ export class ChatSession implements OnDestroy {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     const revision = ++this.revision;
     this.sawReconnecting = false;
+    this.conversationReady = false;
+    this.stoppingTurnId.set('');
     this.reconnectCount = 0;
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
@@ -143,6 +148,7 @@ export class ChatSession implements OnDestroy {
   newSession(): void {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     ++this.revision; this.sawReconnecting = false; this.reconnectCount = 0;
+    this.stoppingTurnId.set('');
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
@@ -192,7 +198,9 @@ export class ChatSession implements OnDestroy {
     return selectedRow.payingGroupId ?? '';
   }
   async stop(): Promise<void> {
-    const turn = this.active(); if (!turn || this.busy()) return;
+    const turn = this.active();
+    if (!turn || turn.state !== 'working' || this.busy()) return;
+    this.stoppingTurnId.set(turn.id);
     this.busy.set(true); this.error.set('');
     try {
       await this.request(`/api/conversations/${this.selected()}/messages`, { id: `stop-${turn.id}`, stopTurnId: turn.id });
@@ -247,6 +255,7 @@ export class ChatSession implements OnDestroy {
     const state = this.socket.state();
     if (state === 'reconnecting') {
       this.sawReconnecting = true;
+      this.conversationReady = false;
     }
     if (state !== 'open') {
       return;
@@ -336,6 +345,7 @@ export class ChatSession implements OnDestroy {
     if (!('topic' in message) || message.topic !== 'conversation' || message.conversationId !== this.selected()) return;
     if (message.type === 'refused') { this.fail(new ReadFailure(403)); return; }
     if (message.type === 'resync') {
+      this.conversationReady = false;
       this.position = 0; this.generation = message.generation; this.rows.set([]); this.socket.connect(); return;
     }
     if (message.type === 'ready' && this.sawReconnecting) {
@@ -346,15 +356,15 @@ export class ChatSession implements OnDestroy {
       const reconnectWords = this.reconnectCount === 1 ? 'Reconnected at' : 'Reconnected again at';
       this.announcement.set(`${reconnectWords} ${shortTime(connectedAt)}. You're caught up.`);
     }
+    this.conversationReady = message.type === 'ready' || this.conversationReady;
     this.generation = message.generation;
     this.updateComputerState(message);
     if (message.row) {
       const parsed = chatRowSchema.safeParse(message.row);
       if (parsed.success) {
         const added = this.apply(parsed.data);
-        const toolAnnouncement = added
-          ? toolTransitionAnnouncement(parsed.data, this.turns())
-          : '';
+        const toolAnnouncement = toolTransitionAnnouncement(
+          added, this.conversationReady, parsed.data, this.turns());
         if (toolAnnouncement) this.announcement.set(toolAnnouncement);
         // Do not announce old notices when the workspace reloads.
         if (added && isBudgetStop(parsed.data)) {
@@ -395,7 +405,8 @@ export class ChatSession implements OnDestroy {
   private updateSummary(): void {
     const turns = this.turns(), latest = turns.filter(turn => turn.author === 'agent').at(-1);
     const title = turns.find(turn => (turn.author === 'you' || turn.author === 'person') && turn.text)?.text;
-    const status = this.rows().some(row => row.type === 'conversation.closed') ? 'closed' : latest?.state ?? 'open';
+    const status = this.rows().some(row => row.type === 'conversation.closed')
+      ? 'closed' : conversationStatus(latest?.state);
     this.conversations.update(rows => rows.map(row => row.conversationId === this.selected() ? { ...row, ...(title ? { title: sessionSlug(title) } : {}), status } : row));
   }
   private async request(path: string, body?: unknown): Promise<unknown> {
@@ -428,13 +439,16 @@ function isBudgetStop(row: ChatRow): boolean {
 }
 
 function toolTransitionAnnouncement(
+  added: boolean,
+  conversationReady: boolean,
   row: ChatRow,
   turns: ReturnType<typeof transcript>,
 ): string {
+  if (!added || !conversationReady) return '';
   if (row.type !== 'agent.tool_call_started' && row.type !== 'agent.tool_call_finished') {
     return '';
   }
-  const activeTurn = findWorkingAgentTurn(turns, row.data.turnId);
+  const activeTurn = findActiveAgentTurn(turns, row.data.turnId);
   if (!activeTurn) return '';
   const toolName = findToolName(activeTurn, row);
   const callNumber = findToolCallNumber(activeTurn, row.data.callId);
@@ -451,13 +465,13 @@ function toolTransitionAnnouncement(
   return finishedToolAnnouncement(toolName, callNumber, 'finished');
 }
 
-function findWorkingAgentTurn(
+function findActiveAgentTurn(
   turns: ReturnType<typeof transcript>,
   turnId: string | undefined,
 ): ReturnType<typeof transcript>[number] | undefined {
   if (!turnId) return undefined;
   for (const turn of turns) {
-    if (turn.id === turnId && turn.author === 'agent' && turn.state === 'working') {
+    if (turn.id === turnId && turn.author === 'agent' && isActiveTurn(turn)) {
       return turn;
     }
   }
