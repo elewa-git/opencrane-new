@@ -695,10 +695,11 @@ it('resolves source status separately and hides denied source references', async
   const url = `${path('bob')}/facts/with_source`;
   expect((await get(url)).json()).toMatchObject({ sources: [{ status: 'available',
     reference: references[0] }] });
-  await append('conversation-detail_chat', 'participant.removed', {
-    conversationId: 'detail_chat', participantId: 'bob', removedBy: 'owner',
-  });
-  const refused = await get(url);
+  const denied = { allowed: false, status: 'ok' as const };
+  const permission = vi.spyOn(auth, 'conversation').mockResolvedValue(denied);
+  let refused;
+  try { refused = await get(url); }
+  finally { permission.mockRestore(); }
   expect(refused.statusCode).toBe(200);
   expect(refused.json()).toMatchObject({ fact: { text: 'A sourced fact' },
     sources: [{ status: 'refused' }] });
@@ -767,7 +768,7 @@ it('checks read grants for notes detail separately from write grants', async fun
 });
 
 it('checks chat access first and looks up only the selected source message', async function boundedSources() {
-  const conversationId = 'detail-bounded';
+  const conversationId = 'detail-source-only-chat';
   await append(`conversation-${conversationId}`, 'conversation.created', {
     conversationId, createdBy: 'bob', mode: 'direct', participantIds: ['bob', 'owner'],
   });
@@ -797,10 +798,12 @@ it('checks chat access first and looks up only the selected source message', asy
     const url = `${path('bob')}/facts/detail-bounded`;
     expect((await get(url)).json()).toMatchObject({ sources: [{ status: 'available',
       reference: sources[0] }] });
-    await append(`conversation-${conversationId}`, 'participant.removed',
-      { conversationId, participantId: 'bob', removedBy: 'owner' });
+    const denied = { allowed: false, status: 'ok' as const };
+    const permission = vi.spyOn(auth, 'conversation').mockResolvedValue(denied);
     querySpy.mockClear();
-    const refused = await get(url);
+    let refused;
+    try { refused = await get(url); }
+    finally { permission.mockRestore(); }
     expect(refused.statusCode).toBe(200);
     expect(refused.json()).toMatchObject({ sources: [{ status: 'refused' }] });
     expect(refused.body).not.toContain(conversationId);
@@ -814,8 +817,6 @@ it('checks chat access first and looks up only the selected source message', asy
 it('hides missing messages and keeps readable facts available during source outages',
   async function missingAndUnavailableSources() {
     const sources = [{ conversationId: 'detail_chat', messageId: 'missing-message' }];
-    await append('conversation-detail_chat', 'participant.added',
-      { conversationId: 'detail_chat', participantId: 'bob', addedBy: 'owner' });
     await write('bob', 'person', 'detail-missing', 'Fact with a missing source', false, 'acme', sources);
     await runner.run(projection);
     await runner.run(conversations);
