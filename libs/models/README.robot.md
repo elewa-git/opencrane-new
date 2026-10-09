@@ -847,3 +847,36 @@ npx vitest run libs/models/test/codex-mcp.test.ts -t 'forwards captured Codex by
 
 These runs cover 157 tests and one selected external MCP test per run. The full
 root test suite and live fresh-install qualification are not part of this correction.
+
+## Provider turn contracts before activation
+
+P4-22 row 4 is split. This first change records and signs provider identity and
+preserves it in reservation replay. `turnSchema` requires `providerId` and positive
+`bindingSequence`. The separate legacy parser remains available before switch-on.
+Any token supplying either field must pass the required schema. Admission compares
+both fields and any recorded model with the first `computer.turn_started`.
+Ordinary model calls with provider claims are refused before any hold, including
+when they match the recorded turn. The gateway still uses the deployment key.
+
+Remaining work: select the assistant or silo default binding at turn admission,
+send the selected model to the computer, migrate with separate resumable commands,
+and record a switch-on event that cannot strand running turns. Managed dispatch
+also needs the real gateway proof and provider/key checks from row 5. There is no
+switch-on command or retirement in this first change.
+
+`test/provider-turn-contract.test.ts` uses real NATS, PostgreSQL, OpenFGA and the
+pinned gateway with a recording upstream. It checks zero holds and sends for bound
+or incomplete tokens, unchanged legacy traffic, matched issuance and reservation
+replay with the original cents and tariff. Set `PG_TEST_URL` to a disposable server.
+Fresh-install migration, paid calls and retirement remain NOT RUN.
+
+`test/provider-turn-guards.test.ts` checks a signed pass with both provider fields
+missing from a bound turn. It also checks each provider, position and model mismatch
+before the later managed-call refusal. Malformed claims must fail before the
+decision checks the turn's recorded activity. Issuance must refuse a changed task.
+
+`test/provider-turn-replay.test.ts` feeds incomplete provider pairs straight to
+budget replay, without using append validation. A real NATS test records usage
+with a non-zero cost, delivers it twice, restarts the budget actor and delivers it
+again. It checks one saved settlement and unchanged provider, model, payer and
+price-table fields. It sends no provider request.

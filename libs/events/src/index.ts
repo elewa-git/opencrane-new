@@ -60,3 +60,5 @@ export { memoryWrittenDataSchema, memoryWrittenIdentity, memoryWrittenEventSchem
   type MemoryIdentity } from './memory.ts';
 
 export { conversationEventId, chatIdSchema, groupConversationCommandSchema } from './conversation.ts';
+
+export { providerTurnBindingSchema, optionalProviderTurnBindingSchema } from './turn-binding.ts';

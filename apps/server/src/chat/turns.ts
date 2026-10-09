@@ -1,7 +1,7 @@
 import { computerSummary, type ComputerSummary, type TurnSummary,
   type ThreadSummary } from '@opencrane/auth';
 import type { Binding } from '@opencrane/authz';
-import type { EventEnvelope } from '@opencrane/events';
+import { optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
 import { authorityFence, groupMembership, PayingGroupRefused, MemberAccessRefused,
   activeMember } from '@opencrane/models';
 import { createHash } from 'node:crypto';
@@ -12,10 +12,12 @@ import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
 import { agentSessionData, ReportRejected } from './reports.ts';
 
-const binding = z.object({
+const bindingFields = optionalProviderTurnBindingSchema.safeExtend({
   conversationId: z.string(), turnId: z.string(), threadId: z.string().optional(),
   requesterId: z.string(), task: z.literal('chat_turn'), payingGroupId: z.string().optional(),
+  model: z.string().optional(),
 });
+const binding = bindingFields.strip();
 const assistantDetails = z.object({
   kind: z.enum(['personal', 'team']), ownerId: z.string(),
   payingGroupId: z.string().optional(),

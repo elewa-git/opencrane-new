@@ -200,7 +200,7 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 | `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
-| `computer.turn_started` / `computer.turn_closed` | server turn command | admission and idle-suspend fence on the computer stream | started binds the requested message, thread and `executionMode`; closed is permanent |
+| `computer.turn_started` / `computer.turn_closed` | server turn command | admission and idle-suspend fence on the computer stream | started binds the requested message, thread and `executionMode`, with optional provider/model identity; closed is permanent |
 | `computer.suspended` / `computer.resumed` | server (intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
@@ -478,6 +478,18 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | `provider.verification_requested` | Owner/Admin command | provider metadata | Explicit live check only; no replay dispatch. |
 | `provider.verification_dispatched` | authenticated gateway admission | provider metadata | Consume one check, with existing budget reservation for paid tests. |
 | `provider.verification_recorded` | live verification reaction or explicit skip | provider metadata | Dated original-attempt outcome, including late results. No dispatch means unknown and zero-cost release; never raw responses or credentials. |
+
+Provider-bound `computer.turn_started` and `computer.turn_closed` records keep
+`providerId`, positive `bindingSequence` and `model` together. The position names
+the binding event, not the provider configuration revision. Repeating or closing a
+turn keeps its original choice. `budget.reserved.modelCall` accepts the optional
+provider/position pair. Old records without these fields retain their old meaning
+and settle at their recorded model, tariff and payer.
+
+The turn pass signs the provider and binding position. A provider-bound model pass
+is refused on the deployment-key gateway before money is held. Selecting saved
+bindings at turn admission, recording the safe switch-on command and managed
+provider dispatch are not enabled by these optional event fields.
 
 ## Named handler subscriptions
 

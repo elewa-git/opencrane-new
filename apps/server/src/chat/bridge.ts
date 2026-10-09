@@ -77,7 +77,7 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
         if (!tokens) throw new Error('Turn issuer unavailable');
         const credentials = computerCredentials(options.store, tokens, options.silo);
         const turn = { ...binding, assistantId: input.assistantId,
-          model: modelForTask(binding.task) };
+          model: binding.model ?? modelForTask(binding.task) };
         const grant = await credentials.turn(turn);
         acknowledgement.token = grant.value;
         acknowledgement.expiresAt = grant.expiresAt;

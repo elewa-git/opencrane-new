@@ -1,7 +1,8 @@
+import { z } from 'zod';
 import { generateKeyPairSync } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BudgetActor, envelope } from '@opencrane/models';
-import { tokenIssuer } from '@opencrane/auth';
+import { tokenIssuer, turnTokenAudience } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
 import { conversations, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { SandboxClient } from '../../ops/src/kubernetes.ts';
@@ -51,9 +52,9 @@ async function replayFixture(conversationIds = ['alice', 'bob']) {
   const messages: unknown[] = [];
   wss.on('connection', socket => socket.on('message', raw => messages.push(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown)));
   return { ...nats, keys, context, messages, wss, directory, url: `http://127.0.0.1:${address.port}`,
-    async connect() {
+    async connect(tokens?: Awaited<ReturnType<typeof tokenIssuer>>) {
       const connected = new Promise<import('ws').WebSocket>(resolve => wss.once('connection', resolve));
-      const link = await connectBridge({ silo: 'test', store: nats.store, keys }, { ...context, url: `ws://127.0.0.1:${address.port}`, bearer: 'test' });
+      const link = await connectBridge({ silo: 'test', store: nats.store, keys }, { ...context, url: `ws://127.0.0.1:${address.port}`, bearer: 'test' }, tokens);
       return { ...link, peer: await connected };
     },
     async close() {
@@ -1282,3 +1283,85 @@ async function wakesApprovalsThroughWatcher() {
 }
 it('wakes the right computer through watchBridges while another hold leaves reports and turns free',
   wakesApprovalsThroughWatcher);
+
+async function reissuesSavedProviderModel() {
+  const fixture = await replayFixture(['alice']);
+  let link: Awaited<ReturnType<typeof fixture.connect>> | undefined;
+  try {
+    const tokens = await bridgeTokens(fixture);
+    const computer = { assistantId: 'assistant', computerId: 'computer', generation: 1 };
+    const claimed = { ...computer, tokenId: 'token:test' };
+    const ready = { ...computer, podUid: 'pod' };
+    const claimEvent = envelope('test', 'computer-assistant', 'computer.claimed', claimed);
+    const readyEvent = envelope('test', 'computer-assistant', 'computer.ready', ready);
+    const choice = { providerId: 'primary', bindingSequence: 42, model: 'gpt-6-luna' };
+    const started = {
+      assistantId: 'assistant', computerId: 'computer', conversationId: 'alice',
+      turnId: 'message-alice', threadId: 'thread-alice', requesterId: 'alice',
+      task: 'chat_turn', payingGroupId: 'personal-default', ...choice,
+    };
+    const startEvent = {
+      ...envelope('test', 'computer-assistant', 'computer.turn_started', started),
+      source: 'opencrane-server',
+    };
+    await fixture.seed([claimEvent, readyEvent, startEvent]);
+    const report = {
+      sequence: 1, previousSequence: 0, conversationId: 'alice', turnId: 'message-alice',
+      assistantId: 'assistant', type: 'agent.turn_started', threadId: 'thread-alice',
+    };
+    const acknowledgement = z.object({
+      type: z.literal('ack'), sequence: z.literal(1), token: z.string(),
+    });
+    function hasAcknowledgement(message: unknown) {
+      return acknowledgement.safeParse(message).success;
+    }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      link = await fixture.connect(tokens);
+      fixture.messages.length = 0;
+      link.peer.send(JSON.stringify(report));
+      await until(reportFinished, 2000);
+      function reportFinished() {
+        if (link && link.socket.readyState === link.socket.CLOSED) {
+          return true;
+        }
+        return fixture.messages.some(hasAcknowledgement);
+      }
+      expect(link.socket.readyState).toBe(link.socket.OPEN);
+      const message = fixture.messages.find(hasAcknowledgement);
+      const ack = acknowledgement.parse(message);
+      const checked = await tokens.verify(ack.token, turnTokenAudience);
+      const expectedClaims = {
+        ...choice, task: 'chat_turn', turn: 'message-alice', thread: 'thread-alice',
+      };
+      expect(checked).toMatchObject(expectedClaims);
+      link.socket.terminate();
+      await link.settled();
+      link = undefined;
+      if (attempt === 0) {
+        const moved = {
+          providerId: 'secondary', revision: 3, changedBy: 'alice',
+          previousBindingSequence: 42, expectedProviderSequence: 42,
+          kind: 'assistant', dependantId: 'assistant', task: 'chat_turn',
+          state: 'active', model: 'gpt-6.1-sol',
+        };
+        const movedEvent = envelope('test', 'provider-secondary', 'provider.model_binding_set', moved);
+        await fixture.seed([movedEvent]);
+      }
+    }
+    const rows = await history(fixture.store, 'computer-assistant');
+    function isStart(row: typeof rows[number]) {
+      return row.event.type === 'computer.turn_started';
+    }
+    const starts = rows.filter(isStart);
+    expect(starts).toHaveLength(2);
+    for (const row of starts) {
+      expect(row.event.data).toMatchObject(choice);
+    }
+  } finally {
+    link?.socket.terminate();
+    await link?.settled();
+    await fixture.close();
+  }
+}
+it('returns the saved provider model in a bridge token after reconnect and a binding change',
+  reissuesSavedProviderModel);

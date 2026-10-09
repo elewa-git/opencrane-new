@@ -51,3 +51,27 @@ async function separatesVerificationAudience() {
 }
 it('provider verification and budget configuration tokens cannot share an audience',
   separatesVerificationAudience);
+
+async function signsProviderChoice() {
+  directory = await mkdtemp(join(tmpdir(), 'bound-turn-token-'));
+  const keyOptions = { namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8' as const, format: 'pem' as const },
+    publicKeyEncoding: { type: 'spki' as const, format: 'pem' as const } };
+  const key = generateKeyPairSync('ec', keyOptions);
+  const path = join(directory, 'signing.pem');
+  await writeFile(path, key.privateKey, { mode: 0o600 });
+  const options = { privateKeyPath: path, issuer: 'https://bound-turn.invalid/' };
+  const issuer = await tokenIssuer(options);
+  const input = { silo: 'test', assistantId: 'assistant', conversationId: 'chat',
+    turnId: 'turn', requesterId: 'alice', threadId: 'thread', task: 'chat_turn',
+    model: 'gpt-6-luna', providerId: 'primary', bindingSequence: 42 };
+  const token = await issuer.turn(input);
+  expect(await issuer.verify(token.value, turnTokenAudience)).toMatchObject({
+    providerId: 'primary', bindingSequence: 42, model: 'gpt-6-luna', task: 'chat_turn',
+  });
+  const incomplete = { ...input, bindingSequence: undefined };
+  await expect(issuer.turn(incomplete)).rejects.toThrow();
+  const invalid = { ...input, bindingSequence: 0 };
+  await expect(issuer.turn(invalid)).rejects.toThrow();
+}
+it('signs a complete provider choice and refuses incomplete or invalid choices', signsProviderChoice);
