@@ -1,3 +1,4 @@
+import type { EventEnvelope } from '@opencrane/events';
 import { expect, it } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { history, modelGrantHandler } from '../src/index.ts';
@@ -8,7 +9,7 @@ async function oldCreationPreservesRevocation(type: string) {
   const nats = await natsFixture();
   try {
     const memberId = type === 'silo.owner_bootstrapped' ? 'bootstrap-owner' : 'alice';
-    const trigger = event('old-creation', `member-${memberId}`, type);
+    const trigger: EventEnvelope = event('old-creation', `member-${memberId}`, type);
     let granteeId = memberId;
     let granteeKind = 'member';
     if (type === 'assistant.created') {
@@ -18,7 +19,7 @@ async function oldCreationPreservesRevocation(type: string) {
       granteeKind = 'assistant';
     }
     const subject = grantStream('model', 'gpt-6-luna');
-    const revoked = event('later-revocation', subject, 'grant.revoked');
+    const revoked: EventEnvelope = event('later-revocation', subject, 'grant.revoked');
     revoked.data = { resourceType: 'model', resourceId: 'gpt-6-luna', granteeId,
       granteeKind, revokedBy: 'alice' };
     await nats.seed([trigger, revoked]);
@@ -35,7 +36,7 @@ async function removedMemberGetsNoGrant(type: string) {
   const nats = await natsFixture();
   try {
     const memberId = type === 'silo.owner_bootstrapped' ? 'bootstrap-owner' : 'alice';
-    const trigger = event('old-member', `member-${memberId}`, type);
+    const trigger: EventEnvelope = event('old-member', `member-${memberId}`, type);
     await nats.seed([trigger, event('removed-member', trigger.subject, 'member.removed')]);
     await modelGrantHandler(nats.store).handle(trigger, noSql);
     expect(await history(nats.store, 'grant-*', 'test')).toEqual([]);

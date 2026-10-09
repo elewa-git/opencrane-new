@@ -11,10 +11,12 @@ import { pgDb } from "@opencrane/projections";
 import { dispatch, HandlerRuntime, provisionDispatcher } from "@opencrane/handlers";
 import {
   createStore,
+  grantStream,
   memberAuthorisation,
   rebuildMembers,
   type Binding,
 } from "../src/index.ts";
+import { objectId } from "../src/client.ts";
 import model from "../model/v1.json" with { type: "json" };
 import { databases, openfga, until } from "./services.ts";
 
@@ -587,3 +589,112 @@ async function oldMemberEventAfterRemoval(type: string) {
 }
 it.each(['member.joined', 'silo.owner_bootstrapped', 'member.role_changed'])(
   'receipts an old %s after removal without restoring access', oldMemberEventAfterRemoval);
+
+interface OldPermissionCase {
+  type: string;
+  subject: string;
+  data: Record<string, unknown>;
+  laterType: string;
+  laterData: Record<string, unknown>;
+  initial?: EventEnvelope[];
+}
+function savedPermission(id: string, type: string, subject: string,
+  data: Record<string, unknown>): EventEnvelope {
+  const raw = event(id, subject, type);
+  return { ...raw, data };
+}
+const oldPermissionCases: OldPermissionCase[] = [
+  { type: 'member.removed', subject: 'member-alice', data: { memberId: 'alice', removedBy: 'bob' },
+    laterType: 'member.joined', laterData: { memberId: 'alice', email: 'alice@example.test',
+      displayName: 'Alice', role: 'admin' } },
+  { type: 'team.member_added', subject: 'team-sales', data: { teamId: 'sales', memberId: 'alice',
+    addedBy: 'bob' }, laterType: 'team.member_removed', laterData: { teamId: 'sales',
+    memberId: 'alice', removedBy: 'bob' } },
+  { type: 'team.member_removed', subject: 'team-sales', data: { teamId: 'sales', memberId: 'alice',
+    removedBy: 'bob' }, laterType: 'team.member_added', laterData: { teamId: 'sales',
+    memberId: 'alice', addedBy: 'bob' } },
+  { type: 'grant.given', subject: grantStream('model', 'gpt-6-luna'), data: {
+    resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', granteeKind: 'member',
+    grantedBy: 'bob' }, laterType: 'grant.revoked', laterData: { resourceType: 'model',
+    resourceId: 'gpt-6-luna', granteeId: 'alice', granteeKind: 'member', revokedBy: 'bob' } },
+  { type: 'grant.revoked', subject: grantStream('model', 'gpt-6-luna'), data: {
+    resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', granteeKind: 'member',
+    revokedBy: 'bob' }, laterType: 'grant.given', laterData: { resourceType: 'model',
+    resourceId: 'gpt-6-luna', granteeId: 'alice', granteeKind: 'member', grantedBy: 'bob' } },
+  { type: 'participant.added', subject: 'conversation-chat', data: { conversationId: 'chat',
+    participantId: 'alice', addedBy: 'bob' }, laterType: 'participant.removed', laterData: {
+    conversationId: 'chat', participantId: 'alice', removedBy: 'bob' } },
+  { type: 'participant.removed', subject: 'conversation-chat', data: { conversationId: 'chat',
+    participantId: 'alice', removedBy: 'bob' }, laterType: 'participant.added', laterData: {
+    conversationId: 'chat', participantId: 'alice', addedBy: 'bob' } },
+  { type: 'conversation.created', subject: 'conversation-chat', data: { conversationId: 'chat',
+    assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session' },
+    laterType: 'participant.removed', laterData: { conversationId: 'chat',
+      participantId: 'alice', removedBy: 'bob' } },
+  { type: 'ownership.seeded', subject: 'ownership-test', data: { ownerIds: ['alice'] },
+    laterType: 'ownership.transferred', laterData: { memberId: 'bob', transferredBy: 'alice' } },
+  { type: 'ownership.transferred', subject: 'ownership-test', data: {
+    memberId: 'bob', transferredBy: 'alice' }, laterType: 'ownership.stepped_down',
+    laterData: { memberId: 'bob' } },
+  { type: 'ownership.stepped_down', subject: 'ownership-test', data: { memberId: 'alice' },
+    laterType: 'ownership.transferred', laterData: { memberId: 'alice', transferredBy: 'bob' } },
+];
+function permissionOnly(row: string) {
+  return !row.includes('"relation":"applied"');
+}
+async function oldPermissionKeepsLaterChange(test: OldPermissionCase) {
+  const nats = await natsFixture();
+  try {
+    const old = savedPermission('old-permission', test.type, test.subject, test.data);
+    const later = savedPermission('later-permission', test.laterType, test.subject, test.laterData);
+    await nats.seed([old, later]);
+    const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'), nats.store);
+    if (test.type.startsWith('ownership.')) {
+      await apply(projection, [member('owner-alice', 'member.joined', 'alice', { role: 'owner' }),
+        member('owner-bob', 'member.joined', 'bob', { role: 'owner' })]);
+    }
+    await apply(projection, [later]);
+    const before = await snapshot(projection.binding);
+    await apply(projection, [old, old]);
+    const after = await snapshot(projection.binding);
+    // Allow the conversation's missing silo link, while keeping the removed participant absent.
+    if (test.type === 'conversation.created') {
+      const client = new OpenFgaClient(projection.binding);
+      const participants = await client.read({ object: objectId('conversation', 'test', 'chat'),
+        relation: 'participant' });
+      expect(participants.tuples).toEqual([]);
+    } else {
+      expect(after.filter(permissionOnly)).toEqual(before.filter(permissionOnly));
+    }
+    expect(await projection.applied(old.id)).toBe(true);
+  } finally {
+    await nats.close();
+  }
+}
+it.each(oldPermissionCases)('old $type preserves later applied permissions',
+  oldPermissionKeepsLaterChange);
+
+async function stableCreation(type: string) {
+  const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'));
+  let data: Record<string, unknown>;
+  let subject: string;
+  if (type === 'team.created') {
+    subject = 'team-sales';
+    data = { teamId: 'sales', name: 'Sales', createdBy: 'alice' };
+  } else if (type === 'provider.created') {
+    subject = 'provider-primary';
+    data = { providerId: 'primary', provider: 'openai', name: 'Primary',
+      revision: 1, changedBy: 'alice' };
+  } else {
+    subject = 'assistant-personal';
+    data = { assistantId: 'personal', ownerId: 'alice', kind: 'personal' };
+  }
+  const created = savedPermission('stable-created', type, subject, data);
+  await apply(projection, [created, member('joined-later'), member('removed-later', 'member.removed')]);
+  const before = await snapshot(projection.binding);
+  await apply(projection, [created]);
+  expect(await snapshot(projection.binding)).toEqual(before);
+  expect(await projection.applied(created.id)).toBe(true);
+}
+it.each(['team.created', 'provider.created', 'assistant.created'])(
+  'repeating an old %s keeps its saved result', stableCreation);

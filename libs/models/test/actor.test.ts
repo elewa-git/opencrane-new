@@ -310,12 +310,14 @@ async function oldLossKeepsCurrentHold(reclaimed: boolean) {
     assistantId: 'assistant', computerId: 'computer',
   });
   const saved = await nats.store.append({ event: loss, expectedSequence: 0 });
-  expect(saved.status).toBe('appended');
+  if (saved.status !== 'appended') {
+    throw new Error('Loss append failed');
+  }
   if (reclaimed) {
     const claim = envelope('test', loss.subject, 'computer.claimed', {
       assistantId: 'assistant', computerId: 'computer', generation: 2, tokenId: 'token:new',
     });
-    await nats.store.append({ event: claim, expectedSequence: saved.sequence! });
+    await nats.store.append({ event: claim, expectedSequence: saved.sequence });
   }
   const reservationId = await reserve(false, 'current-request');
   const before = await nats.store.head();

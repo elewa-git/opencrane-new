@@ -241,7 +241,7 @@ function upgradeTests() {
 
   async function removalNeedsNoScan() {
     const runtime = await prepare();
-    const manifest = JSON.parse(oldManifest) as { name: string; eventTypes: string[] }[];
+    const manifest = [{ name: 'update-members', eventTypes: ['member.removed'] }];
     // Store all current subscriptions plus a removed handler.
     for (const handler of runtime.options.handlers) {
       const subscription = { name: handler.name, eventTypes: [...handler.eventTypes] };
@@ -252,7 +252,10 @@ function upgradeTests() {
     function noRead(): AsyncIterable<never> {
       throw new Error('Removal must not scan history');
     }
-    const source = { head: async () => 4, subscribe: noRead };
+    function head() {
+      return Promise.resolve(4);
+    }
+    const source = { head, subscribe: noRead };
     await upgradeHandlers(runtime, source);
   }
   it('does not read history when subscriptions are only removed', removalNeedsNoScan);
@@ -334,6 +337,59 @@ function upgradeTests() {
     expect((await current.db.query('SELECT * FROM handler_receipts')).rows).toHaveLength(3);
   }
   it('lists and cancels one failed original without changing receipts', operatesFailedJobs);
+
+  async function historicalAndLiveTogether() {
+    const runtime = await prepare();
+    await current.append('live-tail', 'member-alice');
+    await command('--confirm-writers-stopped');
+    await runtime.start();
+    void current.startDispatch(runtime);
+    await current.checkpoint(5);
+    await runtime.work(1);
+    async function finished() {
+      return (await current.effects()).length === 12;
+    }
+    await until(finished);
+    const rows = await current.effects();
+    function openfga(row: typeof rows[number]) {
+      return row.handler === 'update-openfga';
+    }
+    function id(row: typeof rows[number]) {
+      return row.event_id;
+    }
+    const permissions = rows.filter(openfga);
+    expect(permissions.map(id)).toEqual(['joined', 'role', 'role-again', 'owner', 'live-tail']);
+  }
+  it('runs historical and live jobs queued together on the same key in saved order',
+    historicalAndLiveTogether);
+
+  async function orderOnlyChange() {
+    const runtime = await prepare();
+    function subscription(handler: typeof runtime.options.handlers[number]) {
+      const eventTypes = [...handler.eventTypes];
+      eventTypes.reverse();
+      return { name: handler.name, eventTypes };
+    }
+    const manifest = runtime.options.handlers.map(subscription);
+    await current.db.query('UPDATE handler_dispatcher SET manifest = $1', [JSON.stringify(manifest)]);
+    const info = vi.spyOn(runtime.options.logger, 'info');
+    const stop = new AbortController();
+    const task = dispatch(current.nats.dispatcherConnection, runtime, stop.signal);
+    try {
+      function logged() {
+        return Promise.resolve(info.mock.calls.length > 0);
+      }
+      await until(logged);
+      expect(JSON.stringify(info.mock.calls)).toContain('Only subscription order changed');
+      const result = await command('--dry-run');
+      expect(result.stdout).toContain('"plan":[]');
+      expect((await snapshot()).jobs).toEqual([]);
+    } finally {
+      stop.abort();
+      await task;
+    }
+  }
+  it('explains order-only changes and queues no historical jobs', orderOnlyChange);
 
 }
 describe.skipIf(!process.env["PG_TEST_URL"])("handler subscription upgrade / real services", upgradeTests);
