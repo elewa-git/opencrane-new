@@ -868,8 +868,6 @@ async function grantHistoryFinishesBeforeTheShortCheck() {
   const store = nats.store;
   const subject = grantStream('model', 'gpt-6-sol');
   const read = store.readStream.bind(store);
-  const appendCommand = store.append.bind(store);
-  let historyFinished = false;
   let fullReads = 0;
   store.readStream = async function* readGrantHistory(name, from, deadline) {
     if (name === subject && (from ?? 1) === 1) {
@@ -877,15 +875,6 @@ async function grantHistoryFinishesBeforeTheShortCheck() {
       expect((deadline ?? 0) - performance.now()).toBeGreaterThan(2000);
     }
     yield* read(name, from, deadline);
-    if (name === subject && (from ?? 1) === 1) historyFinished = true;
-  };
-  store.append = async function saveAfterHistory(command) {
-    const record = z.object({ subject: z.string() }).parse(command.event);
-    if (record.subject === subject) {
-      expect(historyFinished).toBe(true);
-      expect(command.historyChecked).toBe(true);
-    }
-    return appendCommand(command);
   };
   try {
     const expected = await store.head(subject);
@@ -895,10 +884,9 @@ async function grantHistoryFinishesBeforeTheShortCheck() {
     expect(fullReads).toBe(1);
   } finally {
     store.readStream = read;
-    store.append = appendCommand;
   }
 }
-it('reads grant history once before the two-second check and appends with historyChecked',
+it('reads grant history once before the two-second check without rereading during append',
   grantHistoryFinishesBeforeTheShortCheck);
 
 async function teamHistoryIsReadOnceBeforeTheCheck() {

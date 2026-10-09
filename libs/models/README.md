@@ -17,7 +17,7 @@ flowchart LR
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|checks tool mode, call ids and access| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|new usage lines| models
-  models -->|saves changes, reads new activity and checks history positions| store["libs/event-store<br/>event log"]
+  models -->|saves changes, reads new activity and grant facts| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -40,7 +40,7 @@ flowchart LR
 - Check member or admin access for reads using saved membership and current permissions.
   Let one request reuse checks for the same saved access event.
 - Check that an invitation's sender still has authority before it is accepted.
-- Keep chat and computer facts in memory and read new events before each call.
+- Keep chat, computer and model grant facts in memory and read new events before each call.
   Check those facts before watching the streams that decide access. These checks
   share two seconds because the gateway waits only that long. Older summaries
   are dropped when their memory budget is reached and rebuilt on their next use.

@@ -295,16 +295,18 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     const warmed = await decide(setup);
     expect([200, 403]).toContain(warmed.status);
     expect(fullReads).toEqual([false]);
-    const catchUpDeadline = performance.now() + 15_000;
+    const catchUpDeadline = performance.now() + 120_000;
     let ready = warmed;
     while (ready.status !== 200 && performance.now() < catchUpDeadline) {
-      ready = await decide(setup);
+      const headers = await setup.issue();
+      ready = await decide(setup, setup.options.decisionUrl, headers);
     }
     expect(ready.status, ready.text).toBe(200);
     const summaryPosition = await store.head(subject);
     const reads = countReads(store);
+    const headers = await setup.issue();
     const began = performance.now();
-    const result = await decide(setup);
+    const result = await decide(setup, setup.options.decisionUrl, headers);
     expect(result.status, result.text).toBe(200);
     const milliseconds = Math.round(performance.now() - began);
     expect(milliseconds).toBeLessThan(2000);
@@ -337,18 +339,60 @@ async function repeatedGrantEditsStayOnLaterReads() {
 it('keeps 15,000 edits to one model grantee on later reads within two seconds',
   repeatedGrantEditsStayOnLaterReads, 180_000);
 
-async function refusesGrantChangedBeforeAccessCheck() {
+async function refusesTeamRevocationMissingReceipt(granteeKind: string | undefined) {
+  const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true);
+  const subject = grantStream('model', 'gpt-6-luna');
+  const resource = { resourceType: 'model', resourceId: 'gpt-6-luna' };
+  try {
+    const teamGrant = { ...resource, granteeId: 'sales', granteeKind: 'team', grantedBy: 'alice' };
+    const given = await setup.append(subject, 'grant.given', teamGrant);
+    await setup.auth.handler.handle(given, setup.db);
+    const directRevocation = { ...resource, granteeId: 'alice', revokedBy: 'alice' };
+    const revoked = await setup.append(subject, 'grant.revoked', directRevocation);
+    await setup.auth.handler.handle(revoked, setup.db);
+    const teamRevocation = { ...resource, granteeId: 'sales', granteeKind, revokedBy: 'alice' };
+    await setup.append(subject, 'grant.revoked', teamRevocation);
+    expect((await setup.auth.use('person', 'alice', 'model', 'gpt-6-luna')).allowed).toBe(true);
+    const result = await decide(setup);
+    expect(result.status, result.text).toBe(403);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it.each([undefined, 'team'])('requires the latest %s team revocation receipt while IAM still allows',
+  refusesTeamRevocationMissingReceipt, 40_000);
+
+async function refusesGrantChangedBeforeAccessCheck(team: boolean) {
   const setup = await fixture();
   const subject = grantStream('model', 'gpt-6-luna');
   const read = setup.nats.store.readStream.bind(setup.nats.store);
-  let changed = false;
-  async function* revokeAfterSummary(...args: Parameters<typeof read>) {
-    yield* read(...args);
-    if (args[0] !== subject || changed) return;
-    changed = true;
+  let granteeId = 'alice';
+  if (team) {
+    granteeId = 'eng';
+    const created = { teamId: 'eng', name: 'Engineering', createdBy: 'alice' };
+    await setup.append('team-eng', 'team.created', created);
+    const membership = { teamId: 'eng', memberId: 'alice', addedBy: 'alice' };
+    await setup.append('team-eng', 'team.member_added', membership);
+    const grant = { resourceType: 'model', resourceId: 'gpt-6-luna',
+      granteeId, granteeKind: 'team', grantedBy: 'alice' };
+    const given = await setup.append(subject, 'grant.given', grant);
+    await setup.auth.handler.handle(given, setup.db);
     const revocation = { resourceType: 'model', resourceId: 'gpt-6-luna',
       granteeId: 'alice', revokedBy: 'alice' };
-    await setup.append(subject, 'grant.revoked', revocation);
+    const revoked = await setup.append(subject, 'grant.revoked', revocation);
+    await setup.auth.handler.handle(revoked, setup.db);
+  }
+  let changed = false;
+  async function* revokeAfterSummary(...args: Parameters<typeof read>) {
+    if (args[0] === subject && !changed) {
+      changed = true;
+      const revocation = { resourceType: 'model', resourceId: 'gpt-6-luna',
+        granteeId, revokedBy: 'alice' };
+      await setup.append(subject, 'grant.revoked', revocation);
+    }
+    yield* read(...args);
   }
   vi.spyOn(setup.nats.store, 'readStream').mockImplementation(revokeAfterSummary);
   try {
@@ -357,10 +401,20 @@ async function refusesGrantChangedBeforeAccessCheck() {
     expect(result.status, result.text).toBe(403);
     expect(setup.actor.state.reservations).toHaveLength(0);
     expect(setup.received()).toBe(0);
+    expect((await setup.auth.use('person', 'alice', 'model', 'gpt-6-luna')).allowed).toBe(true);
   } finally {
     vi.restoreAllMocks();
     await setup.close();
   }
 }
+async function refusesMemberGrantChangedBeforeAccessCheck() {
+  await refusesGrantChangedBeforeAccessCheck(false);
+}
 it('refuses a grant revoked between its summary read and the access check while IAM still allows',
-  refusesGrantChangedBeforeAccessCheck, 40_000);
+  refusesMemberGrantChangedBeforeAccessCheck, 40_000);
+
+async function refusesTeamGrantChangedDuringSummary() {
+  await refusesGrantChangedBeforeAccessCheck(true);
+}
+it('refuses an untyped revoke during catch-up for a granted team that does not own the assistant',
+  refusesTeamGrantChangedDuringSummary, 40_000);

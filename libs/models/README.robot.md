@@ -474,6 +474,23 @@ facts catch up before the short access check; only new activity is read during i
 
 ## Decision activity summaries
 
+Model decisions read `decision-grants` through `readStreamSummary` before the access
+check. Each grantee kind and id keeps its latest event and position. Previously
+granted teams remain known for receipt checks and untyped revocations, even when
+catch-up replaces their grant. Legacy revocations update all three identity kinds.
+The check reads changes after the position captured before catch-up, including
+the gap before it opened. History and access share the original two-second budget.
+
+The kind keeps at most 64 streams with a 16 MiB estimated budget: 1,152 bytes per
+grantee and 128 per remembered team. It uses the same whole-stream eviction and
+background catch-up rules as chats. Restored history below the summary refuses
+before money is held. Processes must restart after an event-store restore.
+
+`test/decision-cost.test.ts` covers 3,000 grantees, 15,000 edits to one grantee,
+later-row reads within two seconds, catch-up revocations, delayed team receipts
+and restored history. `test/decision-fence.test.ts` keeps all #198 refusal and
+harmless cases, including zero-cent release after an allow audit and disconnection.
+
 `decisionActivity` uses the auth `computer` summary and the models `decision-chat`
 summary. The computer facts include the latest lifecycle event and the requested
 turn's first start and first close. Admission requires the same Ready position
@@ -493,8 +510,9 @@ row counts as 1,152 bytes, above the measured UUID row cost of about 1,009 bytes
 This allows 65,536 kept rows: two 10,000-turn chats with creation, message, start
 and completion events fit together. Reply chunks do not count because this
 summary does not keep them. The shared computer kind has a separate 48 MiB
-estimate. Together these allowances use 120 MiB of the 256 MiB heap cap.
-They leave 136 MiB for other service work, caller copies and active reads.
+estimate. Together these allowances use 120 MiB of the 256 MiB heap cap. Model grant
+summaries add a separate 16 MiB estimate, leaving 120 MiB for other service work,
+caller copies and active reads.
 Whole summaries are
 dropped in least-recently-used order; individual refusal facts are never removed.
 A dropped summary rebuilds from sequence 1. A summary larger than its whole budget
