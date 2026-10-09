@@ -773,3 +773,38 @@ async function legacyRemovalKeepsOnlyLaterGrant() {
 }
 it('an old grant removal without a kind keeps a later grant and removes earlier grants',
   legacyRemovalKeepsOnlyLaterGrant);
+
+async function oldTransferAfterActorStepdown(removed: boolean) {
+  const nats = await natsFixture();
+  try {
+    const alice = member('original-alice-owner', 'member.joined', 'alice', { role: 'owner' });
+    const charlie = member('original-charlie-owner', 'member.joined', 'charlie', { role: 'owner' });
+    const bob = member('original-bob-member', 'member.joined', 'bob');
+    const seed = savedPermission('original-owners', 'ownership.seeded', 'ownership-test', {
+      ownerIds: ['alice', 'charlie'] });
+    const transfer = savedPermission('old-bob-transfer', 'ownership.transferred', 'ownership-test', {
+      memberId: 'bob', transferredBy: 'alice' });
+    const stepdown = savedPermission('later-alice-stepdown', 'ownership.stepped_down',
+      'ownership-test', { memberId: 'alice' });
+    const removal = member('later-alice-removal', 'member.removed');
+    const history = [alice, charlie, bob, seed, transfer, stepdown];
+    if (removed) {
+      history.push(removal);
+    }
+    await nats.seed(history);
+    const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'), nats.store);
+    await apply(projection, [alice, charlie, bob, seed, stepdown]);
+    if (removed) {
+      await apply(projection, [removal]);
+    }
+    await apply(projection, [transfer]);
+    expect(await projection.check('bob', 'owner')).toMatchObject({ allowed: true });
+    expect(await projection.check('alice', 'owner')).toMatchObject({ allowed: false });
+    expect(await projection.applied(transfer.id)).toBe(true);
+  } finally {
+    await nats.close();
+  }
+}
+it.each([false, true])(
+  'keeps a valid old ownership transfer after its actor steps down (removed: %s)',
+  oldTransferAfterActorStepdown);
