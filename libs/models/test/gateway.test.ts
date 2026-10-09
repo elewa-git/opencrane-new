@@ -251,6 +251,8 @@ it.each([
       yield* readStream(...args);
     });
     try {
+      // The decision's two-second budget starts with the call, so measure from there.
+      const started = performance.now();
       const pending = f.call();
       const captureOrResponse = await Promise.race([
         capturing.then(() => undefined),
@@ -262,10 +264,9 @@ it.each([
       if (revoke) await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
         resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
       });
-      const revoked = performance.now();
       resume();
       const response = await pending;
-      if (pauseMs > 2000) expect(performance.now() - revoked).toBeGreaterThan(2000);
+      if (pauseMs > 2000) expect(performance.now() - started).toBeGreaterThan(2000);
       expect(f.received()).toBe(1);
       expect(response.status).toBe(403);
       expect(f.actor.state.reservations).toHaveLength(1);
