@@ -988,8 +988,13 @@ it('converges identical concurrent commands and conflicts on changed input', asy
   const original = await get(`${path('bob')}/changes/concurrent`);
   expect(original.json()).toMatchObject({ outcome: 'saved', revision: 1 });
   const saved = original.json<{ memoryId: string }>();
-  for (const receipt of receipts) {
-    expect(receipt).toMatchObject({ memoryId: saved.memoryId });
+  for (let index = 0; index < receipts.length; index++) {
+    const response = replies[index]!;
+    if (response.statusCode === 503) {
+      expect(receipts[index]).toEqual({ status: 'unavailable', reason: 'memory_unavailable' });
+    } else {
+      expect(receipts[index]).toMatchObject({ memoryId: saved.memoryId });
+    }
   }
   expect((await send()).json()).toEqual(original.json());
   expect((await remember('bob', 'person', 'concurrent', 'bob', { pinned: true })).statusCode).toBe(409);
@@ -1001,7 +1006,8 @@ it('converges identical concurrent commands and conflicts on changed input', asy
     return response.statusCode;
   }
   const statuses = changed.map(status);
-  expect(statuses.sort()).toEqual([200, 409]);
+  expect(statuses).toContain(200);
+  for (const status of statuses) expect([200, 409, 503]).toContain(status);
   await runner.run(projection);
   expect((await get(`${path('bob')}/changes/concurrent`, 'admin')).statusCode).toBe(404);
   expect((await get(`${path('bob')}/changes/unseen`)).json()).toMatchObject({ outcome: 'unknown' });
@@ -1113,8 +1119,11 @@ it('reconciles a prepared key and its temporary copy after restart', async funct
   await copyFile(`${directory}/${reference}`, `${directory}/${reference}-pending`);
   await app.close();
   app = buildServer(config, { memory });
-  expect((await get(`${path('bob')}/changes/restart-prepared`)).json())
-    .toMatchObject({ outcome: 'failed' });
+  async function resolvedFailure() {
+    expect((await get(`${path('bob')}/changes/restart-prepared`)).json())
+      .toMatchObject({ outcome: 'failed' });
+  }
+  await vi.waitFor(resolvedFailure, { timeout: 5000, interval: 100 });
   expect(function deleted() { keys.provision(identity); }).toThrow('destroyed');
   await expect(access(`${directory}/${reference}-pending`)).rejects.toThrow();
   expect((await remember('bob', 'person', 'unavailable-write')).json())
@@ -1199,10 +1208,10 @@ it('ignores other event types when checking live dependencies', async function o
   const scopeId = memoryScopeId('acme', 'person', 'bob');
   const original = nats.store.readStream.bind(nats.store);
   async function* withOtherRow(subject: string, from?: number, deadline?: number) {
-    yield* original(subject, from, deadline);
     if (subject === `scope-${scopeId}`) {
       yield { sequence: 0, event: { ...record, type: 'memory.forgotten', data: {} } };
     }
+    yield* original(subject, from, deadline);
   }
   const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(withOtherRow);
   try {
@@ -1317,7 +1326,9 @@ it('keeps no text or text hash in a journal and removes resolved records', async
   const input = { kind: 'fact', pinned: false, expiresAt: null,
     sources: [{ memberId: 'bob', commandId: 'journal-private' }], dependsOn: [],
     commandId: 'journal-private', text: 'A human statement' };
-  const digest = hash.createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  const fingerprint = hash.createHash('sha256');
+  fingerprint.update(JSON.stringify(input));
+  const digest = fingerprint.digest('hex');
   expect(entry.inputDigest).not.toBe(digest);
   await new Promise(function appendWindow(resolve) { setTimeout(resolve, 2100); });
   await reconcileCommands(memory);
@@ -1335,7 +1346,8 @@ it('starts despite damaged journals and a failed recovery read', async function 
   await app.close();
   const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(brokenRead);
   async function* brokenRead(): AsyncGenerator<never> {
-    throw new Error('NATS unavailable');
+    await Promise.reject(new Error('NATS unavailable'));
+    yield* [];
   }
   try {
     app = buildServer(config, { memory });

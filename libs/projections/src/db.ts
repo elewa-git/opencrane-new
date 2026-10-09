@@ -6,5 +6,6 @@ export interface Query {
 }
 export interface Db extends Query {
   transaction<T>(work: (transaction: Query) => Promise<T>): Promise<T>;
-  lock?<T>(name: string, work: (db: Db) => Promise<T>): Promise<T>;
+  lock?<T>(name: string, work: (db: Db) => Promise<T>,
+    options?: { timeoutMs: number }): Promise<T>;
 }

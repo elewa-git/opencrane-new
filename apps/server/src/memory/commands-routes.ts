@@ -10,9 +10,21 @@ import { remember, readCommand, changeParams, reconcileCommands } from './comman
 export function registerMemoryCommands(app: FastifyInstance, config: AuthConfig,
   options?: MemoryOptions) {
   async function reconcile() {
-    if (options) await reconcileCommands(options);
+    try {
+      if (options) await reconcileCommands(options);
+    } catch {
+      app.log.warn('Memory command recovery will need another check');
+    }
   }
-  app.addHook('onReady', reconcile);
+  function startRecovery(done: () => void) {
+    // Let startup finish before scanning files or contacting the event store.
+    function runRecovery() {
+      void reconcile();
+    }
+    setImmediate(runRecovery);
+    done();
+  }
+  app.addHook('onReady', startRecovery);
   app.get('/api/memory/:scopeId/changes/:commandId', handle);
   const postOptions = { bodyLimit: 16384, errorHandler: invalidCommandBody };
   app.post('/api/memory/:scopeId/facts', postOptions, handle);

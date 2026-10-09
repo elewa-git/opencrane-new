@@ -10,6 +10,7 @@ import { detailFact, listFacts, memorySnapshot, readInput, readParams,
 
 export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
   options?: MemoryOptions) {
+
   app.get('/api/memory/scopes', handle);
   app.get('/api/memory/:scopeId/facts', handle);
   app.get('/api/memory/:scopeId/facts/:memoryId', handle);

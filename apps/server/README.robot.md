@@ -64,18 +64,31 @@ Current chats cannot prove durable whole-group visibility, so shared message sou
 Preferences stay personal. Text allows tabs/newlines but refuses other C0 controls.
 Commands and events have separate 16 KiB limits. Dependencies require a live same-scope revision.
 
-History loads before the two-second access check. It watches only member, assistant,
-team and write-grant streams. Each command makes one conditional append at the scope
-position read from history. A PostgreSQL advisory lock keeps attempts for the same command
-together across servers. Keys are prepared first. Changed inputs return 409. Lost replies
-return `outcome: "unknown"`; clients check `GET /api/memory/:scopeId/changes/:commandId`
-instead of resending. Status returns only this principal's original command, after projection catch-up.
-Receipts contain references and audience, never text. Missing commands stay unknown.
+Write permission is checked before inspecting scope history, dependencies or sources.
+Chat access is checked before an indexed message lookup in the conversation read table.
+The lookup checks that the worker has caught up, then checks one saved event in NATS.
+These content checks finish before the command lock and the final two-second access check.
+The final check watches only member, assistant, team and write-grant streams. Each command
+makes one conditional append at the scope position read from history. A PostgreSQL advisory
+lock keeps attempts for the same command together across servers. Memory commands wait at
+most 100 ms for this lock; a busy lock returns 503. Work inside the lock uses its own
+checked-out database client. No conversation content is read inside the lock.
 
-The existing 0700 key directory also holds payload-free command records. Startup checks
-prepared/failed records against event history, then destroys unused keys and temporary copies.
-Unknown outcomes retain keys and never append again. Definite failures consume their command id;
-use a new id for a new attempt. Keep all servers for a silo on the same database and key directory.
+The full encrypted event size is checked before a revision key is created. Changed saved
+inputs return 409. Lost replies return `outcome: "unknown"`; clients check
+`GET /api/memory/:scopeId/changes/:commandId` instead of resending. Status returns only
+this principal's original command, after projection catch-up, including for a notes writer
+without a read grant. Receipts contain references and audience, never text.
+
+The existing 0700 key directory also holds temporary command records. Their fingerprint
+leaves text out. A resolved record is deleted. Unknown outcomes keep their key until the
+append deadline passes. A later status request or recovery check reads the scope stream
+again, then reports the saved result or a definite `failed` outcome. Failed commands keep
+only the destroyed-key marker and cannot append again. An unseen command stays unknown.
+Startup launches recovery in the background. Recovery reads directory entries gradually,
+yields after every 16 records and limits each scope read to one second. A damaged record,
+busy lock or event-store outage leaves the record for a later check and never stops startup.
+Keep all servers for a silo on the same database and key directory.
 Fact detail is in the companion draft. Fresh-install memory journeys and native turns remain NOT RUN.
 
 The Node service exposes sign-in routes, invitation acceptance, the organisation MCP

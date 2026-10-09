@@ -1,4 +1,6 @@
-import { readdirSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
+import { opendir } from 'node:fs/promises';
+import { setImmediate } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { authorityFence, history, readActiveMember } from '@opencrane/models';
@@ -26,9 +28,9 @@ function commandReference(silo: string, scopeId: string, requester: string, comm
   return hash.digest('hex');
 }
 async function commandHistory(options: MemoryOptions, scopeId: string,
-  requester: string, commandId: string) {
+  requester: string, commandId: string, deadline = performance.now() + 10_000) {
   const rows = await history(options.store, `scope-${scopeId}`, options.silo,
-    performance.now() + 10_000);
+    deadline);
   function matches(row: StoredEvent) {
     return row.event.commandId === commandId && row.event.principal?.kind === 'human' &&
       row.event.principal.id === requester;
@@ -93,11 +95,18 @@ function checkDependencies(rows: StoredEvent[], scope: Scope, input: Input,
     seen.add(reference);
     let latest: ReturnType<typeof memoryWrittenEventSchema.parse> | undefined;
     for (const row of rows) {
+      if (row.event.type !== 'memory.written') {
+        continue;
+      }
       const saved = memoryWrittenEventSchema.parse(row.event);
-      if (saved.data.memoryId === dependency.memoryId) latest = saved;
+      if (saved.data.memoryId === dependency.memoryId) {
+        latest = saved;
+      }
     }
     if (!latest || !('schemaVersion' in latest.data) ||
-        latest.data.revision !== dependency.revision) throw new MemoryConflict();
+        latest.data.revision !== dependency.revision) {
+      throw new MemoryConflict();
+    }
     const identity = { silo, ...scope, memoryId: dependency.memoryId, revision: dependency.revision };
     if (keys.decrypt(identity, latest.data) === null ||
         (latest.data.expiresAt !== null && Date.parse(latest.data.expiresAt) <= Date.now())) {
@@ -107,6 +116,11 @@ function checkDependencies(rows: StoredEvent[], scope: Scope, input: Input,
 }
 
 export async function remember(options: MemoryOptions, requester: string, scope: Scope, raw: unknown) {
+  // Check write permission before inspecting private content or reserving a database client.
+  const initialAccess = await scopeAccess(options, requester, scope, false, undefined, true);
+  if (!initialAccess.canWrite) {
+    throw new MemoryRefused();
+  }
   const parsed = commandInput.parse(raw);
   if (Buffer.byteLength(JSON.stringify(raw)) > 16384 ||
       (parsed.kind === 'preference' && scope.scopeKind !== 'person')) {
@@ -117,25 +131,28 @@ export async function remember(options: MemoryOptions, requester: string, scope:
     throw new Error('Memory custody unavailable');
   }
   const reference = commandReference(options.silo, scope.scopeId, requester, input.commandId);
-  async function execute() {
-    return rememberLocked(options, requester, scope, input, reference);
-  }
-  // Serialise one command across server processes before preparing or deleting its key.
-  return options.db.lock(`memory-command:${reference}`, execute);
-}
-async function rememberLocked(options: MemoryOptions, requester: string, scope: Scope,
-  input: Input, reference: string) {
-  const keys = memoryKeys(options.keyDirectory!);
-  const identity = { silo: options.silo, ...scope, memoryId: reference, revision: 1 };
-  const journal = commandJournal(options.keyDirectory!, reference);
   const state = await commandHistory(options, scope.scopeId, requester, input.commandId);
   if (!state.original) {
     if (input.expiresAt !== null && Date.parse(input.expiresAt) <= Date.now()) {
       throw new z.ZodError([]);
     }
     await checkSources(options, requester, scope, input.sources, input.commandId);
+    const keys = memoryKeys(options.keyDirectory);
     checkDependencies(state.rows, scope, input, keys, options.silo);
   }
+  async function execute(db: import('@opencrane/projections').Db) {
+    const lockedOptions = { ...options, db };
+    return rememberLocked(lockedOptions, requester, scope, input, reference, state.rows);
+  }
+  // Refuse a busy command promptly so one duplicate cannot hold up other database work.
+  return options.db.lock(`memory-command:${reference}`, execute, { timeoutMs: 100 });
+}
+async function rememberLocked(options: MemoryOptions, requester: string, scope: Scope,
+  input: Input, reference: string, rows: StoredEvent[]) {
+  const keys = memoryKeys(options.keyDirectory!);
+  const identity = { silo: options.silo, ...scope, memoryId: reference, revision: 1 };
+  const journal = commandJournal(options.keyDirectory!, reference);
+  const state = await commandHistory(options, scope.scopeId, requester, input.commandId);
   // Read content first. Watch only streams that decide permission during the two-second check.
   const fresh = await authorityFence(options.store, performance.now(), [`member-${requester}`]);
   const checks = memoryAccessChecks(options, requester, fresh);
@@ -145,23 +162,33 @@ async function rememberLocked(options: MemoryOptions, requester: string, scope: 
     throw new MemoryRefused();
   }
   if (state.original) {
+    journal.remove();
     return originalReceipt(state.original, keys, input, access.audience);
   }
-  const inputDigest = digest(input);
+  const { text: _text, ...metadata } = input;
+  const hash = createHash('sha256');
+  // Leave text out so a forgotten fact cannot be guessed from a saved fingerprint.
+  hash.update(JSON.stringify(metadata));
+  const inputDigest = hash.digest('hex');
   const pending = journal.read();
   if (pending && pending.inputDigest !== inputDigest) {
     throw new MemoryConflict();
   }
-  if (pending?.stage === 'unknown') {
-    return { outcome: 'unknown', memoryId: reference };
-  }
   if (pending) {
+    if (pending.stage === 'unknown' && Date.now() <= pending.appendUntil) {
+      return { outcome: 'unknown', memoryId: reference };
+    }
     keys.delete(identity);
+    journal.remove();
+    return { outcome: 'failed', memoryId: reference };
+  }
+  if (keys.status(identity) === 'destroyed') {
     return { outcome: 'failed', memoryId: reference };
   }
   const entry = { identity, requester, commandId: input.commandId, inputDigest,
+    appendUntil: Date.now() + Math.max(0, fresh.deadline - performance.now()),
     stage: 'prepared' as const };
-  return appendPrepared(options, input, entry, state.rows, fresh, access.audience);
+  return appendPrepared(options, input, entry, rows, fresh, access.audience);
 }
 async function appendPrepared(options: MemoryOptions, input: Input,
   entry: NonNullable<ReturnType<ReturnType<typeof commandJournal>['read']>>,
@@ -172,17 +199,22 @@ async function appendPrepared(options: MemoryOptions, input: Input,
   const scope = { scopeId: identity.scopeId, scopeKind: identity.scopeKind, ownerId: identity.ownerId };
   const keys = memoryKeys(options.keyDirectory!);
   const journal = commandJournal(options.keyDirectory!, reference);
+  const encryptedSize = Buffer.byteLength(input.text) + 28;
+  const placeholder = { ciphertext: Buffer.alloc(encryptedSize).toString('base64'),
+    keyId: `key:${'0'.repeat(64)}` };
+  // Check the full event with an encrypted value of the same size before creating a key.
+  const data = { schemaVersion: 1, ...scope, memoryId: reference, revision: 1,
+    kind: input.kind, pinned: input.pinned, expiresAt: input.expiresAt,
+    sources: input.sources, dependsOn: input.dependsOn, ...placeholder };
+  const event = memoryWrittenEventSchema.parse({ id: reference, commandId: input.commandId,
+      silo: options.silo, subject: `scope-${scope.scopeId}`, type: 'memory.written',
+      source: 'opencrane-server', time: new Date().toISOString(),
+      principal: { kind: 'human', id: requester }, correlation: {}, data });
   journal.save(entry);
   try {
     keys.provision(identity);
     const encrypted = keys.encrypt(identity, input.text);
-    const data = { schemaVersion: 1, ...scope, memoryId: reference, revision: 1,
-      kind: input.kind, pinned: input.pinned, expiresAt: input.expiresAt,
-      sources: input.sources, dependsOn: input.dependsOn, ...encrypted };
-    const event = memoryWrittenEventSchema.parse({ id: reference, commandId: input.commandId,
-      silo: options.silo, subject: `scope-${scope.scopeId}`, type: 'memory.written',
-      source: 'opencrane-server', time: new Date().toISOString(),
-      principal: { kind: 'human', id: requester }, correlation: {}, data });
+    event.data = { ...data, ...encrypted };
     await fresh();
     journal.save({ ...entry, stage: 'unknown' });
     const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0,
@@ -197,20 +229,22 @@ async function appendPrepared(options: MemoryOptions, input: Input,
       return { outcome: 'unknown', memoryId: reference };
     }
     if (result.status === 'appended') {
+      journal.remove();
       return savedReceipt({ event, sequence: result.sequence }, audience);
     }
     // Check the original command again before destroying any key after a definite refusal.
     const reconciled = await commandHistory(options, scope.scopeId, requester, input.commandId);
     if (reconciled.original) {
+      journal.remove();
       return originalReceipt(reconciled.original, keys, input, audience);
     }
-    journal.save({ ...entry, stage: 'failed' });
     keys.delete(identity);
+    journal.remove();
     return { outcome: 'conflict', memoryId: reference };
   } catch (error) {
     if (journal.read()?.stage === 'prepared') {
-      journal.save({ ...entry, stage: 'failed' });
       keys.delete(identity);
+      journal.remove();
     }
     throw error;
   }
@@ -219,50 +253,81 @@ export async function readCommand(options: MemoryOptions, requester: string, sco
   commandId: string, audience: { kind: string; ownerId: string }) {
   await memorySnapshot(options, scope);
   const state = await commandHistory(options, scope.scopeId, requester, commandId);
-  if (!state.original) {
-    return { outcome: 'unknown' };
-  }
   if (!options.keyDirectory) {
     throw new Error('Memory custody unavailable');
   }
   const keys = memoryKeys(options.keyDirectory);
   const memoryId = commandReference(options.silo, scope.scopeId, requester, commandId);
+  const identity = { silo: options.silo, ...scope, memoryId, revision: 1 };
+  const journal = commandJournal(options.keyDirectory, memoryId);
+  if (!state.original) {
+    const entry = journal.read();
+    if (entry && (entry.stage !== 'unknown' || Date.now() > entry.appendUntil) && options.db.lock) {
+      async function reconcile() {
+        await reconcileCommand(options, memoryId);
+      }
+      await options.db.lock(`memory-command:${memoryId}`, reconcile, { timeoutMs: 100 });
+    }
+    if (keys.status(identity) === 'destroyed') {
+      return { outcome: 'failed', memoryId };
+    }
+    return { outcome: 'unknown' };
+  }
+  journal.remove();
   if (originalInput(state.original, keys) === null) {
     return { outcome: 'unavailable', memoryId };
   }
   return savedReceipt(state.original, audience);
 }
 
+async function reconcileCommand(options: MemoryOptions, reference: string) {
+  const journal = commandJournal(options.keyDirectory!, reference);
+  const entry = journal.read();
+  if (!entry) {
+    rmSync(`${options.keyDirectory!}/command-${reference}.json-pending`, { force: true });
+    return;
+  }
+  if (entry.identity.silo !== options.silo) {
+    return;
+  }
+  const expected = commandReference(options.silo, entry.identity.scopeId,
+    entry.requester, entry.commandId);
+  if (reference !== expected || entry.identity.memoryId !== reference) {
+    throw new Error('Invalid memory command record');
+  }
+  if (entry.stage === 'unknown' && Date.now() <= entry.appendUntil) {
+    return;
+  }
+  const state = await commandHistory(options, entry.identity.scopeId,
+    entry.requester, entry.commandId, performance.now() + 1000);
+  if (!state.original) {
+    memoryKeys(options.keyDirectory!).delete(entry.identity);
+  }
+  journal.remove();
+}
+
 export async function reconcileCommands(options: MemoryOptions) {
-  if (!options.keyDirectory || !options.db.lock) return;
-  const directory = options.keyDirectory;
-  const keys = memoryKeys(directory);
-  for (const name of readdirSync(directory)) {
-    const match = /^command-([a-f0-9]{64})\.json(?:-pending)?$/u.exec(name);
+  if (!options.keyDirectory || !options.db.lock) {
+    return;
+  }
+  const directory = await opendir(options.keyDirectory);
+  let processed = 0;
+  for await (const file of directory) {
+    const match = /^command-([a-f0-9]{64})\.json(?:-pending)?$/u.exec(file.name);
     if (!match) {
       continue;
     }
     const reference = match[1]!;
     async function reconcile() {
-      const journal = commandJournal(directory, reference);
-      const entry = journal.read();
-      if (!entry) {
-        // Remove an interrupted journal write. Key provision starts only after its rename.
-        rmSync(`${directory}/${name}`, { force: true });
-        return;
-      }
-      if (entry.identity.silo !== options.silo || entry.stage === 'unknown') return;
-      const expected = commandReference(options.silo, entry.identity.scopeId,
-        entry.requester, entry.commandId);
-      if (reference !== expected || entry.identity.memoryId !== reference) {
-        throw new Error('Invalid memory command record');
-      }
-      const state = await commandHistory(options, entry.identity.scopeId,
-        entry.requester, entry.commandId);
-      if (state.original) return;
-      journal.save({ ...entry, stage: 'failed' });
-      keys.delete(entry.identity);
+      await reconcileCommand(options, reference);
     }
-    await options.db.lock(`memory-command:${reference}`, reconcile);
+    try {
+      await options.db.lock(`memory-command:${reference}`, reconcile, { timeoutMs: 100 });
+    } catch {
+      // Keep the record for a later check. One damaged file or outage must not stop startup.
+    }
+    if (++processed % 16 === 0) {
+      await setImmediate();
+    }
   }
 }

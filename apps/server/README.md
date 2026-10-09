@@ -36,6 +36,9 @@ flowchart LR
   Returns fact detail and checks each source separately, hiding denied references.
   Checks chat access and the latest join before looking up one source message. Describes a member statement
   without naming its author. Reports destroyed or quarantined facts without text.
+  Checks write permission before inspecting a fact. Records human facts and checks
+  the original command when a reply is lost. Checks chat access before looking up
+  a source message. A busy command returns promptly so other requests can continue.
   These reads need the memory worker and its existing private key directory.
   It returns current facts only after the read table has caught up with their events.
 - Accepts bound and email invitations after a recent sign-in with a verified email, while

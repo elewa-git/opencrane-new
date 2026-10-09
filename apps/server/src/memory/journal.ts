@@ -1,11 +1,11 @@
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync,
-  renameSync, writeFileSync } from 'node:fs';
+  renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import { memoryRevisionIdentitySchema } from '@opencrane/events';
 
 const entrySchema = z.strictObject({ identity: memoryRevisionIdentitySchema,
   requester: z.string(), commandId: z.string(), inputDigest: z.string(),
-  stage: z.enum(['prepared', 'unknown', 'failed']) });
+  appendUntil: z.number().optional(), stage: z.enum(['prepared', 'unknown', 'failed']) });
 function sync(path: string) {
   const descriptor = openSync(path, 'r');
   try {
@@ -21,7 +21,9 @@ export function commandJournal(directory: string, reference: string) {
       return null;
     }
     const raw: unknown = JSON.parse(readFileSync(path, 'utf8'));
-    return entrySchema.parse(raw);
+    const entry = entrySchema.parse(raw);
+    const appendUntil = entry.appendUntil ?? statSync(path).mtimeMs + 2000;
+    return { ...entry, appendUntil };
   }
   function save(entry: z.infer<typeof entrySchema>) {
     const pending = `${path}-pending`;
@@ -30,5 +32,10 @@ export function commandJournal(directory: string, reference: string) {
     renameSync(pending, path);
     sync(directory);
   }
-  return { read, save };
+  function remove() {
+    rmSync(path, { force: true });
+    rmSync(`${path}-pending`, { force: true });
+    sync(directory);
+  }
+  return { read, save, remove };
 }
