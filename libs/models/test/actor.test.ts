@@ -304,3 +304,25 @@ async function advancesAfterLostReservationReply() {
 }
 it('stores a lost-reply reservation once and uses its position for the next reservation',
   advancesAfterLostReservationReply);
+
+async function oldLossKeepsCurrentHold(reclaimed: boolean) {
+  const loss = envelope('test', 'computer-assistant', 'computer.lost', {
+    assistantId: 'assistant', computerId: 'computer',
+  });
+  const saved = await nats.store.append({ event: loss, expectedSequence: 0 });
+  expect(saved.status).toBe('appended');
+  if (reclaimed) {
+    const claim = envelope('test', loss.subject, 'computer.claimed', {
+      assistantId: 'assistant', computerId: 'computer', generation: 2, tokenId: 'token:new',
+    });
+    await nats.store.append({ event: claim, expectedSequence: saved.sequence! });
+  }
+  const reservationId = await reserve(false, 'current-request');
+  const before = await nats.store.head();
+  await actor.computerLostRecorded(loss.subject, loss.id);
+  expect(await nats.store.head()).toBe(before);
+  expect(await history(nats.store, `effect-${reservationId}`, 'test')).toEqual([]);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+}
+it.each([false, true])('old loss leaves a later reservation untouched (reclaimed: %s)',
+  oldLossKeepsCurrentHold);

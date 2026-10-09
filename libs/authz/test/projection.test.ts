@@ -566,3 +566,26 @@ it('rejects alternate grant streams and keeps grant then revoke denied through t
     controller.abort(); await task?.catch(() => undefined); await runtime.stop(); await nats.close(); await isolated.close();
   }
 }, 40_000);
+
+
+async function oldMemberEventAfterRemoval(type: string) {
+  const nats = await natsFixture();
+  try {
+    const old = member(`old-${type}`, type, 'alice', {
+      previousRole: 'member', newRole: 'admin', email: 'alice@example.test',
+      displayName: 'Alice', identityIssuer: 'test', identitySub: 'alice',
+    });
+    const joined = member('first-join');
+    const removal = member('later-removal', 'member.removed');
+    await nats.seed([joined, old, removal]);
+    const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'), nats.store);
+    await apply(projection, [joined, removal]);
+    await apply(projection, [old]);
+    expect(await projection.check('alice', 'member')).toMatchObject({ allowed: false });
+    expect(await projection.applied(old.id)).toBe(true);
+  } finally {
+    await nats.close();
+  }
+}
+it.each(['member.joined', 'silo.owner_bootstrapped', 'member.role_changed'])(
+  'receipts an old %s after removal without restoring access', oldMemberEventAfterRemoval);

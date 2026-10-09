@@ -30,14 +30,14 @@ export async function until(check: () => Promise<boolean>, timeout = 15_000) {
     await delay(25);
   }
 }
-export async function fixture() {
+export async function fixture(options: { idleTimeoutMillis?: number } = {}) {
   const url = new URL(process.env["PG_TEST_URL"] ?? "");
   const admin = new Pool({ connectionString: url.href });
   const name = `handlers_${randomUUID().replaceAll("-", "")}`;
   await admin.query(`CREATE DATABASE ${name}`);
   url.pathname = `/${name}`;
   const connectionString = url.href;
-  const pool = new Pool({ connectionString });
+  const pool = new Pool({ connectionString, ...options });
   const db = pgDb(pool);
   await db.query(`CREATE TABLE handler_effects (
     ordinal SERIAL, handler TEXT, event_id TEXT, stream TEXT)`);
