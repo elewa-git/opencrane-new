@@ -28,12 +28,12 @@ assistants and claims computers.
 ```mermaid
 flowchart LR
   ops["apps/ops<br/>workers"] -->|starts work| handlers["libs/handlers<br/>reaction jobs"]
-  nats["NATS JetStream<br/>event log"] -->|new events| handlers
+  nats["NATS JetStream<br/>event log"] -->|new events and upgrade history| handlers
   reactions["libs/models and libs/authz<br/>registered reactions"] -.->|registers reactions| handlers
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
   handlers -.-> events["libs/events<br/>reaction list"]
   handlers -.-> projections["libs/projections<br/>database helpers"]
-  handlers -->|stores jobs in conversation order| pg["PostgreSQL<br/>job queue"]
+  handlers -->|saves jobs and progress| pg["PostgreSQL<br/>job queue"]
 ```
 
 ## What it is responsible for
@@ -45,9 +45,11 @@ flowchart LR
 - Save a note that the job is done in the same database step as the reaction's
   changes, so its database changes are never applied twice.
 - Let an operator retry a failed job after fixing its cause.
+- Add historical jobs for new subscriptions during a stopped-service upgrade.
 
 Chat creation and participant permission jobs run in the same conversation order,
-even though their events use separate streams.
+even though their events use separate streams. Both new jobs and historical jobs
+queued during an upgrade use that order.
 
 ## Processes it handles
 
@@ -57,7 +59,16 @@ even though their events use separate streams.
    (`seed-model-grants`).
 2. **A reaction fails.** Later jobs about the same thing wait, while jobs about
    other things carry on. An operator can repair the cause and retry the failed
-   job.
+   job, or deliberately cancel a failed original with the ops command.
+
+3. **A release changes subscriptions.** The dispatcher reports which reactions and
+   event types changed and waits for shutdown. With writers and workers stopped,
+   `npm run ops -- upgrade-handlers` adds historical jobs for new subscriptions.
+   An interrupted scan continues from its saved progress. Computers stay in
+   their current state while the dispatcher waits. Finished reactions keep their
+   receipts, so they do not run again. The
+   [operator procedure](../../apps/ops/README.robot.md#handler-subscription-upgrade)
+   lists the stop, dry-run, upgrade and restart steps.
 
 ## How to run or test it
 

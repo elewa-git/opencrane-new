@@ -1,3 +1,7 @@
+import type { EventStore } from '@opencrane/event-store';
+import { createLogger } from '@opencrane/observability';
+import { supersededEvent, removedParticipant, ownerAtTransfer,
+  memberEventBeforeOwnershipSeed } from './backfill.ts';
 import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
   ownershipSteppedDownSchema, conversationCreatedDataSchema, conversationEventId,
   grantRevokedDataSchema, handlerSubscriptions, parseEventByType, type EventEnvelope } from "@opencrane/events";
@@ -37,7 +41,8 @@ export function grantStream(resourceType: string, resourceId: string): string {
 // Cache only startup or setup bindings so request data cannot grow this map.
 const authorisations = new Map<string, ReturnType<typeof createMemberAuthorisation>>();
 
-export function memberAuthorisation(binding: Binding) {
+export function memberAuthorisation(binding: Binding,
+  store?: Pick<EventStore, 'readStream'>) {
   // Keep the client tied to these values if a caller later changes the binding.
   const cachedBinding = Object.freeze({
     apiUrl: binding.apiUrl,
@@ -45,6 +50,9 @@ export function memberAuthorisation(binding: Binding) {
     authorizationModelId: binding.authorizationModelId,
     silo: binding.silo,
   } satisfies Binding);
+  if (store) {
+    return createMemberAuthorisation(cachedBinding, store);
+  }
   const key = JSON.stringify(cachedBinding);
   const existing = authorisations.get(key);
   if (existing) return existing;
@@ -54,7 +62,14 @@ export function memberAuthorisation(binding: Binding) {
   return authorisation;
 }
 
-function createMemberAuthorisation(binding: Binding) {
+function createMemberAuthorisation(binding: Binding,
+  store?: Pick<EventStore, 'readStream'>) {
+  const logger = createLogger('update-openfga');
+  async function applied(eventId: string) {
+    const receipt = { user: object, relation: 'applied',
+      object: objectId('projection_event', binding.silo, eventId) };
+    return (await client.read(receipt)).length > 0;
+  }
   const client = new TupleClient(binding);
   const object = objectId("silo", binding.silo);
 
@@ -82,6 +97,9 @@ function createMemberAuthorisation(binding: Binding) {
       writes.push(creator);
     }
     for (const participantId of participantIds) {
+      if (store && await removedParticipant(store, event, participantId, applied)) {
+        continue;
+      }
       const participant = {
         user: objectId('person', binding.silo, participantId),
         relation: 'participant', object: target,
@@ -113,6 +131,20 @@ function createMemberAuthorisation(binding: Binding) {
     return user;
   }
 
+  async function laterGrantForKind(event: EventEnvelope, kind: string) {
+    if (!store || event.type !== 'grant.revoked') {
+      return false;
+    }
+    const revoked = grantRevokedDataSchema.parse(event.data);
+    if (revoked.granteeKind !== undefined) {
+      return false;
+    }
+    // Check each identity separately because old removals covered every matching id.
+    const data = { ...revoked, granteeKind: kind };
+    const specific = { ...event, data };
+    return supersededEvent(store, specific, applied);
+  }
+
   async function applyGrant(event: EventEnvelope, receipt: Tuple) {
     const resourceType = field(event.data, 'resourceType'), resourceId = field(event.data, 'resourceId');
     if (event.subject !== grantStream(resourceType, resourceId)) throw new Error('Grant subject mismatch');
@@ -124,6 +156,11 @@ function createMemberAuthorisation(binding: Binding) {
     if (kind) identityKinds = [kind];
     const users = new Set<string>();
     for (const identityKind of identityKinds) {
+      if (await laterGrantForKind(event, identityKind)) {
+        const fields = { eventId: event.id, granteeKind: identityKind, stream: event.subject };
+        logger.info(fields, 'Kept a later grant while applying an old removal');
+        continue;
+      }
       users.add(granteeUser(identityKind, grantee));
     }
     function matchesGrantee(tuple: Tuple) {
@@ -183,7 +220,11 @@ function createMemberAuthorisation(binding: Binding) {
       const actor = objectId('person', binding.silo, transfer.transferredBy);
       const actorTuple = { user: actor, object, relation: 'owner_role' };
       const actorOwners = await client.read(actorTuple);
-      if (!actorOwners.length) {
+      let authorised = actorOwners.length > 0;
+      if (store) {
+        authorised = await ownerAtTransfer(store, event);
+      }
+      if (!authorised) {
         throw new Error('Transfer requires an owner');
       }
       const existingOwners = await client.read(owner);
@@ -210,6 +251,9 @@ function createMemberAuthorisation(binding: Binding) {
     }
     const nextRole = legacyMemberRole(event);
     if (seeded.length && (current.some(isOwner) || nextRole === 'owner')) {
+      if (store && await memberEventBeforeOwnershipSeed(store, event)) {
+        return;
+      }
       throw new Error('Owner changes require the ownership stream');
     }
   }
@@ -238,6 +282,12 @@ function createMemberAuthorisation(binding: Binding) {
       object: objectId("projection_event", binding.silo, event.id),
     };
     if ((await client.read(receipt)).length) return;
+    if (store && await supersededEvent(store, event, applied)) {
+      await client.write([receipt], []);
+      const fields = { eventId: event.id, eventType: event.type, stream: event.subject };
+      logger.info(fields, 'Skipped an old event because a later permission change was already applied');
+      return;
+    }
     if (event.type.startsWith('ownership.')) {
       return applyOwnership(event, receipt);
     }
@@ -253,6 +303,10 @@ function createMemberAuthorisation(binding: Binding) {
       await applyConversation(event, receipt);
       return;
     }
+    await applyMember(event, receipt);
+  }
+
+  async function applyMember(event: EventEnvelope, receipt: Tuple): Promise<void> {
     const memberId = field(event.data, "memberId");
     if (event.subject !== `member-${memberId}`) {
       throw new Error("Member subject mismatch");
@@ -260,26 +314,34 @@ function createMemberAuthorisation(binding: Binding) {
     const user = objectId("person", binding.silo, memberId);
     const current = await client.read({ user, object });
     await refuseMemberOwnerEdit(event, current);
-    if (
-      event.type === "member.role_changed" &&
-      !current.some((t) => t.relation === "member")
-    ) {
+    function isMember(tuple: Tuple): boolean {
+      return tuple.relation === 'member';
+    }
+    if (event.type === "member.role_changed" && !current.some(isMember)) {
       throw new Error("Role change requires an existing member");
     }
-    const desired =
-      event.type === "member.removed"
-        ? []
-        : roleTuples(
-            user,
-            object,
-            legacyMemberRole(event) ?? '',
-          );
+    let desired: Tuple[] = [];
+    if (event.type !== 'member.removed') {
+      desired = roleTuples(user, object, legacyMemberRole(event) ?? '');
+    }
+    function missingTuple(tuple: Tuple): boolean {
+      function matchesCurrent(existing: Tuple): boolean {
+        return same(tuple, existing);
+      }
+      return !current.some(matchesCurrent);
+    }
+    function unwantedTuple(tuple: Tuple): boolean {
+      function matchesDesired(existing: Tuple): boolean {
+        return same(tuple, existing);
+      }
+      return !desired.some(matchesDesired);
+    }
+    const missing = desired.filter(missingTuple);
+    const unwanted = current.filter(unwantedTuple);
+    const writes = [...missing, receipt];
     // The receipt and changes commit together, so a lost reply is safe to retry.
     // An old event after removal cannot restore the removed permissions.
-    await client.write(
-      [...desired.filter((t) => !current.some((c) => same(t, c))), receipt],
-      current.filter((t) => !desired.some((d) => same(t, d))),
-    );
+    await client.write(writes, unwanted);
   }
 
   return {

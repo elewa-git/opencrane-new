@@ -15,6 +15,7 @@
     "typecheck": "npm run typecheck --workspaces",
     "pretest": "sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh",
     "test": "vitest run",
+    "ops": "npm run ops -w apps/ops --",
     "replay": "npm run start -w apps/ops --",
     "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",
     "check:docker-volume-cleanup": "node --experimental-strip-types scripts/check-docker-volume-cleanup.mjs",

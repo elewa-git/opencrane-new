@@ -13,6 +13,9 @@ import { tokenIssuer } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
 import { SandboxClient } from './kubernetes.ts';
 import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
+import { dispatcherHandlerNames } from './dispatcher-handlers.ts';
+import type { Handler } from '@opencrane/handlers';
+import type { HandlerName } from '@opencrane/events';
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -93,28 +96,54 @@ async function runProjectionWorker(projection: Projection) {
 try {
   if (mode === 'dispatcher') {
     const silo = required('SILO_ID');
-    const authorisation = memberAuthorisation({ silo, apiUrl: required('OPENFGA_API_URL'),
-      storeId: required('OPENFGA_STORE_ID'), authorizationModelId: required('OPENFGA_MODEL_ID') });
     const commandEnv = Object.fromEntries(Object.entries(process.env)
       .filter(([name]) => name.startsWith('COMMAND_')).map(([name, value]) => [name.slice(8), value]));
     commands = await connectEventStore(commandEnv);
+    const authorisation = memberAuthorisation({ silo, apiUrl: required('OPENFGA_API_URL'),
+      storeId: required('OPENFGA_STORE_ID'), authorizationModelId: required('OPENFGA_MODEL_ID') }, commands.store);
     const kube = new SandboxClient(required('KUBECONFIG'), required('KUBE_NAMESPACE'),
       process.env['COMPUTER_POOL'] ?? 'computer', process.env['COMPUTER_STORAGE'] ?? '10Gi');
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),
       issuer: required('TOKEN_ISSUER') });
-    const handlers = [authorisation.handler, ownershipSeedHandler(commands.store),
+    const available = [authorisation.handler, ownershipSeedHandler(commands.store),
       modelGrantHandler(commands.store), ...lifecycleHandlers(commands.store)];
     const decisionUrl = process.env['MODEL_DECISION_URL'];
     if (decisionUrl) {
-      handlers.push(settlementHandler(decisionUrl));
+      available.push(settlementHandler(decisionUrl));
     }
+    const names = dispatcherHandlerNames(process.env);
+    function findHandler(name: HandlerName): Handler {
+      function matches(handler: Handler) {
+        return handler.name === name;
+      }
+      const handler = available.find(matches);
+      if (!handler) {
+        throw new Error(`Dispatcher handler missing: ${name}`);
+      }
+      return handler;
+    }
+    const handlers = names.map(findHandler);
     runtime = new HandlerRuntime({ db: db.db, logger, silo, handlers });
     await runtime.start();
-    await runtime.work();
     const idleMs = Number(process.env['COMPUTER_IDLE_MS'] ?? 900_000);
     if (!Number.isSafeInteger(idleMs) || idleMs < 1) throw new Error('COMPUTER_IDLE_MS must be positive');
-    watcher = watchComputers(commands.store, kube, tokens, (id, token) => kube.credentials(id, token), silo, idleMs, stop.signal);
-    await Promise.race([dispatch(connection, runtime, stop.signal), watcher]);
+    const dispatcherRuntime = runtime;
+    const commandStore = commands.store;
+    async function startWorkers() {
+      await dispatcherRuntime.work();
+      function deliverCredentials(id: string, token: import('@opencrane/auth').IssuedToken) {
+        return kube.credentials(id, token);
+      }
+      watcher = watchComputers(commandStore, kube, tokens, deliverCredentials,
+        silo, idleMs, stop.signal);
+      function watcherFailed(error: unknown) {
+        logger.error({ err: error }, 'Computer watcher failed');
+        process.exitCode = 1;
+        stop.abort();
+      }
+      void watcher.catch(watcherFailed);
+    }
+    await dispatch(connection, runtime, stop.signal, startWorkers);
   } else {
     const projection = workerProjection();
     if (projection) {
@@ -127,6 +156,7 @@ try {
     process.exitCode = 1;
   }
 } finally {
+  stop.abort();
   await runtime?.stop();
   await watcher;
   await commands?.close();

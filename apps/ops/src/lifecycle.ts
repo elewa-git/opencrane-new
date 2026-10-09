@@ -28,8 +28,18 @@ export async function history(store: Pick<EventStore, 'readStream'>, subject: st
   for await (const item of store.readStream(subject)) result.push(item);
   return result;
 }
+function changesMembership(row: StoredEvent): boolean {
+  return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed',
+    'member.removed'].includes(row.event.type);
+}
 function isLifecycleEvent(event: EventEnvelope): boolean {
   return ['computer.claimed', 'computer.ready', 'computer.suspended', 'computer.resumed', 'computer.lost', 'computer.retired'].includes(event.type);
+}
+function containsLifecycleEvent(row: StoredEvent): boolean {
+  return isLifecycleEvent(row.event);
+}
+function containsClaim(row: StoredEvent): boolean {
+  return row.event.type === 'computer.claimed';
 }
 function generation(events: StoredEvent[]): number {
   const data = events.findLast(({ event }) => event.type === 'computer.claimed')?.event.data;
@@ -59,11 +69,11 @@ export function lifecycleHandlers(store: Store) {
       if (joined.personalAssistant === 'none') {
         return;
       }
-      const memberEvents = await history(store, event.subject);
-      const latestMemberEvent = memberEvents.at(-1)?.event;
-      if (latestMemberEvent?.type === 'member.removed') {
-        return;
-      }
+    }
+    const memberEvents = await history(store, event.subject);
+    const memberFacts = memberEvents.filter(changesMembership);
+    if (memberFacts.at(-1)?.event.type === 'member.removed') {
+      return;
     }
     const assistantId = stable('personal', event.silo, memberId);
     const subject = `assistant-${assistantId}`;
@@ -75,15 +85,30 @@ export function lifecycleHandlers(store: Store) {
       { assistantId, ownerId: memberId, kind: 'personal' });
   }
   const createAssistant = registerHandler('create-assistant', createPersonalAssistant);
-  const claimComputer = registerHandler('claim-computer', async (event) => {
+  async function claimAssistantComputer(event: EventEnvelope) {
     const assistantId = field(event.data, 'assistantId');
+    if (event.type === 'assistant.created' && field(event.data, 'kind') === 'personal') {
+      const ownerId = field(event.data, 'ownerId');
+      const memberEvents = await history(store, `member-${ownerId}`);
+      const memberFacts = memberEvents.filter(changesMembership);
+      if (memberFacts.at(-1)?.event.type === 'member.removed') {
+        return;
+      }
+    }
     const subject = `computer-${assistantId}`;
     const events = await history(store, subject);
-    if (events.length && events.findLast(r => isLifecycleEvent(r.event))?.event.id !== event.id) return;
-    const generation = events.filter(({ event: item }) => item.type === 'computer.claimed').length + 1;
-    await append(store, event, events, 'computer.claimed', subject,
-      { assistantId, computerId: stable('computer', event.silo, assistantId), generation, tokenId: `token:${randomUUID()}` });
-  });
+    const latestLifecycle = events.findLast(containsLifecycleEvent);
+    if (events.length && latestLifecycle?.event.id !== event.id) {
+      return;
+    }
+    const claims = events.filter(containsClaim);
+    const generation = claims.length + 1;
+    const computerId = stable('computer', event.silo, assistantId);
+    const tokenId = `token:${randomUUID()}`;
+    const payload = { assistantId, computerId, generation, tokenId };
+    await append(store, event, events, 'computer.claimed', subject, payload);
+  }
+  const claimComputer = registerHandler('claim-computer', claimAssistantComputer);
   return [createAssistant, claimComputer] as const;
 }
 

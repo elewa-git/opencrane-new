@@ -167,3 +167,12 @@ async function recoversBeforeAcknowledgement() {
 }
 it('keeps one assistant after SIGKILL between creation and acknowledgement',
   recoversBeforeAcknowledgement);
+
+async function removedOwnerGetsNoAssistant() {
+  const owner = event('old-owner', 'member-bootstrap-owner', 'silo.owner_bootstrapped');
+  await nats.seed([owner,
+    event('removed-owner', owner.subject, 'member.removed')]);
+  await deliver(nats.store, owner);
+  expect(await history(nats.store, 'assistant-*')).toEqual([]);
+}
+it('does not create an assistant for a removed bootstrap owner', removedOwnerGetsNoAssistant);

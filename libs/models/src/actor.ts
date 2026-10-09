@@ -359,15 +359,44 @@ export class BudgetActor {
     return rows.some(matchesDispatch);
   }
   async computerLostRecorded(subject: string, eventId: string) {
-    if (!/^computer-[\w-]+$/u.test(subject)) throw new Error('Wrong computer stream');
-    const event = (await history(this.store, subject, this.silo)).find(r => r.event.id === eventId)?.event;
-    if (event?.type !== 'computer.lost') throw new Error('Computer loss not recorded');
-    const computerId = z.string().parse(data(event)['computerId']);
-    return this.serial(async () => {
-      for (const r of this.state.reservations.filter(r => r.call.computerId === computerId && r.settledCents === undefined)) {
-        await this.recordEffect(r.id, undefined, 'success', 'computer_lost');
+    if (!/^computer-[\w-]+$/u.test(subject)) {
+      throw new Error('Wrong computer stream');
+    }
+    async function applyLoss(this: BudgetActor) {
+      const rows = await history(this.store, subject, this.silo);
+      function matchesLoss(row: typeof rows[number]) {
+        return row.event.id === eventId;
       }
-    });
+      const loss = rows.find(matchesLoss);
+      if (loss?.event.type !== 'computer.lost') {
+        throw new Error('Computer loss not recorded');
+      }
+      function isLifecycle(row: typeof rows[number]) {
+        return ['computer.claimed', 'computer.ready', 'computer.suspended',
+          'computer.resumed', 'computer.lost', 'computer.retired'].includes(row.event.type);
+      }
+      const lifecycle = rows.filter(isLifecycle);
+      if (lifecycle.at(-1)?.event.id !== eventId) {
+        return;
+      }
+      const computerId = z.string().parse(data(loss.event)['computerId']);
+      // Compare saved event positions. Computer ids survive a new claim and clocks can differ.
+      const budgetRows = await history(this.store, `budget-${this.silo}`, this.silo);
+      const openedBeforeLoss = new Set<string>();
+      for (const row of budgetRows) {
+        if (row.sequence < loss.sequence && row.event.type === 'budget.reserved') {
+          openedBeforeLoss.add(z.string().parse(data(row.event)['reservationId']));
+        }
+      }
+      for (const reservation of this.state.reservations) {
+        if (reservation.call.computerId === computerId &&
+            reservation.settledCents === undefined && openedBeforeLoss.has(reservation.id)) {
+          await this.recordEffect(reservation.id, undefined, 'success', 'computer_lost');
+        }
+      }
+    }
+    const apply = applyLoss.bind(this);
+    return this.serial(apply);
   }
   async settleRecorded(id: string, eventId: string) {
     const row = (await history(this.store, `effect-${id}`, this.silo)).find(row => row.event.id === eventId);

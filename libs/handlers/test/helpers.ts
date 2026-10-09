@@ -30,14 +30,14 @@ export async function until(check: () => Promise<boolean>, timeout = 15_000) {
     await delay(25);
   }
 }
-export async function fixture() {
+export async function fixture(options: { idleTimeoutMillis?: number } = {}) {
   const url = new URL(process.env["PG_TEST_URL"] ?? "");
   const admin = new Pool({ connectionString: url.href });
   const name = `handlers_${randomUUID().replaceAll("-", "")}`;
   await admin.query(`CREATE DATABASE ${name}`);
   url.pathname = `/${name}`;
   const connectionString = url.href;
-  const pool = new Pool({ connectionString });
+  const pool = new Pool({ connectionString, ...options });
   const db = pgDb(pool);
   await db.query(`CREATE TABLE handler_effects (
     ordinal SERIAL, handler TEXT, event_id TEXT, stream TEXT)`);
@@ -49,11 +49,20 @@ export async function fixture() {
   const children: ChildProcess[] = [];
   const dispatchers: { controller: AbortController; task: Promise<void> }[] =
     [];
+  async function waitForConnectionsClosed() {
+    async function closed() {
+      const connections = await admin.query(
+        'SELECT pid FROM pg_stat_activity WHERE datname = $1', [name]);
+      return connections.rows.length === 0;
+    }
+    await until(closed);
+  }
   return {
     db,
     pool,
     nats,
     connectionString,
+    waitForConnectionsClosed,
     async runtime(
       handlers: Handler[],
       options: { retryLimit?: number; expireInSeconds?: number } = {},
@@ -119,7 +128,7 @@ export async function fixture() {
         env: {
           ...process.env,
           PG_TEST_URL: connectionString,
-          ...nats.env(mode.startsWith("projection") ? "projection" : "dispatcher"),
+          ...nats.env((mode.startsWith("projection") || mode.startsWith("upgrade")) ? "projection" : "dispatcher"),
           CRASH_MODE: mode,
         },
         stdio: ["ignore", "pipe", "pipe", "ipc"],
@@ -165,15 +174,7 @@ export async function fixture() {
       // Stop every runtime before closing their shared pool, even if one stop fails.
       results.push(...await Promise.allSettled(runtimes.map((runtime) => runtime.stop())));
       results.push(...await Promise.allSettled([nats.close(), pool.end()]));
-      await until(
-        async () =>
-          (
-            await admin.query(
-              "SELECT pid FROM pg_stat_activity WHERE datname = $1",
-              [name],
-            )
-          ).rows.length === 0,
-      );
+      await waitForConnectionsClosed();
       await admin.query(`DROP DATABASE ${name}`);
       await admin.end();
       for (const result of results) {

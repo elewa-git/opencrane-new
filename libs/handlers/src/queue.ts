@@ -1,12 +1,12 @@
 import { handlerJobKey } from './job-key.ts';
 import { PgBoss, type Queue, type JobWithMetadata } from "pg-boss";
-import { parseEventByType } from "@opencrane/events";
+import { parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { runHandler, type Logger } from "@opencrane/observability";
 import type { Db, Query } from "@opencrane/projections";
 import { withinAttempt } from "./attempt.ts";
 import { checkHandlers, type Handler } from "./registration.ts";
 
-export function transactionAdapter(tx: Query) {
+function transactionAdapter(tx: Query) {
   return {
     executeSql: (sql: string, values?: unknown[]) => tx.query(sql, values),
   };
@@ -14,13 +14,15 @@ export function transactionAdapter(tx: Query) {
 
 // Set queued events to infinity before commit because pg-boss has no such setting.
 // Keep failed stream heads too, so later events cannot pass them.
-export async function retainJob(
+// Use the insertion time so backfill jobs in one transaction keep their event order.
+async function retainJob(
   tx: Query,
   name: string,
   id: string,
 ): Promise<void> {
   await tx.query(
-    "UPDATE pgboss.job SET keep_until = 'infinity' WHERE name = $1 AND id = $2",
+    "UPDATE pgboss.job SET keep_until = 'infinity', created_on = clock_timestamp() " +
+      "WHERE name = $1 AND id = $2",
     [name, id],
   );
 }
@@ -83,6 +85,47 @@ export class HandlerRuntime {
         throw new Error(`Incompatible handler queue: ${name}/${key}`);
       }
     }
+  }
+
+  async enqueue(handler: Handler, event: EventEnvelope, tx: Query): Promise<void> {
+    const singletonKey = handlerJobKey(handler.name, event);
+    const id = await this.boss.send(handler.name, event, {
+      singletonKey,
+      db: transactionAdapter(tx),
+    });
+    if (!id) {
+      throw new Error("Handler enqueue refused");
+    }
+    await retainJob(tx, handler.name, id);
+  }
+
+  /** Hold historical jobs until the scan has finished and workers can use the new subscriptions. */
+  async enqueueBatch(handler: Handler, events: EventEnvelope[], tx: Query,
+    queuedBefore: number): Promise<number> {
+    if (!events.length) {
+      return 0;
+    }
+    function job(event: EventEnvelope) {
+      const singletonKey = handlerJobKey(handler.name, event);
+      return { data: event, singletonKey };
+    }
+    const jobs = events.map(job);
+    const options = { db: transactionAdapter(tx), returnId: true };
+    const ids = await this.boss.insert(handler.name, jobs, options);
+    if (!ids || ids.length !== jobs.length) {
+      throw new Error('Handler batch enqueue refused');
+    }
+    // Give every saved batch a lasting order before any later live job can arrive.
+    // Leave enough time slots for every possible match through the target checkpoint.
+    await tx.query(
+      "UPDATE pgboss.job AS job SET keep_until = 'infinity', start_after = 'infinity', " +
+      "created_on = (SELECT created_on - target * $3::int * interval '1 microsecond' " +
+      "FROM handler_upgrade WHERE id = 1) + ($4::bigint + batch.ordinal) * interval '1 microsecond' " +
+      "FROM unnest($2::uuid[]) WITH ORDINALITY AS batch(id, ordinal) " +
+      "WHERE job.name = $1 AND job.id = batch.id",
+      [handler.name, ids, this.options.handlers.length, queuedBefore],
+    );
+    return ids.length;
   }
 
   async work(concurrency = 4): Promise<void> {

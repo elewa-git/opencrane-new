@@ -12,7 +12,7 @@ The [catalogue](../../docs/architecture/events.md) owns the subscriptions and
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 
 const binding = await createStore('http://127.0.0.1:8080', 'acme');
-const authz = memberAuthorisation(binding);
+const authz = memberAuthorisation(binding, eventStore);
 // Pass authz.handler in HandlerRuntime's handlers array; start dispatcher/workers.
 const decision = await authz.check('alice', 'admin');
 if (!decision.allowed) { /* refuse the operation */ }
@@ -30,8 +30,10 @@ stream; they do not silently complete. Invitations do not grant membership.
 `member.joined` writes membership and an optional owner/admin role.
 `member.role_changed` replaces the elevated role and requires existing membership.
 Owners also pass admin checks; every elevated check requires membership.
-`member.removed` deletes all that person's silo tuples. A later join can restore
-membership. IDs encode both silo and member without delimiter collisions.
+`member.removed` deletes that person's membership and role tuples on the silo.
+It keeps grants, team membership, conversation participants and assistant links.
+A later join restores membership and makes those saved relationships available again.
+IDs encode both silo and member without delimiter collisions.
 Checks always request higher consistency, with no application cache. Errors and
 one-second HTTP timeouts return `allowed: false`, `status: 'unavailable'`, and an
 internal error with its cause. Do not return that error to an API caller.
@@ -123,3 +125,43 @@ keeps old and new jobs from running under different keys.
 New group creations have at most 97 people including the creator. The person tuples,
 creator, silo and event receipt fit OpenFGA's default 100-tuple atomic write limit.
 The dev stack and fixtures use that default.
+
+## Older events after later permission changes
+
+Reaction hosts pass their event store as the second argument to `memberAuthorisation`.
+Read-only callers can keep passing only the binding. Before changing permissions,
+the handler reads later events on the same stream and checks their OpenFGA receipts.
+A later applied change for the same person or resource makes the old event a no-op.
+The handler saves the old event's receipt and logs why it skipped the change.
+Conversation creation checks each participant separately, so a later removal cannot
+restore their access. The [full reaction audit](../handlers/README.robot.md#old-event-audit)
+lists every currently enabled pair and its test.
+
+Conversation backfill compares global event positions across `conversation-<id>`
+and `participation-<id>`. The first stream holds creation and older participant
+changes; the second holds new participant changes. A later applied participant
+change takes precedence over an older addition or removal. Creation still writes
+its immutable creator and silo links, but skips a participant whose latest applied
+change is removal. Re-addition restores participation only; the server enforces
+the new history interval. Silo rejoin cannot undo an explicit participant removal.
+The cross-stream cases in `test/projection.test.ts` compare permissions and event
+receipts against a clean rebuild before and after silo removal and rejoin.
+
+Ownership transfers check the owner's authority at the saved transfer, using the
+ownership events before it. A later step-down or member removal of the person who
+made the transfer does not undo a valid transfer to somebody else. Old grant
+removals without a grantee kind check each kind separately. They remove earlier
+grants while keeping newer applied grants for the same id.
+
+Member roles saved before ownership was seeded can still be applied. They keep
+any later applied ownership change for that person. An old demotion that happened
+before the seed can remove a stale owner role when the seed did not include that
+person. New owner changes still require the ownership stream.
+
+Saved relationships stay independent of silo membership. A delayed grant, team
+addition, participant addition or personal assistant creation still writes its
+relationship after the member is removed. Only a later applied change to that
+relationship can replace it. Membership checks in the server and models process
+still refuse removed people. The real OpenFGA tests save join, relationship and
+removal, apply join and removal, backfill the relationship, then save and apply a
+rejoin. The resulting tuples and receipts equal a clean rebuild of that history.
