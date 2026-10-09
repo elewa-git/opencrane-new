@@ -96,7 +96,7 @@ if (mode.startsWith("upgrade")) {
   }
   const source = { head: store.head.bind(store), subscribe: stopAfterChunk };
   const names = ['update-openfga', 'seed-ownership', 'seed-model-grants',
-    'create-assistant', 'claim-computer', 'settle-budget'] as const;
+    'seed-provider-default', 'create-assistant', 'claim-computer', 'settle-budget'] as const;
   function subscription(name: typeof names[number]) {
     return registerHandler(name, effect);
   }

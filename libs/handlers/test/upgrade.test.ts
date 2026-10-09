@@ -37,7 +37,7 @@ function upgradeTests() {
     await current.db.query("INSERT INTO handler_dispatcher VALUES (1, 'test', $1, 4)",
       [oldManifest]);
     const names: HandlerName[] = ["update-openfga", "seed-ownership", "seed-model-grants",
-      "create-assistant", "claim-computer", "settle-budget"];
+      "seed-provider-default", "create-assistant", "claim-computer", "settle-budget"];
     function testHandler(name: HandlerName) {
       async function apply(event: Parameters<typeof effect>[0], tx: Parameters<typeof effect>[1]) {
         await effect(event, tx, name);
