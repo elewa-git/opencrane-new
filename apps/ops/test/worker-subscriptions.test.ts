@@ -2,19 +2,15 @@ import { fork, type ForkOptions } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { generateKeyPairSync, randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import { generateKeyPairSync } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { until } from '@opencrane/authz/testing';
+import { until, databases } from '@opencrane/authz/testing';
 
 async function workerWaitsBeforeStartingReactions() {
-  const url = new URL(process.env['PG_TEST_URL']!);
-  const admin = new Pool({ connectionString: url.href });
-  const name = `worker_${randomUUID().replaceAll('-', '')}`;
-  await admin.query(`CREATE DATABASE ${name}`);
-  url.pathname = `/${name}`;
-  const pool = new Pool({ connectionString: url.href });
+  const storage = await databases();
+  const pool = storage.queue;
+  const connectionString = pool.options.connectionString;
   const nats = await natsFixture();
   const directory = await mkdtemp(`${tmpdir()}/worker-subscriptions-`);
   const keyOptions = { namedCurve: 'P-256', publicKeyEncoding: {
@@ -33,7 +29,7 @@ async function workerWaitsBeforeStartingReactions() {
     commandEnv[`COMMAND_${setting}`] = value;
   }
   const env = { ...process.env, ...nats.env('dispatcher'), ...commandEnv,
-    DATABASE_URL: url.href, SILO_ID: 'test', OPENFGA_API_URL: 'http://unused',
+    DATABASE_URL: connectionString, SILO_ID: 'test', OPENFGA_API_URL: 'http://unused',
     OPENFGA_STORE_ID: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
     OPENFGA_MODEL_ID: '01ARZ3NDEKTSV4RRFFQ69G5FAV', KUBECONFIG: '/unused',
     KUBE_NAMESPACE: 'test', TOKEN_SIGNING_KEY_FILE: `${directory}/key.pem`,
@@ -67,11 +63,9 @@ async function workerWaitsBeforeStartingReactions() {
       child.kill('SIGTERM');
       await exited;
     }
-    await pool.end();
     await nats.close();
     await rm(directory, { recursive: true, force: true });
-    await admin.query(`DROP DATABASE ${name} WITH (FORCE)`);
-    await admin.end();
+    await storage.close();
   }
 }
 it.skipIf(!process.env['PG_TEST_URL'])(

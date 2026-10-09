@@ -13,7 +13,7 @@ flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events and assistant choices| ops["apps/ops<br/>workers and operator tools"]
   ops -.->|uses| libs["libs/*<br/>shared code"]
-  ops -->|updates tables, including memory when keys are configured| postgres["PostgreSQL<br/>read tables"]
+  ops -->|updates tables, jobs and configured memory| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
   ops -->|checks and updates computers| kube["Kubernetes<br/>computer manager"]
   kube -->|runs| computer["apps/computer<br/>assistant runtime"]
@@ -29,6 +29,7 @@ flowchart LR
 - Rebuilds tables and permissions for operator recovery.
 - Checks all saved memory keys before rebuilding current memory and search text.
   Readers and workers stay stopped during this process.
+- Lists failed reaction jobs and records an operator’s chosen cancellation.
 - Runs one-off upgrades for model access, the default budget group and handler subscriptions.
 
 ## Processes it handles
@@ -58,7 +59,8 @@ flowchart LR
    the handler upgrade tool adds jobs for the new subscriptions from saved events.
    It keeps the notes of finished jobs, so those reactions do not run again.
    The dispatcher names changed subscriptions and waits for this upgrade before
-   starting its workers. The [upgrade procedure](README.robot.md#handler-subscription-upgrade)
+   starting its workers. Computers stay in their current state while it waits.
+   The tool saves progress, so an interrupted scan can continue. The [upgrade procedure](README.robot.md#handler-subscription-upgrade)
    explains how to stop services, check the plan and restart them.
 
 ## How to run or test it
@@ -68,6 +70,7 @@ npm run worker -w apps/ops -- members
 npm run worker -w apps/ops -- dispatcher
 npm run replay -- memory --dry-run
 npm run ops -- upgrade-handlers --dry-run
+npm run ops -- jobs
 ```
 
 The live memory worker runs with `npm run worker -w apps/ops -- memory`. It needs

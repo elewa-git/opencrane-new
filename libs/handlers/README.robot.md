@@ -58,8 +58,9 @@ Failed heads remain in place and block their stream. Monitor
 `runtime.deadLetters(name)` and pg-boss queue errors in the host. Each failure
 also has a diagnostic copy in `<handler>-dead` (14-day queued retention).
 Repair with `runtime.replay(name, originalJobId)`: it retries the original
-head once, preserving order. Never redrive the diagnostic copy, cancel a
-head or delete it to unblock a stream. There is no automatic skip.
+head once, preserving order. Never redrive the diagnostic copy. An operator can deliberately cancel a failed
+original with `npm run ops -- jobs --cancel <id>`. This records a cancelled job,
+keeps receipts and allows later jobs on that stream to run. There is no automatic skip.
 The pinned pg-boss adapter sets queued event jobs' `keep_until` to infinity
 inside enqueue's transaction and disables finished-job deletion. This uses
 pg-boss 12.35's schema; upgrades must rerun retention/replay tests. Queue rows
@@ -74,25 +75,96 @@ Subscription upgrades preserve the database, consumer and receipts. They do not
 rebuild projections or reset the consumer. The dispatcher holds the PostgreSQL
 `handler-dispatcher` advisory lock for its whole lifetime, including when a changed
 manifest leaves it waiting for shutdown. It logs changed handlers, added/removed
-event types and `npm run ops -- upgrade-handlers --confirm-writers-stopped` before
-waiting. The ops host starts workers and the computer watcher only after this check.
+event types and `npm run ops -- upgrade-handlers --dry-run` before waiting.
+An order-only change gets a separate, plain log line. The ops host starts workers
+and the computer watcher only after this check. Computers are not suspended while
+the dispatcher waits. An operator stops them as part of the upgrade procedure.
 
 The [operator upgrade procedure](../../apps/ops/README.robot.md#handler-subscription-upgrade)
 stops clients, drains old jobs with decision services available, then stops
-dispatchers, workers and decision services before installing the new code. The command refuses a held dispatcher
-lock and unfinished or failed original jobs. Diagnostic dead-letter copies do not
-block it. A rerun with an equal manifest changes nothing, even with queued backfill jobs.
+all database clients and event writers. The command checks the dispatcher lock
+and refuses any other session in the handlers database, including idle sessions.
+Original jobs in created, retry or active state block a changed manifest.
+Failed originals are listed in the report and do not block an upgrade.
+Diagnostic dead-letter copies do not block it. A successful rerun with an equal
+manifest queues nothing, even when backfill jobs are still waiting.
 
-The command compares stored subscriptions with the current catalogue for the ops
-host's enabled handlers. Each added `(handler, eventType)` gets historical jobs in
-EVENTS order through the stored SQL checkpoint. Job insertion times keep that order
-within the single transaction. Removed handlers/types get no backfill. All jobs,
-the manifest and the unchanged checkpoint commit together; a failed scan rolls
-back those writes. Events beyond that checkpoint stay with the durable consumer,
-which sends them to all current subscribers after restart. New queue setup may
-remain after failure; no reaction runs in the command. Dry-run reports each changed
-handler, its added/removed types and matching historical event count without starting
-the queue runtime or writing data. Counts include already receipted events.
+Each added `(handler, eventType)` gets historical jobs in EVENTS order through
+the stored SQL checkpoint. Batches of at most 256 events commit their jobs and
+progress together. `handler_upgrade` records the target and previous manifests,
+target checkpoint, last scanned sequence, event counts, queued-job count and start time.
+Batch insertion times use that saved start time and count. Their order survives
+restart, and every historical job sorts before a later live job.
+After a crash, the same code resumes at the next sequence. A different target
+manifest refuses the unfinished upgrade. Jobs use `start_after = infinity` while
+the scan runs; the final transaction releases them and changes the manifest.
+The dispatcher checkpoint stays unchanged. Workers remain stopped throughout.
+
+The command inserts one job batch per matching handler, then updates retention
+and order in one statement. It logs events scanned and jobs queued after each
+chunk. History timeouts retry the chunk up to five times, with delays of 250 ms,
+500 ms, 1 s, 2 s and 4 s. Other failures stop immediately. Committed chunks remain
+available for the next attempt. Removed handlers/types and order-only changes
+skip the history scan. New queues may remain after failure; no reaction runs here.
+Events beyond the checkpoint stay with the durable consumer after restart.
+
+Dry-run takes no advisory lock, creates no tables or queues, and writes nothing.
+It works while a changed dispatcher waits. It checks unfinished jobs, lists failed
+originals and counts each newly subscribed historical event, including receipted
+events. During a partial upgrade, it ignores that upgrade's parked jobs and reports
+the whole plan from sequence 1. It still refuses other unfinished jobs.
+
+## Old-event audit
+
+The rule is: **a handler must be correct when given an old event after later events were applied**.
+A SQL receipt is a saved note that the handler finished the event. A successful
+no-op gets the same receipt as any other successful job. OpenFGA also saves its
+own receipt alongside permission changes. Its reaction receives the event store
+and skips an old change when a later change for the same person or resource has
+already been applied. It saves a receipt and logs the skip.
+
+The table lists every pair enabled by the ops host today. Which pairs need
+backfill depends on the installed manifest. It includes retained pairs so that
+adding a whole handler cannot miss one of its event types. Tests below use real
+NATS, PostgreSQL and OpenFGA where those services hold the result.
+
+| Handler | Event type | Current-state check | Test |
+| --- | --- | --- | --- |
+| create-assistant | member.joined | Skip a removed member or an existing assistant. | assistant-choice |
+| create-assistant | silo.owner_bootstrapped | Check membership before creating the owner assistant. | assistant-choice |
+| claim-computer | assistant.created | Check the personal owner is active; keep later computer lifecycle events. | assistant-choice |
+| claim-computer | computer.lost | Claim only if this loss is still the latest lifecycle event. | backfill-lifecycle |
+| seed-ownership | silo.owner_bootstrapped | Read current members and existing ownership before seeding. | ownership-migration |
+| seed-model-grants | member.joined | Skip removed members; keep later grants and revocations. | grants-backfill |
+| seed-model-grants | silo.owner_bootstrapped | Skip removed owners; keep later grants and revocations. | grants-backfill |
+| seed-model-grants | assistant.created | Check the personal owner's membership; keep later revocations. | grants-backfill |
+| settle-budget | computer.lost | Require the latest lifecycle event and reservations saved before it. | actor, loss-backfill |
+| settle-budget | effect.observed | Read current spending and all saved effect amounts; charge once. | reconcile |
+| settle-budget | effect.resolved | Read current spending and saved resolutions; charge once. | reconcile |
+| update-openfga | member.joined | Keep later applied membership and ownership changes. | projection |
+| update-openfga | silo.owner_bootstrapped | Keep later applied membership and ownership changes. | projection |
+| update-openfga | member.role_changed | Keep later applied roles, removals and ownership changes. | projection |
+| update-openfga | member.removed | Keep a later applied rejoin. | projection |
+| update-openfga | ownership.seeded | Keep later ownership changes or applied member removals. | projection |
+| update-openfga | ownership.transferred | Check authority at the saved transfer; keep later changes for its recipient. | projection |
+| update-openfga | ownership.stepped_down | Keep later changes for that owner or an applied member removal. | projection |
+| update-openfga | team.created | Save only a receipt; create no membership. | projection |
+| update-openfga | team.member_added | Keep a later applied removal for that member. | projection |
+| update-openfga | team.member_removed | Keep a later applied addition for that member. | projection |
+| update-openfga | grant.given | Keep a later applied revocation for that grantee and kind. | projection |
+| update-openfga | grant.revoked | Keep later grants; check each kind separately for older removals with no kind. | projection |
+| update-openfga | participant.added | Keep a later applied removal for that participant. | projection |
+| update-openfga | participant.removed | Keep a later applied addition for that participant. | projection |
+| update-openfga | conversation.created | Add its silo link; skip participants whose later removal was applied. | projection |
+| update-openfga | assistant.created | Check personal membership; keep its immutable owner link and receipt. | projection |
+| update-openfga | provider.created | Keep its immutable silo link and event receipt. | projection |
+
+Test names refer to files in `apps/ops/test`, `libs/models/test` or `libs/authz/test`,
+with `.test.ts` added. `libs/handlers/test/upgrade.test.ts` checks job receipts,
+subscription changes, parked jobs, resume, timeouts, locks, connected sessions,
+failed-job reports, cancellation and ordering with live jobs. The worker process
+check is `apps/ops/test/worker-subscriptions.test.ts`. Million-event throughput and
+fresh-install upgrade qualification are NOT RUN.
 
 Keep event-id receipts for retained external state. Workers check these receipts
 before invoking reactions, including newly subscribed historical events. External

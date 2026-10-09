@@ -13,7 +13,8 @@ flowchart LR
   server["apps/server<br/>back end"] -.-> authz["libs/authz<br/>permission checks"]
   models["libs/models<br/>AI access and spending"] -.-> authz
   ops["apps/ops<br/>background workers"] -.-> authz
-  authz -->|checks people and chat creators| fga["OpenFGA<br/>permissions service"]
+  authz -->|checks and updates access| fga["OpenFGA<br/>permissions service"]
+  authz -->|reads later changes| store["libs/event-store<br/>saved events"]
   authz -.-> handlers["libs/handlers<br/>background jobs"]
 ```
 
@@ -33,6 +34,9 @@ only while they can still read the chat. Group membership does not grant chat ac
 1. **A person's access changes.** A background worker sends the event to this library. It updates OpenFGA and records which event it applied, so a retry cannot apply the same change twice.
 2. **A protected request arrives.** The server or models process asks whether the person, assistant or group has access. The request continues only when OpenFGA confirms it.
 3. **An operator rebuilds permissions.** The rebuild reads the event history into a new OpenFGA store. The server and the background workers can then switch to the new store.
+
+When a release adds an older event to a reaction, the worker checks later saved
+permission changes before applying it. Removed access stays removed.
 
 ## How to run or test it
 

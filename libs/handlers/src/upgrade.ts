@@ -1,17 +1,11 @@
-import type { EventSource, Query } from "@opencrane/projections";
-import { readEvents } from "@opencrane/projections";
+import type { Db, EventSource, Query } from "@opencrane/projections";
+import { scanUpgrade, requireOnlySession, type UpgradeProgress, type SubscriptionChange } from "./upgrade-scan.ts";
+import { HandlerRuntime } from "./queue.ts";
 import { checkHandlers } from "./registration.ts";
-import type { HandlerRuntime } from "./queue.ts";
 
 interface Subscription {
   name: string;
   eventTypes: string[];
-}
-export interface SubscriptionChange {
-  handler: string;
-  addedTypes: string[];
-  removedTypes: string[];
-  eventCount: number;
 }
 export interface DispatcherState extends Record<string, unknown> {
   silo: string;
@@ -87,65 +81,130 @@ async function requireStoppedDispatcher(tx: Query): Promise<void> {
   }
 }
 
-/** Keep receipts and existing jobs; commit only new subscription jobs with the manifest. */
+interface FailedJob extends Record<string, unknown> {
+  id: string;
+  name: string;
+  stream: string;
+}
+export interface UpgradeReport {
+  plan: SubscriptionChange[];
+  failedJobs: FailedJob[];
+}
+
+async function unfinishedJobs(db: Query, resuming: boolean): Promise<FailedJob[]> {
+  let sql = "SELECT id FROM pgboss.job WHERE name NOT LIKE '%-dead' " +
+    "AND state IN ('created', 'retry', 'active')";
+  if (resuming) {
+    sql += " AND start_after <> 'infinity'";
+  }
+  const pending = await db.query(sql + ' LIMIT 1');
+  if (pending.rows.length) {
+    throw new Error('There are unfinished handler jobs; drain them before upgrading subscriptions');
+  }
+  return failedJobs(db);
+}
+
+async function failedJobs(db: Query): Promise<FailedJob[]> {
+  const failed = await db.query<FailedJob>(
+    "SELECT id, name, singleton_key AS stream FROM pgboss.job " +
+    "WHERE state = 'failed' AND name NOT LIKE '%-dead' ORDER BY name, created_on",
+  );
+  return failed.rows;
+}
+
+async function progressRow(db: Query): Promise<UpgradeProgress | undefined> {
+  const table = await db.query<{ name: string | null }>(
+    "SELECT to_regclass('handler_upgrade')::text AS name",
+  );
+  if (!table.rows[0]?.name) {
+    return undefined;
+  }
+  const result = await db.query<UpgradeProgress>('SELECT * FROM handler_upgrade WHERE id = 1');
+  return result.rows[0];
+}
+
+async function inspect(runtime: HandlerRuntime, source: EventSource): Promise<{
+  row: DispatcherState; sequence: number; manifest: string; changes: SubscriptionChange[];
+  progress: UpgradeProgress | undefined;
+}> {
+  const { db, silo, handlers } = runtime.options;
+  const state = await db.query<DispatcherState>(
+    'SELECT silo, manifest, sequence FROM handler_dispatcher WHERE id = 1',
+  );
+  const row = state.rows[0];
+  if (!row || row.silo !== silo) {
+    throw new Error('Dispatcher state missing or silo mismatch');
+  }
+  const manifest = checkHandlers(handlers);
+  const sequence = await checkedSequence(source, row);
+  const progress = await progressRow(db);
+  if (progress && (progress.manifest !== manifest ||
+      progress.previous !== row.manifest || Number(progress.target) !== sequence)) {
+    throw new Error('An unfinished upgrade uses different subscriptions; resume it with the same code');
+  }
+  const changes = subscriptionChanges(row.manifest, manifest);
+  return { row, sequence, manifest, changes, progress };
+}
+
+async function upgradeLocked(runtime: HandlerRuntime, source: EventSource, db: Db) {
+  const lock = await db.query<{ acquired: boolean }>(
+    'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired',
+    ['opencrane:projection:handler-dispatcher'],
+  );
+  if (!lock.rows[0]?.acquired) {
+    throw new Error('The dispatcher is running; stop it before upgrading handlers');
+  }
+  const options = { ...runtime.options, db };
+  const local = new HandlerRuntime(options);
+  try {
+    await requireOnlySession(db);
+    const state = await inspect(local, source);
+    if (state.row.manifest === state.manifest) {
+      return { plan: [], failedJobs: await failedJobs(db) };
+    }
+    const failures = await unfinishedJobs(db, Boolean(state.progress));
+    await local.start();
+    const plan = await scanUpgrade(local, source, state.changes, state.sequence,
+      state.manifest, state.row.manifest, state.progress, false);
+    async function finish(tx: Query) {
+      await requireOnlySession(tx);
+      await tx.query("UPDATE pgboss.job SET start_after = now() WHERE start_after = 'infinity'");
+      await tx.query('UPDATE handler_dispatcher SET manifest = $1 WHERE id = 1', [state.manifest]);
+      await tx.query('DELETE FROM handler_upgrade WHERE id = 1');
+    }
+    await db.transaction(finish);
+    return { plan, failedJobs: failures };
+  } finally {
+    await local.stop();
+    await db.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))',
+      ['opencrane:projection:handler-dispatcher']);
+  }
+}
+
+/** Save scan progress with each batch of jobs; publish the manifest only after the scan finishes. */
 export async function upgradeHandlers(
   runtime: HandlerRuntime,
   source: EventSource,
   dryRun = false,
-): Promise<SubscriptionChange[]> {
-  const { db, silo, handlers } = runtime.options;
-  const manifest = checkHandlers(handlers);
-  async function upgrade(tx: Query) {
-    await requireStoppedDispatcher(tx);
-    const state = await tx.query<DispatcherState>(
-      "SELECT silo, manifest, sequence FROM handler_dispatcher WHERE id = 1 FOR UPDATE",
-    );
-    const row = state.rows[0];
-    if (!row || row.silo !== silo) {
-      throw new Error("Dispatcher state missing or silo mismatch");
+): Promise<UpgradeReport> {
+  const { db } = runtime.options;
+  if (dryRun) {
+    const state = await inspect(runtime, source);
+    const failedJobs = await unfinishedJobs(db, Boolean(state.progress));
+    if (state.row.manifest === state.manifest) {
+      return { plan: [], failedJobs };
     }
-    if (row.manifest === manifest) {
-      return [];
-    }
-    const sequence = await checkedSequence(source, row);
-    const changes = subscriptionChanges(row.manifest, manifest);
-    if (!dryRun) {
-      const pending = await tx.query(
-        "SELECT id FROM pgboss.job WHERE name NOT LIKE '%-dead' " +
-        "AND state NOT IN ('completed', 'cancelled') LIMIT 1",
-      );
-      if (pending.rows.length) {
-        throw new Error("Drain or repair handler jobs before upgrading subscriptions");
-      }
-      await runtime.start();
-    }
-    for await (const stored of readEvents(source, 1, sequence)) {
-      if (stored.event.silo !== silo) {
-        throw new Error("Dispatcher silo mismatch in EVENTS history");
-      }
-      for (const change of changes) {
-        if (!change.addedTypes.includes(stored.event.type)) {
-          continue;
-        }
-        change.eventCount += 1;
-        if (!dryRun) {
-          function matches(handler: typeof handlers[number]) {
-            return handler.name === change.handler;
-          }
-          const handler = handlers.find(matches);
-          if (!handler) {
-            throw new Error("Backfill handler missing");
-          }
-          await runtime.enqueue(handler, stored.event, tx);
-        }
-      }
-    }
-    if (!dryRun) {
-      // Leave the unread tail to the durable consumer so existing handlers receive it too.
-      await tx.query("UPDATE handler_dispatcher SET manifest = $1, sequence = $2 WHERE id = 1",
-        [manifest, sequence]);
-    }
-    return changes;
+    const plan = await scanUpgrade(runtime, source, state.changes, state.sequence,
+      state.manifest, state.row.manifest, undefined, true);
+    return { plan, failedJobs };
   }
-  return db.transaction(upgrade);
+  // Check the old dispatcher lock before reporting its other database connections.
+  await db.transaction(requireStoppedDispatcher);
+  if (!db.lock) {
+    throw new Error('Handler upgrade requires a database lock');
+  }
+  async function run(locked: Db) {
+    return upgradeLocked(runtime, source, locked);
+  }
+  return db.lock('handler-upgrade', run);
 }

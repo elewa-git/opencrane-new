@@ -2,7 +2,7 @@
 import { Pool } from "pg";
 import { connectEventStore, connectNats } from "@opencrane/event-store";
 import { members, ProjectionRunner, pgDb, type Db } from "@opencrane/projections";
-import { HandlerRuntime, registerHandler, dispatch } from "../src/index.ts";
+import { HandlerRuntime, registerHandler, dispatch, upgradeHandlers } from "../src/index.ts";
 import { effect, logger } from "./helpers.ts";
 
 const mode = process.env["CRASH_MODE"] ?? "";
@@ -50,7 +50,25 @@ const db: Db = {
 if (mode.startsWith("dispatcher")) {
   db.lock = base.lock!.bind(base);
 }
-if (mode.startsWith("projection")) {
+if (mode.startsWith("upgrade")) {
+  const { store } = await connectEventStore();
+  const subscribe = store.subscribe.bind(store);
+  async function* stopAfterChunk(from: number, signal?: AbortSignal) {
+    if (from > 256) {
+      await barrier();
+    }
+    yield* subscribe(from, signal);
+  }
+  const source = { head: store.head.bind(store), subscribe: stopAfterChunk };
+  const names = ['update-openfga', 'seed-ownership', 'seed-model-grants',
+    'create-assistant', 'claim-computer', 'settle-budget'] as const;
+  function subscription(name: typeof names[number]) {
+    return registerHandler(name, effect);
+  }
+  const handlers = names.map(subscription);
+  const runtime = new HandlerRuntime({ db: base, logger, silo: 'test', handlers });
+  await upgradeHandlers(runtime, source);
+} else if (mode.startsWith("projection")) {
   const { store } = await connectEventStore();
   const runner = new ProjectionRunner(db, store, logger);
   await runner.initialise(members);

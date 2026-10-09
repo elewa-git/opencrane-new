@@ -96,11 +96,11 @@ async function runProjectionWorker(projection: Projection) {
 try {
   if (mode === 'dispatcher') {
     const silo = required('SILO_ID');
-    const authorisation = memberAuthorisation({ silo, apiUrl: required('OPENFGA_API_URL'),
-      storeId: required('OPENFGA_STORE_ID'), authorizationModelId: required('OPENFGA_MODEL_ID') });
     const commandEnv = Object.fromEntries(Object.entries(process.env)
       .filter(([name]) => name.startsWith('COMMAND_')).map(([name, value]) => [name.slice(8), value]));
     commands = await connectEventStore(commandEnv);
+    const authorisation = memberAuthorisation({ silo, apiUrl: required('OPENFGA_API_URL'),
+      storeId: required('OPENFGA_STORE_ID'), authorizationModelId: required('OPENFGA_MODEL_ID') }, commands.store);
     const kube = new SandboxClient(required('KUBECONFIG'), required('KUBE_NAMESPACE'),
       process.env['COMPUTER_POOL'] ?? 'computer', process.env['COMPUTER_STORAGE'] ?? '10Gi');
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),

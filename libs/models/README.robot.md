@@ -753,3 +753,15 @@ A retry carries the approval id from its first call. The decision service comput
 that id from the current tool review, arguments and turn before writing anything.
 A mismatch is refused and creates no approval card. The existing approval remains
 bound to its original action.
+
+## Historical computer losses and initial model grants
+
+A saved `computer.lost` changes held money only while it remains the latest computer
+lifecycle event. It applies only to reservations saved earlier in the event log.
+A newer reservation or a later claim makes the old loss a no-op. SQL handler receipts
+still record successful no-ops. Event positions, rather than clocks or reused
+computer ids, establish which reservation came first.
+Initial model grants check current membership for people and personal assistant
+owners. Removed members get no grants from older creation events. Existing grants
+and revocations remain unchanged. Tests are `actor.test.ts`, `loss-backfill.test.ts`
+and `grants-backfill.test.ts`; settlement history remains covered by `reconcile.test.ts`.

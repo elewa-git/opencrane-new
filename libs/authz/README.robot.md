@@ -12,7 +12,7 @@ The [catalogue](../../docs/architecture/events.md) owns the subscriptions and
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 
 const binding = await createStore('http://127.0.0.1:8080', 'acme');
-const authz = memberAuthorisation(binding);
+const authz = memberAuthorisation(binding, eventStore);
 // Pass authz.handler in HandlerRuntime's handlers array; start dispatcher/workers.
 const decision = await authz.check('alice', 'admin');
 if (!decision.allowed) { /* refuse the operation */ }
@@ -123,3 +123,25 @@ keeps old and new jobs from running under different keys.
 New group creations have at most 97 people including the creator. The person tuples,
 creator, silo and event receipt fit OpenFGA's default 100-tuple atomic write limit.
 The dev stack and fixtures use that default.
+
+## Older events after later permission changes
+
+Reaction hosts pass their event store as the second argument to `memberAuthorisation`.
+Read-only callers can keep passing only the binding. Before changing permissions,
+the handler reads later events on the same stream and checks their OpenFGA receipts.
+A later applied change for the same person or resource makes the old event a no-op.
+The handler saves the old event's receipt and logs why it skipped the change.
+Conversation creation checks each participant separately, so a later removal cannot
+restore their access. The [full reaction audit](../handlers/README.robot.md#old-event-audit)
+lists every currently enabled pair and its test.
+
+Ownership transfers check the owner's authority at the saved transfer, using the
+ownership events before it. A later step-down or member removal of the person who
+made the transfer does not undo a valid transfer to somebody else. Old grant
+removals without a grantee kind check each kind separately. They remove earlier
+grants while keeping newer applied grants for the same id.
+
+Member roles saved before ownership was seeded can still be applied. They keep
+any later applied ownership change for that person. An old demotion that happened
+before the seed can remove a stale owner role when the seed did not include that
+person. New owner changes still require the ownership stream.

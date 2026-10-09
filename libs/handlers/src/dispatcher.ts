@@ -85,9 +85,17 @@ async function dispatchLocked(
   }
   if (row.manifest !== manifest) {
     const changes = subscriptionChanges(row.manifest, manifest);
-    const command = "npm run ops -- upgrade-handlers --confirm-writers-stopped";
-    runtime.options.logger.error({ changes },
-      `Dispatcher subscriptions changed: ${JSON.stringify(changes)}. Stop writers and run ${command}`);
+    if (!changes.length) {
+      runtime.options.logger.info({}, 'Only subscription order changed');
+    }
+    const command = "npm run ops -- upgrade-handlers --dry-run";
+    const fields = { changes };
+    const message =
+      `Dispatcher subscriptions changed. Run ${command} first. Stop clients and event writers, ` +
+      'drain unfinished jobs with the old workers, then stop workers and database clients. ' +
+      'Run npm run ops -- upgrade-handlers --confirm-writers-stopped and restart services. ' +
+      'Computers are not suspended while the dispatcher waits';
+    runtime.options.logger.error(fields, message);
     if (!signal.aborted) {
       await once(signal, "abort");
     }

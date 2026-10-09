@@ -49,6 +49,23 @@ async function seedGrant(store: EventStore, trigger: EventEnvelope, resourceId: 
 
 export function modelGrantHandler(store: EventStore) {
   async function seedSelection(event: EventEnvelope) {
+    let memberId: string | undefined;
+    if (['member.joined', 'silo.owner_bootstrapped'].includes(event.type)) {
+      memberId = z.string().parse(data(event)['memberId']);
+    } else if (event.type === 'assistant.created' && data(event)['kind'] === 'personal') {
+      memberId = z.string().parse(data(event)['ownerId']);
+    }
+    if (memberId) {
+      const membership = await history(store, `member-${memberId}`, event.silo);
+      function changesMembership(row: typeof membership[number]) {
+        return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed',
+          'member.removed'].includes(row.event.type);
+      }
+      const memberFacts = membership.filter(changesMembership);
+      if (memberFacts.at(-1)?.event.type === 'member.removed') {
+        return;
+      }
+    }
     if (event.type === 'assistant.created' && data(event)['kind'] === 'team') {
       const shared = assistantCreatedDataSchema.parse(event.data);
       // Old team events with no explicit selection grant nothing; ownership is not tool authority.

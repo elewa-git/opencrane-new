@@ -44,8 +44,8 @@ const runtime = new HandlerRuntime({ db: db.db, logger, silo: required("SILO_ID"
 try {
   const events = await connectEventStore();
   try {
-    const plan = await upgradeHandlers(runtime, events.store, args.values["dry-run"]);
-    console.log(JSON.stringify({ dryRun: args.values["dry-run"], plan }));
+    const report = await upgradeHandlers(runtime, events.store, args.values["dry-run"]);
+    console.log(JSON.stringify({ dryRun: args.values["dry-run"], ...report }));
   } finally {
     await events.close();
   }

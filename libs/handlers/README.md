@@ -33,7 +33,7 @@ flowchart LR
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
   handlers -.-> events["libs/events<br/>reaction list"]
   handlers -.-> projections["libs/projections<br/>database helpers"]
-  handlers -->|stores jobs in conversation order| pg["PostgreSQL<br/>job queue"]
+  handlers -->|saves jobs and progress| pg["PostgreSQL<br/>job queue"]
 ```
 
 ## What it is responsible for
@@ -58,12 +58,14 @@ even though their events use separate streams.
    (`seed-model-grants`).
 2. **A reaction fails.** Later jobs about the same thing wait, while jobs about
    other things carry on. An operator can repair the cause and retry the failed
-   job.
+   job, or deliberately cancel a failed original with the ops command.
 
 3. **A release changes subscriptions.** The dispatcher reports which reactions and
    event types changed and waits for shutdown. With writers and workers stopped,
    `npm run ops -- upgrade-handlers` adds historical jobs for new subscriptions.
-   Finished reactions keep their receipts, so they do not run again. The
+   An interrupted scan continues from its saved progress. Computers stay in
+   their current state while the dispatcher waits. Finished reactions keep their
+   receipts, so they do not run again. The
    [operator procedure](../../apps/ops/README.robot.md#handler-subscription-upgrade)
    lists the stop, dry-run, upgrade and restart steps.
 

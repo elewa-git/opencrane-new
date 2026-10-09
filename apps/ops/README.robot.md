@@ -174,8 +174,8 @@ The `create-assistant` reaction reads the assistant choice from `member.joined`.
 `personalAssistant: none` skips creation. `provision` and older joins without the
 field retain the existing stable personal assistant id. The reaction checks the
 member stream first and skips a late join delivery after `member.removed`.
-Bootstrap always retains its existing behaviour. Computer claims still follow
-`assistant.created`.
+Bootstrap also checks that the owner is still a member before creating an
+assistant. Computer claims still follow `assistant.created`.
 `test/assistant-choice.test.ts` uses real NATS and PostgreSQL to check repeats,
 restart and SIGKILL after creation before the delivery can acknowledge completion.
 
@@ -241,44 +241,62 @@ This command updates the saved list of enabled handlers and the event types they
 receive. It keeps the events, queues and receipts (the saved notes that a handler
 has already finished an event).
 
-1. Stop `apps/server`, computers, the model gateway and other clients that request
-   decisions or append events. Leave NATS, PostgreSQL, OpenFGA and the model/budget
-   decision services available while the previous release's dispatcher drains jobs
-   and any events those reactions append. Budget settlement needs its decision
-   endpoint. Repair/retry failed originals using `runtime.replay` before continuing.
-2. After jobs finish, stop the dispatcher, all handler workers and model/budget
-   decision services through the installation's service manager (or scale their
-   Kubernetes workloads to zero). Wait for their processes to exit. If new code
-   already stopped on a mismatch, use the previous release to drain old jobs first.
-   The command refuses a running dispatcher or unfinished jobs.
-3. Install the new release. Set `DATABASE_URL`, `SILO_ID` and the NATS projection
+1. Preview the plan with `npm run ops -- upgrade-handlers --dry-run`.
+   Dry-run takes no lock and can run while a changed dispatcher waits. It checks
+   unfinished jobs and lists failed originals. If jobs are unfinished, drain them
+   using the previous release before requesting another preview.
+2. Stop `apps/server`, computers, the model gateway and other clients that request
+   decisions or append events. Leave NATS, PostgreSQL, OpenFGA and model/budget
+   decision services available while the previous release drains jobs and the
+   events those reactions append. The dispatcher does not suspend computers while
+   it waits on changed subscriptions; the operator stops them here.
+3. After unfinished jobs finish, stop all dispatchers, workers and decision services.
+   Close every other connection to the handlers database, including idle operator
+   clients. The command refuses a held dispatcher lock or another database session.
+   Failed originals are reported and retained; they do not block the upgrade.
+4. Install the new release. Set `DATABASE_URL`, `SILO_ID` and the NATS projection
    reader settings listed above. Keep `MODEL_DECISION_URL` set exactly as it will
-   be for the dispatcher: it enables `settle-budget`. The shared enabled handler
-   list excludes `update-members`, whose tables the separate members runner updates.
-4. Inspect the plan, then apply it while writers and workers remain stopped:
+   be for the dispatcher: it enables `settle-budget`. `update-members` is excluded
+   because the separate members runner updates those tables.
+5. Apply the checked plan with writers and workers stopped:
 
    ```sh
    npm run ops -- upgrade-handlers --dry-run
    npm run ops -- upgrade-handlers --confirm-writers-stopped
    ```
 
-5. Restart the upgraded model/budget decision services, then the dispatcher and
-   workers. Keep the server, computers, gateway and other clients stopped while
-   backfill jobs run; settlement uses the decision endpoint and reactions may append
-   further events. Check that jobs finish without failed originals and that tables
-   and permissions catch up. Then restart clients and other event writers.
+6. Restart model/budget decision services, then the dispatcher and workers. Keep
+   clients stopped while historical jobs run. Reactions may append further events.
+   Check failed jobs and permissions before restarting clients and event writers.
 
-Dry-run prints JSON with each changed handler, added/removed types and the number
-of matching historical events. It changes nothing. The command adds jobs only for
-new subscriptions through the stored dispatcher checkpoint; the durable consumer
-handles any later events on restart. It never invokes a reaction or publishes an
-event. Queue jobs and the new manifest/checkpoint commit in one transaction.
-Workers skip events already recorded in that handler's receipts. Removed handlers
-and types need only a manifest update; their old queues and receipts are retained.
-Rerunning after success is a no-op. An error leaves the old manifest and jobs in
-place; newly created empty queues may remain. The confirmation flag records the
-operator's stopped-writer check; only the dispatcher lock and jobs are checked
-by the command. Do not delete receipts or reset the consumer during this upgrade.
+The JSON report contains `plan`, with changed handlers, added/removed types and
+matching event counts, and `failedJobs`, with original job ids, names and streams.
+Dry-run changes nothing. The upgrade queues only new pairs through the saved
+dispatcher checkpoint. The durable consumer handles later events after restart.
+It never runs a reaction or publishes an event. Removed subscriptions and changes
+to order alone skip history. Old queues and receipts are retained.
+
+The scan saves jobs and progress in chunks of at most 256 events. It logs events
+scanned and jobs queued. Transient read timeouts retry with back-off. After a crash,
+the same release resumes after the last committed sequence. Jobs remain parked
+until the final transaction changes the manifest and makes them available. The
+checkpoint stays unchanged. A successful rerun adds nothing. Do not delete receipts,
+the progress row or queues, or reset the consumer during an unfinished upgrade.
+The confirmation flag records the operator's check that NATS writers are stopped;
+the database lock, sessions and unfinished jobs are checked by the command.
+
+### Failed jobs
+
+`npm run ops -- jobs` lists failed original jobs, including their ids, handler
+names, streams, retry counts and stored error output. It needs only `DATABASE_URL`.
+Failures still hold later jobs on the same stream. `runtime.replay` retries an
+original after its cause is repaired.
+
+`npm run ops -- jobs --cancel <id>` deliberately cancels one failed original.
+It refuses a missing id, a diagnostic copy or a job that is not failed. It keeps
+receipts and records the cancellation. Later jobs on that stream can then run.
+The cancelled reaction will not run unless it is queued again separately. This
+is an operator decision, not an automatic response to failure.
 
 ## Model grant upgrade
 

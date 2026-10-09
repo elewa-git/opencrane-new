@@ -98,6 +98,34 @@ export class HandlerRuntime {
     await retainJob(tx, handler.name, id);
   }
 
+  /** Hold historical jobs until the scan has finished and workers can use the new subscriptions. */
+  async enqueueBatch(handler: Handler, events: EventEnvelope[], tx: Query,
+    queuedBefore: number): Promise<number> {
+    if (!events.length) {
+      return 0;
+    }
+    function job(event: EventEnvelope) {
+      return { data: event, singletonKey: event.subject };
+    }
+    const jobs = events.map(job);
+    const options = { db: transactionAdapter(tx), returnId: true };
+    const ids = await this.boss.insert(handler.name, jobs, options);
+    if (!ids || ids.length !== jobs.length) {
+      throw new Error('Handler batch enqueue refused');
+    }
+    // Give every saved batch a lasting order before any later live job can arrive.
+    // Leave enough time slots for every possible match through the target checkpoint.
+    await tx.query(
+      "UPDATE pgboss.job AS job SET keep_until = 'infinity', start_after = 'infinity', " +
+      "created_on = (SELECT created_on - target * $3::int * interval '1 microsecond' " +
+      "FROM handler_upgrade WHERE id = 1) + ($4::bigint + batch.ordinal) * interval '1 microsecond' " +
+      "FROM unnest($2::uuid[]) WITH ORDINALITY AS batch(id, ordinal) " +
+      "WHERE job.name = $1 AND job.id = batch.id",
+      [handler.name, ids, this.options.handlers.length, queuedBefore],
+    );
+    return ids.length;
+  }
+
   async work(concurrency = 4): Promise<void> {
     for (const handler of this.options.handlers) {
       const workOptions = {
