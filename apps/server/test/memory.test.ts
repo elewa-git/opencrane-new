@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises';
+import type { z } from 'zod';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -6,8 +7,8 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
-  pgDb, ProjectionRunner } from '@opencrane/projections';
-import type { MemoryIdentity } from '@opencrane/events';
+  pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
+import type { MemoryIdentity, memoryWrittenDataSchema } from '@opencrane/events';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -42,7 +43,7 @@ async function append(subject: string, type: string, data: unknown, apply = true
 }
 async function write(ownerId: string, scopeKind: MemoryIdentity['scopeKind'],
   memoryId: string, text = 'Deliveries café 東京', pinned = false, silo = 'acme',
-  sources: { conversationId: string; messageId: string }[] = []) {
+  sources: z.infer<typeof memoryWrittenDataSchema>['sources'] = []) {
   const scopeId = memoryScopeId(silo, scopeKind, ownerId);
   const identity = { silo, scopeId, scopeKind, ownerId, memoryId, revision: 1 };
   keys.provision(identity);
@@ -73,7 +74,7 @@ async function setup() {
   auth = memberAuthorisation(binding);
   const db = pgDb(storage.queue);
   runner = new ProjectionRunner(db, nats.reader, createLogger('memory-http'));
-  for (const target of [projection, groups, computers]) await runner.initialise(target);
+  for (const target of [projection, groups, computers, conversations]) await runner.initialise(target);
   for (const [memberId, role] of [['owner', 'owner'], ['admin', 'admin'], ['bob', 'member']]) {
     await append(`member-${memberId}`, 'member.joined', {
       memberId, role, email: `${memberId}@example.test`, displayName: memberId,
@@ -690,6 +691,7 @@ it('resolves source status separately and hides denied source references', async
   const references = [{ conversationId: 'detail_chat', messageId: message.id }];
   await write('bob', 'person', 'with_source', 'A sourced fact', false, 'acme', references);
   await runner.run(projection);
+  await runner.run(conversations);
   const url = `${path('bob')}/facts/with_source`;
   expect((await get(url)).json()).toMatchObject({ sources: [{ status: 'available',
     reference: references[0] }] });
@@ -702,3 +704,162 @@ it('resolves source status separately and hides denied source references', async
     sources: [{ status: 'refused' }] });
   expect(refused.body).not.toContain('detail_chat');
 });
+
+
+it('returns a typed unavailable result after a fact key is destroyed', async function destroyedDetail() {
+  await write('bob', 'person', 'detail-destroyed', 'Destroyed private text');
+  const identity = { silo: 'acme', scopeId: memoryScopeId('acme', 'person', 'bob'),
+    scopeKind: 'person' as const, ownerId: 'bob', memoryId: 'detail-destroyed', revision: 1 };
+  keys.delete(identity);
+  await runner.rebuild(projection);
+  const response = await get(`${path('bob')}/facts/detail-destroyed`);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'unavailable', memoryId: 'detail-destroyed',
+    revision: 1, reason: 'destroyed' });
+  expect(response.body).not.toContain('Destroyed private text');
+  expect(response.json()).not.toHaveProperty('fact');
+});
+
+it('returns quarantined fact detail without any text', async function quarantinedDetail() {
+  await write('bob', 'person', 'detail-quarantined', 'Quarantined private text');
+  await runner.run(projection);
+  await storage.queue.query("UPDATE memory_facts SET content_status='quarantined' WHERE memory_id=$1",
+    ['detail-quarantined']);
+  const response = await get(`${path('bob')}/facts/detail-quarantined`);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'unavailable', memoryId: 'detail-quarantined',
+    revision: 1, reason: 'quarantined' });
+  expect(response.body).not.toContain('Quarantined private text');
+  expect(response.json()).not.toHaveProperty('fact');
+});
+
+it('refuses expired detail and waits for projection catch-up', async function detailExpiryAndLag() {
+  await write('bob', 'person', 'detail-lag');
+  const url = `${path('bob')}/facts/detail-lag`;
+  expect((await get(url)).statusCode).toBe(503);
+  await runner.run(projection);
+  expect((await get(url)).statusCode).toBe(200);
+  await storage.queue.query('UPDATE memory_facts SET expires_at=$1 WHERE memory_id=$2',
+    ['2020-01-01T00:00:00Z', 'detail-lag']);
+  expect((await get(url)).statusCode).toBe(404);
+});
+
+it('checks read grants for notes detail separately from write grants', async function notesDetail() {
+  for (const operation of ['memory_read', 'memory_write']) {
+    const assistantId = `detail-${operation}`;
+    await append(`assistant-${assistantId}`, 'assistant.created',
+      { assistantId, kind: 'personal', ownerId: 'bob' });
+    const scopeId = memoryScopeId('acme', 'assistant_notes', assistantId);
+    await append(grantStream(operation, scopeId), 'grant.given', {
+      resourceType: operation, resourceId: scopeId, granteeKind: 'member', granteeId: 'bob',
+      grantedBy: 'owner',
+    });
+    await write(assistantId, 'assistant_notes', 'detail-note');
+  }
+  await runner.run(computers);
+  await runner.run(projection);
+  const readable = await get(`${path('detail-memory_read', 'assistant_notes')}/facts/detail-note`);
+  expect(readable.statusCode).toBe(200);
+  expect(readable.json()).toMatchObject({ fact: { memoryId: 'detail-note' } });
+  const writeOnly = await get(`${path('detail-memory_write', 'assistant_notes')}/facts/detail-note`);
+  expect(writeOnly.statusCode).toBe(404);
+  expect(writeOnly.json()).toEqual({ status: 'refused' });
+});
+
+it('checks chat access first and looks up only the selected source message', async function boundedSources() {
+  const conversationId = 'detail-bounded';
+  await append(`conversation-${conversationId}`, 'conversation.created', {
+    conversationId, createdBy: 'bob', mode: 'direct', participantIds: ['bob', 'owner'],
+  });
+  const messageData = { conversationId, authorId: 'bob', authorKind: 'human',
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text' };
+  const message = await append(`conversation-${conversationId}`, 'message.posted', messageData);
+  for (let index = 0; index < 100; index++) {
+    await append(`conversation-${conversationId}`, 'message.posted', messageData);
+  }
+  const sources = [{ conversationId, messageId: message.id }];
+  await write('bob', 'person', 'detail-bounded', 'Readable sourced text', false, 'acme', sources);
+  await runner.run(projection);
+  await runner.run(conversations);
+  const original = nats.store.readStream.bind(nats.store);
+  async function* bounded(subject: string, from?: number, deadline?: number) {
+    let count = 0;
+    for await (const row of original(subject, from, deadline)) {
+      if (subject === `conversation-${conversationId}`) {
+        expect(++count).toBeLessThanOrEqual(1);
+      }
+      yield row;
+    }
+  }
+  const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(bounded);
+  const querySpy = vi.spyOn(memory.db, 'query');
+  try {
+    const url = `${path('bob')}/facts/detail-bounded`;
+    expect((await get(url)).json()).toMatchObject({ sources: [{ status: 'available',
+      reference: sources[0] }] });
+    await append(`conversation-${conversationId}`, 'participant.removed',
+      { conversationId, participantId: 'bob', removedBy: 'owner' });
+    querySpy.mockClear();
+    const refused = await get(url);
+    expect(refused.statusCode).toBe(200);
+    expect(refused.json()).toMatchObject({ sources: [{ status: 'refused' }] });
+    expect(refused.body).not.toContain(conversationId);
+    for (const [sql] of querySpy.mock.calls) expect(sql).not.toContain('conversation_feed');
+  } finally {
+    readSpy.mockRestore();
+    querySpy.mockRestore();
+  }
+});
+
+it('hides missing messages and keeps readable facts available during source outages',
+  async function missingAndUnavailableSources() {
+    const sources = [{ conversationId: 'detail_chat', messageId: 'missing-message' }];
+    await append('conversation-detail_chat', 'participant.added',
+      { conversationId: 'detail_chat', participantId: 'bob', addedBy: 'owner' });
+    await write('bob', 'person', 'detail-missing', 'Fact with a missing source', false, 'acme', sources);
+    await runner.run(projection);
+    await runner.run(conversations);
+    const url = `${path('bob')}/facts/detail-missing`;
+    const missing = await get(url);
+    expect(missing.statusCode).toBe(200);
+    expect(missing.json()).toMatchObject({ fact: { text: 'Fact with a missing source' },
+      sources: [{ status: 'refused' }] });
+    expect(missing.body).not.toContain('missing-message');
+    const original = memory.db.query.bind(memory.db);
+    async function unavailable<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+      if (sql.includes('conversation_feed')) {
+        throw new Error('Message lookup unavailable');
+      }
+      return original<Row>(sql, values);
+    }
+    const spy = vi.spyOn(memory.db, 'query').mockImplementation(unavailable);
+    try {
+      const response = await get(url);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ fact: { text: 'Fact with a missing source' },
+        sources: [{ status: 'unavailable' }] });
+      expect(response.body).not.toContain('detail_chat');
+      expect(response.body).not.toContain('missing-message');
+    } finally { spy.mockRestore(); }
+  });
+
+it('labels a departed member statement without exposing their identity or command',
+  async function neutralStatement() {
+    await append('member-statement-author', 'member.joined', {
+      memberId: 'statement-author', role: 'member', email: 'author@example.test',
+      displayName: 'Former author',
+    });
+    const sources = [{ memberId: 'statement-author', commandId: 'private-statement-command' }];
+    await write('bob', 'person', 'detail-statement', 'A saved member statement', false, 'acme', sources);
+    await append('member-statement-author', 'member.removed',
+      { memberId: 'statement-author', removedBy: 'owner' });
+    await runner.run(projection);
+    const response = await get(`${path('bob')}/facts/detail-statement`);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ sources: [{ status: 'available',
+      label: "a member's statement" }] });
+    expect(response.body).not.toContain('statement-author');
+    expect(response.body).not.toContain('private-statement-command');
+    expect(response.body).not.toContain('memberId');
+    expect(response.body).not.toContain('commandId');
+  });
