@@ -171,6 +171,27 @@ command returns 404 `unknown`; a request still running may yet save it. An
 uncertain append returns 503 `unknown`, while a failed check before append returns
 503 `unavailable`. The browser grant editor and fresh-install journey remain pending.
 
+## Model calls during grant changes
+
+Model calls catch up their model's saved grant facts before checking access.
+OpenFGA still decides whether the requester and assistant can use the model.
+The complete decision has two seconds; a cold catch-up can outlast the call and
+help a later retry.
+
+Two cases can refuse a call even while OpenFGA still allows it:
+
+- A relevant grant change is saved after the call captures the log position for
+  catch-up. The current call is refused even if the summary includes that change
+  and OpenFGA has applied it.
+- An older revoke has no `granteeKind` and names an id ever granted as a team on
+  this model. The current call is refused even if that team does not own the
+  assistant or currently include the requester.
+
+These checks are stricter than the earlier grant check; they never grant new
+permission. Unrelated typed member grant changes still allow a call to proceed.
+The [models contract](../../libs/models/README.robot.md#grant-memory-budget-and-queue)
+records the cache budget and the limits on cold reads.
+
 ## Known design and dev-stack gaps
 
 - MOD-04 needs non-admin read-only provider state. Current event-backed authority

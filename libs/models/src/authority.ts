@@ -4,6 +4,7 @@ import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz
 import { wireSubject, type StoredEvent, type EventStore } from '@opencrane/event-store';
 import { data } from './state.ts';
 import { memberStateTypes } from './ownership.ts';
+import type { DecisionGrants, DecisionGrantRow } from './decision-grants.ts';
 
 export const outputReportTypes: readonly string[] = [
   'agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
@@ -14,7 +15,8 @@ export const outputReportTypes: readonly string[] = [
 /** Shared by model/MCP decisions; destination checks can use this same resource grant. */
 export async function currentAuthority(store: EventStore, binding: Binding, requester: string, assistant: string,
   conversation: string, resourceType: string, resourceId: string,
-  fresh?: Awaited<ReturnType<typeof authorityFence>>, conversationRows?: StoredEvent[]) {
+  fresh?: Awaited<ReturnType<typeof authorityFence>>, conversationRows?: StoredEvent[],
+  grants?: DecisionGrants) {
   fresh ??= await authorityFence(store, performance.now());
   const auth = memberAuthorisation(binding);
   const facts = [], receipts: string[] = [];
@@ -29,12 +31,12 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   function readSubject(subject: string) {
     return readAt(store, subject, snapshotHead, deadline);
   }
-  const histories = await Promise.all(subjects.map(readSubject));
-  if (conversationRows) histories.push(conversationRows);
+  const histories = await readAuthorityHistories(subjects, readSubject, conversationRows, grants);
   const initialRows = histories.flat();
   const teams = authorityTeams(initialRows, binding.silo);
   const forDecision = conversationRows !== undefined;
-  const decisionGrantees = grantReceiptGrantees(initialRows, requester, assistant, forDecision);
+  const decisionGrantees = grantReceiptGrantees(initialRows, requester, assistant,
+    forDecision, grants?.teamGrantees);
   fresh.include(...teams);
   const teamReads = [...teams].map(readSubject);
   histories.push(...await Promise.all(teamReads));
@@ -64,7 +66,27 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   return createHash('sha256').update(JSON.stringify({ facts, permissions, memoryScopes: [], credential: null })).digest('hex');
 }
 
-function authorityTeams(rows: StoredEvent[], silo: string) {
+async function readAuthorityHistories(subjects: string[],
+  readSubject: (subject: string) => Promise<StoredEvent[]>,
+  conversationRows?: StoredEvent[], grants?: DecisionGrants) {
+  let currentSubjects = subjects;
+  const histories: DecisionGrantRow[][] = [];
+  if (grants) {
+    // Reuse grant facts only when the caller checks later changes from their captured position.
+    const grantSubject = grants.subject;
+    function isOtherSubject(subject: string) {
+      return subject !== grantSubject;
+    }
+    currentSubjects = subjects.filter(isOtherSubject);
+    histories.push(grants.rows);
+  }
+  const reads = currentSubjects.map(readSubject);
+  histories.push(...await Promise.all(reads));
+  if (conversationRows) histories.push(conversationRows);
+  return histories;
+}
+
+function authorityTeams(rows: DecisionGrantRow[], silo: string) {
   // Only the assistant's owner and current resource grantees can supply team authority.
   const teams = new Set<string>();
   const grants = new Map<string, Record<string, unknown>>();
@@ -84,10 +106,13 @@ function authorityTeams(rows: StoredEvent[], silo: string) {
   return teams;
 }
 
-function grantReceiptGrantees(rows: StoredEvent[], requester: string, assistant: string,
-  forDecision: boolean) {
+function grantReceiptGrantees(rows: DecisionGrantRow[], requester: string, assistant: string,
+  forDecision: boolean, teamGrantees?: ReadonlySet<string>) {
   if (!forDecision) return undefined;
   const grantees = new Set([`member-${requester}`, `assistant-${assistant}`]);
+  if (teamGrantees) {
+    for (const subject of teamGrantees) grantees.add(subject);
+  }
   for (const { event } of rows) {
     const fields = data(event);
     // Keep teams whose grants were revoked too. The permissions service may
@@ -99,7 +124,7 @@ function grantReceiptGrantees(rows: StoredEvent[], requester: string, assistant:
   return grantees;
 }
 
-function relevant(event: EventEnvelope, requester: string, assistant: string,
+function relevant(event: DecisionGrantRow['event'], requester: string, assistant: string,
   conversation: string, resourceType: string, resourceId: string,
   decisionGrantees?: Set<string>) {
   const fields = data(event);
@@ -118,7 +143,7 @@ function relevant(event: EventEnvelope, requester: string, assistant: string,
   return relevantGrant(event, resourceType, resourceId, decisionGrantees);
 }
 
-function relevantGrant(event: EventEnvelope, resourceType: string, resourceId: string,
+function relevantGrant(event: DecisionGrantRow['event'], resourceType: string, resourceId: string,
   decisionGrantees?: Set<string>) {
   if (!event.type.startsWith('grant.')) return false;
   const fields = data(event);
@@ -163,7 +188,8 @@ export async function conversationAccessFence(store: EventStore, started: number
 }
 
 async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head'>, started: number,
-  subjects: string[], callerDeadline: number, checkChanges: typeof checkOutputReports) {
+  subjects: string[], callerDeadline: number, checkChanges: typeof checkOutputReports,
+  earlierPositions?: ReadonlyMap<string, number>) {
   const deadline = Math.min(started + 2000, callerDeadline);
   const head = await store.head(undefined, deadline);
   const watched = new Set<string>();
@@ -174,7 +200,7 @@ async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head
     }
   };
   include(...subjects);
-  const outputHeads = new Map<string, number>();
+  const outputHeads = new Map<string, number>(earlierPositions);
   async function confirm() {
     if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
     async function readSubjectHead(subject: string) {
@@ -243,8 +269,15 @@ function changesChatAccess(subject: string, type: string) {
 
 /** Keep other callers strict; only decisions can ignore unrelated access events. */
 export async function decisionAuthorityFence(store: EventStore, started: number,
-  subjects: string[], requesterId: string, assistantId: string) {
+  subjects: string[], requesterId: string, assistantId: string,
+  grantHistory?: DecisionGrants) {
   const grantees = new Set([`member-${requesterId}`, `assistant-${assistantId}`]);
+  const earlierPositions = new Map<string, number>();
+  if (grantHistory) {
+    subjects = [...subjects, grantHistory.subject];
+    earlierPositions.set(grantHistory.subject, grantHistory.sequence);
+    for (const team of grantHistory.teamGrantees) grantees.add(team);
+  }
   async function checkDecisionChanges(store: Pick<EventStore, 'readStream'>, subject: string, from: number,
     to: number, deadline: number) {
     for await (const row of store.readStream(subject, from, deadline)) {
@@ -255,7 +288,7 @@ export async function decisionAuthorityFence(store: EventStore, started: number,
     }
   }
   const authority = await createAuthorityFence(
-    store, started, subjects, Infinity, checkDecisionChanges);
+    store, started, subjects, Infinity, checkDecisionChanges, earlierPositions);
   const includeSubjects = authority.fresh.include;
   function include(...subjects: string[]) {
     includeSubjects(...subjects);

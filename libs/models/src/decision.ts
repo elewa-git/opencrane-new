@@ -6,6 +6,7 @@ import { configureBudget, BudgetAccessRefused } from './budget-config.ts';
 import { approvalDecision, closesDecisionTurn, type ReviewKeys } from './approvals.ts';
 import { losslessJson } from './lossless-json.ts';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
+import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall } from './mcp.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -76,13 +77,14 @@ async function context(actor: BudgetActor, binding: Binding,
   computer: z.infer<typeof computerSchema>, turnToken: z.infer<typeof turnSchema>,
   liveSequence: number, resourceType: string, resourceId: string,
   fresh: Awaited<ReturnType<typeof authorityFence>>, conversation: StoredEvent[],
-  turn: StoredEvent): Promise<ModelCall> {
+  turn: StoredEvent, grants?: DecisionGrants): Promise<ModelCall> {
   const permission = await memberAuthorisation(binding).check(turnToken.requester, 'member');
   if (!permission.allowed || binding.silo !== actor.silo) throw new Error('Membership unavailable or refused');
   const assistantRead = history(
     actor.store, `assistant-${computer.assistant}`, actor.silo, fresh.deadline);
   const authorityRead = currentAuthority(actor.store, binding, turnToken.requester,
-    computer.assistant, turnToken.conversation, resourceType, resourceId, fresh, conversation);
+    computer.assistant, turnToken.conversation, resourceType, resourceId, fresh, conversation,
+    grants);
   const [assistants, authority] = await Promise.all([assistantRead, authorityRead]);
   const assistant = assistants.find(r => r.event.type === 'assistant.created');
   if (!assistant) throw new Error('Assistant refused');
@@ -203,9 +205,10 @@ export async function startDecision(
       const conversation = activity.conversation;
       requireActiveConversationTurn(conversation, turnToken.turn);
       const turn = activeTurn(turnToken, activity.computer, checked.sequence);
+      const grants = await modelGrantHistory(actor, turnToken.model, route, decisionDeadline);
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
       const authority = await decisionAuthorityFence(actor.store, started,
-        subjects, turnToken.requester, computer.assistant);
+        subjects, turnToken.requester, computer.assistant, grants);
       let needsApproval = false;
       async function confirmDecision() {
         while (true) {
@@ -257,7 +260,7 @@ export async function startDecision(
       if (body.model !== turnToken.model) throw new Error('Model does not match turn grant');
       const amountCents = requestReservationCents(body);
       const call = await context(actor, binding, computer, turnToken, checked.sequence,
-        'model', body.model, fresh, conversation, turn);
+        'model', body.model, fresh, conversation, turn, grants);
       contextDigest = call.contextDigest;
       requireConnectedClient(req, res);
       const reservation = await actor.reserve({ ...call, requestId }, amountCents, fresh);
@@ -288,6 +291,12 @@ export async function startDecision(
   if (!address || typeof address === 'string') throw new Error('Decision listen failed');
   return { url: `http://127.0.0.1:${address.port}`, models,
     close: () => new Promise<void>((resolve, reject) => { if (!server.listening) { resolve(); return; } server.closeAllConnections(); server.close(error => error ? reject(error) : resolve()); }) };
+}
+
+async function modelGrantHistory(actor: BudgetActor, model: string, route: string,
+  deadline: number) {
+  if (route !== 'model') return undefined;
+  return readDecisionGrants(actor.store, actor.silo, model, deadline);
 }
 
 async function internalRoutes(

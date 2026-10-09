@@ -474,6 +474,74 @@ facts catch up before the short access check; only new activity is read during i
 
 ## Decision activity summaries
 
+Model decisions read `decision-grants` through `readStreamSummary` before the
+access check. Each model keeps separate maps for member, assistant and team ids.
+A map entry keeps only the latest action, event id and sequence as a compact JSON
+string. The event id is needed to check that OpenFGA has applied the change.
+The action also records whether a team was ever granted access. The resource kind
+and id come from the model stream, after each event is checked against that stream.
+The cache does not keep the full event or extra fields that cannot affect the
+decision. Revocations without `granteeKind` update all three identity kinds.
+Previously granted teams remain known after revocation, so delayed OpenFGA updates
+cannot keep their old
+access usable.
+
+The check reads changes after the global position captured before catch-up,
+including changes saved before the access check opened. History and access share
+the original two-second request budget. Compared with #198, PR 2b is stricter
+in two cases:
+
+- A relevant grant change saved during catch-up refuses the current call, even
+  when the summary includes it and OpenFGA has already applied it.
+- An older revoke without `granteeKind` refuses the current call if its id was
+  ever granted as a team on this model. The team need not own the assistant or
+  currently include the requester.
+
+These rules never add permission. OpenFGA still decides whether the requester
+and assistant can use the model. Unrelated typed member grants keep working.
+The [model API](../../docs/api/providers.md#model-calls-during-grant-changes)
+describes these extra refusals for callers.
+
+### Grant memory budget and queue
+
+The grant cache keeps at most 64 model summaries. It has an estimated budget of
+16 MiB across one store in one process. Each summary counts as 256 bytes, and each
+kind and id counts as a 160-byte record for a UUID id and a compact record of at
+most 51 UTF-8 bytes. Longer ids and records add two bytes for each byte above
+those allowances. This also charges longer event ids and sequence numbers.
+100,000 UUID grantees fit on one model: 16,000,256 estimated bytes. The count is
+per kind and id; a legacy revoke can keep three records for the same id.
+
+Whole grant summaries are dropped, starting with those used least recently. A
+summary larger than the whole budget is dropped on its own. The next call reads
+that model from sequence 1 to rebuild it. More than 64 active models, longer ids
+or more than 16 MiB of cached facts can therefore cause repeated cold reads.
+The estimate covers retained summaries; it does not cap active reads, caller
+copies or complete service memory. No
+permission check skips catch-up to avoid a rebuild.
+
+Each model has its own queue. Calls for that model wait for earlier catch-ups,
+including a catch-up whose caller has already timed out. Other models have
+separate queues. Each live decision's event-store catch-up read has a ten-second
+deadline starting when its queue slot runs. The caller still has only two seconds
+and refuses when that time runs out. Background catch-up may then continue. A
+later call resumes after the last applied event if the partial summary remains
+cached. A cold model may need several attempts to finish. Several earlier calls
+can make the total queue wait longer than ten seconds. Queued reads are not
+cancelled when their callers time out.
+
+A call is refused before holding money if the saved history ends before the
+summary's latest position. Processes must restart after an event-store restore.
+
+`test/decision-grants.test.ts` checks that 100,000 UUID grantees stay cached without
+full event payloads. `test/decision-cost.test.ts` checks 10,000 members on one
+model and another eight models with 1,000 members each in one process. After
+warm-up, two rounds of real HTTP decisions use only later grant reads and finish
+within two seconds. It also covers 3,000 grantees, 15,000 edits to one grantee,
+revocations before and after the summary read, delayed team receipts and restored
+history. `test/decision-fence.test.ts` keeps all #198 refusal and harmless cases,
+including zero-cent release after an allow audit and disconnection.
+
 `decisionActivity` uses the auth `computer` summary and the models `decision-chat`
 summary. The computer facts include the latest lifecycle event and the requested
 turn's first start and first close. Admission requires the same Ready position
@@ -493,8 +561,9 @@ row counts as 1,152 bytes, above the measured UUID row cost of about 1,009 bytes
 This allows 65,536 kept rows: two 10,000-turn chats with creation, message, start
 and completion events fit together. Reply chunks do not count because this
 summary does not keep them. The shared computer kind has a separate 48 MiB
-estimate. Together these allowances use 120 MiB of the 256 MiB heap cap.
-They leave 136 MiB for other service work, caller copies and active reads.
+estimate. Together these allowances use 120 MiB of the 256 MiB heap cap. Model grant
+summaries add a separate 16 MiB estimate, leaving 120 MiB for other service work,
+caller copies and active reads.
 Whole summaries are
 dropped in least-recently-used order; individual refusal facts are never removed.
 A dropped summary rebuilds from sequence 1. A summary larger than its whole budget
@@ -517,6 +586,11 @@ older turns with 10 and 3,000 chat events. It counts credentials, activity, acce
 reservation and audit reads together. The 500-turn count and long-chat count may
 exceed their short equivalents by at most two rows. It also checks cold catch-up,
 fresh suspension or closure, start source and all turn bindings without new holds.
+The cold catch-up test pauses the first chat read until admission times out, then
+waits for that read to finish before checking a new admission on later rows.
+A separate real-gateway test delays a saved allow record beyond two seconds.
+It checks the 503 refusal, no provider call, the earlier reservation still held,
+and a zero-cent `not_dispatched` settlement for the refused call alone.
 It also checks that restoring either subject below its summary refuses another
 call without holding more money.
 `test/decision-activity.test.ts` checks warm reads, removed output/text, saved order
