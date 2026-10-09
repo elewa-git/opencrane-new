@@ -70,6 +70,12 @@ async function replaysParticipation() {
     });
     expect((await nats.store.append({ event: oldWrite, expectedSequence: 2 })).status)
       .toBe('rejected');
+    const wrongSubject = { ...oldWrite, subject: 'participation-other' };
+    await expect(conversations.apply(storage.db, wrongSubject, 6))
+      .rejects.toThrow('Conversation subject mismatch');
+    const foreign = { ...oldWrite, silo: 'other' };
+    await expect(conversations.apply(storage.db, foreign, 6))
+      .rejects.toThrow('Missing conversation in silo');
   } finally {
     await storage.close();
     await nats.close();

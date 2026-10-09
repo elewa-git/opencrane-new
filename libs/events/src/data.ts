@@ -1,3 +1,4 @@
+import { chatIdSchema, groupConversationSchema } from './conversation.ts';
 import { isToolCallText } from './tool-call.ts';
 // Data schemas for every event type in the registry except the four
 // examples in examples.ts. Each is built from what docs/architecture/events.md
@@ -268,6 +269,7 @@ export function hasDirectParticipants(data: { createdBy: string; participantIds:
 
 // Missing mode belongs only to legacy assistant sessions. New human records are explicit.
 export const conversationCreatedDataSchema = z.union([
+  groupConversationSchema,
   z.object({
     conversationId: id, assistantId: id, createdBy: id,
     mode: z.literal('agent_session').default('agent_session'), payingGroupId: id.optional(),
@@ -279,11 +281,11 @@ export const conversationCreatedDataSchema = z.union([
 ]);
 
 export const participantAddedDataSchema = z
-  .object({ conversationId: id, participantId: id, addedBy: id })
+  .object({ conversationId: chatIdSchema, participantId: chatIdSchema, addedBy: chatIdSchema })
   .strict();
 
 export const participantRemovedDataSchema = z
-  .object({ conversationId: id, participantId: id, removedBy: id })
+  .object({ conversationId: chatIdSchema, participantId: chatIdSchema, removedBy: chatIdSchema })
   .strict();
 
 export const agentTurnStartedDataSchema = z

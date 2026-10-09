@@ -25,8 +25,10 @@ type conversation
   relations
     define silo: [silo]
     define participant: [person]
+    define creator: [person]
     define read: participant and member from silo
     define post: read
+    define manage_participants: creator and read
 
 # Explicit resource grants never follow from installation or ownership.
 type resource

@@ -13,7 +13,7 @@ flowchart LR
   server["apps/server<br/>back end"] -.-> authz["libs/authz<br/>permission checks"]
   models["libs/models<br/>AI access and spending"] -.-> authz
   ops["apps/ops<br/>background workers"] -.-> authz
-  authz -->|checks and updates access| fga["OpenFGA<br/>permissions service"]
+  authz -->|checks people and chat creators| fga["OpenFGA<br/>permissions service"]
   authz -.-> handlers["libs/handlers<br/>background jobs"]
 ```
 
@@ -24,6 +24,9 @@ flowchart LR
 - Refuse access when OpenFGA cannot give a reliable answer.
 - Keep repeated or delayed events from restoring access that has been removed.
 - Rebuild permission records in a new OpenFGA store from the event history.
+
+Conversation permissions name individual people. The creator can manage participants
+only while they can still read the chat. Group membership does not grant chat access.
 
 ## Processes it handles
 

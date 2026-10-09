@@ -21,8 +21,13 @@ async function rejectsDirectMutation(type: string) {
     if (saved.status !== 'appended') throw new Error('Creation failed');
     const data = invalidData(type);
     const invalid = envelope('test', 'conversation-direct', type, data);
-    expect((await nats.store.append({ expectedSequence: saved.sequence, event: invalid })).status)
-      .toBe('appended');
+    if (type === 'participant.added') {
+      // Replay old subjects without allowing commands to write new participant events there.
+      await nats.connection.request('ev.conversation.direct', JSON.stringify(invalid));
+    } else {
+      expect((await nats.store.append({ expectedSequence: saved.sequence, event: invalid })).status)
+        .toBe('appended');
+    }
     const runner = new ProjectionRunner(storage.db, nats.reader, createLogger('direct-mode'));
     await runner.initialise(conversations);
     await expect(runner.rebuild(conversations)).rejects.toThrow('Direct conversation is immutable');

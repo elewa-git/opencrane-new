@@ -266,3 +266,16 @@ Fresh-install customer journeys and power-loss qualification remain NOT RUN.
 
 The [live memory worker](../../apps/ops/README.robot.md#run-the-live-memory-worker)
 uses the same read-only custody as rebuild.
+
+## Conversation participation
+
+The projection builds `conversations` metadata and `conversation_participants`
+intervals. Global NATS sequences supply join and exclusive end positions; each bound
+keeps its event id. Creation starts the initial intervals. Duplicate active joins and
+absent removals do nothing; re-addition starts a new interval. Current participants
+have no end position. Named TypeScript functions enforce these rules, the 100-person
+cap and monotonic closed state. SQL stores results. Exact current and legacy subjects
+enter the feed by data id; participant events require creation in the same silo.
+Metadata, intervals, feed and checkpoints commit together. Existing installations
+need an offline conversations rebuild. Replay runs no reactions. Group history
+filtering remains pending.

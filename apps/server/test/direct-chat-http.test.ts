@@ -45,9 +45,9 @@ async function directFixture() {
   async function append(subject: string, type: string, data: unknown, iam = true) {
     const event = envelope('test', subject, type, data);
     event.principal = { id: subject.slice('member-'.length), kind: 'human' };
-    const rows = await history(nats.store, subject, 'test');
-    const expectedSequence = rows.at(-1)?.sequence ?? 0;
-    expect((await nats.store.append({ event, expectedSequence })).status).toBe('appended');
+    // Seed saved history, including old participant subjects that commands now refuse.
+    const savedHistory = [event];
+    await nats.seed(savedHistory);
     if (iam) await auth.handler.handle(event, db);
     return event;
   }

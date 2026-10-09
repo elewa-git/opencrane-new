@@ -588,3 +588,6 @@ this setting. Setup fails with a clear message if it is missing, false or a stri
 The check adds no provider write, does not repair the setting and does not touch
 external users or other organisations. Tests use an isolated provider fixture;
 they verify that a refusal leaves provider state unchanged.
+
+OpenFGA accepts 103 tuples per atomic write so a 100-person chat audience, its
+creator, silo and event receipt can be saved together.

@@ -7,90 +7,131 @@ import { dispatch, HandlerRuntime, provisionDispatcher } from '@opencrane/handle
 import { createStore, memberAuthorisation, rebuildMembers } from '../src/index.ts';
 import { databases, openfga, until } from './services.ts';
 
+function participantId(_unused: unknown, index: number) {
+  const memberId = `member_${index}`;
+  return memberId.padEnd(200, 'x');
+}
+
 async function ordersConversationJobs() {
   const storage = await databases();
   const fga = await openfga();
   const nats = await natsFixture();
   const stop = new AbortController();
+  const db = pgDb(storage.queue);
   const authorisation = memberAuthorisation(await createStore(fga.apiUrl, 'test'));
-  let releaseCreation = () => undefined;
-  const creationGate = new Promise<void>(function captureRelease(resolve) {
+  let releaseCreation: () => void = () => undefined;
+  function captureRelease(resolve: () => void) {
     releaseCreation = resolve;
-  });
+  }
+  const creationGate = new Promise<void>(captureRelease);
   let creationStarted = false;
   async function delayedCreation(saved: EventEnvelope) {
     if (saved.type === 'conversation.created') {
       creationStarted = true;
       await creationGate;
     }
-    await authorisation.handler.handle(saved, pgDb(storage.queue));
+    await authorisation.handler.handle(saved, db);
+    if (saved.type === 'conversation.created') {
+      expect((await authorisation.conversation('alice', 'chat', 'manage_participants')).allowed)
+        .toBe(true);
+      expect((await authorisation.conversation('bob', 'chat', 'read')).allowed).toBe(true);
+      expect((await authorisation.conversation('bob', 'chat', 'manage_participants')).allowed)
+        .toBe(false);
+    }
   }
   const handler = { ...authorisation.handler, handle: delayedCreation };
-  const runtime = new HandlerRuntime({ db: pgDb(storage.queue), silo: 'test', handlers: [handler],
-    logger: createLogger('conversation-order'), expireInSeconds: 10 });
+  const runtimeOptions = { db, silo: 'test', handlers: [handler],
+    logger: createLogger('conversation-order'), expireInSeconds: 10 };
+  const runtime = new HandlerRuntime(runtimeOptions);
   let task: Promise<void> | undefined;
+  function ignoreStop() {
+    return undefined;
+  }
   function record(id: string, subject: string, type: string, data: unknown) {
     return { ...event(id, subject, type), data };
   }
   try {
     const member = event('member', 'member-alice');
-    const created = record('created', 'conversation-chat', 'conversation.created', {
-      conversationId: 'chat', createdBy: 'alice', assistantId: 'assistant', mode: 'agent_session',
-    });
+    const audience = Array.from({ length: 98 }, participantId);
+    audience.push('alice', 'bob');
+    const creationData = { conversationId: 'chat', createdBy: 'alice', mode: 'group',
+      participantIds: audience };
+    const created = record('created', 'conversation-chat', 'conversation.created', creationData);
+    const oversizedAudience = audience.concat('one_more');
+    const invalidGroups = [
+      { ...creationData, assistantId: 'assistant' }, { ...creationData, payingGroupId: 'team' },
+      { ...creationData, mode: 'agent_session', assistantId: 'assistant' },
+      { ...creationData, participantIds: ['alice', 'alice'] },
+      { ...creationData, participantIds: ['bob', 'carol'] },
+      { ...creationData, participantIds: ['alice'] },
+      { ...creationData, participantIds: oversizedAudience },
+      { ...creationData, groupId: 'team' }, { ...creationData, groupSnapshotPosition: 12 },
+      { ...creationData, groupId: 'team', groupSnapshotPosition: -1 },
+      { ...creationData, groupId: 'team', groupSnapshotPosition: 1.5 },
+      { ...creationData, conversationId: 'provider-reserved' },
+      { ...creationData, participantIds: ['alice', 'bad.id'] },
+      { ...creationData, participantIds: ['alice', 'b'.repeat(201)] },
+      { ...creationData, groupId: 'c'.repeat(201), groupSnapshotPosition: 1 },
+    ];
+    for (const data of invalidGroups) {
+      const invalid = { ...created, data };
+      const command = { event: invalid, expectedSequence: 0 };
+      expect((await nats.store.append(command)).status).toBe('rejected');
+    }
     const removed = record('removed', 'participation-chat', 'participant.removed', {
-      conversationId: 'chat', participantId: 'alice', removedBy: 'alice',
+      conversationId: 'chat', participantId: 'bob', removedBy: 'alice',
     });
-    expect((await nats.store.append({ event: member, expectedSequence: 0 })).status).toBe('appended');
-    expect((await nats.store.append({ event: created, expectedSequence: 0 })).status).toBe('appended');
-    // Store the future subject unchanged so this test first exercises the old worker's routing.
-    await nats.connection.request('ev.participation.chat', JSON.stringify(removed));
+    const bob = event('bob', 'member-bob');
+    const records = [bob, member, created, removed];
+    for (const saved of records) {
+      const command = { event: saved, expectedSequence: 0 };
+      expect((await nats.store.append(command)).status).toBe('appended');
+    }
+    await authorisation.handler.handle(member, db);
+    await authorisation.handler.handle(bob, db);
     await runtime.start();
     await provisionDispatcher(nats.connection);
     task = dispatch(nats.dispatcherConnection, runtime, stop.signal);
-    function ignoreStop() { return undefined; }
     void task.catch(ignoreStop);
     await runtime.work();
-    function started() { return creationStarted; }
+    function started() {
+      return creationStarted;
+    }
     await until(started);
     function queuedRemoval() {
       return storage.queue.query("SELECT singleton_key FROM pgboss.job WHERE data->>'id' = 'removed'");
     }
-    async function removalQueued() { return (await queuedRemoval()).rows.length === 1; }
+    async function removalQueued() {
+      const removalJobs = await queuedRemoval();
+      return removalJobs.rows.length === 1;
+    }
     await until(removalQueued);
     expect((await queuedRemoval()).rows).toEqual([{ singleton_key: 'conversation-chat' }]);
     expect(await authorisation.applied('removed')).toBe(false);
     releaseCreation();
-    function removalApplied() { return authorisation.applied('removed'); }
+    function removalApplied() {
+      return authorisation.applied('removed');
+    }
     await until(removalApplied);
     expect(await authorisation.applied('created')).toBe(true);
-    expect((await authorisation.conversation('alice', 'chat', 'read')).allowed).toBe(false);
-    await authorisation.handler.handle(created, pgDb(storage.queue));
-    expect((await authorisation.conversation('alice', 'chat', 'read')).allowed).toBe(false);
+    expect((await authorisation.conversation('bob', 'chat', 'read')).allowed).toBe(false);
+    await authorisation.handler.handle(created, db);
+    expect((await authorisation.conversation('bob', 'chat', 'read')).allowed).toBe(false);
     const rebuilt = await rebuildMembers(fga.apiUrl, 'test', nats.reader,
       { verifyAgainst: authorisation.binding });
     expect(rebuilt.verified).toBe(true);
 
-    const group = record('group', 'conversation-group', 'conversation.created', {
-      conversationId: 'group', createdBy: 'alice', mode: 'group', participantIds: ['alice', 'bob'],
-    });
-    await authorisation.handler.handle(group, pgDb(storage.queue));
-    expect((await authorisation.conversation('alice', 'group', 'manage_participants')).allowed)
+    expect((await authorisation.conversation('alice', 'chat', 'manage_participants')).allowed)
       .toBe(true);
-    expect((await authorisation.conversation('bob', 'group', 'read')).allowed).toBe(false);
-    const bob = event('bob', 'member-bob');
-    await authorisation.handler.handle(bob, pgDb(storage.queue));
-    expect((await authorisation.conversation('bob', 'group', 'read')).allowed).toBe(true);
-    expect((await authorisation.conversation('bob', 'group', 'manage_participants')).allowed)
-      .toBe(false);
     const wrongSubject = { ...removed, id: 'wrong', subject: 'participation-other' };
-    await expect(authorisation.handler.handle(wrongSubject, pgDb(storage.queue)))
+    await expect(authorisation.handler.handle(wrongSubject, db))
       .rejects.toThrow('Conversation subject mismatch');
     const foreign = { ...removed, id: 'foreign', silo: 'other' };
-    await expect(authorisation.handler.handle(foreign, pgDb(storage.queue))).rejects.toThrow();
+    await expect(authorisation.handler.handle(foreign, db)).rejects.toThrow();
   } finally {
     releaseCreation();
     stop.abort();
-    await task?.catch(function ignoreStop() { return undefined; });
+    await task?.catch(ignoreStop);
     await runtime.stop();
     await nats.close();
     await fga.close();

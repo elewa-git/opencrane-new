@@ -1,3 +1,4 @@
+import { handlerJobKey } from './job-key.ts';
 import {
   AckPolicy,
   DeliverPolicy,
@@ -91,7 +92,7 @@ export async function dispatch(
       for (const handler of handlers) {
         if (handler.eventTypes.includes(event.type)) {
           const id = await runtime.boss.send(handler.name, event, {
-            singletonKey: event.subject,
+            singletonKey: handlerJobKey(handler.name, event),
             db: transactionAdapter(tx),
           });
           if (!id) {

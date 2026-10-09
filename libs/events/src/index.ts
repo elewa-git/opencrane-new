@@ -58,3 +58,5 @@ export { computerTurnStartedDataSchema, computerTurnClosedDataSchema } from './d
 
 export { memoryWrittenIdentity, memoryWrittenEventSchema, memoryRevisionIdentitySchema, memoryTextSchema,
   type MemoryIdentity } from './memory.ts';
+
+export { conversationEventId } from './conversation.ts';

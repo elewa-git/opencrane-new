@@ -1,3 +1,4 @@
+import { handlerJobKey } from './job-key.ts';
 import { PgBoss, type Queue, type JobWithMetadata } from "pg-boss";
 import { parseEventByType } from "@opencrane/events";
 import { runHandler, type Logger } from "@opencrane/observability";
@@ -114,7 +115,7 @@ export class HandlerRuntime {
       !parsed.success ||
       parsed.event.silo !== this.options.silo ||
       !handler.eventTypes.includes(parsed.event.type) ||
-      parsed.event.subject !== job.singletonKey
+      handlerJobKey(handler.name, parsed.event) !== job.singletonKey
     ) {
       throw new Error("Invalid handler job");
     }

@@ -108,7 +108,9 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
       await nats.store.append({ event: created, expectedSequence: 0 }); await auth.handler.handle(created, db);
       if (createdBy === 'bob') {
         const joined = envelope('test', `conversation-${conversationId}`, 'participant.added', { conversationId, participantId: 'alice', addedBy: 'bob' });
-        await nats.store.append({ event: joined, expectedSequence: (await history(nats.store, created.subject, 'test')).at(-1)!.sequence }); await auth.handler.handle(joined, db);
+        const historicalEvents = [joined];
+        await nats.seed(historicalEvents);
+        await auth.handler.handle(joined, db);
       }
       if (conversationId === 'closed') await nats.store.append({ expectedSequence: (await history(nats.store, created.subject, 'test')).at(-1)!.sequence,
         event: envelope('test', created.subject, 'conversation.closed', { conversationId, closedBy: 'alice' }) });

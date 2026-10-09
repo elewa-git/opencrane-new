@@ -28,7 +28,7 @@ services:
     env_file: ${DEV_STACK_DIR}/openfga.env
   openfga:
     image: *openfga
-    command: [run, --http-addr, "0.0.0.0:8080", --grpc-addr, "127.0.0.1:8081", --playground-enabled=false, --metrics-enabled=false]
+    command: [run, --max-tuples-per-write=103, --http-addr, "0.0.0.0:8080", --grpc-addr, "127.0.0.1:8081", --playground-enabled=false, --metrics-enabled=false]
     env_file: ${DEV_STACK_DIR}/openfga.env
     ports: ["127.0.0.1:${FGA_PORT}:8080"]
     depends_on:

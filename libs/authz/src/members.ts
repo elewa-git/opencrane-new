@@ -1,5 +1,5 @@
 import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
-  ownershipSteppedDownSchema, conversationCreatedDataSchema,
+  ownershipSteppedDownSchema, conversationCreatedDataSchema, conversationEventId,
   grantRevokedDataSchema, handlerSubscriptions, parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { registerHandler } from "@opencrane/handlers";
 import { objectId, TupleClient, type Binding, type Tuple } from "./client.ts";
@@ -59,16 +59,15 @@ function createMemberAuthorisation(binding: Binding) {
   const object = objectId("silo", binding.silo);
 
   async function applyConversation(event: EventEnvelope, receipt: Tuple) {
-    const conversationId = field(event.data, 'conversationId');
-    if (event.subject !== `conversation-${conversationId}`) {
-      throw new Error('Conversation subject mismatch');
-    }
+    const conversationId = conversationEventId(event);
     const target = objectId('conversation', binding.silo, conversationId);
     let participantIds: string[];
+    let creatorId: string | undefined;
     if (event.type === 'conversation.created') {
       const created = conversationCreatedDataSchema.parse(event.data);
       participantIds = [created.createdBy];
-      if (created.mode === 'direct') participantIds = created.participantIds;
+      if (created.mode !== 'agent_session') participantIds = created.participantIds;
+      if (created.mode === 'group') creatorId = created.createdBy;
     } else {
       participantIds = [field(event.data, 'participantId')];
     }
@@ -76,6 +75,11 @@ function createMemberAuthorisation(binding: Binding) {
     const deletes: Tuple[] = [];
     if (event.type === 'conversation.created') {
       writes.push({ user: object, relation: 'silo', object: target });
+    }
+    if (creatorId) {
+      const creator = { user: objectId('person', binding.silo, creatorId),
+        relation: 'creator', object: target };
+      writes.push(creator);
     }
     for (const participantId of participantIds) {
       const participant = {
@@ -298,7 +302,8 @@ function createMemberAuthorisation(binding: Binding) {
         relation,
       });
     },
-    conversation(memberId: string, conversationId: string, relation: 'read' | 'post') {
+    conversation(memberId: string, conversationId: string,
+      relation: 'read' | 'post' | 'manage_participants') {
       return client.check({ user: objectId('person', binding.silo, memberId),
         object: objectId('conversation', binding.silo, conversationId), relation });
     },

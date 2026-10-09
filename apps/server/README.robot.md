@@ -1117,3 +1117,7 @@ the candidate read and delayed member projections.
 
 Turn lists now include reviewed, zero-cost Ask tools only when discovery carries a review.
 Allow tools still fail if policy changes to Ask mid-turn.
+
+Human group events are now valid stored records. Existing chat reads, lists and
+subscriptions refuse group mode until its bounded access reader is introduced.
+Creation and participant commands for that mode are not exposed yet.

@@ -111,3 +111,13 @@ and newline, plus lone surrogates. Saved encrypted events still parse; the memor
 projection quarantines earlier refused text after decryption.
 Source/dependency limits are 8/32; ids use 1–200 ASCII letters, digits, `_` or `-`.
 Storage commands and their whole-command size limit are not implemented yet.
+
+## Human group records
+
+`conversation.created` accepts `group` with 2–100 distinct `participantIds`, including
+`createdBy`. Ids use 1–200 ASCII letters, digits, underscores or hyphens; conversation
+ids reject `provider-`. `groupId` and non-negative safe integer `groupSnapshotPosition`
+must appear together. Assistant and payer fields are refused. Direct and legacy
+session rules stay unchanged. Participant events now own `participation-<id>`;
+append refuses conversation subjects, but replay still reads them.
+`conversationEventId` matches the data id to the exact current or legacy subject.
