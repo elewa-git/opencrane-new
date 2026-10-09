@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and permission checks"]
-  server -.->|checks organisation, access, invitation choices and spending| libs["libs/*<br/>shared code"]
+  server -.->|checks organisation, access, invitation accounts and spending| libs["libs/*<br/>shared code"]
   server -->|records changes, model grants, chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -33,7 +33,7 @@ flowchart LR
   without naming its author. Reports destroyed or quarantined facts without text.
   These reads need the memory worker and its existing private key directory.
   It returns current facts only after the read table has caught up with their events.
-- Accepts bound invitations after a recent sign-in with a verified email, while
+- Accepts bound and email invitations after a recent sign-in with a verified email, while
   the inviter is still an owner or admin. Records whether a personal assistant was requested.
 - Checks an invitation email and explains that the person is confirmed when they accept.
 - Records and renews email invitations for owners and admins. Reads saved command results.
@@ -91,7 +91,7 @@ use it to refuse calls if the tool changes to Ask during the turn.
    is confirmed when they accept; the server does not look them up in Zitadel.
    An admin can save or renew an email invitation and recover its saved result.
    The server finds matching emails in its member table and checks their events.
-   Acceptance of these email invitations is not built yet.
+   Acceptance records the signed-in account and refuses an account already active in the silo.
 4. **A person chats with an assistant.** The server sends the turn to that person's
    computer and passes the assistant's progress back to the browser as it arrives. The
   person can stop the turn. A personal turn may include a short list of reviewed

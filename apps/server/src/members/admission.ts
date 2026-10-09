@@ -50,7 +50,7 @@ function memberSequence(rows: StoredEvent[]) {
   return rows.at(-1)?.sequence ?? 0;
 }
 
-async function memberStreams(store: EventStore, silo: string, deadline: number) {
+async function memberStreams(store: Pick<EventStore, 'readStream'>, silo: string, deadline: number) {
   const streams = new Map<string, StoredEvent[]>();
   let read = 0;
   // Refuse an incomplete search rather than miss an older active identity binding.
@@ -95,4 +95,16 @@ export async function deriveAdmission(store: EventStore, silo: string, issuer: s
     return { memberId, memberSequence: memberSequence(rows), membership: state.membership };
   }
   return { status: 'admission_limit' as const };
+}
+
+export async function hasActiveIdentity(store: Pick<EventStore, 'readStream'>, silo: string,
+  issuer: string, subject: string, now: Date): Promise<boolean> {
+  const streams = await memberStreams(store, silo, performance.now() + 10_000);
+  for (const rows of streams.values()) {
+    const state = admission(rows, issuer, subject, now);
+    if (state.bound && state.membership === 'joined') {
+      return true;
+    }
+  }
+  return false;
 }

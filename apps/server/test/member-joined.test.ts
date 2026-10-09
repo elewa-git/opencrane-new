@@ -217,7 +217,6 @@ it.each([
   { name: 'other event silo', identity: session, patch: {}, silo: 'other', reason: 'wrong_silo' },
   { name: 'unknown invitation', identity: session, patch: { invitationId: 'another' }, silo: 'acme', reason: 'unknown_invitation' },
   { name: 'expired invitation at exact boundary', identity: session, patch: { expiresAt: '2026-10-01T12:00:00Z' }, silo: 'acme', reason: 'expired_invitation' },
-  { name: 'legacy unbound invitation', identity: session, patch: { invitedIdentity: undefined }, silo: 'acme', reason: 'unbound_invitation' },
   { name: 'legacy invitation without expiry', identity: session, patch: { expiresAt: undefined }, silo: 'acme', reason: 'unbound_invitation' },
 ])('refuses $name without appending', async ({ identity, patch, silo, reason }) => {
   await invite(patch, silo);
@@ -376,8 +375,8 @@ async function matchingEmail() {
 }
 it('accepts a verified email after trimming and ignoring case', matchingEmail);
 
-async function inviterEnded(type: string) {
-  await invite();
+async function inviterEnded(type: string, emailOnly = false) {
+  await invite(emailOnly ? { invitedIdentity: undefined } : {});
   let data: Record<string, unknown>;
   if (type === 'member.removed') {
     data = { memberId: 'admin', removedBy: 'owner' };
@@ -394,7 +393,10 @@ async function inviterEnded(type: string) {
   expect(await history()).toHaveLength(1);
 }
 const inviterChanges = ['member.role_changed', 'member.removed'];
-it.each(inviterChanges)('refuses an inviter after %s', inviterEnded);
+async function boundInviterEnded(type: string) {
+  await inviterEnded(type);
+}
+it.each(inviterChanges)('refuses an inviter after %s', boundInviterEnded);
 
 async function invalidAdmission(kind: string) {
   let earlier: StoredEvent['event'] = invitation();
@@ -437,8 +439,8 @@ async function seedInviter() {
 }
 
 
-async function lostReply() {
-  await invite();
+async function lostReply(emailOnly = false) {
+  await invite(emailOnly ? { invitedIdentity: undefined } : {});
   const append = nats.store.append.bind(nats.store);
   async function appendWithoutReply(command: Parameters<JoinStore['append']>[0]): Promise<never> {
     const result = await append(command);
@@ -456,7 +458,8 @@ async function lostReply() {
   });
   expect(await history()).toHaveLength(2);
 }
-it('recovers a lost append reply after reconnecting without saving another join', lostReply);
+it.each([false, true])('recovers a lost append reply after reconnecting (email-only %s)',
+  lostReply);
 
 async function refusesBodyIdentity() {
   await invite();
@@ -503,8 +506,9 @@ async function refusesChangedAuthority() {
 it('refuses authority lost during the final event check without saving a join',
   refusesChangedAuthority);
 
-async function expiryAfterAuthority() {
-  await invite({ expiresAt: '2026-10-01T12:00:01Z' });
+async function expiryAfterAuthority(emailOnly = false) {
+  await invite({ expiresAt: '2026-10-01T12:00:01Z',
+    ...(emailOnly ? { invitedIdentity: undefined } : {}) });
   const head = nats.store.head.bind(nats.store);
   async function advanceClock(subject?: string, deadline?: number) {
     const position = await head(subject, deadline);
@@ -520,7 +524,8 @@ async function expiryAfterAuthority() {
     interception.mockRestore();
   }
 }
-it('rechecks invitation expiry after the final authority check', expiryAfterAuthority);
+it.each([false, true])('rechecks expiry after the final authority check (email-only %s)',
+  expiryAfterAuthority);
 
 const identityOrderingCases = [
   { state: 'expired', claim: 'account' },
@@ -557,14 +562,16 @@ async function noStoreReplies() {
 }
 it('marks acceptance, retry and refusal replies as no-store', noStoreReplies);
 
-async function inviterRefusalStatus() {
-  await invite({ invitedBy: 'absent-inviter' });
+async function inviterRefusalStatus(emailOnly = false) {
+  await invite({ invitedBy: 'absent-inviter',
+    ...(emailOnly ? { invitedIdentity: undefined } : {}) });
   const response = await accept();
   expect(response.statusCode).toBe(403);
   expect(response.json()).toEqual({ status: 'refused', reason: 'inviter_authority_ended' });
   expect(await history()).toHaveLength(1);
 }
-it('returns 403 when inviter authority ended', inviterRefusalStatus);
+it.each([false, true])('returns 403 when inviter authority ended (email-only %s)',
+  inviterRefusalStatus);
 
 async function missingEmailClaim() {
   await invite();
@@ -576,7 +583,7 @@ async function missingEmailClaim() {
 it('requires sign-in again when verified is true but the email claim is missing',
   missingEmailClaim);
 
-async function ownerInviter() {
+async function ownerInviter(emailOnly = false) {
   const roleChange = { ...event(randomUUID(), 'member-admin', 'member.role_changed'),
     silo: 'acme', data: { memberId: 'admin', previousRole: 'admin', newRole: 'member',
       changedBy: 'owner' } };
@@ -586,13 +593,14 @@ async function ownerInviter() {
     silo: 'acme', data: { ownerIds: ['admin'] } };
   expect((await nats.store.append({ event: ownership, expectedSequence: 0 })).status)
     .toBe('appended');
-  await invite();
+  await invite(emailOnly ? { invitedIdentity: undefined } : {});
   const response = await accept();
   expect(response.statusCode).toBe(200);
   expect(response.json()).toMatchObject({ status: 'joined' });
   expect(await history()).toHaveLength(2);
 }
-it('accepts an invitation from an Owner recorded in ownership events', ownerInviter);
+it.each([false, true])('accepts an invitation from a recorded Owner (email-only %s)',
+  ownerInviter);
 
 async function recentSignIn(age: number) {
   await invite();
@@ -617,3 +625,230 @@ async function nonAsciiEmail(email: string) {
 }
 it.each(['Kelvin@example.test', 'kelvin@éxample.test'])(
   'refuses the non-ASCII session email %s', nonAsciiEmail);
+
+async function acceptsEmailInvitation() {
+  await invite({ invitedIdentity: undefined, personalAssistant: 'none' });
+  const identity = { ...session, email: ' ALICE@Example.test ' };
+  const response = await accept(input, identity);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual({ status: 'joined', memberId: 'alice', sequence: 3 });
+  const records = await history();
+  expect(records).toHaveLength(2);
+  expect(records[1]?.event.data).toMatchObject({
+    memberId: 'alice', personalAssistant: 'none',
+    identity: { issuer: config.issuerUrl, sub: session.sub },
+  });
+}
+it('binds an email-only invitation to the verified account using its member id',
+  acceptsEmailInvitation);
+
+async function retriesEmailInvitation() {
+  await invite({ invitedIdentity: undefined });
+  expect((await accept()).statusCode).toBe(200);
+  const saved = await history();
+  clock = new Date('2026-10-03T12:00:00Z');
+  const identity = { ...session, emailVerified: false };
+  const response = await accept(input, identity);
+  expect(response.json()).toEqual({
+    status: 'already_joined', memberId: 'alice', sequence: 3,
+  });
+  expect(await history()).toEqual(saved);
+}
+it('returns the saved email-only join after expiry without checking email again',
+  retriesEmailInvitation);
+
+async function refusesActiveIdentity(kind: string) {
+  let identity = { issuer: config.issuerUrl, sub: session.sub };
+  if (kind === 'other-issuer') identity = { ...identity, issuer: 'https://other.test' };
+  if (kind === 'other-subject') identity = { ...identity, sub: 'another' };
+  const data = { memberId: 'existing', displayName: 'Alice', email: session.email,
+    role: 'member', identity };
+  let record: StoredEvent['event'] = {
+    ...event(randomUUID(), 'member-existing', 'member.joined'),
+    silo: 'acme', data };
+  if (kind === 'bootstrap') {
+    record = { ...record, type: 'silo.owner_bootstrapped', subject: 'member-bootstrap-owner',
+      data: { ...data, memberId: 'bootstrap-owner', role: 'owner' } };
+  }
+  if (kind === 'bound') {
+    const earlier = { ...invitation(), subject: 'member-existing', data: {
+      memberId: 'existing', email: session.email, role: 'member', invitedBy: 'admin',
+      invitationId: 'earlier', invitedIdentity: identity,
+    } };
+    expect((await nats.store.append({ event: earlier, expectedSequence: 0 })).status)
+      .toBe('appended');
+    const { identity: _omitted, ...legacy } = data;
+    record = { ...record, data: legacy };
+  }
+  const position = await nats.store.head(record.subject);
+  expect((await nats.store.append({ event: record, expectedSequence: position })).status)
+    .toBe('appended');
+  if (kind === 'departed') {
+    const removal = { ...event(randomUUID(), record.subject, 'member.removed'),
+      silo: 'acme', data: { memberId: 'existing', removedBy: 'admin' } };
+    const expectedSequence = await nats.store.head(record.subject);
+    await nats.store.append({ event: removal, expectedSequence });
+  }
+  await invite({ invitedIdentity: undefined });
+  const before = await nats.store.head();
+  const response = await accept();
+  if (['other-issuer', 'other-subject', 'departed'].includes(kind)) {
+    expect(response.statusCode).toBe(200);
+    expect(await nats.store.head()).toBe(before + 1);
+    return;
+  }
+  expect(response.statusCode).toBe(409);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'already_member' });
+  expect(await nats.store.head()).toBe(before);
+}
+it.each(['joined', 'bound', 'bootstrap', 'other-issuer', 'other-subject', 'departed'])(
+  'checks current issuer and subject across the silo (%s) without any read table',
+  refusesActiveIdentity);
+
+const emailInvitationRefusals = [
+  { name: 'unverified email', identity: { ...session, emailVerified: false },
+    reason: 'wrong_identity' },
+  { name: 'missing verification', identity: { ...session, emailVerified: undefined },
+    reason: 'sign_in_again' },
+  { name: 'missing email', identity: { ...session, email: undefined }, reason: 'sign_in_again' },
+  { name: 'different email', identity: { ...session, email: 'other@example.test' },
+    reason: 'wrong_identity' },
+  { name: 'non-ASCII email', identity: { ...session, email: 'Kelvin@example.test' },
+    reason: 'unsupported_email' },
+  { name: 'old sign-in', identity: { ...session, authTime: 1790852399 },
+    reason: 'sign_in_again' },
+  { name: 'future sign-in', identity: { ...session, authTime: 1790856001 },
+    reason: 'sign_in_again' },
+  { name: 'missing sign-in time', identity: { ...session, authTime: 0 },
+    reason: 'sign_in_again' },
+  { name: 'other organisation', identity: { ...session, orgId: 'org-other' },
+    reason: 'wrong_silo' },
+  { name: 'allowlisted external account',
+    identity: { ...session, sub: 'idp-owner', orgId: 'org-other' }, reason: 'wrong_silo' },
+];
+async function refusesEmailInvitation({ identity, reason }:
+  { identity: SessionData; reason: string }) {
+  await invite({ invitedIdentity: undefined });
+  const response = await accept(input, identity);
+  expect(response.json()).toEqual({ status: 'refused', reason });
+  expect(await history()).toHaveLength(1);
+}
+it.each(emailInvitationRefusals)('refuses an email-only invitation for $name',
+  refusesEmailInvitation);
+
+async function acceptsSignInBoundary() {
+  await invite({ invitedIdentity: undefined });
+  const identity = { ...session, authTime: 1790852400 };
+  expect((await accept(input, identity)).statusCode).toBe(200);
+}
+it('accepts an email-only invitation at exactly 60 minutes since sign-in',
+  acceptsSignInBoundary);
+
+async function emailInvitationState(kind: string) {
+  let patch: Record<string, unknown> = { invitedIdentity: undefined };
+  if (kind === 'expired') patch = { ...patch, expiresAt: clock.toISOString() };
+  await invite(patch);
+  let reason = 'expired_invitation';
+  if (kind === 'accepted') {
+    expect((await accept()).statusCode).toBe(200);
+    reason = 'invitation_not_pending';
+  }
+  if (kind === 'removed') {
+    const data = { memberId: 'alice', removedBy: 'admin' };
+    const removal = { ...event(randomUUID(), 'member-alice', 'member.removed'),
+      silo: 'acme', data };
+    expect((await nats.store.append({ event: removal, expectedSequence: 2 })).status)
+      .toBe('appended');
+    reason = 'access_removed';
+  }
+  const before = await history();
+  const body = { ...input, commandId: 'second-join' };
+  const response = await accept(body);
+  expect(response.json()).toEqual({ status: 'refused', reason });
+  expect(await history()).toEqual(before);
+}
+it.each(['expired', 'accepted', 'removed'])(
+  'refuses an email-only invitation that is %s', emailInvitationState);
+
+async function racesEmailAccounts(sameCommand: boolean) {
+  await invite({ invitedIdentity: undefined });
+  const append = nats.store.append.bind(nats.store);
+  let writes = 0;
+  let release: () => void = pendingRelease;
+  function pendingRelease() {}
+  function setRelease(resolve: () => void) {
+    release = resolve;
+  }
+  const barrier = new Promise<void>(setRelease);
+  async function competingAppend(command: Parameters<typeof append>[0]) {
+    writes++;
+    if (writes === 2) release();
+    await barrier;
+    return append(command);
+  }
+  const interception = vi.spyOn(nats.store, 'append').mockImplementation(competingAppend);
+  const body = { ...input, commandId: sameCommand ? input.commandId : 'other-command' };
+  const other = { ...session, sub: 'other-account' };
+  try {
+    const responses = await Promise.all([accept(), accept(body, other)]);
+    function responseStatus(response: typeof responses[number]) {
+      return response.statusCode;
+    }
+    const statuses = responses.map(responseStatus);
+    statuses.sort();
+    expect(statuses).toEqual([200, 409]);
+    for (const response of responses) {
+      if (response.statusCode === 409) {
+        expect(response.json()).toEqual({ status: 'refused', reason: 'wrong_identity' });
+      }
+    }
+    const records = await history();
+    expect(records).toHaveLength(2);
+    const joined = records[1]!;
+    expect(joined.event.data).toMatchObject({
+      identity: { issuer: config.issuerUrl, sub: joined.event.principal?.id },
+    });
+  } finally {
+    interception.mockRestore();
+  }
+}
+it.each([false, true])('lets one email account append and refuses the other (same command %s)',
+  racesEmailAccounts);
+
+
+async function refusesAccountJoinedDuringAccessCheck() {
+  await invite({ invitedIdentity: undefined });
+  const head = nats.store.head.bind(nats.store);
+  let changed = false;
+  async function competingJoin(subject?: string, deadline?: number) {
+    const position = await head(subject, deadline);
+    if (subject === 'member-alice' && !changed) {
+      changed = true;
+      const data = { memberId: 'alice', invitationId: input.invitationId,
+        email: session.email, displayName: 'Other', role: 'member',
+        identity: { issuer: config.issuerUrl, sub: 'other-account' } };
+      const joined = { ...event(randomUUID(), subject, 'member.joined'), silo: 'acme',
+        principal: { kind: 'human', id: 'other-account' }, data };
+      expect((await nats.store.append({ event: joined, expectedSequence: position })).status)
+        .toBe('appended');
+      return head(subject, deadline);
+    }
+    return position;
+  }
+  const interception = vi.spyOn(nats.store, 'head').mockImplementation(competingJoin);
+  try {
+    const response = await accept();
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ status: 'refused', reason: 'wrong_identity' });
+    expect(await history()).toHaveLength(2);
+  } finally {
+    interception.mockRestore();
+  }
+}
+it('clearly refuses another account that joins during the final access check',
+  refusesAccountJoinedDuringAccessCheck);
+
+async function emailInviterEnded(type: string) {
+  await inviterEnded(type, true);
+}
+it.each(inviterChanges)('refuses an email-only invitation after inviter %s', emailInviterEnded);

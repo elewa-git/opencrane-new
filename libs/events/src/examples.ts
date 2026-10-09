@@ -14,6 +14,7 @@ export const memberJoinedDataSchema = z
     // Optional for older events. The server acceptance command always sets it.
     invitationId: z.string().min(1).optional(),
     personalAssistant: z.enum(['provision', 'none']).optional(),
+    identity: z.object({ issuer: z.url(), sub: z.string().min(1) }).strict().optional(),
   })
   .strict();
 

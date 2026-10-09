@@ -129,3 +129,8 @@ The event store calls it before append, so mismatched ids cannot block later con
 
 `memoryWrittenDataSchema` exports the typed version-1 fields for server validation.
 Storage commands are in the companion draft.
+
+`member.joined` accepts optional `identity: { issuer, sub }` for email-only
+acceptance. Issuer is a URL and subject is a non-empty string. Bound invitation
+joins keep their old event shape. The member projection checks that the recorded
+subject matches the human principal and applies the binding for later reads.

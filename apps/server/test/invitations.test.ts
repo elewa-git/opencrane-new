@@ -341,7 +341,7 @@ async function refusesTargetJoining() {
 }
 it('refuses a matching pending target that joins during the write check', refusesTargetJoining);
 
-async function refusesUnboundAcceptance() {
+async function acceptsEmailInvitation() {
   const created = await request('POST');
   expect(created.statusCode).toBe(200);
   const invitation = created.json<{ invitationId: string }>();
@@ -354,12 +354,25 @@ async function refusesUnboundAcceptance() {
     commandId: 'accept-person', displayName: 'Person' };
   const options = { method: 'POST' as const, url: '/members/join', headers, payload };
   const response = await app.inject(options);
-  expect(response.statusCode).toBe(409);
-  expect(response.json()).toEqual({ status: 'refused', reason: 'unbound_invitation' });
-  expect(await records()).toEqual(before);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'joined', memberId });
+  const after = await records();
+  expect(after.slice(0, -1)).toEqual(before);
+  expect(after.at(-1)?.event.data).toMatchObject({
+    identity: { issuer: config.issuerUrl, sub: 'person' }, personalAssistant: 'none',
+  });
+  const db = pgDb(dbs.queue);
+  await members.apply(db, after.at(-1)!.event, after.at(-1)!.sequence);
+  const query = 'SELECT issuer, sub FROM member_identities WHERE silo = $1 AND member_id = $2';
+  const expected = [{ issuer: config.issuerUrl, sub: 'person' }];
+  expect((await db.query(query, ['acme', memberId])).rows).toEqual(expected);
+  await members.drop(db);
+  await members.create(db);
+  for (const row of after) await members.apply(db, row.event, row.sequence);
+  expect((await db.query(query, ['acme', memberId])).rows).toEqual(expected);
 }
-it('refuses acceptance of a route-created invitation with the right verified email',
-  refusesUnboundAcceptance);
+it('accepts a route-created email invitation and rebuilds its account binding',
+  acceptsEmailInvitation);
 
 async function reinvitesRemovedEmail() {
   const joined = { memberId: 'old-person', displayName: 'Person', email, role: 'member' };

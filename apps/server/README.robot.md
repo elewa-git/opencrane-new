@@ -963,13 +963,13 @@ Bound invitation acceptance copies `personalAssistant: provision|none` into
 The strict join request cannot override it. The join receipt proves membership,
 not assistant creation or computer readiness. The assistant reaction runs later.
 `test/member-joined.test.ts` covers choice, repeats and lost replies on real NATS.
-Email invitation acceptance binding remains follow-up work for #85.
+Email-only acceptance records the account issuer and subject in the join event.
 
 Email create/renew and original-command status follow the
 [member API](../../docs/api/members.md#create-and-renew-email-invitations).
 `test/invitations.test.ts` uses disposable NATS, PostgreSQL and OpenFGA for
 current access, strict input, renewal, repeats, lost replies and slow history.
-The email invitation records remain unbound and the join route refuses them.
+Email invitations have no account binding until the join route accepts them.
 
 The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.
@@ -1125,9 +1125,16 @@ Stored data failures return 503, while invalid request bodies return 400.
 A changed watched stream returns the caller's saved command result, an access
 refusal if their admin access ended, or 409 `concurrent_change`.
 The optional invitation clock sets session checks, event time and seven-day expiry.
-Tests cover its exact expiry boundary and a route-created invitation refused by join.
-Follow-up acceptance must refuse active identities itself, including joins after
+Tests cover its exact expiry boundary and acceptance of a route-created invitation.
+Acceptance refuses active identities itself, including joins after
 the candidate read and delayed member projections.
+
+Email-only join checks current member events through the admission-history reader
+before the two-second access check. It keeps the invitation’s member id and records issuer
+and subject on `member.joined`. The search stops after ten seconds or 10,000 member
+events and refuses incomplete results. The member projection applies this account
+binding and can rebuild it. Same-email accounts compete through one conditional
+append. See the [email acceptance contract](../../docs/api/members.md#email-only-invitation-acceptance).
 
 ## Waiting tool calls
 

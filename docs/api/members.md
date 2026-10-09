@@ -57,10 +57,9 @@ This read checks access once and uses no write freshness check.
 At acceptance, the server checks the signed-in identity using its issuer and subject.
 The ID token must have `email_verified=true`, and its email must match the invited
 email after trimming and ignoring ASCII letter case. The organisation check must
-pass. The planned email invitation flow will derive the member id at acceptance
-from the silo, issuer, subject and admission number. The email-input route does
-not create an invitation or grant membership. The existing `/members/join` command
-still requires an invitation bound to a sign-in identity.
+pass, including the exact configured organisation. Acceptance keeps the invitation's
+member id and records the signed-in issuer and subject. The email-input route does
+not create an invitation or grant membership.
 
 ## Create and renew email invitations
 
@@ -105,19 +104,15 @@ Owner/Admin events and OpenFGA, checks access once and appends nothing. All repl
 use `Cache-Control: no-store`. Invalid bodies return 400, missing sessions 401,
 access refusals 403 and unavailable dependencies 503.
 
-Acceptance is not built: `/members/join` returns `unbound_invitation` for these
-records. No usable link or email is sent. Follow-up acceptance must derive the
-admission id, bind issuer/subject on join and settle two accounts with the same
-verified email through one conditional append. It must also refuse an already
-active identity itself: a person can join after this route's candidate check or
-before the members read table catches up. Lists and minimal receipts after
-self-demotion remain follow-up work.
+`POST /members/join` accepts these email invitations under the checks below.
+No usable link or email is sent. Lists and minimal receipts after self-demotion
+remain follow-up work.
 
 ## Admission member ids
 
 The server keeps a helper for selecting a member id from an authenticated issuer
-and subject. The email route does not call it. Acceptance will use it after checking
-the person's identity. Active or pending invitations keep their existing event-bound
+and subject. Email invitation creation and acceptance do not call it: they keep
+the invitation's member id. Active or pending invitations keep their existing event-bound
 ids. Otherwise SHA-256 of JSON `[silo, issuer, subject, admissionNumber]` selects
 `admission-<hash>`, starting at zero and skipping removed member streams.
 The helper tries at most 20 admissions. Conflicting identity events return
@@ -129,6 +124,28 @@ from another silo makes the search unavailable. It appends nothing.
 The [rework receipt](../process/p4-3-pr2-rework.md) records the checks run for this route.
 The complete fresh-install invitation journey is NOT RUN.
 
+## Email-only invitation acceptance
+
+`POST /members/join` accepts an invitation without `invitedIdentity` when the
+verified ID-token email matches. It uses the same strict body, organisation,
+recent sign-in, current inviter, pending-state and expiry checks as bound acceptance.
+The `memberId` in the body must be the invitation's id. The one `member.joined`
+event records `identity: { issuer, sub }` from the session and server configuration.
+It also keeps the invitation's role, email and assistant choice.
+
+Before the final two-second access check, acceptance checks current member events
+for an active binding to that issuer and subject anywhere in the silo. It returns
+409 `already_member` even when the members read table has not caught up. This search
+uses the existing admission-history reader, with a ten-second deadline and 10,000-event
+limit across member streams. An incomplete search or foreign-silo event returns 503.
+It never reopens a removed stream. These history reads finish before the access check.
+
+Two accounts can have the same verified email. They compete for the same invitation
+stream through one conditional append. The account that stores the join binds the
+invitation to its issuer and subject; the other receives 409 `wrong_identity`.
+An exact saved-command repeat, including after a lost reply, returns `already_joined`
+without another append. Bound invitations retain their existing acceptance behaviour.
+
 ## Bound invitation acceptance
 
 The existing `POST /members/join` remains available for invitations already bound
@@ -139,8 +156,8 @@ in its one `member.joined` event. An older invitation without the field means
 `provision`. The request body cannot change the choice. `none` skips personal
 assistant creation and the computer claim that follows it; it still admits the member.
 An exact retry, including after a lost reply, returns the saved join receipt.
-It does not rerun assistant creation. Binding an email invitation to an account
-at acceptance remains separate work.
+It does not rerun assistant creation. Email-only acceptance uses the same request
+and records the account binding in the join event.
 Fresh acceptance requires the exact Origin and configured organisation, including
 for accounts allowlisted for general sign-in. The encrypted session must keep an
 ID-token email with `email_verified=true`. Both addresses must use ASCII characters;
@@ -172,8 +189,8 @@ is missing or not boolean true. That check writes no Zitadel setting. A trusted
 admin must correct the app before setup can continue.
 
 Emails are not unique in Zitadel. An email is not an account identifier.
-These existing invitations also require the exact issuer and subject. A future
-email-only invitation must allow only one account to complete acceptance.
+Bound invitations also require the exact issuer and subject. An email-only invitation
+allows only one account to complete acceptance.
 
 ### Current access and retries
 
@@ -185,7 +202,9 @@ member and ownership events; otherwise the response is 403 with
 The final access check watches only the joining member, inviter and ownership
 streams for at most two seconds. A changed stream or unavailable check returns
 503 and saves no join in that attempt, except a confirmed inviter demotion or
-removal returns 403 `inviter_authority_ended`. An unavailable recheck stays 503.
+removal returns 403 `inviter_authority_ended`. Email-only acceptance also reloads
+the invitation after a changed-stream check: a saved join returns its receipt,
+and another account's binding returns 409 `wrong_identity`. An unavailable recheck stays 503.
 Expiry is checked again after the final access check.
 
 There is an accepted small risk between that last check and append: the inviter

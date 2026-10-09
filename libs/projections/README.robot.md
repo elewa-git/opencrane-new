@@ -61,7 +61,8 @@ The members table uses `(silo, member_id)` as its key. Invitations are
 `invited`, acceptance replaces details and marks `joined`, removal marks
 `removed`; role changes update the role. Pending and removed rows grant
 no rights. `member_changes` stores each resulting row with its event-log position;
-`member_identities` binds invitations to OIDC issuer/subject for realtime reads.
+`member_identities` binds invitations and email-only joins to OIDC issuer/subject
+for realtime reads. A join binding must match its human principal. Replay rebuilds it.
 These tables, member rows and checkpoints share the same transaction. `pg_notify`
 is called in that transaction and delivered after commit, with no SQL business rules.
 `connectMemberFeed` owns a read pool and a dedicated LISTEN connection; callers

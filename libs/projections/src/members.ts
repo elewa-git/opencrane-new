@@ -147,12 +147,27 @@ async function applyIdentity(
     }
   }
   if (event.type === "member.joined") {
-    const joined = memberJoinedDataSchema.parse(data);
-    await db.query(
-      `DELETE FROM ${tables.identities} WHERE silo = $1 AND member_id = $2
-      AND (invitation_id IS DISTINCT FROM $3 OR sub IS DISTINCT FROM $4)`,
-      [event.silo, id, joined.invitationId ?? null, event.principal?.id ?? null],
-    );
+    await applyJoinedIdentity(tables, db, event, data, id);
+  }
+}
+
+async function applyJoinedIdentity(tables: MemberTables, db: Query, event: EventEnvelope,
+  data: unknown, id: string): Promise<void> {
+  const joined = memberJoinedDataSchema.parse(data);
+  await db.query(
+    `DELETE FROM ${tables.identities} WHERE silo = $1 AND member_id = $2
+    AND (invitation_id IS DISTINCT FROM $3 OR sub IS DISTINCT FROM $4)`,
+    [event.silo, id, joined.invitationId ?? null, event.principal?.id ?? null],
+  );
+  if (joined.identity) {
+    if (event.principal?.kind !== 'human' || event.principal.id !== joined.identity.sub) {
+      throw new Error('Join identity mismatch');
+    }
+    await db.query(`INSERT INTO ${tables.identities} VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (silo, member_id) DO UPDATE
+      SET issuer = $3, sub = $4, invitation_id = $5`,
+      [event.silo, id, joined.identity.issuer, joined.identity.sub,
+        joined.invitationId ?? null]);
   }
 }
 

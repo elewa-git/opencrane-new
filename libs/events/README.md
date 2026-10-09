@@ -22,7 +22,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.-> events["libs/events<br/>event, memory text, metadata and participant checks"]
+  server["apps/server<br/>back end"] -.->|records invitation accounts| events["libs/events<br/>event, memory text, metadata and participant checks"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant choices| events
@@ -49,7 +49,8 @@ Tool access decisions can carry a call id. The shared text check refuses hidden
 control characters before saving the id.
 It also records when part of a private reply was lost before the server could save it.
 Invitation and join events can record whether a personal assistant was requested.
-Older events without that choice still parse.
+Older events without that choice still parse. Email-only join events also record
+the account issuer and subject. Older joins without those fields remain valid.
 
 Group chat records name each participant explicitly. Participant changes use a
 separate event stream so ordinary messages do not change access.

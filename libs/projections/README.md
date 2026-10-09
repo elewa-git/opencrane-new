@@ -24,7 +24,7 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills tables, including configured memory| projections["libs/projections<br/>read tables, message lookups and content keys"]
   server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
-  projections -->|writes tables| pg
+  projections -->|writes tables and account bindings| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
@@ -33,6 +33,7 @@ flowchart LR
 ## What it is responsible for
 
 - Turn ordered events into tables that the server can read.
+- Bind member accounts from bound invitations or accepted email invitations.
 - Keep the latest model grant for each person, group or assistant, including revoked history.
 - Keep assistant names and personal owners' display names for access choices.
 - Copy tool progress and tool access decisions into each conversation's feed.
