@@ -870,3 +870,14 @@ pinned gateway with a recording upstream. It checks zero holds and sends for bou
 or incomplete tokens, unchanged legacy traffic, matched issuance and reservation
 replay with the original cents and tariff. Set `PG_TEST_URL` to a disposable server.
 Fresh-install migration, paid calls and retirement remain NOT RUN.
+
+`test/provider-turn-guards.test.ts` checks a signed pass with both provider fields
+missing from a bound turn. It also checks each provider, position and model mismatch
+before the later managed-call refusal. Malformed claims must fail before the
+decision checks the turn's recorded activity. Issuance must refuse a changed task.
+
+`test/provider-turn-replay.test.ts` feeds incomplete provider pairs straight to
+budget replay, without using append validation. A real NATS test records usage
+with a non-zero cost, delivers it twice, restarts the budget actor and delivers it
+again. It checks one saved settlement and unchanged provider, model, payer and
+price-table fields. It sends no provider request.

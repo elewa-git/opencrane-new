@@ -1239,3 +1239,9 @@ Turn start/close records can retain `providerId`, `bindingSequence` and `model`.
 `turnCommand` keeps the first start's choice on repeat and closure. The bridge
 uses that saved model when issuing another pass. Legacy records keep task-table
 selection. Admission does not yet select a saved assistant or default binding.
+
+`test/bridge-replay.test.ts` checks a bound turn through real NATS, a WebSocket
+connection and the signer. The start acknowledgement contains a signed pass with
+the saved provider, binding position and model. Reconnecting and repeating the
+report after another binding is saved returns the same choice. The test verifies
+the signature and claims; it makes no paid call.

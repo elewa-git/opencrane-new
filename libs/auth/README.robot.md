@@ -204,3 +204,8 @@ Turn issuance accepts optional `providerId` and `bindingSequence` together.
 start of that turn before signing. A missing or different choice is refused.
 `tokenIssuer.turn` validates the pair and signs both claims; it never signs a
 provider configuration revision. Legacy turns remain valid without these claims.
+
+`test/provider-turn-validation.test.ts` checks provider-id syntax and length,
+fractional binding positions and positions above the safe integer limit at signing.
+These tests call the signer directly, so a recorded-turn comparison cannot hide a
+missing input check.

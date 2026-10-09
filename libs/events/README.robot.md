@@ -145,3 +145,9 @@ or neither. Turn start/close data also requires `model` when these fields are
 present, and excludes `model` when they are absent. Old events still parse.
 `budget.reserved.modelCall` accepts the optional pair and keeps its existing
 model, price table and payer. These fields do not change settlement calculations.
+
+`test/provider-turn-validation.test.ts` checks model presence on start and close
+records separately. Each record needs a model exactly when it names a provider.
+Closure tests also check each incomplete provider pair. Storage validation refuses
+bad provider ids and fractional or unsafe binding positions on turn and reservation
+records.
