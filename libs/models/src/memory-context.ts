@@ -72,10 +72,14 @@ async function requireRecordedGrants(store: EventStore, silo: string,
   let assistantAllowed = false;
   // Require saved grants too. Leftover permissions cannot select memory on their own.
   for await (const row of store.readStream(subject, 1, fresh.deadline)) {
-    if (row.sequence > fresh.head) break;
+    if (row.sequence > fresh.head) {
+      break;
+    }
     const event = row.event;
     const fields = data(event);
-    if (!isResourceGrant(event, fields, silo, resourceType, resourceId)) continue;
+    if (!isResourceGrant(event, fields, silo, resourceType, resourceId)) {
+      continue;
+    }
     const allowed = event.type === 'grant.given';
     const kind = fields['granteeKind'];
     // Apply old revocations without a kind to both identities, as OpenFGA does.
@@ -87,13 +91,17 @@ async function requireRecordedGrants(store: EventStore, silo: string,
       assistantAllowed = allowed;
     }
   }
-  if (!memberAllowed || !assistantAllowed) throw new Error('Recorded memory grant refused');
+  if (!memberAllowed || !assistantAllowed) {
+    throw new Error('Recorded memory grant refused');
+  }
 }
 
 function isResourceGrant(event: StoredEvent['event'], fields: Record<string, unknown>,
   silo: string, resourceType: string, resourceId: string) {
   if (event.silo !== silo || fields['resourceType'] !== resourceType ||
-      fields['resourceId'] !== resourceId) return false;
+      fields['resourceId'] !== resourceId) {
+    return false;
+  }
   return event.type === 'grant.given' || event.type === 'grant.revoked';
 }
 
@@ -125,7 +133,9 @@ async function liveMemoryTurn(store: EventStore, binding: Binding, claims: Threa
     threadId: identifier, executionMode: z.string().optional() }).parse(start.event.data);
   if (recorded.requesterId !== claims.requester || recorded.conversationId !== claims.conversation ||
       recorded.threadId !== claims.thread) throw new Error('Memory turn refused');
-  if (recorded.executionMode !== 'restricted') throw new Error('Memory execution mode refused');
+  if (recorded.executionMode !== 'restricted') {
+    throw new Error('Memory execution mode refused');
+  }
   function ended(row: (typeof activity.conversation)[number]) {
     return row.event.type === 'conversation.closed' || closesDecisionTurn(row.event, claims.turn);
   }
