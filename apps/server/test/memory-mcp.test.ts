@@ -164,8 +164,48 @@ async function assertRecallRefused(target: typeof setup, backend: typeof app) {
   }
 }
 
-it('requires recorded member and assistant grants despite leftover OpenFGA permission',
-  async function recordedGrants() {
+async function recordedMemoryGrant(granteeKind: string) {
+  const target = await fixture(2000, 20000, false, 'gpt-6-luna', false, 'manual',
+    'sales', 'restricted');
+  let backend: typeof app | undefined;
+  try {
+    await target.stopDispatch();
+    await target.runtime.stop();
+    await govern(target);
+    backend = await isolatedBackend(target);
+    // Leave real permissions without matching events, as after an incorrect rebuild.
+    await grantMemory(target, 'member', 'alice', false);
+    await grantMemory(target, 'assistant', 'assistant', false);
+    const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+    const otherKind = granteeKind === 'member' ? 'assistant' : 'member';
+    const otherId = otherKind === 'member' ? 'alice' : 'assistant';
+    await grantMemory(target, otherKind, otherId);
+    await assertRecallRefused(target, backend);
+    await grantMemory(target, otherKind, granteeId);
+    await assertRecallRefused(target, backend);
+    await grantMemory(target, granteeKind, granteeId);
+    const allowed = await target.call(headers, call, route);
+    expect(allowed.status, allowed.text).toBe(200);
+    const revoked = await target.append(grantStream('memory_read', scopeId),
+      'grant.revoked', { resourceType: 'memory_read', resourceId: scopeId,
+        granteeId, revokedBy: 'alice' });
+    await target.auth.handler.handle(revoked, target.db);
+    await grantMemory(target, granteeKind, granteeId, false);
+    const identityKind = granteeKind === 'member' ? 'person' : 'assistant';
+    expect(await target.auth.use(identityKind, granteeId, 'memory_read', scopeId))
+      .toMatchObject({ allowed: true });
+    await assertRecallRefused(target, backend);
+  } finally {
+    await backend?.close();
+    await target.close();
+  }
+}
+it.each(['member', 'assistant'])(
+  'requires a recorded %s memory grant of the right kind despite OpenFGA permission',
+  recordedMemoryGrant, 120_000);
+
+it('requires recorded MCP grants independently of valid memory grants',
+  async function recordedMcpGrants() {
     const target = await fixture(2000, 20000, false, 'gpt-6-luna', false, 'manual',
       'sales', 'restricted');
     let backend: typeof app | undefined;
@@ -173,21 +213,9 @@ it('requires recorded member and assistant grants despite leftover OpenFGA permi
       await target.stopDispatch();
       await target.runtime.stop();
       await govern(target, false);
-      backend = await isolatedBackend(target);
-      // Leave real permissions without matching events, as after an incorrect rebuild.
-      await grantMemory(target, 'member', 'alice', false);
-      await grantMemory(target, 'assistant', 'assistant', false);
-      expect(await target.auth.use('person', 'alice', 'memory_read', scopeId))
-        .toMatchObject({ allowed: true });
-      expect(await target.auth.use('assistant', 'assistant', 'memory_read', scopeId))
-        .toMatchObject({ allowed: true });
-      await assertRecallRefused(target, backend);
-      await grantMemory(target, 'assistant', 'alice');
-      await grantMemory(target, 'member', 'assistant');
-      await assertRecallRefused(target, backend);
-      await grantMemory(target, 'assistant', 'assistant');
-      await assertRecallRefused(target, backend);
       await grantMemory(target, 'member', 'alice');
+      await grantMemory(target, 'assistant', 'assistant');
+      backend = await isolatedBackend(target);
       await assertRecallRefused(target, backend);
       for (const granteeKind of ['member', 'assistant']) {
         const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
@@ -198,13 +226,6 @@ it('requires recorded member and assistant grants despite leftover OpenFGA permi
         await target.auth.handler.handle(grant, target.db);
         if (granteeKind === 'member') await assertRecallRefused(target, backend);
       }
-      const revoked = await target.append(grantStream('memory_read', scopeId),
-        'grant.revoked', { resourceType: 'memory_read', resourceId: scopeId,
-          granteeId: 'assistant', revokedBy: 'alice' });
-      await target.auth.handler.handle(revoked, target.db);
-      await grantMemory(target, 'assistant', 'assistant', false);
-      await assertRecallRefused(target, backend);
-      await grantMemory(target, 'assistant', 'assistant');
       const allowed = await target.call(headers, call, route);
       expect(allowed.status, allowed.text).toBe(200);
     } finally {
