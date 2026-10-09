@@ -8,7 +8,8 @@ import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
   pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
-import type { MemoryIdentity, memoryWrittenDataSchema } from '@opencrane/events';
+import { memoryWrittenEventSchema, type MemoryIdentity,
+  type memoryWrittenDataSchema } from '@opencrane/events';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -1114,4 +1115,22 @@ it('reconciles a prepared key and its temporary copy after restart', async funct
   await expect(access(`${directory}/${reference}-pending`)).rejects.toThrow();
   expect((await remember('bob', 'person', 'unavailable-write')).json())
     .toMatchObject({ outcome: 'unknown' });
+});
+
+it('conflicts when a reconciled command has different saved input', async function changedSaved() {
+  const original = nats.store.append.bind(nats.store);
+  async function conflict(command: Parameters<typeof original>[0]) {
+    const record = memoryWrittenEventSchema.parse(command.event);
+    if (!('schemaVersion' in record.data)) throw new Error('Expected current memory');
+    const changedData = { ...record.data, pinned: true };
+    const changedEvent = { ...record, data: changedData };
+    const changedCommand = { ...command, event: changedEvent };
+    await original(changedCommand);
+    return { status: 'conflict' as const };
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(conflict);
+  try {
+    expect((await remember('bob', 'person', 'different-saved-input')).statusCode).toBe(409);
+  } finally { spy.mockRestore(); }
+  await runner.run(projection);
 });
