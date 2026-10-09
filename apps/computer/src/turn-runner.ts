@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Keep approval renewal and release beside the turn state they share. */
+import type { approvalHolds } from './approval-holds.ts';
 import { modelForTask } from '@opencrane/models/routing';
 import type { WorkspaceFile } from './files.ts';
 import { record } from './http.ts';
@@ -20,9 +21,6 @@ export interface PrivateSession {
 }
 
 export interface TurnDriver extends ThreadLoadDriver {
-  approvalResume?(supported: boolean): void;
-  approvalSettled?(approvalId: string, state: string): Promise<void>;
-  endHolds?(thread: string): void;
   privateSession?(): Promise<PrivateSession>;
   file?(file: WorkspaceFile, bytes: Buffer): Promise<void | 'kept_existing'>;
   grant(thread: string, conversation: string, token: string, expiresAt: number): Promise<void>;
@@ -79,6 +77,7 @@ function deleteTurn(state: TurnRunnerState, turnId: string) {
 class TurnRunner {
   private readonly renewals = new Map<string, Promise<void>>();
   private readonly driver: TurnDriver;
+  private readonly approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'> | undefined;
   private readonly loads: ReturnType<typeof threadLoads>;
   private readonly journal: ReturnType<typeof reportJournal>;
   private readonly send: (report: BridgeReport) => void;
@@ -100,8 +99,10 @@ class TurnRunner {
     send: (report: BridgeReport) => void,
     closeCurrentSocket: (code: number, reason: string) => void,
     signal: (value: Record<string, unknown>) => void,
+    approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'> | undefined,
   ) {
     this.driver = driver;
+    this.approvals = approvals;
     this.signal = signal;
     this.loads = threadLoads(driver);
     this.journal = journal;
@@ -118,18 +119,6 @@ class TurnRunner {
       conversationId: turn.conversationId, turnId: turn.id };
     this.signal(value);
     return true;
-  }
-
-  resume(supported: boolean) {
-    this.driver.approvalResume?.(supported);
-  }
-
-  approvalSettled(value: Record<string, unknown>) {
-    const approvalId = value['approvalId'];
-    const state = value['state'];
-    if (typeof approvalId !== 'string' || !/^[a-f0-9]{64}$/u.test(approvalId)
-      || typeof state !== 'string') return;
-    void this.driver.approvalSettled?.(approvalId, state);
   }
 
   renew(thread: string) {
@@ -313,7 +302,7 @@ class TurnRunner {
   private releaseTurn(turnId: string) {
     const threadId = this.findRunningThread(turnId);
     const turn = threadId && this.state.running.get(threadId);
-    if (threadId) this.driver.endHolds?.(threadId);
+    if (threadId) this.approvals?.endThread(threadId);
     deleteTurn(this.state, turnId);
     this.state.codexTurns.delete(turnId);
     this.state.cancelled.delete(turnId);
@@ -485,7 +474,7 @@ class TurnRunner {
 
     this.state.cancelled.add(turnId);
     const heldThread = this.findRunningThread(turnId);
-    if (heldThread) this.driver.endHolds?.(heldThread);
+    if (heldThread) this.approvals?.endThread(heldThread);
     const codexTurnId = this.state.codexTurns.get(turnId);
     if (!codexTurnId) {
       return;
@@ -609,8 +598,9 @@ export function turnRunner(
   send: (report: BridgeReport) => void,
   closeCurrentSocket: (code: number, reason: string) => void,
   signal: (value: Record<string, unknown>) => void = ignoreSignal,
+  approvals?: Pick<ReturnType<typeof approvalHolds>, 'endThread'>,
 ) {
-  return new TurnRunner(driver, journal, send, closeCurrentSocket, signal);
+  return new TurnRunner(driver, journal, send, closeCurrentSocket, signal, approvals);
 }
 
 function ignoreSignal() {}

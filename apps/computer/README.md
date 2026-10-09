@@ -44,6 +44,8 @@ message and the person can send it again. The proxy releases the list when the
 turn ends. A tool changed from Allow to Ask is refused. Reviewed Ask tools wait
 for the requester to approve. The same call then continues once, with a fresh pass.
 Denial, Stop and a wait longer than 15 minutes end the call without sending it.
+The server and computer can be updated in either order. The computer tells the
+server whether it can wait for approval. Older computers receive Allow tools only.
 
 ## Processes it handles
 

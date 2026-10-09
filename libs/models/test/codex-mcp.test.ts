@@ -4,7 +4,7 @@ import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { conversations, readConversation } from '@opencrane/projections';
 import { grantStream } from '@opencrane/authz';
-import { decideApproval, history, readApproval } from '../src/index.ts';
+import { approvalCards, decideApproval, history, readApproval } from '../src/index.ts';
 import { fixture } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 
@@ -446,9 +446,16 @@ async function bindsHeldApproval(change: string) {
         connectionId: 'installed', toolName: 'write', toolRevision: 'a'.repeat(64),
         mode: 'allow', setBy: 'alice' });
     }
+
     const result = await fetch(url, retry);
     expect(result.status, await result.text()).toBe(change === 'same' ? 200 : 403);
     expect(setup.received()).toBe(change === 'same' ? 1 : 0);
+    if (change === 'bytes' || change === 'wrong-id') {
+      const cards = await approvalCards(setup.nats.store, 'test', 'conversation',
+        'alice', setup.keys);
+      expect(cards).toHaveLength(1);
+      expect(cards[0]?.approvalId).toBe(decision.approvalId);
+    }
     expect((await fetch(url, retry)).status).toBe(403);
     expect(setup.received()).toBe(change === 'same' ? 1 : 0);
   } finally { await setup.close(); }

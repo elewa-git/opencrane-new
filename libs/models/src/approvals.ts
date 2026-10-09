@@ -22,27 +22,64 @@ interface ApprovalReadOptions {
   conversationRows?: StoredEvent[] | undefined;
 }
 
-/** Deterministic request identity prevents a retry from reopening denied, expired or used authority. */
-async function askApproval(store: EventStore, silo: string, bound: Binding,
-  policy: Awaited<ReturnType<typeof mcpPolicy>>, keys: ReviewKeys | undefined,
-  now: Date, deadline: number, conversationRows?: StoredEvent[]) {
-  const args = policy.args.value, review = policy.review;
-  if (!keys || !review || !(args instanceof Map) || !policy.revision) throw new Error('Review unavailable');
-  if (args.size !== review.fields.length || new Set(review.fields).size !== args.size ||
-      review.fields.some(k => !args.has(k)) || [...args.values()].some(v => ['object', 'array'].includes(v.kind))) throw new Error('Unreviewed arguments');
+// Build the id before writing so a mismatched retry cannot create another card.
+function prepareApproval(silo: string, bound: Binding,
+  policy: Awaited<ReturnType<typeof mcpPolicy>>) {
+  const args = policy.args.value;
+  const review = policy.review;
+  if (!review || !(args instanceof Map) || !policy.revision) {
+    throw new Error('Review unavailable');
+  }
+  if (args.size !== review.fields.length || new Set(review.fields).size !== args.size) {
+    throw new Error('Unreviewed arguments');
+  }
+  for (const field of review.fields) {
+    const argument = args.get(field);
+    if (!argument || argument.kind === 'object' || argument.kind === 'array') {
+      throw new Error('Unreviewed arguments');
+    }
+  }
   const target = args.get(review.targetArgument);
   if (!target) throw new Error('Review target missing');
-  const details = approvalReviewSchema.parse({ action: review.action, tool: policy.name, target: target.kind === 'string' ? target.value : target.canonical,
-    data: policy.args.canonical, destination: policy.destination, account: 'No account · profile: none (credential-free connection)', consequence: review.consequence });
-  const binding = { ...bound, tool: policy.name, toolRevision: policy.revision, schemaDigest: policy.schemaDigest,
-    connectionId: bound.connectionId, profile: 'none', policySequence: policy.policy.sequence,
-    digestVersion: 'lossless-json-v1' as const, argumentsDigest: hash(policy.args.canonical) };
-  const text = JSON.stringify(details), reviewDigest = hash(text);
+  let targetText: unknown = target.canonical;
+  if (target.kind === 'string') targetText = target.value;
+  const reviewDetails = {
+    action: review.action,
+    tool: policy.name,
+    target: targetText,
+    data: policy.args.canonical,
+    destination: policy.destination,
+    account: 'No account · profile: none (credential-free connection)',
+    consequence: review.consequence,
+  };
+  const details = approvalReviewSchema.parse(reviewDetails);
+  const binding = {
+    ...bound,
+    tool: policy.name,
+    toolRevision: policy.revision,
+    schemaDigest: policy.schemaDigest,
+    connectionId: bound.connectionId,
+    profile: 'none',
+    policySequence: policy.policy.sequence,
+    digestVersion: 'lossless-json-v1' as const,
+    argumentsDigest: hash(policy.args.canonical),
+  };
+  const text = JSON.stringify(details);
+  const reviewDigest = hash(text);
   const approvalId = hash(JSON.stringify([silo, binding, reviewDigest]));
+  return { binding, text, reviewDigest, approvalId, stepUp: review.stepUp };
+}
+
+// Reuse the same request so a retry cannot reopen an ended approval.
+async function askApproval(store: EventStore, silo: string, bound: Binding,
+  policy: Awaited<ReturnType<typeof mcpPolicy>>, keys: ReviewKeys,
+  now: Date, deadline: number, prepared: ReturnType<typeof prepareApproval>,
+  conversationRows?: StoredEvent[]) {
+  const { binding, text, reviewDigest, approvalId, stepUp } = prepared;
   const subject = `approval-${approvalId}`;
   if (!(await history(store, subject, silo, deadline)).length) {
     const lifetime = approvalLifetime(policy.waitLimited);
-    const request = { ...binding, approvalId, expiresAt: new Date(now.getTime() + lifetime).toISOString(), stepUp: review.stepUp,
+    const request = { ...binding, approvalId, expiresAt: new Date(now.getTime() + lifetime).toISOString(), stepUp,
       ...keys.encrypt(silo, bound.conversationId, text), reviewDigest };
     const result = await store.append({ event: envelope(silo, subject, 'tool.approval_requested', request, `request-${approvalId}`), expectedSequence: 0 });
     if (result.status !== 'appended' && result.status !== 'conflict') throw new Error('Approval persistence unavailable');
@@ -191,11 +228,13 @@ export async function approvalDecision(store: EventStore, silo: string, bound: B
   if (policy.outcome !== 'ask' || !policy.review || !keys) return { outcome: policy.outcome, reason: policy.reason, approvalId: undefined };
   await fresh();
   const deadline = fresh.deadline ?? Infinity;
-  const approval = await askApproval(store, silo, bound, policy, keys, now(), deadline, conversationRows);
-  if (policy.expectedApproval && policy.expectedApproval !== approval.request.approvalId) {
+  const prepared = prepareApproval(silo, bound, policy);
+  if (policy.expectedApproval && policy.expectedApproval !== prepared.approvalId) {
     return { outcome: 'deny' as const, reason: 'approval_mismatch',
-      approvalId: approval.request.approvalId };
+      approvalId: undefined };
   }
+  const approval = await askApproval(store, silo, bound, policy, keys, now(), deadline,
+    prepared, conversationRows);
   const used = await consumeApproval(store, silo, approval, requestId, fresh, now);
   return { outcome: used ? 'allow' as const : 'ask' as const,
     reason: used ? 'approval_used' : `approval_${approval.state}`, approvalId: approval.request.approvalId };

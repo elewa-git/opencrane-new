@@ -513,7 +513,9 @@ optional `serverInfo` (`name`, `version`) and string `definitions`. Entries reje
 unknown fields. IDs match `^[\w-]{1,200}$`; keys match `^oc_[a-f0-9]{10}$`.
 The list allows 20 servers and 48 KiB of JSON encoded as UTF-8. Each server
 allows 1,000 definitions of at most 32,768 characters each. Server name and
-version allow 200 characters each. No entry carries `discoverResult`. The server fills the list once per message with Allow tools only.
+version allow 200 characters each. No entry carries `discoverResult`. The server fills
+the list once per message with Allow tools and reviewed Ask tools on computers
+that advertise approval support.
 
 Memory-free `mcpToolCall` notifications report call id, mapped server id and tool
 name. Finished reports add completed/failed status and optional duration in whole
@@ -542,9 +544,8 @@ stub. No paid model call was made. The local MCP listener used a 17-minute
 listener now also sets `requestTimeout` explicitly to 17 minutes. That setting
 limits the time allowed to receive a request; it does not limit a held reply.
 The [saved measurement](test/fixtures/codex-0.159.2-approval-hold.json) records
-the image digest, timing and completed turn. This measures Codex waiting for a
-stub MCP reply; the production proxy's approval-hold and release path is not
-built in this first part of #46. Its wire checks remain NOT RUN.
+the image digest, timing and completed turn. The later held-call check below
+uses the production proxy to hold and release the request.
 
 The one-off probe used the local model and MCP handlers from
 `test/codex-mcp-resume.mjs`, with a single tool call and a 960,000 ms delayed
@@ -558,18 +559,23 @@ docker run --rm --network none \
   --experimental-strip-types /app/test/codex-mcp-resume.mjs --approval-hold
 ```
 
-The owner-changeable default for the follow-up is
+The approval wait default is
 `APPROVAL_WAIT_LIMIT_MS = 900000` (15 minutes). The measured call did not end
 early, so there is no need to reduce that default.
 
-The server must be deployed before an image sends `approval_waiting`. Every
-`resume` must carry `approvalWaiting: true`; rollback ends waits with a plain refusal.
+The server and computer can be deployed in either order. The computer advertises
+`x-opencrane-approval-waiting: true` in its WebSocket upgrade response. The server
+checks this on every new connection and offers reviewed Ask tools only when it is
+present. Older computers receive Allow tools only. The server also sends
+`approvalWaiting: true` in `resume`; an older server without this marker ends waits
+with a plain refusal.
 The proxy holds only a marked 403 `approval_requested` with a 64-hex id. Holds stay
 in the bridge process, outside the shell user's access. It preserves the original
 bytes. Before retry, the runner repeats its own start report through `waitForGrant`
 and installs the fresh token. Missing tokens fail after ten seconds. Duplicate
 signals and identical calls sharing an id produce one retry; every held request
-receives an answer. Other states renew and return a plain tool error. Stop, release,
+receives an answer. Other states renew and return a plain tool error that explains the result.
+A used approval says the tool may have received the action. Stop, release,
 `/drop` and client disconnection end holds before any later wake can send them.
 
 `APPROVAL_WAIT_LIMIT_MS` is 900000. The decision service also expires approvals
@@ -605,4 +611,4 @@ read after the permission check.
 Rebase onto main `94f1ca05` changed no file contents. Both the server base and the
 final source kept identical Git tree hashes before and after rebase. No full root
 suite ran; CI remains the gate. The fresh-install chat journey and image publication
-remain NOT RUN. Deploy the updated server before the computer image.
+remain NOT RUN. Either deployment order is safe with the support check above.

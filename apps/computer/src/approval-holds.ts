@@ -55,9 +55,7 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
         }
         group.followers = [];
       } else {
-        const text = state === 'timeout' ? 'No decision arrived in time. Nothing was sent.'
-          : 'This action was not approved. Nothing was sent.';
-        answer(group, text);
+        answer(group, refusalMessage(state));
       }
     } catch {
       answer(group, 'The turn could not get a new pass. Nothing was sent.');
@@ -121,4 +119,21 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
   }
 
   return { add, settle, endThread, resume, until };
+}
+
+function refusalMessage(state: string) {
+  switch (state) {
+    case 'denied':
+      return 'The requester denied this action. Nothing was sent.';
+    case 'expired':
+      return 'The approval expired. Nothing was sent.';
+    case 'cancelled':
+      return 'The approval was cancelled. Nothing was sent.';
+    case 'outcome_unknown':
+      return 'The approval was already used; the tool may have received this action.';
+    case 'timeout':
+      return 'No decision arrived in time. Nothing was sent.';
+    default:
+      return 'This action was not approved. Nothing was sent.';
+  }
 }

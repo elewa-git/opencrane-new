@@ -268,7 +268,7 @@ async function offersReviewedAsk() {
   const state = serverState('ask', { policyTools: [{ name: 'read', revision: 'a'.repeat(64),
     reviewed: true, costCents: 0, mode: 'ask' }] });
   const input = { rows: [{ serverId: 'ask' }], requesterId: 'person', assistantId: 'assistant',
-    baseMessageBytes: 100, readServer, canUse };
+    baseMessageBytes: 100, readServer, canUse, approvalWaiting: true };
   function readServer() { return Promise.resolve(state); }
   function canUse() { return Promise.resolve(true); }
   expect(await buildTurnTools(input)).toEqual([]);
@@ -276,3 +276,18 @@ async function offersReviewedAsk() {
   expect(await buildTurnTools(input)).toMatchObject([{ modes: { read: 'ask' } }]);
 }
 it('offers Ask only when discovery includes its review', offersReviewedAsk);
+
+async function refusesAskWithoutSupport() {
+  const state = serverState('ask', {
+    discoveryTools: [{ name: 'read', revision: 'a'.repeat(64), definition: toolDefinition,
+      review: { action: 'Read' } }],
+    policyTools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true,
+      costCents: 0, mode: 'ask' }],
+  });
+  function readServer() { return Promise.resolve(state); }
+  function canUse() { return Promise.resolve(true); }
+  const input = { rows: [{ serverId: 'ask' }], requesterId: 'person', assistantId: 'assistant',
+    baseMessageBytes: 100, readServer, canUse };
+  expect(await buildTurnTools(input)).toEqual([]);
+}
+it('never offers Ask to a computer without approval support', refusesAskWithoutSupport);

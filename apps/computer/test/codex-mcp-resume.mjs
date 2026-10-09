@@ -25,6 +25,7 @@ const heldApprovals = process.argv.includes('--held-approvals');
 const heldCalls = new Map();
 const longHoldMode = process.argv.includes('--approval-hold');
 let runtimeProxy;
+let stopRunner;
 let productionConfig;
 let productionThreadLoads;
 let control;
@@ -223,6 +224,7 @@ function startClient() {
       send(refused);
     }
     capture.notifications.push({ stage, atMs, ...message });
+    stopRunner?.complete(message);
     if (message.method === 'turn/completed') {
       const threadId = message.params.threadId;
       const completed = { stage, atMs, threadId, status: message.params.turn.status };
@@ -856,15 +858,49 @@ async function checkHeldCalls(threadA, threadB, config) {
   capture.approvalHold = { heldMs: Date.now() - approved.beganAt,
     approvedSends: approved.sends, deniedSends: denied.sends };
   plans.set('STOP_A', { kind: 'tool', callId: 'call_S', itemId: 'fc_S' });
-  const stopped = activeClient.turn(threadA, 'STOP_A').catch(String);
+  const { turnRunner } = await import('../src/turn-runner.ts');
+  const { reportJournal } = await import('../src/report-journal.ts');
+  async function rpc(method, params) {
+    if (method === 'thread/start') {
+      return activeClient.rpc(method, { cwd: '/tmp', config });
+    }
+    if (method === 'turn/start') {
+      const input = { ...params, model: 'probe-model' };
+      return activeClient.rpc(method, input);
+    }
+    return activeClient.rpc(method, params);
+  }
+  function credential() { return { value: 'local-computer', expiresAt: Date.now() + 60_000 }; }
+  async function grant(thread, conversation, token, expiresAt) {
+    const input = { thread, conversation: wireConversations.get(thread),
+      computer: 'local-computer', token, expires: expiresAt };
+    await control(token ? '/grant' : '/drop', input);
+  }
+  function send(report) {
+    function acknowledge() {
+      stopRunner.acknowledge(report.sequence, { token: 'local-turn',
+        expiresAt: Date.now() + 60_000 });
+    }
+    queueMicrotask(acknowledge);
+  }
+  function close() {}
+  const driver = { rpc, credential, grant, journal: join(probeHome, 'stop-reports') };
+  stopRunner = turnRunner(driver, reportJournal(driver), send, close, undefined,
+    runtimeProxy.approvals);
+  const turn = { id: 'stop-turn', conversationId: 'stop-chat', assistantId: 'assistant',
+    executionMode: 'memory_free', text: 'STOP_A', token: 'local-turn',
+    expiresAt: Date.now() + 60_000, taskKind: 'chat_turn', omittedAttachments: 0 };
+  await stopRunner.start(turn);
   await waitForHold('call_S');
   const beganAt = Date.now();
-  runtimeProxy.approvals.endThread(threadA);
-  const startedTurn = capture.notifications.findLast(function matchesStart(entry) {
-    return entry.method === 'turn/started' && entry.params.threadId === threadA;
-  });
-  await activeClient.rpc('turn/interrupt', { threadId: threadA, turnId: startedTurn.params.turn.id });
-  await stopped;
+  await stopRunner.interrupt({ turnId: turn.id, conversationId: turn.conversationId });
+  const completedBy = Date.now() + 5000;
+  function matchesStop(entry) {
+    return entry.stage === stage && entry.status === 'interrupted';
+  }
+  function stopped() { return capture.completedTurns.some(matchesStop); }
+  while (!stopped() && Date.now() < completedBy) await pause(20);
+  assert.equal(stopped(), true, 'Expected the runner to interrupt Codex');
   capture.approvalHold.stopMs = Date.now() - beganAt;
   assert.ok(capture.approvalHold.stopMs < 5000);
   assert.equal(heldCalls.get('call_S').sends, 0);

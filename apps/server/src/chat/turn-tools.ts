@@ -32,6 +32,7 @@ interface TurnToolInput {
   requesterId: string;
   assistantId: string;
   baseMessageBytes: number;
+  approvalWaiting?: boolean;
   readServer: (serverId: string) => Promise<TurnToolServerState | undefined>;
   canUse: (serverId: string, kind: 'person' | 'assistant', subject: string) =>
     Promise<boolean>;
@@ -72,7 +73,7 @@ export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServ
       omittedServers += 1;
       continue;
     }
-    const selected = reviewedDefinitions(state);
+    const selected = reviewedDefinitions(state, input.approvalWaiting === true);
     if (!selected.definitions.length) continue;
     if (!await canUseServer(input, state.serverId)) continue;
     const entry = makeTurnToolServer(state, selected);
@@ -136,7 +137,7 @@ async function canUseServer(input: TurnToolInput, serverId: string) {
   return input.canUse(serverId, 'assistant', input.assistantId);
 }
 
-function reviewedDefinitions(state: TurnToolServerState) {
+function reviewedDefinitions(state: TurnToolServerState, approvalWaiting: boolean) {
   const definitions: string[] = [];
   const modes: Record<string, 'allow' | 'ask'> = {};
   for (const policyTool of state.policyTools) {
@@ -148,7 +149,7 @@ function reviewedDefinitions(state: TurnToolServerState) {
     }
     const discovered = state.discoveryTools.find(matchesPolicy);
     if (!discovered?.definition || !isValidDefinition(discovered.definition)) continue;
-    if (policyTool.mode === 'ask' && !discovered.review) continue;
+    if (policyTool.mode === 'ask' && (!approvalWaiting || !discovered.review)) continue;
     definitions.push(discovered.definition);
     modes[policyTool.name] = policyTool.mode;
   }

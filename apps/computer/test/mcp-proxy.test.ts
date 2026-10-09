@@ -1,9 +1,11 @@
-import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, request, ServerResponse, IncomingMessage } from 'node:http';
 import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
 import type { ToolServer } from '../src/turn-frame.ts';
+import { turnRunner, type TurnDriver } from '../src/turn-runner.ts';
+import { reportJournal } from '../src/report-journal.ts';
 import { proxy } from '../src/proxy.ts';
 
 const definition = JSON.stringify({ name: 'read', inputSchema: { type: 'object' } });
@@ -93,13 +95,15 @@ async function fixture(approvalSupport = false) {
       expires: Date.now() + 60_000 };
     expect(await control('/grant', input)).toBe(200);
   }
-  async function send(body = call, extra = {}, loadKey = loadA, method = 'POST') {
+  async function send(body = call, extra = {}, loadKey = loadA, method = 'POST',
+    signal?: AbortSignal) {
     const headers = { authorization: `Bearer ${local.caller}`,
       'mcp-protocol-version': '2026-07-28', 'mcp-method': body.method,
       'mcp-name': body.params.name, ...extra };
     const raw = JSON.stringify(body).replace('"number":1', '"number":1.0');
     const options: RequestInit = { method, headers };
     if (method !== 'GET') options.body = raw;
+    if (signal) options.signal = signal;
     const response = await fetch(`${local.url}/mcp/${loadKey}/${tools[0]!.key}`, options);
     const text = await response.text();
     return { status: response.status, text, raw };
@@ -370,6 +374,8 @@ async function heldCall(state: string) {
     if (sent) {
       expect(test.received[1]?.raw).toBe(result.raw);
       expect(test.received[1]?.headers['x-opencrane-approval-id']).toBe(approvalId);
+    } else if (state === 'outcome_unknown') {
+      expect(result.text).toContain('The approval was already used');
     } else expect(result.text).toContain('Nothing was sent');
     await test.approvals.settle(approvalId, 'approved');
     expect(test.received).toHaveLength(sent ? 2 : 1);
@@ -394,3 +400,78 @@ async function malformedApproval(kind: string) {
 }
 it.each(['unsupported', 'bad-id', 'wrong-reason', 'unmarked', '402'])(
   'never holds a refusal with %s', malformedApproval);
+
+async function abortsHeldRequest() {
+  const test = await fixture(true);
+  try {
+    await test.catalogue();
+    await test.grant();
+    test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId }));
+    const controller = new AbortController();
+    const pending = test.send(call, {}, loadA, 'POST', controller.signal);
+    const aborted = expect(pending).rejects.toThrow();
+    function waiting() { expect(test.waiting).toHaveBeenCalledOnce(); }
+    await vi.waitFor(waiting);
+    const responseEvents = vi.spyOn(ServerResponse.prototype, 'emit');
+    function closed() {
+      for (let index = 0; index < responseEvents.mock.calls.length; index += 1) {
+        const context: unknown = responseEvents.mock.contexts[index];
+        if (!(context instanceof ServerResponse)) continue;
+        const incoming: unknown = context.req;
+        if (incoming instanceof IncomingMessage
+          && responseEvents.mock.calls[index]?.[0] === 'close'
+          && incoming.url === `/mcp/${loadA}/${tools[0]!.key}`) return;
+      }
+      throw new Error('The proxy has not seen the aborted request close');
+    }
+    controller.abort();
+    await aborted;
+    await vi.waitFor(closed);
+    await test.approvals.settle(approvalId, 'approved');
+    expect(test.received).toHaveLength(1);
+  } finally { await test.close(); }
+}
+it('ends an abandoned Codex request before approval can send it', abortsHeldRequest);
+
+async function stopsBeforeRefusal() {
+  const test = await fixture(true);
+  try {
+    await test.catalogue();
+    await test.grant();
+    test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId }));
+    test.deferReply();
+    const pending = test.send();
+    function received() { expect(test.received).toHaveLength(1); }
+    await vi.waitFor(received);
+    const journalDirectory = mkdtempSync(`${tmpdir()}/late-approval-stop-`);
+    function rpc() {
+      return Promise.resolve({ thread: { id: 'thread-A' }, turn: { id: 'codex-turn' } });
+    }
+    async function grant() {}
+    function credential() { return { value: 'computer', expiresAt: Date.now() + 60_000 }; }
+    const driver: TurnDriver = { rpc, grant, credential,
+      journal: `${journalDirectory}/reports` };
+    const journal = reportJournal(driver);
+    function send(report: import('../src/report-journal.ts').BridgeReport) {
+      function acknowledge() {
+        runner.acknowledge(report.sequence, { token: 'fresh', expiresAt: Date.now() + 60_000 });
+      }
+      queueMicrotask(acknowledge);
+    }
+    function close() {}
+    const runner = turnRunner(driver, journal, send, close, undefined, test.approvals);
+    try {
+      await runner.start({ id: 'turn', conversationId: 'chat-A', assistantId: 'assistant',
+        executionMode: 'memory_free', text: 'Use tool', token: 'initial',
+        expiresAt: Date.now() + 60_000, taskKind: 'chat_turn', omittedAttachments: 0 });
+      test.waiting.mockImplementation(runner.approvalWaiting.bind(runner));
+      await runner.interrupt({ turnId: 'turn', conversationId: 'chat-A' });
+    } finally { rmSync(journalDirectory, { recursive: true, force: true }); }
+    test.deliverReply();
+    expect((await pending).text).toContain('This turn was stopped');
+    expect(test.approvals.until('thread-A')).toBe(0);
+    await test.approvals.settle(approvalId, 'approved');
+    expect(test.received).toHaveLength(1);
+  } finally { await test.close(); }
+}
+it('answers a late approval request promptly after Stop', stopsBeforeRefusal, 1000);

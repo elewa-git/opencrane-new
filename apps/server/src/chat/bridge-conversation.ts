@@ -28,6 +28,7 @@ type Conversation = Awaited<ReturnType<typeof listConversations>>[number];
 export type AgentSession = Extract<Conversation, { mode: 'agent_session' }>;
 type BridgeLink = {
   connectionId: number;
+  approvalWaiting?: boolean;
   socket: WebSocket;
   delivered: Set<string>;
   sentTurns: Map<string, TurnDelivery>;
@@ -190,7 +191,7 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   const turn = turnMessage(options, conversation, rows, uploads, message, mode) as
     ReturnType<typeof turnMessage> & { tools?: Awaited<ReturnType<typeof buildTurnTools>> };
   async function buildTools() {
-    return toolsForTurn(options, conversation, turn, kind, mode);
+    return toolsForTurn(options, conversation, turn, kind, mode, link.approvalWaiting === true);
   }
   const tools = await toolsForMessageOrEmpty(link.sentTurns, conversation.conversationId,
     message.event.id, buildTools);
@@ -242,7 +243,8 @@ function emptyTools() {
 }
 
 async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
-  turn: ReturnType<typeof turnMessage>, kind: string, mode: ExecutionMode) {
+  turn: ReturnType<typeof turnMessage>, kind: string, mode: ExecutionMode,
+  approvalWaiting: boolean) {
   if (!mayOfferTurnTools(kind, mode, options.binding !== undefined) ||
       !options.binding || !options.catalogue || typeof turn.requesterId !== 'string') return [];
 
@@ -306,6 +308,7 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
     requesterId: turn.requesterId,
     assistantId: conversation.assistantId,
     baseMessageBytes: serializedMessageBytes,
+    approvalWaiting,
     readServer,
     canUse: canUseServer,
   });

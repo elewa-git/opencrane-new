@@ -141,9 +141,6 @@ const server = createServer((req, res) => {
 
 const channel = bridgeChannel(server, {
   file: receiveFile,
-  approvalResume: runtimeProxy.approvals.resume,
-  approvalSettled: runtimeProxy.approvals.settle,
-  endHolds: runtimeProxy.approvals.endThread,
   journal: '/home/agent/codex/bridge-reports.jsonl',
   credential() {
     const value = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);
@@ -167,4 +164,4 @@ const channel = bridgeChannel(server, {
     const input = { thread, conversation, computer: computer['value'], token, expires: expiresAt };
     return proxyControl(path, input);
   },
-});
+}, runtimeProxy.approvals);

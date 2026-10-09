@@ -27,15 +27,21 @@ async function approvesOnce() {
   expect(test.answer).toHaveBeenCalledOnce();
 }
 it('renews before sending once and answers duplicate holds and wakes', approvesOnce);
-async function refuses(state: string) {
+async function refuses(state: string, message: string) {
   const test = fixture();
   test.holds.add(test.input);
   await test.holds.settle(approvalId, state);
   expect(test.renew).toHaveBeenCalledOnce();
   expect(test.send).not.toHaveBeenCalled();
-  expect(test.answer).toHaveBeenCalledOnce();
+  expect(test.answer).toHaveBeenCalledWith(message);
 }
-it.each(['denied', 'expired', 'cancelled', 'outcome_unknown', 'unexpected'])(
+it.each([
+  ['denied', 'The requester denied this action. Nothing was sent.'],
+  ['expired', 'The approval expired. Nothing was sent.'],
+  ['cancelled', 'The approval was cancelled. Nothing was sent.'],
+  ['outcome_unknown', 'The approval was already used; the tool may have received this action.'],
+  ['unexpected', 'This action was not approved. Nothing was sent.'],
+])(
   'renews and refuses %s with no send', refuses);
 async function endsDuringRenewal(cause: string) {
   const test = fixture();

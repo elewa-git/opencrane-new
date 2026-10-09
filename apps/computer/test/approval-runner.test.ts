@@ -15,7 +15,7 @@ async function renewsAndStops() {
   function grant() { operations.push('grant'); return Promise.resolve(); }
   function credential() { return { value: 'computer', expiresAt: Date.now() + 60_000 }; }
   function endHolds() { operations.push('endHolds'); }
-  const driver: TurnDriver = { rpc, grant, credential, endHolds, journal: `${directory}/reports` };
+  const driver: TurnDriver = { rpc, grant, credential, journal: `${directory}/reports` };
   const journal = reportJournal(driver);
   let renewAck = true;
   function send(report: BridgeReport) {
@@ -27,7 +27,7 @@ async function renewsAndStops() {
   }
   function close() {}
   const signal = vi.fn();
-  const runner = turnRunner(driver, journal, send, close, signal);
+  const runner = turnRunner(driver, journal, send, close, signal, { endThread: endHolds });
   try {
     const turn = { id: 'turn', conversationId: 'chat', assistantId: 'assistant',
       executionMode: 'memory_free' as const, text: 'Use tool', token: 'initial',

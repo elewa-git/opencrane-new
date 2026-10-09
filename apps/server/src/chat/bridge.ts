@@ -207,6 +207,11 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   const socketOptions = { headers: { 'x-bridge-token': input.bearer },
     maxPayload: 256 * 1024, handshakeTimeout: 5000 };
   const socket = new WebSocket(input.url, socketOptions);
+  let approvalWaiting = false;
+  function readSupport(response: import('node:http').IncomingMessage) {
+    approvalWaiting = response.headers['x-opencrane-approval-waiting'] === 'true';
+  }
+  socket.on('upgrade', readSupport);
   function terminateSocket() {
     socket.terminate();
   }
@@ -241,7 +246,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     return reportsDone;
   }
   return {
-    socket, deliver, delivered, sentTurns, approvals,
+    socket, deliver, delivered, sentTurns, approvals, approvalWaiting,
     get rejection() { return rejection; },
     settled,
   };

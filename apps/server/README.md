@@ -121,6 +121,9 @@ use it to refuse calls if the tool changes to Ask during the turn.
    access and desktop grant. A confirmed member removal or conversation permission denial
    ends the view straight away, even if another access read is slow.
 
+The server checks whether each computer can wait for approval before offering Ask
+tools. Older computers receive Allow tools only, so either update order is safe.
+
 ## How to run or test it
 
 ```sh

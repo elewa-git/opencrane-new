@@ -670,3 +670,8 @@ need `readStream`; the access check also needs `head`. Their behaviour is unchan
 Computer Ask calls (`x-opencrane-tool-mode: ask`) create approvals with a 15-minute
 expiry. Retries carry `x-opencrane-approval-id` through the gateway and may consume
 only that approval. A changed approval or an Allow policy refuses the retry.
+
+A retry carries the approval id from its first call. The decision service computes
+that id from the current tool review, arguments and turn before writing anything.
+A mismatch is refused and creates no approval card. The existing approval remains
+bound to its original action.

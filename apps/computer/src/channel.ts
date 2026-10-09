@@ -1,3 +1,4 @@
+import type { approvalHolds } from './approval-holds.ts';
 import type { Server } from 'node:http';
 import { bridgeSocket, type BridgeSocketState } from './bridge-socket.ts';
 import { reportJournal, type BridgeReport } from './report-journal.ts';
@@ -6,7 +7,8 @@ import { turnRunner, type TurnDriver } from './turn-runner.ts';
 export type { BridgeReport } from './report-journal.ts';
 
 /** Durable reports are sent in arrival order; each thread waits for its own start acknowledgement. */
-export function bridgeChannel(server: Server, driver: TurnDriver) {
+export function bridgeChannel(server: Server, driver: TurnDriver,
+  approvals?: ReturnType<typeof approvalHolds>) {
   const journal = reportJournal(driver);
   journal.load();
 
@@ -30,7 +32,7 @@ export function bridgeChannel(server: Server, driver: TurnDriver) {
       socket?.send(JSON.stringify(value));
     }
   }
-  const runner = turnRunner(driver, journal, sendReport, closeCurrentSocket, signal);
+  const runner = turnRunner(driver, journal, sendReport, closeCurrentSocket, signal, approvals);
 
   function reportCount() {
     return journal.reports.length;
@@ -41,7 +43,7 @@ export function bridgeChannel(server: Server, driver: TurnDriver) {
     journal.replay(since, waiting, send);
   }
 
-  const bridge = bridgeSocket(server, driver, socketState, runner, reportCount, replayReports);
+  const bridge = bridgeSocket(server, driver, socketState, runner, reportCount, replayReports, approvals);
   socketMethods.send = bridge.send;
 
   function notification(value: unknown) {

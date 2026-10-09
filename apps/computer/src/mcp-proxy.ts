@@ -142,11 +142,10 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
       toolError(response, id, UNAVAILABLE);
       return;
     }
+    const boundGrant = grant;
     const boundLoad = load;
     const boundServer = server;
     function hold(approvalId: string) {
-      // Keep this load while its short-lived grant expires during the wait.
-      extendThread(String(thread), Date.now() + 17 * 60_000);
       function answer(text: string) { toolError(response, id, text); }
       async function send() {
         const renewed = liveCallGrant(boundLoad, boundServer, metadata, params['name'], grants);
@@ -160,6 +159,8 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
       response.once('close', disconnected);
       const held = { approvalId, thread: String(thread), send, answer };
       approvals.add(held);
+      // Keep the list until this hold ends, even if its turn pass expires first.
+      extendThread(String(thread), boundGrant.expires);
     }
     await forward(incoming, response, gateway, server, grant, String(thread), id, raw, hold);
   }

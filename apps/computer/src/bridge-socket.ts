@@ -1,3 +1,4 @@
+import type { approvalHolds } from './approval-holds.ts';
 import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, Server } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -12,8 +13,6 @@ export interface BridgeSocketState {
 }
 
 interface TurnRunnerPort {
-  resume(supported: boolean): void;
-  approvalSettled(value: Record<string, unknown>): void;
   start(turn: ReturnType<typeof parseTurn>): Promise<void>;
   interrupt(value: Record<string, unknown>): Promise<void>;
   acknowledge(sequence: unknown, value?: Record<string, unknown>): void;
@@ -86,6 +85,16 @@ async function interruptTurn(
   }
 }
 
+function settleApproval(input: Record<string, unknown>,
+  approvals: ReturnType<typeof approvalHolds> | undefined) {
+  const approvalId = input['approvalId'];
+  const approvalState = input['state'];
+  if (typeof approvalId === 'string' && /^[a-f0-9]{64}$/u.test(approvalId)
+    && typeof approvalState === 'string') {
+    void approvals?.settle(approvalId, approvalState);
+  }
+}
+
 function dispatch(
   input: Record<string, unknown>,
   next: WebSocket,
@@ -93,15 +102,16 @@ function dispatch(
   runner: TurnRunnerPort,
   receiveFile: ReturnType<typeof filePackets>,
   sendReports: (since: unknown) => void,
+  approvals: ReturnType<typeof approvalHolds> | undefined,
 ) {
   const type = input['type'];
   if (type === 'resume') {
     sendReports(input['since']);
-    runner.resume(input['approvalWaiting'] === true);
+    approvals?.resume(input['approvalWaiting'] === true);
     return;
   }
   if (type === 'approval_settled' && state.resumed) {
-    runner.approvalSettled(input);
+    settleApproval(input, approvals);
     return;
   }
   if (type === 'ack') {
@@ -129,6 +139,7 @@ function installHandlers(
   driver: TurnDriver,
   runner: TurnRunnerPort,
   sendReports: (since: unknown) => void,
+  approvals: ReturnType<typeof approvalHolds> | undefined,
 ) {
   state.socket?.terminate();
   state.socket = next;
@@ -138,7 +149,7 @@ function installHandlers(
     Math.max(1, driver.credential().expiresAt - Date.now()));
   next.once('close', clearExpiry(expiry));
   next.on('error', terminateSocket(next));
-  next.on('message', receiveMessage(next, state, runner, receiveFile, sendReports));
+  next.on('message', receiveMessage(next, state, runner, receiveFile, sendReports, approvals));
 }
 
 function closeForCredentialExpiry(next: WebSocket) {
@@ -165,6 +176,7 @@ function receiveMessage(
   runner: TurnRunnerPort,
   receiveFile: ReturnType<typeof filePackets>,
   sendReports: (since: unknown) => void,
+  approvals: ReturnType<typeof approvalHolds> | undefined,
 ) {
   return function handleMessage(bytes: Buffer | ArrayBuffer | Buffer[]) {
     try {
@@ -172,7 +184,7 @@ function receiveMessage(
         return;
       }
       const input = parseMessage(bytes);
-      dispatch(input, next, state, runner, receiveFile, sendReports);
+      dispatch(input, next, state, runner, receiveFile, sendReports, approvals);
     } catch {
       next.close(1008, 'Invalid bridge message');
     }
@@ -184,9 +196,10 @@ function installConnectionHandler(
   driver: TurnDriver,
   runner: TurnRunnerPort,
   sendReports: (since: unknown) => void,
+  approvals: ReturnType<typeof approvalHolds> | undefined,
 ) {
   return function handleConnection(next: WebSocket) {
-    installHandlers(next, state, driver, runner, sendReports);
+    installHandlers(next, state, driver, runner, sendReports, approvals);
   };
 }
 
@@ -197,6 +210,7 @@ export function bridgeSocket(
   runner: TurnRunnerPort,
   reportCount: () => number,
   replayReports: (since: number, send: (report: BridgeReport) => void) => void,
+  approvals?: ReturnType<typeof approvalHolds>,
 ) {
   function send(report: BridgeReport) {
     const socket = state.socket;
@@ -229,7 +243,11 @@ export function bridgeSocket(
     maxPayload: 128 * 1024,
     verifyClient,
   });
-  const handleConnection = installConnectionHandler(state, driver, runner, resume);
+  const handleConnection = installConnectionHandler(state, driver, runner, resume, approvals);
+  function advertiseSupport(headers: string[]) {
+    if (approvals) headers.push('x-opencrane-approval-waiting: true');
+  }
+  wss.on('headers', advertiseSupport);
   wss.on('connection', handleConnection);
 
   function close() {
