@@ -23,3 +23,19 @@ async function oldLossKeepsNewClaim() {
   }
 }
 it('an old computer loss keeps a later claim', oldLossKeepsNewClaim);
+
+async function oldAssistantAfterOwnerRemoval() {
+  const nats = await natsFixture();
+  try {
+    const assistant: EventEnvelope = event('old-assistant', 'assistant-personal', 'assistant.created');
+    assistant.data = { assistantId: 'personal', ownerId: 'alice', kind: 'personal' };
+    await nats.seed([assistant, event('removed-owner', 'member-alice', 'member.removed')]);
+    const before = await nats.store.head();
+    await lifecycleHandlers(nats.store)[1].handle(assistant, noSql);
+    expect(await nats.store.head()).toBe(before);
+  } finally {
+    await nats.close();
+  }
+}
+it('does not claim a computer for an old assistant whose owner was removed',
+  oldAssistantAfterOwnerRemoval);

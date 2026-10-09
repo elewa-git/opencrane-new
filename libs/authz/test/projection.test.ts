@@ -698,3 +698,26 @@ async function stableCreation(type: string) {
 }
 it.each(['team.created', 'provider.created', 'assistant.created'])(
   'repeating an old %s keeps its saved result', stableCreation);
+
+async function oldOwnershipAfterMemberRemoval(type: string) {
+  const nats = await natsFixture();
+  try {
+    let data: Record<string, unknown> = { memberId: 'alice' };
+    if (type === 'ownership.seeded') {
+      data = { ownerIds: ['alice'] };
+    } else if (type === 'ownership.transferred') {
+      data = { memberId: 'alice', transferredBy: 'bob' };
+    }
+    const old = savedPermission('old-owner-change', type, 'ownership-test', data);
+    const removal = member('removed-owner-member', 'member.removed');
+    await nats.seed([old, removal]);
+    const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'), nats.store);
+    await apply(projection, [member('join-owner-member'), removal, old]);
+    expect(await projection.applied(old.id)).toBe(true);
+    expect(await projection.check('alice', 'owner')).toMatchObject({ allowed: false });
+  } finally {
+    await nats.close();
+  }
+}
+it.each(['ownership.seeded', 'ownership.transferred', 'ownership.stepped_down'])(
+  'receipts old %s after its member removal was applied', oldOwnershipAfterMemberRemoval);
