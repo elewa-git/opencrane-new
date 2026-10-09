@@ -36,7 +36,10 @@ function projection(rows: CandidateRow[]): Query {
 
 function store(memberPosition: number, recent: StoredEvent[], candidates: StoredEvent[],
   requiredDeadline?: number): IdentityStore {
-  function head() {
+  function head(_subject?: string, deadline?: number) {
+    if (requiredDeadline !== undefined && deadline !== requiredDeadline) {
+      throw new Error('Missing member position deadline');
+    }
     return Promise.resolve(memberPosition);
   }
   async function* readStream(subject: string, _from?: number, deadline?: number) {
