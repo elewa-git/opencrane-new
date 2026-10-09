@@ -14,8 +14,9 @@ export const limits = { textBytes: 4096, pageFacts: 20, pageBytes: 16384,
 
 function searchTerms(query: string) {
   if (Buffer.byteLength(query) > limits.queryBytes) throw new z.ZodError([]);
-  const lower = query.toLocaleLowerCase('und');
-  const terms = lower.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const normalised = query.normalize('NFC');
+  const lower = normalised.toLocaleLowerCase('und');
+  const terms = lower.match(/[\p{L}\p{M}\p{N}]+/gu) ?? [];
   if (terms.length > limits.queryTerms || (query.trim() !== '' && terms.length === 0)) {
     throw new z.ZodError([]);
   }

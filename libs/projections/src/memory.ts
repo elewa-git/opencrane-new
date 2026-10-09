@@ -126,6 +126,7 @@ export function memoryProjection(custody: {
     let status = 'quarantined';
     if (identity !== null) {
       text = await custody.decrypt(identity, data);
+      if (text !== null) text = text.normalize('NFC');
       status = 'available';
       if (text === null) {
         status = 'unavailable';
