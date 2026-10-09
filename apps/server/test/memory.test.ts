@@ -864,3 +864,17 @@ it('labels a departed member statement without exposing their identity or comman
     expect(response.body).not.toContain('memberId');
     expect(response.body).not.toContain('commandId');
   });
+
+it('returns unavailable legacy metadata without decoding fact text', async function legacyQuarantine() {
+  await write('bob', 'person', 'detail-legacy', 'Legacy private text');
+  await runner.run(projection);
+  // Match the empty metadata kept for an older write whose ownership could not be checked.
+  await storage.queue.query(`UPDATE memory_facts SET content_status='quarantined',
+    revision=NULL, kind=NULL, pinned=NULL WHERE memory_id=$1`, ['detail-legacy']);
+  const response = await get(`${path('bob')}/facts/detail-legacy`);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'unavailable', memoryId: 'detail-legacy',
+    revision: null, reason: 'quarantined' });
+  expect(response.body).not.toContain('Legacy private text');
+  expect(response.json()).not.toHaveProperty('fact');
+});
