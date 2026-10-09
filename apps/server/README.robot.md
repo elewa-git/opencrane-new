@@ -1359,3 +1359,6 @@ conditionally append once to `participation-<id>`. Saved command positions use
 participant controls and group sends use separate routes.
 `test/chat-access-regression.test.ts` covers the commands with real NATS, PostgreSQL
 and OpenFGA, alongside socket, history, file, desktop and approval refusals.
+
+The [participant command receipt](../../docs/process/p4-5-pr4-evidence.md) records checks
+and the remaining live qualification.
