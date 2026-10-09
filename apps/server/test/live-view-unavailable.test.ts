@@ -180,7 +180,7 @@ async function checksUnavailableLease(boundary: Boundary, recovers: boolean) {
   const head = fixture.nats.store.head.bind(fixture.nats.store);
   function readHead(subject?: string) {
     const startingFence = boundary === 'starting fence' && subject === undefined;
-    const finalFence = boundary === 'final fence' && subject === 'conversation-chat';
+    const finalFence = boundary === 'final fence' && subject === 'participation-chat';
     if (unavailable && (startingFence || finalFence)) {
       failures++;
       throw timeout;
@@ -333,7 +333,7 @@ async function keepsLeaseAfterLateFence(millisecondsAfterDeadline: number) {
     crossed.resolve();
   }
   async function replyAfterDeadline(subject?: string, deadline?: number) {
-    if (late || subject !== 'conversation-chat' || deadline === undefined) {
+    if (late || subject !== 'participation-chat' || deadline === undefined) {
       return readHead(subject, deadline);
     }
     late = true;

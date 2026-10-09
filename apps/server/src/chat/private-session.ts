@@ -37,8 +37,9 @@ export async function readPrivateSession(options: SessionAuthorityOptions,
 export function privateSessionReader(options: SessionAuthorityOptions, memberId: string) {
   const assistants = new Map<string, ReturnType<typeof creationEvent>>();
   const permissions = new Map<string, Promise<void>>();
-  async function read(conversationId: string) {
-    const event = await creationEvent(options.store, options.silo,
+  async function read(conversationId: string,
+    creation?: Awaited<ReturnType<typeof creationEvent>>) {
+    const event = creation ?? await creationEvent(options.store, options.silo,
       `conversation-${conversationId}`, 'conversation.created');
     const created = sessionSchema.parse(event.data);
     let assistantRead = assistants.get(created.assistantId);

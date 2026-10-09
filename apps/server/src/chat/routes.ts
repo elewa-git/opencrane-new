@@ -17,7 +17,7 @@ import {
   isChatRefused,
   ChatRefused,
   ChatAccessApplying,
-  conversationParticipation,
+  conversationParticipationReader,
   type ChatOptions,
 } from './access.ts';
 import { sessionFor } from '../members/routes.ts';
@@ -158,10 +158,13 @@ async function read(
 async function conversationList(options: ChatOptions, memberId: string) {
   const conversations = await listConversations(options.db, options.silo, memberId);
   const readPrivate = privateSessionReader(options, memberId);
+  const readParticipation = conversationParticipationReader(options, memberId);
   async function authorisedSummary(row: (typeof conversations)[number]) {
     try {
-      const access = await conversationParticipation(options, memberId, row.conversationId);
-      if (row.mode === 'agent_session') await readPrivate(row.conversationId);
+      const access = await readParticipation(row.conversationId);
+      if (row.mode === 'agent_session') {
+        await readPrivate(row.conversationId, access.creation.event);
+      }
       const display = await summary(options, row.conversationId, row.mode, access.joinPosition);
       if (row.mode !== 'agent_session') {
         return { ...row, participantIds: access.participantIds, ...display };

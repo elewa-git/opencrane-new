@@ -6,15 +6,16 @@ import { encodeSession } from '@opencrane/auth';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
 import { until } from '@opencrane/authz/testing';
 import { getEventDefinition } from '@opencrane/events';
-import { authorityFence, history, payingGroupAuthority } from '@opencrane/models';
+import { authorityFence, envelope, history, payingGroupAuthority } from '@opencrane/models';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { viewFixture } from './support/view-fixture.ts';
 import { recordLeaseNotices } from './support/rfb-viewer.ts';
+import { viewAccess } from '../src/computers/view-access.ts';
 
 type Fixture = Awaited<ReturnType<typeof viewFixture>>;
-type InjectionPoint = 'fence start' | 'last conversation read';
+type InjectionPoint = 'fence start' | 'last access read';
 interface Injection {
   subject: string;
   type: string;
@@ -27,7 +28,7 @@ interface CloseResult {
   at: number;
 }
 const desktopSubject = grantStream('shared_desktop', 'desktop');
-const injectionPoints: InjectionPoint[] = ['fence start', 'last conversation read'];
+const injectionPoints: InjectionPoint[] = ['fence start', 'last access read'];
 const activityTypes = [
   'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed',
   'agent.turn_stop_requested', 'message.posted', 'file.uploaded', 'file.delivered',
@@ -100,7 +101,11 @@ function conversationEvent(type: string, turnId = 'turn-1') {
   if ('participantId' in example) {
     overrides['participantId'] = 'bob';
   }
-  return eventInjection('conversation-chat', type, overrides);
+  let subject = 'conversation-chat';
+  if (type.startsWith('participant.')) {
+    subject = 'participation-chat';
+  }
+  return eventInjection(subject, type, overrides);
 }
 function desktopGrant(granteeId: string, granteeKind = 'member', type = 'grant.given') {
   const overrides: Record<string, unknown> = {
@@ -208,7 +213,7 @@ async function startViewer(current: Fixture) {
   return observed;
 }
 
-// Add an event after head() reads the starting position or before the final history read.
+// Add an event after the starting position read or during the final access position reads.
 // Keep the real store reads so the next permission check can find that event.
 function armInjection(current: Fixture, point: InjectionPoint, injection: Injection,
   skipFences = 0, persistent = false) {
@@ -234,8 +239,11 @@ function armInjection(current: Fixture, point: InjectionPoint, injection: Inject
     return appended;
   }
   async function readHead(subject?: string, deadline?: number) {
-    if (point === 'last conversation read' && !persistent) {
-      const siblingHead = subject !== undefined && subject !== 'conversation-chat';
+    if (subject === 'conversation-chat') {
+      throw new Error('Live-view access must not watch conversation activity');
+    }
+    if (point === 'last access read' && !persistent) {
+      const siblingHead = subject !== undefined && subject !== 'participation-chat';
       if (siblingHead && state.injectedAt === 0) {
         // Wait for the append before reading the other streams. Those reads run
         // together, so they could otherwise miss the new event.
@@ -254,8 +262,8 @@ function armInjection(current: Fixture, point: InjectionPoint, injection: Inject
       await append();
       return head;
     }
-    if (point === 'last conversation read' && subject !== undefined) {
-      if (subject === 'conversation-chat') {
+    if (point === 'last access read' && subject !== undefined) {
+      if (subject === 'participation-chat') {
         await append();
       }
     }
@@ -332,9 +340,16 @@ async function keepsViewerOpen(injection: Injection, point: InjectionPoint,
   const armed = armInjection(current, point, injection);
   await armed.injected;
   await expectStaysOpen(current, observed, armed.state.injectedAt);
+  return { observed, appendedAt: armed.state.injectedAt };
 }
 async function keepsChatActivityOpen(type: string) {
-  await keepsViewerOpen(conversationEvent(type), 'last conversation read');
+  const result = await keepsViewerOpen(conversationEvent(type), 'last access read');
+  if (!type.startsWith('participant.')) {
+    function pausedAfterActivity(entry: (typeof result.observed.notices)[number]) {
+      return entry.at > result.appendedAt && entry.notice.lease === 'paused';
+    }
+    expect(result.observed.notices.some(pausedAfterActivity)).toBe(false);
+  }
 }
 async function keepsOtherGrantOpen() {
   await keepsViewerOpen(desktopGrant('bob'), 'fence start');
@@ -345,7 +360,7 @@ async function keepsRoleChangeOpen() {
   await keepsViewerOpen(injection, 'fence start');
 }
 function chatActivityTests() {
-  it.each(activityTypes)('%s at the last conversation read keeps the viewer open',
+  it.each(activityTypes)('%s at the last access read keeps the viewer open',
     keepsChatActivityOpen, 30_000);
   it("another member's desktop grant keeps alice viewing", keepsOtherGrantOpen, 30_000);
   it('a member role change that keeps access keeps alice viewing', keepsRoleChangeOpen, 30_000);
@@ -356,7 +371,7 @@ async function admitsDuringActivity() {
   const current = await createFixture();
   await grantDirectly(current);
   const injection = conversationEvent('agent.turn_completed');
-  const armed = armInjection(current, 'last conversation read', injection);
+  const armed = armInjection(current, 'last access read', injection);
   const response = await admission(current);
   await armed.injected;
   expect(response.statusCode).toBe(200);
@@ -398,7 +413,7 @@ describe('opening the viewer while chat activity lands', openingTests);
 
 async function keepsTeamJoinOpen() {
   const injection = teamChange('viewers', 'bob', 'team.member_added', true);
-  await keepsViewerOpen(injection, 'last conversation read', true);
+  await keepsViewerOpen(injection, 'last access read', true);
 }
 async function resumesAfterTeamApplied() {
   const current = await createFixture();
@@ -456,7 +471,7 @@ async function closesTeamRemoval() {
   await grantThroughTeam(current);
   const observed = await startViewer(current);
   const injection = teamChange('viewers', 'alice', 'team.member_removed');
-  const armed = armInjection(current, 'last conversation read', injection);
+  const armed = armInjection(current, 'last access read', injection);
   await armed.injected;
   await expectRevoked(current, observed, armed.state.injectedAt, 'team.member_removed');
 }
@@ -498,7 +513,11 @@ function revocation(type: string) {
   if (type === 'participant.removed') {
     details['participantId'] = 'alice';
   }
-  return eventInjection('conversation-chat', type, details);
+  let subject = 'conversation-chat';
+  if (type === 'participant.removed') {
+    subject = 'participation-chat';
+  }
+  return eventInjection(subject, type, details);
 }
 const revocationCases: { type: string; point: InjectionPoint }[] = [];
 for (const type of ['grant.revoked', 'participant.removed', 'conversation.closed', 'member.removed']) {
@@ -516,7 +535,7 @@ async function closesRevocation(testCase: (typeof revocationCases)[number]) {
   await armed.injected;
   const label = `${testCase.type} / ${testCase.point}`;
   const closed = await expectRevoked(current, observed, armed.state.injectedAt, label);
-  if (testCase.point === 'last conversation read') {
+  if (testCase.point === 'last access read' && testCase.type !== 'conversation.closed') {
     expect(hasUnavailableTimingBefore(closed.at)).toBe(true);
   }
 }
@@ -525,7 +544,7 @@ async function closesDuringContinuousActivity(revokedType: string) {
   await grantDirectly(current);
   const observed = await startViewer(current);
   const injection = conversationEvent('agent.turn_completed');
-  const armed = armInjection(current, 'last conversation read', injection, 0, true);
+  const armed = armInjection(current, 'last access read', injection, 0, true);
   await armed.injected;
   await delay(1000);
   expect(observed.viewer.readyState).toBe(WebSocket.OPEN);
@@ -646,16 +665,54 @@ async function closesRemovedMemberBeforeSlowDesktopRead() {
 it('closes a removed member within 2,000 ms despite a slow desktop read and stops bytes by 1,500 ms',
   closesRemovedMemberBeforeSlowDesktopRead, 30_000);
 
-async function logsUnconfirmedActivity() {
+async function confirmsChatActivity() {
   const injection = conversationEvent('agent.turn_completed');
-  await keepsViewerOpen(injection, 'last conversation read');
-  expect(hasUnavailableTimingBefore()).toBe(true);
+  await keepsViewerOpen(injection, 'last access read');
+  expect(hasUnavailableTimingBefore()).toBe(false);
 }
 function timingTests() {
-  it('logs a check that saw chat activity as unavailable with boundary authority_changed',
-    logsUnconfirmedActivity, 30_000);
+  it('renews access during chat activity without an authority_changed interruption',
+    confirmsChatActivity, 30_000);
 }
 describe('timing records', timingTests);
+
+async function checksUnprojectedActivityOnce() {
+  const current = await createFixture();
+  await grantDirectly(current);
+  const events = [];
+  for (let index = 0; index < 100; index++) {
+    const details = { conversationId: 'chat', turnId: `older-turn-${index}` };
+    const event = envelope('test', 'conversation-chat', 'agent.turn_completed', details);
+    events.push(event);
+  }
+  await current.nats.seed(events);
+  const readStream = current.nats.store.readStream.bind(current.nats.store);
+  let conversationRows = 0;
+  async function* countConversationRows(...args: Parameters<typeof readStream>) {
+    for await (const row of readStream(...args)) {
+      if (args[0] === 'conversation-chat') {
+        conversationRows++;
+      }
+      yield row;
+    }
+  }
+  vi.spyOn(current.nats.store, 'readStream').mockImplementation(countConversationRows);
+  const options = {
+    store: current.nats.store, db: current.db, silo: 'test', binding: current.binding,
+  };
+  await viewAccess(options, 'alice', 'chat');
+  expect(conversationRows).toBeGreaterThanOrEqual(100);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    conversationRows = 0;
+    await viewAccess(options, 'alice', 'chat');
+    expect(conversationRows).toBe(1);
+  }
+  await appendInjection(current, revocation('conversation.closed'));
+  await appendInjection(current, conversationEvent('agent.turn_completed'));
+  await expect(viewAccess(options, 'alice', 'chat')).rejects.toThrow('Access changed');
+}
+it('checks older unprojected chat activity once and still finds a later close',
+  checksUnprojectedActivityOnce, 30_000);
 
 async function keepsExactChangedMessage() {
   const current = await createFixture();

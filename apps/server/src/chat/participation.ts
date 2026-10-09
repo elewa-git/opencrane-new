@@ -128,7 +128,7 @@ export async function participation(store: Pick<EventStore, 'readStream'>,
   for (const currentJoin of joins.values()) {
     if (currentJoin.event.id !== creation.event.id) authorityRows.push(currentJoin);
   }
-  return { created, participantIds: [...joins.keys()], joinPosition: join.sequence,
+  return { created, creation, participantIds: [...joins.keys()], joinPosition: join.sequence,
     joinEventId: join.event.id, accessPosition, authorityRows };
 }
 
@@ -155,8 +155,45 @@ export function participationChanges(store: Pick<EventStore, 'readStream'>,
     changesKind, deadline, copyChanges);
 }
 
-export async function conversationClosed(store: Pick<EventStore, 'readStream' | 'readEvent'>,
+type Closure = { closed: boolean };
+function emptyClosure(): Closure {
+  return { closed: false };
+}
+function addClosure(closure: Closure, row: StoredEvent) {
+  if (row.event.type === 'conversation.closed') {
+    closure.closed = true;
+  }
+}
+function isClosed(closure: Closure) {
+  return closure.closed;
+}
+const closureKind: SummaryKind<Closure> = {
+  name: 'conversation-closure', keep: 256, empty: emptyClosure, add: addClosure,
+};
+const closureReaders = new WeakMap<object, Pick<EventStore, 'readStream'>>();
+
+function closureReader(store: Pick<EventStore, 'readStream' | 'readEvent'>, db: Query) {
+  let reader = closureReaders.get(store);
+  if (reader) return reader;
+  async function* readStream(subject: string, fromSequence = 1, deadline = Infinity) {
+    const identity = z.tuple([z.string(), z.string()]).parse(JSON.parse(subject));
+    const [silo, conversationId] = identity;
+    yield* closureRecords(store, db, silo, conversationId, fromSequence, deadline);
+  }
+  reader = { readStream };
+  closureReaders.set(store, reader);
+  return reader;
+}
+
+export function conversationClosed(store: Pick<EventStore, 'readStream' | 'readEvent'>,
   db: Query, silo: string, conversationId: string, deadline: number) {
+  const reader = closureReader(store, db);
+  const subject = JSON.stringify([silo, conversationId]);
+  return readStreamSummary(reader, silo, subject, closureKind, deadline, isClosed);
+}
+
+async function* closureRecords(store: Pick<EventStore, 'readStream' | 'readEvent'>,
+  db: Query, silo: string, conversationId: string, checkedFrom: number, deadline: number) {
   // Read the close and worker position together so a replay cannot mix two table versions.
   const result = await db.query<{ sequence: string; position: string | null;
     event_id: string | null }>(
@@ -173,18 +210,20 @@ export async function conversationClosed(store: Pick<EventStore, 'readStream' | 
         row.event.id !== reference.event_id || row.event.type !== 'conversation.closed') {
       throw new Error('Conversation history changed');
     }
-    return true;
+    yield row;
+    return;
   }
-  // Confirm all later records. A buffered report after a close must never hide that close.
-  const fromSequence = Number(reference.sequence) + 1;
+  // Resume after checked records when the worker is behind. Keep a close permanently.
+  // Check every newer record so a buffered report cannot hide a close.
+  const fromSequence = Math.max(Number(reference.sequence) + 1, checkedFrom);
   for await (const row of store.readStream(`conversation-${conversationId}`, fromSequence,
     deadline)) {
     if (row.event.silo !== silo || conversationEventId(row.event) !== conversationId) {
       throw new ParticipationRefused('Conversation refused');
     }
-    if (row.event.type === 'conversation.closed') return true;
+    yield row;
+    if (row.event.type === 'conversation.closed') return;
   }
-  return false;
 }
 
 type Membership = { active: boolean };
