@@ -41,8 +41,9 @@ flowchart LR
   Checks write permission before inspecting a fact. Records human facts and checks
   the original command when a reply is lost. Checks chat access before looking up
   a source message. Slow permission checks leave database connections free. The server
-  shares a few write slots between members. A member can save one fact at a time,
-  so a slow write leaves room for another person. Busy writers receive a prompt reply.
+  shares a few write slots between members. A member can save one fact at a time
+  and have one more write waiting, across all their scopes and sign-in sessions.
+  This leaves room for another person. Busy writers receive a prompt reply.
   Keeps the fact's key while a delayed write could still be saved.
   These reads need the memory worker and its existing private key directory.
   It returns current facts only after the read table has caught up with their events.

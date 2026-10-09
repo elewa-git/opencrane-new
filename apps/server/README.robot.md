@@ -75,13 +75,14 @@ history, and OpenFGA checks, finish before taking a database connection or comma
 The watched stream positions are checked before taking the lock and again before append.
 Each command makes one conditional append at the scope position read from history.
 
-Each process allows four active memory writes and one active write per member.
-This also allows at most one active write for each member and scope. A member cannot
-occupy all four slots by writing to several scopes. Permission history and OpenFGA
-checks finish before asking for a slot or reserving a database client.
+Each process allows four active memory writes. Each member can have at most one
+active write and one queued write across all their scopes and sign-in sessions.
+The member identity includes the silo, so members in different silos stay separate.
+A second queued write from the same member is refused immediately. Permission history
+and OpenFGA checks finish before asking for a slot or reserving a database client.
 Up to eight writes can wait for at most 100 ms. A released slot goes to the oldest
 waiting write whose member is free to write. Requests for a member and scope already
-active or waiting are refused immediately, so duplicates cannot fill the queue.
+active or waiting are also refused immediately.
 A full queue or expired wait returns 503 `{status: "unavailable", reason: "memory_busy"}`
 with `Retry-After: 1`. Waiting writes hold no database client. The permission stream
 positions are checked again after waiting and before taking the command lock.

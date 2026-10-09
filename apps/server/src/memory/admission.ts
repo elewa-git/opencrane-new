@@ -13,6 +13,7 @@ type WaitingWrite = {
 };
 
 const activeMembers = new Set<string>();
+const waitingMembers = new Set<string>();
 const reservedPairs = new Set<string>();
 const waitingWrites: WaitingWrite[] = [];
 
@@ -32,6 +33,7 @@ function startWrite(write: Write) {
 
 function refuseWaitingWrite(waiting: WaitingWrite) {
   clearTimeout(waiting.timer);
+  waitingMembers.delete(waiting.write.member);
   reservedPairs.delete(waiting.write.pair);
   waiting.result.reject(new MemoryBusy('Memory writes are busy'));
 }
@@ -52,12 +54,14 @@ function startWaitingWrites() {
     waitingWrites.splice(index, 1);
     index--;
     clearTimeout(waiting.timer);
+    waitingMembers.delete(waiting.write.member);
     const release = startWrite(waiting.write);
     waiting.result.resolve(release);
   }
 }
 
 function waitForWrite(write: Write) {
+  waitingMembers.add(write.member);
   const result = Promise.withResolvers<() => void>();
   function expire() {
     const index = waitingWrites.indexOf(waiting);
@@ -79,6 +83,9 @@ export async function acquireMemoryWrite(silo: string, memberId: string, scopeId
   if (reservedPairs.has(pair)) {
     throw new MemoryBusy('This member already has a write in this scope');
   }
+  if (waitingMembers.has(member)) {
+    throw new MemoryBusy('This member already has a waiting write');
+  }
   if (canStart(write)) {
     reservedPairs.add(pair);
     return startWrite(write);
@@ -86,7 +93,7 @@ export async function acquireMemoryWrite(silo: string, memberId: string, scopeId
   if (waitingWrites.length >= queueLimit) {
     throw new MemoryBusy('Memory writes are busy');
   }
-  // Reserve queued pairs too so repeated requests cannot fill the queue for one scope.
+  // Keep both limits across scopes so one member cannot fill the shared queue.
   reservedPairs.add(pair);
   return waitForWrite(write);
 }

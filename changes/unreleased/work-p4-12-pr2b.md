@@ -19,7 +19,9 @@ events with a short time limit, and recovery reads history before taking a conne
 
 Member and scope permission history, and OpenFGA checks, now finish before a write
 takes a slot, database connection or command lock. Each server process allows four
-active writes, with one per member. This leaves room for another member even when
-one member floods writes to several scopes. Up to eight writes wait for at most
+active writes, with one per member. Each member can have only one further write
+waiting across all scopes and sign-in sessions. A second queued write is refused
+at once. This leaves room for another member even when one member floods writes
+to several scopes. Up to eight writes wait for at most
 100 ms. Busy writes receive 503 `memory_busy` and `Retry-After: 1`. Waiting writes
 hold no database client, and duplicates cannot fill the queue.
