@@ -870,3 +870,90 @@ async function emailInviterEnded(type: string) {
   await inviterEnded(type, true);
 }
 it.each(inviterChanges)('refuses an email-only invitation after inviter %s', emailInviterEnded);
+
+async function refusesChangedSavedInvitation(emailOnly: boolean) {
+  await invite(emailOnly ? { invitedIdentity: undefined } : {});
+  expect((await accept()).statusCode).toBe(200);
+  const saved = await history();
+  const changed = { ...input, invitationId: 'another-invitation' };
+  expect((await accept(changed)).json()).toEqual({
+    status: 'refused', reason: 'command_id_reused',
+  });
+  expect(await history()).toEqual(saved);
+}
+it.each([false, true])('refuses a changed invitation id on a saved command (email-only %s)',
+  refusesChangedSavedInvitation);
+
+async function refusesNonAsciiInvitation() {
+  await invite({ email: 'alKce@example.test' });
+  const response = await accept();
+  expect(response.json()).toEqual({ status: 'refused', reason: 'unsupported_email' });
+  expect(await history()).toHaveLength(1);
+}
+it('refuses a non-ASCII address in the saved invitation', refusesNonAsciiInvitation);
+
+async function refusesMissingAcceptanceDatabase() {
+  await invite({ invitedIdentity: undefined });
+  await app.close();
+  function now() {
+    return clock;
+  }
+  const membership = { silo: 'acme', store: nats.store, now };
+  app = buildServer(config, { membership });
+  const heads = vi.spyOn(nats.store, 'head');
+  const response = await accept();
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+  function isIdentitySearch(call: Parameters<JoinStore['head']>) {
+    return call[0] === 'member-*';
+  }
+  expect(heads.mock.calls.some(isIdentitySearch)).toBe(false);
+  heads.mockRestore();
+  expect(await history()).toHaveLength(1);
+}
+it('refuses email acceptance without the database before searching account history',
+  refusesMissingAcceptanceDatabase);
+
+async function refusesExpiredAppendDeadline(emailOnly: boolean) {
+  await invite(emailOnly ? { invitedIdentity: undefined } : {});
+  const append = nats.store.append.bind(nats.store);
+  async function expireBeforeAppend(command: Parameters<typeof append>[0]) {
+    const afterDeadline = performance.now() + 2_001;
+    vi.spyOn(performance, 'now').mockReturnValue(afterDeadline);
+    return append(command);
+  }
+  const interception = vi.spyOn(nats.store, 'append').mockImplementation(expireBeforeAppend);
+  try {
+    const response = await accept();
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+  } finally {
+    interception.mockRestore();
+    vi.restoreAllMocks();
+  }
+  expect(await history()).toHaveLength(1);
+}
+it.each([false, true])('refuses an append after the access deadline (email-only %s)',
+  refusesExpiredAppendDeadline);
+
+async function refusesForgedJoinIdentity(kind: string) {
+  await invite({ invitedIdentity: undefined });
+  const identity = { issuer: config.issuerUrl, sub: session.sub };
+  const principal = { kind: kind === 'agent' ? 'agent' : 'human',
+    id: kind === 'subject' ? 'other-account' : session.sub };
+  const data = { memberId: 'alice', invitationId: input.invitationId,
+    displayName: 'Alice', email: session.email, role: 'member', identity };
+  const record = { ...event(randomUUID(), 'member-alice', 'member.joined'),
+    silo: 'acme', principal, data };
+  const command = { event: record, expectedSequence: await nats.store.head('member-alice') };
+  expect((await nats.store.append(command)).status).toBe('appended');
+  const runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader, createLogger('test'));
+  await expect(runner.run(members)).rejects.toThrow('Join identity mismatch');
+  const projected = await dbs.queue.query("SELECT status FROM members WHERE member_id = 'alice'");
+  expect(projected.rows).toEqual([{ status: 'invited' }]);
+  const bindings = await dbs.queue.query("SELECT sub FROM member_identities WHERE member_id = 'alice'");
+  expect(bindings.rows).toEqual([]);
+  expect(await runner.checkpoint(members)).toBe(2);
+}
+it.each(['agent', 'subject'])('refuses and rolls back a saved join with a forged %s',
+  refusesForgedJoinIdentity);

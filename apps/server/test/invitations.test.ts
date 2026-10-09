@@ -776,3 +776,77 @@ async function refusesIncompleteUnprojectedHistory() {
 }
 it('refuses an incomplete read of member events after the projection checkpoint',
   refusesIncompleteUnprojectedHistory);
+
+const renewalIntervals = ['before_snapshot', 'after_snapshot', 'during_access', 'before_append'];
+
+async function refusesRenewedInvitation(interval: string) {
+  const initialInput = { ...input, role: 'admin', personalAssistant: 'provision' };
+  const created = await request('POST', initialInput);
+  expect(created.statusCode).toBe(200);
+  const original = (await records())[0]!;
+  const payload = { memberId,
+    invitationId: created.json<{ invitationId: string }>().invitationId,
+    commandId: 'accept-original', displayName: 'Person' };
+  let renewed = false;
+  let renewalId = '';
+  async function renewInvitation() {
+    if (renewed) return;
+    renewed = true;
+    const renewalInput = { ...input, commandId: 'renew-before-acceptance',
+      expectedSequence: original.sequence };
+    const response = await request('POST', renewalInput);
+    expect(response.statusCode).toBe(200);
+    renewalId = response.json<{ invitationId: string }>().invitationId;
+  }
+  const head = nats.store.head.bind(nats.store);
+  async function renewAroundSnapshot(subject?: string, deadline?: number) {
+    if (subject === 'member-*' && interval === 'before_snapshot') {
+      await renewInvitation();
+    }
+    const position = await head(subject, deadline);
+    if (subject === 'member-*' && interval === 'after_snapshot') {
+      await renewInvitation();
+    }
+    return position;
+  }
+  const read = nats.store.readStream.bind(nats.store);
+  async function* renewDuringAccess(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === 'member-admin' && interval === 'during_access') {
+      await renewInvitation();
+    }
+  }
+  const appendEvent = nats.store.append.bind(nats.store);
+  async function renewBeforeAppend(command: Parameters<typeof appendEvent>[0]) {
+    if (command.event.type === 'member.joined' && interval === 'before_append') {
+      await renewInvitation();
+    }
+    return appendEvent(command);
+  }
+  vi.spyOn(nats.store, 'head').mockImplementation(renewAroundSnapshot);
+  vi.spyOn(nats.store, 'readStream').mockImplementation(renewDuringAccess);
+  vi.spyOn(nats.store, 'append').mockImplementation(renewBeforeAppend);
+  const response = await acceptInvitation(payload);
+  expect(renewed).toBe(true);
+  expect(response.statusCode).toBe(409);
+  vi.restoreAllMocks();
+  const beforeRetry = await records();
+  expect(beforeRetry).toHaveLength(2);
+  expect(beforeRetry[1]?.event.data).toMatchObject({ invitationId: renewalId,
+    role: 'member', personalAssistant: 'none' });
+  const oldRetry = await acceptInvitation(payload);
+  expect(oldRetry.json()).toEqual({ status: 'refused', reason: 'unknown_invitation' });
+  expect(await records()).toEqual(beforeRetry);
+  const currentPayload = { ...payload, invitationId: renewalId, commandId: 'accept-renewal' };
+  expect((await acceptInvitation(currentPayload)).statusCode).toBe(200);
+  const saved = await records();
+  expect(saved).toHaveLength(3);
+  expect(saved[2]?.event.data).toMatchObject({ invitationId: renewalId,
+    role: 'member', personalAssistant: 'none' });
+  await prepareAcceptanceProjection();
+  const projected = await dbs.queue.query('SELECT role, status FROM members WHERE member_id = $1',
+    [memberId]);
+  expect(projected.rows).toEqual([{ role: 'member', status: 'joined' }]);
+}
+it.each(renewalIntervals)('refuses a superseded Admin invitation renewed %s',
+  refusesRenewedInvitation);
