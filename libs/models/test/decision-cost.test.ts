@@ -269,7 +269,7 @@ it.each(['computer-assistant', 'conversation-conversation', grantStream('model',
   'refuses %s history restored below its summary without reserving more money',
   refusesRestoredHistory, 40_000);
 
-async function readsLongGrantsBeforeAccessCheck() {
+async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee: boolean) {
   const setup = await fixture();
   const store = setup.nats.store;
   const subject = grantStream('model', 'gpt-6-luna');
@@ -283,9 +283,11 @@ async function readsLongGrantsBeforeAccessCheck() {
   }
   try {
     const events = [];
-    for (let index = 0; index < 3000; index++) {
+    for (let index = 0; index < grantEvents; index++) {
+      let granteeId = `other-${index}`;
+      if (oneGrantee) granteeId = 'bob';
       const grant = { resourceType: 'model', resourceId: 'gpt-6-luna',
-        granteeId: `other-${index}`, granteeKind: 'member', grantedBy: 'alice' };
+        granteeId, granteeKind: 'member', grantedBy: 'alice' };
       events.push(envelope('test', subject, 'grant.given', grant, `grant-${index}`));
     }
     await setup.nats.seed(events);
@@ -304,7 +306,8 @@ async function readsLongGrantsBeforeAccessCheck() {
     const began = performance.now();
     const result = await decide(setup);
     expect(result.status, result.text).toBe(200);
-    expect(performance.now() - began).toBeLessThan(2000);
+    const milliseconds = Math.round(performance.now() - began);
+    expect(milliseconds).toBeLessThan(2000);
     function isGrantRead(call: (typeof reads.calls)[number]) {
       return call.subject === subject;
     }
@@ -314,6 +317,7 @@ async function readsLongGrantsBeforeAccessCheck() {
       expect(call.fromSequence).toBeGreaterThan(summaryPosition);
       expect(call.rows).toBe(0);
     }
+    console.info(JSON.stringify({ grantEvents, milliseconds, grantReads }));
     expect(setup.actor.state.reservations).toHaveLength(2);
     expect(setup.received()).toBe(0);
   } finally {
@@ -321,8 +325,17 @@ async function readsLongGrantsBeforeAccessCheck() {
     await setup.close();
   }
 }
+async function thousandsOfGranteesStayOnLaterReads() {
+  await readsLongGrantsBeforeAccessCheck(3000, false);
+}
 it('reads 3,000 model grants before the access check and admits within two seconds on later rows',
-  readsLongGrantsBeforeAccessCheck, 60_000);
+  thousandsOfGranteesStayOnLaterReads, 60_000);
+
+async function repeatedGrantEditsStayOnLaterReads() {
+  await readsLongGrantsBeforeAccessCheck(15_000, true);
+}
+it('keeps 15,000 edits to one model grantee on later reads within two seconds',
+  repeatedGrantEditsStayOnLaterReads, 180_000);
 
 async function refusesGrantChangedBeforeAccessCheck() {
   const setup = await fixture();
