@@ -113,7 +113,16 @@ export async function listFacts(options: MemoryOptions, requester: string, scope
     ts_rank_cd(search_vector,to_tsquery('simple',$5)) DESC, memory_id
     LIMIT 21 OFFSET $8`, values);
   await requireSameProjection(options, state);
-  const facts = result.rows.map(publicFact);
+  function pageFact(raw: unknown) {
+    const fact = publicFact(raw);
+    const single = { scopeId: scope.scopeId, facts: [fact], returnedCount: 1,
+      nextCursor: pageCursor(secret, binding, offset + 1) };
+    if (Buffer.byteLength(JSON.stringify(single)) > limits.pageBytes) {
+      return { memoryId: fact.memoryId, revision: fact.revision, reason: 'page_limit' };
+    }
+    return fact;
+  }
+  const facts = result.rows.map(pageFact);
   const page = facts.slice(0, limits.pageFacts);
   while (true) {
     let nextCursor: string | null = null;

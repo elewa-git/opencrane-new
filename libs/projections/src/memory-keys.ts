@@ -165,7 +165,8 @@ export function memoryKeys(directory: string) {
     decipher.setAAD(binding(identity));
     decipher.setAuthTag(bytes.subarray(12, 28));
     const text = Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]);
-    return memoryTextSchema.parse(text.toString('utf8'));
+    // Return authenticated older text too. Let the projection quarantine refused text.
+    return text.toString('utf8');
   }
   return { provision, delete: remove, encrypt, decrypt };
 }
