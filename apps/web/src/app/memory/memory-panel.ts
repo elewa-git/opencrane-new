@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, signal,
   type OnDestroy, type OnInit, type SimpleChanges } from '@angular/core';
+import { Overlay } from '../ui/overlay';
 
 type Scope = { scopeId: string; scopeKind: 'person' | 'group' | 'assistant_notes';
   ownerId: string; audience: { kind: string; ownerId: string }; canRead: boolean };
@@ -14,33 +15,37 @@ type Detail = { status: 'unavailable'; scopeId: string; memoryId: string; revisi
   reason: string } | { scopeId: string; fact: Fact; sources: Source[] };
 type DetailRead = { kind: 'ok'; detail: Exclude<Detail, { status: 'unavailable' }> } |
   { kind: 'access' } | { kind: 'missing' } | { kind: 'unavailable' };
-type JsonRead = { kind: 'ok'; body: unknown } | { kind: 'access' } | { kind: 'unavailable' };
+type JsonRead = { kind: 'ok'; body: unknown } | { kind: 'access' } |
+  { kind: 'invalid' } | { kind: 'conflict' } | { kind: 'missing' } | { kind: 'unavailable' };
 type ScreenState = 'loading' | 'ready' | 'unavailable' | 'access';
 
 @Component({
   selector: 'oc-memory-panel',
+  imports: [Overlay],
   templateUrl: './memory-panel.html',
   styleUrl: './memory-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(window:keydown.escape)': 'escapeDetail()' },
 })
 export class MemoryPanel implements OnInit, OnDestroy {
   readonly groupId = input<string | undefined>();
   readonly assistantId = input<string | undefined>();
+  readonly requesterId = input<string | undefined>();
+  readonly accessDenied = input(false);
   protected readonly scopes = signal<Scope[]>([]);
   protected readonly facts = signal<PageFact[]>([]);
   protected readonly sources = signal<Source[]>([]);
   protected readonly selectedScope = signal('');
   protected readonly selectedFact = signal<Fact | undefined>(undefined);
   protected readonly state = signal<ScreenState>('loading');
-  protected readonly listState = signal<'loading' | 'ready' | 'empty' | 'unavailable'>('loading');
+  protected readonly listState = signal<
+    'loading' | 'ready' | 'empty' | 'unavailable' | 'invalid' | 'conflict'>('loading');
   protected readonly query = signal('');
   protected readonly cursor = signal<string | null>(null);
   protected readonly nextCursor = signal<string | null>(null);
   protected readonly detailState = signal<'ready' | 'unavailable' | 'missing' | ''>('');
   private generation = 0;
   private listRequestId = 0;
-  private detailOpener: HTMLElement | undefined;
+  protected detailOpener: HTMLElement | undefined;
   private scopeController: AbortController | undefined;
   private scopeRequestId = 0;
 
@@ -55,13 +60,27 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.scopes.set([]);
     this.facts.set([]);
     this.sources.set([]);
+    this.selectedScope.set('');
     this.selectedFact.set(undefined);
+    this.detailOpener = undefined;
+    this.query.set('');
+    this.cursor.set(null);
+    this.nextCursor.set(null);
+    this.detailState.set('');
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     const groupChanged = changes['groupId']?.firstChange === false;
     const assistantChanged = changes['assistantId']?.firstChange === false;
-    if (groupChanged || assistantChanged) void this.loadScopes();
+    const requesterChanged = changes['requesterId']?.firstChange === false;
+    const accessChange = changes['accessDenied'];
+    const accessWasRevoked = accessChange?.currentValue === true;
+    const accessWasRestored = accessChange?.firstChange === false &&
+      accessChange.currentValue === false;
+    if (accessWasRevoked) this.revoke();
+    else if (accessWasRestored || groupChanged || assistantChanged || requesterChanged) {
+      void this.loadScopes();
+    }
   }
   private listController?: AbortController;
   private detailController?: AbortController;
@@ -75,6 +94,24 @@ export class MemoryPanel implements OnInit, OnDestroy {
   protected scopeAudience(scope: Scope): string {
     if (scope.audience.kind === 'person') return 'Only you';
     return `Shared with ${scope.audience.kind} ${scope.audience.ownerId}`;
+  }
+
+  protected selectedScopeAudience(): string {
+    const selectedScopeId = this.selectedScope();
+    const scope = this.scopes().find(this.isSelectedScope.bind(null, selectedScopeId));
+    if (!scope) return 'Audience unavailable';
+    return this.scopeAudience(scope);
+  }
+
+  private isSelectedScope(selectedScopeId: string, scope: Scope): boolean {
+    return scope.scopeId === selectedScopeId;
+  }
+
+  protected savedDate(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Date unavailable';
+    return new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'UTC' })
+      .format(date);
   }
 
   protected sourceLink(conversationId: string): string {
@@ -137,14 +174,13 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.selectedFact.set(fact);
     this.sources.set([]);
     this.detailState.set('');
-    queueMicrotask(this.focusDetailBack.bind(this));
     const url = detailUrl(this.selectedScope(), fact.memoryId);
     const reply = await readJson(url, controller.signal);
     if (!isCurrentDetailRead(controller, generation, this.generation)) return;
     const result = detailResult(reply);
     if (result.kind === 'access') { this.revoke(); return; }
     if (result.kind === 'missing') { this.detailState.set('missing'); return; }
-    if (result.kind === 'unavailable') { this.detailState.set('unavailable'); return; }
+    if (result.kind !== 'ok') { this.detailState.set('unavailable'); return; }
     this.selectedFact.set(result.detail.fact);
     this.sources.set(result.detail.sources);
     this.detailState.set('ready');
@@ -154,32 +190,15 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.detailController?.abort();
     this.selectedFact.set(undefined);
     this.detailState.set('');
-    this.detailOpener?.focus();
-    this.detailOpener = undefined;
   }
 
-  private focusDetailBack(): void {
-    document.getElementById('memory-detail-back')?.focus();
-  }
-
-  protected escapeDetail(): void {
-    if (this.selectedFact()) this.closeDetail();
-  }
-
-  protected detailKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'Tab' || !(event.currentTarget instanceof HTMLElement)) return;
-    const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), [tabindex="0"]'));
-    const first = focusable[0];
-    const last = focusable.at(-1);
-    if (!first || !last) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
+  protected detailOverlayClosed(): void {
+    if (this.selectedFact()) {
+      this.detailController?.abort();
+      this.selectedFact.set(undefined);
+      this.detailState.set('');
     }
+    this.detailOpener = undefined;
   }
 
   private async loadScopes(): Promise<void> {
@@ -192,6 +211,11 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.facts.set([]);
     this.selectedFact.set(undefined);
     this.sources.set([]);
+    this.detailOpener = undefined;
+    this.query.set('');
+    this.cursor.set(null);
+    this.nextCursor.set(null);
+    this.detailState.set('');
     this.state.set('loading');
     this.listState.set('loading');
     const controller = new AbortController();
@@ -202,7 +226,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
     const result = await readJson(url, controller.signal);
     if (!isCurrentScopeRead(controller, requestId, this.scopeRequestId)) return;
     if (result.kind === 'access') { this.revoke(); return; }
-    if (result.kind === 'unavailable' || !isScopes(result.body)) {
+    if (result.kind !== 'ok' || !isScopes(result.body)) {
       this.state.set('unavailable');
       return;
     }
@@ -232,7 +256,22 @@ export class MemoryPanel implements OnInit, OnDestroy {
     if (!isCurrentListRead(controller, generation, this.generation, requestId,
       this.listRequestId)) return;
     if (result.kind === 'access') { this.revoke(); return; }
-    if (result.kind === 'unavailable' || !isPage(result.body)) {
+    if (result.kind === 'invalid') {
+      this.facts.set([]);
+      this.listState.set('invalid');
+      this.cursor.set(null);
+      this.nextCursor.set(null);
+      return;
+    }
+    if (result.kind === 'conflict') {
+      const hadCursor = this.cursor() !== null;
+      this.cursor.set(null);
+      this.nextCursor.set(null);
+      if (hadCursor) await this.loadFacts();
+      else this.listState.set('conflict');
+      return;
+    }
+    if (result.kind !== 'ok' || !isPage(result.body)) {
       this.listState.set('unavailable');
       return;
     }
@@ -243,16 +282,21 @@ export class MemoryPanel implements OnInit, OnDestroy {
 
   private revoke(): void {
     this.generation += 1;
+    this.scopeRequestId += 1;
+    this.scopeController?.abort();
     this.listController?.abort();
     this.detailController?.abort();
     this.scopes.set([]);
     this.facts.set([]);
     this.sources.set([]);
     this.selectedFact.set(undefined);
+    this.detailOpener = undefined;
     this.selectedScope.set('');
     this.query.set('');
     this.cursor.set(null);
     this.nextCursor.set(null);
+    this.detailState.set('');
+    this.listState.set('empty');
     this.state.set('access');
   }
 }
@@ -262,7 +306,11 @@ async function readJson(url: string, signal: AbortSignal): Promise<JsonRead> {
     const response = await fetch(url, {
       signal, headers: { accept: 'application/json' },
     });
-    if (isAccessStatus(response.status)) return { kind: 'access' };
+    if (response.status === 401 || response.status === 403 || response.status === 404) {
+      return { kind: 'access' };
+    }
+    if (response.status === 409) return { kind: 'conflict' };
+    if (response.status === 422) return { kind: 'invalid' };
     if (!response.ok) return { kind: 'unavailable' };
     const body: unknown = await response.json();
     return { kind: 'ok', body };
@@ -273,7 +321,7 @@ async function readJson(url: string, signal: AbortSignal): Promise<JsonRead> {
 
 function detailResult(reply: JsonRead): DetailRead {
   if (reply.kind === 'access') return { kind: 'access' };
-  if (reply.kind === 'unavailable' || !isDetail(reply.body)) {
+  if (reply.kind !== 'ok' || !isDetail(reply.body)) {
     return { kind: 'unavailable' };
   }
   if ('status' in reply.body) return { kind: 'missing' };
@@ -308,10 +356,6 @@ function scopeUrl(groupId: string | undefined, assistantId: string | undefined):
   const query = params.toString();
   if (!query) return '/api/memory/scopes';
   return `/api/memory/scopes?${query}`;
-}
-
-function isAccessStatus(status: number): boolean {
-  return status === 401 || status === 403 || status === 404;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

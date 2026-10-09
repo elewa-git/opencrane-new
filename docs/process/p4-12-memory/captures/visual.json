@@ -1,0 +1,19 @@
+{
+  "result": "PASS",
+  "widths": [
+    1280,
+    390
+  ],
+  "reducedMotion": true,
+  "checks": [
+    "Detail audience and fact metadata are visible.",
+    "The detail uses its own modal and fits both viewports.",
+    "Opening memory detail sends no chat command."
+  ],
+  "captures": [
+    "MEM-03-1280.png",
+    "MEM-03-1280-RM.png",
+    "MEM-03-390.png",
+    "MEM-03-390-RM.png"
+  ]
+}

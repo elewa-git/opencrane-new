@@ -21,12 +21,20 @@
     }
     <label class="search">Search memory
       <input type="search" [value]="query()" (input)="queryChanged($event)"
-        maxlength="256" autocomplete="off" />
+        maxlength="256" autocomplete="off" [attr.aria-invalid]="listState() === 'invalid'"
+        [attr.aria-describedby]="listState() === 'invalid' ? 'memory-search-error' : null" />
     </label>
+    @if (listState() === 'invalid') {
+      <p id="memory-search-error" class="search-error" role="alert">
+        Search input is invalid. Use up to eight terms and 256 characters.
+      </p>
+    }
     <div class="results" aria-live="polite">
       @if (listState() === 'loading') { <p role="status">Searching memory…</p> }
       @else if (listState() === 'unavailable') {
-        <p role="alert">Memory could not be loaded. Try changing the search.</p>
+        <p role="alert">Memory could not be loaded. Try again later.</p>
+      } @else if (listState() === 'conflict') {
+        <p role="status">Memory changed. Search again to refresh the results.</p>
       } @else if (listState() === 'empty') {
         @if (query()) { <p>No matching facts.</p> }
         @else { <p>No facts have been saved in this scope.</p> }
@@ -50,18 +58,27 @@
       }
     </div>
     @if (selectedFact()) {
-      <aside class="detail" role="dialog" aria-modal="true" aria-labelledby="detail-title"
-        (keydown)="detailKeydown($event)">
+      <dialog class="detail" [ocOverlay]="!!selectedFact()" #detailOverlay="ocOverlay"
+        [returnFocusTo]="detailOpener" [attr.aria-labelledby]="detailOverlay.titleId"
+        (overlayClosed)="detailOverlayClosed()">
         <button id="memory-detail-back" class="back" type="button"
           (click)="closeDetail()">‹ Back to memory</button>
-        <h2 id="detail-title">Fact details</h2>
+        <h2 [id]="detailOverlay.titleId" tabindex="-1">Fact details</h2>
         @if (detailState() === '') { <p role="status">Loading fact…</p> }
         @else if (detailState() === 'unavailable') {
           <p role="alert">Details are unavailable right now.</p>
         } @else if (detailState() === 'missing') {
           <p role="status">This fact or its text is no longer available.</p>
         } @else {
+          <p class="audience">{{ selectedScopeAudience() }}</p>
           <p class="detail-text">{{ selectedFact()?.text }}</p>
+          <dl class="fact-context">
+            <div><dt>Kind</dt><dd>{{ selectedFact()?.kind === 'preference' ? 'Preference' : 'Fact' }}</dd></div>
+            <div><dt>Revision</dt><dd>{{ selectedFact()?.revision }}</dd></div>
+            <div><dt>Saved</dt><dd>{{ savedDate(selectedFact()?.savedAt || '') }}</dd></div>
+            <div><dt>Context</dt><dd>{{ selectedFact()?.pinned
+              ? 'Pinned for initial context; loading is not enabled yet' : 'Not pinned' }}</dd></div>
+          </dl>
           <h3>Sources</h3>
           @for (source of sources(); track $index) {
             @if (source.status === 'available') {
@@ -75,7 +92,7 @@
           }
           @if (!sources().length) { <p>No source was recorded.</p> }
         }
-      </aside>
+      </dialog>
     }
   }
 </section>

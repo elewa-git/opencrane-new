@@ -147,9 +147,9 @@
             }
           </div>
         }
-        @if (reconnectedAt()) {
+        @if (chat.reconnectedAt()) {
           <div class="reconnected-line"><oc-icon name="done" />
-            Reconnected at {{ time(reconnectedAt()!) }}. You're caught up.
+            Reconnected at {{ time(chat.reconnectedAt()!) }}. You're caught up.
           </div>
         }
         @if (chat.selected() && !chat.denied()) {
@@ -341,7 +341,8 @@
         </span>
       </header>
     }
-    <div class="panel-tabs" role="tablist" aria-label="Session views">
+    <div class="panel-tabs" role="tablist" aria-label="Session views"
+      (keydown)="panelTabKeydown($event)">
       <button type="button" role="tab" [attr.aria-selected]="panelTab() === 'files'"
         (click)="panelTab.set('files')">
         Files<small class="tab-count">@if (chat.denied()) { –<span class="sr-only"> unavailable</span> } @else { {{ files().length + chat.attachments().length }} }</small>
@@ -413,7 +414,8 @@
     } @else {
       <section class="panel-section memory-panel-section" role="tabpanel" aria-label="Memory">
         <oc-memory-panel [groupId]="chat.selectedPayingGroupId() || undefined"
-          [assistantId]="chat.selectedAssistantId() || undefined" />
+          [assistantId]="chat.selectedAssistantId() || undefined"
+          [requesterId]="chat.memberId() || undefined" [accessDenied]="chat.denied()" />
       </section>
     }
   </ng-template>

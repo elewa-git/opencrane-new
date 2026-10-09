@@ -1,11 +1,34 @@
+import { Directive, input, output } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryPanel } from './memory-panel';
+import { Overlay } from '../ui/overlay';
+
+@Directive({ selector: 'dialog[ocOverlay]', exportAs: 'ocOverlay', standalone: true })
+class OverlayStub {
+  readonly ocOverlay = input(false);
+  readonly returnFocusTo = input<HTMLElement>();
+  readonly overlayClosed = output<void>();
+  readonly titleId = 'memory-detail-title';
+}
 
 function visibleText(fixture: { nativeElement: unknown }): string {
   const element = fixture.nativeElement;
   if (!(element instanceof HTMLElement)) return '';
   return element.textContent ?? '';
+}
+
+function pageElement(fixture: ComponentFixture<MemoryPanel>): HTMLElement {
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Missing memory page');
+  return element;
+}
+
+function requestUrl(input: RequestInfo | URL | undefined): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  if (input instanceof Request) return input.url;
+  return '';
 }
 
 afterEach(resetTestEnvironment);
@@ -18,16 +41,6 @@ function resetTestEnvironment(): void {
 
 function response(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'cache-control': 'no-store' } });
-}
-
-function installDialogMethods(): void {
-  Object.assign(HTMLDialogElement.prototype, {
-    showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); },
-    close(this: HTMLDialogElement): void {
-      this.removeAttribute('open');
-      this.dispatchEvent(new Event('close'));
-    },
-  });
 }
 
 function personalScope() {
@@ -53,6 +66,10 @@ function stubReplies(...replies: Response[]): void {
 
 function createPanel(): ComponentFixture<MemoryPanel> {
   TestBed.configureTestingModule({ imports: [MemoryPanel] });
+  TestBed.overrideComponent(MemoryPanel, {
+    remove: { imports: [Overlay] },
+    add: { imports: [OverlayStub] },
+  });
   return TestBed.createComponent(MemoryPanel);
 }
 
@@ -161,7 +178,7 @@ it('purges facts and ignores a pending reply when access is revoked', async () =
   let finishList: ((response: Response) => void) | undefined;
   const savedFact = fact('Private pending fact.');
   vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
-    if (String(input).includes('/facts?')) {
+    if (requestUrl(input).includes('/facts?')) {
       return new Promise<Response>((resolve) => { finishList = resolve; });
     }
     return Promise.resolve(response(200, { scopes: [personalScope()] }));
@@ -202,7 +219,7 @@ it('shows rejected search input beside the search field', async () => {
     response(200, { scopeId: 'scope', facts: [], returnedCount: 0, nextCursor: null }),
     response(422, { status: 'invalid' }));
   const fixture = await loadPanel();
-  const element = fixture.nativeElement as HTMLElement;
+  const element = pageElement(fixture);
   const search = element.querySelector<HTMLInputElement>('input[type="search"]');
   if (!search) throw new Error('Missing search field');
   search.value = 'one two three four five six seven eight nine';
@@ -210,6 +227,7 @@ it('shows rejected search input beside the search field', async () => {
   await fixture.whenStable();
   fixture.detectChanges();
   expect(visibleText(fixture)).toContain('Search input is invalid');
+  expect(search.getAttribute('aria-describedby')).toBe('memory-search-error');
 });
 
 it('restarts from the first page after the saved facts change', async () => {
@@ -221,17 +239,18 @@ it('restarts from the first page after the saved facts change', async () => {
     response(200, { scopeId: 'scope', facts: [savedFact], returnedCount: 1,
       nextCursor: 'new-cursor' }));
   const fixture = await loadPanel();
-  const element = fixture.nativeElement as HTMLElement;
+  const element = pageElement(fixture);
   element.querySelector<HTMLButtonElement>('.next')?.click();
   await fixture.whenStable();
   fixture.detectChanges();
-  expect(String(vi.mocked(fetch).mock.calls[2]?.[0])).toContain('old-cursor');
-  expect(String(vi.mocked(fetch).mock.calls[3]?.[0])).not.toContain('old-cursor');
+  const oldPageUrl = requestUrl(vi.mocked(fetch).mock.calls[2]?.[0]);
+  const refreshedPageUrl = requestUrl(vi.mocked(fetch).mock.calls[3]?.[0]);
+  expect(oldPageUrl).toContain('old-cursor');
+  expect(refreshedPageUrl).not.toContain('old-cursor');
   expect(fixture.componentInstance['nextCursor']()).toBe('new-cursor');
 });
 
 it('shows the detail audience and saved fact metadata', async () => {
-  installDialogMethods();
   const savedFact = fact('A shared project fact.');
   savedFact.revision = 4;
   savedFact.pinned = true;
@@ -240,7 +259,7 @@ it('shows the detail audience and saved fact metadata', async () => {
     response(200, { scopeId: 'scope', facts: [savedFact], returnedCount: 1, nextCursor: null }),
     response(200, { scopeId: 'scope', fact: savedFact, sources: [] }));
   const fixture = await loadPanel();
-  const element = fixture.nativeElement as HTMLElement;
+  const element = pageElement(fixture);
   element.querySelector<HTMLButtonElement>('.fact')?.click();
   await fixture.whenStable();
   fixture.detectChanges();
@@ -249,26 +268,22 @@ it('shows the detail audience and saved fact metadata', async () => {
   expect(visibleText(fixture)).toContain('4');
   expect(visibleText(fixture)).toContain('Pinned for initial context; loading is not enabled yet');
   expect(visibleText(fixture)).toContain('2 October 2026');
+  const detailDialog = element.querySelector<HTMLDialogElement>('.detail');
+  expect(detailDialog?.getAttribute('aria-labelledby')).toBe('memory-detail-title');
 });
 
-it('closes the detail overlay on Escape without leaving it open', async () => {
-  installDialogMethods();
-  const savedFact = fact('Fact with a separate detail view.');
+it('shows a missing fact separately from a service failure', async () => {
+  const savedFact = fact('The fact has since been removed.');
   stubReplies(response(200, { scopes: [personalScope()] }),
     response(200, { scopeId: 'scope', facts: [savedFact], returnedCount: 1,
       nextCursor: null }),
-    response(200, { scopeId: 'scope', fact: savedFact, sources: [] }));
+    response(200, { status: 'unavailable', scopeId: 'scope', memoryId: 'fact-one',
+      revision: 1, reason: 'missing' }));
   const fixture = await loadPanel();
-  const element = fixture.nativeElement as HTMLElement;
+  const element = pageElement(fixture);
   element.querySelector<HTMLButtonElement>('.fact')?.click();
   await fixture.whenStable();
   fixture.detectChanges();
-  const detail = element.querySelector<HTMLDialogElement>('.detail');
-  if (!detail) throw new Error('Missing detail dialog');
-  const cancel = new Event('cancel', { cancelable: true });
-  detail.dispatchEvent(cancel);
-  fixture.detectChanges();
-  expect(cancel.defaultPrevented).toBe(true);
-  expect(fixture.componentInstance['selectedFact']()).toBeUndefined();
-  expect(detail.hasAttribute('open')).toBe(false);
+  expect(visibleText(fixture)).toContain('This fact or its text is no longer available.');
+  expect(visibleText(fixture)).not.toContain('Details are unavailable right now.');
 });

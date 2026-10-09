@@ -5,10 +5,12 @@ import type { ProviderRow } from './provider-api';
 
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
   configurable: true,
+  writable: true,
   value: function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); },
 });
 Object.defineProperty(HTMLDialogElement.prototype, 'close', {
   configurable: true,
+  writable: true,
   value: function close(this: HTMLDialogElement): void { this.removeAttribute('open'); },
 });
 

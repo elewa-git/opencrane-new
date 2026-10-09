@@ -305,7 +305,12 @@ memory and honours the server's
 scope changes discard old list replies; scope changes and access loss also discard old
 detail replies. A refused read clears protected content. Source refusal hides its
 reference; source service failure leaves the fact visible and says the source could not
-be checked. This screen has no memory write actions.
+be checked. A denied workspace session also clears every memory value and cancels its
+pending reads. A changed requester causes scope discovery to run again. The detail view
+uses the shared modal overlay, returns focus to its fact row and shows the scope audience,
+kind, revision, saved date and pin state. A rejected search is reported beside the search
+field. A stale page cursor is discarded and the first page is read again. This screen has
+no memory write actions.
 
 Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
 `/ws/conversations/:id/view`, through the existing frontend `/ws` proxy.

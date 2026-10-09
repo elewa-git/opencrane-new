@@ -14,6 +14,7 @@ import { ToolActivityLine } from './tool-activity-line';
 import { RecoveryNotice } from './recovery-notice';
 import { MemoryFreeNotice } from './memory-free-notice';
 import { MemoryPanel } from '../memory/memory-panel';
+import { movePanelTab } from './panel-tab-keyboard';
 import {
   ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, effect, inject, signal,
   viewChild, type OnInit,
@@ -89,7 +90,6 @@ export class Workspace implements OnInit {
   protected readonly screenshotIds = computed(this.screenshotFileIds.bind(this));
   protected readonly rejectedScreenshotIds = computed(this.rejectedScreenshotFileIds.bind(this));
   protected readonly captureViewModel = computed(this.capturePresentation.bind(this));
-  protected readonly reconnectedAt = this.chat.reconnectedAt;
   protected readonly statusChecking = signal(false);
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
@@ -124,6 +124,7 @@ export class Workspace implements OnInit {
   protected selectPrivate(): void {
     this.chat.choosePrivate();
   }
+  protected readonly panelTabKeydown = movePanelTab;
   protected readonly turnOutcome = turnOutcome;
   protected readonly turnStatusIcon = turnStatusIcon;
   protected memoryAdmissionDetail(): string {
