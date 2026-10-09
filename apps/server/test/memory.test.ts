@@ -1668,3 +1668,124 @@ it('keeps older unknown keys when their expected scope position was not recorded
       .toMatchObject({ outcome: 'unknown', memoryId });
     await expect(access(journalPath)).resolves.toBeUndefined();
   });
+
+it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as const)(
+  'keeps other queries available with more slow %s requests than pool slots',
+  async function slowMemoryWrites(stage) {
+    const commandStage = stage.replaceAll(' ', '-');
+    const isAppend = stage.endsWith('append');
+    const assistants = [1, 2, 3, 4].map(assistantName);
+    function assistantName(index: number) {
+      return `pool-${commandStage}-${index}`;
+    }
+    const assistantSubjects = new Set<string>();
+    for (const assistantId of assistants) {
+      await append(`assistant-${assistantId}`, 'assistant.created',
+        { assistantId, kind: 'personal', ownerId: 'bob' });
+      await writeGrant(assistantId);
+      assistantSubjects.add(`assistant-${assistantId}`);
+    }
+    await runner.run(computers);
+    const poolOptions = { ...storage.queue.options, max: 2, connectionTimeoutMillis: 300 };
+    const pool = new Pool(poolOptions);
+    const limitedMemory = { ...memory, db: pgDb(pool) };
+    const previousApp = app;
+    app = buildServer(config, { memory: limitedMemory });
+    await app.ready();
+    function noop() {}
+    let release: () => void = noop;
+    function captureRelease(resolve: () => void) {
+      release = resolve;
+    }
+    const released = new Promise<void>(captureRelease);
+    let notify: () => void = noop;
+    function captureNotification(resolve: () => void) {
+      notify = resolve;
+    }
+    const stalled = new Promise<void>(captureNotification);
+    let delayed = 0;
+    let completed = 0;
+    async function pause() {
+      delayed++;
+      if (isAppend || delayed === 2) {
+        notify();
+      }
+      await released;
+    }
+    const reads = new Map<string, number>();
+    const originalRead = nats.store.readStream.bind(nats.store);
+    async function* slowRead(subject: string, from?: number, deadline?: number) {
+      if (stage === 'permission history' && assistantSubjects.has(subject)) {
+        const visits = (reads.get(subject) ?? 0) + 1;
+        reads.set(subject, visits);
+        // Stall the final permission check, after the first check has allowed the writer.
+        if (visits === 2) {
+          await pause();
+        }
+      }
+      yield* originalRead(subject, from, deadline);
+    }
+    const permissionCalls = new Map<string, number>();
+    const originalPermission = auth.actsFor.bind(auth);
+    async function slowPermission(requester: string, assistantId: string) {
+      if (stage === 'OpenFGA' && assistants.includes(assistantId)) {
+        const visits = (permissionCalls.get(assistantId) ?? 0) + 1;
+        permissionCalls.set(assistantId, visits);
+        if (visits === 2) {
+          await pause();
+        }
+      }
+      return originalPermission(requester, assistantId);
+    }
+    const originalAppend = nats.store.append.bind(nats.store);
+    async function slowAppend(command: Parameters<typeof originalAppend>[0]) {
+      if (isAppend && command.event.type === 'memory.written') {
+        await pause();
+      }
+      return originalAppend(command);
+    }
+    const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(slowRead);
+    const permissionSpy = vi.spyOn(auth, 'actsFor').mockImplementation(slowPermission);
+    const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(slowAppend);
+    function finished(response: Awaited<ReturnType<typeof remember>>) {
+      completed++;
+      return response;
+    }
+    function send(assistantId: string) {
+      let ownerId = assistantId;
+      if (stage === 'same-scope append') {
+        ownerId = assistants[0]!;
+      }
+      const commandId = `pool-${commandStage}-${assistantId}`;
+      const request = remember(ownerId, 'assistant_notes', commandId);
+      return request.then(finished);
+    }
+    const requests = assistants.map(send);
+    function allRequestsReachedSlowWorkOrFinished() {
+      expect(delayed + completed).toBe(assistants.length);
+    }
+    try {
+      await stalled;
+      await vi.waitFor(allRequestsReachedSlowWorkOrFinished, { timeout: 1500 });
+      const result = await pool.query('SELECT 1 AS available');
+      expect(result.rows).toEqual([{ available: 1 }]);
+      if (isAppend) {
+        expect(delayed).toBe(1);
+        expect(pool.totalCount - pool.idleCount).toBe(1);
+      } else {
+        expect(delayed).toBe(assistants.length);
+        expect(pool.totalCount - pool.idleCount).toBe(0);
+      }
+    } finally {
+      release();
+      await Promise.all(requests);
+      readSpy.mockRestore();
+      permissionSpy.mockRestore();
+      appendSpy.mockRestore();
+      await app.close();
+      app = previousApp;
+      await pool.end();
+    }
+    // Prove that a completed or refused batch releases the process's write slot.
+    expect((await remember('bob', 'person', `after-pool-${commandStage}`)).statusCode).toBe(200);
+  });
