@@ -123,3 +123,28 @@ async function checksIssuedChoiceAgainstTurn() {
 }
 it('issues only the provider, binding position and model recorded for that turn',
   checksIssuedChoiceAgainstTurn);
+
+async function refusesRecordedChoiceOnStaticRoute() {
+  const setup = await fixture();
+  try {
+    const recorded = { ...turn, ...choice, model: call.model, turnId: 'bound',
+      payingGroupId: call.payingGroupId };
+    await setup.append('computer-assistant', 'computer.turn_started', recorded);
+    const token = await setup.sign({ ...setup.t, ...choice, turn: 'bound' }, 'decision-service');
+    const headers = { ...setup.headers, 'x-turn-token': token };
+    const body = { model: call.model, stream: true, input: 'OK', max_output_tokens: 128 };
+    const request = { method: 'POST', headers, body: JSON.stringify(body) };
+    const response = await fetch(`${setup.options.decisionUrl}/authorize`, request);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      error: 'Managed provider calls are not available yet',
+    });
+    expect((await setup.call(headers)).status).toBe(403);
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses even a matching recorded provider choice on the static-key route without holding money',
+  refusesRecordedChoiceOnStaticRoute);

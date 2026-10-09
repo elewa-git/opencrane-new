@@ -46,6 +46,8 @@ flowchart LR
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.
   Keep approval lists within the caller’s current period of participation.
   Reuse checked approval facts and read only later chat changes before a decision.
+- Refuse provider-bound model passes on the deployment-key gateway before holding money.
+  Calls through saved provider choices are not available yet.
 - Check member or admin access for reads using saved membership and current permissions.
   Let one request reuse checks for the same saved access event.
 - Check that an invitation's sender still has authority before it is accepted.

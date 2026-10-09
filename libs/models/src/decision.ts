@@ -1,3 +1,4 @@
+import { providerTurnBindingSchema } from '@opencrane/events';
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
   type ProviderVerificationOptions } from './provider-verification.ts';
 import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
@@ -24,8 +25,20 @@ import { requestReservationCents, ModelRequestRefused as RequestRefused, data, m
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
 const computerSchema = z.object({ ...common, typ: z.literal('computer'), computer: id, generation: z.int().nonnegative() });
-const turnSchema = z.object({ ...common, typ: z.literal('turn'), conversation: id, turn: id, requester: id, thread: id, task: z.string().min(1), model: z.string().min(1),
-  delegation: z.array(id).length(1) });
+const legacyTurnSchema = z.object({
+  ...common, typ: z.literal('turn'), conversation: id, turn: id, requester: id, thread: id,
+  task: z.string().min(1), model: z.string().min(1), delegation: z.array(id).length(1),
+  providerId: id.optional(), bindingSequence: z.int().positive().optional(),
+});
+const turnSchema = legacyTurnSchema.extend(providerTurnBindingSchema.shape);
+
+function parseTurnToken(raw: unknown) {
+  const token = legacyTurnSchema.parse(raw);
+  if (token.providerId !== undefined || token.bindingSequence !== undefined) {
+    return turnSchema.parse(raw);
+  }
+  return token;
+}
 const textContent = z.object({ type: z.enum(['input_text', 'output_text']), text: z.string() }).strict();
 const message = z.object({ type: z.literal('message').optional(), id: z.string().nullable().optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
   content: z.union([z.string(), z.array(textContent)]), phase: z.enum(['commentary', 'final_answer']).nullable().optional() }).strict();
@@ -75,7 +88,7 @@ async function readBody(req: IncomingMessage, allowEmpty = false) {
   return text;
 }
 async function context(actor: BudgetActor, binding: Binding,
-  computer: z.infer<typeof computerSchema>, turnToken: z.infer<typeof turnSchema>,
+  computer: z.infer<typeof computerSchema>, turnToken: z.infer<typeof legacyTurnSchema>,
   liveSequence: number, resourceType: string, resourceId: string,
   fresh: Awaited<ReturnType<typeof authorityFence>>, conversation: StoredEvent[],
   turn: StoredEvent, grants?: DecisionGrants): Promise<ModelCall> {
@@ -119,7 +132,7 @@ function digestContext(facts: unknown) {
   digest.update(encoded);
   return digest.digest('hex');
 }
-function activeTurn(turnToken: z.infer<typeof turnSchema>,
+function activeTurn(turnToken: z.infer<typeof legacyTurnSchema>,
   facts: Awaited<ReturnType<typeof decisionActivity>>['computer'],
   computerSequence: number) {
   if (turnToken.delegation[0] !== turnToken.requester) throw new Error('Delegation refused');
@@ -136,7 +149,10 @@ function activeTurn(turnToken: z.infer<typeof turnSchema>,
   const recorded = data(turn.event);
   if (recorded['threadId'] !== turnToken.thread ||
       recorded['conversationId'] !== turnToken.conversation ||
-      recorded['requesterId'] !== turnToken.requester || recorded['task'] !== turnToken.task) {
+      recorded['requesterId'] !== turnToken.requester || recorded['task'] !== turnToken.task ||
+      recorded['providerId'] !== turnToken.providerId ||
+      recorded['bindingSequence'] !== turnToken.bindingSequence ||
+      (recorded['model'] !== undefined && recorded['model'] !== turnToken.model)) {
     throw new Error('Turn is not active');
   }
   return turn;
@@ -146,6 +162,13 @@ function requireActiveConversationTurn(conversation: StoredEvent[], turnId: stri
     return closesDecisionTurn(row.event, turnId);
   }
   if (conversation.some(closesCurrentTurn)) throw new Error('Turn is not active');
+}
+
+function requireDeploymentKeyTurn(turnToken: z.infer<typeof legacyTurnSchema>) {
+  // Refuse a bound call before holding money until the gateway uses that provider's key.
+  if (turnToken.providerId !== undefined) {
+    throw new RequestRefused('Managed provider calls are not available yet');
+  }
 }
 
 function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
@@ -200,7 +223,7 @@ export async function startDecision(
       const decisionDeadline = started + 2000;
       const checked = await credentials.check(req.headers, undefined, decisionDeadline);
       const computer = computerSchema.parse(checked.computer);
-      const turnToken = turnSchema.parse(checked.turn);
+      const turnToken = parseTurnToken(checked.turn);
       // Share two seconds between history and access because the gateway waits only that long.
       // Read new activity before watching the small streams that decide access.
       const activity = await decisionActivity(actor.store, actor.silo,
@@ -278,6 +301,7 @@ export async function startDecision(
         markRefusedDecision(res, outcome === 'allow');
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
       }
+      requireDeploymentKeyTurn(turnToken);
       const parsed = requestSchema.safeParse(JSON.parse(raw));
       if (!parsed.success) throw new RequestRefused('Model request refused: use a supported model, a positive integer output bound (max_output_tokens: 16–2000), n = 1 and supported text/local tools only');
       const body = parsed.data;

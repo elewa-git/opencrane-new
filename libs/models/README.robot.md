@@ -802,6 +802,7 @@ The binding guard tests cover both save orders with an append barrier, status
 recovery, retry access expiry and revocation, failed appends and individual saved
 event identity checks.
 
+
 ## Memory recall capabilities (P4-12 PR 3a)
 
 Only `/mcp/memory/server` receives signed `x-memory-context` after ext_authz checks
@@ -847,3 +848,25 @@ npx vitest run libs/models/test/codex-mcp.test.ts -t 'forwards captured Codex by
 
 These runs cover 157 tests and one selected external MCP test per run. The full
 root test suite and live fresh-install qualification are not part of this correction.
+
+## Provider turn contracts before activation
+
+P4-22 row 4 is split. This first change records and signs provider identity and
+preserves it in reservation replay. `turnSchema` requires `providerId` and positive
+`bindingSequence`. The separate legacy parser remains available before switch-on.
+Any token supplying either field must pass the required schema. Admission compares
+both fields and any recorded model with the first `computer.turn_started`.
+Ordinary model calls with provider claims are refused before any hold, including
+when they match the recorded turn. The gateway still uses the deployment key.
+
+Remaining work: select the assistant or silo default binding at turn admission,
+send the selected model to the computer, migrate with separate resumable commands,
+and record a switch-on event that cannot strand running turns. Managed dispatch
+also needs the real gateway proof and provider/key checks from row 5. There is no
+switch-on command or retirement in this first change.
+
+`test/provider-turn-contract.test.ts` uses real NATS, PostgreSQL, OpenFGA and the
+pinned gateway with a recording upstream. It checks zero holds and sends for bound
+or incomplete tokens, unchanged legacy traffic, matched issuance and reservation
+replay with the original cents and tariff. Set `PG_TEST_URL` to a disposable server.
+Fresh-install migration, paid calls and retirement remain NOT RUN.

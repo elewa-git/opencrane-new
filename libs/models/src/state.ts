@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { parseEventByType, optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
 import type { Projection, Query } from '@opencrane/projections';
 
 // Pinned standard USD prices, 2 October 2026, at the existing EUR 95/100 planning FX.
@@ -85,8 +85,12 @@ export function requestReservationCents(body: { model: string; max_output_tokens
 export function data(event: Pick<EventEnvelope, 'data'>): Record<string, unknown> {
   return z.record(z.string(), z.unknown()).parse(event.data);
 }
-const callSchema = z.object({ requestId: z.string().optional(), model: z.string(), priceTableId: z.string().min(1), computerId: z.string(),
-  assistantId: z.string(), requesterId: z.string(), conversationId: z.string(), turnId: z.string(), threadId: z.string(), payingGroupId: z.string().optional(), contextDigest: z.string() }).strict();
+const callSchema = optionalProviderTurnBindingSchema.safeExtend({
+  requestId: z.string().optional(), model: z.string(), priceTableId: z.string().min(1),
+  computerId: z.string(), assistantId: z.string(), requesterId: z.string(),
+  conversationId: z.string(), turnId: z.string(), threadId: z.string(),
+  payingGroupId: z.string().optional(), contextDigest: z.string(),
+});
 export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
   call: callSchema, settledCents: z.int().nonnegative().optional(), outcomeUnknown: z.boolean().optional() });

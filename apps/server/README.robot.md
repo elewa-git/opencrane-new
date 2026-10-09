@@ -1213,6 +1213,7 @@ desktop grant. A late participant can list and download screenshots saved after 
 latest join. Older previews and downloads are refused, including after projection replay.
 Private team sessions still refuse participant capture.
 
+
 ## Governed personal recall
 
 `POST /mcp/memory/server` serves stateless 2026-07-28 discovery, listing and personal recall.
@@ -1231,3 +1232,10 @@ a mode is refused, as is `memory_free`. Both the requester and assistant need
 recorded grants of the right identity kind and current OpenFGA permission.
 The fixture warms service clients. Fresh-install journeys and backend network
 isolation remain NOT RUN. A valid signed context may be replayed during its short lifetime.
+
+## Repeating a provider-bound turn
+
+Turn start/close records can retain `providerId`, `bindingSequence` and `model`.
+`turnCommand` keeps the first start's choice on repeat and closure. The bridge
+uses that saved model when issuing another pass. Legacy records keep task-table
+selection. Admission does not yet select a saved assistant or default binding.

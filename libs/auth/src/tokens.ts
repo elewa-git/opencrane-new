@@ -1,3 +1,4 @@
+import { optionalProviderTurnBindingSchema } from '@opencrane/events';
 import { readFile } from 'node:fs/promises';
 import { createPublicKey, randomUUID } from 'node:crypto';
 import { createLocalJWKSet, exportJWK, importPKCS8, importSPKI, jwtVerify, SignJWT, type JSONWebKeySet, type JWTPayload } from 'jose';
@@ -81,12 +82,22 @@ export async function tokenIssuer(options: TokenOptions) {
       return issue({ typ: 'computer', silo: input.silo, computer: input.computerId,
         assistant: input.assistantId, generation: input.generation }, computerTokenAudience, options.computerTtlSeconds ?? 600, input.tokenId);
     },
-    turn(input: { silo: string; conversationId: string; turnId: string; requesterId: string; threadId: string; task: string; model: string;
-      assistantId: string; computerTokenId?: string; delegation?: string[] }) {
-      return issue({ typ: 'turn', silo: input.silo, conversation: input.conversationId, thread: input.threadId, task: input.task, model: input.model,
-        computerTokenId: input.computerTokenId, turn: input.turnId, requester: input.requesterId, assistant: input.assistantId,
-        delegation: input.delegation ?? [input.requesterId] }, turnTokenAudience,
-      options.turnTtlSeconds ?? 120);
+    async turn(input: {
+      silo: string; conversationId: string; turnId: string; requesterId: string;
+      threadId: string; task: string; model: string; assistantId: string;
+      computerTokenId?: string; delegation?: string[];
+      providerId?: string | undefined; bindingSequence?: number | undefined;
+    }) {
+      const choice = { providerId: input.providerId, bindingSequence: input.bindingSequence };
+      const checkedChoice = optionalProviderTurnBindingSchema.parse(choice);
+      const payload = {
+        ...checkedChoice, typ: 'turn', silo: input.silo,
+        conversation: input.conversationId, thread: input.threadId,
+        task: input.task, model: input.model, computerTokenId: input.computerTokenId,
+        turn: input.turnId, requester: input.requesterId, assistant: input.assistantId,
+        delegation: input.delegation ?? [input.requesterId],
+      };
+      return issue(payload, turnTokenAudience, options.turnTtlSeconds ?? 120);
     },
   };
 }

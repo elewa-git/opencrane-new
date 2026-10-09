@@ -269,8 +269,11 @@ async function keepsRecordedProviderChoice() {
     data: moved }]);
   expect(await turnCommand(nats.store, context, { ...input, replay: true })).toEqual(admitted);
   await turnCommand(nats.store, context, { ...input, status: 'completed' });
-  const rows = await nats.store.readStream(subject);
-  expect(rows.at(-1)?.event.data).toMatchObject({ ...choice, status: 'completed' });
+  let lastData: unknown;
+  for await (const row of nats.store.readStream(subject)) {
+    lastData = row.event.data;
+  }
+  expect(lastData).toMatchObject({ ...choice, status: 'completed' });
 }
 it('keeps the recorded provider and model on replay and closure after a binding moves',
   keepsRecordedProviderChoice);

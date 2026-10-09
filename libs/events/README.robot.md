@@ -136,3 +136,12 @@ joins keep their old event shape. The member projection checks that the recorded
 subject matches the human principal and applies the binding for later reads.
 
 `provider.model_binding_set` records assistant or `silo_default` choices for `chat_turn`, including model, active/paused state, previous binding position and reviewed category/configuration positions. It changes no key, verification evidence or grant.
+
+## Provider identity on turns and reservations
+
+`providerTurnBindingSchema` requires `providerId` and a positive safe integer
+`bindingSequence`. `optionalProviderTurnBindingSchema` accepts either both fields
+or neither. Turn start/close data also requires `model` when these fields are
+present, and excludes `model` when they are absent. Old events still parse.
+`budget.reserved.modelCall` accepts the optional pair and keeps its existing
+model, price table and payer. These fields do not change settlement calculations.

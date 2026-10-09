@@ -1,3 +1,4 @@
+import { optionalProviderTurnBindingSchema } from './turn-binding.ts';
 import { groupConversationSchema } from './conversation.ts';
 import { isToolCallText } from './tool-call.ts';
 // Data schemas for every event type in the registry except the four
@@ -490,11 +491,15 @@ export const budgetCeilingSetDataSchema = z.discriminatedUnion('scope', [
 // The reservation names both the paying group and the assistant, because
 // the budget actor checks every ceiling (global, group, optional
 // per-assistant) in the one append that records the charge.
-export const budgetReservedDataSchema = z
-  .object({ reservationId: id, permitId: id, amountCents: centsSchema, payingGroupId: id, assistantId: id,
-    modelCall: z.object({ requestId: id.optional(), model: id, priceTableId: id, computerId: id, assistantId: id, requesterId: id, conversationId: id,
-      turnId: id, threadId: id, payingGroupId: id.optional(), contextDigest: digestSchema }).strict().optional() })
-  .strict();
+const reservedModelCallDataSchema = optionalProviderTurnBindingSchema.safeExtend({
+  requestId: id.optional(), model: id, priceTableId: id,
+  computerId: id, assistantId: id, requesterId: id, conversationId: id,
+  turnId: id, threadId: id, payingGroupId: id.optional(), contextDigest: digestSchema,
+});
+export const budgetReservedDataSchema = z.object({
+  reservationId: id, permitId: id, amountCents: centsSchema,
+  payingGroupId: id, assistantId: id, modelCall: reservedModelCallDataSchema.optional(),
+}).strict();
 
 export const budgetSettledDataSchema = z
   .object({ reservationId: id, permitId: id, settledCents: centsSchema, outcome: z.enum(['not_dispatched', 'unknown']).optional() })
@@ -576,11 +581,25 @@ export const securityAlertRaisedDataSchema = z
 
 // Let only the server start or close turns that affect computer suspension. Reports cannot
 // claim this authority.
-export const computerTurnStartedDataSchema = z.object({
-  assistantId: id, computerId: id, conversationId: id, turnId: id, threadId: id, requesterId: id, task: z.literal('chat_turn'), payingGroupId: id.optional(),
+const computerTurnStartedFieldsSchema = optionalProviderTurnBindingSchema.safeExtend({
+  assistantId: id, computerId: id, conversationId: id, turnId: id, threadId: id,
+  requesterId: id, task: z.literal('chat_turn'), payingGroupId: id.optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
-}).strict();
-export const computerTurnClosedDataSchema = computerTurnStartedDataSchema.extend({ threadId: id.optional(), status: z.enum(['completed', 'failed']) });
+  model: id.optional(),
+});
+export const computerTurnStartedDataSchema = computerTurnStartedFieldsSchema
+  .refine(hasProviderTurnModel, 'Provider turns require a model');
+
+function hasProviderTurnModel(data: { providerId?: string | undefined; model?: string | undefined }) {
+  return (data.providerId === undefined) === (data.model === undefined);
+}
+
+const computerTurnClosedFieldsSchema = optionalProviderTurnBindingSchema.safeExtend({
+  ...computerTurnStartedFieldsSchema.shape,
+  threadId: id.optional(), status: z.enum(['completed', 'failed']),
+});
+export const computerTurnClosedDataSchema = computerTurnClosedFieldsSchema
+  .refine(hasProviderTurnModel, 'Provider turns require a model');
 
 // Admission is separate from the later observed outcome. Unverified callers have no asserted identity.
 export const decisionRecordedDataSchema = z.object({
