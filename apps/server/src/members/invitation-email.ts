@@ -3,9 +3,13 @@ import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { readActiveMember, MemberAccessRefused } from '@opencrane/models';
 import { invitationEmailInputSchema, invitationEmailSchema } from '@opencrane/protocol';
 import type { GroupOptions } from './group-routes.ts';
+import type { Query } from '@opencrane/projections';
 import { sessionFor } from './routes.ts';
 
-export type InvitationEmailOptions = Omit<GroupOptions, 'db'>;
+export type InvitationEmailOptions = Omit<GroupOptions, 'db'> & {
+  db?: Query;
+  now?: () => Date;
+};
 export function registerInvitationEmail(app: FastifyInstance, config: AuthConfig,
   options?: InvitationEmailOptions) {
   const routeOptions = { bodyLimit: 1024 };

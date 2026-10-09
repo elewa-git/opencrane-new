@@ -1059,3 +1059,17 @@ or its reply is uncertain. Recovery uses only
 It returns the original receipt, currentSequence and separate content/IAM
 `current` or `applying` states. 404 `unknown` does not prove absence while a POST
 may still be running. Every reply uses `cache-control: no-store`.
+
+## Invitation review fixes
+
+New email invitations use caller-generated UUID v4 member ids. Renewals locate
+candidates by email in the members projection and check each candidate's events.
+The lookup stops at 100 candidates; each stream read stops at 10,000 events.
+The route never scans `member-*`. The members projection is required for POST.
+Stored data failures return 503, while invalid request bodies return 400.
+A changed watched stream returns the caller's saved command result, an access
+refusal if their admin access ended, or 409 `concurrent_change`.
+The optional invitation clock sets session checks, event time and seven-day expiry.
+Tests cover its exact expiry boundary and a route-created invitation refused by join.
+Follow-up acceptance must refuse active identities itself, including joins after
+the candidate read and delayed member projections.

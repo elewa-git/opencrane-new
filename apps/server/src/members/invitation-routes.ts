@@ -1,20 +1,20 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { MemberAccessRefused } from '@opencrane/models';
 import { invitationCommandSchema, invitationStatusParamsSchema } from '@opencrane/protocol';
-import { z } from 'zod';
 import type { InvitationEmailOptions } from './invitation-email.ts';
 import { sessionFor } from './routes.ts';
 import { invitationCommand, invitationStatus, InvitationConflict } from './invitations.ts';
 
 export function registerInvitations(app: FastifyInstance, config: AuthConfig,
   options?: InvitationEmailOptions) {
-  const routeOptions = { bodyLimit: 1024, errorHandler: invalidBody };
+  const routeOptions = { bodyLimit: 1024, errorHandler: requestError };
   app.post('/api/invitations', routeOptions, handler);
   app.get('/api/invitations/:memberId/changes/:commandId', handler);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
-    const session = sessionFor(request, config, new Date());
+    const now = options?.now ?? currentTime;
+    const session = sessionFor(request, config, now());
     if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });
     if (!trustedRequest(request, config, session)) {
       return reply.code(403).send({ status: 'refused', reason: 'wrong_origin_or_organisation' });
@@ -30,8 +30,11 @@ export function registerInvitations(app: FastifyInstance, config: AuthConfig,
       if (!actor) throw new MemberAccessRefused('Active membership required');
       let result;
       if (request.method === 'POST') {
-        const input = invitationCommandSchema.parse(request.body);
-        result = await invitationCommand(options.store, options.binding, actor, input);
+        const input = invitationCommandSchema.safeParse(request.body);
+        if (!input.success) return invalidBody(input.error, request, reply);
+        if (!options.db) throw new Error('Member projection unavailable');
+        result = await invitationCommand(
+          options.store, options.binding, actor, input.data, options.db, now);
       } else {
         const params = invitationStatusParamsSchema.parse(request.params);
         result = await invitationStatus(options.store, options.binding,
@@ -42,15 +45,7 @@ export function registerInvitations(app: FastifyInstance, config: AuthConfig,
       return reply.code(status).send(result);
     } catch (error) {
       if (reply.sent) return reply;
-      if (error instanceof z.ZodError) return invalidBody(error, request, reply);
-      if (error instanceof MemberAccessRefused) {
-        return reply.code(403).send({ status: 'refused', reason: 'access_refused' });
-      }
-      if (error instanceof InvitationConflict) {
-        return reply.code(409).send({ status: 'refused', reason: error.message });
-      }
-      request.log.error({ operation: 'member.invited' }, 'Invitation command unavailable');
-      return reply.code(503).send({ status: 'unavailable' });
+      return commandError(error, request, reply);
     } finally {
       clearTimeout(timer);
     }
@@ -72,4 +67,35 @@ function invalidBody(_error: unknown, _request: FastifyRequest, reply: FastifyRe
   return reply.header('cache-control', 'no-store').code(400).send({
     status: 'refused', reason: 'invalid_request',
   });
+}
+
+function currentTime() {
+  return new Date();
+}
+
+function requestError(error: FastifyError, request: FastifyRequest, reply: FastifyReply) {
+  const bodyErrors = [
+    'FST_ERR_CTP_BODY_TOO_LARGE',
+    'FST_ERR_CTP_INVALID_JSON_BODY',
+    'FST_ERR_CTP_EMPTY_JSON_BODY',
+    'FST_ERR_CTP_INVALID_MEDIA_TYPE',
+  ];
+  if (bodyErrors.includes(error.code)) {
+    return invalidBody(error, request, reply);
+  }
+  const diagnostic = { operation: 'member.invited' };
+  request.log.error(diagnostic, 'Invitation request unavailable');
+  return reply.header('cache-control', 'no-store').code(503).send({ status: 'unavailable' });
+}
+
+function commandError(error: unknown, request: FastifyRequest, reply: FastifyReply) {
+  if (error instanceof MemberAccessRefused) {
+    return reply.code(403).send({ status: 'refused', reason: 'access_refused' });
+  }
+  if (error instanceof InvitationConflict) {
+    return reply.code(409).send({ status: 'refused', reason: error.message });
+  }
+  const diagnostic = { operation: 'member.invited' };
+  request.log.error(diagnostic, 'Invitation command unavailable');
+  return reply.code(503).send({ status: 'unavailable' });
 }

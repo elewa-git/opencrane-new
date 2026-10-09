@@ -72,20 +72,30 @@ personalAssistant }`, at most 1 KiB. Both ids use 1–200 letters, digits,
 underscores or hyphens. `expectedSequence` is a non-negative integer.
 
 Email uses ASCII only, is trimmed and lower-cased, and has at most 254 characters.
-`memberId` is `invitation-` followed by SHA-256 of JSON `[silo, normalisedEmail]`.
-It identifies a pending invitation, not an admitted member. A different body id
-returns 409 `identity_mismatch`. Role is `member|admin`; assistant choice is
+For a new invitation, the caller generates a random UUID v4 for `memberId` and
+keeps it for retries. The server records it in the event. It identifies a pending
+invitation, not an admitted member, and contains no email-derived information.
+A new id that is not a UUID v4 returns 409 `identity_mismatch`. Role is
+`member|admin`; assistant choice is
 required and is `provision|none`. The server supplies `invitedBy`, a stable
 `invitationId` from the original command, and an expiry exactly seven days after
 the event time. It records no issuer or subject and makes no Zitadel request.
 
-An active member with that email returns 409 `already_member`, checked from events.
+The server finds up to 100 candidates by email in the members read table, then
+checks each candidate's event stream. More candidates, over 10,000 events in one
+stream, invalid stored data or an event from another silo return 503. It never
+scans all member streams. An active candidate returns 409 `already_member`.
 A removed stream returns 409 `access_removed`. Renewing a pending or expired
 invitation uses the same email and stream, a new command id and its reviewed
-position. A stale position returns `concurrent_change`; changed saved-command
+position. The email lookup finds the existing invitation; a different body id
+returns `identity_mismatch`. A stale position returns `concurrent_change`; changed
+saved-command
 arguments return `command_id_reused`. History reads finish before the two-second
 caller, ownership and target check. The one append uses the reviewed position and
-`historyChecked`; earlier events remain unchanged.
+`historyChecked` only after comparing the reviewed position with the last event;
+earlier events remain unchanged. If a watched stream changes during the write
+check, the server returns the caller's saved receipt if their command is stored,
+403 if they lost admin access, or 409 `concurrent_change` otherwise.
 
 Success returns `{ status: appended, memberId, invitationId, sequence, createdAt,
 expiresAt }`. An exact repeat returns that receipt without writing. A 503 or lost
@@ -98,7 +108,9 @@ access refusals 403 and unavailable dependencies 503.
 Acceptance is not built: `/members/join` returns `unbound_invitation` for these
 records. No usable link or email is sent. Follow-up acceptance must derive the
 admission id, bind issuer/subject on join and settle two accounts with the same
-verified email through one conditional append. Lists and minimal receipts after
+verified email through one conditional append. It must also refuse an already
+active identity itself: a person can join after this route's candidate check or
+before the members read table catches up. Lists and minimal receipts after
 self-demotion remain follow-up work.
 
 ## Admission member ids
