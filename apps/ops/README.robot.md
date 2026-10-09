@@ -410,3 +410,5 @@ three named admission policies. Use disposable PostgreSQL through `PG_TEST_URL`.
 The image test builds and pushes a second digest under a slot-specific tag in the
 local registry. It proves that v1.0.4 resumes from the updated template, with the
 same Sandbox UID, same PVC UID, a new Pod UID and a saved home file.
+
+The dispatcher registers `seed-provider-default` for provider verification and model selections. It records the first verified connection once the chat model is enabled, using current Owner/Admin authority. Redelivery retains any recorded default or pause. Restart the dispatcher with the updated subscriptions; provider replay runs no reaction.

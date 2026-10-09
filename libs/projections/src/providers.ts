@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { parseEventByType, providerBindingSchema, type EventEnvelope } from '@opencrane/events';
 import type { Projection } from './runner.ts';
 import type { Query } from './db.ts';
 
@@ -49,6 +49,11 @@ export function applyProvider(state: ProviderState | undefined,
   }
   if (!state || state.providerId !== providerId) {
     throw new Error('Missing provider');
+  }
+  if (event.type === 'provider.model_binding_set') {
+    checkBindingRevision(revision, state.revision);
+    state.position = position;
+    return state;
   }
   const fact: ProviderFact = { changeId: event.id, time: event.time, revision,
     outcome: z.string().optional().parse(data['outcome']) ??
@@ -106,13 +111,18 @@ function applyVerification(state: ProviderState, data: Record<string, unknown>,
   }
 }
 function providerProjection(name: string): Projection {
+  const bindings = name === 'providers' ? 'model_bindings' : 'model_bindings_replay';
   return { name, create, drop, apply };
   async function create(db: Query) {
+    await db.query(`CREATE TABLE IF NOT EXISTS ${bindings}
+      (silo TEXT NOT NULL, kind TEXT NOT NULL, dependant_id TEXT NOT NULL,
+      task TEXT NOT NULL, state JSONB NOT NULL, PRIMARY KEY (silo, kind, dependant_id, task))`);
     await db.query(`CREATE TABLE IF NOT EXISTS ${name}
       (silo TEXT NOT NULL, provider_id TEXT NOT NULL, state JSONB NOT NULL,
       PRIMARY KEY (silo, provider_id))`);
   }
   async function drop(db: Query) {
+    await db.query(`DROP TABLE IF EXISTS ${bindings}`);
     await db.query(`DROP TABLE IF EXISTS ${name}`);
   }
   async function apply(db: Query, event: EventEnvelope, position: number) {
@@ -124,6 +134,13 @@ function providerProjection(name: string): Projection {
     const existing = await db.query<{ state: ProviderState }>(
       `SELECT state FROM ${name} WHERE silo = $1 AND provider_id = $2`, values);
     const state = applyProvider(existing.rows[0]?.state, event, position);
+    if (event.type === 'provider.model_binding_set') {
+      const choice = providerBindingSchema.parse(event.data);
+      const saved = { ...choice, position };
+      await db.query(`INSERT INTO ${bindings} VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (silo, kind, dependant_id, task) DO UPDATE SET state = EXCLUDED.state`,
+      [event.silo, choice.kind, choice.dependantId, choice.task, JSON.stringify(saved)]);
+    }
     await db.query(`INSERT INTO ${name} VALUES ($1, $2, $3)
       ON CONFLICT (silo, provider_id) DO UPDATE SET state = EXCLUDED.state`,
     [...values, JSON.stringify(state)]);
@@ -145,4 +162,8 @@ export async function readProviders(db: Query, silo: string, providerId?: string
     return state;
   }
   return result.rows.map(publicState);
+}
+
+function checkBindingRevision(revision: number, current: number) {
+  if (revision !== current) throw new Error('Invalid binding configuration revision');
 }

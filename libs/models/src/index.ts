@@ -30,3 +30,4 @@ export { providerVerificationSchema, requestProviderVerification, providerTestQu
   type ProviderVerificationOptions } from './provider-verification.ts';
 
 export { activeMember, readActiveMember, MemberAccessRefused } from './member-authority.ts';
+export { providerBindingCommand, providerDependencies, providerDefaultHandler } from './provider-bindings.ts';

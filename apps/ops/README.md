@@ -11,7 +11,7 @@ This is the background workers layer. `apps/server` records events, and these wo
 ```mermaid
 flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
-  nats -->|new events and assistant choices| ops["apps/ops<br/>workers and operator tools"]
+  nats -->|new events, assistant and provider choices| ops["apps/ops<br/>workers and table rebuilds"]
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|updates tables, jobs and configured memory| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
@@ -21,6 +21,7 @@ flowchart LR
 
 ## What it is responsible for
 
+- Records the first verified provider as the default once its chat model is enabled. Keeps later choices and pauses.
 - Keeps the member, group, model grant, tool catalogue, conversation, file, computer, budget and
   history tables up to date. Keeps memory current when its key directory is configured.
 - Updates permissions and sets up a new member's assistant and computer when requested.

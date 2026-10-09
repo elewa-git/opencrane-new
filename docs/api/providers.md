@@ -45,6 +45,12 @@ never complete. Check status never saves or verifies again. A repeated accepted
 key command returns the original receipt and ignores the transient replacement
 value; another rotation requires a new command id and the current revision.
 
+A configuration request and a provider-choice request that use the same command
+id on one provider cannot both succeed. The saved request returns its receipt;
+the other request gets 409. The changes GET returns the saved operation and its
+original event id. An unavailable read of that saved event returns 503, so the
+reply cannot confirm a change that was never saved.
+
 Rows contain name, provider, revision, position and enabled model ids. `saved`,
 `reachable`, `modelAnswer` and `modelsChanged` are independent recorded facts with
 actual event time, revision and change id. Model evidence also carries the model,
@@ -204,3 +210,18 @@ records the cache budget and the limits on cold reads.
 - `PROVIDER_SECRETS_DIR` is not wired into the dev stack. Both the server and models
   process need the same private secret directory before a fresh-install provider
   journey can run. Missing wiring denies verification rather than proving it works.
+
+## Saved provider choices
+
+`GET /api/org/providers/:providerId/bindings` returns saved `rows`, `expectedProviderSequence`, real `assistantCount` values and `ordinaryCallsAvailable: false`.
+Its `routines.status` is `absent` after checked empty history, otherwise `unsupported`. Reader failure or changing history returns 503.
+`POST` accepts `commandId`, `expectedProviderSequence`, `expectedRevision`, `kind` (`assistant` or `silo_default`), `dependantId`, `task: chat_turn`, `expectedBindingSequence`, and `action: select|pause`.
+Select requires `model`; a move also requires `expectedSourceRevision`. Pause keeps the provider and model. The existing changes GET recovers the original receipt; retry uses the same body and id.
+Saved choices do not yet control ordinary calls. Retirement remains unavailable.
+
+Identical concurrent retries return the saved event id and sequence. A different actor or
+changed request reusing a command id on the same provider gets 409. The automatic default
+uses a reserved internal command id that user requests cannot supply. It chooses the
+first verified provider only when there is no saved default or pause, and waits for that
+provider to enable the chat model. An administrator can explicitly choose any eligible
+verified provider as the initial default.

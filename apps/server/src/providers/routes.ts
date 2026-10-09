@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig, type tokenIssuer } from '@opencrane/auth';
 import { readProviders } from '@opencrane/projections';
 import { providerAuthority, providerCommand, providerReceipt,
+  readActiveMember, MemberAccessRefused, providerBindingCommand, providerDependencies,
   ProviderRefused, ProviderUnpriced, ProviderConflict, providerHistory, providerSecretRef,
   type ProviderSecrets, requestProviderVerification, providerTestQuote,
   providerVerificationSchema, providerPermission } from '@opencrane/models';
@@ -31,6 +32,8 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
   app.get('/api/org/providers', handlerFor(read));
   app.post('/api/org/providers', { bodyLimit: 8192 }, handlerFor(write));
   app.get('/api/org/providers/:providerId', handlerFor(read));
+  app.get('/api/org/providers/:providerId/bindings', handlerFor(bindings));
+  app.post('/api/org/providers/:providerId/bindings', { bodyLimit: 4096 }, handlerFor(bindings));
   app.get('/api/org/providers/:providerId/changes/:commandId', handlerFor(readStatus));
   app.post('/api/org/providers/:providerId/key', { bodyLimit: 8192 }, handlerFor(writeKey));
   app.get('/api/org/providers/:providerId/verify', handlerFor(readQuote));
@@ -83,7 +86,7 @@ function errorCode(error: unknown) {
   if (error instanceof z.ZodError) {
     return 400;
   }
-  if (error instanceof ProviderRefused) {
+  if (error instanceof ProviderRefused || error instanceof MemberAccessRefused) {
     return 403;
   }
   if (error instanceof ProviderConflict) {
@@ -150,11 +153,10 @@ async function writeKey(request: FastifyRequest, reply: FastifyReply,
 }
 async function readStatus(request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) {
-  const fresh = await providerAuthority(options.store, options.binding, memberId);
   const input = changeParameters.parse(request.params);
-  fresh.include(`provider-${input.providerId}`);
-  const result = await readChange(options, input.providerId, input.commandId, fresh.deadline);
-  await fresh();
+  const deadline = performance.now() + 10_000;
+  const result = await readChange(options, input.providerId, input.commandId, deadline);
+  await readActiveMember(options.store, options.binding, memberId, 'admin');
   return reply.code(result.status === 'not_found' ? 404 : 200).send(result);
 }
 async function readQuote(request: FastifyRequest, reply: FastifyReply,
@@ -285,4 +287,15 @@ function providerRow(state: Awaited<ReturnType<typeof readProviders>>[number]) {
     }
   }
   return { ...state, status };
+}
+async function bindings(request: FastifyRequest, reply: FastifyReply,
+  options: ProviderOptions, memberId: string) {
+  const { providerId } = providerParameters.parse(request.params);
+  if (request.method === 'POST') {
+    const receipt = await providerBindingCommand(options.store, options.binding,
+      memberId, providerId, request.body);
+    return reply.send(receipt);
+  }
+  const result = await providerDependencies(options.store, options.binding, memberId, providerId);
+  return reply.send(result);
 }

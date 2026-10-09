@@ -10,7 +10,7 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls and spending| models["libs/models<br/>AI access and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, saved provider changes and spending| models["libs/models<br/>AI access and spending"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
@@ -22,6 +22,11 @@ flowchart LR
 
 ## What it is responsible for
 
+- Records provider choices and pauses for assistants and the silo default.
+  An administrator can choose any eligible provider. The first verified provider
+  supplies the automatic default when nobody has chosen one. Each reply confirms
+  the change that was saved. Reusing a request id for another change is refused.
+  Ordinary calls still use the existing gateway setup.
 - Choose an AI model for each task from a fixed routing table.
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
