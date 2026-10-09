@@ -1,12 +1,13 @@
 import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from 'jose';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
-import type { Binding } from '@opencrane/authz';
+import { grantStream, type Binding } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
 import { authorityFence, currentAuthority } from './authority.ts';
 import { decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall, parseMemoryRequest } from './mcp.ts';
 import { closesDecisionTurn } from './approvals.ts';
+import { data } from './state.ts';
 import type { IncomingHttpHeaders } from 'node:http';
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
@@ -51,6 +52,8 @@ export async function memoryRights(store: EventStore, binding: Binding,
   if (parsed.input && parsed.input.scopeId !== scope.scopeId) {
     throw new Error('Memory scope refused');
   }
+  await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scope.scopeId, fresh);
+  await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
   const contextDigest = await currentAuthority(store, binding, claims.requester, claims.assistant,
     claims.conversation, 'memory_read', scope.scopeId, fresh, activity.conversation);
   await currentAuthority(store, binding, claims.requester, claims.assistant,
@@ -58,6 +61,35 @@ export async function memoryRights(store: EventStore, binding: Binding,
   await activity.confirm(deadline, false);
   await fresh();
   return { scope, contextDigest, contextPosition: fresh.head };
+}
+
+async function requireRecordedGrants(store: EventStore, silo: string,
+  claims: ThreadIdentity, resourceType: string, resourceId: string,
+  fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  const subject = grantStream(resourceType, resourceId);
+  fresh.include(subject);
+  let memberAllowed = false;
+  let assistantAllowed = false;
+  // Require saved grants too. Leftover permissions cannot select memory on their own.
+  for await (const row of store.readStream(subject, 1, fresh.deadline)) {
+    if (row.sequence > fresh.head) break;
+    const event = row.event;
+    const fields = data(event);
+    if (event.silo !== silo || fields['resourceType'] !== resourceType ||
+        fields['resourceId'] !== resourceId) continue;
+    if (event.type !== 'grant.given' && event.type !== 'grant.revoked') continue;
+    const allowed = event.type === 'grant.given';
+    const kind = fields['granteeKind'];
+    // Apply old revocations without a kind to both identities, as OpenFGA does.
+    const legacyRevocation = !allowed && kind === undefined;
+    if (fields['granteeId'] === claims.requester && (kind === 'member' || legacyRevocation)) {
+      memberAllowed = allowed;
+    }
+    if (fields['granteeId'] === claims.assistant && (kind === 'assistant' || legacyRevocation)) {
+      assistantAllowed = allowed;
+    }
+  }
+  if (!memberAllowed || !assistantAllowed) throw new Error('Recorded memory grant refused');
 }
 
 async function memoryPolicy(store: EventStore, silo: string,
@@ -88,7 +120,7 @@ async function liveMemoryTurn(store: EventStore, binding: Binding, claims: Threa
     threadId: identifier, executionMode: z.string().optional() }).parse(start.event.data);
   if (recorded.requesterId !== claims.requester || recorded.conversationId !== claims.conversation ||
       recorded.threadId !== claims.thread) throw new Error('Memory turn refused');
-  if (recorded.executionMode === 'memory_free') throw new Error('Memory-free turn refused');
+  if (recorded.executionMode !== 'restricted') throw new Error('Memory execution mode refused');
   function ended(row: (typeof activity.conversation)[number]) {
     return row.event.type === 'conversation.closed' || closesDecisionTurn(row.event, claims.turn);
   }
