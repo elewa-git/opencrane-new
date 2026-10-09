@@ -767,6 +767,34 @@ it('checks read grants for notes detail separately from write grants', async fun
   expect(writeOnly.json()).toEqual({ status: 'refused' });
 });
 
+it('keeps memory source links within the latest participation period',
+  async function lateSourceLinks() {
+    const conversationId = 'detail-late-source';
+    const subject = `conversation-${conversationId}`;
+    await append(subject, 'conversation.created', {
+      conversationId, createdBy: 'owner', mode: 'group', participantIds: ['owner', 'admin'],
+    });
+    const messageData = { conversationId, authorId: 'owner', authorKind: 'human',
+      ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text' };
+    const older = await append(subject, 'message.posted', messageData);
+    await append(`participation-${conversationId}`, 'participant.added', {
+      conversationId, participantId: 'bob', addedBy: 'owner',
+    });
+    const newer = await append(subject, 'message.posted', messageData);
+    const sources = [{ conversationId, messageId: older.id },
+      { conversationId, messageId: newer.id }];
+    await write('bob', 'person', 'detail-late-links', 'Readable fact', false, 'acme', sources);
+    await runner.run(projection);
+    await runner.run(conversations);
+    const url = `${path('bob')}/facts/detail-late-links`;
+    const response = await get(url);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ sources: [
+      { status: 'refused' }, { status: 'available', reference: sources[1] },
+    ] });
+    expect(response.body).not.toContain(older.id);
+  });
+
 it('checks chat access first and looks up only the selected source message', async function boundedSources() {
   const conversationId = 'detail-source-only-chat';
   await append(`conversation-${conversationId}`, 'conversation.created', {
