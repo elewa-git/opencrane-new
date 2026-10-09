@@ -10,7 +10,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { wireSubject } from '@opencrane/event-store';
+import { wireSubject, type AppendCommand, type AppendResult } from '@opencrane/event-store';
 import {
   members, computers, conversations, files, pgDb, ProjectionRunner, connectMemberFeed,
 } from '@opencrane/projections';
@@ -26,7 +26,10 @@ import { ownConversation, fileCommand } from '../src/files/commands.ts';
 import { viewAccess } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
-import { conversationParticipationReader } from '../src/chat/access.ts';
+import { ChatRefused, conversationParticipationReader }
+  from '../src/chat/access.ts';
+import * as chatAccess from '../src/chat/access.ts';
+import { ParticipationRefused } from '../src/chat/participation.ts';
 
 async function countedOpenFga(apiUrl: string) {
   let checks = 0;
@@ -1540,6 +1543,10 @@ async function managesGroupParticipants() {
     expect(denied.statusCode).toBe(403);
     const creatorLeave = { id: 'creator-leave', action: 'leave', expectedAccessPosition };
     expect((await participantRequest(context, creatorLeave)).statusCode).toBe(403);
+    const invalidTarget = { id: 'absent', action: 'add', participantId: 'foreign',
+      expectedAccessPosition };
+    expect((await participantRequest(context, invalidTarget)).statusCode).toBe(403);
+    expect(await context.nats.store.head('participation-participants')).toBe(0);
     const invalid = { ...add, expectedAccessPosition: undefined };
     expect((await participantRequest(context, invalid)).statusCode).toBe(400);
     const oversized = { ...add, id: 'a'.repeat(5000) };
@@ -1588,41 +1595,105 @@ async function managesGroupParticipants() {
 it('checks creator rights, saved retries, departed targets, closure and IAM receipts',
   managesGroupParticipants, 120_000);
 
+function pauseParticipantAppends(context: Fixture) {
+  const append = context.nats.store.append.bind(context.nats.store);
+  const ready = Promise.withResolvers<void>();
+  const commands: AppendCommand[] = [];
+  const results: AppendResult[] = [];
+  async function appendTogether(command: AppendCommand) {
+    commands.push(command);
+    if (commands.length === 2) ready.resolve();
+    // Hold both requests after admission so only the real append decides which is saved.
+    await ready.promise;
+    const result = await append(command);
+    results.push(result);
+    return result;
+  }
+  context.nats.store.append = appendTogether;
+  function restore() {
+    ready.resolve();
+    context.nats.store.append = append;
+  }
+  return { commands, results, restore };
+}
+
 async function serialisesParticipantEdits() {
   const context = await fixture();
+  let paused: ReturnType<typeof pauseParticipantAppends> | undefined;
   try {
-    await createParticipantGroup(context);
+    const participantIds = ['alice', 'bob'];
+    for (let index = 0; index < 94; index++) {
+      participantIds.push(`person-${index}`);
+    }
+    await createParticipantGroup(context, participantIds);
     await joinParticipantMember(context, 'carol');
     await joinParticipantMember(context, 'dave');
     const expectedAccessPosition = await participantPosition(context);
+    const subject = 'participation-participants';
+    const expectedSequence = await context.nats.store.head(subject);
+    expect(expectedSequence).toBe(0);
     const first = { id: 'add-carol', action: 'add', participantId: 'carol',
       expectedAccessPosition };
     const second = { id: 'add-dave', action: 'add', participantId: 'dave',
       expectedAccessPosition };
+    paused = pauseParticipantAppends(context);
     const writes = [participantRequest(context, first), participantRequest(context, second)];
     const responses = await Promise.all(writes);
+    paused.restore();
+    expect(paused.commands).toHaveLength(2);
+    const expectedEvent = { subject, type: 'participant.added' };
+    for (const command of paused.commands) {
+      expect(command.expectedSequence).toBe(expectedSequence);
+      expect(command.event).toMatchObject(expectedEvent);
+    }
+    function appendStatus(result: AppendResult) {
+      return result.status;
+    }
+    const appendStatuses = paused.results.map(appendStatus);
+    appendStatuses.sort();
+    expect(appendStatuses).toEqual(['appended', 'conflict']);
     function statusCode(response: typeof responses[number]) {
       return response.statusCode;
     }
     const codes = responses.map(statusCode);
     codes.sort();
     expect(codes).toEqual([200, 409]);
-    expect((await participantRequest(context, first)).statusCode).toBe(responses[0]!.statusCode);
     const rows = [];
-    for await (const row of context.nats.store.readStream('participation-participants')) {
+    for await (const row of context.nats.store.readStream(subject)) {
       rows.push(row);
     }
     expect(rows).toHaveLength(1);
+    const saved = rows[0]!;
+    expect(saved.event.type).toBe('participant.added');
+    let addedParticipantId = 'carol';
+    if (responses[1]!.statusCode === 200) addedParticipantId = 'dave';
+    const savedAddition = { conversationId: 'participants', addedBy: 'alice',
+      participantId: addedParticipantId };
+    expect(saved.event.data).toEqual(savedAddition);
+    participantIds.push(addedParticipantId);
+    participantIds.sort();
     const people = await participantRequest(context);
-    expect(people.json()).toMatchObject({ canManage: true, canLeave: false });
-    const invalidTarget = { id: 'absent', action: 'add', participantId: 'foreign',
-      expectedAccessPosition: rows[0]!.sequence };
-    expect((await participantRequest(context, invalidTarget)).statusCode).toBe(403);
+    const audience = chatParticipantsSchema.parse(people.json());
+    function memberId(person: typeof audience.rows[number]) {
+      return person.memberId;
+    }
+    const savedParticipantIds = audience.rows.map(memberId);
+    savedParticipantIds.sort();
+    expect(savedParticipantIds).toEqual(participantIds);
+    expect(savedParticipantIds).toHaveLength(97);
+    const creatorActions = { canManage: true, canLeave: false };
+    expect(audience).toMatchObject(creatorActions);
+    const staleEdit = { id: 'stale-remove', action: 'remove', participantId: 'bob',
+      expectedAccessPosition };
+    const staleResponse = await participantRequest(context, staleEdit);
+    expect(staleResponse.statusCode, staleResponse.body).toBe(409);
+    expect(await context.nats.store.head(subject)).toBe(saved.sequence);
   } finally {
+    paused?.restore();
     await context.close();
   }
 }
-it('allows one concurrent edit and refuses stale or foreign additions',
+it('races two additions for the 97th participant through the real conditional append',
   serialisesParticipantEdits, 120_000);
 
 async function capsGroupParticipants() {
@@ -1684,9 +1755,6 @@ async function leavesGroupAndRevokesReaders(blocked: boolean) {
       });
       expect(response.statusCode, response.body).toBe(403);
     }
-    const send = { method: 'POST' as const, url: '/api/conversations/participants/messages',
-      headers: context.headers('bob'), payload: { id: 'removed-send', text: 'Forbidden' } };
-    expect((await context.app.inject(send)).statusCode).toBe(403);
     await expect(viewAccess(context.options, 'bob', 'participants')).rejects.toThrow();
     expect(client.received.some(isRefused)).toBe(true);
     expect(JSON.stringify(client.received)).not.toContain('Never deliver this');
@@ -1755,3 +1823,49 @@ async function checksParticipantAdmissionAfterColdHistory() {
 }
 it('loads cold close history before admission and refuses a target removed during addition',
   checksParticipantAdmissionAfterColdHistory, 120_000);
+
+async function refusesRemovedAuthorAtParticipationCheck() {
+  const context = await fixture();
+  const accessChecks = vi.spyOn(chatAccess, 'writeChatAccess');
+  try {
+    await createParticipantGroup(context);
+    const request = { memberId: 'bob', conversationId: 'participants',
+      relation: 'post' as const, allowApplying: false };
+    const activePayload = { id: 'active-send', text: 'Still taking part' };
+    const activeSend = { method: 'POST' as const,
+      url: '/api/conversations/participants/messages',
+      headers: context.headers('bob'), payload: activePayload };
+    const activeResponse = await context.app.inject(activeSend);
+    expect(activeResponse.statusCode, activeResponse.body).toBe(403);
+    expect(accessChecks).toHaveBeenCalledExactlyOnceWith(context.options, request);
+    const activeCheck: unknown = accessChecks.mock.results[0]!.value;
+    const groupRefusal = new ChatRefused('Group commands unavailable');
+    await expect(activeCheck).rejects.toEqual(groupRefusal);
+    const expectedAccessPosition = await participantPosition(context);
+    const remove = { id: 'remove-author', action: 'remove', participantId: 'bob',
+      expectedAccessPosition };
+    const removed = await participantRequest(context, remove);
+    expect(removed.statusCode, removed.body).toBe(200);
+    // Keep IAM unchanged to prove that the saved removal stops the author first.
+    const permission = await context.auth.conversation('bob', 'participants', 'post');
+    expect(permission.allowed).toBe(true);
+    const before = await context.nats.store.head('conversation-participants');
+    const payload = { id: 'removed-send', text: 'Forbidden' };
+    const send = { method: 'POST' as const, url: '/api/conversations/participants/messages',
+      headers: context.headers('bob'), payload };
+    const response = await context.app.inject(send);
+    expect(response.statusCode, response.body).toBe(403);
+    expect(accessChecks).toHaveBeenCalledTimes(2);
+    expect(accessChecks).toHaveBeenLastCalledWith(context.options, request);
+    const removedCheck: unknown = accessChecks.mock.results[1]!.value;
+    const participationRefusal = new ParticipationRefused('Conversation refused');
+    await expect(removedCheck).rejects.toEqual(participationRefusal);
+    await expect(removedCheck).rejects.toBeInstanceOf(ParticipationRefused);
+    expect(await context.nats.store.head('conversation-participants')).toBe(before);
+  } finally {
+    accessChecks.mockRestore();
+    await context.close();
+  }
+}
+it('refuses a removed author at the participation check before the group send restriction',
+  refusesRemovedAuthorAtParticipationCheck, 120_000);
