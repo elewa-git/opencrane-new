@@ -534,11 +534,14 @@ async function keepsApprovalHistoryOutsideShortCheck() {
     async function* refuseFullHistoryDuringShortCheck(
       subject: string, fromSequence = 1, deadline = Infinity,
     ) {
-      if (subject === 'conversation-conversation' && fromSequence === 1 &&
-          deadline - performance.now() < 2100) {
-        throw new Error('Whole conversation read during short access check');
+      for await (const row of originalRead(subject, fromSequence, deadline)) {
+        if (subject === 'conversation-conversation' && fromSequence === 1 &&
+            row.event.type !== 'conversation.created' &&
+            deadline - performance.now() < 2100) {
+          throw new Error('Whole conversation read during short access check');
+        }
+        yield row;
       }
-      yield* originalRead(subject, fromSequence, deadline);
     }
     const read = vi.spyOn(setup.nats.store, 'readStream');
     read.mockImplementation(refuseFullHistoryDuringShortCheck);

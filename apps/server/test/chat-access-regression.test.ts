@@ -1328,6 +1328,8 @@ async function participationVolume() {
         'message.posted', $2::jsonb, '2026-10-01T00:00:00Z'
       FROM generate_series(1, 100000) AS fixture(position)`,
     [previousHead, JSON.stringify(savedMessage)]);
+    await context.db.query("UPDATE projection_checkpoints SET sequence = $1 WHERE name = 'conversations'",
+      [previousHead + 100_000]);
     async function stream() {
       while (!stopped) {
         await context.append('conversation-volume', 'agent.turn_started', {
@@ -1378,7 +1380,7 @@ async function refusesCloseBeforeBufferedReport() {
       conversationId: 'agent', closedBy: 'alice',
     }, false);
     await context.append('conversation-agent', 'agent.turn_completed', {
-      conversationId: 'agent', turnId: 'agent-turn', assistantId: 'assistant',
+      conversationId: 'agent', turnId: 'agent-turn',
     }, false);
     const response = await context.app.inject({ url: '/api/conversations/agent/files',
       headers: context.headers() });
