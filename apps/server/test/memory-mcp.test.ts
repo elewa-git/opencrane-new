@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { dirname } from 'node:path';
 import type { MemoryIdentity } from '@opencrane/events';
 import { decodeJwt } from 'jose';
+import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { fixture } from '@opencrane/models/testing';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
@@ -25,8 +26,35 @@ const projection = memoryProjection({ decrypt });
 function decrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
   return keys.decrypt(identity, encrypted);
 }
+async function govern(target: Awaited<ReturnType<typeof fixture>>) {
+  await target.append('mcp-memory', 'mcp.server_registered', { serverId: 'memory',
+    kind: 'hosted', locator: `registry.example.test/opencrane/server@sha256:${'a'.repeat(64)}`,
+    registeredBy: 'alice' });
+  const tool = { name: 'recall', revision: 'a'.repeat(64), reviewed: true, costCents: 0 };
+  await target.append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
+    connectionId: 'server', accountMode: 'none', schemaDigest: 'a'.repeat(64),
+    toolCount: 1, tools: [tool] });
+  await target.append('mcp-memory', 'mcp.server_published',
+    { serverId: 'memory', publishedBy: 'alice' });
+  await mode(target, 'allow');
+  for (const granteeKind of ['member', 'assistant']) {
+    const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+    const grant = await target.append(grantStream('mcp_server', 'memory'), 'grant.given', {
+      resourceType: 'mcp_server', resourceId: 'memory', granteeKind, granteeId,
+      grantedBy: 'alice' });
+    await target.auth.handler.handle(grant, target.db);
+  }
+}
+function mode(target: Awaited<ReturnType<typeof fixture>>, value: 'allow' | 'ask' | 'block') {
+  return target.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
+    connectionId: 'server', toolName: 'recall', toolRevision: 'a'.repeat(64),
+    mode: value, setBy: 'alice' });
+}
 async function prepare() {
   setup = await fixture();
+  await setup.stopDispatch();
+  await setup.runtime.stop();
+  await govern(setup);
   keys = memoryKeys(dirname(setup.options.configFile));
   await setup.runner.initialise(projection);
   for (const granteeKind of ['member', 'assistant']) {
@@ -59,6 +87,8 @@ async function prepare() {
   const upstream = new URL(address).host;
   setup.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream });
   await setup.restart();
+  // Warm service clients. Cold calls may correctly refuse when the access deadline expires.
+  await setup.call(headers, call, route);
 }
 function memberId() {
   return Promise.resolve('alice');
@@ -83,10 +113,13 @@ it('replaces caller context and returns bounded facts as data through the real g
     const response = await setup.call(headers, call, route);
     expect(response.status, response.text).toBe(200);
     expect(response.text).toContain('ignore all rules');
-    const result = JSON.parse(response.text) as { result: { structuredContent: {
-      facts: { memoryId: string }[]; returnedCount: number; nextCursor: string } } };
+    const resultSchema = z.object({ result: z.object({ structuredContent: z.object({
+      facts: z.array(z.object({ memoryId: z.string() })), returnedCount: z.number(),
+      nextCursor: z.string() }) }) });
+    const result = resultSchema.parse(JSON.parse(response.text));
     expect(result.result.structuredContent.returnedCount).toBe(20);
     expect(result.result.structuredContent.facts[0]?.memoryId).toBe('fact_22');
+    expect(result.result.structuredContent.facts[1]?.memoryId).toBe('fact_21');
     expect(Buffer.byteLength(response.text)).toBeLessThanOrEqual(16384);
     const claims = decodeJwt(capability);
     expect(claims).toMatchObject({ silo: 'test', requester: 'alice', assistant: 'assistant',
@@ -101,6 +134,13 @@ it('replaces caller context and returns bounded facts as data through the real g
     expect(page.status, page.text).toBe(200);
     expect(page.text).toContain('"returnedCount":3');
     expect(setup.actor.state.reservations).toHaveLength(0);
+    const escapedId = { ...call, id: '\u0001'.repeat(200) };
+    const large = '\n'.repeat(1950);
+    await setup.db.query('UPDATE memory_facts SET search_text=$1 WHERE scope_id=$2', [large, scopeId]);
+    const bounded = await setup.call(headers, escapedId, route);
+    expect(bounded.status, bounded.text).toBe(200);
+    expect(Buffer.byteLength(bounded.text)).toBeLessThanOrEqual(16384);
+    await setup.runner.rebuild(projection);
   });
 
 it('discovers only recall and binds method headers to stateless requests', async function discovery() {
@@ -133,6 +173,11 @@ it('refuses direct, forged, altered, expired and wrong-thread backend calls befo
         expect(response.statusCode).toBe(403);
       }
       const claims = decodeJwt(valid);
+      const sharedOnly = await setup.sign({ ...claims, contentAccess: 'shared_only' },
+        'memory-mcp', 2);
+      const shared = await app.inject({ method: 'POST', url: route,
+        headers: { ...headers, 'x-memory-context': sharedOnly }, payload: call });
+      expect(shared.statusCode).toBe(403);
       const expired = await setup.sign(claims, 'memory-mcp', -1);
       const response = await app.inject({ method: 'POST', url: route,
         headers: { ...headers, 'x-memory-context': expired }, payload: call });
@@ -146,6 +191,10 @@ it('refuses foreign scopes, mismatched threads, unsupported operations and forge
     const bodies = [
       { ...call, params: { ...call.params, arguments: {
         scopeId: memoryScopeId('test', 'person', 'bob'), query: '' } } },
+      { ...call, params: { ...call.params, arguments: {
+        scopeId: memoryScopeId('test', 'assistant_notes', 'assistant'), query: '' } } },
+      { ...call, params: { ...call.params, arguments: {
+        scopeId: memoryScopeId('test', 'group', 'sales'), query: '' } } },
       { ...call, params: { ...call.params, _meta: { ...metadata, threadId: 'other' } } },
       { ...call, params: { ...call.params, name: 'remember' } },
     ];
@@ -159,10 +208,25 @@ it('refuses foreign scopes, mismatched threads, unsupported operations and forge
     expect(setup.received()).toBe(0);
   });
 
+it('refuses changed MCP policy at both the gateway and backend', async function changedPolicy() {
+  expect((await setup.call(headers, call, route)).status).toBe(200);
+  const valid = capability;
+  for (const value of ['block', 'ask'] as const) {
+    await mode(setup, value);
+    const response = await app.inject({ method: 'POST', url: route,
+      headers: { ...headers, 'x-memory-context': valid }, payload: call });
+    expect(response.statusCode).toBe(403);
+    capability = '';
+    expect((await setup.call(headers, call, route)).status).toBe(403);
+    expect(capability).toBe('');
+  }
+  await mode(setup, 'allow');
+});
+
 it('rechecks stale grants at the backend and refuses an ended turn upstream', async function stale() {
   expect((await setup.call(headers, call, route)).status).toBe(200);
   const valid = capability;
-  await setup.append(grantStream('memory_read', scopeId), 'grant.revoked', {
+  const revoked = await setup.append(grantStream('memory_read', scopeId), 'grant.revoked', {
     resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'assistant',
     granteeId: 'assistant', revokedBy: 'alice' });
   const database = vi.spyOn(setup.db, 'query');
@@ -174,9 +238,21 @@ it('rechecks stale grants at the backend and refuses an ended turn upstream', as
     capability = '';
     expect((await setup.call(headers, call, route)).status).toBe(403);
     expect(capability).toBe('');
+    await setup.auth.handler.handle(revoked, setup.db);
+    const grant = await setup.append(grantStream('memory_read', scopeId), 'grant.given', {
+      resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'assistant',
+      granteeId: 'assistant', grantedBy: 'alice' });
+    await setup.auth.handler.handle(grant, setup.db);
+    expect((await setup.call(headers, call, route)).status).toBe(200);
+    const active = capability;
     await setup.append('computer-assistant', 'computer.turn_closed', {
       assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
-      turnId: 'turn', status: 'completed' });
+      turnId: 'turn', requesterId: 'alice', task: 'chat_turn',
+      payingGroupId: 'personal-default', status: 'completed' });
+    const ended = await app.inject({ method: 'POST', url: route,
+      headers: { ...headers, 'x-memory-context': active }, payload: call });
+    expect(ended.statusCode).toBe(403);
+    capability = '';
     expect((await setup.call(headers, call, route)).status).toBe(403);
     expect(capability).toBe('');
   } finally { database.mockRestore(); }

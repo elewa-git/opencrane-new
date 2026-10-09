@@ -12,7 +12,7 @@ This is a shared library used by the back end, background workers and the models
 flowchart LR
   server["apps/server<br/>back end"] -.->|checks sign-in and session organisation| auth["libs/auth<br/>checked sign-in details and passes"]
   ops["apps/ops<br/>background workers"] -.-> auth
-  models["libs/models<br/>AI access and spending"] -.-> auth
+  models["libs/models<br/>AI access and spending"] -.->|signs memory passes| auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
   auth -->|updates saved computer facts from new events| events["Event log<br/>saved events"]
   auth -.->|checks turn data| catalogue["libs/events<br/>event definitions"]
@@ -20,6 +20,7 @@ flowchart LR
 
 ## What it is responsible for
 
+- Sign brief passes for memory requests checked by the AI gateway.
 - Send a person to Zitadel and check the sign-in response using OIDC, a standard sign-in method.
 - Keep the email and its verification result from the checked sign-in token.
   Limit the stored email length.

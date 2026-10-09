@@ -8,6 +8,7 @@ import type { ModelAccessOptions } from '../models/access-routes.ts';
 
 export type MemoryOptions = ModelAccessOptions & {
   chat?: import('../chat/access.ts').ChatOptions;
+  identity?: { jwks: import('jose').JSONWebKeySet; issuer: string };
 };
 export type Scope = Pick<MemoryIdentity, 'scopeId' | 'scopeKind' | 'ownerId'>;
 export class MemoryRefused extends Error {}

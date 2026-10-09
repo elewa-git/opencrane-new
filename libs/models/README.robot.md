@@ -801,3 +801,12 @@ receipt as unavailable. This check also applies to verification records.
 The binding guard tests cover both save orders with an append barrier, status
 recovery, retry access expiry and revocation, failed appends and individual saved
 event identity checks.
+
+## Memory recall capabilities (P4-12 PR 3a)
+
+Only `/mcp/memory/server` receives signed `x-memory-context` after ext_authz checks
+live turns, requester/assistant `memory_read` and `mcp_server` grants, and Allow recall policy.
+Claims bind silo, requester, assistant, computer/generation, conversation, turn, thread,
+operation, person scope, private content class, call/decision ids, body digest and event position.
+The server verifies ES256, issuer, audience, expiry within two seconds and body/thread binding,
+then rechecks live rights and policy. Memory-free turns and shared-only contexts are refused.

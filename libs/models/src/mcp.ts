@@ -125,6 +125,37 @@ export function parseMcpCall(body: string) {
   return { call, args };
 }
 
+const memoryDiscovery = callSchema.extend({
+  method: z.enum(['server/discover', 'tools/list']),
+  params: z.strictObject({ _meta: metadataSchema }),
+});
+const recallInput = z.strictObject({ scopeId: z.string().regex(/^[a-f0-9]{64}$/u),
+  query: z.string().default(''), cursor: z.string().max(2000).optional(),
+  limit: z.int().min(1).max(20).default(20) });
+
+export function parseMemoryRequest(raw: string, headers: IncomingHttpHeaders) {
+  if (Buffer.byteLength(raw) > 16384 || headers['mcp-session-id'] !== undefined) {
+    throw new Error('Memory request refused');
+  }
+  const parsed = losslessJson(raw);
+  const discovery = memoryDiscovery.safeParse(plain(parsed));
+  let request;
+  let input;
+  if (discovery.success) {
+    request = discovery.data;
+  } else {
+    request = parseMcpCall(raw).call;
+    if (request.params.name !== 'recall') throw new Error('Memory tool refused');
+    input = recallInput.parse(request.params.arguments);
+  }
+  const name = request.method === 'tools/call' ? request.params.name : '';
+  if (headers['mcp-protocol-version'] !== version ||
+      headers['mcp-method'] !== request.method || (headers['mcp-name'] ?? '') !== name) {
+    throw new Error('Memory protocol refused');
+  }
+  return { request, input, bodyDigest: parsed.digest, headers };
+}
+
 function requireOfferedMode(mode: unknown) {
   if (mode !== undefined && mode !== '' && mode !== 'allow' && mode !== 'ask') {
     throw new Error('MCP turn mode refused');

@@ -27,6 +27,7 @@ function serverState(serverId: string, overrides: Partial<TurnToolServerState> =
 it('offers only reviewed, zero-cost Allow tools on published credential-free servers', async () => {
   const states = new Map([
     ['allow', serverState('allow')],
+    ['memory', serverState('memory')],
     ['ask', serverState('ask', { policyTools: [{ name: 'read', revision: 'a'.repeat(64),
       reviewed: true, costCents: 0, mode: 'ask' }] })],
     ['block', serverState('block', { policyTools: [{ name: 'read', revision: 'a'.repeat(64),

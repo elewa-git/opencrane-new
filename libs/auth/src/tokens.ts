@@ -59,6 +59,17 @@ export async function tokenIssuer(options: TokenOptions) {
   return {
     jwks,
     ...tokenVerifier(jwks, options.issuer, now),
+    memoryContext(payload: JWTPayload, expiresAt: number) {
+      const issuedAt = Date.now() / 1000;
+      const expires = Math.min(expiresAt / 1000, issuedAt + 2);
+      const token = new SignJWT(payload);
+      token.setProtectedHeader({ alg: algorithm, kid: 'lifecycle' });
+      token.setIssuer(options.issuer);
+      token.setAudience('memory-mcp');
+      token.setIssuedAt(issuedAt);
+      token.setExpirationTime(expires);
+      return token.sign(key);
+    },
     budget(input: { silo: string; memberId: string; commandDigest: string }) {
       return issue({ typ: 'budget-admin', silo: input.silo, memberId: input.memberId, commandDigest: input.commandDigest }, 'budget-admin', 30);
     },

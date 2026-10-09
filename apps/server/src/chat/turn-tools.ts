@@ -67,6 +67,8 @@ export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServ
   const keys = new Set<string>();
   let omittedServers = 0;
   for (const row of input.rows) {
+    // Keep memory tools out of native turns until their private execution is supported.
+    if (row.serverId === 'memory') continue;
     const state = await input.readServer(row.serverId);
     if (!state || !isAvailableServer(state)) continue;
     if (!hasComputerCompatibleFields(state)) {

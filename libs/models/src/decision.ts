@@ -9,11 +9,12 @@ import { authorityFence, decisionAuthorityFence, currentAuthority } from './auth
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall } from './mcp.ts';
+import { prepareMemoryContext } from './memory-context.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import type { JSONWebKeySet } from 'jose';
-import { computerCredentials, tokenVerifier } from '@opencrane/auth';
+import { computerCredentials, tokenVerifier, type tokenIssuer } from '@opencrane/auth';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -121,6 +122,7 @@ function digestContext(facts: unknown) {
 function activeTurn(turnToken: z.infer<typeof turnSchema>,
   facts: Awaited<ReturnType<typeof decisionActivity>>['computer'],
   computerSequence: number) {
+  if (turnToken.delegation[0] !== turnToken.requester) throw new Error('Delegation refused');
   const computer = facts.lifecycle;
   // Check the same ready computer that supplied the token's current identity.
   // Refuse a suspension or replacement saved between those two reads.
@@ -166,7 +168,8 @@ function requireMcpThread(call: ReturnType<typeof parseMcpCall>['call'], thread:
 }
 
 export async function startDecision(
-  actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string },
+  actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string;
+    memory?: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'memoryContext'> },
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
 ) {
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
@@ -224,8 +227,29 @@ export async function startDecision(
       auditedContext = { requesterId: turnToken.requester, assistantId: computer.assistant };
       correlation = { conversationId: turnToken.conversation, turnId: turnToken.turn };
       contextDigest = digestContext([computer, turnToken]);
-      if (turnToken.delegation[0] !== turnToken.requester) throw new Error('Delegation refused');
       const raw = await readBody(req);
+      async function memoryDecision() {
+        if (!identity.memory) throw new Error('Memory signing unavailable');
+        const claims = { silo: actor.silo, requester: turnToken.requester,
+          assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
+          conversation: turnToken.conversation, turn: turnToken.turn, thread: turnToken.thread };
+        const memory = await prepareMemoryContext(actor.store, binding, claims, raw,
+          req.headers, decisionDeadline, requestId);
+        contextDigest = memory.contextDigest;
+        callId = memory.callId;
+        await audit('allow', 'memory_read_allowed');
+        await fresh();
+        const remaining = decisionDeadline - performance.now();
+        const capability = await identity.memory.memoryContext(memory.payload, Date.now() + remaining);
+        await fresh();
+        res.setHeader('x-memory-context', capability);
+        res.setHeader('x-request-id', requestId);
+        res.end('{}');
+      }
+      if (req.url === '/authorize/mcp/memory/server') {
+        await memoryDecision();
+        return;
+      }
       if (route === 'mcp') {
         const parsed = parseMcpCall(raw);
         callId = parsed.call.params._meta.callId;

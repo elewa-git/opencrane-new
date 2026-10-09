@@ -11,6 +11,7 @@ import { providerSecrets, BudgetActor, startDecision, startGateway,
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import type { JSONWebKeySet } from 'jose';
+import { tokenIssuer } from '@opencrane/auth';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -46,7 +47,11 @@ try {
   await db.db.lock!(`budget-leader:${silo}`, async locked => {
     const actor = new BudgetActor(events.store, silo);
     await actor.start(2000, 20000, process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default');
-    const identity = { jwks, issuer: required('TOKEN_ISSUER') };
+    const issuer = required('TOKEN_ISSUER');
+    const signingFile = process.env['TOKEN_SIGNING_KEY_FILE'];
+    let memory: Awaited<ReturnType<typeof tokenIssuer>> | undefined;
+    if (signingFile) memory = await tokenIssuer({ privateKeyPath: signingFile, issuer });
+    const identity = { jwks, issuer, ...(memory ? { memory } : {}) };
     const binding = { silo, apiUrl: required('OPENFGA_API_URL'),
       storeId: required('OPENFGA_STORE_ID'),
       authorizationModelId: required('OPENFGA_MODEL_ID') };

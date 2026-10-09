@@ -31,3 +31,6 @@ export { providerVerificationSchema, requestProviderVerification, providerTestQu
 
 export { activeMember, readActiveMember, MemberAccessRefused } from './member-authority.ts';
 export { providerBindingCommand, providerDependencies, providerDefaultHandler } from './provider-bindings.ts';
+
+export { parseMemoryRequest } from './mcp.ts';
+export { memoryRights, verifyMemoryContext } from './memory-context.ts';

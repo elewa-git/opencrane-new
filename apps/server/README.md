@@ -10,8 +10,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and permission and participation checks"]
-  server -.->|checks organisation, access, invitation accounts and spending| libs["libs/*<br/>shared code"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and participation checks"]
+  server -.->|checks organisation, access, invitations, spending and memory passes| libs["libs/*<br/>shared code"]
   server -->|records changes, model grants, chat, computer facts and confirmed provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -25,6 +25,7 @@ flowchart LR
 - Lets owners and admins save provider choices and pauses, count affected assistants
   and recover saved results. Conflicting requests cannot report an unsaved change
   as saved. Ordinary calls keep their existing setup.
+- Serves personal facts after checking the gateway pass and current permissions.
 - Signs people in and keeps their browser session.
 - Uses the shared organisation check for session routes and WebSocket connections.
   Production refuses extra sign-in identities. Development can allow named identities

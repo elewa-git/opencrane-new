@@ -15,7 +15,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
-  models <-->|checks tool mode, call ids and access| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks tool mode, call ids, access and memory passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|new usage lines| models
   models -->|saves spending and reads later activity and grant facts| store["libs/event-store<br/>event log"]
 ```
@@ -27,6 +27,8 @@ flowchart LR
   supplies the automatic default when nobody has chosen one. Each reply confirms
   the change that was saved. Reusing a request id for another change is refused.
   Ordinary calls still use the existing gateway setup.
+
+- Sign short passes for personal memory calls through the gateway.
 - Choose an AI model for each task from a fixed routing table.
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.

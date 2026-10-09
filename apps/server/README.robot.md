@@ -1212,3 +1212,18 @@ Personal agent sessions retain screenshot capture for current participants who h
 desktop grant. A late participant can list and download screenshots saved after their
 latest join. Older previews and downloads are refused, including after projection replay.
 Private team sessions still refuse participant capture.
+
+## Governed personal recall
+
+`POST /mcp/memory/server` serves stateless 2026-07-28 discovery, listing and personal recall.
+Only recall is advertised. Remember and other memory operations remain separate work.
+
+The models process needs `TOKEN_SIGNING_KEY_FILE`. `MODEL_MCP_ROUTES` must include
+`{ "serverId": "memory", "connectionId": "server", "upstream": "<server-host>:<port>" }`.
+The server uses its existing token issuer's public keys and `MEMORY_KEY_DIRECTORY` settings.
+Deployment keeps the backend behind the gateway; unsigned direct requests are refused.
+
+The [memory capability contract](../../libs/models/README.robot.md) explains signature,
+scope, policy and current grant checks. Replies fit within 16 KiB.
+`test/memory-mcp.test.ts` uses real agentgateway, NATS, PostgreSQL and OpenFGA.
+The fixture warms service clients. Fresh-install journeys remain NOT RUN.
