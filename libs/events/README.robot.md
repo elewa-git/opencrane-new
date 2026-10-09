@@ -110,7 +110,8 @@ Write text validation limits UTF-8 to 1–4,096 bytes and refuses C0 controls ex
 and newline, plus lone surrogates. Saved encrypted events still parse; the memory
 projection quarantines earlier refused text after decryption.
 Source/dependency limits are 8/32; ids use 1–200 ASCII letters, digits, `_` or `-`.
-Storage commands and their whole-command size limit are not implemented yet.
+`memoryWrittenDataSchema` exports the version-1 fields for server command validation.
+The server enforces the separate 16 KiB whole-command limit.
 
 ## Human group records
 

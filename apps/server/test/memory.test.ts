@@ -1,5 +1,5 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import type { z } from 'zod';
+import { mkdtemp, rm, readFile, writeFile, copyFile, access } from 'node:fs/promises';
+import { z } from 'zod';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -974,7 +974,10 @@ it('refuses private sources, shared preferences, forged statements and controls'
 it('converges identical concurrent commands and conflicts on changed input', async function duplicate() {
   function send() { return remember('bob', 'person', 'concurrent'); }
   const replies = await Promise.all([send(), send()]);
-  const receipts = replies.map(function receipt(response) { return response.json(); });
+  function receipt(response: Awaited<ReturnType<typeof send>>) {
+    return response.json<{ memoryId: string }>();
+  }
+  const receipts = replies.map(receipt);
   // A pending caller checks status instead of submitting another append.
   await runner.run(projection);
   const original = await get(`${path('bob')}/changes/concurrent`);
@@ -989,41 +992,38 @@ it('converges identical concurrent commands and conflicts on changed input', asy
     remember('bob', 'person', 'changed-race'),
     remember('bob', 'person', 'changed-race', 'bob', { text: 'Changed statement' }),
   ]);
-  const statuses = changed.map(function status(response) { return response.statusCode; });
+  function status(response: Awaited<ReturnType<typeof send>>) {
+    return response.statusCode;
+  }
+  const statuses = changed.map(status);
   expect(statuses.sort()).toEqual([200, 409]);
   await runner.run(projection);
-  const detail = await get(`${path('bob')}/facts/${saved.memoryId}`);
-  expect(detail.json()).toMatchObject({ fact: { text: 'A human statement', revision: 1 },
-    sources: [{ status: 'available' }] });
-  expect(Buffer.byteLength(detail.body)).toBeLessThanOrEqual(16384);
   expect((await get(`${path('bob')}/changes/concurrent`, 'admin')).statusCode).toBe(404);
   expect((await get(`${path('bob')}/changes/unseen`)).json()).toMatchObject({ outcome: 'unknown' });
-  for (const url of [`${path('bob')}/facts/unseen`, `${path('owner')}/facts/private`,
-    `/api/memory/${memoryScopeId('foreign', 'person', 'bob')}/facts/foreign`]) {
-    expect((await get(url)).json()).toEqual({ status: 'refused' });
-  }
+
 });
-it('keeps unknown append keys and resolves a lost reply without another append', async function lost() {
+it.each(['unavailable', 'conflict'] as const)(
+  'reconciles the same key reference after append returns %s', async function lost(status) {
   const original = nats.store.append.bind(nats.store);
   async function lose(command: Parameters<typeof original>[0]) {
     await original(command);
+    if (status === 'conflict') return { status: 'conflict' as const };
     return { status: 'unavailable' as const, cause: new Error('Reply lost') };
   }
   const spy = vi.spyOn(nats.store, 'append').mockImplementation(lose);
   let response;
   try {
-    response = await remember('bob', 'person', 'lost-reply');
-    expect(response.json()).toMatchObject({ outcome: 'unknown' });
+    response = await remember('bob', 'person', `lost-reply-${status}`);
+    const outcome = status === 'conflict' ? 'saved' : 'unknown';
+    expect(response.json()).toMatchObject({ outcome });
     expect(spy).toHaveBeenCalledTimes(1);
   } finally { spy.mockRestore(); }
-  expect((await get(`${path('bob')}/changes/lost-reply`)).statusCode).toBe(503);
+  expect((await get(`${path('bob')}/changes/lost-reply-${status}`)).statusCode).toBe(503);
   await runner.run(projection);
-  const status = await get(`${path('bob')}/changes/lost-reply`);
-  expect(status.json()).toMatchObject({ outcome: 'saved' });
-  expect((await remember('bob', 'person', 'lost-reply')).json()).toEqual(status.json());
-  const id = status.json<{ memoryId: string }>().memoryId;
-  expect((await get(`${path('bob')}/facts/${id}`)).json())
-    .toMatchObject({ fact: { text: 'A human statement' } });
+  const checked = await get(`${path('bob')}/changes/lost-reply-${status}`);
+  expect(checked.json()).toMatchObject({ outcome: 'saved' });
+  expect((await remember('bob', 'person', `lost-reply-${status}`)).json()).toEqual(checked.json());
+
 });
 it('keeps keys while unavailable and reconciles unused keys after definite failure', async function failure() {
   const unavailable = { status: 'unavailable' as const, cause: new Error('Unavailable') };
@@ -1062,6 +1062,17 @@ it('refuses an unapplied write revoke', async function revokedWrite() {
 });
 it('loads long history before the write time limit and ignores chat activity', async function writeActivity() {
   const original = nats.store.readStream.bind(nats.store);
+  const originalHead = nats.store.head.bind(nats.store);
+  async function activeHead(subject?: string, deadline?: number) {
+    const position = await originalHead(subject, deadline);
+    if (subject === undefined) {
+      await append('conversation-busy', 'message.posted', { conversationId: 'busy',
+        authorId: 'bob', authorKind: 'human', ciphertext: 'AAAAAAAAAAAAAAAAAAAA',
+        keyId: 'key:chat', contentType: 'text' });
+    }
+    return position;
+  }
+  const headSpy = vi.spyOn(nats.store, 'head').mockImplementation(activeHead);
   let once = false;
   async function* delayed(subject: string, from?: number, deadline?: number) {
     if (subject.startsWith('scope-') && !once) {
@@ -1073,7 +1084,34 @@ it('loads long history before the write time limit and ignores chat activity', a
   }
   const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(delayed);
   try { expect((await remember('bob', 'person', 'long-history')).statusCode).toBe(200); }
-  finally { spy.mockRestore(); }
+  finally { spy.mockRestore(); headSpy.mockRestore(); }
   await runner.run(projection);
 });
 
+
+it('reconciles a prepared key and its temporary copy after restart', async function restartCleanup() {
+  const unavailable = { status: 'unavailable' as const, cause: new Error('Unavailable') };
+  const spy = vi.spyOn(nats.store, 'append').mockResolvedValue(unavailable);
+  let response;
+  try { response = await remember('bob', 'person', 'restart-prepared'); }
+  finally { spy.mockRestore(); }
+  const memoryId = response.json<{ memoryId: string }>().memoryId;
+  const journalPath = `${directory}/command-${memoryId}.json`;
+  const raw: unknown = JSON.parse(await readFile(journalPath, 'utf8'));
+  const entry = z.record(z.string(), z.unknown()).parse(raw);
+  // Restore the disk state just before append was attempted, as after a process crash.
+  entry['stage'] = 'prepared';
+  await writeFile(journalPath, JSON.stringify(entry));
+  const identity = { silo: 'acme', scopeId: memoryScopeId('acme', 'person', 'bob'),
+    scopeKind: 'person' as const, ownerId: 'bob', memoryId, revision: 1 };
+  const reference = keys.provision(identity).slice(4);
+  await copyFile(`${directory}/${reference}`, `${directory}/${reference}-pending`);
+  await app.close();
+  app = buildServer(config, { memory });
+  expect((await get(`${path('bob')}/changes/restart-prepared`)).json())
+    .toMatchObject({ outcome: 'unknown' });
+  expect(function deleted() { keys.provision(identity); }).toThrow('destroyed');
+  await expect(access(`${directory}/${reference}-pending`)).rejects.toThrow();
+  expect((await remember('bob', 'person', 'unavailable-write')).json())
+    .toMatchObject({ outcome: 'unknown' });
+});

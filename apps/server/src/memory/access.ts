@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import { memberAuthorisation, grantStream } from '@opencrane/authz';
-import { history, groupMembership, PayingGroupRefused } from '@opencrane/models';
+import { history, groupMembership, PayingGroupRefused, type authorityFence } from '@opencrane/models';
 import { assistantCreatedDataSchema, assistantSettingsChangedDataSchema,
   type MemoryIdentity } from '@opencrane/events';
-import { memoryScopeId } from '@opencrane/projections';
+import { memoryScopeId, type Db } from '@opencrane/projections';
 import type { ModelAccessOptions } from '../models/access-routes.ts';
 
 export type MemoryOptions = ModelAccessOptions & {
+  keyDirectory?: string;
+  db: ModelAccessOptions['db'] & Partial<Pick<Db, 'lock'>>;
   chat?: import('../chat/access.ts').ChatOptions;
   identity?: { jwks: import('jose').JSONWebKeySet; issuer: string };
 };
@@ -68,7 +70,11 @@ export async function resolveScope(options: MemoryOptions, requester: string, sc
 }
 
 // Keep checks within this request. Never reuse a permission result for the next reader.
-export function memoryAccessChecks(options: MemoryOptions, requester: string) {
+export function memoryAccessChecks(options: MemoryOptions, requester: string,
+  fresh?: Awaited<ReturnType<typeof authorityFence>>) {
+  function watch(subject: string) {
+    fresh?.include(subject);
+  }
   const receipts = new Map<string, Promise<boolean>>();
   const memberships = new Map<string, Promise<void>>();
   const auth = memberAuthorisation(options.binding);
@@ -81,6 +87,7 @@ export function memoryAccessChecks(options: MemoryOptions, requester: string) {
     return result;
   }
   function group(groupId: string) {
+    watch(`team-${groupId}`);
     let result = memberships.get(groupId);
     if (!result) {
       result = groupMembership(options.store, options.silo, requester, groupId,
@@ -89,12 +96,12 @@ export function memoryAccessChecks(options: MemoryOptions, requester: string) {
     }
     return result;
   }
-  return { applied, group };
+  return { applied, group, watch };
 }
 type AccessChecks = ReturnType<typeof memoryAccessChecks>;
 
 export async function scopeAccess(options: MemoryOptions, requester: string, scope: Scope,
-  describeRights = false, checks = memoryAccessChecks(options, requester)) {
+  describeRights = false, checks = memoryAccessChecks(options, requester), writeOnly = false) {
   if (scope.scopeId !== memoryScopeId(options.silo, scope.scopeKind, scope.ownerId)) {
     throw new MemoryRefused();
   }
@@ -110,11 +117,12 @@ export async function scopeAccess(options: MemoryOptions, requester: string, sco
     return { ...scope, audience: { kind: 'group', ownerId: scope.ownerId },
       canRead: true, canWrite: true };
   }
-  return notesAccess(options, requester, scope, describeRights, checks);
+  return notesAccess(options, requester, scope, describeRights, checks, writeOnly);
 }
 
 async function notesAccess(options: MemoryOptions, requester: string, scope: Scope,
-  describeRights: boolean, checks: AccessChecks) {
+  describeRights: boolean, checks: AccessChecks, writeOnly: boolean) {
+  checks.watch(`assistant-${scope.ownerId}`);
   const { created, assistant } = await readAssistant(options, scope.ownerId);
   if (assistant.kind === 'team') {
     await checks.group(assistant.ownerId);
@@ -132,9 +140,12 @@ async function notesAccess(options: MemoryOptions, requester: string, scope: Sco
   if (!acting.allowed) {
     throw new MemoryRefused();
   }
-  const canRead = await operationAllowed(options, requester, scope, 'memory_read', checks);
+  let canRead = false;
+  if (!writeOnly) {
+    canRead = await operationAllowed(options, requester, scope, 'memory_read', checks);
+  }
   let canWrite = false;
-  if (describeRights) {
+  if (describeRights || writeOnly) {
     canWrite = await operationAllowed(options, requester, scope, 'memory_write', checks);
   }
   if (!canRead && !canWrite) {
@@ -221,6 +232,7 @@ function permitsPerson(grant: Grant) {
 
 async function operationAllowed(options: MemoryOptions, requester: string,
   scope: Scope, operation: string, checks: AccessChecks) {
+  checks.watch(grantStream(operation, scope.scopeId));
   const rows = await history(options.store, grantStream(operation, scope.scopeId), options.silo,
     performance.now() + 10_000);
   const grantees = new Map<string, Grant>();

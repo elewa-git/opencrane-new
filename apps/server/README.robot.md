@@ -55,6 +55,28 @@ Source checks need the server's existing chat settings and conversation read tab
 No source preview is stored or returned.
 Oversized authorised detail returns 503. Command status and storage are in the companion draft. The fresh empty runner and HTTP read test passes with real services.
 Full fresh-install memory journeys and native turns remain NOT RUN.
+`POST /api/memory/:scopeId/facts` accepts commandId, text, kind, pinned, expiresAt,
+sources and dependsOn. It accepts human writers only and checks Origin. Person ownership
+and group membership grant write access. Notes require `memory_write` from saved grants
+and OpenFGA; a read grant never supplies it. Empty sources record the writer's statement.
+Chat sources are allowed only in person scopes, with message access checked separately.
+Current chats cannot prove durable whole-group visibility, so shared message sources are refused.
+Preferences stay personal. Text allows tabs/newlines but refuses other C0 controls.
+Commands and events have separate 16 KiB limits. Dependencies require a live same-scope revision.
+
+History loads before the two-second access check. It watches only member, assistant,
+team and write-grant streams. Each command makes one conditional append at the scope
+position read from history. A PostgreSQL advisory lock keeps attempts for the same command
+together across servers. Keys are prepared first. Changed inputs return 409. Lost replies
+return `outcome: "unknown"`; clients check `GET /api/memory/:scopeId/changes/:commandId`
+instead of resending. Status returns only this principal's original command, after projection catch-up.
+Receipts contain references and audience, never text. Missing commands stay unknown.
+
+The existing 0700 key directory also holds payload-free command records. Startup checks
+prepared/failed records against event history, then destroys unused keys and temporary copies.
+Unknown outcomes retain keys and never append again. Definite failures consume their command id;
+use a new id for a new attempt. Keep all servers for a silo on the same database and key directory.
+Fact detail is in the companion draft. Fresh-install memory journeys and native turns remain NOT RUN.
 
 The Node service exposes sign-in routes, invitation acceptance, the organisation MCP
 register, a health check and authenticated WebSocket routes. It does not serve static
