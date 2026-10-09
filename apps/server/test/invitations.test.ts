@@ -1055,3 +1055,52 @@ async function refusesNonHumanCreator(kind: 'agent' | 'system') {
 it.each(['agent', 'system'] as const)(
   'refuses a saved invitation with a %s principal even when its id matches',
   refusesNonHumanCreator);
+
+async function prepareAuditProjection() {
+  const db = pgDb(dbs.queue);
+  const logger = createLogger('invitation-audit-test');
+  const runner = new ProjectionRunner(db, nats.reader, logger);
+  await runner.initialise(auditTrail);
+  await runner.rebuild(auditTrail);
+  return runner;
+}
+
+async function neverCachesInvitationAudit() {
+  expect((await request('POST')).statusCode).toBe(200);
+  expect((await request('POST', input, 'member')).statusCode).toBe(403);
+  await prepareAuditProjection();
+  const response = await organisationHistory();
+  expect(response.statusCode).toBe(200);
+  expect(response.body).toContain('member.invited');
+  expect(response.body).toContain('member.command_refused');
+  expect(response.headers['cache-control']).toBe('no-store');
+}
+it('sets no-store on successful invitation and refusal audit history', neverCachesInvitationAudit);
+
+async function neverCachesAuditError(kind: string, status: number) {
+  await prepareAuditProjection();
+  let response;
+  if (kind === 'no_session') {
+    const options = { method: 'GET' as const, url: '/api/org/history' };
+    response = await app.inject(options);
+  } else if (kind === 'unavailable') {
+    binding.apiUrl = 'http://127.0.0.1:1';
+    response = await organisationHistory();
+  } else if (kind === 'invalid_request') {
+    const session = { sub: 'admin', orgId: 'org-acme', roles: [],
+      authTime: 1790856000, exp: 2000000000 };
+    const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+    const options = { method: 'GET' as const, url: '/api/org/history?before=bad', headers };
+    response = await app.inject(options);
+  } else if (kind === 'foreign') {
+    response = await organisationHistory('admin', 'other-org');
+  } else {
+    response = await organisationHistory('member');
+  }
+  expect(response.statusCode).toBe(status);
+  expect(response.headers['cache-control']).toBe('no-store');
+}
+it.each([
+  ['no_session', 401], ['member', 403], ['foreign', 403],
+  ['unavailable', 503], ['invalid_request', 400],
+])('sets no-store on an audit %s response', neverCachesAuditError);
