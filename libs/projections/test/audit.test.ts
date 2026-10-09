@@ -71,7 +71,13 @@ it('joins forthcoming typed families, withholds private details and keeps absent
     await append(fixture('decision.recorded', 'foreign-conversation', { requestId: 'other', conversationId: 'other', requesterId: 'bob' }, false));
     await append({ ...fixture('takeover.started', 'foreign-turn', { requestedBy: 'alice' }, false), correlation: { conversation: 'other', turn: 'turn' } });
     await append({ ...fixture('takeover.started', 'foreign-requester', { requestedBy: 'bob' }, false), correlation: { conversation: 'conversation', turn: 'turn' } });
-    await append(fixture('message.posted', 'private-message', { ciphertext: Buffer.from(canary).toString('base64') }));
+    const privateMessageData = {
+      conversationId: 'conversation',
+      ciphertext: Buffer.from(canary).toString('base64'),
+    };
+    const privateMessage = fixture('message.posted', 'private-message', privateMessageData);
+    const privateConversationMessage = { ...privateMessage, subject: 'conversation-conversation' };
+    await append(privateConversationMessage);
     await runner.run(auditTrail);
     const before = await readAudit(db.db, 'test', { conversationId: 'conversation', requesterId: 'alice' });
     expect(before.rows.filter(row => row.requestId === 'request')).toHaveLength(1);
