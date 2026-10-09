@@ -27,9 +27,8 @@ flowchart LR
   supplies the automatic default when nobody has chosen one. Each reply confirms
   the change that was saved. Reusing a request id for another change is refused.
   Ordinary calls still use the existing gateway setup.
-
-- Sign short passes for personal memory calls through the gateway.
-  Require saved grants, current permissions and an explicitly recorded private turn.
+- Signs short passes for personal memory calls through the gateway.
+  These calls need saved grants, current permissions and an explicitly recorded private turn.
 - Choose an AI model for each task from a fixed routing table.
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
