@@ -1263,7 +1263,7 @@ it('records neither a join nor refusal audit for invalid invitation history',
 function wrongAccountJoin(payload: unknown, sub = 'another-account', orgId = 'org-acme') {
   const session = { sub, orgId, roles: [], email: 'private-address@example.test',
     emailVerified: true, authTime: clock.getTime() / 1000, exp: 2000000000 };
-  const headers = { origin: 'https://app.example.test',
+  const headers = { origin: 'https://app.example.test', 'content-type': 'application/json',
     cookie: `${config.cookieName}=${encodeSession(config, session)}` };
   const options = { method: 'POST' as const, url: '/members/join', headers,
     payload: JSON.stringify(payload) };
