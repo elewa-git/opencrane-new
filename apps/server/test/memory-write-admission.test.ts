@@ -73,3 +73,43 @@ async function boundedWait() {
 it('allows one write per member and scope, leaving room for another member', memberLimits);
 it('gives a released process slot to the oldest eligible waiting write', orderedAdmission);
 it('bounds the queue and removes timed-out writes without occupying a slot', boundedWait);
+
+async function manyScopesCannotFillQueue() {
+  vi.useFakeTimers();
+  await admit('bob', 'personal');
+  await admit('carol', 'personal');
+  await admit('dave', 'personal');
+  const eveRelease = await admit('eve', 'personal');
+  let refusedCount = 0;
+  function refused(error: unknown) {
+    expect(error).toBeInstanceOf(MemoryBusy);
+    refusedCount++;
+  }
+  const bobWaits: Promise<void>[] = [];
+  for (let index = 0; index < 8; index++) {
+    const waiting = admit('bob', `group-${index}`);
+    bobWaits.push(waiting.then(undefined, refused));
+  }
+  const aliceWait = admit('alice', 'personal');
+  const aliceResult = Promise.allSettled([aliceWait]);
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refusedCount).toBe(7);
+    await vi.advanceTimersByTimeAsync(20);
+    releaseWrite(eveRelease);
+    const results = await aliceResult;
+    expect(results[0]?.status).toBe('fulfilled');
+  } finally {
+    await vi.advanceTimersByTimeAsync(100);
+    await Promise.all(bobWaits);
+    await aliceResult;
+  }
+  // Check that an expired queue entry no longer reserves the member's next wait.
+  const nextBobWait = admit('bob', 'another-group');
+  const nextBobRefusal = expect(nextBobWait).rejects.toBeInstanceOf(MemoryBusy);
+  await vi.advanceTimersByTimeAsync(100);
+  await nextBobRefusal;
+}
+
+it('limits one member to one queued write across nine scopes while another member waits',
+  manyScopesCannotFillQueue);

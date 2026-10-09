@@ -13,6 +13,7 @@ import { memoryWrittenEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
 import type { MemoryOptions } from '../src/memory/access.ts';
 import { reconcileCommands } from '../src/memory/commands.ts';
+import * as memoryAdmission from '../src/memory/admission.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -912,9 +913,9 @@ it('returns unavailable legacy metadata without decoding fact text', async funct
 });
 
 function remember(owner: string, kind: MemoryIdentity['scopeKind'], commandId: string,
-  member = 'bob', extra: Record<string, unknown> = {}) {
+  member = 'bob', extra: Record<string, unknown> = {}, sessionExpiry = 2000000000) {
   const session = { sub: `idp-${member}`, orgId: 'org-acme', roles: ['owner'],
-    authTime: 1790856000, exp: 2000000000 };
+    authTime: 1790856000, exp: sessionExpiry };
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
     origin: new URL(config.redirectUri).origin };
   const payload = { commandId, text: 'A human statement', kind: 'fact', pinned: false,
@@ -1898,3 +1899,123 @@ async function fairWrites(stage: 'scope history' | 'append') {
 
 it.each(['scope history', 'append'] as const)(
   'lets another member save while one member floods slow %s writes', fairWrites);
+
+async function fairQueueAcrossScopesAndSessions() {
+  const floodScopes = new Set<string>();
+  const groupsToWrite: string[] = [];
+  for (let index = 0; index < 8; index++) {
+    const groupId = `queue-flood-${index}`;
+    groupsToWrite.push(groupId);
+    floodScopes.add(memoryScopeId('acme', 'group', groupId));
+    await append(`team-${groupId}`, 'team.created',
+      { teamId: groupId, name: 'Memory writers', createdBy: 'owner' });
+    await append(`team-${groupId}`, 'team.member_added',
+      { teamId: groupId, memberId: 'bob', addedBy: 'owner' });
+  }
+  await runner.run(groups);
+  const heldSlots: (() => void)[] = [];
+  for (const memberId of ['queue-carol', 'queue-dave', 'queue-eve']) {
+    const release = await memoryAdmission.acquireMemoryWrite('acme', memberId, 'personal');
+    heldSlots.push(release);
+  }
+  const appendGate = Promise.withResolvers<void>();
+  const stalled = Promise.withResolvers<void>();
+  const floodReady = Promise.withResolvers<void>();
+  const floodGate = Promise.withResolvers<void>();
+  const floodAdmitted = Promise.withResolvers<void>();
+  const ownerReady = Promise.withResolvers<void>();
+  const ownerGate = Promise.withResolvers<void>();
+  const ownerAdmitted = Promise.withResolvers<void>();
+  let readyCount = 0;
+  let admittedCount = 0;
+  const originalAcquire = memoryAdmission.acquireMemoryWrite;
+  async function coordinatedAdmission(silo: string, memberId: string, scopeId: string) {
+    const isFlood = memberId === 'bob' && floodScopes.has(scopeId);
+    if (isFlood) {
+      readyCount++;
+      if (readyCount === 8) {
+        floodReady.resolve();
+      }
+      await floodGate.promise;
+    }
+    if (memberId === 'owner') {
+      ownerReady.resolve();
+      await ownerGate.promise;
+    }
+    const admission = originalAcquire(silo, memberId, scopeId);
+    if (isFlood) {
+      admittedCount++;
+      if (admittedCount === 8) {
+        floodAdmitted.resolve();
+      }
+    }
+    if (memberId === 'owner') {
+      ownerAdmitted.resolve();
+    }
+    return admission;
+  }
+  const originalAppend = nats.store.append.bind(nats.store);
+  async function slowAppend(command: Parameters<typeof originalAppend>[0]) {
+    const record = memoryWrittenEventSchema.safeParse(command.event);
+    if (record.success && record.data.commandId === 'queue-bob-active') {
+      stalled.resolve();
+      await appendGate.promise;
+    }
+    return originalAppend(command);
+  }
+  const admissionSpy = vi.spyOn(memoryAdmission, 'acquireMemoryWrite');
+  admissionSpy.mockImplementation(coordinatedAdmission);
+  const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(slowAppend);
+  const requests = [remember('bob', 'person', 'queue-bob-active')];
+  let otherMemoryId: string;
+  try {
+    await stalled.promise;
+    for (let index = 0; index < groupsToWrite.length; index++) {
+      const commandId = `queue-bob-${index}`;
+      const expiry = 2000000001 + index;
+      const request = remember(groupsToWrite[index]!, 'group', commandId, 'bob', {}, expiry);
+      requests.push(request);
+    }
+    const otherRequest = remember('owner', 'person', 'queue-owner', 'owner');
+    requests.push(otherRequest);
+    // Finish permission work before starting the shared 100 ms admission waits.
+    await floodReady.promise;
+    await ownerReady.promise;
+    floodGate.resolve();
+    await floodAdmitted.promise;
+    ownerGate.resolve();
+    await ownerAdmitted.promise;
+    const releaseSlot = heldSlots.pop()!;
+    releaseSlot();
+    const response = await otherRequest;
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ outcome: 'saved' });
+    otherMemoryId = response.json<{ memoryId: string }>().memoryId;
+    // Keep Bob's first write stalled while every further request receives its busy reply.
+    const floodRequests = requests.slice(1, 9);
+    const responses = await Promise.all(floodRequests);
+    for (const busy of responses) {
+      expect(busy.statusCode).toBe(503);
+      expect(busy.json()).toEqual({ status: 'unavailable', reason: 'memory_busy' });
+      expect(busy.headers['retry-after']).toBe('1');
+    }
+  } finally {
+    floodGate.resolve();
+    ownerGate.resolve();
+    appendGate.resolve();
+    for (const release of heldSlots) {
+      release();
+    }
+    await Promise.all(requests);
+    admissionSpy.mockRestore();
+    appendSpy.mockRestore();
+  }
+  await runner.run(projection);
+  const detail = await get(`${path('owner')}/facts/${otherMemoryId}`, 'owner');
+  expect(detail.statusCode).toBe(200);
+  expect(detail.json()).toMatchObject({ fact: { memoryId: otherMemoryId,
+    text: 'A human statement' } });
+}
+
+it('lets another member save with four occupied slots and a flood across scopes and sessions',
+  fairQueueAcrossScopesAndSessions);
