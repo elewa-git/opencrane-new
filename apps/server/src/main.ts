@@ -103,6 +103,7 @@ const app = buildServer(authConfig, {
   ...(realtime && events && modelDb && memoryKeysConfigured ? { memory: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
+    keyDirectory: process.env['MEMORY_KEY_DIRECTORY']!.trim(),
     ...(chat ? { chat } : {}),
     ...(budget ? { identity: { jwks: budget.tokens.jwks,
       issuer: process.env['TOKEN_ISSUER']! } } : {}),

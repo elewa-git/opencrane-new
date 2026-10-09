@@ -168,5 +168,16 @@ export function memoryKeys(directory: string) {
     // Return authenticated older text too. Let the projection quarantine refused text.
     return text.toString('utf8');
   }
-  return { provision, delete: remove, encrypt, decrypt };
+  function status(identity: MemoryIdentity): 'missing' | 'available' | 'destroyed' {
+    requireDirectory(directory);
+    if (!existsSync(`${directory}/${reference(identity)}`)) {
+      return 'missing';
+    }
+    const key = readKey(directory, identity);
+    if (key === 'destroyed') {
+      return 'destroyed';
+    }
+    return 'available';
+  }
+  return { provision, delete: remove, encrypt, decrypt, status };
 }

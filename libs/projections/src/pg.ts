@@ -64,20 +64,27 @@ export function pgDb(pool: Pool): Db {
         }
       }
     },
-    async lock(name, work) {
+    async lock(name, work, options) {
       const client = await pool.connect();
+      let acquired = false;
       try {
+        if (options) {
+          await client.query("SELECT set_config('lock_timeout', $1, false)",
+            [`${options.timeoutMs}ms`]);
+        }
         await client.query(
           "SELECT pg_advisory_lock(hashtextextended($1, 0))",
           [`opencrane:projection:${name}`],
         );
+        acquired = true;
         return await work(clientDb(client));
       } finally {
         try {
-          await client.query(
+          if (acquired) await client.query(
             "SELECT pg_advisory_unlock(hashtextextended($1, 0))",
             [`opencrane:projection:${name}`],
           );
+          if (options) await client.query("RESET lock_timeout");
         } finally {
           client.release();
         }
@@ -90,7 +97,7 @@ export function connectProjectionDb(
   connectionString: string,
   onError: (error: Error) => void,
 ) {
-  const pool = new PgPool({ connectionString });
+  const pool = new PgPool({ connectionString, connectionTimeoutMillis: 1000 });
   pool.on("error", onError);
   return { db: pgDb(pool), close: () => pool.end() };
 }

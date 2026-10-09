@@ -13,6 +13,12 @@ it to read created and closed chats in one query when it polls for work. Two par
 indexes support source-message lookups by message id within one silo and conversation.
 Callers check chat permission first and confirm the matched position in the event log.
 
+`Db.lock` accepts an optional `{timeoutMs}`. PostgreSQL resets this lock timeout before
+returning the client to the pool. Memory commands use 100 ms; projection workers keep
+waiting for their existing exclusive lock. The shared connection helper limits pool
+connection waits to one second. Memory keys expose `status(identity)` without creating
+a key: it distinguishes missing custody, an available key and a destroyed-key marker.
+
 The public entrypoint is `src/index.ts`:
 
 ```ts

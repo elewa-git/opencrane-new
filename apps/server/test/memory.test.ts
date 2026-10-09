@@ -1,5 +1,6 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import type { z } from 'zod';
+import { mkdtemp, rm, readFile, writeFile, copyFile, access } from 'node:fs/promises';
+import { z } from 'zod';
+import { Pool } from 'pg';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -8,7 +9,11 @@ import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
   pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
-import type { MemoryIdentity, memoryWrittenDataSchema } from '@opencrane/events';
+import { memoryWrittenEventSchema, type MemoryIdentity,
+  type memoryWrittenDataSchema } from '@opencrane/events';
+import type { MemoryOptions } from '../src/memory/access.ts';
+import { reconcileCommands } from '../src/memory/commands.ts';
+import * as memoryAdmission from '../src/memory/admission.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -21,7 +26,7 @@ let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
 let keys: ReturnType<typeof memoryKeys>;
 let directory: string;
-let memory: import('../src/memory/access.ts').MemoryOptions;
+let memory: MemoryOptions & { keyDirectory: string };
 let count = 0;
 const projection = memoryProjection({ decrypt });
 function decrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
@@ -101,7 +106,7 @@ async function setup() {
   await write('bob', 'person', 'foreign', 'Foreign secret', false, 'foreign');
   for (const target of [projection, groups, computers]) await runner.run(target);
   memory = { silo: 'acme', store: nats.store, db, binding,
-    feed: { memberId: resolveMember } };
+    feed: { memberId: resolveMember }, keyDirectory: directory };
   memory.chat = { ...memory, keys: conversationKeys(directory) };
   app = buildServer(config, { memory });
 }
@@ -906,3 +911,1111 @@ it('returns unavailable legacy metadata without decoding fact text', async funct
   expect(response.body).not.toContain('Legacy private text');
   expect(response.json()).not.toHaveProperty('fact');
 });
+
+function remember(owner: string, kind: MemoryIdentity['scopeKind'], commandId: string,
+  member = 'bob', extra: Record<string, unknown> = {}, sessionExpiry = 2000000000) {
+  const session = { sub: `idp-${member}`, orgId: 'org-acme', roles: ['owner'],
+    authTime: 1790856000, exp: sessionExpiry };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+    origin: new URL(config.redirectUri).origin };
+  const payload = { commandId, text: 'A human statement', kind: 'fact', pinned: false,
+    expiresAt: null, sources: [], dependsOn: [], ...extra };
+  return app.inject({ method: 'POST', url: `${path(owner, kind)}/facts`, headers, payload });
+}
+async function writeGrant(assistantId: string) {
+  const scopeId = memoryScopeId('acme', 'assistant_notes', assistantId);
+  await append(grantStream('memory_write', scopeId), 'grant.given', {
+    resourceType: 'memory_write', resourceId: scopeId, granteeKind: 'member',
+    granteeId: 'bob', grantedBy: 'owner',
+  });
+}
+
+it('stores human facts with separate write rights and no administrative bypass', async function writes() {
+  await append('team-write-sales', 'team.created',
+    { teamId: 'write-sales', name: 'Writers', createdBy: 'owner' });
+  await append('team-write-sales', 'team.member_added',
+    { teamId: 'write-sales', memberId: 'bob', addedBy: 'owner' });
+  for (const [assistantId, kind, ownerId] of [
+    ['write-personal', 'personal', 'bob'], ['write-shared', 'team', 'write-sales'],
+  ]) {
+    await append(`assistant-${assistantId}`, 'assistant.created', { assistantId, kind, ownerId });
+    const scopeId = memoryScopeId('acme', 'assistant_notes', assistantId!);
+    await append(grantStream('memory_read', scopeId), 'grant.given', {
+      resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'member',
+      granteeId: 'bob', grantedBy: 'owner',
+    });
+  }
+  await runner.run(groups);
+  await runner.run(computers);
+  expect((await remember('bob', 'person', 'own-write')).statusCode).toBe(200);
+  expect((await remember('write-sales', 'group', 'group-write')).statusCode).toBe(200);
+  expect((await remember('write-personal', 'assistant_notes', 'read-only')).statusCode).toBe(404);
+  await writeGrant('write-personal');
+  await writeGrant('write-shared');
+  for (const assistant of ['write-personal', 'write-shared']) {
+    expect((await remember(assistant, 'assistant_notes', `notes-${assistant}`)).statusCode).toBe(200);
+  }
+  for (const member of ['owner', 'admin']) {
+    expect((await remember('bob', 'person', `denied-${member}`, member)).statusCode).toBe(404);
+    expect((await remember('write-shared', 'assistant_notes', `notes-denied-${member}`, member))
+      .statusCode).toBe(404);
+  }
+  await runner.run(projection);
+});
+it('refuses private sources, shared preferences, forged statements and controls', async function inputs() {
+  const privateSource = { sources: [{ conversationId: 'busy', messageId: 'private' }] };
+  for (const [owner, kind] of [['write-sales', 'group'], ['write-shared', 'assistant_notes']] as const) {
+    expect((await remember(owner, kind, `private-${owner}`, 'bob', privateSource)).statusCode).toBe(404);
+    expect((await remember(owner, kind, `preference-${owner}`, 'bob', { kind: 'preference' }))
+      .statusCode).toBe(422);
+  }
+  const forged = { sources: [{ memberId: 'owner', commandId: 'forged' }] };
+  expect((await remember('bob', 'person', 'forged', 'bob', forged)).statusCode).toBe(404);
+  for (const text of ['\u0001', '\u0000', '\r', 'x'.repeat(4097)]) {
+    expect((await remember('bob', 'person', `invalid-${++count}`, 'bob', { text }))
+      .statusCode).toBe(422);
+  }
+});
+it('converges identical concurrent commands and conflicts on changed input', async function duplicate() {
+  function send() { return remember('bob', 'person', 'concurrent'); }
+  const replies = await Promise.all([send(), send()]);
+  function receipt(response: Awaited<ReturnType<typeof send>>) {
+    return response.json<{ memoryId: string }>();
+  }
+  const receipts = replies.map(receipt);
+  // A pending caller checks status instead of submitting another append.
+  await runner.run(projection);
+  const original = await get(`${path('bob')}/changes/concurrent`);
+  expect(original.json()).toMatchObject({ outcome: 'saved', revision: 1 });
+  const saved = original.json<{ memoryId: string }>();
+  for (let index = 0; index < receipts.length; index++) {
+    const response = replies[index]!;
+    if (response.statusCode === 503) {
+      expect(receipts[index]).toEqual({ status: 'unavailable', reason: 'memory_busy' });
+      expect(response.headers['retry-after']).toBe('1');
+    } else {
+      expect(receipts[index]).toMatchObject({ memoryId: saved.memoryId });
+    }
+  }
+  expect((await send()).json()).toEqual(original.json());
+  expect((await remember('bob', 'person', 'concurrent', 'bob', { pinned: true })).statusCode).toBe(409);
+  const changed = await Promise.all([
+    remember('bob', 'person', 'changed-race'),
+    remember('bob', 'person', 'changed-race', 'bob', { text: 'Changed statement' }),
+  ]);
+  function status(response: Awaited<ReturnType<typeof send>>) {
+    return response.statusCode;
+  }
+  const statuses = changed.map(status);
+  expect(statuses).toContain(200);
+  for (const status of statuses) expect([200, 409, 503]).toContain(status);
+  await runner.run(projection);
+  expect((await get(`${path('bob')}/changes/concurrent`, 'admin')).statusCode).toBe(404);
+  expect((await get(`${path('bob')}/changes/unseen`)).json()).toMatchObject({ outcome: 'unknown' });
+
+});
+it.each(['unavailable', 'conflict'] as const)(
+  'reconciles the same key reference after append returns %s', async function lost(status) {
+  const original = nats.store.append.bind(nats.store);
+  async function lose(command: Parameters<typeof original>[0]) {
+    await original(command);
+    if (status === 'conflict') return { status: 'conflict' as const };
+    return { status: 'unavailable' as const, cause: new Error('Reply lost') };
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(lose);
+  let response;
+  try {
+    response = await remember('bob', 'person', `lost-reply-${status}`);
+    const outcome = status === 'conflict' ? 'saved' : 'unknown';
+    expect(response.json()).toMatchObject({ outcome });
+    expect(spy).toHaveBeenCalledTimes(1);
+  } finally { spy.mockRestore(); }
+  expect((await get(`${path('bob')}/changes/lost-reply-${status}`)).statusCode).toBe(503);
+  await runner.run(projection);
+  const checked = await get(`${path('bob')}/changes/lost-reply-${status}`);
+  expect(checked.json()).toMatchObject({ outcome: 'saved' });
+  expect((await remember('bob', 'person', `lost-reply-${status}`)).json()).toEqual(checked.json());
+
+});
+it('keeps keys while unavailable and reconciles unused keys after definite failure', async function failure() {
+  const unavailable = { status: 'unavailable' as const, cause: new Error('Unavailable') };
+  const spy = vi.spyOn(nats.store, 'append').mockResolvedValue(unavailable);
+  try {
+    const response = await remember('bob', 'person', 'unavailable-write');
+    expect(response.json()).toMatchObject({ outcome: 'unknown' });
+    const memoryId = response.json<{ memoryId: string }>().memoryId;
+    const scopeId = memoryScopeId('acme', 'person', 'bob');
+    const identity = { silo: 'acme', scopeId, scopeKind: 'person' as const,
+      ownerId: 'bob', memoryId, revision: 1 };
+    expect(keys.provision(identity)).toMatch(/^key:/u);
+    expect((await remember('bob', 'person', 'unavailable-write')).json())
+      .toMatchObject({ outcome: 'unknown' });
+    expect(spy).toHaveBeenCalledTimes(1);
+  } finally { spy.mockRestore(); }
+  const rejected = { status: 'conflict' as const };
+  const failed = vi.spyOn(nats.store, 'append').mockResolvedValue(rejected);
+  let response;
+  try { response = await remember('bob', 'person', 'failed-write'); }
+  finally { failed.mockRestore(); }
+  const memoryId = response.json<{ memoryId: string }>().memoryId;
+  const scopeId = memoryScopeId('acme', 'person', 'bob');
+  const identity = { silo: 'acme', scopeId, scopeKind: 'person' as const,
+    ownerId: 'bob', memoryId, revision: 1 };
+  expect(response.statusCode).toBe(409);
+  expect(function provisionDeleted() { keys.provision(identity); }).toThrow('destroyed');
+});
+it('refuses an unapplied write revoke', async function revokedWrite() {
+  const scopeId = memoryScopeId('acme', 'assistant_notes', 'write-shared');
+  await append(grantStream('memory_write', scopeId), 'grant.revoked', {
+    resourceType: 'memory_write', resourceId: scopeId, granteeKind: 'member',
+    granteeId: 'bob', revokedBy: 'owner',
+  }, false);
+  expect((await remember('write-shared', 'assistant_notes', 'unapplied-revoke')).statusCode).toBe(503);
+});
+it('loads long history before the write time limit and ignores chat activity', async function writeActivity() {
+  const original = nats.store.readStream.bind(nats.store);
+  const originalHead = nats.store.head.bind(nats.store);
+  async function activeHead(subject?: string, deadline?: number) {
+    const position = await originalHead(subject, deadline);
+    if (subject === undefined) {
+      await append('conversation-busy', 'message.posted', { conversationId: 'busy',
+        authorId: 'bob', authorKind: 'human', ciphertext: 'AAAAAAAAAAAAAAAAAAAA',
+        keyId: 'key:chat', contentType: 'text' });
+    }
+    return position;
+  }
+  const headSpy = vi.spyOn(nats.store, 'head').mockImplementation(activeHead);
+  let once = false;
+  async function* delayed(subject: string, from?: number, deadline?: number) {
+    if (subject.startsWith('scope-') && !once) {
+      once = true;
+      await new Promise(function pause(resolve) { setTimeout(resolve, 2100); });
+    }
+    expect(subject).not.toMatch(/^conversation-/u);
+    yield* original(subject, from, deadline);
+  }
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(delayed);
+  try { expect((await remember('bob', 'person', 'long-history')).statusCode).toBe(200); }
+  finally { spy.mockRestore(); headSpy.mockRestore(); }
+  await runner.run(projection);
+});
+
+
+it('reconciles a prepared key and its temporary copy after restart', async function restartCleanup() {
+  const unavailable = { status: 'unavailable' as const, cause: new Error('Unavailable') };
+  const spy = vi.spyOn(nats.store, 'append').mockResolvedValue(unavailable);
+  let response;
+  try { response = await remember('bob', 'person', 'restart-prepared'); }
+  finally { spy.mockRestore(); }
+  const memoryId = response.json<{ memoryId: string }>().memoryId;
+  const journalPath = `${directory}/command-${memoryId}.json`;
+  const raw: unknown = JSON.parse(await readFile(journalPath, 'utf8'));
+  const entry = z.record(z.string(), z.unknown()).parse(raw);
+  // Restore the disk state just before append was attempted, as after a process crash.
+  entry['stage'] = 'prepared';
+  await writeFile(journalPath, JSON.stringify(entry));
+  const identity = { silo: 'acme', scopeId: memoryScopeId('acme', 'person', 'bob'),
+    scopeKind: 'person' as const, ownerId: 'bob', memoryId, revision: 1 };
+  const reference = keys.provision(identity).slice(4);
+  await copyFile(`${directory}/${reference}`, `${directory}/${reference}-pending`);
+  await app.close();
+  app = buildServer(config, { memory });
+  async function resolvedFailure() {
+    expect((await get(`${path('bob')}/changes/restart-prepared`)).json())
+      .toMatchObject({ outcome: 'failed' });
+  }
+  await vi.waitFor(resolvedFailure, { timeout: 5000, interval: 100 });
+  expect(function deleted() { keys.provision(identity); }).toThrow('destroyed');
+  await expect(access(`${directory}/${reference}-pending`)).rejects.toThrow();
+  expect((await remember('bob', 'person', 'unavailable-write')).json())
+    .toMatchObject({ outcome: 'failed' });
+});
+
+it('conflicts when a reconciled command has different saved input', async function changedSaved() {
+  const original = nats.store.append.bind(nats.store);
+  async function conflict(command: Parameters<typeof original>[0]) {
+    const record = memoryWrittenEventSchema.parse(command.event);
+    if (!('schemaVersion' in record.data)) throw new Error('Expected current memory');
+    const changedData = { ...record.data, pinned: true };
+    const changedEvent = { ...record, data: changedData };
+    const changedCommand = { ...command, event: changedEvent };
+    await original(changedCommand);
+    return { status: 'conflict' as const };
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(conflict);
+  try {
+    expect((await remember('bob', 'person', 'different-saved-input')).statusCode).toBe(409);
+  } finally { spy.mockRestore(); }
+  await runner.run(projection);
+});
+
+
+it('checks write permission before content checks or taking a command lock', async function permissionFirst() {
+  const lock = vi.spyOn(memory.db, 'lock');
+  const read = vi.spyOn(nats.store, 'readStream');
+  const invalid = { kind: 'preference', dependsOn: [{
+    scopeId: memoryScopeId('acme', 'group', 'write-sales'), memoryId: 'missing', revision: 1,
+  }] };
+  try {
+    for (const owner of ['write-sales', 'unknown']) {
+      const response = await remember(owner, 'group', `forbidden-${owner}`, 'admin', invalid);
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ status: 'refused' });
+    }
+    expect(lock).not.toHaveBeenCalled();
+    for (const [subject] of read.mock.calls) expect(subject).not.toMatch(/^scope-/u);
+  } finally {
+    lock.mockRestore();
+    read.mockRestore();
+  }
+});
+
+it.each(['other_scope', 'stale', 'destroyed', 'expired'] as const)(
+  'refuses a %s dependency without appending', async function dependencyRefusal(kind) {
+    const memoryId = `dependency-${kind}`;
+    const record = await write('bob', 'person', memoryId);
+    const scopeId = memoryScopeId('acme', 'person', 'bob');
+    const identity = { silo: 'acme', scopeId, scopeKind: 'person' as const,
+      ownerId: 'bob', memoryId, revision: 1 };
+    if (kind === 'destroyed') keys.delete(identity);
+    if (kind === 'expired') {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      const saved = memoryWrittenEventSchema.parse(record);
+      if (!('schemaVersion' in saved.data)) throw new Error('Expected current memory');
+      const data = { ...saved.data, expiresAt: '2029-01-01T00:00:00Z' };
+      const updated = { ...saved, id: `expired-${memoryId}`, commandId: `expired-${memoryId}`, data };
+      const command = { event: updated, expectedSequence: await nats.store.head(saved.subject),
+        historyChecked: true as const };
+      expect((await nats.store.append(command)).status).toBe('appended');
+    }
+    const dependency = { scopeId, memoryId, revision: 1 };
+    if (kind === 'other_scope') dependency.scopeId = memoryScopeId('acme', 'group', 'sales');
+    if (kind === 'stale') dependency.revision = 2;
+    const spy = vi.spyOn(nats.store, 'append');
+    try {
+      const response = await remember('bob', 'person', `refuse-${kind}`, 'bob',
+        { dependsOn: [dependency] });
+      expect(response.statusCode).toBe(409);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+it('ignores other event types when checking live dependencies', async function otherRows() {
+  const record = await write('bob', 'person', 'dependency-live');
+  const scopeId = memoryScopeId('acme', 'person', 'bob');
+  const original = nats.store.readStream.bind(nats.store);
+  async function* withOtherRow(subject: string, from?: number, deadline?: number) {
+    if (subject === `scope-${scopeId}`) {
+      yield { sequence: 0, event: { ...record, type: 'memory.forgotten', data: {} } };
+    }
+    yield* original(subject, from, deadline);
+  }
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(withOtherRow);
+  try {
+    const dependency = { scopeId, memoryId: 'dependency-live', revision: 1 };
+    expect((await remember('bob', 'person', 'dependency-other-row', 'bob',
+      { dependsOn: [dependency] })).statusCode).toBe(200);
+  } finally { spy.mockRestore(); }
+});
+
+it('refuses past expiry and oversized commands', async function limitsBeforeKeys() {
+  expect((await remember('bob', 'person', 'past-expiry', 'bob',
+    { expiresAt: '2020-01-01T00:00:00Z' })).statusCode).toBe(422);
+  const extra = { text: 'x'.repeat(17000) };
+  expect((await remember('bob', 'person', 'oversized-body', 'bob', extra)).statusCode).toBe(422);
+});
+
+it('checks the complete event size before creating a revision key', async function eventSize() {
+  const scopeId = memoryScopeId('acme', 'person', 'bob');
+  const dependsOn = [];
+  for (let index = 0; index < 32; index++) {
+    const memoryId = `${String(index).padStart(2, '0')}_${'x'.repeat(197)}`;
+    await write('bob', 'person', memoryId);
+    dependsOn.push({ scopeId, memoryId, revision: 1 });
+  }
+  const sources = [];
+  const commandId = 'event-size_' + 'c'.repeat(180);
+  for (let index = 0; index < 8; index++) sources.push({ memberId: 'bob', commandId });
+  const tooLarge = { text: 'x'.repeat(4096), sources, dependsOn };
+  expect((await remember('bob', 'person', commandId, 'bob', tooLarge)).statusCode).toBe(422);
+  expect((await remember('bob', 'person', commandId)).statusCode).toBe(200);
+});
+
+it('refuses a wrong Origin before doing memory work', async function origin() {
+  const session = { sub: 'idp-bob', orgId: 'org-acme', roles: ['owner'],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+    origin: 'https://other.example.test' };
+  const spy = vi.spyOn(nats.store, 'readStream');
+  try {
+    const response = await app.inject({ method: 'POST', url: `${path('bob')}/facts`,
+      headers, payload: {} });
+    expect(response.statusCode).toBe(403);
+    expect(spy).not.toHaveBeenCalled();
+  } finally { spy.mockRestore(); }
+});
+
+it.each(['team', 'grant', 'assistant'] as const)(
+  'refuses a %s change during the final write check', async function changedAuthority(kind) {
+    const assistantId = `write-changing-${kind}`;
+    await append('team-changing', 'team.created',
+      { teamId: 'changing', name: 'Changing', createdBy: 'owner' });
+    await append('team-changing', 'team.member_added',
+      { teamId: 'changing', memberId: 'bob', addedBy: 'owner' });
+    await append(`assistant-${assistantId}`, 'assistant.created',
+      { assistantId, kind: 'team', ownerId: 'changing' });
+    await writeGrant(assistantId);
+    await runner.run(groups);
+    await runner.run(computers);
+    const scopeId = memoryScopeId('acme', 'assistant_notes', assistantId);
+    const subject = { team: 'team-changing', grant: grantStream('memory_write', scopeId),
+      assistant: `assistant-${assistantId}` }[kind];
+    const original = nats.store.head.bind(nats.store);
+    let checks = 0;
+    async function move(target?: string, deadline?: number) {
+      const position = await original(target, deadline);
+      if (target === subject && ++checks === 1) {
+        if (kind === 'team') {
+          await append(subject, 'team.member_removed',
+            { teamId: 'changing', memberId: 'bob', removedBy: 'owner' }, false);
+        } else if (kind === 'assistant') {
+          await append(subject, 'assistant.settings_changed', { assistantId, changedBy: 'owner',
+            active: false, changedFields: ['active'] }, false);
+        } else {
+          await append(subject, 'grant.revoked', { resourceType: 'memory_write',
+            resourceId: scopeId, granteeKind: 'member', granteeId: 'bob', revokedBy: 'owner' }, false);
+        }
+        return original(target, deadline);
+      }
+      return position;
+    }
+    const spy = vi.spyOn(nats.store, 'head').mockImplementation(move);
+    try {
+      expect((await remember(assistantId, 'assistant_notes', `changed-${kind}`)).statusCode)
+        .toBe(503);
+    } finally { spy.mockRestore(); }
+  });
+
+it('lets a notes writer check their command without a read grant', async function writerStatus() {
+  await append('assistant-write-only', 'assistant.created',
+    { assistantId: 'write-only', kind: 'personal', ownerId: 'bob' });
+  await writeGrant('write-only');
+  await runner.run(computers);
+  expect((await remember('write-only', 'assistant_notes', 'write-only-command')).statusCode).toBe(200);
+  await runner.run(projection);
+  expect((await get(`${path('write-only', 'assistant_notes')}/facts`)).statusCode).toBe(404);
+  expect((await get(`${path('write-only', 'assistant_notes')}/changes/write-only-command`)).json())
+    .toMatchObject({ outcome: 'saved' });
+});
+
+it('keeps no text or text hash in a journal and removes resolved records', async function journalPrivacy() {
+  const unavailable = { status: 'unavailable' as const, cause: new Error('Reply lost') };
+  const spy = vi.spyOn(nats.store, 'append').mockResolvedValue(unavailable);
+  let response;
+  try { response = await remember('bob', 'person', 'journal-private'); }
+  finally { spy.mockRestore(); }
+  const memoryId = response.json<{ memoryId: string }>().memoryId;
+  const journalPath = `${directory}/command-${memoryId}.json`;
+  const raw = await readFile(journalPath, 'utf8');
+  expect(raw).not.toContain('A human statement');
+  const entry = z.object({ inputDigest: z.string() }).parse(JSON.parse(raw));
+  const hash = await import('node:crypto');
+  const input = { kind: 'fact', pinned: false, expiresAt: null,
+    sources: [{ memberId: 'bob', commandId: 'journal-private' }], dependsOn: [],
+    commandId: 'journal-private', text: 'A human statement' };
+  const fingerprint = hash.createHash('sha256');
+  fingerprint.update(JSON.stringify(input));
+  const digest = fingerprint.digest('hex');
+  expect(entry.inputDigest).not.toBe(digest);
+  await new Promise(function appendWindow(resolve) { setTimeout(resolve, 2100); });
+  await write('bob', 'person', 'journal-competing-write');
+  await runner.run(projection);
+  await reconcileCommands(memory);
+  expect((await get(`${path('bob')}/changes/journal-private`)).json())
+    .toMatchObject({ outcome: 'failed' });
+  await expect(access(journalPath)).rejects.toThrow();
+  const saved = await remember('bob', 'person', 'journal-saved');
+  const savedId = saved.json<{ memoryId: string }>().memoryId;
+  await expect(access(`${directory}/command-${savedId}.json`)).rejects.toThrow();
+});
+
+it('starts despite damaged journals and a failed recovery read', async function bootRecovery() {
+  const badPath = `${directory}/command-${'f'.repeat(64)}.json`;
+  await writeFile(badPath, '{damaged');
+  await app.close();
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(brokenRead);
+  async function* brokenRead(): AsyncGenerator<never> {
+    await Promise.reject(new Error('NATS unavailable'));
+    yield* [];
+  }
+  try {
+    app = buildServer(config, { memory });
+    await app.ready();
+  } finally {
+    spy.mockRestore();
+    await rm(badPath);
+  }
+});
+
+
+it('accepts accessible personal chat messages and refuses missing or private messages',
+  async function personalSources() {
+    for (const [conversationId, participantIds] of [
+      ['memory-source', ['bob', 'owner']], ['memory-private', ['owner', 'admin']],
+    ] as const) {
+      await append(`conversation-${conversationId}`, 'conversation.created',
+        { conversationId, mode: 'direct', participantIds, createdBy: participantIds[0] });
+    }
+    const posted = await append('conversation-memory-source', 'message.posted', {
+      conversationId: 'memory-source', authorId: 'bob', authorKind: 'human',
+      ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text',
+    });
+    await runner.run(conversations);
+    const original = nats.store.readStream.bind(nats.store);
+    async function* bounded(subject: string, from?: number, deadline?: number) {
+      let rows = 0;
+      for await (const row of original(subject, from, deadline)) {
+        if (subject.startsWith('conversation-')) expect(++rows).toBeLessThanOrEqual(1);
+        yield row;
+      }
+    }
+    const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(bounded);
+    const lock = memory.db.lock!.bind(memory.db);
+    let locked = false;
+    async function trackedLock<T>(name: string, work: (db: import('@opencrane/projections').Db) => Promise<T>) {
+      async function tracked(db: import('@opencrane/projections').Db) {
+        locked = true;
+        try { return await work(db); }
+        finally { locked = false; }
+      }
+      return lock(name, tracked);
+    }
+    const lockSpy = vi.spyOn(memory.db, 'lock').mockImplementation(trackedLock);
+    const query = memory.db.query.bind(memory.db);
+    async function outsideLock<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+      if (sql.includes('conversation_feed')) expect(locked).toBe(false);
+      return query<Row>(sql, values);
+    }
+    const querySpy = vi.spyOn(memory.db, 'query').mockImplementation(outsideLock);
+    try {
+      const accessible = { sources: [{ conversationId: 'memory-source', messageId: posted.id }] };
+      expect((await remember('bob', 'person', 'chat-source', 'bob', accessible)).statusCode).toBe(200);
+      const missing = { sources: [{ conversationId: 'memory-source', messageId: 'missing' }] };
+      expect((await remember('bob', 'person', 'missing-source', 'bob', missing)).statusCode).toBe(404);
+      const privateMessage = { sources: [{ conversationId: 'memory-private', messageId: 'private' }] };
+      expect((await remember('bob', 'person', 'private-source', 'bob', privateMessage)).statusCode).toBe(404);
+    } finally {
+      spy.mockRestore(); lockSpy.mockRestore(); querySpy.mockRestore();
+    }
+  });
+
+it('refuses a busy command lock promptly and keeps the database usable', async function busyLock() {
+  const crypto = await import('node:crypto');
+  const hash = crypto.createHash('sha256');
+  hash.update(JSON.stringify(['acme', 'human', 'bob', memoryScopeId('acme', 'person', 'bob'),
+    'busy-command']));
+  const reference = hash.digest('hex');
+  const client = await storage.queue.connect();
+  const name = `opencrane:projection:memory-command:${reference}`;
+  await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [name]);
+  let pending;
+  try {
+    pending = remember('bob', 'person', 'busy-command');
+    function timeout(): Promise<never> {
+      return new Promise(function wait(_resolve, reject) {
+        setTimeout(function fail() { reject(new Error('Command waited for its lock')); }, 1500);
+      });
+    }
+    const response = await Promise.race([pending, timeout()]);
+    expect([409, 503]).toContain(response.statusCode);
+    expect((await storage.queue.query('SELECT 1')).rows).toHaveLength(1);
+  } finally {
+    await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [name]);
+    client.release();
+    await pending;
+  }
+});
+
+
+it('resolves an unknown saved command across restart without resending', async function unknownRestart() {
+  const original = nats.store.append.bind(nats.store);
+  async function lostReply(command: Parameters<typeof original>[0]) {
+    await original(command);
+    return { status: 'unavailable' as const, cause: new Error('Reply lost') };
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(lostReply);
+  let response;
+  try { response = await remember('bob', 'person', 'unknown-restart'); }
+  finally { spy.mockRestore(); }
+  expect(response.json()).toMatchObject({ outcome: 'unknown' });
+  const memoryId = response.json<{ memoryId: string }>().memoryId;
+  await app.close();
+  await new Promise(function appendWindow(resolve) { setTimeout(resolve, 2100); });
+  app = buildServer(config, { memory });
+  await app.ready();
+  await runner.run(projection);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  try {
+    expect((await get(`${path('bob')}/changes/unknown-restart`)).json())
+      .toMatchObject({ outcome: 'saved', memoryId });
+    await expect(access(`${directory}/command-${memoryId}.json`)).rejects.toThrow();
+    expect(appendSpy).not.toHaveBeenCalled();
+  } finally { appendSpy.mockRestore(); }
+});
+
+it.each(['status', 'retry', 'recovery'] as const)(
+  'keeps a delayed append readable after %s checks an expired unknown command',
+  async function delayedCommit(action) {
+    const original = nats.store.append.bind(nats.store);
+    let delayedCommand: Parameters<typeof original>[0] | undefined;
+    function delay(command: Parameters<typeof original>[0]) {
+      delayedCommand = command;
+      const result = { status: 'unavailable' as const, cause: new Error('Publish reply timed out') };
+      return Promise.resolve(result);
+    }
+    const commandId = `delayed-${action}`;
+    const spy = vi.spyOn(nats.store, 'append').mockImplementation(delay);
+    let response;
+    try {
+      const extra = { text: `Delayed statement ${action}` };
+      response = await remember('bob', 'person', commandId, 'bob', extra);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(response.json()).toMatchObject({ outcome: 'unknown' });
+    const memoryId = response.json<{ memoryId: string }>().memoryId;
+    const journalPath = `${directory}/command-${memoryId}.json`;
+    const raw: unknown = JSON.parse(await readFile(journalPath, 'utf8'));
+    const entry = z.record(z.string(), z.unknown()).parse(raw);
+    entry['appendUntil'] = 0;
+    await writeFile(journalPath, JSON.stringify(entry));
+    await runner.run(projection);
+    if (action === 'status') {
+      expect((await get(`${path('bob')}/changes/${commandId}`)).json())
+        .toMatchObject({ outcome: 'unknown' });
+    } else if (action === 'retry') {
+      const extra = { text: `Delayed statement ${action}` };
+      expect((await remember('bob', 'person', commandId, 'bob', extra)).json())
+        .toMatchObject({ outcome: 'unknown' });
+    } else {
+      await reconcileCommands(memory);
+    }
+    expect(delayedCommand).toBeDefined();
+    // Commit the publish already waiting at NATS, after the caller's timeout has elapsed.
+    const { deadline: _deadline, ...serverCommand } = delayedCommand!;
+    expect((await original(serverCommand)).status).toBe('appended');
+    await runner.run(projection);
+    expect((await get(`${path('bob')}/changes/${commandId}`)).json())
+      .toMatchObject({ outcome: 'saved', memoryId });
+    const listed = await get(`${path('bob')}/facts?q=Delayed%20statement%20${action}`);
+    expect(listed.json()).toMatchObject({ facts: [
+      { memoryId, text: `Delayed statement ${action}` },
+    ] });
+    await expect(access(journalPath)).rejects.toThrow();
+  });
+
+
+it('keeps database queries available during distinct slow scope reads', async function slowScopes() {
+  const assistants = ['pool-first', 'pool-second'];
+  const scopes = new Set<string>();
+  for (const assistantId of assistants) {
+    await append(`assistant-${assistantId}`, 'assistant.created',
+      { assistantId, kind: 'personal', ownerId: 'bob' });
+    await writeGrant(assistantId);
+    scopes.add(`scope-${memoryScopeId('acme', 'assistant_notes', assistantId)}`);
+  }
+  await runner.run(computers);
+  const poolOptions = { ...storage.queue.options, max: 2, connectionTimeoutMillis: 300 };
+  const pool = new Pool(poolOptions);
+  const limitedMemory = { ...memory, db: pgDb(pool) };
+  const previousApp = app;
+  app = buildServer(config, { memory: limitedMemory });
+  await app.ready();
+  const original = nats.store.readStream.bind(nats.store);
+  const reads = new Map<string, number>();
+  let delayed = 0;
+  function noop() {}
+  let notifyRead: () => void = noop;
+  function notifyWhenRead(resolve: () => void) {
+    notifyRead = resolve;
+  }
+  const readDelayed = new Promise<void>(notifyWhenRead);
+  let releaseReads: () => void = noop;
+  function releaseWhenFinished(resolve: () => void) {
+    releaseReads = resolve;
+  }
+  const released = new Promise<void>(releaseWhenFinished);
+  async function* slow(subject: string, from?: number, deadline = Infinity) {
+    if (scopes.has(subject)) {
+      const count = (reads.get(subject) ?? 0) + 1;
+      reads.set(subject, count);
+      if (count === 1) {
+        delayed++;
+        if (delayed === 1) {
+          notifyRead();
+        }
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        function startDeadline(_resolve: (value: never) => void, reject: (error: Error) => void) {
+          function fail() {
+            reject(new Error('Scope read deadline elapsed'));
+          }
+          timer = setTimeout(fail, Math.max(0, deadline - performance.now()));
+        }
+        const expired = new Promise<never>(startDeadline);
+        try {
+          await Promise.race([released, expired]);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+    }
+    yield* original(subject, from, deadline);
+  }
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
+  function send(assistantId: string) {
+    return remember(assistantId, 'assistant_notes', `slow-${assistantId}`);
+  }
+  const requests = assistants.map(send);
+  try {
+    await readDelayed;
+    const result = await pool.query('SELECT 1');
+    expect(result.rows).toHaveLength(1);
+  } finally {
+    releaseReads();
+    await Promise.all(requests);
+    spy.mockRestore();
+    await app.close();
+    app = previousApp;
+    await pool.end();
+  }
+});
+
+
+it.each(['status', 'retry', 'recovery'] as const)(
+  'reports failure through %s only after another scope write and the append window',
+  async function provenFailure(action) {
+    const commandId = `proven-failure-${action}`;
+    const unavailable = { status: 'unavailable' as const, cause: new Error('Reply lost') };
+    const spy = vi.spyOn(nats.store, 'append').mockResolvedValue(unavailable);
+    let response;
+    try {
+      response = await remember('bob', 'person', commandId);
+    } finally {
+      spy.mockRestore();
+    }
+    const memoryId = response.json<{ memoryId: string }>().memoryId;
+    const journalPath = `${directory}/command-${memoryId}.json`;
+    const raw: unknown = JSON.parse(await readFile(journalPath, 'utf8'));
+    const entry = z.record(z.string(), z.unknown()).parse(raw);
+    expect(entry['expectedSequence']).toEqual(expect.any(Number));
+    entry['appendUntil'] = Date.now() + 60_000;
+    await writeFile(journalPath, JSON.stringify(entry));
+    await write('bob', 'person', `competing-${action}`);
+    await runner.run(projection);
+    async function check() {
+      if (action === 'status') {
+        return get(`${path('bob')}/changes/${commandId}`);
+      }
+      if (action === 'retry') {
+        return remember('bob', 'person', commandId);
+      }
+      await reconcileCommands(memory);
+      return get(`${path('bob')}/changes/${commandId}`);
+    }
+    expect((await check()).json()).toMatchObject({ outcome: 'unknown' });
+    entry['appendUntil'] = 0;
+    await writeFile(journalPath, JSON.stringify(entry));
+    expect((await check()).json()).toMatchObject({ outcome: 'failed', memoryId });
+    await expect(access(journalPath)).rejects.toThrow();
+    const appendSpy = vi.spyOn(nats.store, 'append');
+    try {
+      expect((await remember('bob', 'person', commandId)).json())
+        .toMatchObject({ outcome: 'failed', memoryId });
+      expect(appendSpy).not.toHaveBeenCalled();
+    } finally {
+      appendSpy.mockRestore();
+    }
+  });
+
+it('keeps older unknown keys when their expected scope position was not recorded',
+  async function olderUnknown() {
+    const commandId = 'older-unknown';
+    const unavailable = { status: 'unavailable' as const, cause: new Error('Reply lost') };
+    const spy = vi.spyOn(nats.store, 'append').mockResolvedValue(unavailable);
+    let response;
+    try {
+      response = await remember('bob', 'person', commandId);
+    } finally {
+      spy.mockRestore();
+    }
+    const memoryId = response.json<{ memoryId: string }>().memoryId;
+    const journalPath = `${directory}/command-${memoryId}.json`;
+    const raw: unknown = JSON.parse(await readFile(journalPath, 'utf8'));
+    const entry = z.record(z.string(), z.unknown()).parse(raw);
+    delete entry['expectedSequence'];
+    entry['appendUntil'] = 0;
+    await writeFile(journalPath, JSON.stringify(entry));
+    await write('bob', 'person', 'older-unknown-competitor');
+    await runner.run(projection);
+    await reconcileCommands(memory);
+    expect((await get(`${path('bob')}/changes/${commandId}`)).json())
+      .toMatchObject({ outcome: 'unknown' });
+    expect((await remember('bob', 'person', commandId)).json())
+      .toMatchObject({ outcome: 'unknown', memoryId });
+    await expect(access(journalPath)).resolves.toBeUndefined();
+  });
+
+it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as const)(
+  'keeps other queries available with more slow %s requests than pool slots',
+  async function slowMemoryWrites(stage) {
+    const commandStage = stage.replaceAll(' ', '-');
+    const isAppend = stage.endsWith('append');
+    const assistants = [1, 2, 3, 4].map(assistantName);
+    function assistantName(index: number) {
+      return `pool-${commandStage}-${index}`;
+    }
+    const assistantSubjects = new Set<string>();
+    for (const assistantId of assistants) {
+      await append(`assistant-${assistantId}`, 'assistant.created',
+        { assistantId, kind: 'personal', ownerId: 'bob' });
+      await writeGrant(assistantId);
+      assistantSubjects.add(`assistant-${assistantId}`);
+    }
+    await runner.run(computers);
+    const poolOptions = { ...storage.queue.options, max: 2, connectionTimeoutMillis: 300 };
+    const pool = new Pool(poolOptions);
+    const limitedMemory = { ...memory, db: pgDb(pool) };
+    const previousApp = app;
+    app = buildServer(config, { memory: limitedMemory });
+    await app.ready();
+    function noop() {}
+    let release: () => void = noop;
+    function captureRelease(resolve: () => void) {
+      release = resolve;
+    }
+    const released = new Promise<void>(captureRelease);
+    let notify: () => void = noop;
+    function captureNotification(resolve: () => void) {
+      notify = resolve;
+    }
+    const stalled = new Promise<void>(captureNotification);
+    let delayed = 0;
+    let completed = 0;
+    async function pause() {
+      delayed++;
+      if (delayed === 1) {
+        notify();
+      }
+      await released;
+    }
+    const reads = new Map<string, number>();
+    const originalRead = nats.store.readStream.bind(nats.store);
+    async function* slowRead(subject: string, from?: number, deadline?: number) {
+      if (stage === 'permission history' && assistantSubjects.has(subject)) {
+        const visits = (reads.get(subject) ?? 0) + 1;
+        reads.set(subject, visits);
+        // Stall the final permission check, after the first check has allowed the writer.
+        if (visits === 2) {
+          await pause();
+        }
+      }
+      yield* originalRead(subject, from, deadline);
+    }
+    const permissionCalls = new Map<string, number>();
+    const originalPermission = auth.actsFor.bind(auth);
+    async function slowPermission(requester: string, assistantId: string) {
+      if (stage === 'OpenFGA' && assistants.includes(assistantId)) {
+        const visits = (permissionCalls.get(assistantId) ?? 0) + 1;
+        permissionCalls.set(assistantId, visits);
+        if (visits === 2) {
+          await pause();
+        }
+      }
+      return originalPermission(requester, assistantId);
+    }
+    const originalAppend = nats.store.append.bind(nats.store);
+    async function slowAppend(command: Parameters<typeof originalAppend>[0]) {
+      if (isAppend) {
+        await pause();
+      }
+      return originalAppend(command);
+    }
+    const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(slowRead);
+    const permissionSpy = vi.spyOn(auth, 'actsFor').mockImplementation(slowPermission);
+    const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(slowAppend);
+    function finished(response: Awaited<ReturnType<typeof remember>>) {
+      completed++;
+      return response;
+    }
+    function send(assistantId: string) {
+      let ownerId = assistantId;
+      if (stage === 'same-scope append') {
+        ownerId = assistants[0]!;
+      }
+      const commandId = `pool-${commandStage}-${assistantId}`;
+      const request = remember(ownerId, 'assistant_notes', commandId);
+      return request.then(finished);
+    }
+    const requests = assistants.map(send);
+    function allRequestsReachedSlowWorkOrFinished() {
+      expect(delayed + completed).toBe(assistants.length);
+    }
+    try {
+      await stalled;
+      await vi.waitFor(allRequestsReachedSlowWorkOrFinished, { timeout: 1500 });
+      const result = await pool.query('SELECT 1 AS available');
+      expect(result.rows).toEqual([{ available: 1 }]);
+      if (isAppend) {
+        expect(delayed).toBe(1);
+        expect(pool.totalCount - pool.idleCount).toBe(1);
+      } else {
+        expect(delayed).toBe(assistants.length);
+        expect(pool.totalCount - pool.idleCount).toBe(0);
+      }
+    } finally {
+      release();
+      await Promise.all(requests);
+      readSpy.mockRestore();
+      permissionSpy.mockRestore();
+      appendSpy.mockRestore();
+      await app.close();
+      app = previousApp;
+      await pool.end();
+    }
+    // Prove that a completed or refused batch releases its write slots.
+    expect((await remember('bob', 'person', `after-pool-${commandStage}`)).statusCode).toBe(200);
+  });
+
+async function fairWrites(stage: 'scope history' | 'append') {
+  const commandStage = stage.replaceAll(' ', '-');
+  const assistantId = `fair-${commandStage}`;
+  await append(`assistant-${assistantId}`, 'assistant.created',
+    { assistantId, kind: 'personal', ownerId: 'bob' });
+  await writeGrant(assistantId);
+  await runner.run(computers);
+  const poolOptions = { ...storage.queue.options, max: 2, connectionTimeoutMillis: 300 };
+  const pool = new Pool(poolOptions);
+  const previousApp = app;
+  const limitedMemory = { ...memory, db: pgDb(pool) };
+  app = buildServer(config, { memory: limitedMemory });
+  await app.ready();
+  const gate = Promise.withResolvers<void>();
+  const stalled = Promise.withResolvers<void>();
+  const bobScope = memoryScopeId('acme', 'person', 'bob');
+  let delayed = 0;
+  let completed = 0;
+  async function pause() {
+    delayed++;
+    stalled.resolve();
+    await gate.promise;
+  }
+  const originalRead = nats.store.readStream.bind(nats.store);
+  async function* slowHistory(subject: string, from?: number, deadline?: number) {
+    if (stage === 'scope history' && subject === `scope-${bobScope}`) {
+      await pause();
+    }
+    yield* originalRead(subject, from, deadline);
+  }
+  const originalAppend = nats.store.append.bind(nats.store);
+  async function slowAppend(command: Parameters<typeof originalAppend>[0]) {
+    const record = memoryWrittenEventSchema.safeParse(command.event);
+    if (stage === 'append' && record.success && record.data.principal?.id === 'bob') {
+      await pause();
+    }
+    return originalAppend(command);
+  }
+  const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(slowHistory);
+  const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(slowAppend);
+  function finished(response: Awaited<ReturnType<typeof remember>>) {
+    completed++;
+    return response;
+  }
+  const first = remember('bob', 'person', `fair-first-${commandStage}`);
+  const requests = [first.then(finished)];
+  const floodCount = 12;
+  let otherMemoryId = '';
+  let responses: Awaited<ReturnType<typeof remember>>[];
+  try {
+    await stalled.promise;
+    for (let index = 0; index < floodCount; index++) {
+      const commandId = `fair-flood-${commandStage}-${index}`;
+      let request;
+      if (stage === 'append' && index === 0) {
+        request = remember(assistantId, 'assistant_notes', commandId);
+      } else {
+        request = remember('bob', 'person', commandId);
+      }
+      requests.push(request.then(finished));
+    }
+    const start = performance.now();
+    const response = await remember('owner', 'person', `fair-other-${commandStage}`, 'owner');
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ outcome: 'saved' });
+    otherMemoryId = response.json<{ memoryId: string }>().memoryId;
+    expect(performance.now() - start).toBeLessThan(1500);
+    const query = await pool.query('SELECT 1 AS available');
+    expect(query.rows).toEqual([{ available: 1 }]);
+    if (stage === 'append') {
+      function allFloodWritesReachedAppendOrFinished() {
+        expect(delayed + completed).toBe(floodCount + 1);
+      }
+      await vi.waitFor(allFloodWritesReachedAppendOrFinished, { timeout: 1500 });
+      expect(delayed).toBe(1);
+      expect(pool.totalCount - pool.idleCount).toBe(1);
+      // Keep permission refusals private even while this member's write slot is full.
+      const forbidden = await remember('owner', 'person', 'fair-forbidden');
+      expect(forbidden.statusCode).toBe(404);
+    }
+  } finally {
+    gate.resolve();
+    responses = await Promise.all(requests);
+    readSpy.mockRestore();
+    appendSpy.mockRestore();
+    await app.close();
+    app = previousApp;
+    await pool.end();
+  }
+  if (stage === 'append') {
+    for (const response of responses) {
+      if (response.statusCode === 503) {
+        expect(response.json()).toEqual({ status: 'unavailable', reason: 'memory_busy' });
+        expect(response.headers['retry-after']).toBe('1');
+      }
+    }
+  }
+  await runner.run(projection);
+  const facts = await get(`${path('owner')}/facts`, 'owner');
+  const result = facts.json<{ facts: { memoryId: string; text: string }[] }>();
+  function savedForOtherMember(fact: { memoryId: string }) {
+    return fact.memoryId === otherMemoryId;
+  }
+  const saved = result.facts.find(savedForOtherMember);
+  expect(saved).toMatchObject({ memoryId: otherMemoryId, text: 'A human statement' });
+}
+
+it.each(['scope history', 'append'] as const)(
+  'lets another member save while one member floods slow %s writes', fairWrites);
+
+async function fairQueueAcrossScopesAndSessions() {
+  const floodScopes = new Set<string>();
+  const groupsToWrite: string[] = [];
+  for (let index = 0; index < 8; index++) {
+    const groupId = `queue-flood-${index}`;
+    groupsToWrite.push(groupId);
+    floodScopes.add(memoryScopeId('acme', 'group', groupId));
+    await append(`team-${groupId}`, 'team.created',
+      { teamId: groupId, name: 'Memory writers', createdBy: 'owner' });
+    await append(`team-${groupId}`, 'team.member_added',
+      { teamId: groupId, memberId: 'bob', addedBy: 'owner' });
+  }
+  await runner.run(groups);
+  const heldSlots: (() => void)[] = [];
+  for (const memberId of ['queue-carol', 'queue-dave', 'queue-eve']) {
+    const release = await memoryAdmission.acquireMemoryWrite('acme', memberId, 'personal');
+    heldSlots.push(release);
+  }
+  const appendGate = Promise.withResolvers<void>();
+  const stalled = Promise.withResolvers<void>();
+  const floodReady = Promise.withResolvers<void>();
+  const floodGate = Promise.withResolvers<void>();
+  const floodAdmitted = Promise.withResolvers<void>();
+  const ownerReady = Promise.withResolvers<void>();
+  const ownerGate = Promise.withResolvers<void>();
+  const ownerAdmitted = Promise.withResolvers<void>();
+  let readyCount = 0;
+  let admittedCount = 0;
+  const originalAcquire = memoryAdmission.acquireMemoryWrite;
+  async function coordinatedAdmission(silo: string, memberId: string, scopeId: string) {
+    const isFlood = memberId === 'bob' && floodScopes.has(scopeId);
+    if (isFlood) {
+      readyCount++;
+      if (readyCount === 8) {
+        floodReady.resolve();
+      }
+      await floodGate.promise;
+    }
+    if (memberId === 'owner') {
+      ownerReady.resolve();
+      await ownerGate.promise;
+    }
+    const admission = originalAcquire(silo, memberId, scopeId);
+    if (isFlood) {
+      admittedCount++;
+      if (admittedCount === 8) {
+        floodAdmitted.resolve();
+      }
+    }
+    if (memberId === 'owner') {
+      ownerAdmitted.resolve();
+    }
+    return admission;
+  }
+  const originalAppend = nats.store.append.bind(nats.store);
+  async function slowAppend(command: Parameters<typeof originalAppend>[0]) {
+    const record = memoryWrittenEventSchema.safeParse(command.event);
+    if (record.success && record.data.commandId === 'queue-bob-active') {
+      stalled.resolve();
+      await appendGate.promise;
+    }
+    return originalAppend(command);
+  }
+  const admissionSpy = vi.spyOn(memoryAdmission, 'acquireMemoryWrite');
+  admissionSpy.mockImplementation(coordinatedAdmission);
+  const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(slowAppend);
+  const requests = [remember('bob', 'person', 'queue-bob-active')];
+  let otherMemoryId: string;
+  try {
+    await stalled.promise;
+    for (let index = 0; index < groupsToWrite.length; index++) {
+      const commandId = `queue-bob-${index}`;
+      const expiry = 2000000001 + index;
+      const request = remember(groupsToWrite[index]!, 'group', commandId, 'bob', {}, expiry);
+      requests.push(request);
+    }
+    const otherRequest = remember('owner', 'person', 'queue-owner', 'owner');
+    requests.push(otherRequest);
+    // Finish permission work before starting the shared 100 ms admission waits.
+    await floodReady.promise;
+    await ownerReady.promise;
+    floodGate.resolve();
+    await floodAdmitted.promise;
+    ownerGate.resolve();
+    await ownerAdmitted.promise;
+    const releaseSlot = heldSlots.pop()!;
+    releaseSlot();
+    const response = await otherRequest;
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ outcome: 'saved' });
+    otherMemoryId = response.json<{ memoryId: string }>().memoryId;
+    // Keep Bob's first write stalled while every further request receives its busy reply.
+    const floodRequests = requests.slice(1, 9);
+    const responses = await Promise.all(floodRequests);
+    for (const busy of responses) {
+      expect(busy.statusCode).toBe(503);
+      expect(busy.json()).toEqual({ status: 'unavailable', reason: 'memory_busy' });
+      expect(busy.headers['retry-after']).toBe('1');
+    }
+  } finally {
+    floodGate.resolve();
+    ownerGate.resolve();
+    appendGate.resolve();
+    for (const release of heldSlots) {
+      release();
+    }
+    await Promise.all(requests);
+    admissionSpy.mockRestore();
+    appendSpy.mockRestore();
+  }
+  await runner.run(projection);
+  const detail = await get(`${path('owner')}/facts/${otherMemoryId}`, 'owner');
+  expect(detail.statusCode).toBe(200);
+  expect(detail.json()).toMatchObject({ fact: { memoryId: otherMemoryId,
+    text: 'A human statement' } });
+}
+
+it('lets another member save with four occupied slots and a flood across scopes and sessions',
+  fairQueueAcrossScopesAndSessions);

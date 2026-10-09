@@ -28,6 +28,7 @@ import { registerAuditRoutes, type AuditOptions } from './audit/routes.ts';
 import { registerChatRoutes, type ChatOptions } from './chat/routes.ts';
 import { registerMemoryReads } from './memory/routes.ts';
 import { registerMemoryMcp } from './memory/mcp.ts';
+import { registerMemoryCommands } from './memory/commands-routes.ts';
 
 export interface BuildServerOptions {
   /** Where log lines go; defaults to stdout. A test passes an in-memory stream to read them back. */
@@ -85,6 +86,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerModelAccessRoutes(app, authConfig, options.modelAccess);
   registerMemoryReads(app, authConfig, options.memory);
   registerMemoryMcp(app, authConfig, options.memory);
+  registerMemoryCommands(app, authConfig, options.memory);
 
   registerBootstrapRoutes(app, authConfig, options.membership);
   registerIntegrationRoutes(app, authConfig, options.integrations);

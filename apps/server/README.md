@@ -13,7 +13,8 @@ flowchart LR
 
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and participation checks"]
   server -.->|checks organisation, access, invitations, spending and memory passes| libs["libs/*<br/>shared code"]
-  server -->|records changes, model grants, chat, computer facts and confirmed provider choices| nats["NATS<br/>event log"]
+  server -->|records memory facts, model grants, chat and confirmed provider choices| nats["NATS<br/>event log"]
+
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members and invitation accounts, chat rows, closes and old joins, facts and source messages, models and computers| postgres
@@ -37,6 +38,13 @@ flowchart LR
   Returns fact detail and checks each source separately, hiding denied references.
   Checks chat access and the latest join before looking up one source message. Describes a member statement
   without naming its author. Reports destroyed or quarantined facts without text.
+  Checks write permission before inspecting a fact. Records human facts and checks
+  the original command when a reply is lost. Checks chat access before looking up
+  a source message. Slow permission checks leave database connections free. The server
+  shares a few write slots between members. A member can save one fact at a time
+  and have one more write waiting, across all their scopes and sign-in sessions.
+  This leaves room for another person. Busy writers receive a prompt reply.
+  Keeps the fact's key while a delayed write could still be saved.
   These reads need the memory worker and its existing private key directory.
   It returns current facts only after the read table has caught up with their events.
 - Accepts bound and email invitations after a recent sign-in with a verified email, while

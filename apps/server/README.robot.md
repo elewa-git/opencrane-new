@@ -53,8 +53,71 @@ contains a reference or preview. Member statements return the neutral label "a m
 statement", without memberId or commandId, including after the author has left.
 Source checks need the server's existing chat settings and conversation read table.
 No source preview is stored or returned.
-Oversized authorised detail returns 503. Command status and storage are in the companion draft. The fresh empty runner and HTTP read test passes with real services.
+Oversized authorised detail returns 503. The fresh empty runner and HTTP read test
+passes with real services.
 Full fresh-install memory journeys and native turns remain NOT RUN.
+
+`POST /api/memory/:scopeId/facts` accepts commandId, text, kind, pinned, expiresAt,
+sources and dependsOn. It accepts human writers only and checks Origin. Person ownership
+and group membership grant write access. Notes require `memory_write` from saved grants
+and OpenFGA; a read grant never supplies it. Empty sources record the writer's statement.
+Chat sources are allowed only in person scopes, with message access checked separately.
+Current chats cannot prove durable whole-group visibility, so shared message sources are refused.
+Preferences stay personal. Text allows tabs/newlines but refuses other C0 controls.
+Commands and events have separate 16 KiB limits. Dependencies require a live same-scope revision.
+
+Write permission is checked before inspecting scope history, dependencies or sources.
+Chat access is checked before an indexed message lookup in the conversation read table.
+The lookup checks that the worker has caught up, then checks one saved event in NATS.
+These content checks finish before the final two-second access check. The final check
+watches only member, assistant, team and write-grant streams. Member and scope permission
+history, and OpenFGA checks, finish before taking a database connection or command lock.
+The watched stream positions are checked before taking the lock and again before append.
+Each command makes one conditional append at the scope position read from history.
+
+Each process allows four active memory writes. Each member can have at most one
+active write and one queued write across all their scopes and sign-in sessions.
+The member identity includes the silo, so members in different silos stay separate.
+A second queued write from the same member is refused immediately. Permission history
+and OpenFGA checks finish before asking for a slot or reserving a database client.
+Up to eight writes can wait for at most 100 ms. A released slot goes to the oldest
+waiting write whose member is free to write. Requests for a member and scope already
+active or waiting are also refused immediately.
+A full queue or expired wait returns 503 `{status: "unavailable", reason: "memory_busy"}`
+with `Retry-After: 1`. Waiting writes hold no database client. The permission stream
+positions are checked again after waiting and before taking the command lock.
+A slow append holds one shared connection for that member, leaving the default
+10-connection pool room for other queries. Separate server processes each have their
+own limit and pool.
+A PostgreSQL advisory lock keeps attempts for the same command together across servers.
+Memory commands wait at most 100 ms for this lock; a busy lock returns 503. Work inside the
+lock holds one database client. It reads only scope events newer than the earlier history,
+with a 100 ms deadline. Refusal checks use the same read limit and the remaining write
+deadline. No conversation content or OpenFGA checks run inside the lock.
+
+The full encrypted event size is checked before a revision key is created. Changed saved
+inputs return 409. Lost replies return `outcome: "unknown"`; clients check
+`GET /api/memory/:scopeId/changes/:commandId` instead of resending. Status returns only
+this principal's original command, after projection catch-up, including for a notes writer
+without a read grant. Receipts contain references and audience, never text.
+
+The existing 0700 key directory also holds temporary command records. Their fingerprint
+leaves text out. A resolved record is deleted. Each new record stores the expected scope
+position used by its conditional append. A timeout alone cannot prove failure: NATS can
+still accept a delayed publish. After the append window ends, status, retry and recovery
+checks release an unknown key only when the scope has advanced beyond that expected
+position without saving the command. That proves the delayed append cannot succeed.
+An unchanged scope stays unknown and keeps its key. Older unknown records without the
+expected position also keep their keys, even if the scope advances. Prepared records
+can be removed because no append was issued. Failed commands keep only the destroyed-key
+marker and cannot append again. An unseen command stays unknown.
+Startup launches recovery in the background. Recovery reads directory entries gradually,
+yields after every 16 records and limits each scope read to one second. It reads history
+before taking a database connection, then checks that the record has not changed under
+the command lock. A damaged record, busy lock or event-store outage leaves the record
+for a later check and never stops startup.
+Keep all servers for a silo on the same database and key directory.
+Fresh-install memory journeys and native turns remain NOT RUN.
 
 The Node service exposes sign-in routes, invitation acceptance, the organisation MCP
 register, a health check and authenticated WebSocket routes. It does not serve static
