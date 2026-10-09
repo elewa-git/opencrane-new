@@ -30,6 +30,7 @@ flowchart LR
 - Accepts bound invitations after a recent sign-in with a verified email, while
   the inviter is still an owner or admin. Records whether a personal assistant was requested.
 - Checks an invitation email and explains that the person is confirmed when they accept.
+- Records and renews email invitations for owners and admins. Reads saved command results.
 - Returns member headers to members and the email directory to current owners and admins.
   Keeps checking their access while a live member connection is open.
 - Records changes as events and reads the current state from PostgreSQL.
@@ -82,6 +83,9 @@ use it to refuse calls if the tool changes to Ask during the turn.
    The server checks it and records them as the owner.
 3. **An admin prepares an invitation.** The server checks the email input. The person
    is confirmed when they accept; the server does not look them up in Zitadel.
+   An admin can save or renew an email invitation and recover its saved result.
+   The server finds matching emails in its member table and checks their events.
+   Acceptance of these email invitations is not built yet.
 4. **A person chats with an assistant.** The server sends the turn to that person's
    computer and passes the assistant's progress back to the browser as it arrives. The
   person can stop the turn. A personal turn may include a short list of reviewed

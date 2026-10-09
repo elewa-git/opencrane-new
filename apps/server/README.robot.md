@@ -910,7 +910,13 @@ Bound invitation acceptance copies `personalAssistant: provision|none` into
 The strict join request cannot override it. The join receipt proves membership,
 not assistant creation or computer readiness. The assistant reaction runs later.
 `test/member-joined.test.ts` covers choice, repeats and lost replies on real NATS.
-Email invitation create/renew and acceptance binding remain follow-up work for #85.
+Email invitation acceptance binding remains follow-up work for #85.
+
+Email create/renew and original-command status follow the
+[member API](../../docs/api/members.md#create-and-renew-email-invitations).
+`test/invitations.test.ts` uses disposable NATS, PostgreSQL and OpenFGA for
+current access, strict input, renewal, repeats, lost replies and slow history.
+The email invitation records remain unbound and the join route refuses them.
 
 The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.
@@ -1053,3 +1059,17 @@ or its reply is uncertain. Recovery uses only
 It returns the original receipt, currentSequence and separate content/IAM
 `current` or `applying` states. 404 `unknown` does not prove absence while a POST
 may still be running. Every reply uses `cache-control: no-store`.
+
+## Invitation review fixes
+
+New email invitations use caller-generated UUID v4 member ids. Renewals locate
+candidates by email in the members projection and check each candidate's events.
+The lookup stops at 100 candidates; each stream read stops at 10,000 events.
+The route never scans `member-*`. The members projection is required for POST.
+Stored data failures return 503, while invalid request bodies return 400.
+A changed watched stream returns the caller's saved command result, an access
+refusal if their admin access ended, or 409 `concurrent_change`.
+The optional invitation clock sets session checks, event time and seven-day expiry.
+Tests cover its exact expiry boundary and a route-created invitation refused by join.
+Follow-up acceptance must refuse active identities itself, including joins after
+the candidate read and delayed member projections.

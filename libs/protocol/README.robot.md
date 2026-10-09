@@ -99,6 +99,10 @@ Strict header, detail, directory and query schemas follow the
 which says that the person is confirmed when they accept. It carries no account
 existence, verification or organisation claims.
 
+`invitationCommandSchema` and `invitationStatusParamsSchema` follow the
+[member API](../../docs/api/members.md#create-and-renew-email-invitations).
+`apps/server/test/invitations.test.ts` tests both routes.
+
 Model access reads use `modelAccessResponseSchema` and
 `modelAccessCandidatesResponseSchema`. A grant response carries at most 100 rows
 and an exact `grantTotal`; it does not repeat the grant rows inside explanations.

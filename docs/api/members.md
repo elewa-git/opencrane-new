@@ -62,6 +62,57 @@ from the silo, issuer, subject and admission number. The email-input route does
 not create an invitation or grant membership. The existing `/members/join` command
 still requires an invitation bound to a sign-in identity.
 
+## Create and renew email invitations
+
+`POST /api/invitations` records one `member.invited` event. Only a current Owner
+or Admin, checked through events and OpenFGA, may create or renew it. The session
+must belong to the configured organisation and silo. POST requires the exact Origin.
+Its strict JSON body is `{ commandId, memberId, email, expectedSequence, role,
+personalAssistant }`, at most 1 KiB. Both ids use 1–200 letters, digits,
+underscores or hyphens. `expectedSequence` is a non-negative integer.
+
+Email uses ASCII only, is trimmed and lower-cased, and has at most 254 characters.
+For a new invitation, the caller generates a random UUID v4 for `memberId` and
+keeps it for retries. The server records it in the event. It identifies a pending
+invitation, not an admitted member, and contains no email-derived information.
+A new id that is not a UUID v4 returns 409 `identity_mismatch`. Role is
+`member|admin`; assistant choice is
+required and is `provision|none`. The server supplies `invitedBy`, a stable
+`invitationId` from the original command, and an expiry exactly seven days after
+the event time. It records no issuer or subject and makes no Zitadel request.
+
+The server finds up to 100 candidates by email in the members read table, then
+checks each candidate's event stream. More candidates, over 10,000 events in one
+stream, invalid stored data or an event from another silo return 503. It never
+scans all member streams. An active candidate returns 409 `already_member`.
+A removed stream returns 409 `access_removed`. Renewing a pending or expired
+invitation uses the same email and stream, a new command id and its reviewed
+position. The email lookup finds the existing invitation; a different body id
+returns `identity_mismatch`. A stale position returns `concurrent_change`; changed
+saved-command
+arguments return `command_id_reused`. History reads finish before the two-second
+caller, ownership and target check. The one append uses the reviewed position and
+`historyChecked` only after comparing the reviewed position with the last event;
+earlier events remain unchanged. If a watched stream changes during the write
+check, the server returns the caller's saved receipt if their command is stored,
+403 if they lost admin access, or 409 `concurrent_change` otherwise.
+
+Success returns `{ status: appended, memberId, invitationId, sequence, createdAt,
+expiresAt }`. An exact repeat returns that receipt without writing. A 503 or lost
+reply can follow a stored append. `GET /api/invitations/:memberId/changes/:commandId`
+finds its original receipt, or returns 404 `not_found`. This read requires current
+Owner/Admin events and OpenFGA, checks access once and appends nothing. All replies
+use `Cache-Control: no-store`. Invalid bodies return 400, missing sessions 401,
+access refusals 403 and unavailable dependencies 503.
+
+Acceptance is not built: `/members/join` returns `unbound_invitation` for these
+records. No usable link or email is sent. Follow-up acceptance must derive the
+admission id, bind issuer/subject on join and settle two accounts with the same
+verified email through one conditional append. It must also refuse an already
+active identity itself: a person can join after this route's candidate check or
+before the members read table catches up. Lists and minimal receipts after
+self-demotion remain follow-up work.
+
 ## Admission member ids
 
 The server keeps a helper for selecting a member id from an authenticated issuer
@@ -88,8 +139,8 @@ in its one `member.joined` event. An older invitation without the field means
 `provision`. The request body cannot change the choice. `none` skips personal
 assistant creation and the computer claim that follows it; it still admits the member.
 An exact retry, including after a lost reply, returns the saved join receipt.
-It does not rerun assistant creation. Email invitation creation, renewal and
-binding an account at acceptance remain separate work.
+It does not rerun assistant creation. Binding an email invitation to an account
+at acceptance remains separate work.
 Fresh acceptance requires the exact Origin and configured organisation, including
 for accounts allowlisted for general sign-in. The encrypted session must keep an
 ID-token email with `email_verified=true`. Both addresses must use ASCII characters;
@@ -147,8 +198,3 @@ its original receipt before checking expiry, email claims or the inviter again. 
 Changed display-name or invitation arguments refuse reuse of the command id.
 A lost append reply can return 503 even though the join was stored; repeat the
 same command to find the saved result.
-
-The size-limited first change adds these protections and stores sign-in email
-claims. Email invitation creation, renewal, admission selection at acceptance and
-assistant choice follow in the second change. List/status reads remain separate
-work. No Zitadel directory request or credential is added.
