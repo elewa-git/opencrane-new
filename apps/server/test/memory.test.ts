@@ -40,14 +40,13 @@ async function append(subject: string, type: string, data: unknown, apply = true
   return record;
 }
 async function write(ownerId: string, scopeKind: MemoryIdentity['scopeKind'],
-  memoryId: string, text = 'Deliveries café 東京', pinned = false, silo = 'acme',
-  sources: { conversationId: string; messageId: string }[] = []) {
+  memoryId: string, text = 'Deliveries café 東京', pinned = false, silo = 'acme') {
   const scopeId = memoryScopeId(silo, scopeKind, ownerId);
   const identity = { silo, scopeId, scopeKind, ownerId, memoryId, revision: 1 };
   keys.provision(identity);
   const encrypted = keys.encrypt(identity, text);
   const data = { schemaVersion: 1, scopeId, scopeKind, ownerId, memoryId, revision: 1,
-    kind: 'fact', pinned, expiresAt: null, sources, dependsOn: [], ...encrypted };
+    kind: 'fact', pinned, expiresAt: null, sources: [], dependsOn: [], ...encrypted };
   return append(`scope-${scopeId}`, 'memory.written', data, true, silo);
 }
 function resolveMember(_silo: string, _issuer: string, subject: string) {
@@ -132,15 +131,16 @@ it.each([
   ['bob', 'shared', 'assistant_notes', 'note', 200],
   ['admin', 'shared', 'assistant_notes', 'note', 404],
 ] as const)('checks %s reading %s %s', async function matrix(member, owner, kind, id, status) {
-  const response = await get(`${path(owner, kind)}/facts/${id}`, member);
+  const response = await get(`${path(owner, kind)}/facts`, member);
   expect(response.statusCode).toBe(status);
   expect(response.headers['cache-control']).toBe('no-store');
   if (status === 404) expect(response.json()).toEqual({ status: 'refused' });
+  else expect(response.json()).toMatchObject({ facts: [{ memoryId: id }] });
 });
 it('uses one refusal for unknown, foreign and forbidden ids', async function refusedIds() {
-  const urls = [`${path('bob')}/facts/missing`, `${path('owner')}/facts/private`,
-    `/api/memory/${memoryScopeId('foreign', 'person', 'bob')}/facts/foreign`,
-    `/api/memory/${'a'.repeat(64)}/facts/missing`];
+  const urls = [`${path('owner')}/facts`,
+    `/api/memory/${memoryScopeId('foreign', 'person', 'bob')}/facts`,
+    `/api/memory/${'a'.repeat(64)}/facts`];
   for (const url of urls) {
     const response = await get(url);
     expect(response.statusCode).toBe(404);
@@ -156,7 +156,9 @@ it('ranks pins, exact terms and prefixes, with bounded Unicode search', async fu
   const response = await get(`${path('bob')}/facts?q=deliver`);
   expect(response.statusCode).toBe(200);
   const results = response.json<{ facts: { memoryId: string }[] }>();
-  function factId(fact: { memoryId: string }) { return fact.memoryId; }
+  function factId(fact: { memoryId: string }) {
+    return fact.memoryId;
+  }
   expect(results.facts.map(factId))
     .toEqual(['pin', 'exact', 'own', 'prefix']);
   expect((await get(`${path('bob')}/facts?q=${encodeURIComponent('café 東京')}`))
@@ -169,6 +171,7 @@ it('caps whole pages and binds cursors to identity, query, scope and rebuilt con
   async function paging() {
     for (let index = 0; index < 22; index++) {
       await write('bob', 'person', `large_${index}`, 'é'.repeat(1800));
+      await write('sales', 'group', `small_${index}`, 'Small statement');
     }
     await runner.run(projection);
     const first = await get(`${path('bob')}/facts`);
@@ -183,6 +186,14 @@ it('caps whole pages and binds cursors to identity, query, scope and rebuilt con
     expect((await get(`${path('sales', 'group')}/facts?cursor=${cursor}`)).statusCode).toBe(409);
     expect((await get(`${path('bob')}/facts?cursor=${cursor}`, 'admin')).statusCode).toBe(404);
     expect((await get(`${path('bob')}/facts?cursor=${cursor}x`)).statusCode).toBe(409);
+    await append('team-sales', 'team.member_added',
+      { teamId: 'sales', memberId: 'owner', addedBy: 'owner' });
+    const groupPage = (await get(`${path('sales', 'group')}/facts`)).json<{
+      returnedCount: number; nextCursor: string }>();
+    expect(groupPage.returnedCount).toBe(20);
+    const groupCursor = encodeURIComponent(groupPage.nextCursor);
+    expect((await get(`${path('sales', 'group')}/facts?cursor=${groupCursor}`, 'owner'))
+      .statusCode).toBe(409);
     await write('bob', 'person', 'new');
     await runner.run(projection);
     expect((await get(`${path('bob')}/facts?cursor=${cursor}`)).statusCode).toBe(409);
@@ -191,16 +202,25 @@ it('caps whole pages and binds cursors to identity, query, scope and rebuilt con
     const oldCursor = encodeURIComponent(beforeRebuild.nextCursor);
     expect((await get(`${path('bob')}/facts?cursor=${oldCursor}`)).statusCode).toBe(409);
   });
-it('returns unavailable while projection is behind, including detail and status', async function lag() {
-  const saved = await write('bob', 'person', 'lag');
-  const urls = [`${path('bob')}/facts`, `${path('bob')}/facts/own`,
-    `${path('bob')}/changes/${saved.commandId}`];
-  for (const url of urls) expect((await get(url)).statusCode).toBe(503);
+it('returns unavailable until the projection has caught up', async function lag() {
+  await write('bob', 'person', 'lag');
+  expect((await get(`${path('bob')}/facts`)).statusCode).toBe(503);
+  expect((await get('/api/memory/scopes')).statusCode).toBe(503);
   await runner.run(projection);
-  const status = await get(urls[2]!);
-  expect(status.json()).toMatchObject({ outcome: 'written', memoryId: 'lag', revision: 1 });
-  expect(status.body).not.toContain('Deliveries');
-  expect((await get(`${path('bob')}/changes/missing`)).json()).toEqual({ outcome: 'unknown' });
+  expect((await get(`${path('bob')}/facts`)).statusCode).toBe(200);
+});
+it('lists an empty group and refuses notes without a recorded read grant', async function empty() {
+  await append('team-empty', 'team.created',
+    { teamId: 'empty', name: 'Empty', createdBy: 'owner' });
+  await append('team-empty', 'team.member_added',
+    { teamId: 'empty', memberId: 'bob', addedBy: 'owner' });
+  await append('assistant-ungranted', 'assistant.created',
+    { assistantId: 'ungranted', kind: 'personal', ownerId: 'bob' });
+  await runner.run(groups);
+  await runner.run(computers);
+  expect((await get(`${path('empty', 'group')}/facts`)).json())
+    .toMatchObject({ facts: [], returnedCount: 0, nextCursor: null });
+  expect((await get(`${path('ungranted', 'assistant_notes')}/facts`)).statusCode).toBe(404);
 });
 it('keeps reads open during long-chat and memory activity without a write fence', async function activity() {
   const message = { conversationId: 'busy', authorId: 'bob', authorKind: 'human',
@@ -211,14 +231,18 @@ it('keeps reads open during long-chat and memory activity without a write fence'
   const original = nats.store.head.bind(nats.store);
   const originalRead = nats.store.readStream.bind(nats.store);
   let readStarted: () => void;
-  const started = new Promise<void>(function ready(resolve) { readStarted = resolve; });
+  const started = new Promise<void>(function ready(resolve) {
+    readStarted = resolve;
+  });
   let delayed = false;
   async function head(subject?: string, deadline?: number) {
     const position = await original(subject, deadline);
     if (subject?.startsWith('scope-') && !delayed) {
       delayed = true;
       readStarted();
-      await new Promise(function wait(resolve) { setTimeout(resolve, 2100); });
+      await new Promise(function wait(resolve) {
+        setTimeout(resolve, 2100);
+      });
     }
     return position;
   }
@@ -229,7 +253,7 @@ it('keeps reads open during long-chat and memory activity without a write fence'
   const headSpy = vi.spyOn(nats.store, 'head').mockImplementation(head);
   const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(read);
   try {
-    const response = get(`${path('bob')}/facts/own`);
+    const response = get(`${path('bob')}/facts`);
     await started;
     await append('conversation-busy', 'message.posted', message);
     await write('bob', 'person', 'during-read');
@@ -240,40 +264,22 @@ it('keeps reads open during long-chat and memory activity without a write fence'
     readSpy.mockRestore();
   }
 });
-it('returns source links only after a separate message access check', async function sources() {
-  const created = { conversationId: 'source', createdBy: 'bob', mode: 'direct',
-    participantIds: ['bob', 'owner'] };
-  await append('conversation-source', 'conversation.created', created);
-  const message = await append('conversation-source', 'message.posted', {
-    conversationId: 'source', authorId: 'bob', authorKind: 'human',
-    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text',
-  });
-  const sources = [{ conversationId: 'source', messageId: message.id }];
-  await write('bob', 'person', 'linked', 'Statement', false, 'acme', sources);
-  await runner.run(projection);
-  const url = `${path('bob')}/facts/linked`;
-  expect((await get(url)).json()).toMatchObject({ sources: [{ ...sources[0], status: 'available' }] });
-  await append('conversation-source', 'participant.removed', {
-    conversationId: 'source', participantId: 'bob', removedBy: 'owner',
-  }, false);
-  expect((await get(url)).json()).toMatchObject({ sources: [{ status: 'unavailable' }] });
-});
 it('refuses grants for outsiders, inactive assistants and unapplied revocations', async function revoke() {
   const scopeId = memoryScopeId('acme', 'assistant_notes', 'shared');
   await append(grantStream('memory_read', scopeId), 'grant.given', {
     resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'member',
     granteeId: 'admin', grantedBy: 'owner',
   });
-  expect((await get(`${path('shared', 'assistant_notes')}/facts/note`, 'admin')).statusCode).toBe(404);
+  expect((await get(`${path('shared', 'assistant_notes')}/facts`, 'admin')).statusCode).toBe(404);
   await append('assistant-personal', 'assistant.settings_changed', {
     assistantId: 'personal', changedBy: 'owner', active: false, changedFields: ['active'],
   }, false);
-  expect((await get(`${path('personal', 'assistant_notes')}/facts/note`)).statusCode).toBe(404);
+  expect((await get(`${path('personal', 'assistant_notes')}/facts`)).statusCode).toBe(404);
   await append(grantStream('memory_read', scopeId), 'grant.revoked', {
     resourceType: 'memory_read', resourceId: scopeId, granteeId: 'bob', revokedBy: 'owner',
   }, false);
-  expect((await get(`${path('shared', 'assistant_notes')}/facts/note`)).statusCode).toBe(503);
+  expect((await get(`${path('shared', 'assistant_notes')}/facts`)).statusCode).toBe(503);
   await append('team-sales', 'team.member_removed',
     { teamId: 'sales', memberId: 'bob', removedBy: 'owner' }, false);
-  expect((await get(`${path('sales', 'group')}/facts/shared`)).statusCode).toBe(404);
+  expect((await get(`${path('sales', 'group')}/facts`)).statusCode).toBe(404);
 });

@@ -2,6 +2,32 @@
 
 For people, read [README.md](README.md) first.
 
+## Memory scope and search reads
+
+`GET /api/memory/scopes?assistantId=...&groupId=...` returns the requester's own
+scope and permitted selected scopes, their audiences, separate operation rights and limits.
+`GET /api/memory/:scopeId/facts?q=...&cursor=...` returns current, unexpired facts.
+Session identity uses the existing member binding. Roles and labels grant no memory access.
+Notes require their current assistant audience, `actsFor`, and an explicit `memory_read`
+grant checked as OpenFGA `resource#use`. Missing grants deny; unapplied grants return 503.
+Reads check permission once, without a write fence or conversation history.
+
+Queries allow 256 UTF-8 bytes and eight Unicode letter/number terms. TypeScript builds
+literal full-text terms and prefixes. PostgreSQL ranks pins, exact matches, prefix rank,
+then memory id. Pages contain up to 20 whole facts and 16 KiB, with no totals or sources.
+Signed cursors use the existing cookie secret with a separate signing prefix. They bind
+requester, silo, scope, query, order, scope position and projection generation.
+Changes reset paging with 409. Projection lag or a concurrent rebuild returns 503.
+Unknown, foreign and forbidden scopes return the same 404. Invalid input returns 422.
+All responses use `Cache-Control: no-store`. Startup uses the existing database,
+NATS and OpenFGA settings; no new dependency or secret setting is needed.
+
+`test/memory.test.ts` runs HTTP reads with real NATS, PostgreSQL and OpenFGA.
+Set `PG_TEST_URL` to a PostgreSQL service that permits disposable databases.
+Detail, source links, command status and storage are the second part of P4-12 PR 2.
+Its write checks, shared-source rules, idempotency and unused-key reconciliation remain
+unimplemented. Fresh-install memory journeys and native turns remain NOT RUN.
+
 The Node service exposes sign-in routes, invitation acceptance, the organisation MCP
 register, a health check and authenticated WebSocket routes. It does not serve static
 files: `GET /` returns 404. The [web app](../web/README.md) is built and served separately;
