@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17.6-alpine
+        image: mirror.gcr.io/library/postgres:17.6-alpine
         env:
           POSTGRES_PASSWORD: test-only
         ports:
