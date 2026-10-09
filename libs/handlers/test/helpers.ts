@@ -49,11 +49,20 @@ export async function fixture(options: { idleTimeoutMillis?: number } = {}) {
   const children: ChildProcess[] = [];
   const dispatchers: { controller: AbortController; task: Promise<void> }[] =
     [];
+  async function waitForConnectionsClosed() {
+    async function closed() {
+      const connections = await admin.query(
+        'SELECT pid FROM pg_stat_activity WHERE datname = $1', [name]);
+      return connections.rows.length === 0;
+    }
+    await until(closed);
+  }
   return {
     db,
     pool,
     nats,
     connectionString,
+    waitForConnectionsClosed,
     async runtime(
       handlers: Handler[],
       options: { retryLimit?: number; expireInSeconds?: number } = {},
@@ -119,7 +128,7 @@ export async function fixture(options: { idleTimeoutMillis?: number } = {}) {
         env: {
           ...process.env,
           PG_TEST_URL: connectionString,
-          ...nats.env(mode.startsWith("projection") ? "projection" : "dispatcher"),
+          ...nats.env((mode.startsWith("projection") || mode.startsWith("upgrade")) ? "projection" : "dispatcher"),
           CRASH_MODE: mode,
         },
         stdio: ["ignore", "pipe", "pipe", "ipc"],
@@ -165,15 +174,7 @@ export async function fixture(options: { idleTimeoutMillis?: number } = {}) {
       // Stop every runtime before closing their shared pool, even if one stop fails.
       results.push(...await Promise.allSettled(runtimes.map((runtime) => runtime.stop())));
       results.push(...await Promise.allSettled([nats.close(), pool.end()]));
-      await until(
-        async () =>
-          (
-            await admin.query(
-              "SELECT pid FROM pg_stat_activity WHERE datname = $1",
-              [name],
-            )
-          ).rows.length === 0,
-      );
+      await waitForConnectionsClosed();
       await admin.query(`DROP DATABASE ${name}`);
       await admin.end();
       for (const result of results) {

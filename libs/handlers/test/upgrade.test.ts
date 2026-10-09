@@ -249,6 +249,7 @@ function upgradeTests() {
     }
     await current.db.query('UPDATE handler_dispatcher SET manifest = $1', [JSON.stringify(manifest)]);
     await runtime.stop();
+    await current.waitForConnectionsClosed();
     function noRead(): AsyncIterable<never> {
       throw new Error('Removal must not scan history');
     }
@@ -269,18 +270,10 @@ function upgradeTests() {
     await current.nats.seed(history);
     await current.db.query('UPDATE handler_dispatcher SET sequence = 264');
     await runtime.stop();
+    await current.waitForConnectionsClosed();
     const original = current.nats.store.subscribe.bind(current.nats.store);
-    async function* crashAfterChunk(from: number, signal?: AbortSignal) {
-      for await (const row of original(from, signal)) {
-        if (row.sequence > 256) {
-          throw new Error('Simulated process crash');
-        }
-        yield row;
-      }
-    }
-    const crashing = { head: current.nats.store.head.bind(current.nats.store),
-      subscribe: crashAfterChunk };
-    await expect(upgradeHandlers(runtime, crashing)).rejects.toThrow('Simulated process crash');
+    await delay(150);
+    await current.crash('upgrade-after-chunk');
     const progress = await current.db.query('SELECT sequence FROM handler_upgrade');
     expect(Number(progress.rows[0]?.['sequence'])).toBe(256);
     const beforeResume = await current.db.query('SELECT id FROM pgboss.job');
@@ -290,7 +283,8 @@ function upgradeTests() {
       requested.push(from);
       return original(from, signal);
     }
-    const source = { head: crashing.head, subscribe: resumed };
+    const source = { head: current.nats.store.head.bind(current.nats.store), subscribe: resumed };
+    await current.waitForConnectionsClosed();
     await upgradeHandlers(runtime, source);
     expect(requested[0]).toBe(257);
     const jobs = await current.db.query("SELECT data->>'id' AS event_id FROM pgboss.job " +
@@ -303,6 +297,7 @@ function upgradeTests() {
   async function retriesReadTimeout() {
     const runtime = await prepare();
     await runtime.stop();
+    await current.waitForConnectionsClosed();
     const original = current.nats.store.subscribe.bind(current.nats.store);
     let attempts = 0;
     async function* stalled(from: number, signal?: AbortSignal) {
