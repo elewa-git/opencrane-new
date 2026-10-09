@@ -26,7 +26,7 @@ function personalScope() {
 }
 
 function fact(text: string) {
-  return { memoryId: 'fact-one', revision: 1, text, kind: 'fact', pinned: false,
+  return { memoryId: 'fact-one', revision: 1, text, kind: 'fact' as const, pinned: false,
     expiresAt: null, savedAt: '2026-10-02T10:00:00Z' };
 }
 
@@ -145,4 +145,62 @@ it('clears the fact if its detail read is refused', async () => {
   fixture.detectChanges();
   expect(visibleText(fixture)).toContain('Access changed');
   expect(visibleText(fixture)).not.toContain('Private fact text.');
+});
+
+it('purges facts and ignores a pending reply when access is revoked', async () => {
+  let finishList: ((response: Response) => void) | undefined;
+  const savedFact = fact('Private pending fact.');
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    if (String(input).includes('/facts?')) {
+      return new Promise<Response>((resolve) => { finishList = resolve; });
+    }
+    return Promise.resolve(response(200, { scopes: [personalScope()] }));
+  }));
+  const fixture = await loadPanel();
+  fixture.componentInstance['selectedFact'].set(savedFact);
+  fixture.componentInstance['facts'].set([savedFact]);
+  fixture.componentInstance['sources'].set([{ status: 'available', label: 'Private source' }]);
+  fixture.componentInstance['revoke']();
+  finishList?.(response(200, { scopeId: 'scope', facts: [savedFact], returnedCount: 1,
+    nextCursor: null }));
+  await fixture.whenStable();
+  fixture.detectChanges();
+  expect(visibleText(fixture)).not.toContain('Private pending fact.');
+  expect(visibleText(fixture)).not.toContain('Private source');
+  expect(fixture.componentInstance['facts']()).toEqual([]);
+  expect(fixture.componentInstance['sources']()).toEqual([]);
+});
+
+it('shows rejected search input beside the search field', async () => {
+  stubReplies(response(200, { scopes: [personalScope()] }),
+    response(200, { scopeId: 'scope', facts: [], returnedCount: 0, nextCursor: null }),
+    response(422, { status: 'invalid' }));
+  const fixture = await loadPanel();
+  const element = fixture.nativeElement as HTMLElement;
+  const search = element.querySelector<HTMLInputElement>('input[type="search"]');
+  if (!search) throw new Error('Missing search field');
+  search.value = 'one two three four five six seven eight nine';
+  search.dispatchEvent(new Event('input'));
+  await fixture.whenStable();
+  fixture.detectChanges();
+  expect(visibleText(fixture)).toContain('Search must contain no more than eight terms');
+});
+
+it('shows the detail audience and saved fact metadata', async () => {
+  const savedFact = fact('A shared project fact.');
+  savedFact.revision = 4;
+  savedFact.pinned = true;
+  stubReplies(response(200, { scopes: [{ ...personalScope(), scopeKind: 'group',
+    audience: { kind: 'group', ownerId: 'group-a' } }] }),
+    response(200, { scopeId: 'scope', facts: [savedFact], returnedCount: 1, nextCursor: null }),
+    response(200, { scopeId: 'scope', fact: savedFact, sources: [] }));
+  const fixture = await loadPanel();
+  const element = fixture.nativeElement as HTMLElement;
+  element.querySelector<HTMLButtonElement>('.fact')?.click();
+  await fixture.whenStable();
+  fixture.detectChanges();
+  expect(visibleText(fixture)).toContain('Shared with group group-a');
+  expect(visibleText(fixture)).toContain('Revision 4');
+  expect(visibleText(fixture)).toContain('Pinned for initial context; loading is not enabled yet');
+  expect(visibleText(fixture)).toContain('2 October 2026');
 });
