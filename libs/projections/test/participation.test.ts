@@ -125,12 +125,12 @@ async function comparesOldAndNewParticipation() {
     const currentSource = {
       head() { return Promise.resolve(records.length); },
       async *subscribe() {
-        for await (const stored of records) {
+        for (const stored of records) {
           let subject = stored.event.subject;
           if (stored.event.type.startsWith('participant.')) subject = 'participation-chat';
           const event = { ...stored.event, subject };
           const replayed = { ...stored, event };
-          yield replayed;
+          yield Promise.resolve(replayed);
         }
       },
     };
