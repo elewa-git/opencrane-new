@@ -6,14 +6,16 @@ import { z } from 'zod';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { approvalCardsSchema } from '@opencrane/protocol';
-import { auditTrail, readAudit } from '@opencrane/projections';
-import { history } from '@opencrane/models';
+import { auditTrail, readAudit, conversations } from '@opencrane/projections';
+import { history, readApproval, decideApproval } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
 import { fixture } from '@opencrane/models/testing';
 async function approvalFixture(stepUp = false) {
   const f = await fixture();
+  await f.runner.initialise(conversations);
+  await f.runner.run(conversations);
   const config = testAuthConfig({ expectedOrgId: 'org-test' });
   const app = buildServer(config, { chat: { silo: 'test', store: f.nats.store, db: f.db, keys: f.keys, binding: f.binding,
     feed: { memberId: (_silo, _issuer, sub) => Promise.resolve(sub) } } });
@@ -231,10 +233,14 @@ it('requires the requester session, CSRF and approval-bound recent OIDC evidence
     }
     const joined = await f.append('member-bob', 'member.joined', { memberId: 'bob', email: 'bob@example.test', displayName: 'Bob', role: 'admin' });
     await f.auth.handler.handle(joined, f.db);
-    const added = await f.append('conversation-conversation', 'participant.added', { conversationId: 'conversation', participantId: 'bob', addedBy: 'alice' });
+    const added = await f.append('participation-conversation', 'participant.added', { conversationId: 'conversation', participantId: 'bob', addedBy: 'alice' });
     await f.auth.handler.handle(added, f.db);
-    expect((await f.read(f.headers('bob'))).cards[0]?.canDecide).toBe(false);
-    expect((await f.decide('approved', f.headers('bob', now, approvalId))).statusCode).toBe(403);
+    const bob = await f.read(f.headers('bob'));
+    expect(bob.cards).toEqual([]);
+    const refused = await f.app.inject({ method: 'POST', url: '/api/conversations/conversation/approvals',
+      headers: { ...f.headers('bob', now, approvalId), 'x-csrf-token': bob.csrf },
+      payload: { approvalId, decision: 'approved' } });
+    expect(refused.statusCode).toBe(403);
     expect((await f.decide('approved', f.headers('alice', now, approvalId))).statusCode).toBe(200);
     expect((await f.call()).status).toBe(200); expect(f.received()).toBe(1);
   } finally { await f.close(); }
@@ -365,7 +371,7 @@ it('refuses review reads after conversation access is removed even while OpenFGA
   const f = await approvalFixture();
   try {
     await f.call();
-    await f.append('conversation-conversation', 'participant.removed', { conversationId: 'conversation', participantId: 'alice', removedBy: 'owner' });
+    await f.append('participation-conversation', 'participant.removed', { conversationId: 'conversation', participantId: 'alice', removedBy: 'owner' });
     expect((await f.app.inject({ url: '/api/conversations/conversation/approvals', headers: f.headers() })).statusCode).toBe(403);
     expect(f.received()).toBe(0);
   } finally { await f.close(); }
@@ -384,7 +390,7 @@ it('decides an approval using only its bound authority streams', async () => {
       const response = await f.app.inject({ method: 'POST', url: '/api/conversations/conversation/approvals',
         headers: { ...session, 'x-csrf-token': csrf }, payload: { approvalId, decision: 'approved' } });
       expect(response.statusCode, response.body).toBe(200);
-      const relevant = new Set(['ownership-test', 'member-alice', 'assistant-assistant', 'computer-assistant', 'conversation-conversation',
+      const relevant = new Set(['ownership-test', 'member-alice', 'assistant-assistant', 'computer-assistant', 'conversation-conversation', 'participation-conversation',
         'mcp-fixture', grantStream('mcp_server', 'fixture'), `approval-${approvalId}`]);
       expect(read.mock.calls.map(([subject]) => subject).filter(subject => !relevant.has(subject))).toEqual([]);
       expect(head.mock.calls.flatMap(([subject]) => subject === undefined || relevant.has(subject) ? [] : [subject])).toEqual([]);
@@ -460,7 +466,7 @@ const refusesRemovalAfterPermission = async (kind: 'member' | 'participant', app
             memberId: 'alice', removedBy: 'owner',
           });
         } else {
-          removal = await setup.append('conversation-conversation', 'participant.removed', {
+          removal = await setup.append('participation-conversation', 'participant.removed', {
             conversationId: 'conversation', participantId: 'alice', removedBy: 'owner',
           });
         }
@@ -516,3 +522,75 @@ const preservesApprovalDeadline = async () => {
   }
 };
 it('keeps the approval request deadline when IAM consumes the two-second budget', preservesApprovalDeadline, 40_000);
+
+async function keepsApprovalHistoryOutsideShortCheck() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const session = setup.headers();
+    const { cards, csrf } = await setup.read(session);
+    const approvalId = cards[0]!.approvalId;
+    const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+    async function* refuseFullHistoryDuringShortCheck(
+      subject: string, fromSequence = 1, deadline = Infinity,
+    ) {
+      for await (const row of originalRead(subject, fromSequence, deadline)) {
+        if (subject === 'conversation-conversation' && fromSequence === 1 &&
+            row.event.type !== 'conversation.created' &&
+            deadline - performance.now() < 2100) {
+          throw new Error('Whole conversation read during short access check');
+        }
+        yield row;
+      }
+    }
+    const read = vi.spyOn(setup.nats.store, 'readStream');
+    read.mockImplementation(refuseFullHistoryDuringShortCheck);
+    try {
+      const response = await setup.app.inject({ method: 'POST',
+        url: '/api/conversations/conversation/approvals',
+        headers: { ...session, 'x-csrf-token': csrf },
+        payload: { approvalId, decision: 'approved' } });
+      expect(response.statusCode, response.body).toBe(200);
+    } finally {
+      read.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('carries checked approval facts into the short access check without rereading history',
+  keepsApprovalHistoryOutsideShortCheck, 40_000);
+
+async function refusesApprovalChangeDuringFinalCheck(type: string) {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const { cards } = await setup.read();
+    const approvalId = cards[0]!.approvalId;
+    const current = await readApproval(setup.nats.store, 'test', approvalId);
+    async function changeDuringFinalCheck() {
+      if (type === 'message.posted') {
+        const encrypted = setup.keys.encrypt('test', 'conversation', 'Withdraw the request');
+        await setup.append('conversation-conversation', type, {
+          conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+          contentType: 'text', ...encrypted,
+        });
+      } else {
+        await setup.append('conversation-conversation', type, {
+          conversationId: 'conversation', closedBy: 'alice',
+        });
+      }
+    }
+    const result = await decideApproval(setup.nats.store, 'test', approvalId,
+      'alice', 'approved', true, changeDuringFinalCheck, current);
+    expect(result.status).toBe('conflict');
+    const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+    expect(rows).toHaveLength(1);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(['message.posted', 'conversation.closed'])(
+  'refuses an approval when %s arrives during its final access check',
+  refusesApprovalChangeDuringFinalCheck, 40_000);

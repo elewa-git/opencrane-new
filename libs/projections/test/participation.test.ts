@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
-import { conversations, ProjectionRunner, readConversation } from '../src/index.ts';
+import { conversations, ProjectionRunner, readConversation, rebuildConversationsProjection } from '../src/index.ts';
 import { database } from './database.ts';
 
 async function replaysParticipation() {
@@ -43,6 +43,9 @@ async function replaysParticipation() {
       return (await storage.db.query(`SELECT participant_id, join_position, join_event_id,
         end_position, end_event_id FROM conversation_participants ORDER BY join_position, participant_id`)).rows;
     }
+    const oldReferences = await storage.db.query(
+      'SELECT position, event_id FROM conversation_legacy_participation ORDER BY position');
+    expect(oldReferences.rows).toEqual([{ position: '2', event_id: legacy }]);
     const before = await intervals();
     expect(before).toEqual([
       { participant_id: 'alice', join_position: '1', join_event_id: creation,
@@ -63,6 +66,9 @@ async function replaysParticipation() {
       group_id: 'team', group_snapshot_position: '1', position: '5', closed: false });
     await runner.rebuild(conversations);
     expect(await intervals()).toEqual(before);
+    expect((await storage.db.query(
+      'SELECT position, event_id FROM conversation_legacy_participation ORDER BY position')).rows)
+      .toEqual(oldReferences.rows);
     expect((await readConversation(storage.db, 'test', 'chat')).rows).toEqual(feed.rows);
     expect((await storage.db.query('SELECT * FROM conversations')).rows).toEqual(metadata.rows);
     const oldWrite = envelope('test', 'conversation-chat', 'participant.removed', {
@@ -76,6 +82,12 @@ async function replaysParticipation() {
     const foreign = { ...oldWrite, silo: 'other' };
     await expect(conversations.apply(storage.db, foreign, 6))
       .rejects.toThrow('Missing conversation in silo');
+    await storage.db.query('DROP TABLE conversation_legacy_participation');
+    await expect(runner.initialise(conversations)).rejects.toThrow('need rebuilding');
+    await rebuildConversationsProjection(storage.db, nats.reader, createLogger('legacy-upgrade'));
+    expect((await storage.db.query(
+      'SELECT position, event_id FROM conversation_legacy_participation ORDER BY position')).rows)
+      .toEqual(oldReferences.rows);
   } finally {
     await storage.close();
     await nats.close();

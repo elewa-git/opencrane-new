@@ -12,7 +12,9 @@ import { z } from 'zod';
 import { fileUploadedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { memberAuthorisation } from '@opencrane/authz';
+import { readPrivateSession } from '../chat/private-session.ts';
+import { conversationClosed } from '../chat/participation.ts';
+import { conversationParticipation, isChatRefused } from '../chat/access.ts';
 import { listFiles } from '@opencrane/projections';
 import type { ChatOptions } from '../chat/routes.ts';
 import { sessionFor } from '../members/routes.ts';
@@ -35,7 +37,6 @@ const limit = 20 * 1024 * 1024;
 const conversationParams = z.object({ conversationId: id });
 const viewQuery = z.object({ path: z.string(), preview: z.string().optional() });
 const filename = z.string().regex(/^[\w][\w .()-]{0,119}$/u);
-const conversationOwner = z.object({ createdBy: z.string() });
 const savedUpload = z.object({
   fileId: z.string(),
   name: z.string(),
@@ -114,18 +115,17 @@ async function handleFileView(
     return reply.send(response);
   }
   try {
-    const { memberId, conversationId } = await authorise(options, config, request);
+    const { memberId, conversationId, joinPosition, createdBy } = await authorise(options, config, request);
     const { path, preview } = parseFileInput(viewQuery, request.query);
-    const rows = await ownConversation(options.store, options.silo, conversationId, memberId, true);
-    const file = findFileAtPath(rows, conversationId, path);
+    const file = await findFileAtPath(options, conversationId, path, joinPosition);
     if (!file) {
-      await ownConversation(options.store, options.silo, conversationId, memberId);
+      if (createdBy !== memberId) throw new FileRefusal('conversation_refused');
       const response = { status: 'not_found' };
       reply.code(404);
       return reply.send(response);
     }
     if (!file.screenshot) {
-      await ownConversation(options.store, options.silo, conversationId, memberId);
+      if (createdBy !== memberId) throw new FileRefusal('conversation_refused');
     }
     let stream: Awaited<ReturnType<Client['getObject']>>;
     try {
@@ -153,15 +153,22 @@ async function handleFileView(
   }
 }
 
-function findFileAtPath(rows: StoredEvent[], conversationId: string, path: string) {
-  for (const row of rows) {
-    if (row.event.type !== 'file.uploaded') {
-      continue;
+async function findFileAtPath(options: FileOptions, conversationId: string, path: string,
+  joinPosition: number) {
+  const result = await options.db.query<{ position: string; data: unknown }>(
+    `SELECT position, data FROM conversation_files WHERE silo = $1 AND conversation_id = $2
+      AND position >= $3 ORDER BY position`, [options.silo, conversationId, joinPosition]);
+  for (const row of result.rows) {
+    const candidate = fileUploadedDataSchema.parse(row.data);
+    if (path !== `uploads/${conversationId}/${candidate.fileId}/${candidate.name}`) continue;
+    const saved = await options.store.readEvent(Number(row.position), performance.now() + 10_000);
+    const file = fileUploadedDataSchema.parse(saved.event.data);
+    if (saved.event.type !== 'file.uploaded' || saved.event.silo !== options.silo ||
+        saved.event.subject !== `conversation-${conversationId}` ||
+        file.conversationId !== conversationId || file.fileId !== candidate.fileId) {
+      throw new FileRefusal('conversation_refused');
     }
-    const file = fileUploadedDataSchema.parse(row.event.data);
-    if (path === `uploads/${conversationId}/${file.fileId}/${file.name}`) {
-      return file;
-    }
+    return file;
   }
   return undefined;
 }
@@ -178,9 +185,9 @@ async function handleFileRequest(
     return reply.send(response);
   }
   try {
-    const { memberId, conversationId } = await authorise(options, config, request);
+    const { memberId, conversationId, joinPosition, createdBy } = await authorise(options, config, request);
     if (request.method === 'GET') {
-      const rows = await visibleFiles(options, conversationId, memberId);
+      const rows = await visibleFiles(options, conversationId, memberId, joinPosition, createdBy);
       const response = { rows };
       return reply.send(response);
     }
@@ -198,22 +205,15 @@ async function handleFileRequest(
   }
 }
 
-async function visibleFiles(options: FileOptions, conversationId: string, memberId: string) {
-  const rows = await listFiles(options.db, options.silo, conversationId);
-  const conversation = await ownConversation(
-    options.store, options.silo, conversationId, memberId, true,
-  );
-  const owner = conversationOwner.parse(conversation[0]?.event.data);
-  if (owner.createdBy === memberId) {
-    return rows;
-  }
+async function visibleFiles(options: FileOptions, conversationId: string, memberId: string,
+  joinPosition: number, createdBy: string) {
+  const rows = await listFiles(options.db, options.silo, conversationId, joinPosition);
+  if (createdBy === memberId) return rows;
   function isScreenshot(file: (typeof rows)[number]) {
     return Boolean(file.screenshot);
   }
   const visible = rows.filter(isScreenshot);
-  if (!visible.length) {
-    throw new FileRefusal('conversation_refused');
-  }
+  if (!visible.length) throw new FileRefusal('conversation_refused');
   return visible;
 }
 
@@ -234,24 +234,30 @@ async function authorise(options: FileOptions, config: AuthConfig, request: Fast
   if (!memberId) {
     throw new FileRefusal('conversation_refused');
   }
-  const auth = memberAuthorisation(options.binding);
-  const membership = await auth.check(memberId, 'member');
-  if (!membership.allowed) {
-    throw new FileRefusal('conversation_refused');
-  }
   let action: 'post' | 'read' = 'read';
-  if (request.method === 'POST') {
-    action = 'post';
-  }
-  const permission = await auth.conversation(memberId, conversationId, action);
-  if (!permission.allowed) {
+  if (request.method === 'POST') action = 'post';
+  let joinPosition: number;
+  let createdBy: string;
+  try {
+    const access = await conversationParticipation(options, memberId, conversationId,
+      undefined, action);
+    joinPosition = access.joinPosition;
+    createdBy = access.created.createdBy;
+    if (access.created.mode !== 'agent_session') throw new FileRefusal('conversation_refused');
+    if (request.method === 'GET') {
+      await readPrivateSession(options, memberId, conversationId);
+      const closed = await conversationClosed(options.store, options.db, options.silo,
+        conversationId, performance.now() + 2000);
+      if (closed) throw new FileRefusal('conversation_refused');
+    }
+  } catch (error) {
+    if (!isChatRefused(error)) throw error;
     throw new FileRefusal('conversation_refused');
   }
-  await ownConversation(
-    options.store, options.silo, conversationId, memberId, request.method === 'GET',
-    request.method === 'POST',
-  );
-  return { memberId, conversationId };
+  if (request.method === 'POST') {
+    await ownConversation(options.store, options.silo, conversationId, memberId, false, true);
+  }
+  return { memberId, conversationId, joinPosition, createdBy };
 }
 
 type UploadStatus = 'appended' | 'infected' | 'unavailable' | 'conflict';

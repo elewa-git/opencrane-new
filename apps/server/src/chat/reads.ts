@@ -39,12 +39,12 @@ export async function colleagues(options: ChatOptions, memberId: string, query: 
 }
 
 export async function chatChange(
-  options: ChatOptions, conversationId: string, commandId: string,
+  options: ChatOptions, conversationId: string, commandId: string, joinPosition = 0,
 ) {
   const result = await options.db.query<{ event_id: string; type: string; position: string }>(
     `SELECT event_id, type, position FROM conversation_feed
-      WHERE silo = $1 AND conversation_id = $2 AND event_id = $3`,
-    [options.silo, conversationId, commandId]);
+      WHERE silo = $1 AND conversation_id = $2 AND event_id = $3 AND position >= $4`,
+    [options.silo, conversationId, commandId, joinPosition]);
   const row = result.rows[0];
   if (!row) return { status: 'not_found' as const };
   let iam = 'current';

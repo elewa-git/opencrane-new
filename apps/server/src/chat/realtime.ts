@@ -4,7 +4,7 @@ import { AuthorityApplying } from '@opencrane/models';
 import { chatSubscriptionAccess, isChatRefused } from './access.ts';
 import { chatRows, type ChatOptions } from './routes.ts';
 
-type Mode = 'agent_session' | 'direct';
+type Mode = 'agent_session' | 'direct' | 'group';
 interface Subscription {
   socket: WebSocket;
   session: SessionData;
@@ -22,6 +22,8 @@ interface Subscription {
   computerRecovered: boolean;
   computerLostAt: string | undefined;
   checking: boolean;
+  joinPosition?: number;
+  accessVersion?: number;
   applyingSince?: number;
   access?: Awaited<ReturnType<typeof chatSubscriptionAccess>>;
 }
@@ -80,7 +82,10 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
       }
       state.access = await chatSubscriptionAccess(options, memberId, conversationId, deadline);
     }
-    const mode = await state.access(deadline);
+    const access = await state.access(deadline);
+    state.joinPosition = access.joinPosition;
+    state.accessVersion = access.accessPosition;
+    const mode = access.mode;
     state.accessPassed = true;
     delete state.applyingSince;
     return mode;
@@ -119,11 +124,18 @@ async function drain(state: Subscription) {
         state.computerPosition === position.computerPosition) {
       return;
     }
-    const result = await chatRows(state.options, state.conversationId, mode, state.position);
-    if (state.socket.readyState !== state.socket.OPEN) return;
-    state.mode = mode;
-    state.computerPosition = position.computerPosition;
-    sendRows(state, result);
+    while (state.socket.readyState === state.socket.OPEN) {
+      const version = state.accessVersion;
+      const result = await chatRows(state.options, state.conversationId, mode, state.position,
+        state.joinPosition);
+      const confirmed = await pollAccess(state);
+      if (!confirmed || version !== state.accessVersion) return;
+      if (state.socket.readyState !== state.socket.OPEN) return;
+      state.mode = mode;
+      state.computerPosition = position.computerPosition;
+      sendRows(state, result);
+      if (result.rows.length < 100) return;
+    }
   } catch {
     state.socket.close(1013);
   } finally {
@@ -172,6 +184,7 @@ function sendRows(state: Subscription, result: Awaited<ReturnType<typeof chatRow
     const extra = { row };
     send(state, 'event', extra);
   }
+  if (result.rows.length === 100) return;
   if (!state.ready || state.computerState !== result.computerState ||
       state.computerRecovered !== result.computerRecovered ||
       state.computerLostAt !== result.computerLostAt) {

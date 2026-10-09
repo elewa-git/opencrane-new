@@ -17,6 +17,7 @@ import {
   isChatRefused,
   ChatRefused,
   ChatAccessApplying,
+  conversationParticipationReader,
   type ChatOptions,
 } from './access.ts';
 import { sessionFor } from '../members/routes.ts';
@@ -35,8 +36,9 @@ class InvalidChatRequest extends Error {}
 const parameters = z.object({ conversationId: id.optional(), commandId: id.optional() });
 
 export async function chatRows(options: ChatOptions, conversationId: string,
-  mode: 'agent_session' | 'direct', since = 0) {
-  const result = await readConversation(options.db, options.silo, conversationId, since);
+  mode: 'agent_session' | 'direct' | 'group', since = 0, joinPosition = 0) {
+  const visibleSince = Math.max(since, joinPosition - 1);
+  const result = await readConversation(options.db, options.silo, conversationId, visibleSince);
   const computer = await conversationComputerState(options, conversationId, mode);
   function decryptRow(row: (typeof result.rows)[number]) {
     const data = z.record(z.string(), z.unknown()).parse(row.data);
@@ -50,9 +52,9 @@ export async function chatRows(options: ChatOptions, conversationId: string,
 }
 
 async function conversationComputerState(options: ChatOptions, conversationId: string,
-  mode: 'agent_session' | 'direct') {
+  mode: 'agent_session' | 'direct' | 'group') {
   // Use the mode from the event log; the read table may still be catching up.
-  if (mode === 'direct') {
+  if (mode !== 'agent_session') {
     return { computerState: 'not_applicable' as const, computerRecovered: false,
       computerLostAt: undefined };
   }
@@ -108,7 +110,7 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       if (request.method === 'GET') {
         let result;
         if (conversationId && commandId) {
-          result = await chatChange(options, conversationId, commandId);
+          result = await chatChange(options, conversationId, commandId, access.joinPosition);
         } else {
           result = await read(request, options, memberId, conversationId, access);
         }
@@ -148,33 +150,34 @@ async function read(
     const query = z.object({ since: z.coerce.number().int().nonnegative().default(0) });
     const { since } = query.parse(request.query);
     const mode = recordedChatMode(access);
-    return chatRows(options, conversationId, mode, since);
+    return chatRows(options, conversationId, mode, since, access.joinPosition);
   }
   return conversationList(options, memberId);
 }
 
 async function conversationList(options: ChatOptions, memberId: string) {
-  const conversations = await listConversations(options.db, options.silo);
-  const auth = memberAuthorisation(options.binding);
+  const conversations = await listConversations(options.db, options.silo, memberId);
   const readPrivate = privateSessionReader(options, memberId);
+  const readParticipation = conversationParticipationReader(options, memberId);
   async function authorisedSummary(row: (typeof conversations)[number]) {
-    if (row.mode === 'group') return undefined;
-    if (row.mode === 'direct' && !row.participantIds.includes(memberId)) return undefined;
-    const permission = await auth.conversation(memberId, row.conversationId, 'read');
-    if (permission.status === 'unavailable') throw new Error('IAM unavailable');
-    if (!permission.allowed) return undefined;
     try {
-      if (row.mode === 'agent_session') await readPrivate(row.conversationId);
-      const display = await summary(options, row.conversationId, row.mode);
+      const access = await readParticipation(row.conversationId);
+      if (row.mode === 'agent_session') {
+        await readPrivate(row.conversationId, access.creation.event);
+      }
+      const display = await summary(options, row.conversationId, row.mode, access.joinPosition);
+      if (row.mode !== 'agent_session') {
+        return { ...row, participantIds: access.participantIds, ...display };
+      }
       return { ...row, ...display };
     } catch (error) {
-      if (isChatRefused(error)) return undefined;
+      if (isChatRefused(error) || error instanceof ChatAccessApplying) return undefined;
       throw error;
     }
   }
   const rows = [];
-  for (let offset = 0; offset < conversations.length; offset += 8) {
-    const batch = conversations.slice(offset, offset + 8);
+  for (let offset = 0; offset < conversations.length; offset += 16) {
+    const batch = conversations.slice(offset, offset + 16);
     const checks = batch.map(authorisedSummary);
     const summaries = await Promise.all(checks);
     for (const row of summaries) {
@@ -211,7 +214,7 @@ function changesStatus(row: SummaryRow) {
 }
 function conversationStatus(rows: SummaryRow[], last: SummaryRow | undefined, mode: string) {
   if (last?.type === 'conversation.closed') return 'closed';
-  if (mode === 'direct' || !last) return 'open';
+  if (mode !== 'agent_session' || !last) return 'open';
   if (last.type === 'agent.turn_failed') return 'failed';
   if (last.type === 'agent.turn_stop_requested') return 'stopped';
   if (last.type === 'agent.turn_completed') {
@@ -229,11 +232,23 @@ function outputWasLostForTurn(rows: SummaryRow[], turnId: string): boolean {
   }
   return false;
 }
-async function summary(options: ChatOptions, conversationId: string, mode: string) {
-  // Scan authorised history for now; a summary projection can replace this when histories grow.
+async function summary(options: ChatOptions, conversationId: string, mode: string,
+  joinPosition: number) {
   const result = await options.db.query<SummaryRow>(
-    `SELECT type, data FROM conversation_feed
-      WHERE silo = $1 AND conversation_id = $2 ORDER BY position`, [options.silo, conversationId]);
+    `WITH visible_first AS (
+      SELECT type, data FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
+        AND position >= $3 AND type = 'message.posted' ORDER BY position LIMIT 1
+    ), visible_last AS (
+      SELECT type, data FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
+        AND position >= $3 AND type IN ('message.posted', 'agent.turn_started',
+          'agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested',
+          'conversation.closed') ORDER BY position DESC LIMIT 1
+    ), lost_output AS (
+      SELECT type, data FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
+        AND position >= $3 AND type = 'agent.output_lost'
+        AND data->>'turnId' = (SELECT data->>'turnId' FROM visible_last) LIMIT 1
+    ) SELECT * FROM visible_first UNION ALL SELECT * FROM visible_last
+      UNION ALL SELECT * FROM lost_output`, [options.silo, conversationId, joinPosition]);
   const first = result.rows.find(isFirstMessage);
   const last = result.rows.findLast(changesStatus);
   let title = 'New session';

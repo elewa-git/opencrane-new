@@ -59,6 +59,8 @@ ambiguous: retry with the same command key.
 Reads retry only transient unavailable errors with jittered exponential backoff
 capped at 500 ms, for at most one second per NATS read. Each request keeps its
 250 ms timeout.
+`readEvent(sequence, deadline)` reads exactly one global position and refuses a
+missing record. It lets readers check a table’s saved event number against the log.
 `readStream(subject, fromSequence, deadline)` and `head(subject, deadline)` accept
 an absolute `performance.now()` deadline; an earlier caller deadline stops retries
 and rejects late replies. Reads still throw when their bound expires, and other

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { Query } from '@opencrane/projections';
+import { participation, participationChanges, legacyParticipation, conversationClosed } from '../chat/participation.ts';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { isEventStoreUnavailable, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import {
@@ -8,6 +10,7 @@ export interface ViewAccessOptions {
   silo: string;
   store: EventStore;
   binding: Binding;
+  db: Query;
   deadline?: number;
 }
 export type ViewCheckBoundary =
@@ -58,7 +61,6 @@ export const viewCheckMs = 1200;
 
 const identity = z.object({ assistantId: z.string() });
 const ready = identity.extend({ computerId: z.string(), generation: z.int().positive(), podUid: z.string().optional() });
-const participant = z.object({ participantId: z.string() });
 const grant = z.object({ resourceType: z.string(), resourceId: z.string(), granteeId: z.string() });
 const histories = new WeakMap<EventStore, Map<string, StoredEvent[]>>();
 
@@ -122,6 +124,8 @@ export async function viewAccess(options: ViewAccessOptions, memberId: string, c
   }
 }
 
+function ignoreRemovalFailure(): void {}
+
 async function checkViewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
   const { store, silo } = options;
   if (options.binding.silo !== silo) throw new Error('Wrong silo');
@@ -141,6 +145,14 @@ async function checkViewAccess(options: ViewAccessOptions, memberId: string, con
   }
   const memberRead = history(store, `member-${memberId}`, silo, options.deadline);
   const permissionRead = auth.conversation(memberId, conversationId, 'read');
+  async function refuseRemovedParticipant() {
+    const changes = await participationChanges(store, silo, conversationId, options.deadline);
+    if (changes.get(memberId)?.row.event.type === 'participant.removed') {
+      denied.reject(new Error('Access changed'));
+    }
+  }
+  const removalRead = refuseRemovedParticipant();
+  void removalRead.catch(ignoreRemovalFailure);
   const authorityReads = [
     memberRead.then(refuseRemovedMember),
     conversationDesktop(options, memberId, conversationId, auth),
@@ -180,34 +192,29 @@ function settledRead<Value>(result: PromiseSettledResult<Value>): Value {
 async function conversationDesktop(options: ViewAccessOptions, memberId: string, conversationId: string,
   auth: ReturnType<typeof memberAuthorisation>) {
   const { store, silo } = options;
-  const conversation = await history(
-    store, `conversation-${conversationId}`, silo, options.deadline);
-  const created = conversation.find(r => r.event.type === 'conversation.created');
-  if (!created || conversation.some(r => r.event.type === 'conversation.closed')) {
-    throw new Error('Access changed');
+  const legacy = await legacyParticipation(store, options.db, silo, conversationId,
+    options.deadline ?? Infinity);
+  const access = await participation(store, silo, conversationId, memberId, legacy,
+    options.deadline);
+  if (access.created.mode !== 'agent_session') throw new Error('Access changed');
+  const closed = await conversationClosed(store, options.db, silo, conversationId,
+    options.deadline ?? Infinity);
+  if (closed) throw new Error('Access changed');
+  const assistantId = access.created.assistantId;
+  async function checkDesktop() {
+    const computer = await currentComputer(options, assistantId);
+    const desktop = await desktopAccess(options, memberId, conversationId, computer.computerId);
+    const permission = await auth.view(
+      memberId, conversationId, computer.computerId, desktop.receipts);
+    if (permission.status === 'unavailable') throw new ViewCheckUnavailable('authorisation');
+    if (!permission.allowed) throw new Error('Access changed');
+    await confirmSnapshotStillCurrent(desktop.fresh);
+    return computer;
   }
-  const assistantId = identity.parse(created.event.data).assistantId;
-  if (!participatesIn(conversation, created.event.data, memberId)) throw new Error('Access changed');
-  const computer = await currentComputer(options, assistantId);
-  const desktop = await desktopAccess(options, memberId, conversationId, computer.computerId);
-  const permission = await auth.view(
-    memberId, conversationId, computer.computerId, desktop.receipts);
-  if (permission.status === 'unavailable') throw new ViewCheckUnavailable('authorisation');
-  if (!permission.allowed) throw new Error('Access changed');
-  // Read removals before checking for new events. This keeps revocation within
-  // two seconds even when every check sees chat activity.
-  await confirmSnapshotStillCurrent(desktop.fresh);
+  const reads = [auth.applied(access.joinEventId), checkDesktop()] as const;
+  const [applied, computer] = await Promise.all(reads);
+  if (!applied) throw new ViewCheckUnavailable('authorisation');
   return computer;
-}
-
-function participatesIn(conversation: StoredEvent[], data: unknown, memberId: string) {
-  let participates = z.object({ createdBy: z.string() }).parse(data).createdBy === memberId;
-  for (const { event } of conversation) {
-    if (['participant.added', 'participant.removed'].includes(event.type) && participant.parse(event.data).participantId === memberId) {
-      participates = event.type === 'participant.added';
-    }
-  }
-  return participates;
 }
 
 async function currentComputer({ store, silo, deadline }: ViewAccessOptions, assistantId: string) {
@@ -272,7 +279,7 @@ async function desktopAccess(options: ViewAccessOptions, memberId: string,
   conversationId: string, computerId: string) {
   const { store, silo } = options;
   const resource = grantStream('shared_desktop', computerId);
-  const subjects = [`member-${memberId}`, `conversation-${conversationId}`, resource];
+  const subjects = [`member-${memberId}`, `participation-${conversationId}`, resource];
   const fresh = await authorityFence(store, performance.now(), subjects, options.deadline);
   const current = await desktopGrants(store, silo, resource, options.deadline);
   const direct = current.get(`member:${memberId}`);

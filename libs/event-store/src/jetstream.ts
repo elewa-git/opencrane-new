@@ -353,6 +353,13 @@ export class EventStore {
     }
   }
 
+  /** Read one saved event at its global position without scanning its neighbours. */
+  async readEvent(sequence: number, deadline = Infinity): Promise<StoredEvent> {
+    const message = await this.readMessage({ seq: sequence }, deadline);
+    if (!message || message.seq !== sequence) throw new Error("Event position missing");
+    return { sequence: message.seq, event: decodeEvent(message.data, message.subject) };
+  }
+
   /** Read finite entity or category history; fromSequence is an inclusive global position. */
   async *readStream(
     subject: string,

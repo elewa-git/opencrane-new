@@ -24,7 +24,7 @@ flowchart LR
   server["apps/server<br/>back end"] -->|saves changes within the caller time limit| store["libs/event-store<br/>checked events and memory key references"]
   models["libs/models<br/>AI rules and budgets"] -->|saves changes and updates saved facts| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
-  store -->|saves and reads| nats["NATS JetStream<br/>event service"]
+  store -->|saves, reads streams and finds numbered events| nats["NATS JetStream<br/>event service"]
   store -.-> events["libs/events<br/>event definitions"]
 ```
 
@@ -40,6 +40,7 @@ flowchart LR
 - Return the earlier result when a caller repeats the same request.
 - Let callers that have checked their history save a change without reading that
   history again. A conflict still checks for an earlier copy of the request.
+- Read one saved event by its number, so callers can check an indexed result.
 - Read the history of one thing, such as one member, or follow the whole event
   log in order.
 - Keep a [stream summary](../../GLOSSARY.md#stream-summary), a few facts built from

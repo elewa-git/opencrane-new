@@ -7,11 +7,14 @@ import type { Db, Query } from './db.ts';
 export const conversations: Projection = {
   name: 'conversations',
   async create(db) {
+    await requireLegacyReplay(db);
     await createConversationTables(db);
     await refuseMissingParticipation(db);
   },
   async drop(db) {
-    await db.query('DROP TABLE IF EXISTS conversation_participants, conversations, conversation_feed');
+    const tables = 'conversation_participants, conversations, conversation_feed, ' +
+      'conversation_legacy_participation';
+    await db.query(`DROP TABLE IF EXISTS ${tables}`);
   },
   async apply(db, event, position) {
     const entry = conversationFeedEntry(event);
@@ -19,11 +22,31 @@ export const conversations: Projection = {
     const { conversationId, data } = entry;
     await validateMode(db, event, conversationId);
     await foldConversation(db, event, conversationId, position);
+    if (event.subject === `conversation-${conversationId}` &&
+        event.type.startsWith('participant.')) {
+      await db.query('INSERT INTO conversation_legacy_participation VALUES ($1,$2,$3,$4)',
+        [event.silo, conversationId, position, event.id]);
+    }
     await db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
       [event.silo, conversationId, position, event.id, event.type, JSON.stringify(data), event.time]);
     await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
   },
 };
+
+async function requireLegacyReplay(db: Query) {
+  const result = await db.query<{ feed: string | null; legacy: string | null }>(
+    `SELECT to_regclass('conversation_feed')::text AS feed,
+      to_regclass('conversation_legacy_participation')::text AS legacy`);
+  const tables = result.rows[0];
+  if (!tables?.feed || tables.legacy) return;
+  const saved = await db.query<{ position: string }>(
+    `SELECT position FROM conversation_feed
+      WHERE type IN ('participant.added', 'participant.removed') LIMIT 1`);
+  if (saved.rows.length) {
+    throw new Error('Conversation tables need rebuilding. Stop conversation readers and workers, '
+      + 'then run npm run replay -- conversations --confirm-conversations-stopped');
+  }
+}
 
 async function createConversationTables(db: Query): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS conversation_feed (
@@ -31,6 +54,9 @@ async function createConversationTables(db: Query): Promise<void> {
     event_id TEXT NOT NULL, type TEXT NOT NULL, data JSONB NOT NULL, time TEXT NOT NULL,
     PRIMARY KEY (silo, conversation_id, position))`);
   await createParticipationTables(db);
+  await db.query(`CREATE TABLE IF NOT EXISTS conversation_legacy_participation (
+    silo TEXT NOT NULL, conversation_id TEXT NOT NULL, position BIGINT NOT NULL,
+    event_id TEXT NOT NULL, PRIMARY KEY (silo, conversation_id, position))`);
   await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_silo_type
     ON conversation_feed (silo, type)`);
   await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_message_event
@@ -38,6 +64,9 @@ async function createConversationTables(db: Query): Promise<void> {
   await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_message_reply
     ON conversation_feed (silo, conversation_id, (data->>'messageId'))
     WHERE type='agent.message_completed'`);
+  await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_participation
+    ON conversation_feed (silo, conversation_id, position)
+    WHERE type IN ('participant.added', 'participant.removed')`);
 }
 
 async function refuseMissingParticipation(db: Query): Promise<void> {
@@ -104,12 +133,16 @@ export async function readConversation(db: Query, silo: string, conversationId: 
     rows: result.rows.map(row => ({ position: Number(row.position), id: row.event_id, type: row.type, data: row.data, time: row.time })) };
 }
 
-export async function listConversations(db: Query, silo: string) {
+export async function listConversations(db: Query, silo: string, memberId?: string) {
   const rows = await db.query<{ conversation_id: string; data: unknown; time: string;
     kind: 'personal' | 'team' | null }>(
     `SELECT f.conversation_id, f.data, f.time, c.kind FROM conversation_feed f
       LEFT JOIN computers c ON c.silo = f.silo AND c.assistant_id = f.data->>'assistantId'
-      WHERE f.silo = $1 AND f.type = 'conversation.created' ORDER BY f.position DESC`, [silo]);
+      WHERE f.silo = $1 AND f.type = 'conversation.created'
+        AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM conversation_participants p
+          WHERE p.silo = f.silo AND p.conversation_id = f.conversation_id
+            AND p.participant_id = $2 AND p.end_position IS NULL))
+      ORDER BY f.position DESC`, [silo, memberId ?? null]);
   function conversationRow(row: (typeof rows.rows)[number]) {
     const data = conversationCreatedDataSchema.parse(row.data);
     return { ...data, conversationId: row.conversation_id, createdAt: row.time,

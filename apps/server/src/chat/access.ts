@@ -1,6 +1,7 @@
-import { conversationCreatedDataSchema } from '@opencrane/events';
+import { legacyParticipation, participation, ParticipationRefused, ParticipationApplying, chatMembership }
+  from './participation.ts';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { conversationAccessFence, currentMembership, PayingGroupRefused }
+import { conversationAccessFence, PayingGroupRefused }
   from '@opencrane/models';
 import { readPrivateSession, privateSessionCreation, requirePrivateReader }
   from './private-session.ts';
@@ -19,7 +20,7 @@ export interface ChatOptions {
 }
 
 export class ChatRefused extends Error {}
-export class ChatAccessApplying extends Error {}
+export { ParticipationApplying as ChatAccessApplying };
 type Fence = Awaited<ReturnType<typeof conversationAccessFence>>;
 interface AccessRequest {
   memberId: string;
@@ -38,21 +39,20 @@ export async function chatAccess(options: ChatOptions, request: AccessRequest) {
 
 async function readChatAccessContext(options: ChatOptions, memberId: string,
   conversationId: string, deadline: number) {
-  const row = await conversationCreation(options, conversationId, deadline);
-  const created = conversationCreatedDataSchema.parse(row.event.data);
-  if (created.mode === 'group') throw new ChatRefused('Conversation refused');
-  if (created.mode === 'direct' && !created.participantIds.includes(memberId)) {
-    throw new ChatRefused('Conversation refused');
-  }
-  const subjects = [`member-${memberId}`];
+  const legacy = await legacyParticipation(options.store, options.db, options.silo,
+    conversationId, deadline);
+  const access = await participation(options.store, options.silo, conversationId,
+    memberId, legacy, deadline);
+  const created = access.created;
+  const subjects = [`member-${memberId}`, `participation-${conversationId}`];
   let privateSession: Awaited<ReturnType<typeof privateSessionCreation>> | undefined;
   if (created.mode === 'agent_session') {
-    privateSession = await privateSessionCreation(options, conversationId, row.event);
+    privateSession = await privateSessionCreation(options, conversationId);
     if (privateSession.assistant.kind === 'team') {
       subjects.push(`team-${privateSession.assistant.ownerId}`);
     }
   }
-  return { created, subjects, privateSession };
+  return { created, subjects, privateSession, access };
 }
 
 // Keep creation facts for this socket. Later messages cannot change its owner or assistant.
@@ -60,8 +60,8 @@ export async function chatSubscriptionAccess(options: ChatOptions, memberId: str
   conversationId: string, deadline: number) {
   const context = await readChatAccessContext(options, memberId, conversationId, deadline);
   const { created, subjects, privateSession } = context;
-  const auth = memberAuthorisation(options.binding);
   let previousHeads: number[] | undefined;
+  let current = context.access;
   return check;
 
   async function check(checkDeadline: number) {
@@ -75,76 +75,115 @@ export async function chatSubscriptionAccess(options: ChatOptions, memberId: str
     }
     const changed = !previousHeads || heads.some(headMoved);
     if (changed) {
-      await activeChatMember(options, memberId);
-      const permission = await auth.conversation(memberId, conversationId, 'read');
-      if (permission.status === 'unavailable') throw new Error('IAM unavailable');
-      if (!permission.allowed) throw new ChatRefused('Conversation refused');
+      const checks = [activeChatMember(options, memberId),
+        conversationParticipation(options, memberId, conversationId, checkDeadline)] as const;
+      const [, checked] = await Promise.all(checks);
+      current = checked;
+      if (current.joinPosition !== context.access.joinPosition) {
+        throw new ChatRefused('Conversation participation changed');
+      }
       if (privateSession) await requirePrivateReader(options, memberId, privateSession);
     }
     // Save positions from before the check so a change during it is checked next time.
     previousHeads = heads;
-    return created.mode;
+    return { mode: created.mode, joinPosition: current.joinPosition,
+      accessPosition: current.accessPosition };
   }
 }
 
 // Keep the write check short by opening it after command history has loaded.
 export async function writeChatAccess(options: ChatOptions, request: AccessRequest) {
   const subjects = [`member-${request.memberId}`];
-  if (request.conversationId) subjects.push(`conversation-${request.conversationId}`);
+  if (request.conversationId) subjects.push(`participation-${request.conversationId}`);
   const fresh = await conversationAccessFence(
     options.store, performance.now(), subjects, request.deadline);
   await activeChatMember(options, request.memberId, fresh);
   const context = await conversationAccess(options, request, fresh.deadline);
+  if (context.mode === 'group') throw new ChatRefused('Group commands unavailable');
   await fresh();
   return Object.assign(fresh, context);
 }
 
 async function conversationAccess(options: ChatOptions, request: AccessRequest, deadline: number) {
   const { memberId, conversationId, relation = 'read', allowApplying = false } = request;
-  let mode: 'agent_session' | 'direct' | undefined;
+  let mode: 'agent_session' | 'direct' | 'group' | undefined;
   let colleagueId: string | undefined;
+  let joinPosition = 0;
+  let participantIds: string[] = [];
+  let accessPosition = 0;
   if (conversationId) {
-    const row = await conversationCreation(options, conversationId, deadline);
-    const created = conversationCreatedDataSchema.parse(row.event.data);
-    if (created.mode === 'group') throw new ChatRefused('Conversation refused');
+    const access = await conversationParticipation(options, memberId, conversationId,
+      deadline, relation, allowApplying);
+    const created = access.created;
     mode = created.mode;
-    if (created.mode === 'direct' && !created.participantIds.includes(memberId)) {
-      throw new ChatRefused('Conversation refused');
-    }
+    joinPosition = access.joinPosition;
+    participantIds = access.participantIds;
+    accessPosition = access.accessPosition;
     if (created.mode === 'direct') {
       function isOtherParticipant(participantId: string) {
         return participantId !== memberId;
       }
-      colleagueId = created.participantIds.find(isOtherParticipant);
-    }
-    const auth = memberAuthorisation(options.binding);
-    // Require the recorded participants even before OpenFGA has applied creation.
-    const applying = allowApplying && !await auth.applied(row.event.id);
-    if (applying) {
-      if (mode === 'agent_session' && created.createdBy !== memberId) {
-        throw new ChatRefused('Conversation refused');
-      }
-    } else {
-      const permission = await auth.conversation(memberId, conversationId, relation);
-      if (permission.status === 'unavailable') throw new Error('IAM unavailable');
-      if (!permission.allowed) {
-        await refuseConversationAccess(options, created.mode, row.event.id);
-      }
+      colleagueId = participantIds.find(isOtherParticipant);
     }
     if (mode === 'agent_session') await readPrivateSession(options, memberId, conversationId);
   }
-  return { mode, colleagueId };
+  return { mode, colleagueId, joinPosition, participantIds, accessPosition };
 }
 
-async function refuseConversationAccess(
-  options: ChatOptions, mode: 'direct' | 'agent_session', eventId: string,
-): Promise<never> {
-  const auth = memberAuthorisation(options.binding);
-  // Distinguish a new participant waiting for creation permissions from a refusal.
-  if (mode === 'direct' && !await auth.applied(eventId)) {
-    throw new ChatAccessApplying('Conversation access still applying');
+type ParticipationOptions = Pick<ChatOptions, 'store' | 'db' | 'silo' | 'binding'>;
+
+export function conversationParticipation(options: ParticipationOptions,
+  memberId: string, conversationId: string, deadline = performance.now() + 2000,
+  relation: 'read' | 'post' = 'read', allowApplying = false) {
+  const read = conversationParticipationReader(options, memberId);
+  return read(conversationId, deadline, relation, allowApplying);
+}
+
+// Reuse membership facts within one request, and check their position again after IAM replies.
+function currentChatMemberReader(options: ParticipationOptions, memberId: string) {
+  let checkedPosition: number | undefined;
+  let membershipRead: Promise<boolean> | undefined;
+  async function requireMember(deadline: number) {
+    const position = await options.store.head(`member-${memberId}`, deadline);
+    if (position !== checkedPosition || !membershipRead) {
+      membershipRead = chatMembership(options.store, options.silo, memberId, deadline);
+      checkedPosition = position;
+    }
+    const active = await membershipRead;
+    if (!active) throw new ChatRefused('Active silo membership required');
   }
-  throw new ChatRefused('Conversation refused');
+  return requireMember;
+}
+
+export function conversationParticipationReader(options: ParticipationOptions, memberId: string) {
+  const requireMember = currentChatMemberReader(options, memberId);
+  const auth = memberAuthorisation(options.binding);
+  async function read(conversationId: string, deadline = performance.now() + 2000,
+    relation: 'read' | 'post' = 'read', allowApplying = false) {
+    const subject = `participation-${conversationId}`;
+    const position = await options.store.head(subject, deadline);
+    const legacy = await legacyParticipation(options.store, options.db, options.silo,
+      conversationId, deadline);
+    let current = await participation(options.store, options.silo, conversationId,
+      memberId, legacy, deadline);
+    await requireMember(deadline);
+    const permission = await auth.conversation(memberId, conversationId, relation);
+    if (permission.status === 'unavailable') throw new Error('IAM unavailable');
+    await requireMember(deadline);
+    // Check saved changes after IAM answers so an old permission cannot restore a removed person.
+    const latestPosition = await options.store.head(subject, deadline);
+    if (latestPosition !== position) {
+      current = await participation(options.store, options.silo, conversationId,
+        memberId, legacy, deadline);
+    }
+    if (!await auth.applied(current.joinEventId)) {
+      if (allowApplying) return current;
+      throw new ParticipationApplying('Conversation access still applying');
+    }
+    if (!permission.allowed) throw new ChatRefused('Conversation refused');
+    return current;
+  }
+  return read;
 }
 
 /** Check current membership without waiting for role or owner changes to reach OpenFGA.
@@ -152,22 +191,13 @@ async function refuseConversationAccess(
  */
 export async function activeChatMember(options: ChatOptions, memberId: string,
   fresh?: Fence) {
-  const membership = await currentMembership(options.store, options.silo, memberId, fresh);
-  if (!membership.role) throw new ChatRefused('Active silo membership required');
+  fresh?.include(`member-${memberId}`);
+  const membership = await chatMembership(options.store, options.silo, memberId, fresh?.deadline);
+  if (!membership) throw new ChatRefused('Active silo membership required');
   const auth = memberAuthorisation(options.binding);
   const permission = await auth.check(memberId, 'member');
   if (permission.status === 'unavailable') throw new Error('IAM unavailable');
   if (!permission.allowed) throw new ChatRefused('Membership unavailable');
-}
-
-async function conversationCreation(
-  options: ChatOptions, conversationId: string, deadline: number,
-) {
-  for await (const row of options.store.readStream(`conversation-${conversationId}`, 1, deadline)) {
-    if (row.event.silo !== options.silo) throw new ChatRefused('Conversation refused');
-    if (row.event.type === 'conversation.created') return row;
-  }
-  throw new ChatRefused('Conversation refused');
 }
 
 export function recordedChatMode(access: Awaited<ReturnType<typeof chatAccess>>) {
@@ -176,6 +206,7 @@ export function recordedChatMode(access: Awaited<ReturnType<typeof chatAccess>>)
 }
 
 export function isChatRefused(error: unknown) {
-  return error instanceof ChatRefused || error instanceof GroupRefused ||
+  return error instanceof ChatRefused || error instanceof ParticipationRefused ||
+    error instanceof GroupRefused ||
     error instanceof PayingGroupRefused;
 }

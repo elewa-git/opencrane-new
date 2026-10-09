@@ -22,9 +22,9 @@ export const files: Projection = {
     }
   },
 };
-export async function listFiles(db: Query, silo: string, conversationId: string) {
+export async function listFiles(db: Query, silo: string, conversationId: string, joinPosition = 0) {
   const result = await db.query<{ data: unknown; status: string; delivery_outcome: string | null }>(
-    'SELECT data, status, delivery_outcome FROM conversation_files WHERE silo = $1 AND conversation_id = $2 ORDER BY position', [silo, conversationId]);
+    'SELECT data, status, delivery_outcome FROM conversation_files WHERE silo = $1 AND conversation_id = $2 AND position >= $3 ORDER BY position', [silo, conversationId, joinPosition]);
   // Storage object keys are internal and must never be exposed in the file view.
   return result.rows.map(row => { const { objectKey: _objectKey, ...data } = fileUploadedDataSchema.parse(row.data);
     return { ...data, status: row.status, ...(row.delivery_outcome ? { deliveryOutcome: row.delivery_outcome } : {}), path: `uploads/${data.conversationId}/${data.fileId}/${data.name}`, ...(data.mime === 'application/pdf' ? { textPath: `uploads/${data.conversationId}/${data.fileId}/${data.name}.md` } : {}) }; });

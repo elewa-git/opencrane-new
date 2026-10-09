@@ -9,6 +9,8 @@ import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import {
   connectMemberFeed,
+  conversations,
+  files,
   members,
   pgDb,
   ProjectionRunner,
@@ -126,6 +128,11 @@ async function startUploadFixture() {
     size: bytes.length, sha256: 'a'.repeat(64), objectKey: 'test/file', uploadedBy: 'alice',
   };
   await fileCommand(nats.store, 'test', 'alice', 'uploaded-file', 'file.uploaded', file);
+  // Build the read tables used by access checks and file downloads before testing outages.
+  await runner.initialise(conversations);
+  await runner.run(conversations);
+  await runner.initialise(files);
+  await runner.run(files);
   const serverOptions = { files: options };
   app = buildServer(config, serverOptions);
   cleanup.push(app.close.bind(app));
@@ -174,21 +181,30 @@ function viewRequest() {
   };
 }
 
-async function unexpectedStoreFailure(boundary: string) {
-  const failure = new TypeError('Private object-store diagnostic');
-  let request;
+function failObjectStore(boundary: string, failure: Error) {
   if (boundary === 'upload') {
     const putObject = vi.spyOn(options.objects, 'putObject');
     putObject.mockRejectedValue(failure);
-    request = uploadRequest('object-type-error');
-  } else {
-    const getObject = vi.spyOn(options.objects, 'getObject');
-    getObject.mockRejectedValue(failure);
+    return putObject;
+  }
+  const getObject = vi.spyOn(options.objects, 'getObject');
+  getObject.mockRejectedValue(failure);
+  return getObject;
+}
+
+async function unexpectedStoreFailure(boundary: string) {
+  const failure = new TypeError('Private object-store diagnostic');
+  const dependency = failObjectStore(boundary, failure);
+  let request;
+  if (boundary === 'view') {
     request = viewRequest();
+  } else {
+    request = uploadRequest('object-type-error');
   }
   const response = await app.inject(request);
   expect(response.statusCode).toBe(500);
   expect(response.json()).toEqual({ status: 'failed', error: 'Unexpected failure' });
+  expect(dependency).toHaveBeenCalledOnce();
 }
 it.each(['upload', 'view'])(
   'returns a sanitised 500 for an unexpected object-store TypeError during %s',
@@ -206,12 +222,14 @@ async function confirmedStoreOutage(code: string) {
   const response = await app.inject(request);
   expect(response.statusCode).toBe(503);
   expect(response.json()).toEqual({ status: 'unavailable', error: 'Dependency unavailable' });
+  expect(putObject).toHaveBeenCalledTimes(2);
   const getObject = vi.spyOn(options.objects, 'getObject');
   getObject.mockRejectedValue(failure);
   const view = viewRequest();
   const download = await app.inject(view);
   expect(download.statusCode).toBe(503);
   expect(download.json()).toEqual({ status: 'unavailable', error: 'Dependency unavailable' });
+  expect(getObject).toHaveBeenCalledOnce();
 }
 it.each(['ECONNREFUSED', 'ETIMEDOUT', 'ServiceUnavailable'])(
   'marks a confirmed object-store %s outage with typed 503',
@@ -222,11 +240,13 @@ async function invalidScannerResponse() {
   function invalidScan(content: Buffer) {
     return scanFile('127.0.0.1', scannerPort, content);
   }
-  options.scan = invalidScan;
+  const scanner = vi.fn(invalidScan);
+  options.scan = scanner;
   const request = uploadRequest('invalid-scanner-response');
   const response = await app.inject(request);
   expect(response.statusCode).toBe(500);
   expect(response.json()).toEqual({ status: 'failed', error: 'Unexpected failure' });
+  expect(scanner).toHaveBeenCalledOnce();
 }
 it(
   'returns a sanitised 500 for a locally detected invalid scanner response',
@@ -247,7 +267,8 @@ async function refusedScannerConnection() {
   function unavailableScan(content: Buffer) {
     return scanFile('127.0.0.1', port, content);
   }
-  options.scan = unavailableScan;
+  const scanner = vi.fn(unavailableScan);
+  options.scan = scanner;
   const scan = unavailableScan(bytes);
   await expect(scan).rejects.toBeInstanceOf(FileUnavailable);
   await expect(scan).rejects.toMatchObject({ kind: 'scanner', statusCode: 503 });
@@ -255,6 +276,7 @@ async function refusedScannerConnection() {
   const response = await app.inject(request);
   expect(response.statusCode).toBe(503);
   expect(response.json()).toEqual({ status: 'unavailable', error: 'Dependency unavailable' });
+  expect(scanner).toHaveBeenCalledOnce();
 }
 it('marks a refused scanner connection with typed 503', refusedScannerConnection);
 

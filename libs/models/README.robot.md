@@ -754,6 +754,16 @@ that id from the current tool review, arguments and turn before writing anything
 A mismatch is refused and creates no approval card. The existing approval remains
 bound to its original action.
 
+Approval card reads accept an inclusive `fromSequence` from the caller’s current join.
+`readApproval` also returns `requestPosition`, so decisions can refuse an older request.
+
+Approval reads also return `conversationPosition`, the last conversation record checked
+for request invalidation. `decideApproval` requires those checked facts from
+`readApproval`. It checks only later records and the current tool policy, confirms the
+small access streams, and checks later activity again before its conditional append.
+The append expires with the access deadline. The server reads the review before that
+short check, so older messages cannot consume it.
+
 ## Historical computer losses and initial model grants
 
 A saved `computer.lost` changes held money only while it remains the latest computer

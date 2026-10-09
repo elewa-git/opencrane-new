@@ -1,5 +1,5 @@
 import { nextBinaryMessage, recordLeaseNotices, expectUnavailablePause } from './support/rfb-viewer.ts';
-import { grantStream } from '@opencrane/authz';
+import { grantStream, memberAuthorisation } from '@opencrane/authz';
 import { viewFixture } from './support/view-fixture.ts';
 import { once } from 'node:events';
 import { createServer, request as httpRequest } from 'node:http';
@@ -9,6 +9,7 @@ import { expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { encodeSession } from '@opencrane/auth';
 import { until } from '@opencrane/authz/testing';
+import { conversations } from '@opencrane/projections';
 import { history } from '@opencrane/models';
 import { parseEventByType } from '@opencrane/events';
 import * as access from '../src/computers/view-access.ts';
@@ -43,9 +44,11 @@ it('requires participation and an explicit desktop grant before opening an audit
     }, true);
     const bobHeaders = { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'bob', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(403);
-    await append('conversation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' });
+    const join = await append('conversation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' });
     expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(403);
-    await append('conversation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' }, true);
+    await fixture.runner.run(conversations);
+    const auth = memberAuthorisation(fixture.binding);
+    await auth.handler.handle(join, fixture.db);
     expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(200);
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, origin: 'https://wrong.test' } })).statusCode).toBe(403);
     const response = await app.inject({ method: 'POST', url, headers });
@@ -75,7 +78,7 @@ it('requires participation and an explicit desktop grant before opening an audit
     ws = new WebSocket(`${address.replace('http:', 'ws:')}${url.replace(/^\/api/u, '/ws')}`, ['binary', next.ticket], { headers });
     ws.on('error', () => undefined); await once(ws, 'open');
     const closed = once(ws, 'close'), started = performance.now();
-    await append('conversation-chat', 'participant.removed', { conversationId: 'chat', participantId: 'alice', removedBy: 'owner' }, true);
+    await append('participation-chat', 'participant.removed', { conversationId: 'chat', participantId: 'alice', removedBy: 'owner' });
     expect((await closed)[0]).toBe(4003); expect(performance.now()-started).toBeLessThan(2000);
     await until(async () => (await history(nats.store, `view-${sessionId}`, 'test')).length === 2);
     const audit = await history(nats.store, `view-${sessionId}`, 'test');
