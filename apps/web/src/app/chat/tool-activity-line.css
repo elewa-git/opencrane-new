@@ -26,6 +26,10 @@
   color: var(--oc-danger-admin);
 }
 
+[data-state='running'] {
+  color: var(--oc-focus-ring);
+}
+
 .chevron {
   width: 10px;
   height: 10px;

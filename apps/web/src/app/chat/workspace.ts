@@ -26,7 +26,8 @@ import { sessionSlug, type ChatConversation } from '@opencrane/protocol';
 import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
-  rejectedScreenshotIds, toolKind, turnContent, turnOutcome, turnStatusIcon,
+  rejectedScreenshotIds, toolActivityResult, toolActivityResultLabel,
+  toolKind as getToolKind, turnContent, turnOutcome, turnStatusIcon,
   type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
 import { ChatComposer } from './composer';
@@ -71,6 +72,9 @@ export class Workspace implements OnInit {
   protected readonly panelTab = signal<'files' | 'activity' | 'memory'>('files');
   protected readonly approvalWaiting = signal(false);
   protected readonly activity = computed(() => this.chat.turns().flatMap(turn => turn.tools));
+  protected readonly toolResult = toolActivityResult;
+  protected readonly toolResultLabel = toolActivityResultLabel;
+  protected readonly toolKind = getToolKind;
   protected readonly desktop = signal(globalThis.innerWidth >= 1100);
   protected readonly panel = signal(this.desktop());
   protected readonly panelExpanded = computed(this.isPanelExpanded.bind(this));
@@ -223,17 +227,8 @@ export class Workspace implements OnInit {
   protected closeToolDetails(): void {
     this.toolDetails.set(undefined);
   }
-  protected toolResult(record: ToolActivityRecord): string {
-    if (record.failed) {
-      return `Failed · ${record.detail}`;
-    }
-    return `Completed · ${record.detail}`;
-  }
   protected toolTime(record: ToolActivityRecord): string {
     return utcDateTime(record.time);
-  }
-  protected toolKind(record: ToolActivityRecord): string {
-    return toolKind(record);
   }
   private closeMissingToolDetails(): void {
     const details = this.toolDetails();

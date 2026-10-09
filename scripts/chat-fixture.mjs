@@ -40,7 +40,16 @@ export async function chatFixture(page, scenario = 'live') {
   } else if (!['draft', 'empty-selected', 'attach', 'no-agent', 'queued', 'private-team-draft'].includes(scenario)) {
     const human = add('message.posted', { text: scenario === 'long-title' ? 'M'.repeat(500) : 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.', authorId: 'me' });
     add('agent.turn_started', { turnId: human.id });
-    if (scenario === 'workspace-evidence') {
+    if (scenario === 'governed-tool-running') {
+      addGovernedToolStart(add, human.id);
+    } else if (scenario === 'governed-tool-completed') {
+      addGovernedToolStart(add, human.id);
+      add('agent.tool_call_finished', { turnId: human.id, callId: 'tool-call-1',
+        serverId: 'fixture-erp', toolName: 'read_order', status: 'completed', durationMs: 240 });
+      add('agent.message_delta', { turnId: human.id, messageId: 'reply',
+        text: 'The draft order is ready for review.' });
+      add('agent.turn_completed', { turnId: human.id });
+    } else if (scenario === 'workspace-evidence') {
       add('agent.command_ran', { turnId: human.id, exitCode: 1, commandDigest: 'a'.repeat(64) });
       add('agent.file_changed', { turnId: human.id, path: 'quarterly-board-pack.xlsx', changeType: 'created' });
       add('decision.recorded', { turnId: human.id, reason: 'budget_exhausted' });
@@ -139,6 +148,11 @@ export async function chatFixture(page, scenario = 'live') {
     online: () => { offline = false; },
     rows: () => rows,
   };
+}
+
+function addGovernedToolStart(addRow, turnId) {
+  return addRow('agent.tool_call_started', { turnId, callId: 'tool-call-1',
+    serverId: 'fixture-erp', toolName: 'read_order' });
 }
 
 function fixtureComputerState(scenario) {

@@ -29,3 +29,43 @@ it.each([
 
   expect(emittedOpener).toBe(button);
 });
+
+it.each([
+  { status: 'running', failed: false, suffix: 'Running', icon: 'running' },
+  { status: 'completed', failed: false, suffix: 'Completed', icon: 'done' },
+  { status: 'failed', failed: true, suffix: 'Failed', icon: 'failed' },
+  { status: 'finished', failed: false, suffix: 'Finished', icon: 'done' },
+] as const)('shows the $status state with words and a matching mark', ({ status, failed, suffix, icon }) => {
+  const fixture = TestBed.createComponent(ToolActivityLine);
+  fixture.componentRef.setInput('record', {
+    id: 'tool-1', label: 'read_order', detail: 'Tool call in progress', failed,
+    status, time: '2026-10-09T10:00:00Z',
+  });
+  fixture.detectChanges();
+
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No tool activity line');
+  const button = root.querySelector<HTMLButtonElement>('.tool-line');
+
+  expect(button?.textContent).toContain(`read_order · ${suffix}`);
+  expect(button?.querySelector(`[data-state="${icon}"]`)).not.toBeNull();
+  expect(button?.getAttribute('id')).toBe('tool-tool-1');
+  fixture.destroy();
+});
+
+it('keeps the tool details button keyboard reachable', () => {
+  const fixture = TestBed.createComponent(ToolActivityLine);
+  fixture.componentRef.setInput('record', {
+    id: 'tool-1', label: 'read_order', detail: 'Tool call completed', failed: false,
+    status: 'completed', time: '2026-10-09T10:00:00Z',
+  });
+  fixture.detectChanges();
+
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No tool activity line');
+  const button = root.querySelector<HTMLButtonElement>('.tool-line');
+  button?.focus();
+
+  expect(document.activeElement).toBe(button);
+  fixture.destroy();
+});

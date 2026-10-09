@@ -220,7 +220,7 @@
       [description]="toolKind(details.record)" backLabel="Back to conversation"
       [returnFocusTo]="details.opener" (closed)="closeToolDetails()">
       <dl class="tool-detail-ledger">
-        <dt>Result</dt><dd>{{ toolResult(details.record) }}</dd>
+          <dt>{{ toolResultLabel(details.record) }}</dt><dd>{{ toolResult(details.record) }}</dd>
         <dt>Recorded</dt><dd>{{ toolTime(details.record) }}</dd>
         <dt>Reference</dt><dd class="tool-reference">{{ details.record.id }}</dd>
       </dl>

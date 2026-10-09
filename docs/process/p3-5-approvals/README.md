@@ -34,8 +34,8 @@ motion. The differences below follow the data the server provides.
 | Frame | Result | What the screen shows and why it differs |
 | --- | --- | --- |
 | WRK-01 | Delivered | Existing empty conversation; captured as a regression check. |
-| WRK-02 | Not built | There is no record for a tool action while it is running. The page keeps its existing “Folding…” and “Agent working” text. |
-| WRK-03 | Adapted | Saved command and failed-turn records appear as quiet transcript buttons. Restricted turns do not report commands. Team turns sent from the workspace run restricted, so they show at most “Reply failed”. |
+| WRK-02 | Adapted | A reported governed tool call appears as a running line. The fixture compares it with the 1280px and 390px frame; the server reports no arguments or result while it runs. |
+| WRK-03 | Adapted | Finished governed calls, saved command records and failed-turn records appear as quiet transcript buttons. Restricted turns do not report commands. Team turns sent from the workspace run restricted, so they show at most “Reply failed”. |
 | WRK-04 | Delivered | A transcript button opens the cleaned result, time on the shared world clock and event reference. The location, account and attempt history are not available. |
 | WRK-05 | Not built | The server gives no attempt history. |
 | WRK-06 | Not built | The server gives no native-consent refusal report or link to tool settings. |
@@ -80,10 +80,10 @@ checks.
 | Lint | PASS | `nice -n 10 npm run lint`; nine existing max-lines warnings. |
 | Typecheck | PASS | `nice -n 10 npm run typecheck`. |
 | Root tests | NOT RUN | The requested checks excluded the full root suite. |
-| Web tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false`; 32 files, 358 tests. |
+| Web tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false`; 40 files, 599 tests. |
 | Event catalogue | PASS | `nice -n 10 npm run check:events`; 96 event types agree. |
 | Web build | PASS | `nice -n 10 npm run build -w apps/web`; existing CSS budget and CommonJS warnings. |
-| Approval visuals | PASS | `nice -n 10 npm run visual:p3-5-approvals`; 64 captures at 1280, 390 and 320 pixels with both motion settings. |
+| Approval visuals | PASS | `nice -n 10 npm run visual:p3-5-approvals`; 76 captures at 1280, 390 and 320 pixels with both motion settings. |
 | F2 overlays | NOT RUN | Not part of the requested review checks. |
 | F5 workspace | PASS | `nice -n 10 npm run visual:f5-workspace`; 18 captures. |
 | Chat browser | PASS | `nice -n 10 npm run visual:chat`; keyboard, focus, phone, streaming and reconnect checks. |

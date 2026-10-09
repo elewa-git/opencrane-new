@@ -25,6 +25,8 @@ const sceneFrames = {
   'approval-terminal-expired': ['WRK-18'],
   'approval-terminal-cancelled': ['WRK-19', 'WRK-20'],
   'tool-details': ['WRK-03', 'WRK-04'],
+  'tool-activity-running': ['WRK-02'],
+  'tool-activity-completed': ['WRK-03'],
   'activity-jump': ['WRK-07'],
   reconnected: ['WRK-22'],
 };
@@ -97,9 +99,10 @@ async function openDetails(page) {
 }
 
 async function checkPhoneTargets(page, scene) {
-  const controls = page.locator(
-    '.approve, .actions button, .drawer-actions button, .approval-terminal, .state-action, dialog[open] .back',
-  );
+  const controls = page.locator(`
+    .approve, .actions button, .drawer-actions button, .approval-terminal,
+    .state-action, .tool-line, dialog[open] .back
+  `);
   const count = await controls.count();
   for (let index = 0; index < count; index += 1) {
     const control = controls.nth(index);
@@ -121,6 +124,8 @@ async function captureScene(browser, scene, width, motion) {
   }
   let cards = [approvalCard(0)];
   let scenario = 'tools';
+  if (scene === 'tool-activity-running') scenario = 'governed-tool-running';
+  if (scene === 'tool-activity-completed') scenario = 'governed-tool-completed';
   if (scene === 'approval-step-up') cards = [{ ...approvalCard(0), stepUp: true }];
   if (scene === 'approval-terminal') {
     cards = [
@@ -131,7 +136,8 @@ async function captureScene(browser, scene, width, motion) {
       approvalCard(5, 'cancelled', false, 'me'),
     ];
   }
-  if (scene === 'tool-details' || scene === 'activity-jump' || scene === 'reconnected') {
+  if (scene === 'tool-details' || scene === 'activity-jump' || scene === 'reconnected'
+    || scene.startsWith('tool-activity-')) {
     cards = undefined;
   }
   const { page, chat } = await openPage(browser, width, motion, scenario, cards, postResponseForScene(scene));
@@ -183,6 +189,14 @@ async function captureScene(browser, scene, width, motion) {
       await page.keyboard.press('Escape');
       assert(await tool.evaluate(node => node.ownerDocument.activeElement === node));
       return;
+    } else if (scene === 'tool-activity-running') {
+      const tool = page.getByRole('button', { name: /read_order · Running/ });
+      await tool.waitFor();
+      await checkToolDetails(page, tool, 'Running · The call has not finished.', 'Completed');
+    } else if (scene === 'tool-activity-completed') {
+      const tool = page.getByRole('button', { name: /read_order · Completed/ });
+      await tool.waitFor();
+      await checkToolDetails(page, tool, 'Call completed', 'Result');
     } else if (scene === 'activity-jump') {
       const panelOpener = page.getByRole('button', { name: 'Session panel' });
       let panel;
@@ -214,6 +228,19 @@ async function captureScene(browser, scene, width, motion) {
   } finally {
     await page.close();
   }
+}
+
+async function checkToolDetails(page, tool, expectedWords, forbiddenWords) {
+  await tool.click();
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor();
+  const details = dialog.locator('.tool-detail-ledger');
+  const text = await details.innerText();
+  assert(text.includes(expectedWords));
+  assert(!text.includes(forbiddenWords));
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'detached' });
+  assert(await tool.evaluate(node => node.ownerDocument.activeElement === node));
 }
 
 async function capturePhoneTerminalStates(browser, width, motion) {
@@ -278,6 +305,9 @@ function checksForCapture(scene, width) {
   }
   if (scene === 'tool-details' && width < 700) {
     checks.push('Measured the drawer Back control');
+  }
+  if (scene.startsWith('tool-activity-') && width < 700) {
+    checks.push('Measured the 44px tool activity button');
   }
   if (scene.startsWith('approval-terminal-') && width < 700) {
     checks.push('Shows one folded state with the viewer as requester');
@@ -397,7 +427,8 @@ try {
   await removeOldPhoneTerminalCaptures();
   const scenes = [
     'approval-requested', 'approval-details', 'approval-submitting',
-    'approval-step-up', 'approval-terminal', 'tool-details', 'activity-jump', 'reconnected',
+    'approval-step-up', 'approval-terminal', 'tool-activity-running',
+    'tool-activity-completed', 'tool-details', 'activity-jump', 'reconnected',
   ];
   for (const scene of scenes) {
     for (const width of widths) {
@@ -422,7 +453,8 @@ try {
     environment: 'Built Angular assets; Chromium; intercepted fixtures; no live governed turn',
     frames: framesForAllCaptures(captureFiles),
     checks: [
-      '8 scenes captured at 1280, 390 and 320 pixels with both motion settings',
+      '10 scenes captured at 1280, 390 and 320 pixels with both motion settings',
+      'Running and completed governed tool calls match WRK-02 and WRK-03',
       'No horizontal overflow in any capture',
       'Phone card actions, drawer buttons and drawer Back controls were measured',
       'Approval, tool and terminal buttons show the teal focus ring',

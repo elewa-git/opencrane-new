@@ -48,13 +48,31 @@ export interface ToolActivityRecord {
   detail: string;
   failed: boolean;
   time: string;
+  callId?: string;
+  status?: 'running' | 'completed' | 'failed' | 'finished';
+  durationMs?: number;
 }
 
 export function toolKind(record: ToolActivityRecord): string {
+  if (record.callId) return 'Governed tool call';
   if (record.label === 'Reply failed') {
     return 'Agent run';
   }
   return 'Computer command';
+}
+
+export function toolActivityResult(record: ToolActivityRecord): string {
+  if (record.status === 'running') return 'Running · The call has not finished.';
+  if (record.status === 'completed') return 'Call completed';
+  if (record.status === 'finished') return 'Call finished';
+  if (record.status === 'failed') return 'Call failed';
+  if (record.failed) return `Failed · ${record.detail}`;
+  return `Completed · ${record.detail}`;
+}
+
+export function toolActivityResultLabel(record: ToolActivityRecord): string {
+  if (record.callId) return 'Call status';
+  return 'Result';
 }
 
 /** Render saved server rows. Stop freezes that turn at the saved event position. */
@@ -127,13 +145,34 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
 
 function failureDetail(reason: string | undefined): string {
   if (reason === 'computer_lost') return 'Computer was lost';
+  if (reason === 'restricted_tool_refused') return 'Tool access refused';
   return 'Run interrupted';
 }
 
 function updateTurnTools(turn: Turn, row: ChatRow): void {
+  if ((row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished')
+    && turn.state !== 'working') return;
   if (row.type === 'agent.turn_failed') {
     turn.tools.push({ id: row.id, label: 'Reply failed',
       detail: failureDetail(row.data.reason), failed: true, time: row.time });
+    return;
+  }
+  if (row.type === 'agent.tool_call_started') {
+    const toolName = row.data.toolName ?? 'Tool call';
+    const callId = row.data.callId;
+    turn.tools.push({
+      id: row.id,
+      ...(callId ? { callId } : {}),
+      label: toolName,
+      detail: 'Tool call in progress',
+      failed: false,
+      status: 'running',
+      time: row.time,
+    });
+    return;
+  }
+  if (row.type === 'agent.tool_call_finished') {
+    finishToolCall(turn, row);
     return;
   }
   if (row.type !== 'agent.command_ran') return;
@@ -141,6 +180,47 @@ function updateTurnTools(turn: Turn, row: ChatRow): void {
   const label = succeeded ? 'Command completed' : 'Command failed';
   turn.tools.push({ id: row.id, label, detail: `Exit code ${row.data.exitCode ?? 'unknown'}`,
     failed: !succeeded, time: row.time });
+}
+
+function finishToolCall(turn: Turn, row: ChatRow): void {
+  const callId = row.data.callId;
+  const tool = callId
+    ? turn.tools.find(candidate => candidate.callId === callId)
+    : undefined;
+  const status = finishedToolStatus(row.data.status);
+  const toolName = row.data.toolName ?? tool?.label ?? 'Tool call';
+  const detail = finishedToolDetail(status);
+  if (tool) {
+    tool.label = toolName;
+    tool.detail = detail;
+    tool.failed = status === 'failed';
+    tool.status = status;
+    if (row.data.durationMs !== undefined) tool.durationMs = row.data.durationMs;
+    return;
+  }
+  // Keep a finished call visible when history starts after its start event.
+  turn.tools.push({
+    id: row.id,
+    ...(callId ? { callId } : {}),
+    label: toolName,
+    detail,
+    failed: status === 'failed',
+    status,
+    ...(row.data.durationMs !== undefined ? { durationMs: row.data.durationMs } : {}),
+    time: row.time,
+  });
+}
+
+function finishedToolStatus(status: string | undefined): 'completed' | 'failed' | 'finished' {
+  if (status === 'completed') return 'completed';
+  if (status === 'failed') return 'failed';
+  return 'finished';
+}
+
+function finishedToolDetail(status: 'completed' | 'failed' | 'finished'): string {
+  if (status === 'completed') return 'Tool call completed';
+  if (status === 'failed') return 'Tool call failed';
+  return 'Tool call finished';
 }
 
 function updateTurnText(turn: Turn, row: ChatRow, parts: Map<string, string>): void {
