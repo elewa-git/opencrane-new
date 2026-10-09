@@ -240,11 +240,21 @@ async function racesAppointment(appointmentFirst: boolean) {
   } finally {
     spy.mockRestore();
   }
-  if (!appointmentFirst) {
-    const rows = await history(nats.store, `member-${memberId}`, 'acme');
-    await auth.handler.handle(rows[1]!.event, pgDb(dbs.queue));
+  const rows = await history(nats.store, `member-${memberId}`, 'acme');
+  await runner.run(members);
+  expect((await auth.check(memberId, 'owner')).allowed).toBe(false);
+  const applied = auth.applied.bind(auth);
+  async function roleReceiptWithoutAppointment(eventId: string) {
+    // Represent a receipt left by an older worker that applied the role first.
+    if (eventId === rows[1]!.event.id) return true;
+    return applied(eventId);
+  }
+  const receiptSpy = vi.spyOn(auth, 'applied').mockImplementation(roleReceiptWithoutAppointment);
+  try {
     expect((await status(memberId, memberId)).json()).toMatchObject({
-      effect: 'none_target_became_owner', projection: { iam: 'applying' } });
+      effect: 'none_target_became_owner', projection: { content: 'current', iam: 'applying' } });
+  } finally {
+    receiptSpy.mockRestore();
   }
   await project();
   expect((await auth.check(memberId, 'owner')).allowed).toBe(true);
