@@ -167,6 +167,22 @@ it('ranks pins, exact terms and prefixes, with bounded Unicode search', async fu
     expect((await get(`${path('bob')}/facts?q=${encodeURIComponent(query)}`)).statusCode).toBe(422);
   }
 });
+it.each([
+  ['hindi', 'मेरी पसंदीदा भाषा हिन्दी', 'मेरी पसंदीदा भाषा हिन्दी'],
+  ['accent_saved', 'Cafe\u0301 maison', 'Café maison'],
+  ['accent_query', 'Café jardin', 'Cafe\u0301 jardin'],
+  ['japanese', '東京 配送', '東京 配送'],
+  ['latin', 'Morning delivery instructions', 'Morning delivery instructions'],
+])('finds whole Unicode words for %s', async function unicodeWords(id, text, query) {
+  await write('bob', 'person', id, text);
+  await runner.run(projection);
+  const response = await get(`${path('bob')}/facts?q=${encodeURIComponent(query)}`);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ facts: [{ memoryId: id }], returnedCount: 1 });
+  const saved = await storage.queue.query<{ search_text: string }>(
+    'SELECT search_text FROM memory_facts WHERE memory_id=$1', [id]);
+  expect(saved.rows[0]?.search_text).toBe(text.normalize('NFC'));
+});
 it('caps whole pages and binds cursors to identity, query, scope and rebuilt content',
   async function paging() {
     for (let index = 0; index < 22; index++) {
