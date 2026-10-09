@@ -137,7 +137,9 @@ export async function decideApproval(store: EventStore, silo: string, approvalId
   await fresh();
   const checkedAt = new Date(now.getTime() + performance.now() - beganAt);
   if (Date.parse(current.request.expiresAt) <= checkedAt.getTime()) {
-    await readApproval(store, silo, approvalId, { ...readOptions, now: checkedAt });
+    const event = envelope(silo, `approval-${approvalId}`, 'approval.expired', { approvalId });
+    const result = await store.append({ event, expectedSequence: current.sequence });
+    if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
     return { status: 'conflict' } as const;
   }
   return store.append({ event: { ...envelope(silo, `approval-${approvalId}`, 'approval.decided', { approvalId, decidedBy: memberId, decision }),
