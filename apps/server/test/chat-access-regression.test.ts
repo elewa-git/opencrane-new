@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
 import { expect, it } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
-import { createStore, memberAuthorisation } from '@opencrane/authz';
+import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { wireSubject } from '@opencrane/event-store';
@@ -21,6 +21,8 @@ import type { ChatOptions } from '../src/chat/routes.ts';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer } from '../src/websocket.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
+import { ownConversation } from '../src/files/commands.ts';
+import { viewAccess } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -138,7 +140,7 @@ async function fixture(countChecks = false) {
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
-async function openChatSocket(context: Fixture, conversationId: string) {
+async function openChatSocket(context: Fixture, conversationId: string, waitReady = true) {
   const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
   const address = await context.app.listen({ host: '127.0.0.1', port: 0 });
   const realtime = { feed: context.feed, binding: context.options.binding,
@@ -150,13 +152,17 @@ async function openChatSocket(context: Fixture, conversationId: string) {
     received.push(chatMessageSchema.parse(JSON.parse(raw.toString()) as unknown));
   }
   socket.on('message', receive);
+  let code: number | undefined;
+  function rememberClose(value: number) { code = value; }
+  socket.on('close', rememberClose);
+  function closeCode() { return code; }
   await once(socket, 'open');
   const subscription = { type: 'subscribe', topic: 'conversation', conversationId, since: 0 };
   socket.send(JSON.stringify(subscription));
   function ready() {
     return received.some(isReady);
   }
-  await until(ready);
+  if (waitReady) await until(ready);
   async function close() {
     socket.terminate();
     function closeServer(resolve: () => void) {
@@ -164,7 +170,7 @@ async function openChatSocket(context: Fixture, conversationId: string) {
     }
     await new Promise<void>(closeServer);
   }
-  return { socket, received, close };
+  return { socket, received, close, closeCode };
 }
 
 async function readsApprovalsDuringToolProgress(type: string) {
@@ -1123,6 +1129,184 @@ async function removalDuringSlowSocketRead() {
       }
       await new Promise<void>(closeServer);
     }
+    await context.close();
+  }
+}
+
+
+it.each([false, true])('refuses a participation removal before IAM applies (blocked: %s)',
+  participationRemoval, 120_000);
+
+async function participationRemoval(blocked: boolean) {
+  const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  let pause: ReturnType<typeof pauseFirstHistoryRead> | undefined;
+  try {
+    await context.agentSession('agent');
+    if (blocked) {
+      client = await openChatSocket(context, 'agent');
+      pause = pauseFirstHistoryRead(context);
+      const encrypted = context.keys.encrypt('test', 'agent', 'Never deliver this');
+      await context.append('conversation-agent', 'message.posted', {
+        conversationId: 'agent', authorId: 'alice', authorKind: 'human',
+        contentType: 'text', ...encrypted,
+      }, false);
+      await context.runner.run(conversations);
+      await pause.reached;
+    }
+    const started = performance.now();
+    await context.append('participation-agent', 'participant.removed', {
+      conversationId: 'agent', participantId: 'alice', removedBy: 'bob',
+    }, false);
+    if (!client) {
+      // Subscribe after the append while the old permission still allows this person.
+      client = await openChatSocket(context, 'agent', false);
+    }
+    function closed() {
+      return client?.socket.readyState === WebSocket.CLOSED;
+    }
+    await until(closed, 1900);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(client.closeCode()).toBe(1008);
+    expect(client.received.some(isRefused)).toBe(true);
+    expect(JSON.stringify(client.received)).not.toContain('Never deliver this');
+  } finally {
+    pause?.release();
+    await client?.close();
+    await context.close();
+  }
+}
+
+it('limits late joins and re-joins to their latest interval, including titles and people',
+  lateParticipantHistory, 120_000);
+
+async function lateParticipantHistory() {
+  const context = await fixture();
+  try {
+    context.keys.provision('test', 'group');
+    await context.append('conversation-group', 'conversation.created', {
+      conversationId: 'group', mode: 'group', createdBy: 'alice',
+      participantIds: ['alice', 'hidden-person'],
+    });
+    async function message(text: string) {
+      const encrypted = context.keys.encrypt('test', 'group', text);
+      await context.append('conversation-group', 'message.posted', {
+        conversationId: 'group', authorId: 'alice', authorKind: 'human',
+        contentType: 'text', ...encrypted,
+      }, false);
+    }
+    await message('Secret original title');
+    await context.append('participation-group', 'participant.removed', {
+      conversationId: 'group', participantId: 'hidden-person', removedBy: 'alice',
+    });
+    await context.append('conversation-group', 'participant.added', {
+      conversationId: 'group', participantId: 'bob', addedBy: 'alice',
+    });
+    await message('Old interval');
+    await context.append('participation-group', 'participant.removed', {
+      conversationId: 'group', participantId: 'bob', removedBy: 'alice',
+    });
+    const join = await context.append('participation-group', 'participant.added', {
+      conversationId: 'group', participantId: 'bob', addedBy: 'alice',
+    }, false);
+    await context.runner.run(conversations);
+    const request = { url: '/api/conversations/group/messages', headers: context.headers('bob') };
+    expect((await context.app.inject(request)).statusCode).toBe(425);
+    await context.auth.handler.handle(join, context.db);
+    await message('Visible first message');
+    await context.runner.run(conversations);
+    const response = await context.app.inject(request);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain('Visible first message');
+    expect(response.body).not.toMatch(/Secret original title|Old interval|hidden-person/);
+    const list = await context.app.inject({ url: '/api/conversations',
+      headers: context.headers('bob') });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.body).toContain('visible-first-message');
+    expect(list.body).not.toMatch(/Secret original title|hidden-person/);
+  } finally {
+    await context.close();
+  }
+}
+
+it('refuses approvals, file commands and live view on an unapplied participant removal',
+  removedParticipantReaders, 120_000);
+
+async function removedParticipantReaders() {
+  const context = await fixture();
+  try {
+    await context.agentSession('agent');
+    await expect(ownConversation(context.nats.store, 'test', 'agent', 'alice', true))
+      .resolves.toBeDefined();
+    await context.append('computer-assistant', 'computer.claimed', {
+      assistantId: 'assistant', computerId: 'desktop', generation: 1, tokenId: 'token:test',
+    }, false);
+    await context.append('computer-assistant', 'computer.ready', {
+      assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
+    }, false);
+    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
+      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
+      granteeKind: 'member', grantedBy: 'alice',
+    });
+    await expect(viewAccess(context.options, 'alice', 'agent')).resolves.toMatchObject({
+      computerId: 'desktop',
+    });
+    await context.append('participation-agent', 'participant.removed', {
+      conversationId: 'agent', participantId: 'alice', removedBy: 'bob',
+    }, false);
+    const approvals = await context.app.inject({ url: '/api/conversations/agent/approvals',
+      headers: context.headers() });
+    expect(approvals.statusCode, approvals.body).toBe(403);
+    await expect(ownConversation(context.nats.store, 'test', 'agent', 'alice', true))
+      .rejects.toThrow('conversation_refused');
+    await expect(viewAccess(context.options, 'alice', 'agent')).rejects.toThrow();
+  } finally {
+    await context.close();
+  }
+}
+
+
+it('keeps reads and access checks bounded with 100,000 messages and a busy conversation',
+  participationVolume, 600_000);
+
+async function participationVolume() {
+  const context = await fixture();
+  let stopped = false;
+  let streaming: Promise<void> | undefined;
+  try {
+    await context.agentSession('volume');
+    const encrypted = context.keys.encrypt('test', 'volume', 'Saved history');
+    for (let offset = 0; offset < 100_000; offset += 500) {
+      const batch = [];
+      for (let index = offset; index < offset + 500; index++) {
+        const data = { conversationId: 'volume', authorId: 'alice', authorKind: 'human',
+          contentType: 'text', ...encrypted };
+        batch.push(envelope('test', 'conversation-volume', 'message.posted', data,
+          `volume-${index}`));
+      }
+      await context.nats.seed(batch);
+    }
+    async function stream() {
+      while (!stopped) {
+        await context.append('conversation-volume', 'agent.turn_started', {
+          conversationId: 'volume', turnId: 'busy-turn', assistantId: 'assistant',
+        }, false);
+        await delay(20);
+      }
+    }
+    streaming = stream();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const started = performance.now();
+      const response = await context.app.inject({
+        url: '/api/conversations/volume/messages', headers: context.headers(),
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain('Hello');
+      expect(performance.now() - started).toBeLessThan(1500);
+    }
+  } finally {
+    stopped = true;
+    await streaming;
     await context.close();
   }
 }
