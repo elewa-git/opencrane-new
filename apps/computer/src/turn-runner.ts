@@ -13,7 +13,7 @@ import { threadLoads, ThreadLoadFailed, type ThreadLoadDriver } from './thread-l
 
 const MAX_PRIVATE_TURNS = 2;
 const PRIVATE_ITEM_TYPES = new Set(['userMessage', 'agentMessage', 'reasoning', 'contextCompaction']);
-type Grant = { token: string; expiresAt: number; context?: unknown };
+type Grant = { token: string; expiresAt: number; model?: string | undefined; context?: unknown };
 export interface PrivateSession {
   rpc(this: void, method: string, params: Record<string, unknown>): Promise<unknown>;
   close(this: void): void;
@@ -74,7 +74,18 @@ function deleteTurn(state: TurnRunnerState, turnId: string) {
   }
 }
 
+function readAcknowledgedGrant(value: Record<string, unknown>,
+  token: string, expiresAt: number): Grant | Error {
+  const model = value['model'];
+  if (model !== undefined && (typeof model !== 'string'
+    || !/^[\w.-]{1,200}$/u.test(model))) {
+    return new Error('Invalid turn model');
+  }
+  return { token, expiresAt, context: value['context'], model };
+}
+
 class TurnRunner {
+  private readonly turnModels = new Map<string, string>();
   private readonly renewals = new Map<string, Promise<void>>();
   private readonly driver: TurnDriver;
   private readonly approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'> | undefined;
@@ -142,6 +153,10 @@ class TurnRunner {
       const grant = await pending;
       if (this.state.running.get(thread) !== turn || this.state.cancelled.has(turn.id)) {
         throw new Error('Turn ended');
+      }
+      const model = grant.model ?? modelForTask(turn.taskKind);
+      if (model !== this.turnModels.get(turn.id)) {
+        throw new Error('Turn model changed');
       }
       await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt);
     } finally { clearTimeout(timer); }
@@ -305,6 +320,7 @@ class TurnRunner {
     if (threadId) this.approvals?.endThread(threadId);
     deleteTurn(this.state, turnId);
     this.state.codexTurns.delete(turnId);
+    this.turnModels.delete(turnId);
     this.state.cancelled.delete(turnId);
     this.state.refusedTools.delete(turnId);
     const session = this.state.sessions.get(turnId);
@@ -389,6 +405,9 @@ class TurnRunner {
 
     const grant = await this.waitForGrant(sequence, previousStart);
     if (!this.isActiveTurn(input.id)) return;
+    // Keep the server's admitted model for every call and renewal in this turn.
+    const model = grant.model ?? modelForTask(input.taskKind);
+    this.turnModels.set(input.id, model);
     await this.driver.grant(threadId, input.conversationId, grant.token, grant.expiresAt);
     if (!this.isActiveTurn(input.id)) return;
     if (this.state.cancelled.has(input.id)) {
@@ -403,7 +422,7 @@ class TurnRunner {
     this.journal.recordExecution(input.id);
     const turnParams = {
       threadId,
-      model: modelForTask(input.taskKind),
+      model,
       input: [{ type: 'text', text: inputText, text_elements: [] }],
     };
     const turnResponse = record(await this.rpcFor(input)('turn/start', turnParams));
@@ -460,7 +479,8 @@ class TurnRunner {
     if (resolve && typeof value?.['token'] === 'string'
       && typeof value['expiresAt'] === 'number' && value['expiresAt'] > Date.now()) {
       this.state.waiting.delete(sequence);
-      resolve({ token: value['token'], expiresAt: value['expiresAt'], context: value['context'] });
+      const grant = readAcknowledgedGrant(value, value['token'], value['expiresAt']);
+      resolve(grant);
     }
   }
 

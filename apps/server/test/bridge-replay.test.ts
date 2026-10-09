@@ -1373,14 +1373,18 @@ async function deliversSavedModelToComputer(mode: 'memory_free' | 'restricted') 
   const grants: string[] = [];
   const privateClosed = Promise.withResolvers<void>();
   function rpc(method: string, params: Record<string, unknown>) {
-    if (method === 'turn/start') requests.push(params);
+    if (method === 'turn/start') {
+      requests.push(params);
+    }
     return Promise.resolve({ thread: { id: 'thread-alice', ephemeral: true, path: null } });
   }
   function credential() {
     return { value: 'computer-pass', expiresAt: Date.now() + 60_000 };
   }
   function grant(_thread: string, _conversation: string, token: string) {
-    if (token) grants.push(token);
+    if (token) {
+      grants.push(token);
+    }
     return Promise.resolve();
   }
   function closePrivate() {
@@ -1413,7 +1417,9 @@ async function deliversSavedModelToComputer(mode: 'memory_free' | 'restricted') 
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
     const address = server.address();
-    if (!address || typeof address === 'string') throw new Error('No computer port');
+    if (!address || typeof address === 'string') {
+      throw new Error('No computer port');
+    }
     const connection = {
       ...fixture.context, bearer: 'computer-pass',
       url: `ws://127.0.0.1:${address.port}/bridge`,

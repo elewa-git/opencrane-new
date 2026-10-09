@@ -11,11 +11,15 @@ function modelFixture(initialModel: unknown) {
   const reports: BridgeReport[] = [];
   let model = initialModel;
   function rpc(method: string, params: Record<string, unknown>) {
-    if (method === 'turn/start') calls.push(params);
+    if (method === 'turn/start') {
+      calls.push(params);
+    }
     return Promise.resolve({ thread: { id: 'thread' }, turn: { id: 'codex-turn' } });
   }
   function grant(_thread: string, _conversation: string, token: string) {
-    if (token) grants.push(token);
+    if (token) {
+      grants.push(token);
+    }
     return Promise.resolve();
   }
   function credential() {
@@ -28,7 +32,9 @@ function modelFixture(initialModel: unknown) {
       const reply = { token: 'fresh', expiresAt: Date.now() + 60_000, model };
       runner.acknowledge(report.sequence, reply);
     }
-    if (report.type === 'agent.turn_started') queueMicrotask(acknowledge);
+    if (report.type === 'agent.turn_started') {
+      queueMicrotask(acknowledge);
+    }
   }
   const driver: TurnDriver = { rpc, grant, credential, journal: `${directory}/reports` };
   const journal = reportJournal(driver);

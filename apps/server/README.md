@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chat rows, closes, joins, facts, models and computers| postgres
-  server -->|sends turns, tools and approvals; receives reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|sends turns, models, tools and approvals; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -53,7 +53,7 @@ flowchart LR
   Keeps checking their access while a live member connection is open.
 - Records changes as events and reads the current state from PostgreSQL.
 - Keep the original provider choice when repeating or closing a recorded turn.
-  Pass its model to the turn-token issuer.
+  Pass its model to the turn-token issuer and the computer that runs the turn.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
   Checks saved participation changes before returning private content.
   Checks closing events even while read tables are catching up. Keeps the last

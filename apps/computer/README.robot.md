@@ -641,3 +641,23 @@ the changelog check PASS.
 The wider regression batch passed 186 tests with one skip. All seven changed test
 files passed again, with 113 tests. The two corrected test assertion files also
 passed a separate 61-test rerun. No full root test suite ran.
+
+## Model choice in start acknowledgements
+
+A start acknowledgement can carry `model`. The runner uses it for Codex
+`turn/start`, after preparing the thread and before granting model access.
+Thread preparation still uses the task table and makes no model call. Memory-free
+and restricted turns use the same acknowledged choice for execution.
+
+When an older server omits `model`, the runner uses the existing task table.
+A supplied value must be a string of 1–200 letters, digits, underscores, dots or
+hyphens. Invalid values fail the turn before granting access or starting execution.
+A renewed pass must name the same model as the running turn. A changed choice,
+including a missing model that would select a different task default, refuses
+renewal before replacing the local grant. Completion removes the retained choice.
+
+`test/turn-model.test.ts` checks invalid values, changed and missing renewal models,
+recovery after refused renewal, and older-server behaviour. The server's
+`test/bridge-replay.test.ts` checks delivery, signed claims and renewal with real
+NATS and sockets, using a recording Codex driver. Image publication, live Codex
+model delivery and a fresh-install chat journey remain NOT RUN.
