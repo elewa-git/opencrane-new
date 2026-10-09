@@ -4,12 +4,12 @@ import { createStore, memberAuthorisation, deleteStoreById } from '@opencrane/au
 import * as authorisation from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import type { AppendCommand } from '@opencrane/event-store';
+import type { AppendCommand, AppendResult } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 import { applyProvider, pgDb, providers, ProjectionRunner,
   rebuildProviderProjection } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { providerDefaultHandler, providerSecretRef } from '@opencrane/models';
+import { providerDefaultHandler, providerHistory, providerSecretRef } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -100,7 +100,11 @@ function request(method: 'GET' | 'POST', providerId: string, payload?: unknown,
   const session = { sub, orgId: 'org-acme', roles: ['owner'], authTime: 1, exp: 2000000000 };
   const headers = { origin: 'https://app.example.test', 'content-type': 'application/json',
     cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  const options = { method, url: `/api/org/providers/${providerId}/${suffix}`, headers,
+  let url = `/api/org/providers/${providerId}/${suffix}`;
+  if (suffix === 'configuration') {
+    url = '/api/org/providers';
+  }
+  const options = { method, url, headers,
     ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }) };
   return app.inject(options);
 }
@@ -173,6 +177,71 @@ async function changedRetries() {
 }
 it('returns the saved event for concurrent identical retries behind an append barrier', identicalRetries);
 it('refuses changed dependants using the same command id behind an append barrier', changedRetries);
+async function mixedOperations(configurationFirst: boolean) {
+  await connection('primary');
+  const bindingCommand = await input();
+  const configurationCommand = { action: 'models', providerId: 'primary',
+    commandId: bindingCommand.commandId, expectedRevision: 3, models: ['gpt-6-luna'] };
+  const appendOriginal = nats.store.append.bind(nats.store);
+  const bothReady = Promise.withResolvers<void>();
+  const firstSaved = Promise.withResolvers<void>();
+  let arrivals = 0;
+  async function saveInOrder(command: AppendCommand) {
+    arrivals++;
+    if (arrivals === 2) {
+      bothReady.resolve();
+    }
+    await bothReady.promise;
+    const isConfiguration = command.event.type === 'provider.models_selected';
+    if (isConfiguration !== configurationFirst) {
+      await firstSaved.promise;
+      return appendOriginal(command);
+    }
+    const result = await appendOriginal(command);
+    firstSaved.resolve();
+    return result;
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(saveInOrder);
+  const pending = [request('POST', 'primary', bindingCommand),
+    request('POST', 'primary', configurationCommand, 'owner', 'configuration')];
+  const responses = await Promise.all(pending);
+  spy.mockRestore();
+  const expectedStatuses = configurationFirst ? [409, 200] : [200, 409];
+  expect(arrivals).toBe(2);
+  expect(responses[0]!.statusCode).toBe(expectedStatuses[0]);
+  expect(responses[1]!.statusCode).toBe(expectedStatuses[1]);
+  const current = await providerHistory(nats.store, 'acme', 'primary');
+  function matchesCommand(row: (typeof current.rows)[number]) {
+    return row.event.commandId === bindingCommand.commandId;
+  }
+  const saved = current.rows.filter(matchesCommand);
+  expect(saved).toHaveLength(1);
+  const row = saved[0]!;
+  const receipt = { changeId: row.event.id, sequence: row.sequence,
+    operation: row.event.type };
+  const successfulResponse = configurationFirst ? responses[1]! : responses[0]!;
+  expect(successfulResponse.json()).toMatchObject(receipt);
+  const suffix = `changes/${bindingCommand.commandId}`;
+  const status = await request('GET', 'primary', undefined, 'owner', suffix);
+  expect(status.statusCode).toBe(200);
+  expect(status.json()).toMatchObject(receipt);
+  if (configurationFirst) {
+    expect(current.state).toMatchObject({ revision: 4, enabledModels: ['gpt-6-luna'] });
+    expect(await storedBindings('primary')).toHaveLength(0);
+  } else {
+    expect(current.state).toMatchObject({ revision: 3, enabledModels: ['gpt-6.1-sol'] });
+    expect(await storedBindings('primary')).toHaveLength(1);
+  }
+  expect((await request('POST', 'primary', bindingCommand)).statusCode)
+    .toBe(expectedStatuses[0]);
+  expect((await request('POST', 'primary', configurationCommand, 'owner', 'configuration'))
+    .statusCode).toBe(expectedStatuses[1]);
+  expect(await nats.store.head('provider-primary')).toBe(row.sequence);
+}
+it.each([false, true])('recovers the real saved operation when configuration saves first: %s',
+  mixedOperations);
+
 async function actorReuse() {
   await connection('primary');
   const command = await input();
@@ -325,9 +394,12 @@ async function wrongPauseProvider() {
 }
 it('refuses a pause naming a different provider even with both revisions correct', wrongPauseProvider);
 
-async function finalAuthority(expired: boolean) {
+async function finalAuthority(expired: boolean, retry = false) {
   await connection('primary');
   const command = await input();
+  if (retry) {
+    expect((await request('POST', 'primary', command)).statusCode).toBe(200);
+  }
   const appendSpy = vi.spyOn(nats.store, 'append');
   const clock = vi.spyOn(performance, 'now');
   clock.mockReturnValue(100);
@@ -349,9 +421,12 @@ async function finalAuthority(expired: boolean) {
   const authoritySpy = vi.spyOn(authorisation, 'memberAuthorisation');
   authoritySpy.mockImplementation(interruptAfterManage);
   expect((await request('POST', 'primary', command)).statusCode).toBe(503);
-  expect(await storedBindings('primary')).toHaveLength(0);
-  if (expired) {
-    expect(appendSpy).not.toHaveBeenCalled();
+  expect(await storedBindings('primary')).toHaveLength(retry ? 1 : 0);
+  if (expired || retry) {
+    function bindingAppend(call: [AppendCommand]) {
+      return call[0].event.type === 'provider.model_binding_set';
+    }
+    expect(appendSpy.mock.calls.filter(bindingAppend)).toHaveLength(0);
   }
 }
 async function finalExpiry() {
@@ -362,6 +437,75 @@ async function finalRevocation() {
 }
 it('rechecks authority expiry after provider permission and before append', finalExpiry);
 it('rechecks authority after revocation following provider permission', finalRevocation);
+async function retryAuthority(expired: boolean) {
+  await finalAuthority(expired, true);
+}
+it.each([false, true])('rechecks authority on an identical retry when expired: %s', retryAuthority);
+
+async function failedAppend(status: 'unavailable' | 'rejected') {
+  await connection('primary');
+  const command = await input();
+  const before = await nats.store.head();
+  const result: AppendResult = status === 'unavailable'
+    ? { status: 'unavailable', cause: new Error('Test append unavailable') }
+    : { status: 'rejected', reason: 'invalid_event' };
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockResolvedValue(result);
+  expect((await request('POST', 'primary', command)).statusCode).toBe(503);
+  expect(await nats.store.head()).toBe(before);
+  expect(await storedBindings('primary')).toHaveLength(0);
+}
+it.each(['unavailable', 'rejected'] as const)('refuses a binding append that is %s', failedAppend);
+
+type SavedFault = 'missing' | 'silo' | 'subject' | 'command id' |
+  'principal kind' | 'principal id' | 'event type';
+function changeSavedEnvelope(record: EventEnvelope, fault: SavedFault): EventEnvelope {
+  switch (fault) {
+    case 'silo':
+      return { ...record, silo: 'foreign' };
+    case 'subject':
+      return { ...record, subject: 'provider-foreign' };
+    case 'command id':
+      return { ...record, commandId: 'foreign' };
+    case 'principal kind':
+      return { ...record, principal: { kind: 'computer', id: 'owner' } };
+    case 'principal id':
+      return { ...record, principal: { kind: 'human', id: 'admin' } };
+    case 'event type':
+      return { ...record, type: 'provider.models_selected' };
+    case 'missing':
+      return record;
+  }
+}
+async function savedEnvelope(fault: SavedFault) {
+  await connection('primary');
+  const command = await input();
+  const readOriginal = nats.store.readStream.bind(nats.store);
+  async function* incorrectSavedEvent(subject: string, from?: number, deadline?: number) {
+    for await (const row of readOriginal(subject, from, deadline)) {
+      if (subject === 'provider-primary' && from === row.sequence &&
+        row.event.type === 'provider.model_binding_set') {
+        if (fault !== 'missing') {
+          const changed = { ...row, event: changeSavedEnvelope(row.event, fault) };
+          yield changed;
+        }
+        return;
+      }
+      yield row;
+    }
+  }
+  const spy = vi.spyOn(nats.store, 'readStream');
+  spy.mockImplementation(incorrectSavedEvent);
+  const response = await request('POST', 'primary', command);
+  expect(response.statusCode).toBe(fault === 'missing' ? 503 : 409);
+  spy.mockRestore();
+  expect(await storedBindings('primary')).toHaveLength(1);
+  const status = await request('GET', 'primary', undefined, 'owner', `changes/${command.commandId}`);
+  expect(status.statusCode).toBe(200);
+}
+it.each(['missing', 'silo', 'subject', 'command id', 'principal kind', 'principal id',
+  'event type'] as const)('refuses a binding receipt with an incorrect saved %s', savedEnvelope);
+
 async function historyOrder() {
   await connection('primary');
   const command = await input();
