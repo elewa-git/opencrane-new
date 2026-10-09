@@ -39,7 +39,8 @@ export async function chatFixture(page, scenario = 'live') {
     failed.time = '2026-10-02T10:03:00Z';
   } else if (!['draft', 'empty-selected', 'attach', 'no-agent', 'queued', 'private-team-draft'].includes(scenario)) {
     const humanText = messageTextForScenario(scenario);
-    const human = add('message.posted', { text: humanText, authorId: 'me' });
+    const human = add('message.posted', { text: humanText,
+      authorId: scenario === 'approval-context' ? 'another-member' : 'me' });
     add('agent.turn_started', { turnId: human.id });
     if (scenario === 'stop-not-confirmed') {
       add('agent.message_delta', { turnId: human.id, messageId: 'reply', text: 'Still working.' });
@@ -100,7 +101,13 @@ export async function chatFixture(page, scenario = 'live') {
     if (url.pathname.endsWith('/approvals')) return fulfil({ cards: [], csrf: 'fixture' });
     if (url.pathname === '/api/chat' && offline && scenario === 'rail-offline') return route.abort('connectionfailed');
     if (url.pathname === '/api/chat' && scenario === 'rail-loading') return;
-    if (url.pathname === '/api/chat') return fulfil({ memberId: 'me', displayName: 'Taylor Reed', assistantId: scenario === 'no-agent' ? null : 'assistant', memoryAdmission: { state: 'disabled', failing: ['The private memory checks have not all passed.'] } });
+    if (url.pathname === '/api/chat') return fulfil({
+      memberId: scenario === 'approval-context' ? 'another-member' : 'me',
+      displayName: 'Taylor Reed',
+      assistantId: scenario === 'no-agent' ? null : 'assistant',
+      memoryAdmission: { state: 'disabled',
+        failing: ['The private memory checks have not all passed.'] },
+    });
     if (url.pathname.endsWith('/messages') && scenario.startsWith('read-')) {
       const status = Number(scenario.slice('read-'.length));
       return route.fulfill({ status, contentType: 'application/json', body: '{}' });
@@ -160,6 +167,7 @@ export async function chatFixture(page, scenario = 'live') {
     add,
     closeSocket,
     conflictNextStop: () => { stopConflict = true; },
+    memberId: scenario === 'approval-context' ? 'another-member' : 'me',
     online: () => { offline = false; },
     rows: () => rows,
   };
@@ -194,7 +202,6 @@ function addApprovalContextRows(addRow, turnId) {
     text: 'Draft order SO-1042 has 12 cartons of printer paper. The current note is empty. '
       + 'Changing it needs your approval.',
   });
-  addRow('agent.turn_completed', { turnId });
 }
 
 function fixtureComputerState(scenario) {

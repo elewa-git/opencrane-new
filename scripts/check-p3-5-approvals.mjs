@@ -122,10 +122,13 @@ async function checkFocusedOutline(locator) {
   assert.deepEqual(await locator.evaluate(outline), ['2px', 'rgb(10, 132, 151)', '2px']);
 }
 
-function checkApprovalFixture(card, rows) {
-  const requesterMessage = rows.find(row => row.type === 'message.posted'
-    && row.data.authorId === card.requesterId);
+function checkApprovalFixture(card, rows, memberId) {
+  const requesterMessage = rows.find(row => row.type === 'message.posted');
   assert(requesterMessage, 'Approval requester wrote the message bound to this conversation');
+  assert.equal(card.requesterId, requesterMessage.data.authorId,
+    'Approval requester matches the message author');
+  assert.equal(card.requesterId, memberId,
+    'Approval requester matches the conversation reader');
   const turnStart = rows.find(row => row.type === 'agent.turn_started'
     && row.data.turnId === requesterMessage.id);
   assert(turnStart, 'Approval request belongs to a started turn');
@@ -142,7 +145,7 @@ async function captureScene(browser, scene, width, motion) {
   let cards = [approvalCard(0)];
   let scenario = 'tools';
   if (scene === 'approval-waiting') {
-    cards = [approvalCard(0, 'requested', false, 'another-member')];
+    cards = [approvalCard(0, 'requested', true, 'another-member')];
   }
   if (scene === 'tool-activity-running') scenario = 'governed-tool-running';
   if (scene === 'tool-activity-completed') scenario = 'governed-tool-completed';
@@ -165,7 +168,9 @@ async function captureScene(browser, scene, width, motion) {
   if (scene === 'approval-waiting') scenario = 'approval-context';
   const { page, chat } = await openPage(browser, width, motion, scenario, cards, postResponseForScene(scene));
   try {
-    if (scene === 'approval-waiting') checkApprovalFixture(cards[0], chat.rows());
+    if (scene === 'approval-waiting') {
+      checkApprovalFixture(cards[0], chat.rows(), chat.memberId);
+    }
     if (scene === 'approval-requested') {
       const approval = page.getByRole('region', { name: 'Approval needed' });
       await approval.waitFor();
@@ -175,12 +180,11 @@ async function captureScene(browser, scene, width, motion) {
     } else if (scene === 'approval-waiting') {
       const card = page.getByRole('region', { name: 'Approval needed' });
       await card.waitFor();
-      assert(await card.getByText('Only the requester can decide.').isVisible());
       assert(await card.locator('.approval-ledger').isVisible());
       assert(await card.getByText('Changes the draft note immediately; does not confirm the order.')
         .isVisible());
-      assert.equal(await card.getByRole('button', { name: /^Approve:/ }).count(), 0);
-      assert.equal(await card.getByRole('button', { name: /^Deny:/ }).count(), 0);
+      assert.equal(await card.getByRole('button', { name: /^Approve:/ }).count(), 1);
+      assert.equal(await card.getByRole('button', { name: /^Deny:/ }).count(), 1);
       if (width < 700) await checkPhoneTargets(page, scene);
       await page.evaluate(scrollPageToTop);
       await capture(page, scene, width, motion);
