@@ -801,3 +801,49 @@ receipt as unavailable. This check also applies to verification records.
 The binding guard tests cover both save orders with an append barrier, status
 recovery, retry access expiry and revocation, failed appends and individual saved
 event identity checks.
+
+## Memory recall capabilities (P4-12 PR 3a)
+
+Only `/mcp/memory/server` receives signed `x-memory-context` after ext_authz checks
+live turns, requester/assistant `memory_read` and `mcp_server` grants, and Allow recall policy.
+Claims bind silo, requester, assistant, computer/generation, conversation, turn, thread,
+operation, person scope, private content class, call/decision ids, body digest and event position.
+The server verifies ES256, issuer, audience, expiry within two seconds and body/thread binding,
+then rechecks live rights and policy. Only an explicitly recorded `restricted` turn is allowed.
+Legacy starts without a mode, `memory_free` starts and shared-only contexts are refused.
+Both `memory_read` and `mcp_server` need current recorded `grant.given` events for
+the requester as `member` and the assistant as `assistant`, as well as OpenFGA permission.
+A revocation without a kind removes both matching identity kinds. Leftover OpenFGA
+permissions and grants for another identity kind cannot replace these recorded grants.
+
+### Review correction evidence
+
+The regression tests were committed in `692b5c0e` before the fix in `4cadf010`.
+The real-service run returned HTTP 200 for both an absent recorded memory grant
+and a legacy mode-less turn, where HTTP 403 was required. Both now refuse before
+any fact query. The successful fixture records `restricted` explicitly.
+
+`test/memory-context.test.ts` checks a well-formed wrong-key signature, issuer,
+audience, algorithm, required and bounded claims, lifetimes, independent request
+bindings, strict recall arguments and request limits. `apps/server/test/memory-mcp.test.ts`
+checks backend identities and starts, current permissions and revocations, missing
+keys, concurrent access and activity changes, the original deadline, the complete
+thread proxy → real gateway → backend call and model header removal.
+
+The global `contextPosition` is recorded in the signed context. It is not a
+content-context generation or a set of per-grant positions. Current recorded
+access is checked again at both admission points. Network isolation of the backend
+and fresh-install journeys remain NOT RUN. A matching signed context can be used
+directly at the backend while it is still valid. This does not establish complete
+section-3 qualification of the memory specification.
+
+Final checks use `nice -n 10`. The targeted tests run twice with
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`:
+
+```sh
+npx vitest run apps/server/test/memory-mcp.test.ts libs/models/test/memory-context.test.ts apps/server/test/memory.test.ts apps/server/test/turn-tools.test.ts libs/auth/test/tokens.test.ts --maxWorkers=1
+npx vitest run libs/models/test/codex-mcp.test.ts -t 'forwards captured Codex bytes' --maxWorkers=1
+```
+
+These runs cover 157 tests and one selected external MCP test per run. The full
+root test suite and live fresh-install qualification are not part of this correction.

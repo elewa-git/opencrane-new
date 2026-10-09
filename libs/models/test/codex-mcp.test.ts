@@ -89,7 +89,8 @@ async function forwardsCapturedCall() {
   const setup = await fixture();
   try {
     const capturedHeaders = await prepareCapturedCall(setup);
-    const headers = { ...capturedHeaders, 'mcp-tool-name': 'read' };
+    const headers = { ...capturedHeaders, 'mcp-tool-name': 'read',
+      'x-memory-context': 'caller-context-must-not-leave' };
     const request = { method: 'POST', headers, body: JSON.stringify(capture.body) };
     const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
       request);
@@ -97,7 +98,8 @@ async function forwardsCapturedCall() {
     expect(setup.upstreamBody()).toBe(request.body);
     expect(setup.providerHeaders()).toContain('mcp-name');
     expect(setup.providerRequests()[0]?.mcpName).toBe('write');
-    for (const privateHeader of ['authorization', 'x-turn-token', 'session-id', 'mcp-tool-name']) {
+    for (const privateHeader of ['authorization', 'x-turn-token', 'session-id', 'mcp-tool-name',
+      'x-memory-context']) {
       expect(setup.providerHeaders()).not.toContain(privateHeader);
     }
     expect(setup.received()).toBe(1);

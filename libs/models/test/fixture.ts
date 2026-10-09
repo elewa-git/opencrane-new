@@ -62,7 +62,10 @@ export async function waitForModelGrants(auth: ReturnType<typeof memberAuthorisa
     auth.use('person', memberId, 'model', model.id), auth.use('assistant', assistantId, 'model', model.id),
   ]))).every(result => result.allowed));
 }
-export async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel = 'gpt-6-luna', team = false, grants: 'manual' | 'reactions' | 'legacy' = 'manual', teamPayer: string | null = 'sales') {
+export async function fixture(daily = 2000, monthly = 20000, real = false,
+  allowedModel = 'gpt-6-luna', team = false,
+  grants: 'manual' | 'reactions' | 'legacy' = 'manual', teamPayer: string | null = 'sales',
+  executionMode?: 'restricted' | 'memory_free') {
   const directory = await mkdtemp(`${tmpdir()}/oc-models-`);
   const dbs = await databases(), nats = await natsFixture();
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });
@@ -91,7 +94,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
     ...(team ? { payingGroupId: 'sales' } : {}) });
   await append('conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', assistantId: 'assistant', turnId: 'turn' });
-  await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', payingGroupId: team ? 'sales' : 'personal-default' });
+  await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', payingGroupId: team ? 'sales' : 'personal-default',
+    ...(executionMode === undefined ? {} : { executionMode }) });
   const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...await exportJWK(publicKey), kid: 'lifecycle' };
   const issuer = 'https://lifecycle.test/';
@@ -118,7 +122,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   let clock = Date.now();
   const actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly, 'personal-default');
   const keys = conversationKeys(`${directory}/keys`); keys.provision('test', 'conversation');
-  const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer }, binding, 0, keys);
+  const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens }, binding, 0, keys);
   let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
   const admitted: string[] = [], observations: Promise<void>[] = [];
   let upstreamBody = '';
@@ -202,7 +206,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   };
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
+  return { tokens, keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,

@@ -104,6 +104,8 @@ const app = buildServer(authConfig, {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
     ...(chat ? { chat } : {}),
+    ...(budget ? { identity: { jwks: budget.tokens.jwks,
+      issuer: process.env['TOKEN_ISSUER']! } } : {}),
   } } : {}),
   ...(realtime && events && modelDb ? { ownership: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,

@@ -46,6 +46,12 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
   const segment = z.string().regex(/^[\w-]{1,200}$/u);
   segment.parse(route.serverId); segment.parse(route.connectionId);
   const path = `/mcp/${route.serverId}/${route.connectionId}`;
+  const responseHeaders = ['x-request-id'];
+  const upstreamHeaders = [...MCP_UPSTREAM_HEADERS];
+  if (path === '/mcp/memory/server') {
+    responseHeaders.push('x-memory-context');
+    upstreamHeaders.push('"x-memory-context":request.headers["x-memory-context"]');
+  }
   return { name: `mcp-${route.serverId}-${route.connectionId}`, gateways: 'default', matches: [{ path: { exact: path }, method: 'POST' }],
     policies: {
       jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
@@ -61,9 +67,9 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
               'default(request.headers.join()["x-opencrane-tool-mode"], "")',
             'x-opencrane-approval-id':
               'default(request.headers.join()["x-opencrane-approval-id"], "")' },
-          includeResponseHeaders: ['x-request-id'] } },
+          includeResponseHeaders: responseHeaders } },
         failureMode: { denyWithStatus: 503 } },
-      transformations: { request: { replace: `{${MCP_UPSTREAM_HEADERS.join(', ')}}` } },
+      transformations: { request: { replace: `{${upstreamHeaders.join(', ')}}` } },
     }, backends: [{ host: route.upstream, policies: {
       // Strip this only from tool replies. An authorisation refusal never reaches the backend.
       responseHeaderModifier: { remove: ['x-opencrane-decision'] },

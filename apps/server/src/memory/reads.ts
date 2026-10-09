@@ -108,7 +108,8 @@ function currentProjection() {
 }
 
 export async function listFacts(options: MemoryOptions, requester: string, scope: Scope,
-  query: z.infer<typeof readInput>, secret: string) {
+  query: z.infer<typeof readInput>, secret: string,
+  bounds: Pick<typeof limits, 'pageFacts' | 'pageBytes'> = limits) {
   const terms = searchTerms(query.q);
   const state = await memorySnapshot(options, scope);
   const identity = [options.silo, requester, scope.scopeId, query.q.normalize('NFC'),
@@ -131,7 +132,7 @@ export async function listFacts(options: MemoryOptions, requester: string, scope
     const fact = publicFact(raw);
     const single = { scopeId: scope.scopeId, facts: [fact], returnedCount: 1,
       nextCursor: pageCursor(secret, binding, offset + 1, asOf) };
-    if (Buffer.byteLength(JSON.stringify(single)) > limits.pageBytes) {
+    if (Buffer.byteLength(JSON.stringify(single)) > bounds.pageBytes) {
       return { memoryId: fact.memoryId, revision: fact.revision, reason: 'page_limit' };
     }
     return fact;
@@ -146,9 +147,9 @@ export async function listFacts(options: MemoryOptions, requester: string, scope
     return expiry.getTime() > asOf.getTime();
   }
   const current = result.rows.filter(unexpired);
-  const window = current.slice(offset, offset + limits.pageFacts + 1);
+  const window = current.slice(offset, offset + bounds.pageFacts + 1);
   const facts = window.map(pageFact);
-  const page = facts.slice(0, limits.pageFacts);
+  const page = facts.slice(0, bounds.pageFacts);
   while (true) {
     let nextCursor: string | null = null;
     if (page.length < facts.length) {
@@ -156,7 +157,7 @@ export async function listFacts(options: MemoryOptions, requester: string, scope
     }
     const response = { scopeId: scope.scopeId, facts: page,
       returnedCount: page.length, nextCursor };
-    if (Buffer.byteLength(JSON.stringify(response)) <= limits.pageBytes) {
+    if (Buffer.byteLength(JSON.stringify(response)) <= bounds.pageBytes) {
       return response;
     }
     if (page.length === 0) {
