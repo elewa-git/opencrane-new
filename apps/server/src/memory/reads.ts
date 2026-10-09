@@ -182,9 +182,25 @@ export async function detailFact(options: MemoryOptions, requester: string, scop
     WHERE silo=$1 AND scope_id=$2 AND ${currentProjection()} AND memory_id=$5`, values);
   await requireSameProjection(options, state);
   const row = result.rows[0];
-  if (!row) throw new MemoryRefused();
-  const fact = publicFact(row);
-  if (fact.expiresAt !== null && Date.parse(fact.expiresAt) <= Date.now()) throw new MemoryRefused();
+  if (!row) {
+    throw new MemoryRefused();
+  }
+  const saved = factSchema.parse(row);
+  if (saved.expires_at !== null && Date.parse(saved.expires_at) <= Date.now()) {
+    throw new MemoryRefused();
+  }
+  const unavailableStatuses = ['destroyed', 'unavailable', 'quarantined'];
+  if (unavailableStatuses.includes(saved.content_status)) {
+    // Treat the read table's unavailable value as a deleted key, not a service outage.
+    let reason = 'destroyed';
+    if (saved.content_status === 'quarantined') {
+      reason = 'quarantined';
+    }
+    // Return an unavailable result so callers do not keep retrying a service failure.
+    return { status: 'unavailable' as const, scopeId: scope.scopeId,
+      memoryId: saved.memory_id, revision: saved.revision, reason };
+  }
+  const fact = publicFact(saved);
   const sources = await sourceStatuses(options, requester, row['sources']);
   const response = { scopeId: scope.scopeId, fact, sources };
   if (Buffer.byteLength(JSON.stringify(response)) > limits.pageBytes) {

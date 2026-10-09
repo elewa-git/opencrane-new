@@ -36,10 +36,20 @@ The [worker instructions](../ops/README.robot.md#run-the-live-memory-worker) cov
 Set `PG_TEST_URL` to a PostgreSQL service that permits disposable databases.
 `GET /api/memory/:scopeId/facts/:memoryId` returns one authorised, unexpired fact
 and separately checked source statuses within 16 KiB. Unknown, foreign and forbidden
-fact ids use the same 404. Source checks use existing conversation permissions;
-a denied source never returns its reference or preview. No source preview is stored
-or returned. Source outages mark that source unavailable without hiding a readable fact.
-Source checks need the server's existing chat settings and conversation key directory.
+fact ids use the same 404. Expired facts also return 404. Destroyed and quarantined facts
+return HTTP 200 with `{status: "unavailable", scopeId, memoryId, revision, reason}`.
+The reason is `destroyed` or `quarantined`; this result contains no fact text or sources.
+Projection lag or a changed generation still returns 503.
+
+Source checks use existing conversation permissions before looking up content. An indexed
+lookup finds one message id after the conversation worker has caught up, then confirms one
+event at that position in NATS. No source check replays a whole conversation.
+A denied or missing source returns only `{status: "refused"}`. A service failure returns
+only `{status: "unavailable"}` while the readable fact remains available. Neither result
+contains a reference or preview. Member statements return the neutral label "a member's
+statement", without memberId or commandId, including after the author has left.
+Source checks need the server's existing chat settings and conversation read table.
+No source preview is stored or returned.
 Oversized authorised detail returns 503. Command status and storage are in the companion draft. The fresh empty runner and HTTP read test passes with real services.
 Full fresh-install memory journeys and native turns remain NOT RUN.
 

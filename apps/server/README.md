@@ -15,7 +15,7 @@ flowchart LR
   server -->|records changes, model grants, chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, chat rows, memory detail, model access and computer state| postgres
+  server -->|reads members, chat rows, facts and source messages, model access and computer state| postgres
   server -->|sends turns, tool lists and approval outcomes; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -29,6 +29,8 @@ flowchart LR
 - Checks permissions before returning private information or changing data.
 - Lists and searches a person's own memory and permitted group or assistant notes.
   Returns fact detail and checks each source separately, hiding denied references.
+  Checks chat access before looking up one source message. Describes a member statement
+  without naming its author. Reports destroyed or quarantined facts without text.
   These reads need the memory worker and its existing private key directory.
   It returns current facts only after the read table has caught up with their events.
 - Accepts bound invitations after a recent sign-in with a verified email, while

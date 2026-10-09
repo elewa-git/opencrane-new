@@ -9,7 +9,9 @@ Authorisation and reactions belong elsewhere; replay never sends mail,
 changes OpenFGA or performs other external effects.
 
 The conversation table has an index on `silo` and event `type`. The server uses
-it to read created and closed chats in one query when it polls for work.
+it to read created and closed chats in one query when it polls for work. Two partial
+indexes support source-message lookups by message id within one silo and conversation.
+Callers check chat permission first and confirm the matched position in the event log.
 
 The public entrypoint is `src/index.ts`:
 
