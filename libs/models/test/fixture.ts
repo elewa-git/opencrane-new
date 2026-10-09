@@ -118,7 +118,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   let clock = Date.now();
   const actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly, 'personal-default');
   const keys = conversationKeys(`${directory}/keys`); keys.provision('test', 'conversation');
-  const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer }, binding, 0, keys);
+  const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens }, binding, 0, keys);
   let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
   const admitted: string[] = [], observations: Promise<void>[] = [];
   let upstreamBody = '';
@@ -202,7 +202,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   };
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
+  return { tokens, keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
