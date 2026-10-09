@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, chat rows, model access and computer state| postgres
-  server -->|sends turns and Allow tool lists; receives reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|sends turns, tool lists and approval outcomes; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -41,6 +41,10 @@ flowchart LR
 - Starts personal turns using the latest default paying group. It keeps a small
   summary and reads only new spending events after the first use.
 - Records tool starts and finishes as events and returns them in the conversation feed.
+- Tells a computer whether it supports approval messages and when a waiting
+  approval has been decided or ended. A changed tool policy also ends a waiting approval.
+  Reads each approval separately, so a slow read leaves other chats free to continue.
+  Spaces out failed reads and tells the computer when it cannot accept another wait.
 - Records streamed replies using a chat summary. After its first use, it reads only
   new events and checks one saved event. It handles repeats without saving them again.
 - Starts, closes and replays turns using the shared computer summary. It reads new

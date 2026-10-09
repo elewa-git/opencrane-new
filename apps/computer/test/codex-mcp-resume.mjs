@@ -21,6 +21,7 @@ let activeClient;
 let modelHoldStarted;
 let nextRpc = 0;
 const wireMode = process.argv.includes('--wire');
+const longHoldMode = process.argv.includes('--approval-hold');
 let runtimeProxy;
 let productionConfig;
 let productionThreadLoads;
@@ -69,6 +70,16 @@ async function handleMcp(request, response) {
     return;
   }
   if (body.method === 'tools/call') {
+    if (longHoldMode && body.params._meta.callId === 'call_A') {
+      const beganAt = Date.now();
+      function disconnected() {
+        capture.holdClosedBeforeReply = !response.writableEnded;
+      }
+      response.once('close', disconnected);
+      await pause(960_000);
+      capture.holdMs = Date.now() - beganAt;
+      assert.equal(response.destroyed, false, 'Codex closed the held request early');
+    }
     const result = { content: [{ type: 'text', text: 'Local tool finished.' }] };
     reply(response, body.id, result);
     return;
@@ -509,10 +520,12 @@ function gatewayRequest(incoming, response) {
   else void handleModel(incoming, response);
 }
 const mcp = createServer(acceptWireRequest);
+mcp.requestTimeout = 17 * 60_000;
 const model = createServer(gatewayRequest);
-const deadline = setTimeout(expireProbe, 110000);
+const probeLimitMs = longHoldMode ? 1_100_000 : 110_000;
+const deadline = setTimeout(expireProbe, probeLimitMs);
 function expireProbe() {
-  console.error('Reload probe exceeded 110 seconds');
+  console.error(`Probe exceeded ${probeLimitMs} milliseconds`);
   process.exit(2);
 }
 

@@ -19,6 +19,7 @@ import { turnCommand, TurnAdmissionRejected } from './turns.ts';
 import { privateContext } from './private-context.ts';
 import { chatHistory } from './commands.ts';
 import { recordReport, reportPosition, ReportRejected } from './reports.ts';
+import { bridgeApprovals } from './bridge-approvals.ts';
 import type { ChatOptions } from './routes.ts';
 
 type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
@@ -143,7 +144,8 @@ async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: W
 }
 
 function reportReceiver(options: BridgeOptions, input: BridgeInput,
-  tokens: Tokens | undefined, socket: WebSocket, refuse: (reason: string) => void) {
+  tokens: Tokens | undefined, socket: WebSocket, refuse: (reason: string) => void,
+  approvals: ReturnType<typeof bridgeApprovals>) {
   function reportFailure(error: unknown) {
     if (error instanceof ReportRejected) {
       refuse(error.message);
@@ -160,6 +162,7 @@ function reportReceiver(options: BridgeOptions, input: BridgeInput,
       const bytes = messageBytes(raw);
       const value: unknown = JSON.parse(bytes.toString());
       if (receiptData.safeParse(value).success) return;
+      if (approvals.receive(value)) return;
       const report = reportDetails.parse(value);
       const queue = queues.get(report.conversationId) ??
         { pending: Promise.resolve(), count: 0, bytes: 0 };
@@ -214,10 +217,12 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     rejection = reason;
     socket.close(1008, reason);
   }
-  const reports = reportReceiver(options, input, tokens, socket, refuse);
+  const approvals = bridgeApprovals(options.store, options.silo, input.assistantId, socket);
+  const reports = reportReceiver(options, input, tokens, socket, refuse, approvals);
   socket.on('message', reports.receiveReport);
   const position = await reportPosition(options.store, options.silo, input.computerId);
-  socket.send(JSON.stringify({ type: 'resume', since: position }));
+  const resume = { type: 'resume', since: position, approvalWaiting: true };
+  socket.send(JSON.stringify(resume));
   const delivered = new Set<string>();
   let transfers = Promise.resolve();
   function deliver(file: Upload, bytes: Buffer) {
@@ -230,10 +235,15 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   }
   // Remember delivery only for this socket; reconnecting must send pending turns again.
   const sentTurns = new Map<string, TurnDelivery>();
+  async function settled() {
+    const reportsDone = reports.settled();
+    await approvals.settled();
+    return reportsDone;
+  }
   return {
-    socket, deliver, delivered, sentTurns,
+    socket, deliver, delivered, sentTurns, approvals,
     get rejection() { return rejection; },
-    settled: reports.settled,
+    settled,
   };
 }
 
@@ -298,6 +308,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     while (!signal.aborted) {
       try {
         const head = await options.store.head();
+        for (const link of links.values()) link.approvals.poll(head);
         if (head === previousHead && !pending) {
           await delay(250, undefined, { signal });
           continue;

@@ -96,6 +96,8 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
       outgoing.end(raw);
     })().catch(() => { if (!res.headersSent) res.writeHead(400); res.end(); });
   });
+  // Allow a tool request to wait for a decision and still return its result.
+  server.requestTimeout = 17 * 60_000;
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject); server.listen(options.port, '127.0.0.1', resolve);
   });

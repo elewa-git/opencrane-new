@@ -76,7 +76,8 @@ it.each([true, false])('acknowledges completed-start duplicates and keeps other 
     if (closed) await turnCommand(fixture.store, fixture.context, { ...completed, status: 'completed' });
     link = await fixture.connect();
     await until(() => fixture.messages.length > 0, 1000);
-    expect(fixture.messages).toEqual([{ type: 'resume', since: 0 }]);
+    const expectedResume = { type: 'resume', since: 0, approvalWaiting: true };
+    expect(fixture.messages).toEqual([expectedResume]);
     for (const report of [alice, start, completed]) link.peer.send(JSON.stringify(report));
     await until(() => fixture.messages.length === 4 || link?.socket.readyState === 3, 2000);
     expect(link.socket.readyState).toBe(link.socket.OPEN);
@@ -1082,3 +1083,202 @@ async function stopsAndReconnectsAcceptedTurn() {
 
 it('leaves an accepted turn unread, still sends Stop, and resends after reconnecting',
   stopsAndReconnectsAcceptedTurn);
+
+async function approvalWatcherFixture() {
+  const fixture = await replayFixture();
+  const dbs = await databases();
+  const stop = new AbortController();
+  const tokens = await bridgeTokens(fixture);
+  const db = pgDb(dbs.queue);
+  const logger = createLogger('bridge-approvals');
+  const runner = new ProjectionRunner(db, fixture.store, logger);
+  const sockets = new Map<string, import('ws').WebSocket>();
+  const frames = new Map<string, unknown[]>();
+  function captureComputer(socket: import('ws').WebSocket,
+    request: import('node:http').IncomingMessage) {
+    const computerId = request.url?.includes('other-computer:8081') ? 'other-computer' : 'computer';
+    sockets.set(computerId, socket);
+    const received: unknown[] = [];
+    frames.set(computerId, received);
+    function captureFrame(raw: unknown) {
+      if (!Buffer.isBuffer(raw)) throw new Error('Expected a bridge frame');
+      const value: unknown = JSON.parse(raw.toString());
+      received.push(value);
+    }
+    socket.on('message', captureFrame);
+  }
+  fixture.wss.on('connection', captureComputer);
+  async function append(subject: string, type: string, data: unknown) {
+    const event = envelope('test', subject, type, data);
+    const expectedSequence = await fixture.store.head(subject);
+    const command = { event, expectedSequence };
+    const result = await fixture.store.append(command);
+    expect(result.status).toBe('appended');
+  }
+  for (const [assistantId, computerId] of [
+    ['assistant', 'computer'], ['other-assistant', 'other-computer'],
+  ] as const) {
+    if (assistantId === 'other-assistant') {
+      const assistant = { assistantId, ownerId: 'alice', kind: 'personal' };
+      await append(`assistant-${assistantId}`, 'assistant.created', assistant);
+      fixture.keys.provision('test', 'other');
+      const command = { id: 'create-other', conversationId: 'other', assistantId };
+      const member = { silo: 'test', memberId: 'alice' };
+      await chatCommand(fixture.store, fixture.keys, member, command);
+      const message = { id: 'message-other', conversationId: 'other', text: 'Hello' };
+      await chatCommand(fixture.store, fixture.keys, member, message);
+    }
+    const claimed = { assistantId, computerId, generation: 1, tokenId: `token:${computerId}` };
+    await append(`computer-${assistantId}`, 'computer.claimed', claimed);
+    const ready = { assistantId, computerId, generation: 1, podUid: computerId };
+    await append(`computer-${assistantId}`, 'computer.ready', ready);
+  }
+  const started = {
+    conversationId: 'alice', turnId: 'message-alice', assistantId: 'assistant', threadId: 'alice-thread',
+  };
+  await append('conversation-alice', 'agent.turn_started', started);
+  const discovered = {
+    serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+    schemaDigest: 'a'.repeat(64), toolCount: 0,
+  };
+  await append('mcp-fixture', 'mcp.server_discovered', discovered);
+  const published = { serverId: 'fixture', publishedBy: 'alice' };
+  await append('mcp-fixture', 'mcp.server_published', published);
+  const approvalId = 'a'.repeat(64);
+  const request = {
+    approvalId, assistantId: 'assistant', conversationId: 'alice', turnId: 'message-alice',
+    requesterId: 'alice', tool: 'write', serverId: 'fixture', connectionId: 'installed',
+    toolRevision: approvalId, schemaDigest: approvalId, profile: 'none',
+    policySequence: await fixture.store.head('mcp-fixture'),
+    digestVersion: 'lossless-json-v1', argumentsDigest: approvalId,
+    expiresAt: '2099-01-01T00:00:00.000Z', stepUp: false,
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAAAA==', keyId: 'key:fixture', reviewDigest: approvalId,
+  };
+  await append(`approval-${approvalId}`, 'tool.approval_requested', request);
+  await runner.initialise(conversations);
+  await runner.run(conversations);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const credentials = vi.spyOn(kube, 'credentials');
+  credentials.mockResolvedValue();
+  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
+  return { fixture, dbs, stop, sockets, frames, work, append };
+}
+
+async function wakesApprovalsThroughWatcher() {
+  const setup = await approvalWatcherFixture();
+  const { fixture, dbs, stop, sockets, frames, work, append } = setup;
+  const approvalId = 'a'.repeat(64);
+  const blockedId = 'b'.repeat(64);
+  const gate = Promise.withResolvers<number>();
+  let blockedReads = 0;
+  function isResume(value: unknown) {
+    return typeof value === 'object' && value !== null && Reflect.get(value, 'type') === 'resume';
+  }
+  function computerReceived(computerId: string, isFrame: (value: unknown) => boolean) {
+    const received = frames.get(computerId);
+    return received?.some(isFrame) === true;
+  }
+  function bothConnected() {
+    return computerReceived('computer', isResume) && computerReceived('other-computer', isResume);
+  }
+  function isSettlement(value: unknown) {
+    return typeof value === 'object' && value !== null &&
+      Reflect.get(value, 'type') === 'approval_settled';
+  }
+  function decisionArrived() {
+    return computerReceived('computer', isSettlement);
+  }
+  function readBlocked() {
+    return blockedReads === 1;
+  }
+  function isNewTurn(value: unknown) {
+    return typeof value === 'object' && value !== null &&
+      Reflect.get(value, 'type') === 'turn' && Reflect.get(value, 'id') === 'next-bob';
+  }
+  function newTurnArrived() {
+    return computerReceived('computer', isNewTurn);
+  }
+  function isReportAck(value: unknown) {
+    return typeof value === 'object' && value !== null &&
+      Reflect.get(value, 'type') === 'ack' && Reflect.get(value, 'sequence') === 1;
+  }
+  function reportAcknowledged() {
+    return computerReceived('computer', isReportAck);
+  }
+  try {
+    await until(bothConnected);
+    const computer = sockets.get('computer')!;
+    const signal = { type: 'approval_waiting', approvalId,
+      conversationId: 'alice', turnId: 'message-alice' };
+    const reads = vi.spyOn(fixture.store, 'readStream');
+    function isApprovalRead(call: typeof reads.mock.calls[number]) {
+      return call[0] === `approval-${approvalId}`;
+    }
+    function requestedStateWasRead() {
+      return reads.mock.calls.filter(isApprovalRead).length >= 2;
+    }
+    computer.send(JSON.stringify(signal));
+    await until(requestedStateWasRead, 2000);
+    const computerFrames = frames.get('computer')!;
+    const beforeDecision = computerFrames.filter(isSettlement);
+    expect(beforeDecision).toEqual([]);
+    const decision = { approvalId, decidedBy: 'alice', decision: 'approved' };
+    await append(`approval-${approvalId}`, 'approval.decided', decision);
+    await until(decisionArrived, 5000);
+    const settlements = computerFrames.filter(isSettlement);
+    const expectedSettlement = { type: 'approval_settled', approvalId, state: 'approved' };
+    expect(settlements).toEqual([expectedSettlement]);
+    const otherFrames = frames.get('other-computer')!;
+    const otherSettlements = otherFrames.filter(isSettlement);
+    expect(otherSettlements).toEqual([]);
+    const head = fixture.store.head.bind(fixture.store);
+    function readHead(subject?: string, deadline?: number) {
+      if (subject === `approval-${blockedId}`) {
+        blockedReads++;
+        return gate.promise;
+      }
+      return head(subject, deadline);
+    }
+    const positions = vi.spyOn(fixture.store, 'head');
+    positions.mockImplementation(readHead);
+    const blockedSignal = { ...signal, approvalId: blockedId };
+    computer.send(JSON.stringify(blockedSignal));
+    await until(readBlocked, 2000);
+    const report = { sequence: 1, previousSequence: 0, conversationId: 'bob',
+      turnId: 'message-bob', assistantId: 'assistant', type: 'agent.message_delta',
+      messageId: 'reply-bob', text: 'Still working' };
+    computer.send(JSON.stringify(report));
+    await until(reportAcknowledged, 1000);
+    const bob = await chatHistory(fixture.store, 'test', 'bob');
+    function isStoredReport(row: typeof bob[number]) {
+      return row.event.report?.sequence === 1;
+    }
+    expect(bob.some(isStoredReport)).toBe(true);
+    const completed = { sequence: 2, previousSequence: 1, conversationId: 'bob',
+      turnId: 'message-bob', assistantId: 'assistant', type: 'agent.turn_completed' };
+    function isCompletionAck(value: unknown) {
+      return typeof value === 'object' && value !== null &&
+        Reflect.get(value, 'type') === 'ack' && Reflect.get(value, 'sequence') === 2;
+    }
+    function completionAcknowledged() {
+      return computerReceived('computer', isCompletionAck);
+    }
+    computer.send(JSON.stringify(completed));
+    await until(completionAcknowledged, 1000);
+    const command = { id: 'next-bob', conversationId: 'bob', text: 'Continue' };
+    const member = { silo: 'test', memberId: 'bob' };
+    await chatCommand(fixture.store, fixture.keys, member, command);
+    await until(newTurnArrived, 1000);
+    expect(blockedReads).toBe(1);
+  } finally {
+    gate.resolve(0);
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await fixture.close();
+    await dbs.close();
+  }
+}
+it('wakes the right computer through watchBridges while another hold leaves reports and turns free',
+  wakesApprovalsThroughWatcher);

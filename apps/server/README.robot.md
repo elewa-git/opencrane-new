@@ -964,3 +964,55 @@ The sign-in callback limits the complete session cookie header to 3,800 bytes.
 Larger sessions return a clear 400 error and clear both cookies. Browser requests
 receive plain text for this error. Invalid session data, including an email longer
 than 320 characters, also fails sign-in before a session cookie is written.
+
+## Approval signals from computers
+
+The bridge advertises `approvalWaiting: true` in `resume`. Older computers ignore
+this extra field. A new computer can treat its absence as no approval-signal
+support, so it never sends an unknown message to an older server.
+The bridge accepts a strict `approval_waiting` message before parsing stored reports.
+It has a lower-case 64-hex `approvalId`, plus `conversationId` and `turnId` of
+1–200 characters. A socket keeps at most 64 waiting approvals. Repeated messages
+reuse the existing entry. A valid new signal beyond the limit receives
+`outcome_unknown` at once, so the computer can fail its call. Invalid messages
+and mismatched saved bindings are ignored. An empty request stream removes the
+entry and returns `outcome_unknown`; it cannot become a valid request by retrying.
+The saved request must name the link's assistant, the supplied approval id,
+conversation and turn before `readApproval` can expire or cancel it.
+
+The bridge polls each waiting entry independently, with a ten-second read limit.
+It checks entry positions only after the overall event position changes, when
+an expiry is due, or when a failed read is ready to retry. A newly received entry
+gets its first check even if no event has arrived. It reads the approval again
+when its approval, conversation or tool policy stream moves, and when the saved
+expiry time arrives. Each failed entry retries after one second, then doubles
+its delay up to 30 seconds. A successful check clears that delay. An
+`approval_settled` message returns `approved`, `denied`, `expired`, `cancelled` or
+`outcome_unknown`, then removes the entry. Socket messages are never stored and
+never grant permission to send a tool call. The decision service checks each call.
+A reconnect starts with an empty map; the computer must announce its waits again.
+
+Deploy this server before a computer image sends `approval_waiting`. Older servers
+reject unknown messages and stop recovery for that computer. This first part of #46
+keeps the computer Allow-only and sends no approval signals. The next part
+adds held calls, server support checks, grant renewal and Ask tools with a review.
+
+Tests: `test/bridge-approvals.test.ts` uses real NATS and a real socket for the
+message route. It covers request bindings, saved states, reconnects, duplicate
+messages, changed conversations and policies, expiry, failed reads, back-off,
+empty requests, visible capacity refusal and quiet polling.
+`test/bridge-replay.test.ts` also sends signals through `watchBridges`. A decision
+reaches only the waiting computer. A blocked approval read leaves another
+conversation's reports and next turn free to continue.
+
+Local guard checks on 8 October 2026: PASS. The inert handler failed all 17
+initial tests before implementation. Sixteen separate mutations then failed
+their owning tests: the four saved request bindings, approval-id format, duplicate
+registration, duplicate reads, capacity, closed sockets, changed conversation and
+approval positions, quiet-read caching, expiry, saved state, strict message fields
+and the socket message route. Each mutation was restored before final checks.
+
+Review fixes on 9 October 2026: the focused approval tests failed in six cases
+before the implementation changed. The tests were committed first. Removing the
+approval poll from `watchBridges` made its new socket test time out; the poll was
+restored. [Check record](../../docs/process/approval-watcher-review-fixes.md).
