@@ -8,6 +8,7 @@ import { createLogger } from '@opencrane/observability';
 import { computers, groups, memoryKeys, memoryProjection, memoryScopeId,
   pgDb, ProjectionRunner } from '@opencrane/projections';
 import type { MemoryIdentity } from '@opencrane/events';
+import type { ModelAccessOptions } from '../src/models/access-routes.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -20,6 +21,7 @@ let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
 let keys: ReturnType<typeof memoryKeys>;
 let directory: string;
+let memory: ModelAccessOptions;
 let count = 0;
 const projection = memoryProjection({ decrypt });
 function decrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
@@ -97,7 +99,7 @@ async function setup() {
   await write('sales', 'group', 'shared');
   await write('bob', 'person', 'foreign', 'Foreign secret', false, 'foreign');
   for (const target of [projection, groups, computers]) await runner.run(target);
-  const memory = { silo: 'acme', store: nats.store, db, binding,
+  memory = { silo: 'acme', store: nats.store, db, binding,
     feed: { memberId: resolveMember } };
   app = buildServer(config, { memory });
 }
@@ -135,7 +137,9 @@ it.each([
   expect(response.statusCode).toBe(status);
   expect(response.headers['cache-control']).toBe('no-store');
   if (status === 404) expect(response.json()).toEqual({ status: 'refused' });
-  else expect(response.json()).toMatchObject({ facts: [{ memoryId: id }] });
+  else expect(response.json()).toMatchObject({ facts: [
+    { memoryId: id, text: 'Deliveries café 東京', kind: 'fact', revision: 1 },
+  ] });
 });
 it('uses one refusal for unknown, foreign and forbidden ids', async function refusedIds() {
   const urls = [`${path('owner')}/facts`,
@@ -236,7 +240,9 @@ it('caps whole pages and binds cursors to identity, query, scope and rebuilt con
 it('returns unavailable until the projection has caught up', async function lag() {
   await write('bob', 'person', 'lag');
   expect((await get(`${path('bob')}/facts`)).statusCode).toBe(503);
-  expect((await get('/api/memory/scopes')).statusCode).toBe(503);
+  const scopes = await get('/api/memory/scopes');
+  expect(scopes.statusCode).toBe(503);
+  expect(scopes.json()).toEqual({ status: 'unavailable', reason: 'memory_unavailable' });
   await runner.run(projection);
   expect((await get(`${path('bob')}/facts`)).statusCode).toBe(200);
 });
@@ -295,6 +301,323 @@ it('keeps reads open during long-chat and memory activity without a write fence'
     readSpy.mockRestore();
   }
 });
+it('binds a cursor to its requester when both people can read the group',
+  async function cursorRequester() {
+    await append('team-sales', 'team.member_added',
+      { teamId: 'sales', memberId: 'owner', addedBy: 'owner' });
+    for (let index = 0; index < 21; index++) {
+      await write('sales', 'group', `requester_${index}`, 'Requester marker');
+    }
+    for (const target of [projection, groups, computers]) await runner.run(target);
+    const first = await get(`${path('sales', 'group')}/facts?q=requester`);
+    const cursor = first.json<{ nextCursor: string }>().nextCursor;
+    expect(cursor).toBeTruthy();
+    const url = `${path('sales', 'group')}/facts?q=requester&cursor=${encodeURIComponent(cursor)}`;
+    expect((await get(url, 'owner')).statusCode).toBe(409);
+  });
+
+async function notes(assistantId: string, granteeKind = 'member', granteeId = 'bob') {
+  const created = await append(`assistant-${assistantId}`, 'assistant.created',
+    { assistantId, kind: 'team', ownerId: 'sales' });
+  const scopeId = memoryScopeId('acme', 'assistant_notes', assistantId);
+  const granted = await append(grantStream('memory_read', scopeId), 'grant.given', {
+    resourceType: 'memory_read', resourceId: scopeId, granteeKind, granteeId,
+    grantedBy: 'owner',
+  });
+  await write(assistantId, 'assistant_notes', 'note');
+  for (const target of [projection, groups, computers]) await runner.run(target);
+  return { created, granted, scopeId };
+}
+
+it('reads team-kind memory grants and refuses an applied revoke', async function teamGrant() {
+  const current = await notes('team-grant', 'team', 'sales');
+  const url = `${path('team-grant', 'assistant_notes')}/facts`;
+  expect((await get(url)).json()).toMatchObject({ facts: [{ memoryId: 'note' }] });
+  await append(grantStream('memory_read', current.scopeId), 'grant.revoked', {
+    resourceType: 'memory_read', resourceId: current.scopeId,
+    granteeKind: 'team', granteeId: 'sales', revokedBy: 'owner',
+  });
+  const stalePermission = { allowed: true, status: 'ok' as const };
+  const spy = vi.spyOn(auth, 'use').mockResolvedValue(stalePermission);
+  try {
+    expect((await get(url)).statusCode).toBe(404);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it.each(['refused', 'unavailable'] as const)('handles actsFor %s',
+  async function acting(status) {
+    await notes(`acting-${status}`);
+    const result = { allowed: false, status: 'ok' as const };
+    const unavailable = { allowed: false, status: 'unavailable' as const };
+    const response = status === 'refused' ? result : unavailable;
+    const spy = vi.spyOn(auth, 'actsFor').mockResolvedValue(response);
+    try {
+      const expected = status === 'refused' ? 404 : 503;
+      expect((await get(`${path(`acting-${status}`, 'assistant_notes')}/facts`))
+        .statusCode).toBe(expected);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+it('waits for an unapplied assistant creation', async function assistantApplying() {
+  const current = await notes('assistant-applying');
+  const original = auth.applied;
+  function applied(eventId: string) {
+    if (eventId === current.created.id) return Promise.resolve(false);
+    return original(eventId);
+  }
+  const spy = vi.spyOn(auth, 'applied').mockImplementation(applied);
+  try {
+    expect((await get(`${path('assistant-applying', 'assistant_notes')}/facts`))
+      .statusCode).toBe(503);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it('excludes expired, destroyed and quarantined content', async function excluded() {
+  for (const id of ['filter_live', 'filter_expired', 'filter_destroyed', 'filter_quarantined']) {
+    await write('bob', 'person', id, 'Filtering marker');
+  }
+  await runner.run(projection);
+  await storage.queue.query("UPDATE memory_facts SET expires_at=$1 WHERE memory_id=$2",
+    ['2020-01-01T00:00:00Z', 'filter_expired']);
+  await storage.queue.query("UPDATE memory_facts SET content_status='unavailable' WHERE memory_id=$1",
+    ['filter_destroyed']);
+  await storage.queue.query("UPDATE memory_facts SET content_status='quarantined' WHERE memory_id=$1",
+    ['filter_quarantined']);
+  const response = await get(`${path('bob')}/facts?q=filtering`);
+  expect(response.json()).toMatchObject({ facts: [{ memoryId: 'filter_live' }], returnedCount: 1 });
+});
+
+it('refuses a rebuild that starts during the content query', async function rebuilding() {
+  const original = memory.db.query.bind(memory.db);
+  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+    if (sql.includes('FROM memory_facts') && sql.includes('ORDER BY pinned')) {
+      await runner.rebuild(projection);
+    }
+    return original<Row>(sql, values);
+  }
+  const spy = vi.spyOn(memory.db, 'query').mockImplementation(query);
+  try {
+    expect((await get(`${path('bob')}/facts`)).statusCode).toBe(503);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it('refuses a rebuild after the content query', async function rebuiltAfterQuery() {
+  const original = memory.db.query.bind(memory.db);
+  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+    const result = await original<Row>(sql, values);
+    if (sql.includes('FROM memory_facts') && sql.includes('ORDER BY pinned')) await runner.rebuild(projection);
+    return result;
+  }
+  const spy = vi.spyOn(memory.db, 'query').mockImplementation(query);
+  try {
+    expect((await get(`${path('bob')}/facts`)).statusCode).toBe(503);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it('refuses mismatched silo bindings and missing member bindings', async function bindings() {
+  const silo = memory.silo;
+  const memberId = memory.feed.memberId;
+  try {
+    memory.silo = 'other';
+    expect((await get('/api/memory/scopes')).statusCode).toBe(404);
+    memory.silo = silo;
+    function absentMember() {
+      return Promise.resolve(null);
+    }
+    memory.feed.memberId = absentMember;
+    expect((await get('/api/memory/scopes')).statusCode).toBe(404);
+  } finally {
+    memory.silo = silo;
+    memory.feed.memberId = memberId;
+  }
+});
+
+it('refuses notes without saved grants even when OpenFGA allows use', async function absentGrant() {
+  await append('assistant-without-grant', 'assistant.created',
+    { assistantId: 'without-grant', kind: 'personal', ownerId: 'bob' });
+  await runner.run(computers);
+  const stalePermission = { allowed: true, status: 'ok' as const };
+  const spy = vi.spyOn(auth, 'use').mockResolvedValue(stalePermission);
+  try {
+    const response = await get(`${path('without-grant', 'assistant_notes')}/facts`);
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ status: 'refused' });
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it('skips stored ids outside the memory format with uniform refusals', async function storedIds() {
+  await storage.queue.query("UPDATE groups SET group_id='bad.id' WHERE group_id='sales'");
+  await storage.queue.query("UPDATE computers SET assistant_id='bad.id' WHERE assistant_id='shared'");
+  try {
+    const scopes = ['owner', 'nobody'];
+    for (const owner of scopes) {
+      const response = await get(`${path(owner)}/facts`);
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ status: 'refused' });
+    }
+    const unknown = await get(`/api/memory/${'a'.repeat(64)}/facts`);
+    expect(unknown.statusCode).toBe(404);
+    expect(unknown.json()).toEqual({ status: 'refused' });
+  } finally {
+    await storage.queue.query("UPDATE groups SET group_id='sales' WHERE group_id='bad.id'");
+    await storage.queue.query("UPDATE computers SET assistant_id='shared' WHERE assistant_id='bad.id'");
+  }
+});
+
+it('reports setup read-table lag for a new empty group or assistant', async function setupLag() {
+  await append('team-late', 'team.created',
+    { teamId: 'late', name: 'Late group', createdBy: 'owner' });
+  await append('team-late', 'team.member_added',
+    { teamId: 'late', memberId: 'bob', addedBy: 'owner' });
+  await append('assistant-late', 'assistant.created',
+    { assistantId: 'late', kind: 'personal', ownerId: 'bob' });
+  const scopeId = memoryScopeId('acme', 'assistant_notes', 'late');
+  await append(grantStream('memory_read', scopeId), 'grant.given', {
+    resourceType: 'memory_read', resourceId: scopeId,
+    granteeKind: 'member', granteeId: 'bob', grantedBy: 'owner',
+  });
+  for (const kind of ['group', 'assistant_notes'] as const) {
+    expect((await get(`${path('late', kind)}/facts`)).statusCode).toBe(503);
+  }
+  for (const target of [groups, computers]) await runner.run(target);
+  for (const kind of ['group', 'assistant_notes'] as const) {
+    const response = await get(`${path('late', kind)}/facts`);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ facts: [], returnedCount: 0 });
+  }
+});
+
+it('ignores unapplied grants and revokes for unrelated people and groups', async function unrelated() {
+  const current = await notes('unrelated');
+  await append('team-other', 'team.created',
+    { teamId: 'other', name: 'Other group', createdBy: 'owner' });
+  await runner.run(groups);
+  for (const [granteeKind, granteeId] of [['member', 'admin'], ['team', 'other'],
+    ['assistant', 'another-assistant']]) {
+    const grant = { resourceType: 'memory_read', resourceId: current.scopeId,
+      granteeKind, granteeId, grantedBy: 'owner' };
+    await append(grantStream('memory_read', current.scopeId), 'grant.given', grant, false);
+    expect((await get(`${path('unrelated', 'assistant_notes')}/facts`)).statusCode).toBe(200);
+    const revoke = { resourceType: 'memory_read', resourceId: current.scopeId,
+      granteeKind, granteeId, revokedBy: 'owner' };
+    await append(grantStream('memory_read', current.scopeId), 'grant.revoked', revoke, false);
+    expect((await get(`${path('unrelated', 'assistant_notes')}/facts`)).statusCode).toBe(200);
+  }
+});
+
+it.each(['member', 'team', 'assistant'] as const)('waits for a relevant %s grant',
+  async function relevant(kind) {
+    const current = await notes(`relevant-${kind}`);
+    const granteeIds = { member: 'bob', team: 'sales', assistant: `relevant-${kind}` };
+    await append(grantStream('memory_read', current.scopeId), 'grant.given', {
+      resourceType: 'memory_read', resourceId: current.scopeId,
+      granteeKind: kind, granteeId: granteeIds[kind], grantedBy: 'owner',
+    }, false);
+    expect((await get(`${path(`relevant-${kind}`, 'assistant_notes')}/facts`)).statusCode).toBe(503);
+  });
+
+it('keeps grant kinds separate when their ids match', async function sameIds() {
+  const current = await notes('same-ids', 'team', 'sales');
+  await append(grantStream('memory_read', current.scopeId), 'grant.given', {
+    resourceType: 'memory_read', resourceId: current.scopeId,
+    granteeKind: 'assistant', granteeId: 'sales', grantedBy: 'owner',
+  });
+  await append(grantStream('memory_read', current.scopeId), 'grant.revoked', {
+    resourceType: 'memory_read', resourceId: current.scopeId,
+    granteeKind: 'assistant', granteeId: 'sales', revokedBy: 'owner',
+  });
+  expect((await get(`${path('same-ids', 'assistant_notes')}/facts`)).statusCode).toBe(200);
+});
+
+it('checks each saved grant once per request and checks again on the next request',
+  async function receiptCache() {
+    const current = await notes('receipt-cache');
+    const original = nats.store.readStream.bind(nats.store);
+    async function* read(subject: string, from?: number, deadline?: number) {
+      for await (const row of original(subject, from, deadline)) {
+        yield row;
+        if (row.event.id === current.granted.id) yield row;
+      }
+    }
+    const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(read);
+    const appliedSpy = vi.spyOn(auth, 'applied');
+    function isGrantCheck(call: [string]) {
+      return call[0] === current.granted.id;
+    }
+    try {
+      const url = `${path('receipt-cache', 'assistant_notes')}/facts`;
+      expect((await get(url)).statusCode).toBe(200);
+      expect(appliedSpy.mock.calls.filter(isGrantCheck)).toHaveLength(1);
+      expect((await get(url)).statusCode).toBe(200);
+      expect(appliedSpy.mock.calls.filter(isGrantCheck)).toHaveLength(2);
+    } finally {
+      readSpy.mockRestore();
+      appliedSpy.mockRestore();
+    }
+  });
+
+it('treats equal expiry instants with different timestamp text as expired',
+  async function equalExpiry() {
+    await write('bob', 'person', 'equal_expiry', 'Equal expiry marker');
+    await runner.run(projection);
+    await storage.queue.query('UPDATE memory_facts SET expires_at=$1 WHERE memory_id=$2',
+      ['2026-10-09T11:00:00Z', 'equal_expiry']);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-09T11:00:00.000Z'));
+      const response = await get(`${path('bob')}/facts?q=equal`);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ facts: [], returnedCount: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+it('compares expiry as an instant and keeps the first page time', async function expiryPages() {
+  for (let index = 0; index < 23; index++) {
+    await write('bob', 'person', `expiry_${String(index).padStart(2, '0')}`, 'Expiry marker');
+  }
+  await runner.run(projection);
+  await storage.queue.query('UPDATE memory_facts SET expires_at=$1 WHERE memory_id=$2',
+    ['2026-10-09T12:00:00Z', 'expiry_00']);
+  await storage.queue.query('UPDATE memory_facts SET expires_at=$1 WHERE memory_id=$2',
+    ['2026-10-09T12:00:00Z', 'expiry_21']);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    vi.setSystemTime(new Date('2026-10-09T11:59:59Z'));
+    const first = await get(`${path('bob')}/facts?q=expiry`);
+    expect(first.statusCode).toBe(200);
+    const cursor = first.json<{ nextCursor: string }>().nextCursor;
+    expect(first.json()).toMatchObject({ returnedCount: 20 });
+    vi.setSystemTime(new Date('2026-10-09T12:00:01Z'));
+    const second = await get(`${path('bob')}/facts?q=expiry&cursor=${encodeURIComponent(cursor)}`);
+    expect(second.json()).toMatchObject({ facts: [
+      { memoryId: 'expiry_20' }, { memoryId: 'expiry_21' }, { memoryId: 'expiry_22' },
+    ], returnedCount: 3, nextCursor: null });
+    const latest = await get(`${path('bob')}/facts?q=expiry`);
+    expect(latest.json<{ facts: { memoryId: string }[] }>().facts[0]?.memoryId).toBe('expiry_01');
+    await storage.queue.query('UPDATE memory_facts SET expires_at=$1 WHERE memory_id=$2',
+      ['2026-10-09T12:00:01.000Z', 'expiry_01']);
+    const atExpiry = await get(`${path('bob')}/facts?q=expiry`);
+    expect(atExpiry.json<{ facts: { memoryId: string }[] }>().facts[0]?.memoryId)
+      .toBe('expiry_02');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('refuses grants for outsiders, inactive assistants and unapplied revocations', async function revoke() {
   const scopeId = memoryScopeId('acme', 'assistant_notes', 'shared');
   await append(grantStream('memory_read', scopeId), 'grant.given', {
