@@ -126,3 +126,6 @@ but replay still reads them. Stored participant schemas retain their earlier non
 string fields; new appends check the member-id format separately.
 `conversationEventId` matches the data id to the exact current or legacy subject.
 The event store calls it before append, so mismatched ids cannot block later consumers.
+
+`memoryWrittenDataSchema` exports the typed version-1 fields for server validation.
+Storage commands are in the companion draft.

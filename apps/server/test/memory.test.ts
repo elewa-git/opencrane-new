@@ -1,14 +1,14 @@
 import { mkdtemp, rm } from 'node:fs/promises';
+import type { z } from 'zod';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { computers, groups, memoryKeys, memoryProjection, memoryScopeId,
-  pgDb, ProjectionRunner } from '@opencrane/projections';
-import type { MemoryIdentity } from '@opencrane/events';
-import type { ModelAccessOptions } from '../src/models/access-routes.ts';
+import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
+  pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
+import type { MemoryIdentity, memoryWrittenDataSchema } from '@opencrane/events';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -21,7 +21,7 @@ let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
 let keys: ReturnType<typeof memoryKeys>;
 let directory: string;
-let memory: ModelAccessOptions;
+let memory: import('../src/memory/access.ts').MemoryOptions;
 let count = 0;
 const projection = memoryProjection({ decrypt });
 function decrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
@@ -42,13 +42,14 @@ async function append(subject: string, type: string, data: unknown, apply = true
   return record;
 }
 async function write(ownerId: string, scopeKind: MemoryIdentity['scopeKind'],
-  memoryId: string, text = 'Deliveries café 東京', pinned = false, silo = 'acme') {
+  memoryId: string, text = 'Deliveries café 東京', pinned = false, silo = 'acme',
+  sources: z.infer<typeof memoryWrittenDataSchema>['sources'] = []) {
   const scopeId = memoryScopeId(silo, scopeKind, ownerId);
   const identity = { silo, scopeId, scopeKind, ownerId, memoryId, revision: 1 };
   keys.provision(identity);
   const encrypted = keys.encrypt(identity, text);
   const data = { schemaVersion: 1, scopeId, scopeKind, ownerId, memoryId, revision: 1,
-    kind: 'fact', pinned, expiresAt: null, sources: [], dependsOn: [], ...encrypted };
+    kind: 'fact', pinned, expiresAt: null, sources, dependsOn: [], ...encrypted };
   return append(`scope-${scopeId}`, 'memory.written', data, true, silo);
 }
 function resolveMember(_silo: string, _issuer: string, subject: string) {
@@ -73,7 +74,7 @@ async function setup() {
   auth = memberAuthorisation(binding);
   const db = pgDb(storage.queue);
   runner = new ProjectionRunner(db, nats.reader, createLogger('memory-http'));
-  for (const target of [projection, groups, computers]) await runner.initialise(target);
+  for (const target of [projection, groups, computers, conversations]) await runner.initialise(target);
   for (const [memberId, role] of [['owner', 'owner'], ['admin', 'admin'], ['bob', 'member']]) {
     await append(`member-${memberId}`, 'member.joined', {
       memberId, role, email: `${memberId}@example.test`, displayName: memberId,
@@ -101,6 +102,7 @@ async function setup() {
   for (const target of [projection, groups, computers]) await runner.run(target);
   memory = { silo: 'acme', store: nats.store, db, binding,
     feed: { memberId: resolveMember } };
+  memory.chat = { ...memory, keys: conversationKeys(directory) };
   app = buildServer(config, { memory });
 }
 async function cleanup() {
@@ -661,4 +663,218 @@ it('refuses grants for outsiders, inactive assistants and unapplied revocations'
   await append('team-sales', 'team.member_removed',
     { teamId: 'sales', memberId: 'bob', removedBy: 'owner' }, false);
   expect((await get(`${path('sales', 'group')}/facts`)).statusCode).toBe(404);
+});
+
+it('returns authorised fact detail within 16 KiB and uses uniform refusals', async function detail() {
+  const response = await get(`${path('bob')}/facts/own`);
+  expect(response.statusCode).toBe(200);
+  expect(response.headers['cache-control']).toBe('no-store');
+  expect(response.json()).toMatchObject({ fact: { memoryId: 'own', revision: 1,
+    text: 'Deliveries café 東京' }, sources: [] });
+  expect(Buffer.byteLength(response.body)).toBeLessThanOrEqual(16384);
+  for (const url of [`${path('bob')}/facts/unseen`, `${path('owner')}/facts/private`,
+    `/api/memory/${memoryScopeId('foreign', 'person', 'bob')}/facts/foreign`]) {
+    expect((await get(url)).json()).toEqual({ status: 'refused' });
+  }
+  await storage.queue.query('UPDATE memory_facts SET search_text=$1 WHERE memory_id=$2',
+    ['\u0001'.repeat(4096), 'own']);
+  expect((await get(`${path('bob')}/facts/own`)).statusCode).toBe(503);
+});
+it('resolves source status separately and hides denied source references', async function sources() {
+  await append('conversation-detail_chat', 'conversation.created', {
+    conversationId: 'detail_chat', createdBy: 'bob', mode: 'direct', participantIds: ['bob', 'owner'],
+  });
+  const message = await append('conversation-detail_chat', 'message.posted', {
+    conversationId: 'detail_chat', authorId: 'bob', authorKind: 'human',
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text',
+  });
+  const references = [{ conversationId: 'detail_chat', messageId: message.id }];
+  await write('bob', 'person', 'with_source', 'A sourced fact', false, 'acme', references);
+  await runner.run(projection);
+  await runner.run(conversations);
+  const url = `${path('bob')}/facts/with_source`;
+  expect((await get(url)).json()).toMatchObject({ sources: [{ status: 'available',
+    reference: references[0] }] });
+  const denied = { allowed: false, status: 'ok' as const };
+  const permission = vi.spyOn(auth, 'conversation').mockResolvedValue(denied);
+  let refused;
+  try { refused = await get(url); }
+  finally { permission.mockRestore(); }
+  expect(refused.statusCode).toBe(200);
+  expect(refused.json()).toMatchObject({ fact: { text: 'A sourced fact' },
+    sources: [{ status: 'refused' }] });
+  expect(refused.body).not.toContain('detail_chat');
+});
+
+
+it('returns a typed unavailable result after a fact key is destroyed', async function destroyedDetail() {
+  await write('bob', 'person', 'detail-destroyed', 'Destroyed private text');
+  const identity = { silo: 'acme', scopeId: memoryScopeId('acme', 'person', 'bob'),
+    scopeKind: 'person' as const, ownerId: 'bob', memoryId: 'detail-destroyed', revision: 1 };
+  keys.delete(identity);
+  await runner.rebuild(projection);
+  const response = await get(`${path('bob')}/facts/detail-destroyed`);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'unavailable', memoryId: 'detail-destroyed',
+    revision: 1, reason: 'destroyed' });
+  expect(response.body).not.toContain('Destroyed private text');
+  expect(response.json()).not.toHaveProperty('fact');
+});
+
+it('returns quarantined fact detail without any text', async function quarantinedDetail() {
+  await write('bob', 'person', 'detail-quarantined', 'Quarantined private text');
+  await runner.run(projection);
+  await storage.queue.query("UPDATE memory_facts SET content_status='quarantined' WHERE memory_id=$1",
+    ['detail-quarantined']);
+  const response = await get(`${path('bob')}/facts/detail-quarantined`);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'unavailable', memoryId: 'detail-quarantined',
+    revision: 1, reason: 'quarantined' });
+  expect(response.body).not.toContain('Quarantined private text');
+  expect(response.json()).not.toHaveProperty('fact');
+});
+
+it('refuses expired detail and waits for projection catch-up', async function detailExpiryAndLag() {
+  await write('bob', 'person', 'detail-lag');
+  const url = `${path('bob')}/facts/detail-lag`;
+  expect((await get(url)).statusCode).toBe(503);
+  await runner.run(projection);
+  expect((await get(url)).statusCode).toBe(200);
+  await storage.queue.query('UPDATE memory_facts SET expires_at=$1 WHERE memory_id=$2',
+    ['2020-01-01T00:00:00Z', 'detail-lag']);
+  expect((await get(url)).statusCode).toBe(404);
+});
+
+it('checks read grants for notes detail separately from write grants', async function notesDetail() {
+  for (const operation of ['memory_read', 'memory_write']) {
+    const assistantId = `detail-${operation}`;
+    await append(`assistant-${assistantId}`, 'assistant.created',
+      { assistantId, kind: 'personal', ownerId: 'bob' });
+    const scopeId = memoryScopeId('acme', 'assistant_notes', assistantId);
+    await append(grantStream(operation, scopeId), 'grant.given', {
+      resourceType: operation, resourceId: scopeId, granteeKind: 'member', granteeId: 'bob',
+      grantedBy: 'owner',
+    });
+    await write(assistantId, 'assistant_notes', 'detail-note');
+  }
+  await runner.run(computers);
+  await runner.run(projection);
+  const readable = await get(`${path('detail-memory_read', 'assistant_notes')}/facts/detail-note`);
+  expect(readable.statusCode).toBe(200);
+  expect(readable.json()).toMatchObject({ fact: { memoryId: 'detail-note' } });
+  const writeOnly = await get(`${path('detail-memory_write', 'assistant_notes')}/facts/detail-note`);
+  expect(writeOnly.statusCode).toBe(404);
+  expect(writeOnly.json()).toEqual({ status: 'refused' });
+});
+
+it('checks chat access first and looks up only the selected source message', async function boundedSources() {
+  const conversationId = 'detail-source-only-chat';
+  await append(`conversation-${conversationId}`, 'conversation.created', {
+    conversationId, createdBy: 'bob', mode: 'direct', participantIds: ['bob', 'owner'],
+  });
+  const messageData = { conversationId, authorId: 'bob', authorKind: 'human',
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text' };
+  const message = await append(`conversation-${conversationId}`, 'message.posted', messageData);
+  for (let index = 0; index < 100; index++) {
+    await append(`conversation-${conversationId}`, 'message.posted', messageData);
+  }
+  const sources = [{ conversationId, messageId: message.id }];
+  await write('bob', 'person', 'detail-bounded', 'Readable sourced text', false, 'acme', sources);
+  await runner.run(projection);
+  await runner.run(conversations);
+  const original = nats.store.readStream.bind(nats.store);
+  async function* bounded(subject: string, from?: number, deadline?: number) {
+    let count = 0;
+    for await (const row of original(subject, from, deadline)) {
+      if (subject === `conversation-${conversationId}`) {
+        expect(++count).toBeLessThanOrEqual(1);
+      }
+      yield row;
+    }
+  }
+  const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(bounded);
+  const querySpy = vi.spyOn(memory.db, 'query');
+  try {
+    const url = `${path('bob')}/facts/detail-bounded`;
+    expect((await get(url)).json()).toMatchObject({ sources: [{ status: 'available',
+      reference: sources[0] }] });
+    const denied = { allowed: false, status: 'ok' as const };
+    const permission = vi.spyOn(auth, 'conversation').mockResolvedValue(denied);
+    querySpy.mockClear();
+    let refused;
+    try { refused = await get(url); }
+    finally { permission.mockRestore(); }
+    expect(refused.statusCode).toBe(200);
+    expect(refused.json()).toMatchObject({ sources: [{ status: 'refused' }] });
+    expect(refused.body).not.toContain(conversationId);
+    for (const [sql] of querySpy.mock.calls) expect(sql).not.toContain('conversation_feed');
+  } finally {
+    readSpy.mockRestore();
+    querySpy.mockRestore();
+  }
+});
+
+it('hides missing messages and keeps readable facts available during source outages',
+  async function missingAndUnavailableSources() {
+    const sources = [{ conversationId: 'detail_chat', messageId: 'missing-message' }];
+    await write('bob', 'person', 'detail-missing', 'Fact with a missing source', false, 'acme', sources);
+    await runner.run(projection);
+    await runner.run(conversations);
+    const url = `${path('bob')}/facts/detail-missing`;
+    const missing = await get(url);
+    expect(missing.statusCode).toBe(200);
+    expect(missing.json()).toMatchObject({ fact: { text: 'Fact with a missing source' },
+      sources: [{ status: 'refused' }] });
+    expect(missing.body).not.toContain('missing-message');
+    const original = memory.db.query.bind(memory.db);
+    async function unavailable<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+      if (sql.includes('conversation_feed')) {
+        throw new Error('Message lookup unavailable');
+      }
+      return original<Row>(sql, values);
+    }
+    const spy = vi.spyOn(memory.db, 'query').mockImplementation(unavailable);
+    try {
+      const response = await get(url);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ fact: { text: 'Fact with a missing source' },
+        sources: [{ status: 'unavailable' }] });
+      expect(response.body).not.toContain('detail_chat');
+      expect(response.body).not.toContain('missing-message');
+    } finally { spy.mockRestore(); }
+  });
+
+it('labels a departed member statement without exposing their identity or command',
+  async function neutralStatement() {
+    await append('member-statement-author', 'member.joined', {
+      memberId: 'statement-author', role: 'member', email: 'author@example.test',
+      displayName: 'Former author',
+    });
+    const sources = [{ memberId: 'statement-author', commandId: 'private-statement-command' }];
+    await write('bob', 'person', 'detail-statement', 'A saved member statement', false, 'acme', sources);
+    await append('member-statement-author', 'member.removed',
+      { memberId: 'statement-author', removedBy: 'owner' });
+    await runner.run(projection);
+    const response = await get(`${path('bob')}/facts/detail-statement`);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ sources: [{ status: 'available',
+      label: "a member's statement" }] });
+    expect(response.body).not.toContain('statement-author');
+    expect(response.body).not.toContain('private-statement-command');
+    expect(response.body).not.toContain('memberId');
+    expect(response.body).not.toContain('commandId');
+  });
+
+it('returns unavailable legacy metadata without decoding fact text', async function legacyQuarantine() {
+  await write('bob', 'person', 'detail-legacy', 'Legacy private text');
+  await runner.run(projection);
+  // Match the empty metadata kept for an older write whose ownership could not be checked.
+  await storage.queue.query(`UPDATE memory_facts SET content_status='quarantined',
+    revision=NULL, kind=NULL, pinned=NULL WHERE memory_id=$1`, ['detail-legacy']);
+  const response = await get(`${path('bob')}/facts/detail-legacy`);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'unavailable', memoryId: 'detail-legacy',
+    revision: null, reason: 'quarantined' });
+  expect(response.body).not.toContain('Legacy private text');
+  expect(response.json()).not.toHaveProperty('fact');
 });

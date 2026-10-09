@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills tables, including configured memory| projections["libs/projections<br/>read tables, scope queries and content keys"]
+  ops["apps/ops<br/>workers"] -->|fills tables, including configured memory| projections["libs/projections<br/>read tables, message lookups and content keys"]
   server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
   projections -->|writes tables| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
@@ -37,6 +37,7 @@ flowchart LR
 - Keep assistant names and personal owners' display names for access choices.
 - Copy tool progress and tool access decisions into each conversation's feed.
   Keep the call id so the page can match a decision to its tool call.
+  Index message ids so an authorised caller can find one source message quickly.
 - Save table changes and each worker's position together in one database step.
 - Rebuild tables from the event log. The replay command rebuilds members,
   groups, model grants, model providers, budgets, the tool catalogue, computers and the

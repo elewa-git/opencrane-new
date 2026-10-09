@@ -1,5 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import { MemoryRefused } from './access.ts';
+import { sourceStatuses } from './detail-sources.ts';
 import type { MemoryOptions, Scope } from './access.ts';
 
 export class MemoryConflict extends Error {}
@@ -86,6 +88,9 @@ const factSchema = z.object({ memory_id: identifier, revision: z.coerce.number()
   expires_at: z.string().nullable(), content_status: z.string(), saved_at: z.string() });
 const factColumns = `memory_id, revision, search_text, kind, pinned, expires_at,
   content_status, saved_at`;
+const detailMetadataSchema = z.object({ memory_id: identifier,
+  revision: z.coerce.number().nullable(), expires_at: z.string().nullable(),
+  content_status: z.string() });
 function publicFact(raw: unknown) {
   const row = factSchema.parse(raw);
   if (row.content_status !== 'available' || row.search_text === null) {
@@ -170,4 +175,39 @@ async function requireSameProjection(options: MemoryOptions, state: Snapshot) {
     Number(current.sequence) < state.position) {
     throw new Error('Memory rebuild in progress');
   }
+}
+
+export async function detailFact(options: MemoryOptions, requester: string, scope: Scope,
+  memoryId: string) {
+  const state = await memorySnapshot(options, scope);
+  const values = [options.silo, scope.scopeId, state.position, state.generation, memoryId];
+  const result = await options.db.query(`SELECT ${factColumns}, sources FROM memory_facts
+    WHERE silo=$1 AND scope_id=$2 AND ${currentProjection()} AND memory_id=$5`, values);
+  await requireSameProjection(options, state);
+  const row = result.rows[0];
+  if (!row) {
+    throw new MemoryRefused();
+  }
+  const saved = detailMetadataSchema.parse(row);
+  if (saved.expires_at !== null && Date.parse(saved.expires_at) <= Date.now()) {
+    throw new MemoryRefused();
+  }
+  const unavailableStatuses = ['destroyed', 'unavailable', 'quarantined'];
+  if (unavailableStatuses.includes(saved.content_status)) {
+    // Treat the read table's unavailable value as a deleted key, not a service outage.
+    let reason = 'destroyed';
+    if (saved.content_status === 'quarantined') {
+      reason = 'quarantined';
+    }
+    // Return an unavailable result so callers do not keep retrying a service failure.
+    return { status: 'unavailable' as const, scopeId: scope.scopeId,
+      memoryId: saved.memory_id, revision: saved.revision, reason };
+  }
+  const fact = publicFact(row);
+  const sources = await sourceStatuses(options, requester, row['sources']);
+  const response = { scopeId: scope.scopeId, fact, sources };
+  if (Buffer.byteLength(JSON.stringify(response)) > limits.pageBytes) {
+    throw new Error('Memory detail exceeds size limit');
+  }
+  return response;
 }

@@ -33,6 +33,11 @@ async function createConversationTables(db: Query): Promise<void> {
   await createParticipationTables(db);
   await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_silo_type
     ON conversation_feed (silo, type)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_message_event
+    ON conversation_feed (silo, conversation_id, event_id) WHERE type='message.posted'`);
+  await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_message_reply
+    ON conversation_feed (silo, conversation_id, (data->>'messageId'))
+    WHERE type='agent.message_completed'`);
 }
 
 async function refuseMissingParticipation(db: Query): Promise<void> {

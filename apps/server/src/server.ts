@@ -38,7 +38,7 @@ export interface BuildServerOptions {
   ownership?: GroupOptions;
   providers?: ProviderOptions;
   modelAccess?: ModelAccessOptions;
-  memory?: ModelAccessOptions;
+  memory?: import('./memory/access.ts').MemoryOptions;
   audit?: AuditOptions;
   chat?: ChatOptions;
   files?: FileOptions;
