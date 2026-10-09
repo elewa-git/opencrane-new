@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createCipheriv, createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync,
@@ -7,13 +7,40 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { parseEventByType } from '@opencrane/events';
+import { memoryTextSchema, parseEventByType } from '@opencrane/events';
 import { memoryKeys, memoryScopeId, memoryIdentity } from '../src/index.ts';
 
 const identity = {
   silo: 'test', scopeKind: 'person' as const, ownerId: 'alice', memoryId: 'fact', revision: 1,
   scopeId: 'pending',
 };
+it('refuses C0 controls at writes while allowing tabs and newlines', function controls() {
+  for (let code = 0; code < 32; code++) {
+    const text = `Before${String.fromCharCode(code)}after`;
+    const allowed = code === 9 || code === 10;
+    expect(memoryTextSchema.safeParse(text).success, `control ${code}`).toBe(allowed);
+  }
+});
+
+it('decrypts earlier control text and still parses its saved event', function oldControls() {
+  function check(keys: ReturnType<typeof memoryKeys>, directory: string) {
+    const current = currentIdentity();
+    const keyId = keys.provision(current);
+    const key = readFileSync(`${directory}/${keyId.slice(4)}`);
+    const nonce = Buffer.alloc(12, 1);
+    const cipher = createCipheriv('aes-256-gcm', key, nonce, { authTagLength: 16 });
+    const fields = [current.silo, current.scopeId, current.scopeKind, current.ownerId,
+      current.memoryId, current.revision];
+    cipher.setAAD(Buffer.from(JSON.stringify(fields)));
+    const text = 'Before\u0001after';
+    const content = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    const bytes = Buffer.concat([nonce, cipher.getAuthTag(), content]);
+    const encrypted = { ciphertext: bytes.toString('base64'), keyId };
+    expect(parseEventByType(fixtureEvent(encrypted.ciphertext, keyId)).success).toBe(true);
+    expect(keys.decrypt(current, encrypted)).toBe(text);
+  }
+  withKeys(check);
+});
 function currentIdentity() {
   return { ...identity, scopeId: memoryScopeId('test', 'person', 'alice') };
 }

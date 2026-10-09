@@ -183,6 +183,21 @@ it.each([
     'SELECT search_text FROM memory_facts WHERE memory_id=$1', [id]);
   expect(saved.rows[0]?.search_text).toBe(text.normalize('NFC'));
 });
+it('returns an unavailable placeholder for one fact that exceeds a page', async function oversize() {
+  await write('bob', 'person', 'oversize', 'Oversize marker');
+  await write('bob', 'person', 'oversize_after', 'Oversize marker after');
+  await runner.run(projection);
+  await storage.queue.query('UPDATE memory_facts SET search_text=$1 WHERE memory_id=$2',
+    ['\u0001'.repeat(4096), 'oversize']);
+  const response = await get(`${path('bob')}/facts?q=oversize`);
+  expect(response.statusCode).toBe(200);
+  expect(Buffer.byteLength(response.body)).toBeLessThanOrEqual(16384);
+  expect(response.json()).toMatchObject({ facts: [
+    { memoryId: 'oversize', revision: 1, reason: 'page_limit' },
+    { memoryId: 'oversize_after', text: 'Oversize marker after' },
+  ], returnedCount: 2, nextCursor: null });
+  expect(response.json<{ facts: object[] }>().facts[0]).not.toHaveProperty('text');
+});
 it('caps whole pages and binds cursors to identity, query, scope and rebuilt content',
   async function paging() {
     for (let index = 0; index < 22; index++) {
