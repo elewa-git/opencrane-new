@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   getEventDefinition,
   memoryWrittenIdentity,
+  memoryWrittenEventSchema,
   parseEventByType,
   type EventEnvelope,
 } from "@opencrane/events";
@@ -99,7 +100,16 @@ function validCurrentMemoryWrite(event: EventEnvelope): boolean {
   const scopeFields = [identity.silo, identity.scopeKind, identity.ownerId];
   const hash = createHash('sha256');
   hash.update(JSON.stringify(scopeFields));
-  return identity.scopeId === hash.digest('hex');
+  if (identity.scopeId !== hash.digest('hex')) {
+    return false;
+  }
+  const binding = [identity.silo, identity.scopeId, identity.scopeKind, identity.ownerId,
+    identity.memoryId, identity.revision];
+  const keyHash = createHash('sha256');
+  keyHash.update(JSON.stringify(binding));
+  const expectedKeyId = `key:${keyHash.digest('hex')}`;
+  const written = memoryWrittenEventSchema.parse(event);
+  return written.data.keyId === expectedKeyId;
 }
 
 function validHistoryChecked(value: unknown): boolean {

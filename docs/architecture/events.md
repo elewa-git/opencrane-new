@@ -425,11 +425,13 @@ hosted provider tools with unknown prices remain disabled.
 ### Memory
 
 Version-1 `memory.written` records the derived scope identity, initial revision, kind, pin,
-expiry, typed sources and same-scope dependencies with ciphertext and a revision key reference.
+expiry, typed sources and unique same-scope dependencies with ciphertext and a revision key reference.
+Append checks that the key reference is derived from the recorded memory revision identity.
 The [memory design](../specs/phase-4/p4-12-memory.md) defines the limits and later work.
 Unversioned events still parse for replay; unknown ownership stays quarantined.
-Encrypted revision storage is available internally. The memory projection, rebuild command
-and public access are not implemented yet.
+Encrypted revision storage and the current memory projection are available internally.
+The offline operator rebuild reads existing revision keys before each database transaction.
+It never creates or deletes keys or runs reactions. Public access is not implemented yet.
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |

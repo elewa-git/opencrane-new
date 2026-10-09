@@ -35,7 +35,10 @@ registered stream prefix. `commandId` and `principal` are required for
 appends, including an explicit system principal for system commands.
 New `memory.written` appends require version 1 and a scope id equal to SHA-256
 of JSON `[silo, scopeKind, ownerId]`. A mismatched owner, kind or silo is rejected
-before writing. Reads still parse unversioned
+before writing. The key reference must equal `key:` followed by the SHA-256 hash
+of JSON `[silo, scopeId, scopeKind, ownerId, memoryId, revision]`. Repeated
+dependency memory-id/revision pairs are refused by the event parser before append.
+Reads still parse unversioned
 memory events so their unknown ownership can stay quarantined during replay.
 
 `append` returns `appended` with the global sequence, `conflict` for a stale

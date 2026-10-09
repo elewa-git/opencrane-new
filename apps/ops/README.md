@@ -16,7 +16,7 @@ flowchart LR
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
   ops -->|checks and updates computers| kube["Kubernetes<br/>computer manager"]
-  kube -->|runs| computer["apps/computer<br/>personal computer"]
+  kube -->|runs| computer["apps/computer<br/>assistant runtime"]
 ```
 
 ## What it is responsible for
@@ -27,6 +27,8 @@ flowchart LR
 - Starts computers, gives them short-lived access keys and pauses idle ones.
 - Settles model spending after a model request.
 - Rebuilds tables and permissions for operator recovery.
+- Checks all saved memory keys before rebuilding current memory and search text.
+  Readers and workers stay stopped during this process.
 - Runs one-off upgrades for model access and the default budget group.
 
 ## Processes it handles
@@ -46,15 +48,25 @@ flowchart LR
    computer starts from the checked image and keeps its home files. A running computer
    waits until its next pause. The worker updates the paused computer in place.
    Failed changes wait before retrying, while other computers continue to resume.
-4. **An operator rebuilds a table.** The replay command reads every saved event again, builds a fresh copy of the table and checks it before swapping it in.
+4. **An operator rebuilds a table.** The replay command reads every saved event again.
+   Most tables are rebuilt alongside the live tables, then checked and swapped in.
+   Memory is rebuilt with readers and workers stopped. It reads existing revision keys
+   and keeps destroyed content unavailable. It never creates or deletes keys.
 
 ## How to run or test it
 
 ```sh
 npm run worker -w apps/ops -- members
 npm run worker -w apps/ops -- dispatcher
-npm run replay -- members --dry-run
+npm run replay -- memory --dry-run
 ```
+
+The memory rebuild command is `npm run replay -- memory --confirm-memory-stopped`.
+It needs `DATABASE_URL`, the NATS reader settings and `MEMORY_KEY_DIRECTORY`, an
+existing private directory holding revision keys and permanent deletion markers.
+Readers and workers stay stopped until replay succeeds. A failed replay may leave
+only the successfully rebuilt part; running the command again starts from the beginning.
+It does not offer the online `--verify` option.
 
 These need the dev stack's settings. To run the whole system, use
 infra/dev-stack/up.sh (see [infra/dev-stack](../../infra/dev-stack/README.md)).

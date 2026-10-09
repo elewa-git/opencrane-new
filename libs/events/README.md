@@ -21,7 +21,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.-> events["libs/events<br/>events, memory identity and tool call ids"]
+  server["apps/server<br/>back end"] -.-> events["libs/events<br/>checked events and memory dependencies"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant choices| events
@@ -39,7 +39,8 @@ flowchart LR
 - Keep its event type list in step with the [event catalogue](../../docs/architecture/events.md).
 
 It checks recorded memory ownership fields and keeps old encrypted memory events readable for replay.
-Old events without recorded ownership do not grant access.
+Old events without recorded ownership do not grant access. New memory writes refuse
+repeated dependencies, so a bad write cannot stop table updates for other scopes.
 
 It defines tool start and finish records that exclude arguments, results and error text.
 The computer and server share its check for call ids and tool names.

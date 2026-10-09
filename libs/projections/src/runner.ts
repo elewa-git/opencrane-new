@@ -8,6 +8,8 @@ export interface Projection {
   create(db: Query): Promise<void>;
   drop(db: Query): Promise<void>;
   apply(db: Query, event: EventEnvelope, position: number): Promise<void>;
+  /** Read outside dependencies before opening the transaction; return only database work. */
+  prepare?(event: EventEnvelope): Promise<Projection['apply']>;
 }
 export interface EventSource {
   head(): Promise<number>;
@@ -108,49 +110,24 @@ export class ProjectionRunner {
     attempt: number,
   ): Promise<number> {
     const event = stored.event;
-    return runHandler(
-      this.logger,
-      {
-        handler: projection.name,
-        eventId: event.id,
-        eventType: event.type,
-        stream: event.subject,
-        attempt,
-      },
-      () =>
-        db.transaction(async (tx) => {
-          const checkpoint = await tx.query<{ sequence: string | number }>(
-            "SELECT sequence FROM projection_checkpoints WHERE name = $1",
-            [projection.name],
-          );
-          const sequence = Number(checkpoint.rows[0]?.sequence);
-          if (!Number.isSafeInteger(sequence)) {
-            throw new Error("Projection is not initialised");
-          }
-          if (stored.sequence <= sequence) {
-            return sequence;
-          }
-          if (stored.sequence !== sequence + 1) {
-            throw new Error("Event sequence gap");
-          }
-          const seen = await tx.query(
-            "SELECT event_id FROM projection_events WHERE projection = $1 AND event_id = $2",
-            [projection.name, event.id],
-          );
-          if (!seen.rows.length) {
-            await projection.apply(tx, event, stored.sequence);
-            await tx.query("INSERT INTO projection_events VALUES ($1, $2)", [
-              projection.name,
-              event.id,
-            ]);
-          }
-          await tx.query(
-            "UPDATE projection_checkpoints SET sequence = $2 WHERE name = $1",
-            [projection.name, stored.sequence],
-          );
-          return stored.sequence;
-        }),
-    );
+    async function handleEvent(): Promise<number> {
+      let applyEvent = projection.apply.bind(projection);
+      if (projection.prepare) {
+        applyEvent = await projection.prepare(event);
+      }
+      async function updateProjection(tx: Query): Promise<number> {
+        return applyPreparedEvent(tx, projection, stored, applyEvent);
+      }
+      return db.transaction(updateProjection);
+    }
+    const run = {
+      handler: projection.name,
+      eventId: event.id,
+      eventType: event.type,
+      stream: event.subject,
+      attempt,
+    };
+    return runHandler(this.logger, run, handleEvent);
   }
 
   /** Process events up to the position read when this call began. Stop on failure; retry with a higher attempt. */
@@ -184,18 +161,70 @@ export class ProjectionRunner {
 
   /** Stop readers and other runners first. Use a separate projection name/tables for an online rebuild. */
   async rebuild(projection: Projection): Promise<void> {
-    await this.db.transaction(async (tx) => {
+    const head = await this.source.head();
+    if (!Number.isSafeInteger(head) || head < 0) {
+      throw new Error("Invalid replay head");
+    }
+    await this.checkPreparation(projection, head);
+    async function resetTables(tx: Query): Promise<void> {
       await projection.drop(tx);
       await projection.create(tx);
-      await tx.query("UPDATE projection_generations SET generation = generation + 1 WHERE name = $1", [projection.name]);
-      await tx.query("DELETE FROM projection_events WHERE projection = $1", [
-        projection.name,
-      ]);
       await tx.query(
-        "UPDATE projection_checkpoints SET sequence = 0 WHERE name = $1",
+        "UPDATE projection_generations SET generation = generation + 1 WHERE name = $1",
         [projection.name],
       );
-    });
-    await this.run(projection);
+      await tx.query("DELETE FROM projection_events WHERE projection = $1", [projection.name]);
+      await tx.query("UPDATE projection_checkpoints SET sequence = 0 WHERE name = $1",
+        [projection.name]);
+    }
+    await this.db.transaction(resetTables);
+    await this.run(projection, { toSequence: head });
   }
+
+  private async checkPreparation(projection: Projection, head: number): Promise<void> {
+    if (!projection.prepare) {
+      return;
+    }
+    const prepare = projection.prepare.bind(projection);
+    // Check all keys before dropping tables. Discard each result to avoid keeping all memory text.
+    for await (const stored of readEvents(this.source, 1, head)) {
+      const event = stored.event;
+      async function checkEvent(): Promise<void> {
+        await prepare(event);
+      }
+      const run = { handler: projection.name, eventId: event.id, eventType: event.type,
+        stream: event.subject, attempt: 1 };
+      await runHandler(this.logger, run, checkEvent);
+    }
+  }
+}
+
+async function applyPreparedEvent(
+  tx: Query, projection: Projection, stored: StoredEvent, applyEvent: Projection['apply'],
+): Promise<number> {
+  const checkpoint = await tx.query<{ sequence: string | number }>(
+    "SELECT sequence FROM projection_checkpoints WHERE name = $1", [projection.name],
+  );
+  const sequence = Number(checkpoint.rows[0]?.sequence);
+  if (!Number.isSafeInteger(sequence)) {
+    throw new Error("Projection is not initialised");
+  }
+  if (stored.sequence <= sequence) {
+    return sequence;
+  }
+  if (stored.sequence !== sequence + 1) {
+    throw new Error("Event sequence gap");
+  }
+  const event = stored.event;
+  const seen = await tx.query(
+    "SELECT event_id FROM projection_events WHERE projection = $1 AND event_id = $2",
+    [projection.name, event.id],
+  );
+  if (!seen.rows.length) {
+    await applyEvent(tx, event, stored.sequence);
+    await tx.query("INSERT INTO projection_events VALUES ($1, $2)", [projection.name, event.id]);
+  }
+  await tx.query("UPDATE projection_checkpoints SET sequence = $2 WHERE name = $1",
+    [projection.name, stored.sequence]);
+  return stored.sequence;
 }

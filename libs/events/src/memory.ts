@@ -64,10 +64,13 @@ function validWritten(event: WrittenEvent): boolean {
   if (data.kind === 'preference' && data.scopeKind !== 'person') {
     return false;
   }
+  const dependencies = new Set<string>();
   for (const entry of data.dependsOn) {
-    if (entry.scopeId !== data.scopeId) {
+    const reference = JSON.stringify([entry.memoryId, entry.revision]);
+    if (entry.scopeId !== data.scopeId || dependencies.has(reference)) {
       return false;
     }
+    dependencies.add(reference);
   }
   if (data.expiresAt !== null && Date.parse(data.expiresAt) <= Date.parse(event.time)) {
     return false;

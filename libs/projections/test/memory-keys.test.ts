@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync,
@@ -422,7 +423,7 @@ it('an opened key store cannot recreate a lost volume', lostDirectoryProvision);
 async function wrongDerivedScopeAppend() {
   const fixture = await natsFixture();
   try {
-    const event = fixtureEvent('A'.repeat(40), `key:${'a'.repeat(64)}`);
+    const event = fixtureEvent('A'.repeat(40), derivedKeyId());
     const changes = [
       { data: { ...event.data, ownerId: 'bob' } },
       { data: { ...event.data, scopeKind: 'group' } },
@@ -458,3 +459,39 @@ function ciphertextByteLimits() {
   withKeys(check);
 }
 it('decrypt checks the encrypted byte limits', ciphertextByteLimits);
+
+function derivedKeyId() {
+  const current = currentIdentity();
+  const fields = [current.silo, current.scopeId, current.scopeKind, current.ownerId,
+    current.memoryId, current.revision];
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(fields));
+  return `key:${hash.digest('hex')}`;
+}
+
+async function invalidMemoryAppend(kind: string) {
+  const fixture = await natsFixture();
+  try {
+    const original = fixtureEvent('A'.repeat(40), derivedKeyId());
+    const dependency = { scopeId: original.data.scopeId, memoryId: 'parent', revision: 1 };
+    let data: Record<string, unknown> = { ...original.data };
+    if (kind === 'dependencies') {
+      data = { ...data, dependsOn: [dependency, dependency] };
+    } else {
+      data = { ...data, keyId: `key:${'b'.repeat(64)}` };
+    }
+    const invalid = { ...original, data };
+    const result = await fixture.store.append({ event: invalid, expectedSequence: 0 });
+    expect(result).toEqual({ status: 'rejected', reason: 'invalid_event' });
+    expect(await fixture.reader.head()).toBe(0);
+    const laterDependency = { ...dependency, revision: 2 };
+    const dataWithDependencies = { ...original.data,
+      dependsOn: [dependency, laterDependency] };
+    const valid = { ...original, data: dataWithDependencies };
+    expect((await fixture.store.append({ event: valid, expectedSequence: 0 })).status)
+      .toBe('appended');
+  } finally {
+    await fixture.close();
+  }
+}
+it.each(['dependencies', 'key'])('append refuses invalid memory %s', invalidMemoryAppend);

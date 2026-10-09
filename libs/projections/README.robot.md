@@ -41,8 +41,8 @@ The source must provide every event in global order; filtering is a handler
 concern in this slice. Poll or call again for later events. An abort stops
 between transactions; an already running transaction may finish.
 
-Every handler attempt uses observability's `runHandler`, including the
-transaction commit. Start telemetry in the host to obtain real `trace_id`
+Every handler attempt uses observability's `runHandler`, including preparation and
+the transaction commit. Start telemetry in the host to obtain real `trace_id`
 values; the helper deliberately omits that field with a no-op tracer.
 
 The low-level `rebuild` method is destructive and remains for tests and offline
@@ -214,9 +214,47 @@ The adapter requires a local
 filesystem with atomic link/rename and file/directory fsync. Power-loss and customer
 secret-store qualification are NOT RUN.
 
-This draft lands together with PR 1b, the second storage change for row 1 of the
-[memory design](../../docs/specs/phase-4/p4-12-memory.md). The next change adds
-`memory_facts`, `memory_dependencies`, payload-free `memory_changes`, preparation
-before the ProjectionRunner transaction, and operator rebuild with real PostgreSQL
-rollback/index equality tests. No memory worker, route, MCP tool or UI is enabled.
-Focused proof: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts`.
+## Memory projection
+
+`memoryProjection({ decrypt })` gives ProjectionRunner read-only custody. Its optional
+`prepare(event)` step returns database work after key resolution, before the SQL transaction.
+The runner commits all rows, the processed id and the checkpoint together. Calling
+memory's `apply` directly is refused because it would skip preparation.
+
+`memory_facts` has a `(silo, scope_id, memory_id)` primary key. It stores current
+metadata, ciphertext, key reference, event position and time. `search_text` and
+`search_vector` are deletable derivatives. The TypeScript projection passes text
+as a parameter to explicit `to_tsvector('simple', $14)` calls; there are no triggers,
+views, generated columns or stored procedures. The order index is
+`(silo, scope_id, position, memory_id)`; a GIN index supports full-text queries.
+`memory_dependencies` stores current same-scope fact/revision references without duplicates.
+TypeScript checks the existing revision before replacing a fact or its dependencies.
+A stale or repeated write keeps the current row and still records the saved event.
+`memory_changes` stores only command, principal, fact, revision, outcome, position
+and time. Its outcome is `written` or `quarantined`, independent of key availability.
+It never stores plaintext, ciphertext, keys or source payloads.
+
+Only a destroyed key yields `unavailable`, with null search text/vector. Missing
+or damaged keys and temporary custody failures stop replay without advancing that
+event's checkpoint. Legacy writes retain ciphertext and references as `quarantined`,
+with unknown ownership and no searchable content. Parsing uses `parseEventByType`
+and the full replay schema, plus `memoryIdentity` / `memoryWrittenIdentity`.
+Other memory event types stop replay until their projection rules are implemented;
+correction, forgetting, dependency invalidation and the public memory API remain later work.
+`readMemoryFactIds(db, silo, scopeId, search?)` returns ids in saved-event order.
+Its optional search uses PostgreSQL `to_tsquery` syntax. Both paths restrict silo and
+scope; callers must check permission before calling it.
+Rebuild prepares the entire saved history before dropping any tables, then prepares
+each event again before its transaction. It discards each prepared result during the
+first pass to avoid holding all plaintext in memory. It rebuilds only through the
+position it checked. A failure during that first pass preserves live tables and
+runner records. A later storage failure can still stop the second pass.
+Replay never provisions or deletes keys, calls models or runs cleanup reactions.
+
+The offline operator command is documented in [apps/ops](../../apps/ops/README.robot.md#rebuild-memory-offline).
+`test/memory.test.ts` requires `PG_TEST_URL`; it uses real NATS and disposable
+PostgreSQL databases. It proves operator replay equality for rows and index
+settings, dependency edges, rollback, ordering, scope isolation, legacy quarantine,
+destroyed versus missing/unavailable keys and key resolution before transactions.
+Run it with `nice -n 10 npx vitest run libs/projections/test/memory.test.ts`.
+Fresh-install customer journeys and power-loss qualification remain NOT RUN.
