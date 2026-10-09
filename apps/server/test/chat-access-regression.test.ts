@@ -26,7 +26,6 @@ import { ownConversation, fileCommand } from '../src/files/commands.ts';
 import { viewAccess } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
-import { conversationParticipationReader } from '../src/chat/access.ts';
 
 async function countedOpenFga(apiUrl: string) {
   let checks = 0;
@@ -145,50 +144,6 @@ async function fixture(countChecks = false) {
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
-
-const removalsAfterPermission = [
-  { subject: 'member-alice', type: 'member.removed',
-    data: { memberId: 'alice', removedBy: 'bob' }, message: 'Active silo membership required' },
-  { subject: 'participation-agent', type: 'participant.removed',
-    data: { conversationId: 'agent', participantId: 'alice', removedBy: 'bob' },
-    message: 'Conversation refused' },
-];
-
-async function refusesRemovalAfterPermission(testCase: (typeof removalsAfterPermission)[number]) {
-  const context = await fixture();
-  try {
-    await context.agentSession('agent');
-    const read = conversationParticipationReader(context.options, 'alice');
-    await read('agent');
-    const head = context.nats.store.head.bind(context.nats.store);
-    let positionReads = 0;
-    async function removeBeforeFinalPosition(subject?: string, deadline?: number) {
-      if (subject === testCase.subject) {
-        positionReads++;
-        if (positionReads === 2) {
-          // Save the removal after IAM answers, without updating its old permission.
-          await context.append(testCase.subject, testCase.type, testCase.data, false);
-        }
-      }
-      return head(subject, deadline);
-    }
-    const positions = vi.spyOn(context.nats.store, 'head');
-    positions.mockImplementation(removeBeforeFinalPosition);
-    try {
-      const started = performance.now();
-      await expect(read('agent')).rejects.toThrow(testCase.message);
-      expect(positionReads).toBe(2);
-      expect(performance.now() - started).toBeLessThan(2000);
-    } finally {
-      positions.mockRestore();
-    }
-  } finally {
-    await context.close();
-  }
-}
-it.each(removalsAfterPermission)(
-  'refuses $type after IAM replies when a list reader reuses checked membership',
-  refusesRemovalAfterPermission, 30_000);
 
 async function openChatSocket(context: Fixture, conversationId: string, waitReady = true) {
   const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
@@ -1281,8 +1236,8 @@ async function lateParticipantHistory() {
     expect(list.body).toContain('visible-first-message');
     expect(list.body).not.toMatch(/Secret original title|hidden-person/);
     const posting = { method: 'POST' as const, url: '/api/conversations/group/messages',
-      headers: context.headers('bob'), payload: { id: 'group-post', text: 'Not available yet' } };
-    expect((await context.app.inject(posting)).statusCode).toBe(403);
+      headers: context.headers('bob'), payload: { id: 'group-post', text: 'Hello from the new interval' } };
+    expect((await context.app.inject(posting)).statusCode).toBe(200);
   } finally {
     await context.close();
   }

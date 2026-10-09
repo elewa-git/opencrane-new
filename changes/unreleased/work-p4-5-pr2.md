@@ -10,8 +10,3 @@ reads check each old participation record once. Late participants can download o
 screenshots saved since their latest join.
 
 Memory source links also hide messages saved before the caller's latest join.
-
-Desktop and file checks reuse records already checked for a close while background work
-is behind. They still check every newer record and refuse access after a saved close.
-Conversation lists reuse unchanged member and creation facts within each request.
-They check saved changes again after the permissions service answers.

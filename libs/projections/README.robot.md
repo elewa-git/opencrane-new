@@ -304,8 +304,6 @@ cannot check a quarantine marker, so skipping a bad event could expose incomplet
 access history. Safe per-conversation quarantine must wait for every read path to
 refuse a marked conversation. Storage errors and event-log gaps also remain failures.
 
-The providers runner also writes `model_bindings`, keyed by silo, kind, dependant and task. Binding events retain the configuration revision. Provider rebuild compares and switches both tables together without reactions. Existing installations initialise the new table before replaying providers.
-
 `listConversations` accepts an optional member id to select projected current participants.
 These rows are candidates; the server still checks events and OpenFGA before returning them.
 

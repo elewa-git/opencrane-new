@@ -1,4 +1,4 @@
-import { PayingGroupRefused } from '@opencrane/models';
+import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { creationEvent, privateSessionReader, sharedAssistantAuthority,
   writePrivateSession } from './private-session.ts';
 import { sessionSlug } from '@opencrane/protocol';
@@ -17,18 +17,20 @@ import {
   isChatRefused,
   ChatRefused,
   ChatAccessApplying,
-  conversationParticipationReader,
+  conversationParticipation,
   type ChatOptions,
 } from './access.ts';
 import { sessionFor } from '../members/routes.ts';
 import { colleagues, chatChange } from './reads.ts';
 import { chatCommand, chatInput, ChatConflict } from './commands.ts';
+import { chatGroups, chatGroupSnapshot, reviewedGroup, GroupSnapshotTooLarge } from './groups.ts';
+import { chatIdSchema } from '@opencrane/events';
 import { memoryAdmission } from './memory-admission.ts';
 
 export type { ChatOptions } from './access.ts';
 type Access = Awaited<ReturnType<typeof chatAccess>>;
 type Fresh = Awaited<ReturnType<typeof writeChatAccess>>;
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = chatIdSchema;
 const assistantDetails = z.object({
   kind: z.string(), payingGroupId: z.string().optional(),
 });
@@ -73,10 +75,13 @@ async function conversationComputerState(options: ChatOptions, conversationId: s
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
   app.get('/api/chat', handler);
   app.get('/api/chat/colleagues', handler);
+  app.get('/api/chat/groups', handler);
+  app.get('/api/chat/groups/:groupId', handler);
   app.get('/api/conversations/:conversationId/changes/:commandId', handler);
   const conversationsRoute = {
     method: ['GET', 'POST'] as ('GET' | 'POST')[],
     url: '/api/conversations',
+    bodyLimit: 32 * 1024,
     handler,
   };
   const messagesRoute = {
@@ -101,12 +106,7 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       const relation: 'post' | 'read' = request.method === 'POST' ? 'post' : 'read';
       const allowApplying = commandId !== undefined;
       const accessRequest = { memberId, conversationId, relation, allowApplying };
-      let access;
-      if (request.method === 'GET') {
-        access = await chatAccess(options, accessRequest);
-      } else {
-        access = await writeChatAccess(options, accessRequest);
-      }
+      const access = await chatAccess(options, accessRequest);
       if (request.method === 'GET') {
         let result;
         if (conversationId && commandId) {
@@ -145,6 +145,13 @@ async function read(
   if (request.routeOptions.url === '/api/chat/colleagues') {
     return colleagues(options, memberId, request.query);
   }
+  if (request.routeOptions.url === '/api/chat/groups') {
+    return chatGroups(options, memberId, request.query);
+  }
+  if (request.routeOptions.url === '/api/chat/groups/:groupId') {
+    const { groupId } = z.object({ groupId: id }).parse(request.params);
+    return chatGroupSnapshot(options, memberId, groupId);
+  }
   if (request.routeOptions.url === '/api/chat') return personalContext(options, memberId);
   if (conversationId) {
     const query = z.object({ since: z.coerce.number().int().nonnegative().default(0) });
@@ -158,13 +165,10 @@ async function read(
 async function conversationList(options: ChatOptions, memberId: string) {
   const conversations = await listConversations(options.db, options.silo, memberId);
   const readPrivate = privateSessionReader(options, memberId);
-  const readParticipation = conversationParticipationReader(options, memberId);
   async function authorisedSummary(row: (typeof conversations)[number]) {
     try {
-      const access = await readParticipation(row.conversationId);
-      if (row.mode === 'agent_session') {
-        await readPrivate(row.conversationId, access.creation.event);
-      }
+      const access = await conversationParticipation(options, memberId, row.conversationId);
+      if (row.mode === 'agent_session') await readPrivate(row.conversationId);
       const display = await summary(options, row.conversationId, row.mode, access.joinPosition);
       if (row.mode !== 'agent_session') {
         return { ...row, participantIds: access.participantIds, ...display };
@@ -282,8 +286,13 @@ async function write(
   if ('mode' in input) options.keys.provision(options.silo, input.conversationId);
   async function checkFresh(operation: 'retry' | 'append') {
     // Check access just before the append; slow history reads have their own time limit.
+    let snapshot;
+    if (operation === 'append' && 'participantIds' in input) {
+      snapshot = await reviewedGroup(options, memberId, input);
+    }
     const request = { memberId, conversationId, relation: 'post' as const };
     const fresh = await writeChatAccess(options, request);
+    await groupCreationAuthority(options, input, operation, fresh, snapshot);
     if ('assistantId' in input) {
       const payerFresh = await assistantCreation(options, memberId, input, fresh);
       await payerFresh?.();
@@ -306,10 +315,39 @@ async function write(
         options, memberId, conversationId, 'stopTurnId' in input);
       await teamFresh?.();
     }
-    await fresh();
+    await confirmChatAccess(fresh, snapshot !== undefined);
+    return fresh.deadline;
   }
   const context = { silo: options.silo, memberId };
   return chatCommand(options.store, options.keys, context, input, checkFresh);
+}
+
+async function groupCreationAuthority(options: ChatOptions,
+  input: z.infer<typeof chatInput>, operation: 'retry' | 'append', fresh: Fresh,
+  snapshot: Awaited<ReturnType<typeof reviewedGroup>>) {
+  if (operation === 'retry' || !('participantIds' in input)) return;
+  function activeParticipant(participantId: string) {
+    return activeChatMember(options, participantId, fresh);
+  }
+  const checks = input.participantIds.map(activeParticipant);
+  await Promise.all(checks);
+  if (!snapshot) return;
+  const subject = `team-${snapshot.groupId}`;
+  fresh.include(subject);
+  if (await options.store.head(subject, fresh.deadline) !== snapshot.position) {
+    throw new ChatConflict('Group changed; review its members again');
+  }
+}
+
+async function confirmChatAccess(fresh: Fresh, reviewedSnapshot: boolean) {
+  try {
+    await fresh();
+  } catch (error) {
+    if (reviewedSnapshot && isAuthorityChanged(error)) {
+      throw new ChatConflict('Group changed; review its members again');
+    }
+    throw error;
+  }
 }
 
 async function assistantCreation(
@@ -349,6 +387,9 @@ function chatRefusal(request: FastifyRequest, reply: FastifyReply, error: unknow
   if (isChatRefused(error)) return reply.code(403).send({ status: 'refused' });
   if (error instanceof z.ZodError || error instanceof InvalidChatRequest) {
     return reply.code(400).send({ status: 'refused' });
+  }
+  if (error instanceof GroupSnapshotTooLarge) {
+    return reply.code(409).send({ status: 'refused', error: error.message });
   }
   if (error instanceof ChatConflict) return reply.code(409).send({ status: 'refused' });
   const message = error instanceof Error ? error.message : 'Unknown chat error';

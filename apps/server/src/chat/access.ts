@@ -99,7 +99,6 @@ export async function writeChatAccess(options: ChatOptions, request: AccessReque
     options.store, performance.now(), subjects, request.deadline);
   await activeChatMember(options, request.memberId, fresh);
   const context = await conversationAccess(options, request, fresh.deadline);
-  if (context.mode === 'group') throw new ChatRefused('Group commands unavailable');
   await fresh();
   return Object.assign(fresh, context);
 }
@@ -130,60 +129,29 @@ async function conversationAccess(options: ChatOptions, request: AccessRequest, 
   return { mode, colleagueId, joinPosition, participantIds, accessPosition };
 }
 
-type ParticipationOptions = Pick<ChatOptions, 'store' | 'db' | 'silo' | 'binding'>;
-
-export function conversationParticipation(options: ParticipationOptions,
-  memberId: string, conversationId: string, deadline = performance.now() + 2000,
-  relation: 'read' | 'post' = 'read', allowApplying = false) {
-  const read = conversationParticipationReader(options, memberId);
-  return read(conversationId, deadline, relation, allowApplying);
-}
-
-// Reuse membership facts within one request, and check their position again after IAM replies.
-function currentChatMemberReader(options: ParticipationOptions, memberId: string) {
-  let checkedPosition: number | undefined;
-  let membershipRead: Promise<boolean> | undefined;
-  async function requireMember(deadline: number) {
-    const position = await options.store.head(`member-${memberId}`, deadline);
-    if (position !== checkedPosition || !membershipRead) {
-      membershipRead = chatMembership(options.store, options.silo, memberId, deadline);
-      checkedPosition = position;
-    }
-    const active = await membershipRead;
-    if (!active) throw new ChatRefused('Active silo membership required');
-  }
-  return requireMember;
-}
-
-export function conversationParticipationReader(options: ParticipationOptions, memberId: string) {
-  const requireMember = currentChatMemberReader(options, memberId);
+export async function conversationParticipation(options: Pick<ChatOptions,
+  'store' | 'db' | 'silo' | 'binding'>, memberId: string, conversationId: string,
+  deadline = performance.now() + 2000, relation: 'read' | 'post' = 'read', allowApplying = false) {
+  const legacy = await legacyParticipation(options.store, options.db, options.silo,
+    conversationId, deadline);
+  await participation(options.store, options.silo, conversationId,
+    memberId, legacy, deadline);
+  const initialMembership = await chatMembership(options.store, options.silo, memberId, deadline);
+  if (!initialMembership) throw new ChatRefused('Active silo membership required');
   const auth = memberAuthorisation(options.binding);
-  async function read(conversationId: string, deadline = performance.now() + 2000,
-    relation: 'read' | 'post' = 'read', allowApplying = false) {
-    const subject = `participation-${conversationId}`;
-    const position = await options.store.head(subject, deadline);
-    const legacy = await legacyParticipation(options.store, options.db, options.silo,
-      conversationId, deadline);
-    let current = await participation(options.store, options.silo, conversationId,
-      memberId, legacy, deadline);
-    await requireMember(deadline);
-    const permission = await auth.conversation(memberId, conversationId, relation);
-    if (permission.status === 'unavailable') throw new Error('IAM unavailable');
-    await requireMember(deadline);
-    // Check saved changes after IAM answers so an old permission cannot restore a removed person.
-    const latestPosition = await options.store.head(subject, deadline);
-    if (latestPosition !== position) {
-      current = await participation(options.store, options.silo, conversationId,
-        memberId, legacy, deadline);
-    }
-    if (!await auth.applied(current.joinEventId)) {
-      if (allowApplying) return current;
-      throw new ParticipationApplying('Conversation access still applying');
-    }
-    if (!permission.allowed) throw new ChatRefused('Conversation refused');
-    return current;
+  const permission = await auth.conversation(memberId, conversationId, relation);
+  if (permission.status === 'unavailable') throw new Error('IAM unavailable');
+  const membership = await chatMembership(options.store, options.silo, memberId, deadline);
+  if (!membership) throw new ChatRefused('Active silo membership required');
+  // Check events after IAM answers so a delayed old permission cannot restore a removed person.
+  const current = await participation(options.store, options.silo, conversationId,
+    memberId, legacy, deadline);
+  if (!await auth.applied(current.joinEventId)) {
+    if (allowApplying) return current;
+    throw new ParticipationApplying('Conversation access still applying');
   }
-  return read;
+  if (!permission.allowed) throw new ChatRefused('Conversation refused');
+  return current;
 }
 
 /** Check current membership without waiting for role or owner changes to reach OpenFGA.

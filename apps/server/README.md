@@ -15,9 +15,12 @@ flowchart LR
   server -.->|checks organisation, access, invitations, spending and memory passes| libs["libs/*<br/>shared code"]
   server -->|records memory facts, model grants, chat and confirmed provider choices| nats["NATS<br/>event log"]
 
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, human groups, chat and permission checks"]
+  server -.->|checks organisation, access, invitation accounts and spending| libs["libs/*<br/>shared code"]
+  server -->|records changes, model grants, chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members and invitation accounts, chat rows, closes and old joins, facts and source messages, models and computers| postgres
+  server -->|reads members and invitation accounts, chat rows, old joins, facts and source messages, models and computers| postgres
   server -->|sends turns, tool lists and approval outcomes; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -77,6 +80,8 @@ flowchart LR
   events first and keeps the conditional write at the position it checked.
   Both summaries drop older entries when their memory budget is reached. A
   summary that is too large is dropped on its own, leaving other chats warm.
+- Lets silo members create a group chat from reviewed people and exchange messages
+  without starting assistant work. Offers only groups they belong to.
 - Lets two silo members exchange private messages without starting assistant work.
   Tells the browser when a new chat is waiting for its permissions, so it can keep the draft.
 - Runs a separate models process. It keeps AI budgets, approves or refuses each AI request,
@@ -143,8 +148,6 @@ use it to refuse calls if the tool changes to Ask during the turn.
    then returns messages and live updates. Busy chats and slow reads keep working.
    A removed participant loses access even before the permissions service catches up.
    A person who joins later sees messages from their latest join onwards.
-   Lists reuse permission facts within the request and check for changes after each
-   answer from the permissions service.
 7. **An admin adds a tool server.** The server checks the remote address, lists its
    tools and leaves them blocked until an admin reviews them.
 8. **An assistant asks an AI model for help.** The request goes through agentgateway, the
@@ -153,8 +156,6 @@ use it to refuse calls if the tool changes to Ask during the turn.
 9. **A person watches the assistant's desktop.** The server checks their conversation
    access and desktop grant. A confirmed member removal or conversation permission denial
    ends the view straight away, even if another access read is slow.
-   When background work is behind, later checks reuse the chat records already checked
-   for a close. New records still receive a check before access continues.
 
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.
