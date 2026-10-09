@@ -5,7 +5,7 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { pgDb, providers, ProjectionRunner, rebuildProviderProjection } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { providerSecretRef } from '@opencrane/models';
+import { providerDefaultHandler, providerSecretRef } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -13,6 +13,7 @@ const config = testAuthConfig({ expectedOrgId: 'org-acme' });
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let dbs: Awaited<ReturnType<typeof databases>>;
+let binding: Awaited<ReturnType<typeof createStore>>;
 let auth: ReturnType<typeof memberAuthorisation>;
 let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
@@ -43,7 +44,7 @@ async function initialise() {
   nats = await natsFixture();
   fga = await openfga();
   dbs = await databases();
-  const binding = await createStore(fga.apiUrl, 'acme');
+  binding = await createStore(fga.apiUrl, 'acme');
   auth = memberAuthorisation(binding);
   for (const [memberId, role] of [['owner', 'owner'], ['admin', 'admin'], ['bob', 'member']]) {
     await append(`member-${memberId}`, 'member.joined', { memberId, role,
@@ -78,8 +79,8 @@ afterAll(close);
 function request(method: 'GET' | 'POST', providerId = 'primary', payload?: unknown,
   sub = 'owner', origin = 'https://app.example.test', orgId = 'org-acme', suffix = 'bindings') {
   const session = { sub, orgId, roles: ['owner'], authTime: 1, exp: 2000000000 };
-  const headers = { origin, cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  const options = { method, url: `/api/org/providers/${providerId}/${suffix}`, headers, payload };
+  const headers = { origin, 'content-type': 'application/json', cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const options = { method, url: `/api/org/providers/${providerId}/${suffix}`, headers, ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }) };
   return app.inject(options);
 }
 async function input(overrides: Record<string, unknown> = {}) {
@@ -118,8 +119,30 @@ async function deniedRequest(sub: string, origin: string, orgId: string) {
 it.each([['bob', 'https://app.example.test', 'org-acme'],
   ['owner', 'https://foreign.test', 'org-acme'],
   ['owner', 'https://app.example.test', 'foreign']])('checks current authority and Origin', deniedRequest);
+async function seedsFirstVerified() {
+  const binding = await createStore(fga.apiUrl, 'acme');
+  const differentStore = providerDefaultHandler(nats.store, binding);
+  const trigger = event('seed', 'provider-secondary', 'provider.models_selected');
+  trigger.silo = 'acme';
+  trigger.data = { providerId: 'secondary', revision: 3, changedBy: 'owner',
+    models: ['gpt-6.1-sol'] };
+  const before = await nats.store.head();
+  // Require applied IAM from the actual silo, even for an automatic default.
+  await expect(differentStore.handle(trigger, pgDb(dbs.queue))).rejects.toThrow();
+  expect(await nats.store.head()).toBe(before);
+  const handler = providerDefaultHandler(nats.store, binding);
+  await handler.handle(trigger, pgDb(dbs.queue));
+  const saved = await request('GET');
+  expect(saved.json()).toMatchObject({ rows: [{ providerId: 'primary', kind: 'silo_default' }] });
+  const position = await nats.store.head();
+  await handler.handle(trigger, pgDb(dbs.queue));
+  expect(await nats.store.head()).toBe(position);
+}
+it('keeps automatic default creation behind current silo authority', seedsFirstVerified);
 async function savesAndReconciles() {
-  const command = await input({ kind: 'silo_default', dependantId: 'acme' });
+  const dependency = (await request('GET')).json<{ rows: { position: number }[] }>();
+  const command = await input({ kind: 'silo_default', dependantId: 'acme',
+    expectedBindingSequence: dependency.rows[0]?.position ?? 0 });
   const response = await request('POST', 'primary', command);
   expect(response.statusCode).toBe(200);
   expect((await request('POST', 'primary', command)).json()).toEqual(response.json());
@@ -165,11 +188,12 @@ async function racesAndExpires() {
   expect(appendSpy).toHaveBeenCalledWith(expect.objectContaining({
     expectedSubject: 'provider-*', historyChecked: true, deadline: expect.any(Number) }));
   appendSpy.mockRestore();
+  const expiredCommand = await input();
   const clock = vi.spyOn(performance, 'now');
   let calls = 0;
   function expires() { return ++calls < 4 ? 100 : 3000; }
   clock.mockImplementation(expires);
-  expect((await request('POST', 'primary', await input())).statusCode).toBe(503);
+  expect((await request('POST', 'primary', expiredCommand)).statusCode).toBe(503);
   clock.mockRestore();
 }
 it('orders concurrent choices and refuses an expired authority check', racesAndExpires);
@@ -178,3 +202,18 @@ async function hidesAfterRemoval() {
   await deniedRequest('admin', 'https://app.example.test', 'org-acme');
 }
 it('refuses a departed admin even before IAM catches up', hidesAfterRemoval);
+
+async function routineGaps() {
+  const read = nats.store.readStream.bind(nats.store);
+  const spy = vi.spyOn(nats.store, 'readStream');
+  function fails(subject: string, from?: number, deadline?: number) {
+    if (subject === 'routine-*') throw new Error('reader failed');
+    return read(subject, from, deadline);
+  }
+  spy.mockImplementation(fails);
+  expect((await request('GET')).statusCode).toBe(503);
+  spy.mockRestore();
+  await append('routine-old', 'routine.paused', { routineId: 'old', pausedBy: 'owner' });
+  expect((await request('GET')).json()).toMatchObject({ routines: { status: 'unsupported' } });
+}
+it('reports reader failure and legacy routine history without invented counts', routineGaps);
