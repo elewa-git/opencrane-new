@@ -42,13 +42,15 @@ function requireMembership(groupRows: StoredEvent[], memberRows: StoredEvent[],
   }
 }
 async function requireApplied(binding: Binding, silo: string, requesterId: string,
-  groupId: string, groupReceipts: StoredEvent[], memberRows: StoredEvent[]) {
+  groupId: string, groupReceipts: StoredEvent[], memberRows: StoredEvent[],
+  applied?: (eventId: string) => Promise<boolean>) {
   if (binding.silo !== silo) throw new PayingGroupRefused('Wrong silo');
   const auth = memberAuthorisation(binding);
+  const checkApplied = applied ?? auth.applied.bind(auth);
   const memberReceipts = memberRows.filter(needsReceipt);
   const receiptRows = [...groupReceipts, ...memberReceipts];
   for (const row of receiptRows) {
-    if (!await auth.applied(row.event.id)) {
+    if (!await checkApplied(row.event.id)) {
       throw new AuthorityApplying('Group membership is still being applied; try again shortly');
     }
   }
@@ -63,7 +65,8 @@ async function requireApplied(binding: Binding, silo: string, requesterId: strin
 }
 
 export async function groupMembership(store: EventStore, silo: string, requesterId: string,
-  groupId: string, binding: Binding, deadline = Infinity) {
+  groupId: string, binding: Binding, deadline = Infinity,
+  applied?: (eventId: string) => Promise<boolean>) {
   const { groupRows, memberRows } = await readMembership(
     store, silo, requesterId, groupId, deadline);
   requireMembership(groupRows, memberRows, requesterId, groupId);
@@ -72,7 +75,7 @@ export async function groupMembership(store: EventStore, silo: string, requester
   }
   // Check this requester while the access system applies other members' changes.
   const groupReceipts = groupRows.filter(concernsRequester);
-  await requireApplied(binding, silo, requesterId, groupId, groupReceipts, memberRows);
+  await requireApplied(binding, silo, requesterId, groupId, groupReceipts, memberRows, applied);
 }
 
 /** Require active silo and group membership before allowing shared spending. */

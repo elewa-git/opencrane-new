@@ -62,6 +62,24 @@ Use a PostgreSQL role allowed to create and drop shadow tables, replace the live
 projection contents and take advisory locks. Run only the upgraded projection runner: an
 older writer does not take the lock and is unsafe during this operation.
 
+## Run the live memory worker
+
+`npm run worker -w apps/ops -- memory` maintains the current memory and search tables.
+Set `DATABASE_URL`, the projection-reader NATS settings and `MEMORY_KEY_DIRECTORY`.
+The existing key directory needs mode 0700 and its permanent deletion markers.
+As with rebuild, only `decrypt` is passed to the projection. It never creates or deletes keys.
+The runner creates the `memory` checkpoint and tables before consuming saved events.
+An empty installation can therefore serve `/api/memory/scopes` without any facts.
+
+When `MEMORY_KEY_DIRECTORY` is absent, the worker logs
+`Memory reads unavailable: MEMORY_KEY_DIRECTORY is not configured` once, then exits successfully.
+Set the same directory setting on `apps/server` to enable memory reads. Without it, or
+while a required read table is behind, routes return HTTP 503 with
+`{status: "unavailable", reason: "memory_unavailable"}`. Invalid custody stops the worker
+and logs the failure; restore the directory and deletion markers before restarting it.
+`apps/server/test/memory-worker.test.ts` starts the real worker with disposable NATS,
+PostgreSQL and OpenFGA, and checks fresh empty reads and missing configuration.
+
 ## Rebuild memory offline
 
 Stop memory readers and runners before this command, and keep them stopped until it succeeds:
@@ -85,7 +103,7 @@ preserve table grants; reapply any separately configured grants before restartin
 `--verify` is refused. `--dry-run` only checks complete event history; it does not
 check keys or projected content. Replay never provisions/deletes keys or runs reactions.
 The [projection contract](../../libs/projections/README.robot.md#memory-projection)
-lists rows, indexes and focused integration proof. No memory worker or public API is enabled yet.
+lists rows, indexes and focused integration proof. The server exposes scope and paged list/search reads.
 
 ## Rebuild OpenFGA offline
 

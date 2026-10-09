@@ -19,7 +19,11 @@ import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepa
 const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
 const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
+const memoryKeyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
 const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets', 'audit', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
+if (memoryKeyDirectory) {
+  names.push('memory');
+}
 async function run(command: string, args: string[], env: Record<string, string> = base, timeout = 180_000) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
   try { return (await exec(command, command === 'kubectl' ? ['--context=k3d-ocn', ...args] : args, { cwd: root, env, timeout, maxBuffer: 8 * 1024 * 1024 })).stdout; }
@@ -370,8 +374,13 @@ async function up(fresh: boolean) {
       OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId });
   }
   const binding = await readEnv('binding');
-  for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets', 'audit']) {
-    await start(name, ['--experimental-strip-types', 'apps/ops/src/worker.ts', name], await readEnv('projection'));
+  for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets',
+    'audit', 'memory']) {
+    const projectionEnv = await readEnv('projection');
+    if (memoryKeyDirectory) {
+      projectionEnv['MEMORY_KEY_DIRECTORY'] = memoryKeyDirectory;
+    }
+    await start(name, ['--experimental-strip-types', 'apps/ops/src/worker.ts', name], projectionEnv);
   }
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
   await save('model-jwks.json', JSON.stringify(issuer.jwks));
@@ -424,6 +433,7 @@ async function up(fresh: boolean) {
       ...(tokenBootstrap ? { BOOTSTRAP_TOKEN_FILE: `${directory}/bootstrap-token.json` } : {}),
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
+      ...(memoryKeyDirectory ? { MEMORY_KEY_DIRECTORY: memoryKeyDirectory } : {}),
       CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
       PROVIDER_SECRETS_DIR: `${directory}/provider-secrets`,
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,

@@ -41,6 +41,7 @@ let catalogue: ReturnType<typeof connectMcpCatalogue> | undefined;
 let computers: ReturnType<typeof connectComputers> | undefined;
 let modelDb: ReturnType<typeof connectProjectionDb> | undefined;
 const databaseUrl = process.env['DATABASE_URL'];
+const memoryKeysConfigured = Boolean(process.env['MEMORY_KEY_DIRECTORY']?.trim());
 if (databaseUrl) {
   const apiUrl = process.env['OPENFGA_API_URL'];
   const storeId = process.env['OPENFGA_STORE_ID'];
@@ -94,7 +95,7 @@ const app = buildServer(authConfig, {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
   } } : {}),
-  ...(realtime && events && modelDb ? { memory: {
+  ...(realtime && events && modelDb && memoryKeysConfigured ? { memory: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
   } } : {}),

@@ -223,7 +223,9 @@ memory's `apply` directly is refused because it would skip preparation.
 
 `memory_facts` has a `(silo, scope_id, memory_id)` primary key. It stores current
 metadata, ciphertext, key reference, event position and time. `search_text` and
-`search_vector` are deletable derivatives. The TypeScript projection passes text
+`search_vector` are deletable derivatives. Search text is normalised to NFC. Older projected rows need the offline memory rebuild
+to apply the new text checks and normalisation before these reads are enabled.
+The TypeScript projection passes text
 as a parameter to explicit `to_tsvector('simple', $14)` calls; there are no triggers,
 views, generated columns or stored procedures. The order index is
 `(silo, scope_id, position, memory_id)`; a GIN index supports full-text queries.
@@ -236,11 +238,14 @@ It never stores plaintext, ciphertext, keys or source payloads.
 
 Only a destroyed key yields `unavailable`, with null search text/vector. Missing
 or damaged keys and temporary custody failures stop replay without advancing that
-event's checkpoint. Legacy writes retain ciphertext and references as `quarantined`,
+event's checkpoint. Authenticated earlier text with C0 controls other than tab and newline
+is quarantined with null search text/vector, without stopping replay. Decryption returns
+this older text; write validation still refuses it. Legacy writes retain ciphertext and references as `quarantined`,
 with unknown ownership and no searchable content. Parsing uses `parseEventByType`
 and the full replay schema, plus `memoryIdentity` / `memoryWrittenIdentity`.
 Other memory event types stop replay until their projection rules are implemented;
-correction, forgetting, dependency invalidation and the public memory API remain later work.
+correction, forgetting and dependency invalidation remain later work. The server now
+exposes authorised scopes and paged list/search reads.
 `readMemoryFactIds(db, silo, scopeId, search?)` returns ids in saved-event order.
 Its optional search uses PostgreSQL `to_tsquery` syntax. Both paths restrict silo and
 scope; callers must check permission before calling it.
@@ -258,3 +263,6 @@ settings, dependency edges, rollback, ordering, scope isolation, legacy quaranti
 destroyed versus missing/unavailable keys and key resolution before transactions.
 Run it with `nice -n 10 npx vitest run libs/projections/test/memory.test.ts`.
 Fresh-install customer journeys and power-loss qualification remain NOT RUN.
+
+The [live memory worker](../../apps/ops/README.robot.md#run-the-live-memory-worker)
+uses the same read-only custody as rebuild.

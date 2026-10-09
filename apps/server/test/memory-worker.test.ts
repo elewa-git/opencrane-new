@@ -51,7 +51,7 @@ afterEach(async function cleanup() {
 
 function startWorker(configureKeys: boolean) {
   const databaseUrl = storage.queue.options.connectionString;
-  const env = { ...process.env, ...nats.env('projection'), DATABASE_URL: databaseUrl,
+  const env: NodeJS.ProcessEnv = { ...process.env, ...nats.env('projection'), DATABASE_URL: databaseUrl,
     LOG_LEVEL: 'info' };
   delete env['MEMORY_KEY_DIRECTORY'];
   if (configureKeys) env['MEMORY_KEY_DIRECTORY'] = directory;

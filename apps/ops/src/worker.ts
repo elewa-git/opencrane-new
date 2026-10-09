@@ -5,7 +5,8 @@ import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
 import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
   mcpCatalogue, computers, modelAccess,
-  conversations, files } from '@opencrane/projections';
+  conversations, files, memoryKeys, memoryProjection, type Projection, type Db,
+} from '@opencrane/projections';
 import { dispatch, HandlerRuntime } from '@opencrane/handlers';
 import { memberAuthorisation } from '@opencrane/authz';
 import { tokenIssuer } from '@opencrane/auth';
@@ -19,12 +20,34 @@ function required(name: string): string {
   return value;
 }
 const mode = process.argv[2];
-if (!['members', 'mcp-catalogue', 'computers', 'dispatcher', 'budgets', 'conversations', 'audit', 'files'].includes(mode ?? '')) {
+const modes = ['members', 'mcp-catalogue', 'computers', 'dispatcher', 'budgets',
+  'conversations', 'audit', 'files', 'memory'];
+if (!modes.includes(mode ?? '')) {
   throw new Error(
-    'Expected members, mcp-catalogue, computers, dispatcher, budgets, conversations, audit or files',
+    `Expected one of: ${modes.join(', ')}`,
   );
 }
 const logger = createLogger(`worker-${mode}`);
+function workerProjection() {
+  if (mode === 'memory') {
+    const directory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
+    if (!directory) {
+      logger.warn('Memory reads unavailable: MEMORY_KEY_DIRECTORY is not configured');
+      return undefined;
+    }
+    const keys = memoryKeys(directory);
+    const custody = { decrypt: keys.decrypt };
+    return memoryProjection(custody);
+  }
+  const projections: Record<string, Projection> = {
+    files, audit: auditTrail, conversations, members, budgets,
+    computers, 'mcp-catalogue': mcpCatalogue,
+  };
+  if (!mode) {
+    return undefined;
+  }
+  return projections[mode];
+}
 const stop = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => stop.abort());
 const db = connectProjectionDb(required('DATABASE_URL'), (error) => {
@@ -37,6 +60,36 @@ const store = await createEventStore(connection);
 let runtime: HandlerRuntime | undefined;
 let commands: Awaited<ReturnType<typeof connectEventStore>> | undefined;
 let watcher: Promise<void> | undefined;
+async function runProjectionWorker(projection: Projection) {
+  const runner = new ProjectionRunner(db.db, store, logger);
+  // Hold the database lock while creating shared tables. Other workers may start together.
+  async function initialiseProjection(locked: Db) {
+    const lockedRunner = new ProjectionRunner(locked, store, logger);
+    await lockedRunner.initialise(projection);
+  }
+  await db.db.lock!('initialise', initialiseProjection);
+  async function initialiseGroups(locked: Db) {
+    const groupRunner = new ProjectionRunner(locked, store, logger);
+    await groupRunner.initialise(groups);
+    await groupRunner.initialise(providers);
+    await groupRunner.initialise(modelAccess);
+  }
+  if (mode === 'members') {
+    await db.db.lock!('initialise', initialiseGroups);
+  }
+  if (mode === 'budgets') {
+    await initialiseBudgetProjection(db.db, store, logger);
+  }
+  while (!stop.signal.aborted) {
+    await runner.run(projection, { signal: stop.signal });
+    if (mode === 'members') {
+      await runner.run(groups, { signal: stop.signal });
+      await runner.run(providers, { signal: stop.signal });
+      await runner.run(modelAccess, { signal: stop.signal });
+    }
+    await delay(100, undefined, { signal: stop.signal });
+  }
+}
 try {
   if (mode === 'dispatcher') {
     const silo = required('SILO_ID');
@@ -63,29 +116,9 @@ try {
     watcher = watchComputers(commands.store, kube, tokens, (id, token) => kube.credentials(id, token), silo, idleMs, stop.signal);
     await Promise.race([dispatch(connection, runtime, stop.signal), watcher]);
   } else {
-    const projection = mode === 'files' ? files : mode === 'audit' ? auditTrail : mode === 'conversations' ? conversations : mode === 'members' ? members : mode === 'budgets' ? budgets : mode === 'computers' ? computers : mcpCatalogue;
-    const runner = new ProjectionRunner(db.db, store, logger);
-    // Workers may initialise the same schema together, so hold the DB lock through migration.
-    await db.db.lock!('initialise', async (locked) => {
-      const lockedRunner = new ProjectionRunner(locked, store, logger);
-      await lockedRunner.initialise(projection);
-    });
-    async function initialiseGroups(locked: import('@opencrane/projections').Db) {
-      const groupRunner = new ProjectionRunner(locked, store, logger);
-      await groupRunner.initialise(groups);
-      await groupRunner.initialise(providers);
-      await groupRunner.initialise(modelAccess);
-    }
-    if (mode === 'members') await db.db.lock!('initialise', initialiseGroups);
-    if (mode === 'budgets') await initialiseBudgetProjection(db.db, store, logger);
-    while (!stop.signal.aborted) {
-      await runner.run(projection, { signal: stop.signal });
-      if (mode === 'members') {
-        await runner.run(groups, { signal: stop.signal });
-        await runner.run(providers, { signal: stop.signal });
-        await runner.run(modelAccess, { signal: stop.signal });
-      }
-      await delay(100, undefined, { signal: stop.signal });
+    const projection = workerProjection();
+    if (projection) {
+      await runProjectionWorker(projection);
     }
   }
 } catch (error) {

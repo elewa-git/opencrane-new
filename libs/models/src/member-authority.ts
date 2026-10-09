@@ -18,13 +18,15 @@ export async function activeMember(
 
 export async function readActiveMember(store: EventStore, binding: Binding, memberId: string,
   requiredRole: 'member' | 'admin' = 'member',
+  applied?: (eventId: string) => Promise<boolean>,
 ) {
-  await requireMember(store, binding, memberId, requiredRole === 'admin');
+  await requireMember(store, binding, memberId, requiredRole === 'admin', undefined, applied);
 }
 
 async function requireMember(
   store: EventStore, binding: Binding, memberId: string, admin: boolean,
   fresh?: Awaited<ReturnType<typeof authorityFence>>,
+  applied?: (eventId: string) => Promise<boolean>,
 ) {
   const membership = await currentMembership(store, binding.silo, memberId, fresh);
   if (!membership.role) {
@@ -34,6 +36,7 @@ async function requireMember(
     throw new MemberAccessRefused('Owner or Admin required');
   }
   const auth = memberAuthorisation(binding);
+  const checkApplied = applied ?? auth.applied.bind(auth);
   const relation = admin ? 'admin' : 'member';
   const permission = await auth.check(memberId, relation);
   if (permission.status === 'unavailable') {
@@ -43,7 +46,7 @@ async function requireMember(
     throw new MemberAccessRefused('Membership unavailable');
   }
   for (const row of membership.facts) {
-    if (!await auth.applied(row.event.id)) {
+    if (!await checkApplied(row.event.id)) {
       throw new AuthorityApplying('Membership is still being applied');
     }
   }

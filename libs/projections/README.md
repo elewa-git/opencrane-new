@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables, scope queries and content keys"]
+  ops["apps/ops<br/>workers"] -->|fills tables, including configured memory| projections["libs/projections<br/>read tables, scope queries and content keys"]
   server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
   projections -->|writes tables| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
@@ -70,8 +70,10 @@ runs with readers and workers stopped. Customer deployment and backup recovery s
    directory on the server. An empty deletion marker means the text was forgotten;
    a missing key means storage failed. Replay checks every required key before replacing memory tables.
    It reads keys again before each database update.
-   It saves current text for search, or marks destroyed content unavailable.
-   The application does not expose memory yet.
+   It saves normalised text for search, marks destroyed content unavailable and keeps
+   older text with refused controls out of search. The live memory worker keeps these
+   tables current when its key directory is configured. The server lists and searches
+   facts after checking access.
 5. **An operator rebuilds a table.** They run `npm run replay -- members`. The
    command reads the whole event log again, builds fresh tables on the side and
    swaps them in. It does not run reactions or make outside calls.

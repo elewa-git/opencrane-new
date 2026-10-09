@@ -13,7 +13,7 @@ flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events and assistant choices| ops["apps/ops<br/>workers and replay tools"]
   ops -.->|uses| libs["libs/*<br/>shared code"]
-  ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
+  ops -->|updates tables, including memory when keys are configured| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
   ops -->|checks and updates computers| kube["Kubernetes<br/>computer manager"]
   kube -->|runs| computer["apps/computer<br/>assistant runtime"]
@@ -22,7 +22,7 @@ flowchart LR
 ## What it is responsible for
 
 - Keeps the member, group, model grant, tool catalogue, conversation, file, computer, budget and
-  history tables up to date.
+  history tables up to date. Keeps memory current when its key directory is configured.
 - Updates permissions and sets up a new member's assistant and computer when requested.
 - Starts computers, gives them short-lived access keys and pauses idle ones.
 - Settles model spending after a model request.
@@ -60,6 +60,13 @@ npm run worker -w apps/ops -- members
 npm run worker -w apps/ops -- dispatcher
 npm run replay -- memory --dry-run
 ```
+
+The live memory worker runs with `npm run worker -w apps/ops -- memory`. It needs
+`DATABASE_URL`, the NATS reader settings and `MEMORY_KEY_DIRECTORY`, an existing
+private directory holding the saved revision keys. It only reads those keys.
+An existing installation needs a memory rebuild to apply the new text checks to saved rows.
+Without this setting, it logs one message and stops. Memory routes return
+`503 memory_unavailable` until the server has this setting and the worker is ready.
 
 The memory rebuild command is `npm run replay -- memory --confirm-memory-stopped`.
 It needs `DATABASE_URL`, the NATS reader settings and `MEMORY_KEY_DIRECTORY`, an

@@ -18,7 +18,7 @@ flowchart LR
   stack -->|starts in Docker| services["Services<br/>PostgreSQL, NATS, OpenFGA, MinIO"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
-  stack -->|runs processes| apps["apps/server, ops, web<br/>OpenCrane programs"]
+  stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>browser checks, saved-data repeats and daily run"]
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|uses local cluster| devbox
@@ -27,6 +27,7 @@ flowchart LR
 ## What it is responsible for
 
 - Start and stop the local services and OpenCrane processes.
+  Memory reads need an existing private key directory configured at startup.
 - Create private local credentials for the services.
 - Set up four sign-in test users for each spare stack. Check that the sign-in apps
   include email claims in their signed tokens.
