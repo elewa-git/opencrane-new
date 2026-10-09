@@ -16,7 +16,7 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
 2. **PostgreSQL holds content, not truth:** who owns what, installed MCP servers, conversations, budgets and so on. Every table is a **projection** with a checkpoint, and can be dropped and **rebuilt by replay**.
 3. **Order is guaranteed within a stream, never across streams.** Each stream is handled by one writer at a time, so projections need no locks. Handlers recheck current state when they depend on another stream.
 4. **Projections and reactions are separate.** A replay rebuilds projections only. Reactions (waking a computer, pushing gateway config, sending mail) keep their own checkpoints, are idempotent, and are switched off during a rebuild.
-5. **No secrets and no plaintext history in events.** Events carry secret *references*. Message and memory text is encrypted with a per-conversation or per-scope key, so "forget" deletes the key (crypto-shredding) and appends a tombstone event.
+5. **No secrets and no plaintext history in events.** Events carry secret *references*. Message text uses a per-conversation key. Memory text uses a separate key for each fact revision. Forget records a tombstone first, then deletes every revision key and the searchable text.
 6. **An event never grants anything.** Permissions come from the OpenFGA projection, which is rebuilt from events like any other.
 7. **Idempotency is by event id, not by the event store's duplicate window.** Every projection and reaction records the event ids it has applied (in the same Postgres transaction as its checkpoint), and commands use expected-sequence appends. JetStream's `Nats-Msg-Id` de-duplication only lasts for its duplicate window, is lost on backup/restore, and is **stream-wide** (an id first used on another subject makes the append report a duplicate and store nothing), so it is an optimisation, never the guarantee (found in spike S0.7).
    - A retried **command** is recognised from the stream itself: the envelope carries `commandId` (a non-empty string; optional for older events), and the command checks the entity history it already loads before appending. There is no separate command ledger: a ledger written after the publish leaves a gap, and a ledger restored to a different point than the stream re-runs commands.
@@ -417,10 +417,17 @@ hosted provider tools with unknown prices remain disabled.
 
 ### Memory
 
+Version-1 `memory.written` records the derived scope identity, initial revision, kind, pin,
+expiry, typed sources and same-scope dependencies with ciphertext and a revision key reference.
+The [memory design](../specs/phase-4/p4-12-memory.md) defines the limits and later work.
+Unversioned events still parse for replay; unknown ownership stays quarantined.
+Encrypted revision storage is available internally. The memory projection, rebuild command
+and public access are not implemented yet.
+
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
-| `memory.corrected` / `memory.forgotten` | OpenCrane memory MCP (correct/forget); nightly per-scope dreaming job (corrected only) | Postgres memory projection for that scope | forget: delete the payload key, then tombstone |
+| `memory.corrected` / `memory.forgotten` | OpenCrane memory MCP (correct/forget); nightly per-scope dreaming job (corrected only) | Postgres memory projection for that scope | forget: record a tombstone, then delete every revision key and searchable text |
 | `memory.consolidated` | Reserved for later use; not emitted by MVP dreaming | Postgres memory projection for that scope | — |
 | `scope.promotion_requested` / `scope.promoted` | person / approver | scopes | OpenFGA viewer tuples; copy to the target dataset |
 

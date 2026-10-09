@@ -176,3 +176,47 @@ Conversation tool reports are copied as events in order.
 `test/conversations.test.ts` uses real PostgreSQL and NATS. Dropping and
 replaying `conversation_feed` returns identical rows. No backfill command is
 added; the operator replay command has no conversations target.
+
+## Memory key custody
+
+`memoryScopeId` derives scope ids; `memoryIdentity` checks saved ownership or
+returns null for legacy events. `memoryKeys(directory)` provisions, encrypts,
+decrypts and deletes revision keys
+without returning key bytes. Its server-only file adapter requires an existing
+directory with mode 0700 and writes 0600 files. It checks the directory on opening
+and before every key operation. It never creates a missing directory; a lost
+volume must be recovered with its deletion markers before commands resume.
+AES-256-GCM uses a fresh 12-byte nonce. Additional authenticated
+data binds silo, scope id/kind/owner, memory id and positive safe-integer revision.
+Ciphertext stores nonce, 16-byte tag and encrypted UTF-8 bytes, in that order.
+
+Provision publishes a synced complete key by an exclusive hard link. Delete
+atomically replaces it with a synced empty file; that permanent marker cannot be
+overwritten by provision. Delete also removes temporary hard links left by an
+interrupted provision. Provision uses one known `-pending` filename per revision;
+delete removes that file directly, without reading the directory. An unfinished
+provision with no published key refuses further provisioning until the command
+has been reconciled. Concurrent provisioning may report a store error; it cannot
+overwrite an existing key or deletion marker.
+
+Only an empty deletion marker decrypts to null. A missing key file is a store
+error, including in an existing empty directory. Damaged key files, other file
+errors and failed authentication throw. Decrypt never provisions or deletes
+anything. Both encryption and decryption require a 16-byte GCM tag. Decryption
+accepts 29–4,124 decoded bytes: nonce, tag and 1–4,096 encrypted text bytes.
+
+Retain deletion markers through backup and restore. Deleted key bytes may remain
+in filesystem free blocks, journals and volume snapshots until overwritten. File
+deletion does not shred those bytes. Snapshot retention must follow the tombstone
+rules: expire copies holding deleted key bytes under the silo's retention policy,
+and reapply tombstones and deleted-key state before serving a restore.
+The adapter requires a local
+filesystem with atomic link/rename and file/directory fsync. Power-loss and customer
+secret-store qualification are NOT RUN.
+
+This draft lands together with PR 1b, the second storage change for row 1 of the
+[memory design](../../docs/specs/phase-4/p4-12-memory.md). The next change adds
+`memory_facts`, `memory_dependencies`, payload-free `memory_changes`, preparation
+before the ProjectionRunner transaction, and operator rebuild with real PostgreSQL
+rollback/index equality tests. No memory worker, route, MCP tool or UI is enabled.
+Focused proof: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts`.

@@ -21,7 +21,7 @@ with `libs/events`.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -->|saves changes| store["libs/event-store<br/>event log"]
+  server["apps/server<br/>back end"] -->|saves changes| store["libs/event-store<br/>checked events and scopes"]
   models["libs/models<br/>AI rules and budgets"] -->|saves changes and updates saved facts| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves and reads| nats["NATS JetStream<br/>event service"]
@@ -33,6 +33,8 @@ flowchart LR
 - Save a valid event only if nothing else has changed the same thing since the
   caller last read it. Otherwise report a conflict, so the caller can reload and
   try again.
+- Require the current memory event version for new writes, while still reading old events.
+  Check that its scope id matches its recorded owner, kind and silo before saving it.
 - Return the earlier result when a caller repeats the same request.
 - Let callers that have checked their history save a change without reading that
   history again. A conflict still checks for an earlier copy of the request.

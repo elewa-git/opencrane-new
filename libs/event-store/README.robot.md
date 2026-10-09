@@ -33,6 +33,10 @@ maps the first hyphen to `ev.member.alice`; ids may contain further hyphens,
 but no dots, whitespace or NATS wildcards. Event types must use their
 registered stream prefix. `commandId` and `principal` are required for
 appends, including an explicit system principal for system commands.
+New `memory.written` appends require version 1 and a scope id equal to SHA-256
+of JSON `[silo, scopeKind, ownerId]`. A mismatched owner, kind or silo is rejected
+before writing. Reads still parse unversioned
+memory events so their unknown ownership can stay quarantined during replay.
 
 `append` returns `appended` with the global sequence, `conflict` for a stale
 expected subject sequence, `rejected` for invalid input or an unrelated
@@ -172,7 +176,7 @@ omitted server defaults where stated and never repairs an existing stream.
 | `storage`, `retention` | `file`, `limits`; durable history independent of consumers. |
 | `num_replicas` | Requested 1, 3 or 5; default 3. |
 | `max_consumers` | `-1`; no stream limit on projection consumers. |
-| `max_msg_size` | `-1`; event schemas have no maximum encoded size, so no finite stream limit is safe. Server/account payload limits still apply and must be provisioned separately. |
+| `max_msg_size` | `-1`; event schemas do not share a maximum encoded size, so no finite stream limit is safe. Server/account payload limits still apply and must be provisioned separately. |
 | `max_msgs`, `max_bytes`, `max_msgs_per_subject`, `max_age` | `-1`, `-1`, `-1`, `0`; never expire history. |
 | `discard`, `discard_new_per_subject` | `old`, false (or omitted); discard never applies with unlimited retention. |
 | `deny_delete`, `deny_purge`, `sealed`, `no_ack` | true, true, false, false; retain history, allow writes and require acknowledgements. False may be omitted. |
