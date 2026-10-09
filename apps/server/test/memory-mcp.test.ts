@@ -145,8 +145,14 @@ async function scopedRecall(team: boolean) {
         memoryId: scope.scopeKind, revision: 1, kind: 'fact', pinned: false,
         expiresAt: null, sources: [], dependsOn: [], ...encrypted };
       await target.append(`scope-${selectedId}`, 'memory.written', fact);
-      for (const granteeKind of ['member', 'assistant']) {
-        const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+      let requesterKind = 'member';
+      let requesterId = 'alice';
+      if (team && scope.scopeKind !== 'person') {
+        requesterKind = 'team';
+        requesterId = 'sales';
+      }
+      for (const granteeKind of [requesterKind, 'assistant']) {
+        const granteeId = granteeKind === 'assistant' ? 'assistant' : requesterId;
         const fields = { resourceType: 'memory_read', resourceId: selectedId,
           granteeKind, granteeId, grantedBy: 'alice' };
         const grant = await target.append(grantStream('memory_read', selectedId),
@@ -179,8 +185,22 @@ async function scopedRecall(team: boolean) {
       expect(result.result.structuredContent).toMatchObject({ returnedCount: 1,
         facts: [{ memoryId: scope.scopeKind, text: `Only ${scope.scopeKind} facts` }] });
       expect(decodeJwt(issued)).toMatchObject({ scopes: [selectedId], contentAccess: 'private' });
+      if (team) {
+        const removedFields = { teamId: 'sales', memberId: 'alice', removedBy: 'alice' };
+        const removed = await target.append('team-sales', 'team.member_removed', removedFields);
+        await assertScopedRefused(target, backend, body, selectedId);
+        await target.auth.handler.handle(removed, target.db);
+        const addedFields = { teamId: 'sales', memberId: 'alice', addedBy: 'alice' };
+        await target.append('team-sales', 'team.member_added', addedFields);
+      }
+      let requesterKind = 'member';
+      let requesterId = 'alice';
+      if (team && scope.scopeKind !== 'person') {
+        requesterKind = 'team';
+        requesterId = 'sales';
+      }
       const revokedFields = { resourceType: 'memory_read', resourceId: selectedId,
-        granteeKind: 'member', granteeId: 'alice', revokedBy: 'alice' };
+        granteeKind: requesterKind, granteeId: requesterId, revokedBy: 'alice' };
       const revoked = await target.append(grantStream('memory_read', selectedId),
         'grant.revoked', revokedFields);
       const direct = { method: 'POST' as const, url: route,
@@ -195,6 +215,21 @@ async function scopedRecall(team: boolean) {
   }
 }
 it.each([false, true])('recalls only the selected scope with live grants (team=%s)', scopedRecall);
+
+async function assertScopedRefused(target: typeof setup, backend: typeof app,
+  body: typeof call, selectedId: string) {
+  const token = await signedRecall(target, { scopes: [selectedId] }, body);
+  const database = vi.spyOn(target.db, 'query');
+  try {
+    const direct = { method: 'POST' as const, url: route,
+      headers: { ...headers, 'x-memory-context': token }, payload: body };
+    expect((await backend.inject(direct)).statusCode).toBe(403);
+    expect((await target.call(headers, body, route)).status).toBe(403);
+    expect(database).not.toHaveBeenCalled();
+  } finally {
+    database.mockRestore();
+  }
+}
 
 async function grantMemory(target: typeof setup, kind: string, granteeId: string,
   recorded = true) {
