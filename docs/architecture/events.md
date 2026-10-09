@@ -63,7 +63,8 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `assistant-<id>` | personal or team assistant | created, settings |
 | `computer-<assistant>` | assistant's computer | claimed, ready, suspended, lost, takeover |
 | `toolset-<profile>` | computer profile (an image plus Codex built-in tool settings) | changed |
-| `conversation-<id>` | conversation | participants, messages, agent activity |
+| `conversation-<id>` | conversation | creation, messages, agent activity, close |
+| `participation-<id>` | participation | participant additions and removals |
 | `approval-<id>` | approval request | requested, decided, used, expired, cancelled |
 | `decision-<request>` | gateway admission attempt | allow, ask or deny before dispatch |
 | `effect-<permit>` | gateway-observed external call | observed, uncertain, resolved |
@@ -234,8 +235,8 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `conversation.created` | command | conversations (immutable `mode`: `agent_session` binds one assistant; `direct` records exactly two distinct `participantIds`, including `createdBy`, with no assistant; group admission is deferred; missing mode in older assistant events reads as `agent_session`) | OpenFGA participants |
-| `participant.added` / `participant.removed` | command | conversations | OpenFGA participants; chat sockets do not watch these changes yet (#216) |
+| `conversation.created` | command | conversations (immutable `mode`: `agent_session` binds one assistant; `direct` records exactly two distinct `participantIds`, including `createdBy`, with no assistant; `group` records 2–97 distinct people including the creator on new writes (older 100-person records remain readable) and optional paired group snapshot fields, with no assistant or payer; group commands are deferred; missing mode in older assistant events reads as `agent_session`) | OpenFGA explicit participants and group creator; creation and participant jobs share the conversation id |
+| `participant.added` / `participant.removed` | command on `participation-<id>`; legacy conversation subjects remain readable | conversations, participant intervals with global join/end positions and event ids | OpenFGA participants; chat sockets do not watch these changes yet (#216) |
 | `message.posted` | person, or the system for routines | messages | browser delivery (WebSocket) in every mode; only `agent_session` dispatches to its assistant's computer and wakes it if suspended |
 | `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity (`executionMode` on starts; `restricted_tool_refused` on failures) | browser (WebSocket); notify on failure |
 | `agent.turn_stop_requested` | member command | activity; freeze partial text at this position | bridge interrupts an active turn; queued turns do not start; browser keeps partial text on replay |

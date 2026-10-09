@@ -158,6 +158,7 @@ async function conversationList(options: ChatOptions, memberId: string) {
   const auth = memberAuthorisation(options.binding);
   const readPrivate = privateSessionReader(options, memberId);
   async function authorisedSummary(row: (typeof conversations)[number]) {
+    if (row.mode === 'group') return undefined;
     if (row.mode === 'direct' && !row.participantIds.includes(memberId)) return undefined;
     const permission = await auth.conversation(memberId, row.conversationId, 'read');
     if (permission.status === 'unavailable') throw new Error('IAM unavailable');

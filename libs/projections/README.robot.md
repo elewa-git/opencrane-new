@@ -266,3 +266,27 @@ Fresh-install customer journeys and power-loss qualification remain NOT RUN.
 
 The [live memory worker](../../apps/ops/README.robot.md#run-the-live-memory-worker)
 uses the same read-only custody as rebuild.
+
+## Conversation participation
+
+The projection builds `conversations` metadata and `conversation_participants`
+intervals. Global NATS sequences supply join and exclusive end positions; each bound
+keeps its event id. Creation starts the initial intervals. Duplicate active joins and
+absent removals leave intervals unchanged; re-addition starts a new interval. Current participants
+have no end position. Named TypeScript functions enforce these rules, the 97-person
+cap for new additions and keep closed conversations closed. SQL stores results.
+Exact current and legacy subjects enter the feed by data id; participant events require creation in the same silo.
+Metadata, intervals, feed and checkpoints commit together. Existing installations
+need an offline conversations rebuild. Startup refuses saved creations with empty
+metadata or participant tables and names the command:
+`npm run replay -- conversations --confirm-conversations-stopped`. Stop readers and
+workers before running it. Replay takes the projection lock, replaces all three tables,
+resets event ids and the checkpoint, increases the generation and replays the log.
+A failure may leave a rebuilt prefix; keep readers stopped and rerun. It runs no
+reactions and does not offer `--verify`. Group history filtering remains pending.
+
+Inconsistent events stop the projection and leave that event's changes and checkpoint
+uncommitted. The runner logs an apply failure with its event id and subject. Existing readers
+cannot check a quarantine marker, so skipping a bad event could expose incomplete
+access history. Safe per-conversation quarantine must wait for every read path to
+refuse a marked conversation. Storage errors and event-log gaps also remain failures.

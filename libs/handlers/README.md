@@ -33,7 +33,7 @@ flowchart LR
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
   handlers -.-> events["libs/events<br/>reaction list"]
   handlers -.-> projections["libs/projections<br/>database helpers"]
-  handlers -->|stores queued jobs| pg["PostgreSQL<br/>job queue"]
+  handlers -->|stores jobs in conversation order| pg["PostgreSQL<br/>job queue"]
 ```
 
 ## What it is responsible for
@@ -45,6 +45,9 @@ flowchart LR
 - Save a note that the job is done in the same database step as the reaction's
   changes, so its database changes are never applied twice.
 - Let an operator retry a failed job after fixing its cause.
+
+Chat creation and participant permission jobs run in the same conversation order,
+even though their events use separate streams.
 
 ## Processes it handles
 

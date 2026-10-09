@@ -108,3 +108,18 @@ direct member grant stays independent of group membership.
 Flat groups reuse `team#member`, assistant `acts_for` and resource `use`; no new
 model is needed. [Group commands](../../docs/api/groups.md) append events, never
 write tuples directly. Exact-subject checks fence pending membership changes.
+
+## Conversation participants
+
+Group creation writes explicit person tuples for its audience and one `creator` tuple.
+`manage_participants = creator and read`; every read still requires silo membership.
+Group membership never grants conversation access. Receipts and permission changes
+share one atomic OpenFGA write. Rebuild into a fresh model/store before using these
+relations. Direct chats and assistant sessions keep their existing tuples.
+The server still refuses group mode. Creation and participant IAM jobs share `conversation-<id>` for exact current and legacy subjects in this silo.
+The [queue upgrade procedure](../handlers/README.robot.md#conversation-job-keys)
+keeps old and new jobs from running under different keys.
+
+New group creations have at most 97 people including the creator. The person tuples,
+creator, silo and event receipt fit OpenFGA's default 100-tuple atomic write limit.
+The dev stack and fixtures use that default.

@@ -70,8 +70,9 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   const auth = memberAuthorisation(binding);
   const append = async (subject: string, type: string, payload: unknown) => {
     const event = { ...envelope('test', subject, type, payload), source: 'opencrane-server' };
-    const rows = await history(nats.store, subject, 'test');
-    expect((await nats.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 })).status).toBe('appended');
+    // Seed saved history, including old participant subjects that commands now refuse.
+    const savedHistory = [event];
+    await nats.seed(savedHistory);
     if (['assistant.created', 'conversation.created', 'team.created', 'team.member_added'].includes(type)) await auth.handler.handle(event, db);
     return event;
   };

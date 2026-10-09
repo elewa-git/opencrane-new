@@ -105,3 +105,16 @@ Never supply the command identity to a reader process.
 
 Consumer creation/reset belongs to the authorised provisioning job, following
 [ADR 0005](../../docs/adr/0005-nats-access.md); dispatchers bind the existing durable consumer; projections read exact sequences.
+
+## Conversation job keys
+
+`update-openfga` keys creation and participant changes by the checked conversation
+id (`conversation-<id>`), retaining creation's key. Other handlers keep subject keys.
+Enqueue and worker validation use the same function for exact current and legacy subjects.
+
+Before upgrading, stop writers and dispatch. Drain queued and running IAM jobs with
+the old worker; repair and retry failed jobs first. Stop that worker, deploy worker
+and dispatcher together, then resume. Never run old `participation-<id>` keys beside
+new conversation keys. If draining is impossible, rebuild permissions and execution
+state together from the whole ordered event log using the recovery procedure above.
+Never requeue old joins after newer removals. Live upgrade qualification is NOT RUN.

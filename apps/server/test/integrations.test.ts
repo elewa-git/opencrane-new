@@ -616,7 +616,12 @@ it('serves safe admin changes and requester actions while refusing foreign users
   await append(fixture('decision.recorded', 'decision-safe-request', { requestId: 'safe-request', conversationId: 'private', turnId: 'turn', requesterId: 'alice',
     outcome: 'deny', reason: 'request_refused' }));
   await append(fixture('approval.decided', 'approval-private', { reason: 'private-approval-canary' }));
-  await append(fixture('message.posted', 'conversation-private-text', { ciphertext: Buffer.from('private-text-canary').toString('base64') }));
+  const privateMessageData = {
+    conversationId: 'private',
+    ciphertext: Buffer.from('private-text-canary').toString('base64'),
+  };
+  const privateMessage = fixture('message.posted', 'conversation-private', privateMessageData);
+  await append(privateMessage);
   await runner.run(auditTrail);
   const url = '/api/conversations/private/history';
   for (const [sub, status] of [['oidc-alice', 200], ['oidc-amina', 403], ['oidc-bob', 403], ['oidc-mallory', 403]] as const) {

@@ -145,6 +145,9 @@
         "participant": {
           "this": {}
         },
+        "creator": {
+          "this": {}
+        },
         "read": {
           "intersection": {
             "child": [
@@ -170,6 +173,22 @@
           "computedUserset": {
             "relation": "read"
           }
+        },
+        "manage_participants": {
+          "intersection": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "creator"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "read"
+                }
+              }
+            ]
+          }
         }
       },
       "metadata": {
@@ -188,10 +207,20 @@
               }
             ]
           },
+          "creator": {
+            "directly_related_user_types": [
+              {
+                "type": "person"
+              }
+            ]
+          },
           "read": {
             "directly_related_user_types": []
           },
           "post": {
+            "directly_related_user_types": []
+          },
+          "manage_participants": {
             "directly_related_user_types": []
           }
         }

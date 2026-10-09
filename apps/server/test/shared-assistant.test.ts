@@ -60,9 +60,9 @@ async function append(subject: string, type: string, data: unknown, apply = true
     const joined = z.object({ memberId: z.string() }).parse(data);
     record.principal = { kind: 'human', id: joined.memberId };
   }
-  const result = await nats.store.append({ event: record,
-    expectedSequence: await nats.store.head(subject) });
-  expect(result.status).toBe('appended');
+  // Seed saved history, including old participant subjects that commands now refuse.
+  const savedHistory = [record];
+  await nats.seed(savedHistory);
   if (apply && auth.handler.eventTypes.includes(type)) await auth.handler.handle(record, pgDb(dbs.queue));
   return record;
 }

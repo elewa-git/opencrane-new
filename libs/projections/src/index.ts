@@ -22,7 +22,7 @@ export {
   rebuildComputersProjection,
 } from "./rebuild.ts";
 export {
-  conversations, readConversation, listConversations, listOpenConversations,
+  conversations, rebuildConversationsProjection, readConversation, listConversations, listOpenConversations,
 } from './conversations.ts';
 
 export { emptyToolPolicy, applyToolPolicy } from './tool-policy.ts';

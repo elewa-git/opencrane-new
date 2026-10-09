@@ -55,6 +55,10 @@ flowchart LR
 Memory encryption and searchable text stay on the server. The memory rebuild command
 runs with readers and workers stopped. Customer deployment and backup recovery still need testing.
 
+Conversation tables keep each person's join and removal positions, so replay can
+restore their periods of participation. Conversation tables are rebuilt with readers
+and workers stopped. The worker names the replay command when an upgrade needs it.
+
 ## Processes it handles
 
 1. **A member joins.** The worker reads the saved event and updates the member

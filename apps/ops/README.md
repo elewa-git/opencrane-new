@@ -11,7 +11,7 @@ This is the background workers layer. `apps/server` records events, and these wo
 ```mermaid
 flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
-  nats -->|new events and assistant choices| ops["apps/ops<br/>workers and replay tools"]
+  nats -->|new events and assistant choices| ops["apps/ops<br/>workers and table rebuilds"]
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|updates tables, including memory when keys are configured| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
@@ -50,8 +50,9 @@ flowchart LR
    Failed changes wait before retrying, while other computers continue to resume.
 4. **An operator rebuilds a table.** The replay command reads every saved event again.
    Most tables are rebuilt alongside the live tables, then checked and swapped in.
-   Memory is rebuilt with readers and workers stopped. It reads existing revision keys
-   and keeps destroyed content unavailable. It never creates or deletes keys.
+   Conversation and memory tables are rebuilt with readers and workers stopped.
+   Memory replay reads existing revision keys and keeps destroyed content unavailable.
+   It never creates or deletes keys.
 
 ## How to run or test it
 

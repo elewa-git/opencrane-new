@@ -140,14 +140,14 @@ export const eventRegistry: readonly EventDefinition[] = [
   ),
   event(
     'participant.added',
-    'conversation',
+    'participation',
     'Someone was added to a conversation.',
     data.participantAddedDataSchema,
     { conversationId: 'conv_1', participantId: 'mem_2', addedBy: 'mem_1' },
   ),
   event(
     'participant.removed',
-    'conversation',
+    'participation',
     'Someone was removed from a conversation.',
     data.participantRemovedDataSchema,
     { conversationId: 'conv_1', participantId: 'mem_2', removedBy: 'mem_1' },

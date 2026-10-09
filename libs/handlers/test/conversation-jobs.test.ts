@@ -1,0 +1,51 @@
+import { expect, it } from 'vitest';
+import { event } from '@opencrane/event-store/testing';
+import { HandlerRuntime, registerHandler } from '../src/index.ts';
+import { handlerJobKey } from '../src/job-key.ts';
+import { fixture, until } from './helpers.ts';
+import { createLogger } from '@opencrane/observability';
+import type { EventEnvelope } from '@opencrane/events';
+
+async function acceptsQueuedLegacyJobs() {
+  const storage = await fixture();
+  const applied: string[] = [];
+  function handle(saved: EventEnvelope) {
+    applied.push(saved.id);
+    return Promise.resolve();
+  }
+  const handler = registerHandler('update-openfga', handle);
+  const options = { db: storage.db, silo: 'test', handlers: [handler],
+    logger: createLogger('old-conversation-jobs') };
+  const runtime = new HandlerRuntime(options);
+  try {
+    await runtime.start();
+    const creation = { ...event('creation', 'conversation-chat', 'conversation.created'),
+      data: { conversationId: 'chat', createdBy: 'alice', assistantId: 'assistant' } };
+    const added = { ...event('added', 'conversation-chat', 'participant.added'),
+      data: { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' } };
+    const removed = { ...event('removed', 'conversation-chat', 'participant.removed'),
+      data: { conversationId: 'chat', participantId: 'bob', removedBy: 'alice' } };
+    const records = [creation, added, removed];
+    for (const saved of records) {
+      expect(handlerJobKey('update-openfga', saved)).toBe('conversation-chat');
+      const queued = await runtime.boss.send(handler.name, saved, { singletonKey: saved.subject });
+      expect(queued).not.toBeNull();
+    }
+    const newAdded = { ...added, subject: 'participation-chat' };
+    expect(handlerJobKey('update-openfga', newAdded)).toBe('conversation-chat');
+    expect(handlerJobKey('update-members', newAdded)).toBe('participation-chat');
+    // Start after the old jobs are queued, as an upgraded worker would.
+    await runtime.work();
+    function allApplied() {
+      return Promise.resolve(applied.length === records.length);
+    }
+    await until(allApplied);
+    expect(applied).toEqual(['creation', 'added', 'removed']);
+    expect(await runtime.deadLetters('update-openfga')).toEqual([]);
+  } finally {
+    await runtime.stop();
+    await storage.close();
+  }
+}
+it('uses the conversation key for both forms and accepts jobs queued before the upgrade',
+  acceptsQueuedLegacyJobs);

@@ -40,6 +40,7 @@ async function readChatAccessContext(options: ChatOptions, memberId: string,
   conversationId: string, deadline: number) {
   const row = await conversationCreation(options, conversationId, deadline);
   const created = conversationCreatedDataSchema.parse(row.event.data);
+  if (created.mode === 'group') throw new ChatRefused('Conversation refused');
   if (created.mode === 'direct' && !created.participantIds.includes(memberId)) {
     throw new ChatRefused('Conversation refused');
   }
@@ -105,6 +106,7 @@ async function conversationAccess(options: ChatOptions, request: AccessRequest, 
   if (conversationId) {
     const row = await conversationCreation(options, conversationId, deadline);
     const created = conversationCreatedDataSchema.parse(row.event.data);
+    if (created.mode === 'group') throw new ChatRefused('Conversation refused');
     mode = created.mode;
     if (created.mode === 'direct' && !created.participantIds.includes(memberId)) {
       throw new ChatRefused('Conversation refused');

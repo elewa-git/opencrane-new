@@ -15,7 +15,7 @@ import {
   members, computers, conversations, pgDb, ProjectionRunner, connectMemberFeed,
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { envelope, history } from '@opencrane/models';
+import { envelope } from '@opencrane/models';
 import { chatMessageSchema } from '@opencrane/protocol';
 import type { ChatOptions } from '../src/chat/routes.ts';
 import { buildServer } from '../src/server.ts';
@@ -81,9 +81,9 @@ async function fixture(countChecks = false) {
     let actorId = 'alice';
     if (type === 'member.joined') actorId = subject.slice('member-'.length);
     event.principal = { id: actorId, kind: 'human' };
-    const rows = await history(nats.store, subject, 'test');
-    const expectedSequence = rows.at(-1)?.sequence ?? 0;
-    expect((await nats.store.append({ event, expectedSequence })).status).toBe('appended');
+    // Seed saved history, including old participant subjects that commands now refuse.
+    const savedHistory = [event];
+    await nats.seed(savedHistory);
     if (iam) await auth.handler.handle(event, db);
     return event;
   }
