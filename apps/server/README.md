@@ -10,18 +10,13 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and participation checks"]
-  server -.->|checks organisation, access, invitations, spending and memory passes| libs["libs/*<br/>shared code"]
-  server -->|records memory facts, model grants, chat and confirmed provider choices| nats["NATS<br/>event log"]
-
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, human groups, chat and permission checks"]
-  server -.->|checks organisation, access, invitation accounts and spending| libs["libs/*<br/>shared code"]
-  server -->|records changes, model grants, chat and computer facts| nats["NATS<br/>event log"]
+  server -.->|checks organisation, access, invitations, spending and memory passes| libs["libs/*<br/>shared code"]
+  server -->|records changes, memory facts, model grants, chats and provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members and invitation accounts, chat rows, old joins, facts and source messages, models and computers| postgres
-  server -->|sends turns, tool lists and approval outcomes; receives reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|reads members, invitations, chat rows, closes, joins, facts, models and computers| postgres
+  server -->|sends turns, tools and approvals; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 

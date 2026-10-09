@@ -1289,6 +1289,7 @@ connection and the signer. The start acknowledgement contains a signed pass with
 the saved provider, binding position and model. Reconnecting and repeating the
 report after another binding is saved returns the same choice. The test verifies
 the signature and claims; it makes no paid call.
+
 ## Human group creation and sends
 
 Members can review their own groups and create a chat with a fixed audience,
