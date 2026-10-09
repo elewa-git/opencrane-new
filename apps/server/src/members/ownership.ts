@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { legacyMemberRole } from '@opencrane/events';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -125,8 +126,10 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
     if (membership.owners.has(input.successorId)) {
       throw new OwnershipConflict('already_owner');
     }
-  } else if (membership.owners.size === 1) {
-    throw new OwnershipConflict('last_owner');
+  } else {
+    const anotherActiveOwner = await hasAnotherActiveOwner(
+      store, binding.silo, actorId, membership.owners, fresh);
+    if (!anotherActiveOwner) throw new OwnershipConflict('last_owner');
   }
   const event = {
     id: randomUUID(), commandId: input.commandId, subject, silo: binding.silo,
@@ -151,4 +154,20 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
     return receipt;
   }
   throw new OwnershipConflict('concurrent_change');
+}
+
+async function hasAnotherActiveOwner(store: EventStore, silo: string, actorId: string,
+  owners: Set<string>, fresh: FreshAuthority) {
+  for (const ownerId of owners) {
+    if (ownerId === actorId) continue;
+    fresh.include(`member-${ownerId}`);
+    const rows = await history(store, `member-${ownerId}`, silo, fresh.deadline);
+    let active = false;
+    for (const row of rows) {
+      const role = legacyMemberRole(row.event);
+      if (role !== undefined) active = role !== '';
+    }
+    if (active) return true;
+  }
+  return false;
 }

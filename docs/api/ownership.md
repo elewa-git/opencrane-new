@@ -74,14 +74,13 @@ bound is exhausted or a dependency fails, the server logs the failure and keeps
 serving; ownership commands remain unavailable until seeding succeeds on a later
 startup. An empty install waits for the claim's durable seed reaction.
 
-Legacy owner additions/removals/demotions belong only before this seed. After it,
-member and OpenFGA projections reject owner-changing member events. Invitation
-acceptance refuses an Owner role and any rewrite of active membership. P4-3 must
-route future owner edits through this ownership invariant; its non-owner role and
-safe removal commands are not part of this interface. P4-3 must also fence the
-successor's active membership at append time: the present pre-append check leaves
-a gap in which a future removal could arrive. Its removal/transfer race test must
-prove that a removed successor cannot be appointed or stall IAM delivery.
+Legacy owner changes belong only before this seed. Afterwards, owner-role values
+and owner removal on a member stream are rejected by both projections. A valid
+Member/Admin role change that reaches a current Owner has no effect and records
+its receipt. The [member role route](members.md#change-a-member-or-admin-role)
+refuses Owner targets before append. Step-down requires another owner whose
+member events still show active membership. Appointment and future removal still
+need coordination to close the gap between their final access checks and appends.
 
 Replay members to rebuild roles, identities, owner sets and feed deltas; replay
 OpenFGA to rebuild the same tuples and receipts. Ownership reactions do not run

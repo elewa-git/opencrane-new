@@ -310,3 +310,6 @@ The providers runner also writes `model_bindings`, keyed by silo, kind, dependan
 These rows are candidates; the server still checks events and OpenFGA before returning them.
 
 File list reads accept an inclusive join position and query only records at or after it.
+
+Member/Admin changes on an Owner keep its role and record a receipt. See the
+[role contract](../../docs/api/members.md#change-a-member-or-admin-role).

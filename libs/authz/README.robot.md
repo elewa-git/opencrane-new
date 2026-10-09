@@ -165,3 +165,6 @@ relationship can replace it. Membership checks in the server and models process
 still refuse removed people. The real OpenFGA tests save join, relationship and
 removal, apply join and removal, backfill the relationship, then save and apply a
 rejoin. The resulting tuples and receipts equal a clean rebuild of that history.
+
+Member/Admin changes on an Owner keep its role and record a receipt. See the
+[role contract](../../docs/api/members.md#change-a-member-or-admin-role).

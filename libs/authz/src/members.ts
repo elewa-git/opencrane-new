@@ -252,10 +252,15 @@ function createMemberAuthorisation(binding: Binding,
     const nextRole = legacyMemberRole(event);
     if (seeded.length && (current.some(isOwner) || nextRole === 'owner')) {
       if (store && await memberEventBeforeOwnershipSeed(store, event)) {
-        return;
+        return false;
+      }
+      if (current.some(isOwner) && event.type === 'member.role_changed'
+        && (nextRole === 'member' || nextRole === 'admin')) {
+        return true;
       }
       throw new Error('Owner changes require the ownership stream');
     }
+    return false;
   }
 
   async function applyProvider(event: EventEnvelope, receipt: Tuple) {
@@ -313,7 +318,11 @@ function createMemberAuthorisation(binding: Binding,
     }
     const user = objectId("person", binding.silo, memberId);
     const current = await client.read({ user, object });
-    await refuseMemberOwnerEdit(event, current);
+    const noEffect = await refuseMemberOwnerEdit(event, current);
+    if (noEffect) {
+      await client.write([receipt], []);
+      return;
+    }
     function isMember(tuple: Tuple): boolean {
       return tuple.relation === 'member';
     }

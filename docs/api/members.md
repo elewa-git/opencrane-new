@@ -238,3 +238,27 @@ its original receipt before checking expiry, email claims or the inviter again. 
 Changed display-name or invitation arguments refuse reuse of the command id.
 A lost append reply can return 503 even though the join was stored; repeat the
 same command to find the saved result.
+
+## Change a Member or Admin role
+
+`POST /api/members/:memberId/role` accepts only `{ commandId, expectedSequence,
+newRole: "member" | "admin" }`, within 1 KiB. It requires an organisation session,
+the exact configured Origin, and current Owner/Admin access in events and OpenFGA.
+The target must be active and must not be an Owner. Self-demotion is allowed.
+The server supplies `previousRole` and `changedBy`. It reads history before its
+two-second access check, then conditionally appends one `member.role_changed`.
+An exact retry returns the same receipt. Changed arguments under that id return 409.
+
+`GET /api/members/:memberId/changes/:commandId` returns the original `recorded`
+receipt with command/event ids, type, sequence, time, member id and new role.
+`projection.content` and `projection.iam` separately say `applying` or `current`.
+A Member can read only their own original self-demotion receipt, including while
+IAM catches up. Removed members cannot read status. A missing result returns 404
+with `status: not_found`; the original request might still arrive.
+
+If an appointment races the role append, ownership takes precedence. Both
+projections keep running. Status reports `effect: none_target_became_owner`
+while the target is an Owner, or when they were already an Owner at that append.
+Other role results report `effect: role_changed`. Status reads append nothing.
+Owner-role values and removal of an Owner remain rejected by both projections.
+Step-down uses the ownership API and requires another currently active owner.
