@@ -95,11 +95,16 @@ it('keeps raw failure codes out of tool details', () => {
   expect(transcript(rows, 'me').at(-1)?.tools[0]?.detail).toBe('Run interrupted');
 });
 
-it.each([
+const completedToolCases = [
   { status: 'completed', failed: false, detail: 'Tool call completed' },
   { status: 'failed', failed: true, detail: 'Tool call failed' },
   { status: undefined, failed: false, detail: 'Tool call finished' },
-] as const)('updates live tool activity to $status', ({ status, failed, detail }) => {
+ ] as const;
+
+function assertFinishedToolState(
+  toolCase: (typeof completedToolCases)[number],
+): void {
+  const { status, failed, detail } = toolCase;
   const rows: ChatRow[] = [
     { id: 'message', position: 1, type: 'message.posted', time: '2026-10-09T10:00:00Z',
       data: { authorId: 'me', text: 'Read the order' } },
@@ -117,7 +122,9 @@ it.each([
   expect(tool).toMatchObject({ id: 'started', callId: 'call-1', label: 'read_order',
     status: status ?? 'finished', failed, detail, durationMs: 240 });
   expect(tool?.time).toBe('2026-10-09T10:00:01Z');
-});
+}
+
+it.each(completedToolCases)('updates live tool activity to $status', assertFinishedToolState);
 
 it('keeps a finished tool visible when the saved history has no start row', () => {
   const rows: ChatRow[] = [
@@ -163,10 +170,54 @@ it('ignores a late tool reply after the server ended the turn', () => {
         serverId: 'erp', toolName: 'read_order', status: 'completed' } },
   ];
 
-  const turn = transcript(rows, 'me').find(candidate => candidate.author === 'agent');
+  const turn = transcript(rows, 'me').find(isAgentTurn);
 
   expect(turn?.state).toBe('failed');
-  expect(turn?.tools.find(tool => tool.callId === 'call-1')).toMatchObject({
-    status: 'running', detail: 'Tool call in progress',
+  const unconfirmedTool = turn?.tools.find(isCallOne);
+  expect(unconfirmedTool).toMatchObject({
+    status: 'unconfirmed', detail: 'No finish report was received before the turn ended',
   });
+  expect(turn?.tools[0]?.failed).toBe(false);
+  expect(turn?.tools[0]?.status).not.toBe('completed');
 });
+
+function isCallOne(tool: { callId?: string }): boolean {
+  return tool.callId === 'call-1';
+}
+
+const endedTurnCases = [
+  { eventType: 'agent.turn_completed', state: 'done' },
+  { eventType: 'agent.turn_stop_requested', state: 'stopped' },
+  { eventType: 'agent.output_lost', state: 'lost' },
+] as const;
+
+function assertUnconfirmedToolAfterEnd(
+  turnCase: (typeof endedTurnCases)[number],
+): void {
+  const { eventType, state } = turnCase;
+  const rows: ChatRow[] = [
+    { id: 'message', position: 1, type: 'message.posted', time: '2026-10-09T10:00:00Z',
+      data: { authorId: 'me', text: 'Read the order' } },
+    { id: 'started', position: 2, type: 'agent.tool_call_started',
+      time: '2026-10-09T10:00:01Z', data: { turnId: 'message', callId: 'call-1',
+        serverId: 'erp', toolName: 'read_order' } },
+    { id: 'ended', position: 3, type: eventType, time: '2026-10-09T10:00:02Z',
+      data: { turnId: 'message' } },
+  ];
+
+  const agentTurn = transcript(rows, 'me').find(isAgentTurn);
+
+  expect(agentTurn?.state).toBe(state);
+  expect(agentTurn?.endedAt).toBe('2026-10-09T10:00:02Z');
+  expect(agentTurn?.tools[0]?.status).toBe('unconfirmed');
+  expect(agentTurn?.tools[0]?.failed).toBe(false);
+}
+
+it.each(endedTurnCases)(
+  'marks an unfinished tool unconfirmed when its turn ends',
+  assertUnconfirmedToolAfterEnd,
+);
+
+function isAgentTurn(turn: { author: string }): boolean {
+  return turn.author === 'agent';
+}

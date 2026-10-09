@@ -42,6 +42,9 @@ export async function chatFixture(page, scenario = 'live') {
     add('agent.turn_started', { turnId: human.id });
     if (scenario === 'governed-tool-running') {
       addGovernedToolStart(add, human.id);
+    } else if (scenario === 'governed-tool-long-name') {
+      add('agent.tool_call_started', { turnId: human.id, callId: 'tool-call-1',
+        serverId: 'fixture-erp', toolName: 'x'.repeat(200) });
     } else if (scenario === 'governed-tool-completed') {
       addGovernedToolStart(add, human.id);
       add('agent.tool_call_finished', { turnId: human.id, callId: 'tool-call-1',

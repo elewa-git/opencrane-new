@@ -2,6 +2,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
   margin: 8px 0;
   color: var(--oc-ink-muted);
   font-size: 11px;
@@ -11,11 +13,23 @@
   border: 0;
   background: transparent;
   text-align: left;
+  white-space: normal;
+}
+
+.tool-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  flex: 1 1 auto;
 }
 
 .state-mark {
   width: 14px;
   height: 11px;
+  flex: 0 0 auto;
+}
+
+.chevron {
+  flex: 0 0 auto;
 }
 
 [data-state='done'] {
@@ -28,6 +42,10 @@
 
 [data-state='running'] {
   color: var(--oc-focus-ring);
+}
+
+[data-state='unconfirmed'] {
+  color: var(--oc-ink-muted);
 }
 
 .chevron {

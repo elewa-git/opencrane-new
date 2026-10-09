@@ -284,8 +284,13 @@ Restricted turns do not report commands. Team turns sent from the workspace run
 restricted, so they show at most the “Reply failed” line. Tool details show the
 recorded result, UTC time and event reference, then say that the location, account
 and attempt history are not available. The transcript does not show raw arguments,
-tokens or full tool output. A stored review that fails the review schema makes the
-GET return 400. The browser shows the read-failed state and pauses decisions.
+tokens or full tool output. Live tool start and finish rows update one polite status
+message. History replay and streamed text do not announce tool changes. If a turn
+ends before a tool finish report arrives, the tool says that no finish was confirmed;
+it does not claim that the call failed, completed or kept running. An open details
+drawer follows the latest saved tool row. A stored review that fails its schema
+makes the GET return 400. The browser shows the read-failed state and pauses
+decisions.
 Chromium captures use intercepted fixtures and do not prove a live governed turn.
 
 Run `nice -n 10 npm run visual:p4-4-screens` to capture direct-chat states at

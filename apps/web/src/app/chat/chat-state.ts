@@ -49,7 +49,7 @@ export interface ToolActivityRecord {
   failed: boolean;
   time: string;
   callId?: string;
-  status?: 'running' | 'completed' | 'failed' | 'finished';
+  status?: 'running' | 'completed' | 'failed' | 'finished' | 'unconfirmed';
   durationMs?: number;
 }
 
@@ -63,6 +63,9 @@ export function toolKind(record: ToolActivityRecord): string {
 
 export function toolActivityResult(record: ToolActivityRecord): string {
   if (record.status === 'running') return 'Running · The call has not finished.';
+  if (record.status === 'unconfirmed') {
+    return 'No finish report was received before the turn ended.';
+  }
   if (record.status === 'completed') return 'Call completed';
   if (record.status === 'finished') return 'Call finished';
   if (record.status === 'failed') return 'Call failed';
@@ -102,7 +105,12 @@ export function transcript(rows: ChatRow[], memberId: string): Turn[] {
     }
     const turn = agents.get(data.turnId ?? '');
     if (!turn || turn.state === 'stopped') continue;
-    if (row.type === 'agent.turn_stop_requested') { turn.state = 'stopped'; turn.endedAt = row.time; continue; }
+    if (row.type === 'agent.turn_stop_requested') {
+      turn.state = 'stopped';
+      turn.endedAt = row.time;
+      markRunningCallsUnconfirmed(turn);
+      continue;
+    }
     if (row.type === 'decision.recorded' && data.reason === 'budget_exhausted') {
       turn.budgetStop = 'budget_exhausted';
     }
@@ -129,17 +137,28 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
     lostOutput.add(row.data.turnId ?? '');
     turn.state = 'lost';
     turn.endedAt = row.time;
+    markRunningCallsUnconfirmed(turn);
     return;
   }
   if (row.type === 'agent.turn_failed') {
     turn.state = 'failed';
     turn.endedAt = row.time;
+    markRunningCallsUnconfirmed(turn);
     if (row.data.reason) turn.reason = row.data.reason;
     return;
   }
   if (row.type === 'agent.turn_completed') {
     turn.state = lostOutput.has(turn.id) ? 'lost' : 'done';
     turn.endedAt = row.time;
+    markRunningCallsUnconfirmed(turn);
+  }
+}
+
+function markRunningCallsUnconfirmed(turn: Turn): void {
+  for (const tool of turn.tools) {
+    if (tool.status !== 'running') continue;
+    tool.status = 'unconfirmed';
+    tool.detail = 'No finish report was received before the turn ended';
   }
 }
 
@@ -184,9 +203,7 @@ function updateTurnTools(turn: Turn, row: ChatRow): void {
 
 function finishToolCall(turn: Turn, row: ChatRow): void {
   const callId = row.data.callId;
-  const tool = callId
-    ? turn.tools.find(candidate => candidate.callId === callId)
-    : undefined;
+  const tool = callId ? findToolByCallId(turn.tools, callId) : undefined;
   const status = finishedToolStatus(row.data.status);
   const toolName = row.data.toolName ?? tool?.label ?? 'Tool call';
   const detail = finishedToolDetail(status);
@@ -209,6 +226,13 @@ function finishToolCall(turn: Turn, row: ChatRow): void {
     ...(row.data.durationMs !== undefined ? { durationMs: row.data.durationMs } : {}),
     time: row.time,
   });
+}
+
+function findToolByCallId(tools: ToolActivityRecord[], callId: string): ToolActivityRecord | undefined {
+  for (const tool of tools) {
+    if (tool.callId === callId) return tool;
+  }
+  return undefined;
 }
 
 function finishedToolStatus(status: string | undefined): 'completed' | 'failed' | 'finished' {

@@ -113,7 +113,7 @@ export class Workspace implements OnInit {
   constructor() {
     effect(this.rememberRecoveryFocus.bind(this));
     effect(this.resetCaptureWhenSessionChanges.bind(this));
-    effect(this.closeMissingToolDetails.bind(this));
+    effect(this.followOpenToolDetails.bind(this));
     afterEveryRender(this.afterRender.bind(this));
   }
   ngOnInit(): void { void this.chat.load(); }
@@ -230,18 +230,23 @@ export class Workspace implements OnInit {
   protected toolTime(record: ToolActivityRecord): string {
     return utcDateTime(record.time);
   }
-  private closeMissingToolDetails(): void {
+  private followOpenToolDetails(): void {
     const details = this.toolDetails();
     if (!details) return;
-    const recordStillExists = this.activity().some(
-      this.isSameToolRecord.bind(this, details.record.id),
-    );
-    if (recordStillExists) return;
+    const currentRecord = this.findToolRecord(details.record.id);
+    if (currentRecord === details.record) return;
+    if (currentRecord) {
+      this.toolDetails.set({ ...details, record: currentRecord });
+      return;
+    }
     this.toolDetails.set(undefined);
     requestAnimationFrame(this.focusTranscript.bind(this));
   }
-  private isSameToolRecord(recordId: string, record: ToolActivityRecord): boolean {
-    return record.id === recordId;
+  private findToolRecord(recordId: string): ToolActivityRecord | undefined {
+    for (const record of this.activity()) {
+      if (record.id === recordId) return record;
+    }
+    return undefined;
   }
   private focusTranscript(): void {
     this.transcriptElement()?.nativeElement.focus();

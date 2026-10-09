@@ -25,6 +25,12 @@ Tool lines open a drawer with the result, recorded time and event reference.
 It says that the location, account and attempt history are not available. It does
 not show raw arguments, tokens or full tool output.
 
+The open drawer follows the latest tool row. If the turn ends before a finish
+report arrives, the line says that the result was not confirmed. It does not call
+the tool a failure or say that it kept running. Live start and finish updates are
+announced once in the polite status message. History replay and streamed text
+stay quiet.
+
 ## Visual comparison
 
 The frames were compared at 1280px and 390px where supplied, and the layouts were
@@ -77,13 +83,13 @@ checks.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Lint | PASS | `nice -n 10 npm run lint`; nine existing max-lines warnings. |
-| Typecheck | PASS | `nice -n 10 npm run typecheck`. |
+| Lint | PASS | `nice -n 10 npm run lint`; 14 existing max-lines warnings. |
+| Web typecheck | PASS | `nice -n 10 npm run typecheck -w apps/web`. |
 | Root tests | NOT RUN | The requested checks excluded the full root suite. |
-| Web tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false`; 40 files, 599 tests. |
+| Web tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false`; 40 files, 607 tests. |
 | Event catalogue | PASS | `nice -n 10 npm run check:events`; 96 event types agree. |
 | Web build | PASS | `nice -n 10 npm run build -w apps/web`; existing CSS budget and CommonJS warnings. |
-| Approval visuals | PASS | `nice -n 10 npm run visual:p3-5-approvals`; 76 captures at 1280, 390 and 320 pixels with both motion settings. |
+| Approval visuals | PASS | `nice -n 10 npm run visual:p3-5-approvals`; 82 captures at 1280, 390 and 320 pixels with both motion settings. Includes a 200-character tool name. |
 | F2 overlays | NOT RUN | Not part of the requested review checks. |
 | F5 workspace | PASS | `nice -n 10 npm run visual:f5-workspace`; 18 captures. |
 | Chat browser | PASS | `nice -n 10 npm run visual:chat`; keyboard, focus, phone, streaming and reconnect checks. |

@@ -27,6 +27,7 @@ const sceneFrames = {
   'tool-details': ['WRK-03', 'WRK-04'],
   'tool-activity-running': ['WRK-02'],
   'tool-activity-completed': ['WRK-03'],
+  'tool-activity-long-name': ['WRK-02'],
   'activity-jump': ['WRK-07'],
   reconnected: ['WRK-22'],
 };
@@ -126,6 +127,7 @@ async function captureScene(browser, scene, width, motion) {
   let scenario = 'tools';
   if (scene === 'tool-activity-running') scenario = 'governed-tool-running';
   if (scene === 'tool-activity-completed') scenario = 'governed-tool-completed';
+  if (scene === 'tool-activity-long-name') scenario = 'governed-tool-long-name';
   if (scene === 'approval-step-up') cards = [{ ...approvalCard(0), stepUp: true }];
   if (scene === 'approval-terminal') {
     cards = [
@@ -197,6 +199,15 @@ async function captureScene(browser, scene, width, motion) {
       const tool = page.getByRole('button', { name: /read_order · Completed/ });
       await tool.waitFor();
       await checkToolDetails(page, tool, 'Call completed', 'Result');
+    } else if (scene === 'tool-activity-long-name') {
+      const tool = page.locator('.tool-line');
+      await tool.waitFor();
+      const label = tool.locator('.tool-label');
+      assert.equal((await label.innerText()).length, 210);
+      const layout = await tool.evaluate(readToolLineLayout);
+      assert.equal(layout.overflowWrap, 'anywhere');
+      assert(layout.labelHeight > 16, 'A long tool name wraps inside its button');
+      assert(layout.right <= width, 'The tool button stays inside the viewport');
     } else if (scene === 'activity-jump') {
       const panelOpener = page.getByRole('button', { name: 'Session panel' });
       let panel;
@@ -428,7 +439,8 @@ try {
   const scenes = [
     'approval-requested', 'approval-details', 'approval-submitting',
     'approval-step-up', 'approval-terminal', 'tool-activity-running',
-    'tool-activity-completed', 'tool-details', 'activity-jump', 'reconnected',
+    'tool-activity-completed', 'tool-activity-long-name', 'tool-details',
+    'activity-jump', 'reconnected',
   ];
   for (const scene of scenes) {
     for (const width of widths) {
@@ -453,8 +465,9 @@ try {
     environment: 'Built Angular assets; Chromium; intercepted fixtures; no live governed turn',
     frames: framesForAllCaptures(captureFiles),
     checks: [
-      '10 scenes captured at 1280, 390 and 320 pixels with both motion settings',
+      '11 scenes captured at 1280, 390 and 320 pixels with both motion settings',
       'Running and completed governed tool calls match WRK-02 and WRK-03',
+      'A 200-character tool name wraps inside the transcript at every width',
       'No horizontal overflow in any capture',
       'Phone card actions, drawer buttons and drawer Back controls were measured',
       'Approval, tool and terminal buttons show the teal focus ring',
@@ -470,4 +483,15 @@ try {
   console.log(`PASS P3-5 approvals: ${captures.length} captures; 1280/390/320 and both motion settings`);
 } finally {
   await browser.close();
+}
+
+function readToolLineLayout(button) {
+  const label = button.querySelector('.tool-label');
+  const buttonBounds = button.getBoundingClientRect();
+  const labelBounds = label.getBoundingClientRect();
+  return {
+    overflowWrap: globalThis.getComputedStyle(label).overflowWrap,
+    labelHeight: labelBounds.height,
+    right: buttonBounds.right,
+  };
 }

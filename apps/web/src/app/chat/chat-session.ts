@@ -352,6 +352,10 @@ export class ChatSession implements OnDestroy {
       const parsed = chatRowSchema.safeParse(message.row);
       if (parsed.success) {
         const added = this.apply(parsed.data);
+        const toolAnnouncement = added
+          ? toolTransitionAnnouncement(parsed.data, this.turns())
+          : '';
+        if (toolAnnouncement) this.announcement.set(toolAnnouncement);
         // Do not announce old notices when the workspace reloads.
         if (added && isBudgetStop(parsed.data)) {
           this.announcement.set(`Spending limit reached · ${shortTime(parsed.data.time)}`);
@@ -421,6 +425,77 @@ function isSelectedConversation(
 
 function isBudgetStop(row: ChatRow): boolean {
   return row.type === 'decision.recorded' && row.data['reason'] === 'budget_exhausted';
+}
+
+function toolTransitionAnnouncement(
+  row: ChatRow,
+  turns: ReturnType<typeof transcript>,
+): string {
+  if (row.type !== 'agent.tool_call_started' && row.type !== 'agent.tool_call_finished') {
+    return '';
+  }
+  const activeTurn = findWorkingAgentTurn(turns, row.data.turnId);
+  if (!activeTurn) return '';
+  const toolName = findToolName(activeTurn, row);
+  const callNumber = findToolCallNumber(activeTurn, row.data.callId);
+  if (row.type === 'agent.tool_call_started') {
+    if (callNumber) return `${toolName} call ${callNumber} started.`;
+    return `${toolName} started.`;
+  }
+  if (row.data.status === 'completed') {
+    return finishedToolAnnouncement(toolName, callNumber, 'completed');
+  }
+  if (row.data.status === 'failed') {
+    return finishedToolAnnouncement(toolName, callNumber, 'failed');
+  }
+  return finishedToolAnnouncement(toolName, callNumber, 'finished');
+}
+
+function findWorkingAgentTurn(
+  turns: ReturnType<typeof transcript>,
+  turnId: string | undefined,
+): ReturnType<typeof transcript>[number] | undefined {
+  if (!turnId) return undefined;
+  for (const turn of turns) {
+    if (turn.id === turnId && turn.author === 'agent' && turn.state === 'working') {
+      return turn;
+    }
+  }
+  return undefined;
+}
+
+function findToolName(turn: ReturnType<typeof transcript>[number], row: ChatRow): string {
+  if (row.data.toolName) return row.data.toolName;
+  if (!row.data.callId) return 'Tool call';
+  for (const tool of turn.tools) {
+    if (tool.callId === row.data.callId) return tool.label;
+  }
+  return 'Tool call';
+}
+
+function findToolCallNumber(
+  turn: ReturnType<typeof transcript>[number],
+  callId: string | undefined,
+): number | undefined {
+  if (!callId) return undefined;
+  let callNumber = 0;
+  for (const tool of turn.tools) {
+    if (!tool.callId) continue;
+    callNumber += 1;
+    if (tool.callId === callId) return callNumber;
+  }
+  return undefined;
+}
+
+function finishedToolAnnouncement(
+  toolName: string,
+  callNumber: number | undefined,
+  result: 'completed' | 'failed' | 'finished',
+): string {
+  const callLabel = callNumber ? `${toolName} call ${callNumber}` : toolName;
+  if (result === 'completed') return `${callLabel} completed.`;
+  if (result === 'failed') return `${callLabel} failed.`;
+  return `${callLabel} finished without a reported result.`;
 }
 
 function isAgentTurn(turn: ReturnType<typeof transcript>[number]): boolean {

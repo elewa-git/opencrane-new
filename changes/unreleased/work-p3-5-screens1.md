@@ -1,9 +1,11 @@
 # Governed tool activity appears in chat
 
 The chat transcript now shows when a reported tool call starts, finishes or
-fails. It matches the finish report to the call that started and ignores a
-late finish after the server has ended the turn. A restricted tool refusal is
-shown as an access refusal without guessing its cause.
+fails. If the turn ends before a finish report arrives, it says that the result
+was not confirmed. The details drawer follows a call as its saved status changes.
+Live starts and results are announced once to screen readers. Long tool names
+wrap inside the transcript on phone screens. A restricted tool refusal is shown
+as an access refusal without guessing its cause.
 
 The existing approval cards continue to show pending decisions, approved but
 unused approvals, used approvals with unknown outcomes, denials, expiry and
