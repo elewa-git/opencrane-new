@@ -142,7 +142,7 @@ async function projectionProgress(options: GroupOptions, row: StoredEvent,
   const content = Number(checkpoint.rows[0]?.sequence ?? 0) >= requiredPosition
     ? 'current' : 'applying';
   let iamApplied = await auth.applied(row.event.id);
-  if (appointment && appointment.sequence > row.sequence) {
+  if (appointment) {
     iamApplied = iamApplied && await auth.applied(appointment.event.id);
   }
   const iam = iamApplied ? 'current' : 'applying';

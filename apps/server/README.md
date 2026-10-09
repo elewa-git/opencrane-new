@@ -49,6 +49,7 @@ flowchart LR
   the inviter is still an owner or admin. Records whether a personal assistant was requested.
 - Checks an invitation email and explains that the person is confirmed when they accept.
 - Changes Member and Admin roles after checking current access. Owners use the ownership route.
+  Reports a competing appointment as applying until its permissions have been updated.
 - Records and renews email invitations for owners and admins. Reads saved command results.
 - Returns member headers to members and the email directory to current owners and admins.
   Keeps checking their access while a live member connection is open.

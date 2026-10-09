@@ -260,5 +260,9 @@ If an appointment races the role append, ownership takes precedence. Both
 projections keep running. Status reports `effect: none_target_became_owner`
 while the target is an Owner, or when they were already an Owner at that append.
 Other role results report `effect: role_changed`. Status reads append nothing.
+Status reports IAM as `current` only after both the role and the competing appointment
+have applied receipts, whether the appointment was saved before or after the role.
+Permission jobs wait for earlier relevant changes on the member and ownership streams
+before applying a role or appointment. Different delivery orders give the same state as replay.
 Owner-role values and removal of an Owner remain rejected by both projections.
 Step-down uses the ownership API and requires another currently active owner.

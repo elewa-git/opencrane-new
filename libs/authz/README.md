@@ -14,7 +14,7 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.-> authz
   ops["apps/ops<br/>background workers"] -.-> authz
   authz -->|checks access and roles| fga["OpenFGA<br/>permissions service"]
-  authz -->|reads later joins and removals| store["libs/event-store<br/>saved events"]
+  authz -->|reads saved roles and ownership| store["libs/event-store<br/>saved events"]
   authz -.-> handlers["libs/handlers<br/>background jobs"]
 ```
 
@@ -31,8 +31,9 @@ only while they can still read the chat. Group membership does not grant chat ac
 
 ## Processes it handles
 
-A Member or Admin role change that reaches an Owner keeps the owner role and records
-the event as processed. Later events can still be applied.
+A Member or Admin role change saved after an ownership appointment keeps the owner
+role and records the event as processed. Jobs wait for earlier role or ownership
+changes to be applied, so delivering the jobs in a different order gives the same result.
 
 1. **A person's access changes.** A background worker sends the event to this library. It updates OpenFGA and records which event it applied, so a retry cannot apply the same change twice.
 2. **A protected request arrives.** The server or models process asks whether the person, assistant or group has access. The request continues only when OpenFGA confirms it.

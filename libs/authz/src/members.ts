@@ -1,7 +1,7 @@
 import type { EventStore } from '@opencrane/event-store';
 import { createLogger } from '@opencrane/observability';
 import { supersededEvent, removedParticipant, ownerAtTransfer,
-  memberEventBeforeOwnershipSeed } from './backfill.ts';
+  memberEventBeforeOwnershipSeed, requireEarlierRoleChanges } from './backfill.ts';
 import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
   ownershipSteppedDownSchema, conversationCreatedDataSchema, conversationEventId,
   grantRevokedDataSchema, handlerSubscriptions, parseEventByType, type EventEnvelope } from "@opencrane/events";
@@ -292,6 +292,10 @@ function createMemberAuthorisation(binding: Binding,
       const fields = { eventId: event.id, eventType: event.type, stream: event.subject };
       logger.info(fields, 'Skipped an old event because a later permission change was already applied');
       return;
+    }
+    if (store && (event.type === 'member.role_changed'
+      || event.type === 'ownership.transferred')) {
+      await requireEarlierRoleChanges(store, event, applied);
     }
     if (event.type.startsWith('ownership.')) {
       return applyOwnership(event, receipt);

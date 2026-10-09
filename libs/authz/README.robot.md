@@ -168,3 +168,13 @@ rejoin. The resulting tuples and receipts equal a clean rebuild of that history.
 
 Member/Admin changes on an Owner keep its role and record a receipt. See the
 [role contract](../../docs/api/members.md#change-a-member-or-admin-role).
+
+Role changes and ownership appointments use separate worker keys. The event-store-backed
+handler compares saved global sequences and requires OpenFGA receipts for earlier relevant
+changes on the other stream. A role change waits for the ownership seed and earlier changes
+for that member. An appointment waits for earlier membership and role changes for its target.
+An unmet requirement throws before changing tuples or recording a receipt. The existing
+worker retries the job; exhausted retries use its existing dead-letter repair process.
+Rebuilds apply events in saved order and need no such wait. `test/role-order.test.ts`
+covers both saved orders and both delivery orders, retries, repeated delivery and full
+tuple/receipt comparison against replay.

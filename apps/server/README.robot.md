@@ -1375,3 +1375,6 @@ Owners and admins can change member and admin roles. Each change checks current
 access and records an appointment receipt. An owner stays an owner when another
 person's role changes. An owner can step down only while another active owner remains.
 See the [role contract](../../docs/api/members.md#change-a-member-or-admin-role).
+Role status requires the competing appointment's IAM receipt in either saved order.
+The content checkpoint must also cover both changes. A role receipt alone cannot report
+IAM as current while that appointment is still waiting to be applied.
