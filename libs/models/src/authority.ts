@@ -4,7 +4,7 @@ import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz
 import { wireSubject, type StoredEvent, type EventStore } from '@opencrane/event-store';
 import { data } from './state.ts';
 import { memberStateTypes } from './ownership.ts';
-import type { DecisionGrants } from './decision-grants.ts';
+import type { DecisionGrants, DecisionGrantRow } from './decision-grants.ts';
 
 export const outputReportTypes: readonly string[] = [
   'agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
@@ -70,7 +70,7 @@ async function readAuthorityHistories(subjects: string[],
   readSubject: (subject: string) => Promise<StoredEvent[]>,
   conversationRows?: StoredEvent[], grants?: DecisionGrants) {
   let currentSubjects = subjects;
-  const histories: StoredEvent[][] = [];
+  const histories: DecisionGrantRow[][] = [];
   if (grants) {
     // Reuse grant facts only when the caller checks later changes from their captured position.
     const grantSubject = grants.subject;
@@ -86,7 +86,7 @@ async function readAuthorityHistories(subjects: string[],
   return histories;
 }
 
-function authorityTeams(rows: StoredEvent[], silo: string) {
+function authorityTeams(rows: DecisionGrantRow[], silo: string) {
   // Only the assistant's owner and current resource grantees can supply team authority.
   const teams = new Set<string>();
   const grants = new Map<string, Record<string, unknown>>();
@@ -106,7 +106,7 @@ function authorityTeams(rows: StoredEvent[], silo: string) {
   return teams;
 }
 
-function grantReceiptGrantees(rows: StoredEvent[], requester: string, assistant: string,
+function grantReceiptGrantees(rows: DecisionGrantRow[], requester: string, assistant: string,
   forDecision: boolean, teamGrantees?: ReadonlySet<string>) {
   if (!forDecision) return undefined;
   const grantees = new Set([`member-${requester}`, `assistant-${assistant}`]);
@@ -124,7 +124,7 @@ function grantReceiptGrantees(rows: StoredEvent[], requester: string, assistant:
   return grantees;
 }
 
-function relevant(event: EventEnvelope, requester: string, assistant: string,
+function relevant(event: DecisionGrantRow['event'], requester: string, assistant: string,
   conversation: string, resourceType: string, resourceId: string,
   decisionGrantees?: Set<string>) {
   const fields = data(event);
@@ -143,7 +143,7 @@ function relevant(event: EventEnvelope, requester: string, assistant: string,
   return relevantGrant(event, resourceType, resourceId, decisionGrantees);
 }
 
-function relevantGrant(event: EventEnvelope, resourceType: string, resourceId: string,
+function relevantGrant(event: DecisionGrantRow['event'], resourceType: string, resourceId: string,
   decisionGrantees?: Set<string>) {
   if (!event.type.startsWith('grant.')) return false;
   const fields = data(event);

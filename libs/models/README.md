@@ -41,6 +41,7 @@ flowchart LR
   Let one request reuse checks for the same saved access event.
 - Check that an invitation's sender still has authority before it is accepted.
 - Keep chat, computer and model grant facts in memory and read new events before each call.
+  Keep only the latest grant facts for each person, assistant or group.
   Check those facts before watching the streams that decide access. These checks
   share two seconds because the gateway waits only that long. Older summaries
   are dropped when their memory budget is reached and rebuilt on their next use.

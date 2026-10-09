@@ -82,7 +82,7 @@ export function requestReservationCents(body: { model: string; max_output_tokens
   }
   return reservationCents(body.model, body.max_output_tokens * (body.n ?? 1), inputBound);
 }
-export function data(event: EventEnvelope): Record<string, unknown> {
+export function data(event: Pick<EventEnvelope, 'data'>): Record<string, unknown> {
   return z.record(z.string(), z.unknown()).parse(event.data);
 }
 const callSchema = z.object({ requestId: z.string().optional(), model: z.string(), priceTableId: z.string().min(1), computerId: z.string(),

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setImmediate } from 'node:timers/promises';
 import { expect, it } from 'vitest';
 import { grantStream } from '@opencrane/authz';
 import { readDecisionGrants } from '../src/decision-grants.ts';
@@ -9,10 +10,11 @@ async function keepsOneHundredThousandGranteesWarm() {
   const subject = grantStream('model', modelId);
   const readPositions: number[] = [];
   const count = 100_000;
-  async function head() {
-    return count;
+  function head() {
+    return Promise.resolve(count);
   }
   async function* readStream(name: string, from = 1) {
+    await setImmediate();
     expect(name).toBe(subject);
     readPositions.push(from);
     for (let sequence = from; sequence <= count; sequence++) {
@@ -45,10 +47,11 @@ const wrongResources = [
 async function refusesMismatchedResource(resource: (typeof wrongResources)[number]) {
   const modelId = 'gpt-6-luna';
   const subject = grantStream('model', modelId);
-  async function head() {
-    return 1;
+  function head() {
+    return Promise.resolve(1);
   }
   async function* readStream() {
+    await setImmediate();
     const grant = { ...resource, granteeId: 'alice', granteeKind: 'member', grantedBy: 'alice' };
     const event = envelope('test', subject, 'grant.given', grant);
     yield { sequence: 1, event };
