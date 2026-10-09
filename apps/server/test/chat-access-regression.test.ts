@@ -5,7 +5,7 @@ import { createServer, request, type IncomingMessage, type ServerResponse } from
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
@@ -1358,3 +1358,77 @@ async function participationVolume() {
     await context.close();
   }
 }
+
+async function refusesCloseBeforeBufferedReport() {
+  const context = await fixture();
+  try {
+    await context.agentSession('agent');
+    await context.append('computer-assistant', 'computer.claimed', {
+      assistantId: 'assistant', computerId: 'desktop', generation: 1, tokenId: 'token:test',
+    }, false);
+    await context.append('computer-assistant', 'computer.ready', {
+      assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
+    }, false);
+    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
+      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
+      granteeKind: 'member', grantedBy: 'alice',
+    });
+    await context.runner.run(conversations);
+    await context.append('conversation-agent', 'conversation.closed', {
+      conversationId: 'agent', closedBy: 'alice',
+    }, false);
+    await context.append('conversation-agent', 'agent.turn_completed', {
+      conversationId: 'agent', turnId: 'agent-turn', assistantId: 'assistant',
+    }, false);
+    const response = await context.app.inject({ url: '/api/conversations/agent/files',
+      headers: context.headers() });
+    expect(response.statusCode, response.body).toBe(403);
+    await expect(viewAccess(context.options, 'alice', 'agent')).rejects.toThrow();
+  } finally {
+    await context.close();
+  }
+}
+it('refuses files and desktop leases after an unprojected close followed by a report',
+  refusesCloseBeforeBufferedReport, 120_000);
+
+async function retainsVerifiedLegacyParticipation() {
+  const context = await fixture();
+  try {
+    await context.agentSession('agent');
+    const legacy = await context.append('conversation-agent', 'participant.added', {
+      conversationId: 'agent', participantId: 'bob', addedBy: 'alice',
+    });
+    for (let index = 0; index < 20; index++) {
+      await context.append('participation-agent', 'participant.removed', {
+        conversationId: 'agent', participantId: 'bob', removedBy: 'alice',
+      }, false);
+      await context.append('participation-agent', 'participant.added', {
+        conversationId: 'agent', participantId: 'bob', addedBy: 'alice',
+      }, false);
+    }
+    await context.runner.run(conversations);
+    const read = vi.spyOn(context.nats.store, 'readEvent');
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const response = await context.app.inject({ url: '/api/conversations/agent/messages',
+          headers: context.headers() });
+        expect(response.statusCode, response.body).toBe(200);
+      }
+      expect(read).toHaveBeenCalledTimes(1);
+      const saved = await context.nats.store.readEvent(read.mock.calls[0]![0]);
+      expect(saved.event.id).toBe(legacy.id);
+      await context.append('participation-agent', 'participant.removed', {
+        conversationId: 'agent', participantId: 'alice', removedBy: 'bob',
+      }, false);
+      const response = await context.app.inject({ url: '/api/conversations/agent/messages',
+        headers: context.headers() });
+      expect(response.statusCode, response.body).toBe(403);
+    } finally {
+      read.mockRestore();
+    }
+  } finally {
+    await context.close();
+  }
+}
+it('checks legacy participation once and skips modern events during repeated churn reads',
+  retainsVerifiedLegacyParticipation, 120_000);

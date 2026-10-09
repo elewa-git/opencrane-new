@@ -522,3 +522,38 @@ const preservesApprovalDeadline = async () => {
   }
 };
 it('keeps the approval request deadline when IAM consumes the two-second budget', preservesApprovalDeadline, 40_000);
+
+async function keepsApprovalHistoryOutsideShortCheck() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const session = setup.headers();
+    const { cards, csrf } = await setup.read(session);
+    const approvalId = cards[0]!.approvalId;
+    const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+    async function* refuseFullHistoryDuringShortCheck(
+      subject: string, fromSequence = 1, deadline = Infinity,
+    ) {
+      if (subject === 'conversation-conversation' && fromSequence === 1 &&
+          deadline - performance.now() < 2100) {
+        throw new Error('Whole conversation read during short access check');
+      }
+      yield* originalRead(subject, fromSequence, deadline);
+    }
+    const read = vi.spyOn(setup.nats.store, 'readStream');
+    read.mockImplementation(refuseFullHistoryDuringShortCheck);
+    try {
+      const response = await setup.app.inject({ method: 'POST',
+        url: '/api/conversations/conversation/approvals',
+        headers: { ...session, 'x-csrf-token': csrf },
+        payload: { approvalId, decision: 'approved' } });
+      expect(response.statusCode, response.body).toBe(200);
+    } finally {
+      read.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('carries checked approval facts into the short access check without rereading history',
+  keepsApprovalHistoryOutsideShortCheck, 40_000);
