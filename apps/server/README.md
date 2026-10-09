@@ -94,7 +94,8 @@ use it to refuse calls if the tool changes to Ask during the turn.
   again until the computer accepts it, and
    sends it again after reconnecting. It retries short service outages so pending
    messages can still reach the computer. Personal memory-free turns include only tools
-   that have been reviewed, cost nothing and are allowed for both the person and assistant.
+   that have been reviewed, cost nothing and are available to both the person and assistant.
+   Ask tools also need a review describing the action the person will approve.
    Private team turns stay restricted and do not receive tools.
    Open chat pages repeat permission checks when silo or team membership changes.
    Removing someone from a team closes their private chat with that team's assistant
@@ -119,6 +120,9 @@ use it to refuse calls if the tool changes to Ask during the turn.
 9. **A person watches the assistant's desktop.** The server checks their conversation
    access and desktop grant. A confirmed member removal or conversation permission denial
    ends the view straight away, even if another access read is slow.
+
+The server checks whether each computer can wait for approval before offering Ask
+tools. Older computers receive Allow tools only, so either update order is safe.
 
 ## How to run or test it
 

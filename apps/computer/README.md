@@ -16,7 +16,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts and pauses| computer
-  server["apps/server<br/>the back end"] <-->|turns, reviewed lists and reports| computer
+  server["apps/server<br/>the back end"] <-->|turns, approvals and reports| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
@@ -41,7 +41,11 @@ a new turn begins, the bridge reloads only that conversation's Codex thread.
 It keeps the conversation history. Reloading stops any background terminals
 from that thread. If reload cannot be confirmed, the reply fails with a clear
 message and the person can send it again. The proxy releases the list when the
-turn ends. A tool changed from Allow to Ask is refused. Ask tools are not offered yet.
+turn ends. A tool changed from Allow to Ask is refused. Reviewed Ask tools wait
+for the requester to approve. The same call then continues once, with a fresh pass.
+Denial, Stop and a wait longer than 15 minutes end the call without sending it.
+The server and computer can be updated in either order. The computer tells the
+server whether it can wait for approval. Older computers receive Allow tools only.
 
 ## Processes it handles
 
@@ -51,8 +55,7 @@ turn ends. A tool changed from Allow to Ask is refused. Ask tools are not offere
 4. **A computer resumes.** Its files remain on its disk. The bridge sends any reports that the server has not confirmed yet.
 
 The local HTTP listener allows up to 17 minutes to receive a request. This setting
-does not limit how long its reply can wait. Waiting calls are not enabled yet;
-tools still have to be allowed in advance.
+does not limit how long its reply can wait. Approval waits have their own 15-minute limit.
 
 ## How to run or test it
 

@@ -59,7 +59,8 @@ flowchart LR
 - Give new members and assistants access to the active models ([grants](../../GLOSSARY.md#grant)), record the silo's first owner, store the AI provider settings that admins enter, and show spending history without private details.
 
 A tool offered in Allow mode is refused if its policy changes to Ask during that
-turn. This keeps the computer from creating an approval it cannot handle yet.
+turn. A waiting Ask call can use only its own approval, once. Approvals opened by
+a waiting computer expire after 15 minutes, even while the chat turn stays open.
 
 ## Processes it handles
 

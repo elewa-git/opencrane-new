@@ -108,7 +108,7 @@ from tool-server replies. Unmarked failures and lost replies say the tool may ha
 received the request. Each tool carries its `allow` mode in the turn list. The proxy sets
 `x-opencrane-tool-mode: allow` itself. The gateway passes it to the decision service,
 which refuses an Allow tool changed to Ask before creating an approval card.
-Approval waits are later work.
+Approval waits are described below.
 
 `test/codex-mcp-wire.mjs` runs from `build.sh` against the built image with Docker
 networking disabled. It imports the real memory-free config and `threadLoads()`,
@@ -513,7 +513,9 @@ optional `serverInfo` (`name`, `version`) and string `definitions`. Entries reje
 unknown fields. IDs match `^[\w-]{1,200}$`; keys match `^oc_[a-f0-9]{10}$`.
 The list allows 20 servers and 48 KiB of JSON encoded as UTF-8. Each server
 allows 1,000 definitions of at most 32,768 characters each. Server name and
-version allow 200 characters each. No entry carries `discoverResult`. The server fills the list once per message with Allow tools only.
+version allow 200 characters each. No entry carries `discoverResult`. The server fills
+the list once per message with Allow tools and reviewed Ask tools on computers
+that advertise approval support.
 
 Memory-free `mcpToolCall` notifications report call id, mapped server id and tool
 name. Finished reports add completed/failed status and optional duration in whole
@@ -542,9 +544,8 @@ stub. No paid model call was made. The local MCP listener used a 17-minute
 listener now also sets `requestTimeout` explicitly to 17 minutes. That setting
 limits the time allowed to receive a request; it does not limit a held reply.
 The [saved measurement](test/fixtures/codex-0.159.2-approval-hold.json) records
-the image digest, timing and completed turn. This measures Codex waiting for a
-stub MCP reply; the production proxy's approval-hold and release path is not
-built in this first part of #46. Its wire checks remain NOT RUN.
+the image digest, timing and completed turn. The later held-call check below
+uses the production proxy to hold and release the request.
 
 The one-off probe used the local model and MCP handlers from
 `test/codex-mcp-resume.mjs`, with a single tool call and a 960,000 ms delayed
@@ -558,31 +559,85 @@ docker run --rm --network none \
   --experimental-strip-types /app/test/codex-mcp-resume.mjs --approval-hold
 ```
 
-The owner-changeable default for the follow-up is
+The approval wait default is
 `APPROVAL_WAIT_LIMIT_MS = 900000` (15 minutes). The measured call did not end
 early, so there is no need to reduce that default.
 
-The server must be deployed before an image sends `approval_waiting`. Older
-servers reject unknown messages and stop recovery for that computer. This part
-keeps the computer Allow-only and sends no new socket messages. The follow-up
-must require `approvalWaiting: true` on every server `resume` before sending a
-wait signal, and answer a plain
-tool refusal with no send when support is absent. It must also renew the grant
-through `waitForGrant`, send approved held bytes once, and end holds before
-`turn/interrupt` and on release. Those behaviours are not claimed here.
+The server and computer can be deployed in either order. The computer advertises
+`x-opencrane-approval-waiting: true` in its WebSocket upgrade response. The server
+checks this on every new connection and offers reviewed Ask tools only when it is
+present. Older computers receive Allow tools only. The server also sends
+`approvalWaiting: true` in `resume`; an older server without this marker ends waits
+with a plain refusal.
+The proxy holds only a marked 403 `approval_requested` with a 64-hex id. Holds stay
+in the bridge process, outside the shell user's access. It preserves the original
+bytes. Before retry, the runner repeats its own start report through `waitForGrant`
+and installs the fresh token. Missing tokens fail after ten seconds. Duplicate
+signals and identical calls sharing an id produce one retry; every held request
+receives an answer. Other states renew and return a plain tool error that explains the result.
+A used approval says the tool may have received the action. Stop, release,
+`/drop` and client disconnection end holds before any later wake can send them.
 
-PR 5b has four explicit release requirements from review 1:
+`APPROVAL_WAIT_LIMIT_MS` is 900000. The decision service also expires approvals
+opened with `x-opencrane-tool-mode: ask` after 900000 ms. Its clock starts before
+the hold, so an expired hold cannot leave an approvable card. The retry adds
+`x-opencrane-approval-id`; the gateway passes it to the decision service, which
+refuses a different approval or a policy now on Allow. The server still checks the
+requester, tool arguments, conversation, turn and thread before sending anything.
 
-- Run `--wire` with a hold longer than five minutes through the real production
-  proxy. Check that Codex accepts the eventual reply and completes the same turn.
-  The 16-minute stub measurement above does not prove this path.
-- Check `approvalWaiting: true` on every `resume`, including reconnects after a
-  server rollback. If support disappears, fail waiting calls without a tool send.
-- When identical calls in one turn share an approval id, answer every held call
-  and send the tool request only once. Test both the replies and the send count.
-- When the computer gives up waiting, end the saved approval through an event
-  before a later human decision can approve it. Test a decision racing with that
-  deadline. A card must not stay approvable until the turn eventually closes.
+Tests: `approval-holds.test.ts`, `approval-runner.test.ts`, `mcp-proxy.test.ts`,
+server `bridge-channel.test.ts` and `turn-tools.test.ts`, models `codex-mcp.test.ts`.
+The offline check uses `codex-mcp-resume.mjs --wire --held-approvals` with the real
+proxy and pinned Codex, Docker networking disabled, and local model/tool fixtures.
+The fresh-install governed chat journey remains NOT RUN here; it belongs to PR 6.
 
-These checks are NOT RUN in PR 5a. Held-call storage and these computer behaviours
-are part of PR 5b, rather than part of this server deployment.
+## Held-call check results — 9 October 2026
+
+The [saved check](test/fixtures/codex-0.159.2-held-approvals.json) records the source
+SHA, image digest and results. Pinned Codex waited 310370 ms through the real proxy.
+Approval sent once; denial sent nothing. Another thread finished while both waited.
+Stop released its held call in 41 ms. UID 1001 could neither read the caller file
+nor reach the control socket. Docker networking was disabled. Only local fixtures
+ran; no paid model was called. These checks PASS.
+
+Lint, typecheck, event catalogue (98 events), Knip and changelog checks PASS.
+The changed batch passed twice (149 then 152 tests); final computer checks passed
+twice (66 each). The final expiry cases passed twice through the real gateway.
+Removing each of 25 guards made its test fail in a disposable copy. The actual
+source passed. Independent review completed in two passes; its three race findings
+were fixed. The final expiry path appends directly, avoiding another conversation
+read after the permission check.
+
+Rebase onto main `94f1ca05` changed no file contents. Both the server base and the
+final source kept identical Git tree hashes before and after rebase. No full root
+suite ran; CI remains the gate. The fresh-install chat journey and image publication
+remain NOT RUN. Either deployment order is safe with the support check above.
+
+## Review fix checks — 9 October 2026
+
+The [new saved check](test/fixtures/codex-0.159.2-held-approvals-review1.json)
+records source `a12ab2c6`, the image digest and the offline command. The rebase onto
+main `c9ef4b43` completed and was checked. Docker networking was disabled, and all
+model replies came from a local fixture. No paid model was called.
+
+Pinned Codex held its call for 310394 ms through the real proxy. Approval sent
+once, denial sent nothing and another thread completed during the wait. Stop went
+through the runner's `interrupt()` and completed in 42 ms. UID 1001 could neither
+read the caller credential nor reach the control socket. The image content check
+confirmed that its source matched the checkout. These checks PASS.
+
+Removing each of the computer support, caller disconnection and late-Stop guards
+made its targeted test fail. With the guards restored, the tests pass. The caller
+case aborts the request, then approves; without the guard it sends again. The late
+Stop case calls the runner while the first gateway call is waiting, then returns
+403; without the guard it keeps the request open.
+
+The full root test suite, fresh-install chat journey and image publication remain
+NOT RUN. The wire mode's separate fallback and TTL probes also remain NOT RUN,
+as recorded in the saved check.
+
+The complete lint command, typecheck, the event catalogue (98 events), Knip and
+the changelog check PASS.
+The wider regression batch passed 186 tests with one skip. All seven changed test
+files passed again, with 113 tests. The two corrected test assertion files also
+passed a separate 61-test rerun. No full root test suite ran.

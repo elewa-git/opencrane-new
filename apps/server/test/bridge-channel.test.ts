@@ -2,7 +2,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import { BudgetActor, envelope } from '@opencrane/models';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
 import { tokenIssuer } from '@opencrane/auth';
-import { createServer } from 'node:http';
+import { createServer, IncomingMessage } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,11 +10,15 @@ import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
 import { until } from '@opencrane/authz/testing';
+import { approvalHolds } from '../../computer/src/approval-holds.ts';
 import { bridgeChannel } from '../../computer/src/channel.ts';
 
 it('authenticates, overlaps conversations and replays a strict report sequence after disconnect', async () => {
   const directory = await mkdtemp(`${tmpdir()}/bridge-`), server = createServer();
   let calls = 0;
+  const approvals = approvalHolds({ waiting: () => true, renew: async () => {} });
+  const approvalResume = vi.spyOn(approvals, 'resume');
+  const approvalSettled = vi.spyOn(approvals, 'settle');
   const turnModels: unknown[] = [];
   const channel = bridgeChannel(server, {
     rpc(method, input) {
@@ -25,26 +29,37 @@ it('authenticates, overlaps conversations and replays a strict report sequence a
     },
     async grant() {},
     credential: () => ({ value: 'short-lived-test-capability', expiresAt: Date.now() + 60_000 }), journal: `${directory}/reports`,
-  });
+  }, approvals);
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   const url = `ws://127.0.0.1:${address.port}/bridge`;
   let socket: WebSocket | undefined;
   const reports: { sequence: number; conversationId: string; type: string }[] = [];
-  const connect = async (since: number) => {
+  const connect = async (since: number, supported = false) => {
     const ws = new WebSocket(url, { headers: { 'x-bridge-token': 'short-lived-test-capability' } });
     ws.on('message', raw => {
       const report = z.object({ sequence: z.number(), conversationId: z.string(), type: z.string() }).parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown);
       reports.push(report); ws.send(JSON.stringify({ type: 'ack', sequence: report.sequence, token: 'test-turn', expiresAt: Date.now()+120_000 }));
     });
-    await once(ws, 'open'); ws.send(JSON.stringify({ type: 'resume', since })); return ws;
+    const opened = once(ws, 'open');
+    const upgraded = once(ws, 'upgrade');
+    const upgradeEvents: unknown[] = await upgraded;
+    const response = upgradeEvents[0];
+    if (!(response instanceof IncomingMessage)) throw new Error('Missing upgrade response');
+    expect(response.headers['x-opencrane-approval-waiting']).toBe('true');
+    await opened; ws.send(JSON.stringify({ type: 'resume', since, approvalWaiting: supported })); return ws;
   };
   try {
     const bad = new WebSocket(url); bad.on('error', () => undefined);
     await once(bad, 'unexpected-response'); bad.terminate();
-    socket = await connect(0);
+    socket = await connect(0, true);
     for (const conversationId of ['alice', 'bob']) socket.send(JSON.stringify({ type: 'turn', id: conversationId, conversationId, assistantId: 'assistant', text: 'Hello', token: 'test-turn', expiresAt: Date.now()+60_000 }));
     await until(() => reports.filter(r => r.type === 'agent.message_delta').length === 2);
+    expect(approvalResume).toHaveBeenLastCalledWith(true);
+    const settlement = { type: 'approval_settled', approvalId: 'a'.repeat(64), state: 'approved' };
+    socket.send(JSON.stringify(settlement));
+    await until(() => approvalSettled.mock.calls.length === 1);
+    expect(approvalSettled).toHaveBeenCalledWith(settlement.approvalId, 'approved');
     expect(calls).toBe(2);
     expect(turnModels).toEqual(['gpt-6.1-sol', 'gpt-6.1-sol']);
     channel.notification({ method: 'item/reasoning/summaryTextDelta', params: { threadId: 'thread-1', delta: 'Checking the request.' } });
@@ -55,6 +70,7 @@ it('authenticates, overlaps conversations and replays a strict report sequence a
     channel.notification({ method: 'turn/completed', params: { threadId: 'thread-2', turn: { status: 'completed' } } });
     socket = await connect(last);
     await until(() => reports.filter(r => r.type === 'agent.turn_completed').length === 2);
+    expect(approvalResume).toHaveBeenLastCalledWith(false);
     expect(reports.map(r => r.sequence)).toEqual(Array.from({ length: reports.length }, (_, i) => i+1));
     socket.send(JSON.stringify({ type: 'turn', id: 'alice', conversationId: 'alice', assistantId: 'assistant', text: 'Hello', token: 'test-turn', expiresAt: Date.now()+60_000 }));
     expect(calls).toBe(2);

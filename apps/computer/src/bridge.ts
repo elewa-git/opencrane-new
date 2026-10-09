@@ -22,7 +22,14 @@ process.on('unhandledRejection', stopped);
 process.umask(0o077);
 const gateway = new URL(process.env['GATEWAY'] ?? 'http://127.0.0.1:3000');
 if (gateway.protocol !== 'http:' || gateway.username || gateway.password || gateway.pathname !== '/') throw new Error('Invalid gateway');
-const { caller } = await proxy(gateway.origin, undefined, process.env['PROXY_CALLER_TOKEN']);
+function waiting(thread: string, approvalId: string) {
+  return channel.approvalWaiting(thread, approvalId);
+}
+function renew(thread: string) { return channel.renew(thread); }
+const approvalDriver = { waiting, renew };
+const runtimeProxy = await proxy(gateway.origin, undefined,
+  process.env['PROXY_CALLER_TOKEN'], approvalDriver);
+const { caller } = runtimeProxy;
 writeFileSync('/home/codex/.codex/environments.toml', memoryFreeEnvironments());
 writeFileSync('/home/codex/.codex/config.toml', memoryFreeConfig(process.env['MODEL'] ?? 'stub-model'));
 const child = spawn('codex', ['app-server', '--stdio'], { cwd: '/workspace', env: {
@@ -157,4 +164,4 @@ const channel = bridgeChannel(server, {
     const input = { thread, conversation, computer: computer['value'], token, expires: expiresAt };
     return proxyControl(path, input);
   },
-});
+}, runtimeProxy.approvals);

@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Keep approval renewal and release beside the turn state they share. */
+import type { approvalHolds } from './approval-holds.ts';
 import { modelForTask } from '@opencrane/models/routing';
 import type { WorkspaceFile } from './files.ts';
 import { record } from './http.ts';
@@ -73,11 +75,14 @@ function deleteTurn(state: TurnRunnerState, turnId: string) {
 }
 
 class TurnRunner {
+  private readonly renewals = new Map<string, Promise<void>>();
   private readonly driver: TurnDriver;
+  private readonly approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'> | undefined;
   private readonly loads: ReturnType<typeof threadLoads>;
   private readonly journal: ReturnType<typeof reportJournal>;
   private readonly send: (report: BridgeReport) => void;
   private readonly closeCurrentSocket: (code: number, reason: string) => void;
+  private readonly signal: (value: Record<string, unknown>) => void;
   private readonly state: TurnRunnerState = {
     preparing: new Map(),
     running: new Map(),
@@ -93,13 +98,59 @@ class TurnRunner {
     journal: ReturnType<typeof reportJournal>,
     send: (report: BridgeReport) => void,
     closeCurrentSocket: (code: number, reason: string) => void,
+    signal: (value: Record<string, unknown>) => void,
+    approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'> | undefined,
   ) {
     this.driver = driver;
+    this.approvals = approvals;
+    this.signal = signal;
     this.loads = threadLoads(driver);
     this.journal = journal;
     this.send = send;
     this.closeCurrentSocket = closeCurrentSocket;
     this.recover();
+  }
+
+
+  approvalWaiting(thread: string, approvalId: string) {
+    const turn = this.state.running.get(thread);
+    if (!turn || this.state.cancelled.has(turn.id)) return false;
+    const value = { type: 'approval_waiting', approvalId,
+      conversationId: turn.conversationId, turnId: turn.id };
+    this.signal(value);
+    return true;
+  }
+
+  renew(thread: string) {
+    const existing = this.renewals.get(thread);
+    if (existing) return existing;
+    const pending = this.renewGrant(thread);
+    const clear = this.renewals.delete.bind(this.renewals, thread);
+    const renewal = pending.finally(clear);
+    this.renewals.set(thread, renewal);
+    return renewal;
+  }
+
+  private async renewGrant(thread: string) {
+    const turn = this.state.running.get(thread);
+    const started = turn && this.lastStartedReport(turn.id);
+    if (!turn || !started || this.state.cancelled.has(turn.id)) throw new Error('Turn ended');
+    const pending = this.waitForGrant(started.sequence, started);
+    const expire = this.expireRenewal.bind(this, started.sequence);
+    const timer = setTimeout(expire, 10_000);
+    try {
+      const grant = await pending;
+      if (this.state.running.get(thread) !== turn || this.state.cancelled.has(turn.id)) {
+        throw new Error('Turn ended');
+      }
+      await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt);
+    } finally { clearTimeout(timer); }
+  }
+
+  private expireRenewal(sequence: number) {
+    const settle = this.state.waiting.get(sequence);
+    this.state.waiting.delete(sequence);
+    settle?.(new Error('No new turn pass'));
   }
 
   get waiting() {
@@ -251,6 +302,7 @@ class TurnRunner {
   private releaseTurn(turnId: string) {
     const threadId = this.findRunningThread(turnId);
     const turn = threadId && this.state.running.get(threadId);
+    if (threadId) this.approvals?.endThread(threadId);
     deleteTurn(this.state, turnId);
     this.state.codexTurns.delete(turnId);
     this.state.cancelled.delete(turnId);
@@ -421,6 +473,8 @@ class TurnRunner {
     }
 
     this.state.cancelled.add(turnId);
+    const heldThread = this.findRunningThread(turnId);
+    if (heldThread) this.approvals?.endThread(heldThread);
     const codexTurnId = this.state.codexTurns.get(turnId);
     if (!codexTurnId) {
       return;
@@ -543,6 +597,10 @@ export function turnRunner(
   journal: ReturnType<typeof reportJournal>,
   send: (report: BridgeReport) => void,
   closeCurrentSocket: (code: number, reason: string) => void,
+  signal: (value: Record<string, unknown>) => void = ignoreSignal,
+  approvals?: Pick<ReturnType<typeof approvalHolds>, 'endThread'>,
 ) {
-  return new TurnRunner(driver, journal, send, closeCurrentSocket);
+  return new TurnRunner(driver, journal, send, closeCurrentSocket, signal, approvals);
 }
+
+function ignoreSignal() {}

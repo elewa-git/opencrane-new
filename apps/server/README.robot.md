@@ -1005,10 +1005,12 @@ its delay up to 30 seconds. A successful check clears that delay. An
 never grant permission to send a tool call. The decision service checks each call.
 A reconnect starts with an empty map; the computer must announce its waits again.
 
-Deploy this server before a computer image sends `approval_waiting`. Older servers
-reject unknown messages and stop recovery for that computer. This first part of #46
-keeps the computer Allow-only and sends no approval signals. The next part
-adds held calls, server support checks, grant renewal and Ask tools with a review.
+The server and computer can be deployed in either order. The computer advertises
+`x-opencrane-approval-waiting: true` in its WebSocket upgrade response. This server
+checks it on every new connection before offering Ask tools with a review. An
+older computer receives Allow tools only. A new computer sends `approval_waiting`
+only after this server advertises its own support in `resume`. An older server
+without that marker receives no approval signals.
 
 Tests: `test/bridge-approvals.test.ts` uses real NATS and a real socket for the
 message route. It covers request bindings, saved states, reconnects, duplicate
@@ -1073,3 +1075,8 @@ The optional invitation clock sets session checks, event time and seven-day expi
 Tests cover its exact expiry boundary and a route-created invitation refused by join.
 Follow-up acceptance must refuse active identities itself, including joins after
 the candidate read and delayed member projections.
+
+## Waiting tool calls
+
+Turn lists now include reviewed, zero-cost Ask tools only when discovery carries a review.
+Allow tools still fail if policy changes to Ask mid-turn.

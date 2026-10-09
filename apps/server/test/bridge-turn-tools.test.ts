@@ -1,3 +1,8 @@
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { WebSocket, WebSocketServer } from 'ws';
+import { z } from 'zod';
+import { connectBridge } from '../src/chat/bridge.ts';
 import { expect, it, vi } from 'vitest';
 import { envelope } from '@opencrane/models';
 import type { EventEnvelope } from '@opencrane/events';
@@ -20,7 +25,7 @@ function storedEvent(sequence: number, event: EventEnvelope): StoredEvent {
   return { sequence, event };
 }
 
-function serverEvents() {
+function serverEvents(modeValue: 'allow' | 'ask' = 'allow') {
   const registration = envelope('test', 'mcp-fixture', 'mcp.server_registered', {
     serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp',
     registeredBy: 'person',
@@ -38,7 +43,7 @@ function serverEvents() {
   });
   const mode = envelope('test', 'mcp-fixture', 'mcp.tool_mode_set', {
     serverId: 'fixture', connectionId: 'connection', toolName: 'read',
-    toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'person',
+    toolRevision: 'a'.repeat(64), mode: modeValue, setBy: 'person',
   });
   return [registration, discovery, publication, mode].map((event, index) =>
     storedEvent(index + 1, event));
@@ -59,11 +64,12 @@ function conversationEvents(memoryFree = false) {
 
 function bridgeFixture(options: {
   kind?: 'personal' | 'team'; binding?: boolean; memoryFree?: boolean;
+  ask?: boolean; approvalWaiting?: boolean;
 } = {}) {
   use.mockReset();
   const rowsBySubject = new Map<string, StoredEvent[]>([
     ['conversation-chat', conversationEvents(options.memoryFree)],
-    ['mcp-fixture', serverEvents()],
+    ['mcp-fixture', serverEvents(options.ask ? 'ask' : 'allow')],
   ]);
   const reads: string[] = [];
   const store = {
@@ -77,6 +83,7 @@ function bridgeFixture(options: {
   const sentTurns = new Map<string, import('../src/chat/turn-tools.ts').TurnDelivery>();
   const link = {
     connectionId: 1,
+    approvalWaiting: options.approvalWaiting === true,
     socket: { send: (value: string) => sent.push(value) },
     delivered: new Set<string>(),
     sentTurns,
@@ -126,7 +133,7 @@ function bridgeFixture(options: {
     return processConversation(watchOptions, {} as never, conversation, assistant,
       new Set(), openLink);
   }
-  return { process, sent, reads, rows, link, sentTurns };
+  return { process, sent, reads, rows, link, sentTurns, watchOptions };
 }
 
 it('sends a waiting turn without tools when OpenFGA cannot check a grant', async () => {
@@ -204,3 +211,59 @@ it('reuses the tool offer and permission checks while resending a waiting turn',
     vi.useRealTimers();
   }
 });
+
+async function checksComputerSupport(supported: boolean) {
+  const test = bridgeFixture({ binding: true, ask: true });
+  use.mockResolvedValue({ allowed: true });
+  const server = createServer();
+  const computers = new WebSocketServer({ server, path: '/bridge' });
+  function support(headers: string[]) {
+    if (supported) headers.push('x-opencrane-approval-waiting: true');
+  }
+  computers.on('headers', support);
+  const received: Record<string, unknown>[] = [];
+  function connected(socket: WebSocket) {
+    function receive(bytes: Buffer) {
+      const frame = z.record(z.string(), z.unknown()).parse(JSON.parse(bytes.toString()));
+      received.push(frame);
+      if (!supported && String(JSON.stringify(frame['tools'])).includes('"ask"')) {
+        socket.close(1008, 'Old computer cannot parse Ask');
+      }
+    }
+    socket.on('message', receive);
+  }
+  computers.on('connection', connected);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing bridge port');
+  const options = { silo: 'test', store: test.watchOptions.store, keys: test.watchOptions.keys };
+  // Supply an empty saved report stream without changing the tool and conversation fixtures.
+  function emptyReports() { return Promise.resolve(0); }
+  const head = vi.fn(emptyReports);
+  const store = { ...options.store, head };
+  // Use only reads on this connector path. No report is sent by this fake computer.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- No writes on this path.
+  const bridgeOptions = { ...options, store } as unknown as Parameters<typeof connectBridge>[0];
+  const input = { url: `ws://127.0.0.1:${address.port}/bridge`, computerId: 'computer',
+    assistantId: 'assistant', bearer: 'test-token' };
+  const link = await connectBridge(bridgeOptions, input);
+  try {
+    Object.assign(test.link, { socket: link.socket, approvalWaiting: link.approvalWaiting });
+    await test.process();
+    function receivedTurn() { expect(received.some(isTurn)).toBe(true); }
+    function isTurn(frame: Record<string, unknown>) { return frame['type'] === 'turn'; }
+    await vi.waitFor(receivedTurn);
+    const turn = received.find(isTurn);
+    if (supported) expect(turn).toMatchObject({ tools: [{ modes: { read: 'ask' } }] });
+    else expect(turn).not.toHaveProperty('tools');
+    expect(link.socket.readyState).toBe(WebSocket.OPEN);
+  } finally {
+    link.socket.terminate();
+    for (const socket of computers.clients) socket.terminate();
+    computers.close();
+    server.close();
+  }
+}
+it.each([false, true])('offers Ask only to a computer advertising support: %s',
+  checksComputerSupport);

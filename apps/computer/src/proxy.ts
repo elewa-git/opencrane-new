@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream';
 import { chmodSync, writeFileSync } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { body, json, record } from './http.ts';
+import { approvalHolds } from './approval-holds.ts';
 import { mcpProxy, type ProxyGrant } from './mcp-proxy.ts';
 
 // Let Codex use the computer for ten minutes before it needs a new turn grant.
@@ -13,10 +14,20 @@ const MAX_TURN_GRANT_LIFETIME_MS = 120_000;
 // Close a model request after two minutes without activity on its connection.
 const UPSTREAM_REQUEST_TIMEOUT_MS = 120_000;
 
-export async function proxy(gateway: string, options = { callerPath: '/home/codex/caller', controlSocket: '/run/codex/control.sock', port: 8080 }, caller = randomBytes(32).toString('hex')) {
+const DEFAULT_PROXY_OPTIONS = {
+  callerPath: '/home/codex/caller', controlSocket: '/run/codex/control.sock', port: 8080,
+};
+function unavailableWaiting() { return false; }
+function unavailableRenewal() { return Promise.reject(new Error('Approval unavailable')); }
+const UNAVAILABLE_APPROVALS = { waiting: unavailableWaiting, renew: unavailableRenewal };
+
+export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
+  caller = randomBytes(32).toString('hex'),
+  approvalDriver: Parameters<typeof approvalHolds>[0] = UNAVAILABLE_APPROVALS) {
   let deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
   const turns = new Map<string, ProxyGrant>();
-  const mcp = mcpProxy(gateway, turns);
+  const approvals = approvalHolds(approvalDriver);
+  const mcp = mcpProxy(gateway, turns, approvals);
   writeFileSync(options.callerPath, caller, { mode: 0o600 });
   const control = createServer((req, res) => {
     void (async () => {
@@ -103,7 +114,7 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
   });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Proxy listen failed');
-  return { caller, url: `http://127.0.0.1:${address.port}`, close: async () => {
+  return { caller, approvals, url: `http://127.0.0.1:${address.port}`, close: async () => {
     server.closeAllConnections(); control.closeAllConnections();
     await Promise.all([server, control].map(listener => new Promise<void>((resolve, reject) => listener.close(error => error ? reject(error) : resolve()))));
   } };

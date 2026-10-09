@@ -1,0 +1,188 @@
+{
+  "measuredAt": "2026-10-09T01:21:51.987Z",
+  "sourceSha": "b17a797b8d973fac521af8d4e89590ad6e76d3b7",
+  "image": "ocn-p3-5-pr5b-computer",
+  "imageDigest": "sha256:fab970528dbfd75df608511ed6882a327236f3fa7e9d815aa39291ae06cf264b",
+  "version": "codex-cli 0.159.2",
+  "network": "none",
+  "model": "local fixture",
+  "freshSilo": false,
+  "command": "codex-mcp-resume.mjs --wire --held-approvals",
+  "result": "PASS",
+  "approvalHold": {
+    "heldMs": 310370,
+    "approvedSends": 1,
+    "deniedSends": 0,
+    "stopMs": 41
+  },
+  "checks": [
+    {
+      "name": "R1_zero",
+      "result": "PASS"
+    },
+    {
+      "name": "R2",
+      "result": "PASS"
+    },
+    {
+      "name": "R3",
+      "result": "PASS"
+    },
+    {
+      "name": "R4",
+      "result": "PASS"
+    },
+    {
+      "name": "R5",
+      "result": "PASS"
+    },
+    {
+      "name": "R6",
+      "result": "PASS"
+    },
+    {
+      "name": "R7",
+      "result": "NOT RUN"
+    },
+    {
+      "name": "R8",
+      "result": "NOT RUN"
+    },
+    {
+      "name": "shell_caller",
+      "result": "PASS"
+    }
+  ],
+  "guardMutations": [
+    {
+      "guard": "duplicate wake",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "renewal ordering",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "approved state",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "rollback",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "stop during renewal",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "timeout",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "support marker",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "decision marker",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "64 hex id",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "requested reason",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "403 only",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "held bytes",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "stop ordering",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "shared renewal",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "Ask review",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "held catalogue",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "uncertain sent result",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "late reply",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "exact approval",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "policy now Allow",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "server expiry",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "late decision",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "drop release",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "turn release",
+      "killed": true,
+      "exit": 1
+    },
+    {
+      "guard": "every resume marker",
+      "killed": true,
+      "exit": 1
+    }
+  ],
+  "remaining": [
+    "Full root suite: NOT RUN; CI is the gate.",
+    "Fresh-install chat journey: NOT RUN.",
+    "Image publication: NOT RUN."
+  ]
+}

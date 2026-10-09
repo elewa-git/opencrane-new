@@ -16,6 +16,7 @@ export interface TurnToolServerState {
     name: string;
     revision: string;
     definition?: string;
+    review?: unknown;
   }[];
   policyTools: {
     name: string;
@@ -31,6 +32,7 @@ interface TurnToolInput {
   requesterId: string;
   assistantId: string;
   baseMessageBytes: number;
+  approvalWaiting?: boolean;
   readServer: (serverId: string) => Promise<TurnToolServerState | undefined>;
   canUse: (serverId: string, kind: 'person' | 'assistant', subject: string) =>
     Promise<boolean>;
@@ -42,7 +44,7 @@ interface TurnToolServer {
   connectionId: string;
   serverInfo?: { name: string; version: string };
   definitions: string[];
-  modes: Record<string, 'allow'>;
+  modes: Record<string, 'allow' | 'ask'>;
 }
 
 export interface TurnDelivery {
@@ -71,7 +73,7 @@ export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServ
       omittedServers += 1;
       continue;
     }
-    const selected = reviewedAllowDefinitions(state);
+    const selected = reviewedDefinitions(state, input.approvalWaiting === true);
     if (!selected.definitions.length) continue;
     if (!await canUseServer(input, state.serverId)) continue;
     const entry = makeTurnToolServer(state, selected);
@@ -135,11 +137,11 @@ async function canUseServer(input: TurnToolInput, serverId: string) {
   return input.canUse(serverId, 'assistant', input.assistantId);
 }
 
-function reviewedAllowDefinitions(state: TurnToolServerState) {
+function reviewedDefinitions(state: TurnToolServerState, approvalWaiting: boolean) {
   const definitions: string[] = [];
-  const modes: Record<string, 'allow'> = {};
+  const modes: Record<string, 'allow' | 'ask'> = {};
   for (const policyTool of state.policyTools) {
-    if (!policyTool.reviewed || policyTool.costCents !== 0 || policyTool.mode !== 'allow') {
+    if (!policyTool.reviewed || policyTool.costCents !== 0 || policyTool.mode === 'block') {
       continue;
     }
     function matchesPolicy(tool: TurnToolServerState['discoveryTools'][number]) {
@@ -147,8 +149,9 @@ function reviewedAllowDefinitions(state: TurnToolServerState) {
     }
     const discovered = state.discoveryTools.find(matchesPolicy);
     if (!discovered?.definition || !isValidDefinition(discovered.definition)) continue;
+    if (policyTool.mode === 'ask' && (!approvalWaiting || !discovered.review)) continue;
     definitions.push(discovered.definition);
-    modes[policyTool.name] = 'allow';
+    modes[policyTool.name] = policyTool.mode;
   }
   return { definitions, modes };
 }
@@ -163,7 +166,7 @@ function isValidDefinition(definition: string) {
 }
 
 function makeTurnToolServer(state: TurnToolServerState,
-  selected: ReturnType<typeof reviewedAllowDefinitions>): TurnToolServer {
+  selected: ReturnType<typeof reviewedDefinitions>): TurnToolServer {
   if (!state.connectionId) throw new Error('Tool server connection is unavailable');
   const result: TurnToolServer = {
     key: `oc_${createHash('sha256').update(state.serverId).digest('hex').slice(0, 10)}`,
