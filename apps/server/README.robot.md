@@ -905,6 +905,13 @@ governed-work qualification remains tracked in #63.
 
 ## Member reads
 
+Bound invitation acceptance copies `personalAssistant: provision|none` into
+`member.joined`; an older invitation without a choice records `provision`.
+The strict join request cannot override it. The join receipt proves membership,
+not assistant creation or computer readiness. The assistant reaction runs later.
+`test/member-joined.test.ts` covers choice, repeats and lost replies on real NATS.
+Email invitation create/renew and acceptance binding remain follow-up work for #85.
+
 The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.
 

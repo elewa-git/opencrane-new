@@ -5,7 +5,9 @@ import { event } from './definition.ts';
 import { memberJoinedDataSchema } from './examples.ts';
 import * as data from './data.ts';
 
-export const siloOwnerBootstrappedDataSchema = memberJoinedDataSchema.omit({ invitationId: true }).extend({
+export const siloOwnerBootstrappedDataSchema = memberJoinedDataSchema.omit({
+  invitationId: true, personalAssistant: true,
+}).extend({
   memberId: z.literal('bootstrap-owner'), role: z.literal('owner'),
   identity: z.object({ issuer: z.url(), sub: z.string().min(1) }).strict(),
 }).strict();

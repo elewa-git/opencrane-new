@@ -2,7 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { IssuedToken, tokenIssuer } from '@opencrane/auth';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { conversationCreatedDataSchema, type EventEnvelope } from '@opencrane/events';
+import { conversationCreatedDataSchema, memberJoinedDataSchema,
+  type EventEnvelope } from '@opencrane/events';
 import { readEvents } from '@opencrane/projections';
 import { registerHandler } from '@opencrane/handlers';
 import { createLogger } from '@opencrane/observability';
@@ -51,15 +52,24 @@ async function append(store: Store, trigger: EventEnvelope, events: StoredEvent[
 }
 
 export function lifecycleHandlers(store: Store) {
-  const createAssistant = registerHandler('create-assistant', async (event) => {
+  async function createPersonalAssistant(event: EventEnvelope) {
+    if (event.type === 'member.joined') {
+      const joined = memberJoinedDataSchema.parse(event.data);
+      if (joined.personalAssistant === 'none') {
+        return;
+      }
+    }
     const memberId = field(event.data, 'memberId');
     const assistantId = stable('personal', event.silo, memberId);
     const subject = `assistant-${assistantId}`;
     const events = await history(store, subject);
-    if (events.length) return;
+    if (events.length) {
+      return;
+    }
     await append(store, event, events, 'assistant.created', subject,
       { assistantId, ownerId: memberId, kind: 'personal' });
-  });
+  }
+  const createAssistant = registerHandler('create-assistant', createPersonalAssistant);
   const claimComputer = registerHandler('claim-computer', async (event) => {
     const assistantId = field(event.data, 'assistantId');
     const subject = `computer-${assistantId}`;

@@ -28,6 +28,11 @@ and credentials appear only as secret references.
 
 ## Verification and dependencies
 
+`member.invited` and `member.joined` accept optional
+`personalAssistant: provision|none`. Missing fields remain valid for older events.
+The server supplies `provision` when accepting an older invitation. Bootstrap
+does not accept this field. `test/assistant-choice.test.ts` checks these contracts.
+
 ```sh
 npm test -- libs/events
 npm run typecheck -w libs/events

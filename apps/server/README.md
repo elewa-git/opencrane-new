@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and permission checks"]
-  server -.->|checks organisation, access, invitations and spending| libs["libs/*<br/>shared code"]
+  server -.->|checks organisation, access, invitation choices and spending| libs["libs/*<br/>shared code"]
   server -->|records changes and updates chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
@@ -28,7 +28,7 @@ flowchart LR
   from another organisation, but session routes still need a configured organisation.
 - Checks permissions before returning private information or changing data.
 - Accepts bound invitations after a recent sign-in with a verified email, while
-  the inviter is still an owner or admin.
+  the inviter is still an owner or admin. Records whether a personal assistant was requested.
 - Checks an invitation email and explains that the person is confirmed when they accept.
 - Returns member headers to members and the email directory to current owners and admins.
   Keeps checking their access while a live member connection is open.

@@ -11,7 +11,7 @@ This is the background workers layer. `apps/server` records events, and these wo
 ```mermaid
 flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
-  nats -->|new events| ops["apps/ops<br/>workers and replay tools"]
+  nats -->|new events and assistant choices| ops["apps/ops<br/>workers and replay tools"]
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
@@ -23,7 +23,7 @@ flowchart LR
 
 - Keeps the member, group, model grant, tool catalogue, conversation, file, computer, budget and
   history tables up to date.
-- Updates permissions and sets up a new member's assistant and computer.
+- Updates permissions and sets up a new member's assistant and computer when requested.
 - Starts computers, gives them short-lived access keys and pauses idle ones.
 - Settles model spending after a model request.
 - Rebuilds tables and permissions for operator recovery.
@@ -34,7 +34,8 @@ flowchart LR
 1. **A change is recorded.** A worker reads the event and updates the matching PostgreSQL table, including model grants. Replaying the events can rebuild that table.
 2. **A member joins.** The [dispatcher](../../GLOSSARY.md#dispatcher) is the background
    program that reacts to each new event. It updates permissions, gives the member model
-   access and claims a computer for their assistant.
+   access and claims a computer for their assistant when the invitation requested one.
+   A join that requests no assistant creates neither an assistant nor its computer.
 3. **A computer sits idle.** After 15 minutes without activity (by default), the worker
    pauses it. When a new message arrives, the server asks for the computer back and the
    worker starts it again. The watcher reads new events as they arrive and only asks
