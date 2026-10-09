@@ -14,6 +14,7 @@ export interface AuditOptions {
 }
 export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, options?: AuditOptions) {
   for (const url of ['/api/org/history', '/api/conversations/:conversationId/history']) app.get(url, async (request, reply) => {
+    reply.header('cache-control', 'no-store');
     const session = sessionFor(request, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
