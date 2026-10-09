@@ -494,7 +494,7 @@ it.each([500, 503, 403])('does not show empty states after a %s conversation rea
   await fixture.whenStable();
   expect(root.textContent).not.toContain('No screenshots yet');
 });
-it('renders streamed replies, wake progress and durable Stop, then replays the stopped partial', async () => {
+it('renders streamed replies and shows a stopped partial when the server ends the turn', async () => {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const creation = { conversationId: 'chat', createdBy: 'me', assistantId: 'assistant' };
   const rows = [{
@@ -531,7 +531,7 @@ it('renders streamed replies, wake progress and durable Stop, then replays the s
   expect(budgetNotice?.textContent).toContain('next monthly budget period (UTC)');
   message('agent.turn_stop_requested', 6, { turnId: 'message' });
   await fixture.whenStable();
-  expect(root.textContent).toContain('Stopping…');
+  expect(root.textContent).not.toContain('Stopping…');
   message('agent.turn_failed', 7, { turnId: 'message' });
   await fixture.whenStable(); expect(root.textContent).toContain('Stopped');
   expect(root.querySelector('[aria-live="polite"]')).not.toBeNull();
@@ -850,6 +850,67 @@ it('shows Stop not confirmed after a queued cancellation timeout without ending 
   }
 });
 
+it('shows a saved stop request as active after the workspace reloads', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta',
+      time: '2026-10-04T10:00:01Z',
+      data: { turnId: 'message', messageId: 'reply', text: 'Working' } },
+    { id: 'stop-requested', position: 3, type: 'agent.turn_stop_requested',
+      time: '2026-10-04T10:00:02Z', data: { turnId: 'message' } },
+  ]);
+
+  expect(capture.root.textContent).not.toContain('Stopping…');
+  expect(capture.root.querySelector('oc-chat-composer .stop')).not.toBeNull();
+  expect(capture.fixture.componentInstance['chat'].turns().at(-1)?.state).toBe('working');
+  capture.fixture.destroy();
+});
+
+it('does not send Stop for a completed turn', async () => {
+  const completedCapture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'ended', position: 2, type: 'agent.turn_completed',
+      time: '2026-10-04T10:00:01Z', data: { turnId: 'message' } },
+  ]);
+  const completedChat = completedCapture.fixture.componentInstance['chat'];
+  await completedChat.stop();
+  expect(completedCapture.postBodies.filter(isStopBody)).toHaveLength(0);
+  completedCapture.fixture.destroy();
+});
+
+it('does not reopen a completed turn after a delayed Stop reply', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta',
+      time: '2026-10-04T10:00:01Z',
+      data: { turnId: 'message', messageId: 'reply', text: 'Working' } },
+  ]);
+  let resolveStopResponse: (response: Response) => void = () => undefined;
+  const delayedStopResponse = new Promise<Response>(resolve => {
+    resolveStopResponse = resolve;
+  });
+  capture.setStopResponse(delayedStopResponse);
+  const chat = capture.fixture.componentInstance['chat'];
+  const stopRequest = chat.stop();
+  sendConversationRow(capture.socket, { id: 'ended', position: 3,
+    type: 'agent.turn_completed', time: '2026-10-04T10:00:02Z',
+    data: { turnId: 'message' } });
+  capture.fixture.detectChanges();
+  expect(chat.turns().at(-1)?.state).toBe('done');
+
+  resolveStopResponse(new Response('{"status":"appended"}'));
+  await stopRequest;
+  capture.fixture.detectChanges();
+
+  expect(chat.turns().at(-1)?.state).toBe('done');
+  expect(capture.root.textContent).toContain('Done');
+  expect(capture.root.textContent).not.toContain('Stopping…');
+  capture.fixture.destroy();
+});
+
 it('restores Stop when the stop request was not saved', async () => {
   const capture = await createCaptureWorkspace([
     { id: 'message', position: 1, type: 'message.posted',
@@ -898,6 +959,9 @@ it('does not restore Stopping when the stop reply arrives after its timeout', as
     await vi.advanceTimersByTimeAsync(10_000);
     capture.fixture.detectChanges();
     expect(capture.root.textContent).toContain('Stop not confirmed');
+    const retryButton = capture.root.querySelector<HTMLButtonElement>(
+      'oc-chat-composer .stop');
+    expect(retryButton?.disabled).toBe(false);
 
     resolveStopResponse(new Response('{"status":"appended"}'));
     await stopRequest;

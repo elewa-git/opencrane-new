@@ -48,8 +48,7 @@ export class ChatSession implements OnDestroy {
   readonly queued = signal(false);
   readonly connected = this.socket.isConnected;
   readonly turns = computed(() =>
-    transcript(this.rows(), this.memberId(), this.stoppingTurnId(),
-      this.stopNotConfirmedTurnId()));
+    transcript(this.rows(), this.memberId(), this.stoppingTurnId()));
   readonly selectedConversation = computed(() =>
     this.conversations().find(row => row.conversationId === this.selected()));
   readonly teamSession = computed(this.isTeamSession.bind(this));
@@ -208,7 +207,9 @@ export class ChatSession implements OnDestroy {
   }
   async stop(): Promise<void> {
     const turn = this.active();
-    if (!turn || turn.state !== 'working' || this.busy()) return;
+    const retryingUnconfirmedStop = turn
+      && this.stopNotConfirmedTurnId() === turn.id;
+    if (!turn || turn.state !== 'working' || (this.busy() && !retryingUnconfirmedStop)) return;
     const attempt = ++this.stopAttempt;
     const commandId = `stop-${turn.id}-${crypto.randomUUID()}`;
     this.clearStopConfirmationTimer();
@@ -253,8 +254,8 @@ export class ChatSession implements OnDestroy {
     this.socket.disconnect();
   }
 
-  stopNotConfirmedFor(turnId: string): boolean {
-    return this.stopNotConfirmedTurnId() === turnId;
+  stopNotConfirmedFor(turnId = this.active()?.id ?? ''): boolean {
+    return !!turnId && this.stopNotConfirmedTurnId() === turnId;
   }
 
   private async list(): Promise<void> {

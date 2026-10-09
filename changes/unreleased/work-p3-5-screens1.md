@@ -11,6 +11,11 @@ ending report arrives after ten seconds, the screen says â€œStop not confirmedâ€
 keeps the reply active and offers Stop again. A late ending report still sets the
 final turn state. Long tool names wrap inside the transcript on phone screens.
 A restricted tool refusal is shown as an access refusal without guessing its cause.
+After a reload, a saved Stop request does not make a turn look as if it is still
+stopping; the turn status comes from its start and ending reports. Stop is not
+sent for a turn the browser already knows has ended, and a late reply cannot
+make it active again. If the Stop request takes longer than ten seconds, Stop
+can be tried again while that request is still waiting.
 
 The existing approval cards continue to show pending decisions, approved but
 unused approvals, used approvals with unknown outcomes, denials, expiry and

@@ -234,7 +234,7 @@ it('keeps a stop request pending and accepts tool finishes until the turn ends',
 
   const turn = transcript(rows, 'me').find(isAgentTurn);
 
-  expect(turn?.state).toBe('stopping');
+  expect(turn?.state).toBe('working');
   expect(turn?.endedAt).toBeUndefined();
   expect(turn?.tools[0]?.status).toBe('completed');
 
@@ -243,6 +243,35 @@ it('keeps a stop request pending and accepts tool finishes until the turn ends',
   const stoppedTurn = transcript(rows, 'me').find(isAgentTurn);
   expect(stoppedTurn?.state).toBe('stopped');
   expect(stoppedTurn?.endedAt).toBe('2026-10-09T10:00:04Z');
+});
+
+it('does not restore a saved Stop request as Stopping after reload', () => {
+  const rows: ChatRow[] = [
+    { id: 'message', position: 1, type: 'message.posted', time: '2026-10-09T10:00:00Z',
+      data: { authorId: 'me', text: 'Read the order' } },
+    { id: 'stop-requested', position: 2, type: 'agent.turn_stop_requested',
+      time: '2026-10-09T10:00:02Z', data: { turnId: 'message' } },
+  ];
+
+  const reloadedTurn = transcript(rows, 'me').find(isAgentTurn);
+
+  expect(reloadedTurn?.state).toBe('working');
+  expect(reloadedTurn?.stopRequested).toBe(true);
+});
+
+it('keeps a completed turn completed when a late Stop request is replayed', () => {
+  const rows: ChatRow[] = [
+    { id: 'message', position: 1, type: 'message.posted', time: '2026-10-09T10:00:00Z',
+      data: { authorId: 'me', text: 'Read the order' } },
+    { id: 'ended', position: 2, type: 'agent.turn_completed',
+      time: '2026-10-09T10:00:01Z', data: { turnId: 'message' } },
+    { id: 'stop-requested', position: 3, type: 'agent.turn_stop_requested',
+      time: '2026-10-09T10:00:02Z', data: { turnId: 'message' } },
+  ];
+
+  const completedTurn = transcript(rows, 'me').find(isAgentTurn);
+
+  expect(completedTurn?.state).toBe('done');
 });
 
 function isAgentTurn(turn: { author: string }): boolean {

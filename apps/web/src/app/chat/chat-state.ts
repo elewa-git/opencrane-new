@@ -99,7 +99,6 @@ export function transcript(
   rows: ChatRow[],
   memberId: string,
   stoppingTurnId = '',
-  stopNotConfirmedTurnId = '',
 ): Turn[] {
   const turns: Turn[] = [], agents = new Map<string, Turn>(), messages = new Map<string, Map<string, string>>();
   const seen = new Set<string>();
@@ -118,7 +117,7 @@ export function transcript(
     const turn = agents.get(data.turnId ?? '');
     if (!turn || turn.state === 'stopped') continue;
     if (row.type === 'agent.turn_stop_requested') {
-      recordStopRequest(turn, stopNotConfirmedTurnId);
+      recordStopRequest(turn);
       continue;
     }
     if (row.type === 'decision.recorded' && data.reason === 'budget_exhausted') {
@@ -130,9 +129,8 @@ export function transcript(
   return turns;
 }
 
-function recordStopRequest(turn: Turn, stopNotConfirmedTurnId: string): void {
+function recordStopRequest(turn: Turn): void {
   turn.stopRequested = true;
-  turn.state = turn.id === stopNotConfirmedTurnId ? 'working' : 'stopping';
 }
 
 function addStandaloneTurn(row: ChatRow, memberId: string, turns: Turn[]): boolean {
