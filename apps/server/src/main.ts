@@ -70,6 +70,11 @@ const budget = budgetDecisionUrl && process.env['TOKEN_SIGNING_KEY_FILE'] && pro
   decisionUrl: budgetDecisionUrl,
   tokens: await tokenIssuer({ privateKeyPath: process.env['TOKEN_SIGNING_KEY_FILE'], issuer: process.env['TOKEN_ISSUER'] }),
 } : undefined;
+const membership = events && silo ? {
+  silo,
+  store: events.store,
+  ...(modelDb ? { db: modelDb.db } : {}),
+} : undefined;
 const app = buildServer(authConfig, {
   processOwnsTelemetry: true,
   ...(chat ? { chat, liveView: { ...chat, open: desktopConnection(process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!) } } : {}),
@@ -104,7 +109,7 @@ const app = buildServer(authConfig, {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
   } } : {}),
-  ...(events && silo ? { membership: { silo, store: events.store } } : {}),
+  ...(membership ? { membership } : {}),
   ...(realtime && catalogue ? { integrations: { silo: realtime.binding.silo, feed: realtime.feed,
     catalogue, discovery: {}, ...(budget ? { budget } : {}), ...(events ? { store: events.store } : {}), ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),
   ...(realtime && computers ? { computers: { silo: realtime.binding.silo, feed: realtime.feed,

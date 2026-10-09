@@ -140,10 +140,10 @@ recorded actor/target/time and both projection statuses, without a second ledger
 
 `member.invited` pre-allocates `memberId`; invitation and acceptance share
 `member-<memberId>` so one conditional append settles concurrent acceptance.
-New invitations for the server acceptance path carry `invitedIdentity` (OIDC
-`issuer` and `sub`) and `expiresAt` (an ISO timestamp with offset). These fields
-are optional only for replay of older events; the command refuses invitations
-without either field. Email is contact data, never proof of identity. The server
+Bound invitations carry `invitedIdentity` (OIDC `issuer` and `sub`). Email-only
+invitations omit it and record `identity: { issuer, sub }` in `member.joined` when
+accepted. Both require `expiresAt` (an ISO timestamp with offset). The command
+refuses invitations without an expiry. Email is contact data, never proof of identity. The server
 also checks the session organisation against its configured organisation and
 every event's silo against its configured silo. It accepts only the latest,
 still-pending invitation, before its expiry, using its email and role.
@@ -154,9 +154,9 @@ The final access check watches the joining member, inviter and ownership streams
 General sign-in exceptions do not bypass the exact organisation check here.
 
 Email create/renew records no `invitedIdentity`; `memberId` identifies the pending
-email record. These events grant no access; join refuses `unbound_invitation`.
-The [member API](../api/members.md#create-and-renew-email-invitations) owns the contract.
-Account binding and admission selection at acceptance remain follow-up work.
+email record. These events grant no access. Acceptance keeps that id, checks that
+the account is not already active in the silo and binds its issuer and subject.
+The [member API](../api/members.md#email-only-invitation-acceptance) owns the contract.
 
 Invitations can record `personalAssistant: provision|none`. Acceptance copies
 that choice into `member.joined`. A missing choice in an older invitation means
@@ -171,8 +171,7 @@ the earlier sequence without appending, even after invitation expiry. A removed
 stream refuses all joins, including repeats; no retry restores membership.
 Changed invitation/display-name arguments with the same key are refused. A race
 with another command reloads history and returns a refusal without a second
-append; the caller can retry after reconsidering the result. Invitation creation
-and identity binding are separate work.
+append; the caller can retry after reconsidering the result.
 
 Owner decision, 2 October 2026: production installation prints a one-time token
 with a 24-hour expiry. Only its hash and expiry live in a private local file.

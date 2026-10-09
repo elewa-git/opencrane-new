@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
-import { memberInvitedDataSchema } from '@opencrane/events';
+import { memberInvitedDataSchema, parseEventByType } from '@opencrane/events';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { history } from '@opencrane/models';
-import { members, pgDb } from '@opencrane/projections';
+import { createLogger } from '@opencrane/observability';
+import { members, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -42,7 +43,7 @@ function resolveMember(_silo: string, _issuer: string, sub: string) {
 function server() {
   const options = { silo: 'acme', store: nats.store, binding, db: pgDb(dbs.queue), now,
     feed: { memberId: resolveMember } };
-  const membership = { silo: 'acme', store: nats.store, now };
+  const membership = { silo: 'acme', store: nats.store, db: pgDb(dbs.queue), now };
   return buildServer(config, { invitationEmail: options, membership });
 }
 async function append(subject: string, type: string, data: unknown, apply = false) {
@@ -62,6 +63,7 @@ async function fixture() {
     const data = { memberId: role, displayName: role, email: `${role}@example.test`, role };
     await append(`member-${role}`, 'member.joined', data, true);
   }
+  await prepareAcceptanceProjection();
   app = server();
 }
 beforeEach(fixture);
@@ -341,7 +343,7 @@ async function refusesTargetJoining() {
 }
 it('refuses a matching pending target that joins during the write check', refusesTargetJoining);
 
-async function refusesUnboundAcceptance() {
+async function acceptsEmailInvitation() {
   const created = await request('POST');
   expect(created.statusCode).toBe(200);
   const invitation = created.json<{ invitationId: string }>();
@@ -354,12 +356,25 @@ async function refusesUnboundAcceptance() {
     commandId: 'accept-person', displayName: 'Person' };
   const options = { method: 'POST' as const, url: '/members/join', headers, payload };
   const response = await app.inject(options);
-  expect(response.statusCode).toBe(409);
-  expect(response.json()).toEqual({ status: 'refused', reason: 'unbound_invitation' });
-  expect(await records()).toEqual(before);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'joined', memberId });
+  const after = await records();
+  expect(after.slice(0, -1)).toEqual(before);
+  expect(after.at(-1)?.event.data).toMatchObject({
+    identity: { issuer: config.issuerUrl, sub: 'person' }, personalAssistant: 'none',
+  });
+  const db = pgDb(dbs.queue);
+  await members.apply(db, after.at(-1)!.event, after.at(-1)!.sequence);
+  const query = 'SELECT issuer, sub FROM member_identities WHERE silo = $1 AND member_id = $2';
+  const expected = [{ issuer: config.issuerUrl, sub: 'person' }];
+  expect((await db.query(query, ['acme', memberId])).rows).toEqual(expected);
+  await members.drop(db);
+  await members.create(db);
+  for (const row of after) await members.apply(db, row.event, row.sequence);
+  expect((await db.query(query, ['acme', memberId])).rows).toEqual(expected);
 }
-it('refuses acceptance of a route-created invitation with the right verified email',
-  refusesUnboundAcceptance);
+it('accepts a route-created email invitation and rebuilds its account binding',
+  acceptsEmailInvitation);
 
 async function reinvitesRemovedEmail() {
   const joined = { memberId: 'old-person', displayName: 'Person', email, role: 'member' };
@@ -572,3 +587,267 @@ async function refusesMalformedJson() {
   expect(await records()).toEqual([]);
 }
 it('returns invalid_request for malformed request JSON', refusesMalformedJson);
+
+
+async function prepareAcceptanceProjection() {
+  await members.drop(pgDb(dbs.queue));
+  const runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader, createLogger('test'));
+  await runner.initialise(members);
+  await dbs.queue.query("UPDATE projection_checkpoints SET sequence = 0 WHERE name = 'members'");
+  await dbs.queue.query("DELETE FROM projection_events WHERE projection = 'members'");
+  await runner.run(members);
+  return runner;
+}
+
+async function createCompetingInvitations() {
+  await prepareAcceptanceProjection();
+  const first = await request('POST');
+  const secondId = randomUUID();
+  const secondInput = { ...input, memberId: secondId, commandId: 'invite-other' };
+  const second = await request('POST', secondInput);
+  expect(first.statusCode).toBe(200);
+  expect(second.statusCode).toBe(200);
+  // Leave both invitations out of the read table to reproduce delayed background work.
+  expect((await dbs.queue.query('SELECT member_id FROM members WHERE email = $1',
+    [email])).rows).toEqual([]);
+  const firstCommand = { memberId, invitationId: first.json<{ invitationId: string }>().invitationId,
+    commandId: 'join-first', displayName: 'Person' };
+  const secondCommand = { memberId: secondId,
+    invitationId: second.json<{ invitationId: string }>().invitationId,
+    commandId: 'join-second', displayName: 'Person' };
+  return { firstCommand, secondCommand };
+}
+
+function acceptInvitation(payload: unknown) {
+  const identity = { sub: 'person', orgId: 'org-acme', roles: [], email,
+    emailVerified: true, authTime: clock.getTime() / 1000, exp: 2000000000 };
+  const headers = { origin: 'https://app.example.test', 'content-type': 'application/json',
+    cookie: `${config.cookieName}=${encodeSession(config, identity)}` };
+  const options = { method: 'POST' as const, url: '/members/join', headers,
+    payload: JSON.stringify(payload) };
+  return app.inject(options);
+}
+
+async function assertOneJoined(firstId: string, secondId: string) {
+  const first = await history(nats.store, `member-${firstId}`, 'acme');
+  const second = await history(nats.store, `member-${secondId}`, 'acme');
+  const rows = [...first, ...second];
+  function isJoined(row: typeof rows[number]) {
+    return row.event.type === 'member.joined';
+  }
+  expect(rows.filter(isJoined)).toHaveLength(1);
+}
+
+async function refusesOtherInvitationDuringFinalCheck() {
+  const commands = await createCompetingInvitations();
+  const read = nats.store.readStream.bind(nats.store);
+  let competed = false;
+  async function* joinOtherInvitation(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] !== 'member-admin' || competed) return;
+    competed = true;
+    const other = await acceptInvitation(commands.secondCommand);
+    expect(other.statusCode).toBe(200);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(joinOtherInvitation);
+  const response = await acceptInvitation(commands.firstCommand);
+  expect(response.statusCode).toBe(409);
+  await assertOneJoined(memberId, commands.secondCommand.memberId);
+}
+it('refuses a competing invitation accepted by the same account during the final access check',
+  refusesOtherInvitationDuringFinalCheck);
+
+async function racesDifferentInvitations() {
+  const commands = await createCompetingInvitations();
+  const appendEvent = nats.store.append.bind(nats.store);
+  let attempts = 0;
+  let release: () => void = pendingRelease;
+  function pendingRelease() {}
+  function setRelease(resolve: () => void) {
+    release = resolve;
+  }
+  const barrier = new Promise<void>(setRelease);
+  async function appendTogether(command: Parameters<typeof appendEvent>[0]) {
+    attempts += 1;
+    if (attempts === 2) release();
+    await barrier;
+    return appendEvent(command);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(appendTogether);
+  const firstRequest = acceptInvitation(commands.firstCommand);
+  const secondRequest = acceptInvitation(commands.secondCommand);
+  const responses = await Promise.all([firstRequest, secondRequest]);
+  function responseStatus(response: typeof responses[number]) {
+    return response.statusCode;
+  }
+  const statuses = responses.map(responseStatus);
+  statuses.sort();
+  expect(statuses).toEqual([200, 409]);
+  await assertOneJoined(memberId, commands.secondCommand.memberId);
+}
+it('stores one membership when the same account accepts two invitations at the same time',
+  racesDifferentInvitations);
+
+async function ignoresAlreadyProjectedHistory() {
+  await prepareAcceptanceProjection();
+  const created = await request('POST');
+  expect(created.statusCode).toBe(200);
+  const read = nats.store.readStream.bind(nats.store);
+  const oldEvent = { ...event('old-member', 'member-unrelated', 'member.joined'),
+    silo: 'acme', data: { memberId: 'unrelated', displayName: 'Unrelated',
+      email: 'unrelated@example.test', role: 'member' } };
+  async function* accumulatedHistory(...args: Parameters<typeof read>) {
+    if (args[0] === 'member-*' && (args[1] ?? 1) === 1) {
+      for (let index = 1; index <= 10_001; index += 1) {
+        yield { sequence: index, event: oldEvent };
+      }
+      return;
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(accumulatedHistory);
+  const payload = { memberId,
+    invitationId: created.json<{ invitationId: string }>().invitationId,
+    commandId: 'accept-after-long-history', displayName: 'Person' };
+  const response = await acceptInvitation(payload);
+  expect(response.statusCode).toBe(200);
+  expect(await records()).toHaveLength(2);
+}
+it('accepts without reading more than ten thousand already projected unrelated member events',
+  ignoresAlreadyProjectedHistory);
+
+
+async function checksProjectedIdentityAgainstEvents(kind: string) {
+  const identity = { issuer: config.issuerUrl, sub: 'person' };
+  const data = { memberId: 'existing-person', email: 'old-address@example.test',
+    displayName: 'Person', role: 'member', invitationId: 'existing-invitation', identity };
+  const record = { ...event(randomUUID(), 'member-existing-person', 'member.joined'),
+    silo: 'acme', principal: { kind: 'human', id: 'person' }, data };
+  expect((await nats.store.append({ event: record, expectedSequence: 0 })).status)
+    .toBe('appended');
+  const runner = await prepareAcceptanceProjection();
+  // Keep the candidate in the read table but make its status disagree with its events.
+  await dbs.queue.query("UPDATE members SET status = 'invited' WHERE member_id = $1",
+    ['existing-person']);
+  if (kind === 'removed') {
+    const removal = { ...event(randomUUID(), record.subject, 'member.removed'),
+      silo: 'acme', data: { memberId: 'existing-person', removedBy: 'admin' } };
+    const expectedSequence = await nats.store.head(record.subject);
+    expect((await nats.store.append({ event: removal, expectedSequence })).status)
+      .toBe('appended');
+  }
+  const created = await request('POST');
+  expect(created.statusCode).toBe(200);
+  const payload = { memberId,
+    invitationId: created.json<{ invitationId: string }>().invitationId,
+    commandId: 'accept-with-projected-candidate', displayName: 'Person' };
+  const response = await acceptInvitation(payload);
+  if (kind === 'removed') {
+    expect(response.statusCode).toBe(200);
+    await runner.run(members);
+    const bindings = await dbs.queue.query(
+      `SELECT members.member_id FROM members JOIN member_identities USING (silo, member_id)
+        WHERE members.status = 'joined' AND member_identities.sub = $1`, ['person']);
+    expect(bindings.rows).toEqual([{ member_id: memberId }]);
+  } else {
+    expect(response.json()).toEqual({ status: 'refused', reason: 'already_member' });
+    expect(await records()).toHaveLength(1);
+  }
+}
+it.each(['active', 'removed'])(
+  'checks a projected identity from another email against current events (%s)',
+  checksProjectedIdentityAgainstEvents);
+
+async function refusesIncompleteUnprojectedHistory() {
+  const created = await request('POST');
+  expect(created.statusCode).toBe(200);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* incompleteHistory(...args: Parameters<typeof read>) {
+    if (args[0] === 'member-*') return;
+    yield* read(...args);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(incompleteHistory);
+  const payload = { memberId,
+    invitationId: created.json<{ invitationId: string }>().invitationId,
+    commandId: 'accept-with-incomplete-history', displayName: 'Person' };
+  const response = await acceptInvitation(payload);
+  expect(response.statusCode).toBe(503);
+  expect(await records()).toHaveLength(1);
+}
+it('refuses an incomplete read of member events after the projection checkpoint',
+  refusesIncompleteUnprojectedHistory);
+
+const renewalIntervals = ['before_snapshot', 'after_snapshot', 'during_access', 'before_append'];
+
+async function refusesRenewedInvitation(interval: string) {
+  const initialInput = { ...input, role: 'admin', personalAssistant: 'provision' };
+  const created = await request('POST', initialInput);
+  expect(created.statusCode).toBe(200);
+  const original = (await records())[0]!;
+  const payload = { memberId,
+    invitationId: created.json<{ invitationId: string }>().invitationId,
+    commandId: 'accept-original', displayName: 'Person' };
+  let renewed = false;
+  let renewalId = '';
+  async function renewInvitation() {
+    if (renewed) return;
+    renewed = true;
+    const renewalInput = { ...input, commandId: 'renew-before-acceptance',
+      expectedSequence: original.sequence };
+    const response = await request('POST', renewalInput);
+    expect(response.statusCode).toBe(200);
+    renewalId = response.json<{ invitationId: string }>().invitationId;
+  }
+  const head = nats.store.head.bind(nats.store);
+  async function renewAroundSnapshot(subject?: string, deadline?: number) {
+    if (subject === 'member-*' && interval === 'before_snapshot') {
+      await renewInvitation();
+    }
+    const position = await head(subject, deadline);
+    if (subject === 'member-*' && interval === 'after_snapshot') {
+      await renewInvitation();
+    }
+    return position;
+  }
+  const read = nats.store.readStream.bind(nats.store);
+  async function* renewDuringAccess(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === 'member-admin' && interval === 'during_access') {
+      await renewInvitation();
+    }
+  }
+  const appendEvent = nats.store.append.bind(nats.store);
+  async function renewBeforeAppend(command: Parameters<typeof appendEvent>[0]) {
+    const parsed = parseEventByType(command.event);
+    if (parsed.success && parsed.event.type === 'member.joined' && interval === 'before_append') {
+      await renewInvitation();
+    }
+    return appendEvent(command);
+  }
+  vi.spyOn(nats.store, 'head').mockImplementation(renewAroundSnapshot);
+  vi.spyOn(nats.store, 'readStream').mockImplementation(renewDuringAccess);
+  vi.spyOn(nats.store, 'append').mockImplementation(renewBeforeAppend);
+  const response = await acceptInvitation(payload);
+  expect(renewed).toBe(true);
+  expect(response.statusCode).toBe(409);
+  vi.restoreAllMocks();
+  const beforeRetry = await records();
+  expect(beforeRetry).toHaveLength(2);
+  expect(beforeRetry[1]?.event.data).toMatchObject({ invitationId: renewalId,
+    role: 'member', personalAssistant: 'none' });
+  const oldRetry = await acceptInvitation(payload);
+  expect(oldRetry.json()).toEqual({ status: 'refused', reason: 'unknown_invitation' });
+  expect(await records()).toEqual(beforeRetry);
+  const currentPayload = { ...payload, invitationId: renewalId, commandId: 'accept-renewal' };
+  expect((await acceptInvitation(currentPayload)).statusCode).toBe(200);
+  const saved = await records();
+  expect(saved).toHaveLength(3);
+  expect(saved[2]?.event.data).toMatchObject({ invitationId: renewalId,
+    role: 'member', personalAssistant: 'none' });
+  await prepareAcceptanceProjection();
+  const projected = await dbs.queue.query('SELECT role, status FROM members WHERE member_id = $1',
+    [memberId]);
+  expect(projected.rows).toEqual([{ role: 'member', status: 'joined' }]);
+}
+it.each(renewalIntervals)('refuses a superseded Admin invitation renewed %s',
+  refusesRenewedInvitation);

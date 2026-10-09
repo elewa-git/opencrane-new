@@ -963,13 +963,13 @@ Bound invitation acceptance copies `personalAssistant: provision|none` into
 The strict join request cannot override it. The join receipt proves membership,
 not assistant creation or computer readiness. The assistant reaction runs later.
 `test/member-joined.test.ts` covers choice, repeats and lost replies on real NATS.
-Email invitation acceptance binding remains follow-up work for #85.
+Email-only acceptance records the account issuer and subject in the join event.
 
 Email create/renew and original-command status follow the
 [member API](../../docs/api/members.md#create-and-renew-email-invitations).
 `test/invitations.test.ts` uses disposable NATS, PostgreSQL and OpenFGA for
 current access, strict input, renewal, repeats, lost replies and slow history.
-The email invitation records remain unbound and the join route refuses them.
+Email invitations have no account binding until the join route accepts them.
 
 The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.
@@ -1125,9 +1125,35 @@ Stored data failures return 503, while invalid request bodies return 400.
 A changed watched stream returns the caller's saved command result, an access
 refusal if their admin access ended, or 409 `concurrent_change`.
 The optional invitation clock sets session checks, event time and seven-day expiry.
-Tests cover its exact expiry boundary and a route-created invitation refused by join.
-Follow-up acceptance must refuse active identities itself, including joins after
+Tests cover its exact expiry boundary and acceptance of a route-created invitation.
+Acceptance refuses active identities itself, including joins after
 the candidate read and delayed member projections.
+
+Email-only acceptance requires the members projection through `DATABASE_URL`.
+It reads up to 100 candidate ids by issuer and subject with their checkpoint in
+one query. It includes member events after that checkpoint and verifies each
+candidate from its own stream. It refuses incomplete reads, more than 10,000
+unapplied events or more than 10,000 events in one candidate stream. Its event reads
+have a ten-second deadline and finish before the two-second access check.
+Older unrelated member history does not count towards these limits.
+It keeps the invitation’s member id and records issuer and subject on `member.joined`.
+After the account read, acceptance checks that the invitation stream still has
+the position read at the start. This check finishes before the two-second access
+check. A renewal returns 409 `unknown_invitation`; another unexplained change
+returns 409 `concurrent_change`. No join uses the old role or assistant choice.
+The final check confirms the member position has not moved, and the conditional
+append uses that position across `member-*`. Concurrent accepts on different
+invitations cannot admit the same account twice. Other member changes also require
+a retry with the same command. The projection can rebuild the account binding.
+Bound acceptance needs no database and retains its own member-stream append.
+See the [email acceptance contract](../../docs/api/members.md#email-only-invitation-acceptance).
+`test/invitations.test.ts` covers renewal before and after the account position
+is read, during the access check and just before append. Each case checks the
+saved events and the renewed role in PostgreSQL.
+`test/email-admission.test.ts` checks invalid checkpoints, candidate and history
+limits, conflicting account bindings, bounded reads and events after the saved
+member position. `test/member-joined.test.ts` also checks saved invitation ids,
+missing databases, expired append deadlines and rejected join identity projection.
 
 ## Waiting tool calls
 
