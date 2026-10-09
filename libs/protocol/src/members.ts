@@ -71,3 +71,23 @@ export const invitationCommandSchema = z.object({
   personalAssistant: z.enum(['provision', 'none']),
 }).strict();
 export const invitationStatusParamsSchema = z.object({ memberId, commandId: memberId }).strict();
+
+export const invitationChangeSchema = z.object({
+  status: z.enum(['recorded', 'refused', 'not_found']),
+  commandId: memberId,
+  changeId: memberId.optional(),
+  type: z.enum(['member.invited', 'member.command_refused']).optional(),
+  sequence: z.int().positive().optional(),
+  recordedAt: z.iso.datetime({ offset: true }).optional(),
+  reason: z.string().max(100).optional(),
+  projection: z.object({ content: z.enum(['current', 'applying']),
+    iam: z.literal('not_required') }).strict().optional(),
+  result: z.object({
+    status: z.literal('appended'), memberId, invitationId: memberId,
+    sequence: z.int().positive(), createdAt: z.iso.datetime({ offset: true }),
+    expiresAt: z.iso.datetime({ offset: true }).optional(), email: z.email(),
+    role: z.enum(['owner', 'admin', 'member']),
+    personalAssistant: z.enum(['provision', 'none']), delivery: z.literal('link_only'),
+    link: z.url(),
+  }).strict().optional(),
+}).strict();

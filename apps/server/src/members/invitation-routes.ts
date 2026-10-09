@@ -3,17 +3,19 @@ import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { MemberAccessRefused } from '@opencrane/models';
 import { invitationCommandSchema, invitationStatusParamsSchema } from '@opencrane/protocol';
 import type { InvitationEmailOptions } from './invitation-email.ts';
+import { recordMemberRefusal } from './refusals.ts';
 import { sessionFor } from './routes.ts';
-import { invitationCommand, invitationStatus, InvitationConflict } from './invitations.ts';
+import { invitationCommand, invitationStatus, invitationChange, InvitationConflict } from './invitations.ts';
 
 export function registerInvitations(app: FastifyInstance, config: AuthConfig,
   options?: InvitationEmailOptions) {
   const routeOptions = { bodyLimit: 1024, errorHandler: requestError };
+  const now = options?.now ?? currentTime;
   app.post('/api/invitations', routeOptions, handler);
   app.get('/api/invitations/:memberId/changes/:commandId', handler);
+  app.get('/api/members/:memberId/changes/:commandId', handler);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
-    const now = options?.now ?? currentTime;
     const session = sessionFor(request, config, now());
     if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });
     if (!trustedRequest(request, config, session)) {
@@ -24,32 +26,72 @@ export function registerInvitations(app: FastifyInstance, config: AuthConfig,
       if (!reply.sent) void reply.code(503).send({ status: 'unavailable' });
     }
     const timer = setTimeout(expire, 15_000);
+    let actor: string | undefined;
+    const input = invitationCommandSchema.safeParse(request.body);
     try {
       if (options.silo !== options.binding.silo) throw new MemberAccessRefused('Wrong silo');
-      const actor = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
+      actor = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!actor) throw new MemberAccessRefused('Active membership required');
       let result;
       if (request.method === 'POST') {
-        const input = invitationCommandSchema.safeParse(request.body);
         if (!input.success) return invalidBody(input.error, request, reply);
         if (!options.db) throw new Error('Member projection unavailable');
         result = await invitationCommand(
           options.store, options.binding, actor, input.data, options.db, now);
       } else {
-        const params = invitationStatusParamsSchema.parse(request.params);
-        result = await invitationStatus(options.store, options.binding,
-          actor, params.memberId, params.commandId);
+        const parsedParams = invitationStatusParamsSchema.safeParse(request.params);
+        if (!parsedParams.success) return invalidBody(parsedParams.error, request, reply);
+        const params = parsedParams.data;
+        const full = request.routeOptions.url === '/api/members/:memberId/changes/:commandId';
+        result = await readInvitationStatus(options, actor, params, config.redirectUri, full);
       }
       if (reply.sent) return reply;
       const status = result.status === 'not_found' ? 404 : 200;
       return reply.code(status).send(result);
     } catch (error) {
       if (reply.sent) return reply;
-      return commandError(error, request, reply);
+      return invitationFailure(error, request, reply, options, actor, input, now());
     } finally {
       clearTimeout(timer);
     }
   }
+}
+
+async function readInvitationStatus(options: InvitationEmailOptions, actor: string,
+  params: { memberId: string; commandId: string }, redirectUri: string, full: boolean) {
+  if (!full) {
+    return invitationStatus(options.store, options.binding,
+      actor, params.memberId, params.commandId);
+  }
+  if (!options.db) {
+    throw new Error('Member projection unavailable');
+  }
+  const origin = new URL(redirectUri).origin;
+  return invitationChange(options.store, options.binding,
+    actor, params.memberId, params.commandId, options.db, origin);
+}
+
+async function invitationFailure(error: unknown, request: FastifyRequest, reply: FastifyReply,
+  options: InvitationEmailOptions, actor: string | undefined,
+  input: ReturnType<typeof invitationCommandSchema.safeParse>, time: Date) {
+  let reason: string | undefined;
+  if (error instanceof MemberAccessRefused) {
+    reason = 'access_refused';
+  } else if (error instanceof InvitationConflict && error.message !== 'command_id_reused') {
+    reason = error.message;
+  }
+  if (request.method !== 'POST' || !actor || !input.success
+    || options.silo !== options.binding.silo || !reason) {
+    return commandError(error, request, reply);
+  }
+  const recorded = await recordMemberRefusal(options.store, options.silo,
+    actor, 'invite', input.data, reason, time);
+  if (reply.sent) {
+    return reply;
+  }
+  const code = error instanceof MemberAccessRefused ? 403 : 409;
+  const response = { status: 'refused', reason, recorded };
+  return reply.code(code).send(response);
 }
 
 function trustedRequest(request: FastifyRequest, config: AuthConfig,

@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, groups, approvals, dispatch records and settings messages"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, groups, invitations, approvals and settings messages"]
   server["apps/server<br/>back end"] -.-> protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -26,7 +26,7 @@ flowchart LR
   on decision rows, so delivered uploads keep their own outcome values.
 - Reject messages with missing or wrongly typed fields. Live-connection messages also reject fields they do not know; some page data allows extra fields so that newer data still loads.
 - Provide the same schemas and types to browser and Node.js code.
-- Check invitation email requests, create and renew commands, and status parameters.
+- Check invitation email requests, create and renew commands, status parameters and saved receipts.
   Keep member headers separate from the admin directory.
 - Check own-group picker pages, reviewed member snapshots and human group chat rows.
 - Check group chat participant edits and the current people list.

@@ -266,3 +266,45 @@ Permission jobs wait for earlier relevant changes on the member and ownership st
 before applying a role or appointment. Different delivery orders give the same state as replay.
 Owner-role values and removal of an Owner remain rejected by both projections.
 Step-down uses the ownership API and requires another currently active owner.
+## Invitation command status and refusal history
+
+`GET /api/members/:memberId/changes/:commandId` reads the creator's original
+invitation command from events. Id bounds, session, exact organisation and
+OpenFGA checks follow the invitation contract above. Reads use `no-store` and
+append nothing. Another creator's command returns 404. A still-active creator
+who lost admin access gets a minimal receipt; removed people get 403.
+
+A saved invitation returns `status: recorded`, `commandId`, `changeId`, `type`,
+`sequence` and `recordedAt`. An Owner/Admin creator also gets `result` with the
+original receipt, email, role, assistant choice, `delivery: link_only` and a link
+at `/join/:memberId/:invitationId`. The link grants no access; the join page is
+not implemented yet. `projection.content` is `current|applying`, while
+`iam: not_required` means creating an invitation grants no access.
+Exact create retries return the original receipt even after acceptance.
+Changed arguments return `command_id_reused` and append nothing.
+
+A matching refusal returns `status: refused`, its event reference, time and safe
+reason. A saved invitation always takes precedence. A missing result returns
+404 with `status: not_found` and `commandId`; an earlier request may still arrive.
+The older invitation status route retains its receipt shape.
+
+Trusted create and acceptance refusals can save `member.command_refused` on
+`memberaudit-<memberId>`. Successful commands save only their business event.
+Records contain safe ids, an operation, a bounded reason and a SHA-256 digest
+(a fixed-length value calculated from the request). The event key includes the
+person, operation, target, reason and UTC day. Concurrent attempts and different
+command ids therefore leave at most one such record per day. Only the first
+attempt's command id is retained; later ids may have no status result.
+Refusal history stops at 10,000 events and two seconds.
+
+Eligible refusal replies include `recorded: true|false`. Audit errors preserve
+the original 403 or 409 with `recorded: false`. Invalid sessions, Origin, ids,
+foreign organisations and changed saved-command arguments create no audit record.
+Wrong-account records use a digest of silo, issuer and subject for the daily limit.
+They expose neither that account's email, name nor subject.
+
+`GET /api/org/history` exposes only safe member/invitation ids, operation, role,
+allowlisted reason and event time to an Owner/Admin in the exact organisation.
+The existing audit worker and rebuild restore these records without granting
+access or contacting outside services. Invitation lists, intended-person reads,
+invitation read-table rebuilds and acceptance-command status remain follow-up work.

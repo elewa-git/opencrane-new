@@ -39,7 +39,7 @@ export { toolApprovalRequestedDataSchema, mcpServerDiscoveredDataSchema } from '
 export { fileUploadedDataSchema, fileRejectedDataSchema, fileDeliveredDataSchema } from './file-events.ts';
 
 export { effectResolvedDataSchema, effectUncertainDataSchema } from './data.ts';
-export { legacyMemberRole, siloOwnerBootstrappedDataSchema } from './identity-events.ts';
+export { legacyMemberRole, siloOwnerBootstrappedDataSchema, memberCommandRefusedSchema } from './identity-events.ts';
 
 export { ownershipSeededSchema, ownershipTransferredSchema,
   ownershipSteppedDownSchema } from './ownership-events.ts';

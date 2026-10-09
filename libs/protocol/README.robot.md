@@ -130,3 +130,6 @@ The server tests check both the input rules and the list reply with real service
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
+
+The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
+defines invitation receipts and safe refusal history.

@@ -156,3 +156,6 @@ records.
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
+
+The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
+describes safe invitation refusal events and their daily limit.

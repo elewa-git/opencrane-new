@@ -26,7 +26,7 @@ flowchart LR
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|writes tables, roles and account bindings| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
-  projections -.-> events["libs/events<br/>event definitions"]
+  projections -.-> events["libs/events<br/>event definitions and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
 ```
 
@@ -55,6 +55,7 @@ flowchart LR
   Refuse a missing store or key, so a storage failure cannot look like deliberate deletion.
 - Send member-change notices after the table update commits.
 - Keep private conversation content out of the event-history table.
+- Include invitation and refusal summaries without copying email addresses or names.
 - Avoid outside actions while rebuilding tables.
 
 Memory encryption and searchable text stay on the server. The memory rebuild command

@@ -10,7 +10,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat, role and participation checks"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chat, role and participation checks"]
   server -.->|checks access and passes for organisation, memory and chat| libs["libs/*<br/>shared code"]
   server -->|records changes, memory facts, model grants, roles, participants, chats, computers and provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]

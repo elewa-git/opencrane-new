@@ -12,7 +12,23 @@ export const siloOwnerBootstrappedDataSchema = memberJoinedDataSchema.omit({
   identity: z.object({ issuer: z.url(), sub: z.string().min(1) }).strict(),
 }).strict();
 
+const safeReference = z.string().regex(/^[\w-]{1,200}$/u);
+export const memberCommandRefusedSchema = z.object({
+  memberId: safeReference,
+  originalCommandId: safeReference,
+  invitationId: safeReference.optional(),
+  operation: z.enum(['invite', 'join']),
+  inputDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  reason: z.enum(['access_refused', 'identity_mismatch', 'already_member', 'access_removed',
+    'concurrent_change', 'wrong_identity', 'unknown_invitation', 'expired_invitation',
+    'unbound_invitation', 'invitation_not_pending', 'inviter_authority_ended',
+    'ownership_stream_required', 'sign_in_again', 'unsupported_email']),
+}).strict();
+
 export const identityEvents = [
+  event('member.command_refused', 'memberaudit', 'A trusted invitation request was refused.',
+    memberCommandRefusedSchema, { memberId: 'mem_2', originalCommandId: 'invite-bob',
+      operation: 'invite', inputDigest: 'a'.repeat(64), reason: 'access_refused' }),
   event('silo.owner_bootstrapped', 'member', 'The installation token admitted the first owner.',
     siloOwnerBootstrappedDataSchema, { memberId: 'bootstrap-owner', email: 'alice@example.com',
       displayName: 'Alice', role: 'owner', identity: { issuer: 'https://idp.example.com', sub: 'alice' } }),

@@ -115,6 +115,7 @@ the personal default.
 | Event | Emitted by | Projections (content) | Reactions (logic) |
 | --- | --- | --- | --- |
 | `org.created` | install | org | create the budget stream with defaults; generate gateway config |
+| `member.command_refused` | command | safe audit history and original-command status | — |
 | `member.invited` | admin command | invitations, members (pending) | none; link only, no email delivery |
 | `silo.owner_bootstrapped` | authenticated installation-token claim | members, identities | OpenFGA owner/member; seed ownership; emit `assistant.created` (personal); seed model `grant.given` |
 | `member.joined` | invitation accepted | members | OpenFGA `member`; emit personal `assistant.created` unless `personalAssistant: none`; seed model `grant.given` |
@@ -141,6 +142,13 @@ an Owner remain rejected. Non-owner role commands use the
 Step-down requires another owner whose member events show active membership. Ownership adds no conversation, memory, group or resource grant.
 The [ownership interface](../api/ownership.md) exposes the original event receipt,
 recorded actor/target/time and both projection statuses, without a second ledger.
+
+`member.command_refused` uses `memberaudit-<memberId>`, never the membership stream.
+It stores safe command and invitation ids, an operation, an input digest and a
+bounded reason. Its command id includes the person, operation, target, reason and
+UTC day. It grants no access and has no membership or OpenFGA subscription.
+The audit worker reads the whole log and includes it in organisation history.
+A saved business event takes precedence over refusal evidence in command status.
 
 `member.invited` pre-allocates `memberId`; invitation and acceptance share
 `member-<memberId>` so one conditional append settles concurrent acceptance.

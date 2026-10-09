@@ -1382,3 +1382,6 @@ IAM as current while that appointment is still waiting to be applied.
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
+
+The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
+records saved invitation results and safe refusal history.
