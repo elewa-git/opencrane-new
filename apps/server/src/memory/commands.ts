@@ -13,6 +13,7 @@ import { memoryAccessChecks, scopeAccess, MemoryRefused, type MemoryOptions,
 import { MemoryConflict, memorySnapshot } from './reads.ts';
 import { checkSources } from './sources.ts';
 import { commandJournal } from './journal.ts';
+import { acquireMemoryWrite } from './admission.ts';
 
 const fields = memoryWrittenDataSchema.pick({ kind: true, pinned: true, expiresAt: true,
   sources: true, dependsOn: true });
@@ -21,7 +22,6 @@ const commandInput = fields.extend({ commandId: identifier, text: memoryTextSche
 export const changeParams = z.strictObject({ scopeId: z.string().regex(/^[a-f0-9]{64}$/u),
   commandId: identifier });
 type Input = z.infer<typeof commandInput>;
-let memoryWriteInProgress = false;
 
 function commandReference(silo: string, scopeId: string, requester: string, commandId: string) {
   const hash = createHash('sha256');
@@ -124,20 +124,6 @@ function checkDependencies(rows: StoredEvent[], scope: Scope, input: Input,
 }
 
 export async function remember(options: MemoryOptions, requester: string, scope: Scope, raw: unknown) {
-  // Allow one memory write per process, including writes to the same scope.
-  // Bound slow permission work too. Refuse extra work without taking a connection or queuing it.
-  if (memoryWriteInProgress) {
-    throw new Error('Memory write busy');
-  }
-  memoryWriteInProgress = true;
-  try {
-    return await rememberFact(options, requester, scope, raw);
-  } finally {
-    memoryWriteInProgress = false;
-  }
-}
-
-async function rememberFact(options: MemoryOptions, requester: string, scope: Scope, raw: unknown) {
   // Check write permission before inspecting private content or reserving a database client.
   const initialAccess = await scopeAccess(options, requester, scope, false, undefined, true);
   if (!initialAccess.canWrite) {
@@ -175,7 +161,14 @@ async function rememberFact(options: MemoryOptions, requester: string, scope: Sc
     return rememberLocked(options, requester, scope, input, reference, state.rows,
       fresh, access.audience);
   }
-  return options.db.lock(`memory-command:${reference}`, execute, { timeoutMs: 100 });
+  // Finish permission checks before waiting for a write slot or taking a database client.
+  const release = await acquireMemoryWrite(options.silo, requester, scope.scopeId);
+  try {
+    await fresh();
+    return await options.db.lock(`memory-command:${reference}`, execute, { timeoutMs: 100 });
+  } finally {
+    release();
+  }
 }
 async function rememberLocked(options: MemoryOptions, requester: string, scope: Scope,
   input: Input, reference: string, rows: StoredEvent[],

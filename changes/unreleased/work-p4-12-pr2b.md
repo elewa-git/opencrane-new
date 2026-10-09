@@ -18,7 +18,8 @@ Slow scope reads no longer fill the database pool: locked checks read only newer
 events with a short time limit, and recovery reads history before taking a connection.
 
 Member and scope permission history, and OpenFGA checks, now finish before a write
-takes a database connection or command lock. Each server process allows one memory
-write at a time, including its permission checks. Extra writers receive a prompt
-503. A slow append therefore holds at most one connection per process, leaving
-other queries room to run.
+takes a slot, database connection or command lock. Each server process allows four
+active writes, with one per member. This leaves room for another member even when
+one member floods writes to several scopes. Up to eight writes wait for at most
+100 ms. Busy writes receive 503 `memory_busy` and `Retry-After: 1`. Waiting writes
+hold no database client, and duplicates cannot fill the queue.

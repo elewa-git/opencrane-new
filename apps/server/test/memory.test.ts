@@ -990,7 +990,8 @@ it('converges identical concurrent commands and conflicts on changed input', asy
   for (let index = 0; index < receipts.length; index++) {
     const response = replies[index]!;
     if (response.statusCode === 503) {
-      expect(receipts[index]).toEqual({ status: 'unavailable', reason: 'memory_unavailable' });
+      expect(receipts[index]).toEqual({ status: 'unavailable', reason: 'memory_busy' });
+      expect(response.headers['retry-after']).toBe('1');
     } else {
       expect(receipts[index]).toMatchObject({ memoryId: saved.memoryId });
     }
@@ -1771,7 +1772,7 @@ it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as cons
         expect(delayed).toBe(1);
         expect(pool.totalCount - pool.idleCount).toBe(1);
       } else {
-        expect(delayed).toBe(1);
+        expect(delayed).toBe(assistants.length);
         expect(pool.totalCount - pool.idleCount).toBe(0);
       }
     } finally {
@@ -1784,6 +1785,116 @@ it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as cons
       app = previousApp;
       await pool.end();
     }
-    // Prove that a completed or refused batch releases the process's write slot.
+    // Prove that a completed or refused batch releases its write slots.
     expect((await remember('bob', 'person', `after-pool-${commandStage}`)).statusCode).toBe(200);
   });
+
+async function fairWrites(stage: 'scope history' | 'append') {
+  const commandStage = stage.replaceAll(' ', '-');
+  const assistantId = `fair-${commandStage}`;
+  await append(`assistant-${assistantId}`, 'assistant.created',
+    { assistantId, kind: 'personal', ownerId: 'bob' });
+  await writeGrant(assistantId);
+  await runner.run(computers);
+  const poolOptions = { ...storage.queue.options, max: 2, connectionTimeoutMillis: 300 };
+  const pool = new Pool(poolOptions);
+  const previousApp = app;
+  const limitedMemory = { ...memory, db: pgDb(pool) };
+  app = buildServer(config, { memory: limitedMemory });
+  await app.ready();
+  const gate = Promise.withResolvers<void>();
+  const stalled = Promise.withResolvers<void>();
+  const bobScope = memoryScopeId('acme', 'person', 'bob');
+  let delayed = 0;
+  let completed = 0;
+  async function pause() {
+    delayed++;
+    stalled.resolve();
+    await gate.promise;
+  }
+  const originalRead = nats.store.readStream.bind(nats.store);
+  async function* slowHistory(subject: string, from?: number, deadline?: number) {
+    if (stage === 'scope history' && subject === `scope-${bobScope}`) {
+      await pause();
+    }
+    yield* originalRead(subject, from, deadline);
+  }
+  const originalAppend = nats.store.append.bind(nats.store);
+  async function slowAppend(command: Parameters<typeof originalAppend>[0]) {
+    const record = memoryWrittenEventSchema.safeParse(command.event);
+    if (stage === 'append' && record.success && record.data.principal?.id === 'bob') {
+      await pause();
+    }
+    return originalAppend(command);
+  }
+  const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(slowHistory);
+  const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(slowAppend);
+  function finished(response: Awaited<ReturnType<typeof remember>>) {
+    completed++;
+    return response;
+  }
+  const first = remember('bob', 'person', `fair-first-${commandStage}`);
+  const requests = [first.then(finished)];
+  const floodCount = 12;
+  let otherMemoryId = '';
+  let responses: Awaited<ReturnType<typeof remember>>[];
+  try {
+    await stalled.promise;
+    for (let index = 0; index < floodCount; index++) {
+      const commandId = `fair-flood-${commandStage}-${index}`;
+      let request;
+      if (stage === 'append' && index === 0) {
+        request = remember(assistantId, 'assistant_notes', commandId);
+      } else {
+        request = remember('bob', 'person', commandId);
+      }
+      requests.push(request.then(finished));
+    }
+    const start = performance.now();
+    const response = await remember('owner', 'person', `fair-other-${commandStage}`, 'owner');
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ outcome: 'saved' });
+    otherMemoryId = response.json<{ memoryId: string }>().memoryId;
+    expect(performance.now() - start).toBeLessThan(1500);
+    const query = await pool.query('SELECT 1 AS available');
+    expect(query.rows).toEqual([{ available: 1 }]);
+    if (stage === 'append') {
+      function allFloodWritesReachedAppendOrFinished() {
+        expect(delayed + completed).toBe(floodCount + 1);
+      }
+      await vi.waitFor(allFloodWritesReachedAppendOrFinished, { timeout: 1500 });
+      expect(delayed).toBe(1);
+      expect(pool.totalCount - pool.idleCount).toBe(1);
+      // Keep permission refusals private even while this member's write slot is full.
+      const forbidden = await remember('owner', 'person', 'fair-forbidden');
+      expect(forbidden.statusCode).toBe(404);
+    }
+  } finally {
+    gate.resolve();
+    responses = await Promise.all(requests);
+    readSpy.mockRestore();
+    appendSpy.mockRestore();
+    await app.close();
+    app = previousApp;
+    await pool.end();
+  }
+  if (stage === 'append') {
+    for (const response of responses) {
+      if (response.statusCode === 503) {
+        expect(response.json()).toEqual({ status: 'unavailable', reason: 'memory_busy' });
+        expect(response.headers['retry-after']).toBe('1');
+      }
+    }
+  }
+  await runner.run(projection);
+  const facts = await get(`${path('owner')}/facts`, 'owner');
+  const result = facts.json<{ facts: { memoryId: string; text: string }[] }>();
+  function savedForOtherMember(fact: { memoryId: string }) {
+    return fact.memoryId === otherMemoryId;
+  }
+  const saved = result.facts.find(savedForOtherMember);
+  expect(saved).toMatchObject({ memoryId: otherMemoryId, text: 'A human statement' });
+}
+
+it.each(['scope history', 'append'] as const)(
+  'lets another member save while one member floods slow %s writes', fairWrites);

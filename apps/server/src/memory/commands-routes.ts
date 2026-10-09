@@ -6,6 +6,7 @@ import { sessionFor } from '../members/routes.ts';
 import { scopeAccess, resolveScope, memoryAccessChecks, MemoryRefused,
   type MemoryOptions } from './access.ts';
 import { remember, readCommand, changeParams, reconcileCommands } from './commands.ts';
+import { MemoryBusy } from './admission.ts';
 
 export function registerMemoryCommands(app: FastifyInstance, config: AuthConfig,
   options?: MemoryOptions) {
@@ -53,6 +54,10 @@ export function registerMemoryCommands(app: FastifyInstance, config: AuthConfig,
       if (result.status === 409) reply.code(409);
       return result.body;
     } catch (error) {
+      if (error instanceof MemoryBusy) {
+        reply.header('retry-after', '1');
+        return reply.code(503).send({ status: 'unavailable', reason: 'memory_busy' });
+      }
       let status = 503;
       if (error instanceof z.ZodError) {
         status = 422;

@@ -10,9 +10,11 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
+
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and participation checks"]
   server -.->|checks organisation, access, invitations, spending and memory passes| libs["libs/*<br/>shared code"]
   server -->|records memory facts, model grants, chat and confirmed provider choices| nats["NATS<br/>event log"]
+
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members and invitation accounts, chat rows, closes and old joins, facts and source messages, models and computers| postgres
@@ -39,7 +41,8 @@ flowchart LR
   Checks write permission before inspecting a fact. Records human facts and checks
   the original command when a reply is lost. Checks chat access before looking up
   a source message. Slow permission checks leave database connections free. The server
-  saves one memory write at a time, so a slow write leaves room for other requests.
+  shares a few write slots between members. A member can save one fact at a time,
+  so a slow write leaves room for another person. Busy writers receive a prompt reply.
   Keeps the fact's key while a delayed write could still be saved.
   These reads need the memory worker and its existing private key directory.
   It returns current facts only after the read table has caught up with their events.

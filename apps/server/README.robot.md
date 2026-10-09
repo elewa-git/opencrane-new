@@ -75,11 +75,19 @@ history, and OpenFGA checks, finish before taking a database connection or comma
 The watched stream positions are checked before taking the lock and again before append.
 Each command makes one conditional append at the scope position read from history.
 
-Each process allows one memory write at a time, including writes in the same scope.
-Extra writers receive 503 without waiting in a queue or taking a connection. The limit
-covers permission checks, history reads and appends. A slow append therefore holds at
-most one shared database connection within that process. The limit is per
-process; separate server processes each have their own limit and pool.
+Each process allows four active memory writes and one active write per member.
+This also allows at most one active write for each member and scope. A member cannot
+occupy all four slots by writing to several scopes. Permission history and OpenFGA
+checks finish before asking for a slot or reserving a database client.
+Up to eight writes can wait for at most 100 ms. A released slot goes to the oldest
+waiting write whose member is free to write. Requests for a member and scope already
+active or waiting are refused immediately, so duplicates cannot fill the queue.
+A full queue or expired wait returns 503 `{status: "unavailable", reason: "memory_busy"}`
+with `Retry-After: 1`. Waiting writes hold no database client. The permission stream
+positions are checked again after waiting and before taking the command lock.
+A slow append holds one shared connection for that member, leaving the default
+10-connection pool room for other queries. Separate server processes each have their
+own limit and pool.
 A PostgreSQL advisory lock keeps attempts for the same command together across servers.
 Memory commands wait at most 100 ms for this lock; a busy lock returns 503. Work inside the
 lock holds one database client. It reads only scope events newer than the earlier history,
