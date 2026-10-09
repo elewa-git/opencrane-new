@@ -56,3 +56,18 @@ export const invitationEmailSchema = z.object({
   email: z.email().max(254),
   message: z.literal('The person is confirmed when they accept the invitation.'),
 }).strict();
+
+function normaliseEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+const invitationAddress = z.string().trim().max(254).regex(/^[\x20-\x7e]+$/u)
+  .transform(normaliseEmail).pipe(z.email());
+export const invitationCommandSchema = z.object({
+  commandId: memberId,
+  memberId,
+  email: invitationAddress,
+  expectedSequence: z.int().nonnegative(),
+  role: z.enum(['member', 'admin']),
+  personalAssistant: z.enum(['provision', 'none']),
+}).strict();
+export const invitationStatusParamsSchema = z.object({ memberId, commandId: memberId }).strict();

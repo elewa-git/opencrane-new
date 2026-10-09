@@ -910,7 +910,13 @@ Bound invitation acceptance copies `personalAssistant: provision|none` into
 The strict join request cannot override it. The join receipt proves membership,
 not assistant creation or computer readiness. The assistant reaction runs later.
 `test/member-joined.test.ts` covers choice, repeats and lost replies on real NATS.
-Email invitation create/renew and acceptance binding remain follow-up work for #85.
+Email invitation acceptance binding remains follow-up work for #85.
+
+Email create/renew and original-command status follow the
+[member API](../../docs/api/members.md#create-and-renew-email-invitations).
+`test/invitations.test.ts` uses disposable NATS, PostgreSQL and OpenFGA for
+current access, strict input, renewal, repeats, lost replies and slow history.
+The email invitation records remain unbound and the join route refuses them.
 
 The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.

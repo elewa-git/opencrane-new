@@ -1,5 +1,6 @@
 import { registerInvitationEmail,
   type InvitationEmailOptions } from './members/invitation-email.ts';
+import { registerInvitations } from './members/invitation-routes.ts';
 import { registerOwnershipRoutes } from './members/ownership-routes.ts';
 import { registerMemberReads } from './members/read-routes.ts';
 import { registerProviderRoutes, type ProviderOptions } from './providers/routes.ts';
@@ -75,6 +76,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerGroupRoutes(app, authConfig, options.groups);
   registerMemberReads(app, authConfig, options.memberReads);
   registerInvitationEmail(app, authConfig, options.invitationEmail);
+  registerInvitations(app, authConfig, options.invitationEmail);
   registerOwnershipRoutes(app, authConfig, options.ownership);
   registerProviderRoutes(app, authConfig, options.providers);
   registerModelAccessRoutes(app, authConfig, options.modelAccess);

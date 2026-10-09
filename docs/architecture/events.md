@@ -152,6 +152,11 @@ Owner or Admin. A removed stream or earlier different identity cannot be reused.
 The final access check watches the joining member, inviter and ownership streams.
 General sign-in exceptions do not bypass the exact organisation check here.
 
+Email create/renew records no `invitedIdentity`; `memberId` identifies the pending
+email record. These events grant no access; join refuses `unbound_invitation`.
+The [member API](../api/members.md#create-and-renew-email-invitations) owns the contract.
+Account binding and admission selection at acceptance remain follow-up work.
+
 Invitations can record `personalAssistant: provision|none`. Acceptance copies
 that choice into `member.joined`. A missing choice in an older invitation means
 `provision`. The accepting person cannot supply or change it in the request.
