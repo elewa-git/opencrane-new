@@ -27,26 +27,17 @@ function sameTarget(previous: EventEnvelope, later: EventEnvelope): boolean {
   return previous.type.startsWith('member.') || previous.type === 'silo.owner_bootstrapped';
 }
 
-function relatedMembers(event: EventEnvelope): string[] {
+function relatedOwners(event: EventEnvelope): string[] {
   if (event.type === 'ownership.seeded') {
     return ownershipSeededSchema.parse(event.data).ownerIds;
   }
-  const ids: unknown[] = [];
-  if (event.type === 'ownership.transferred') {
-    ids.push(value(event, 'memberId'));
-  } else if (event.type === 'ownership.stepped_down' || event.type === 'team.member_added') {
-    ids.push(value(event, 'memberId'));
-  } else if (event.type === 'assistant.created' && value(event, 'kind') === 'personal') {
-    ids.push(value(event, 'ownerId'));
-  } else if (event.type === 'participant.added') {
-    ids.push(value(event, 'participantId'));
-  } else if (event.type === 'grant.given' && value(event, 'granteeKind') === 'member') {
-    ids.push(value(event, 'granteeId'));
+  if (event.type === 'ownership.transferred' || event.type === 'ownership.stepped_down') {
+    const memberId = value(event, 'memberId');
+    if (typeof memberId === 'string') {
+      return [memberId];
+    }
   }
-  function isId(id: unknown): id is string {
-    return typeof id === 'string';
-  }
-  return ids.filter(isId);
+  return [];
 }
 
 async function appliedRemoval(store: Pick<EventStore, 'readStream'>, silo: string,
@@ -144,7 +135,9 @@ export async function supersededEvent(
       await laterOwnershipApplied(store, event, sequence, applied)) {
     return true;
   }
-  for (const memberId of relatedMembers(event)) {
+  // Keep recorded grants, groups, participants and assistant links independent of membership.
+  // Removing silo membership leaves these tuples in place during a clean rebuild too.
+  for (const memberId of relatedOwners(event)) {
     if (await appliedRemoval(store, event.silo, memberId, applied)) {
       return true;
     }

@@ -70,3 +70,38 @@ async function lossNoOpHasReceipt() {
 }
 it.skipIf(!process.env['PG_TEST_URL'])(
   'an old loss leaves a current hold untouched and commits its handler receipt', lossNoOpHasReceipt);
+
+async function supersededLossKeepsEarlierHold() {
+  const nats = await natsFixture();
+  const actor = new BudgetActor(nats.store, 'test');
+  try {
+    await actor.start(100, 100, 'group');
+    const reservationId = await actor.reserve({ model: 'gpt-6-luna', priceTableId,
+      computerId: 'computer', assistantId: 'assistant', requesterId: 'alice',
+      conversationId: 'chat', turnId: 'turn', threadId: 'thread', payingGroupId: 'group',
+      requestId: 'request',
+      contextDigest: '0'.repeat(64) }, 1);
+    const allowed = envelope('test', 'decision-request', 'decision.recorded', {
+      requestId: 'request', route: 'model', outcome: 'allow', reason: 'model_allowed',
+      contextDigest: '0'.repeat(64), permitId: reservationId });
+    await nats.seed([allowed]);
+    const loss = envelope('test', 'computer-assistant', 'computer.lost', {
+      assistantId: 'assistant', computerId: 'computer' });
+    const latest = envelope('test', loss.subject, 'computer.lost', {
+      assistantId: 'assistant', computerId: 'computer' });
+    await nats.seed([loss, latest]);
+    await actor.computerLostRecorded(loss.subject, loss.id);
+    expect(await history(nats.store, `effect-${reservationId}`, 'test')).toEqual([]);
+    expect(actor.state.reservations[0]?.settledCents).toBeUndefined();
+    await actor.computerLostRecorded(latest.subject, latest.id);
+    const effects = await history(nats.store, `effect-${reservationId}`, 'test');
+    expect(effects).toHaveLength(1);
+    expect(effects[0]?.event).toMatchObject({ type: 'effect.uncertain',
+      data: { permitId: reservationId, reason: 'computer_lost' } });
+    expect(actor.state.reservations[0]?.settledCents).toBeUndefined();
+  } finally {
+    await nats.close();
+  }
+}
+it('ignores a superseded loss for an earlier hold and records uncertainty only for the latest loss',
+  supersededLossKeepsEarlierHold);

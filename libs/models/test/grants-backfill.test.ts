@@ -46,3 +46,28 @@ async function removedMemberGetsNoGrant(type: string) {
 }
 it.each(['member.joined', 'silo.owner_bootstrapped'])(
   'old %s does not give models to a removed member', removedMemberGetsNoGrant);
+
+async function removedAssistantOwnerGetsNoGrant() {
+  const nats = await natsFixture();
+  try {
+    const joined = event('assistant-owner-join', 'member-alice', 'member.joined');
+    const assistant: EventEnvelope = event('personal-assistant', 'assistant-personal', 'assistant.created');
+    assistant.data = { assistantId: 'personal', ownerId: 'alice', kind: 'personal' };
+    const removed = event('assistant-owner-removal', 'member-alice', 'member.removed');
+    await nats.seed([joined, assistant, removed]);
+    const handler = modelGrantHandler(nats.store);
+    await handler.handle(assistant, noSql);
+    expect(await history(nats.store, 'grant-*', 'test')).toEqual([]);
+    await nats.seed([event('assistant-owner-rejoin', 'member-alice', 'member.joined')]);
+    await handler.handle(assistant, noSql);
+    const grants = await history(nats.store, 'grant-*', 'test');
+    expect(grants.length).toBeGreaterThan(0);
+    for (const row of grants) {
+      expect(row.event.data).toMatchObject({ granteeKind: 'assistant', granteeId: 'personal' });
+    }
+  } finally {
+    await nats.close();
+  }
+}
+it('creates initial personal assistant grants only after its removed owner rejoins',
+  removedAssistantOwnerGetsNoGrant);

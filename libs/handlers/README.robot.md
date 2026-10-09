@@ -66,6 +66,12 @@ inside enqueue's transaction and disables finished-job deletion. This uses
 pg-boss 12.35's schema; upgrades must rerun retention/replay tests. Queue rows
 and receipts currently grow without pruning. Monitor database capacity.
 
+Workers in `src/queue.ts` fetch one job per worker slot and poll every 0.5 seconds.
+This polling continues while a large historical queue drains. The chunked upgrade
+scan does not remove that limit. Million-event throughput, database load during
+that drain and the time needed to finish it are NOT RUN. A measured large-queue
+run is needed before changing the polling interval or batch size.
+
 ## Recovery and subscription changes
 
 Stop dispatchers/workers before recovery. PostgreSQL is disposable execution
@@ -156,14 +162,16 @@ NATS, PostgreSQL and OpenFGA where those services hold the result.
 | update-openfga | participant.added | Keep a later applied removal for that participant. | projection |
 | update-openfga | participant.removed | Keep a later applied addition for that participant. | projection |
 | update-openfga | conversation.created | Add its silo link; skip participants whose later removal was applied. | projection |
-| update-openfga | assistant.created | Check personal membership; keep its immutable owner link and receipt. | projection |
+| update-openfga | assistant.created | Keep its immutable owner link independently of membership. | projection |
 | update-openfga | provider.created | Keep its immutable silo link and event receipt. | projection |
 
 Test names refer to files in `apps/ops/test`, `libs/models/test` or `libs/authz/test`,
 with `.test.ts` added. `libs/handlers/test/upgrade.test.ts` checks job receipts,
 subscription changes, parked jobs, resume, timeouts, locks, connected sessions,
-failed-job reports, cancellation and ordering with live jobs. The worker process
-check is `apps/ops/test/worker-subscriptions.test.ts`. Million-event throughput and
+failed-job reports, cancellation and ordering with live jobs. It also checks
+incompatible resume records, foreign-silo history, retry exhaustion and SIGKILL
+inside a chunk, inside final publication and just after publication commits.
+The worker process check is `apps/ops/test/worker-subscriptions.test.ts`. Million-event throughput and
 fresh-install upgrade qualification are NOT RUN.
 
 Keep event-id receipts for retained external state. Workers check these receipts

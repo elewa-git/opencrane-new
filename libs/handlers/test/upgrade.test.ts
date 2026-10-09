@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
+import type { PoolClient } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type HandlerName } from "@opencrane/events";
 import { event } from "@opencrane/event-store/testing";
-import { dispatch, registerHandler, upgradeHandlers } from "../src/index.ts";
+import { dispatch, HandlerRuntime, registerHandler, upgradeHandlers } from "../src/index.ts";
+import { scanUpgrade } from "../src/upgrade-scan.ts";
 import { effect, fixture, until } from "./helpers.ts";
 
 const execute = promisify(execFile);
@@ -315,6 +317,263 @@ function upgradeTests() {
   }
   it('backs off and retries a transient history timeout', retriesReadTimeout);
 
+  async function invalidManifest(manifest: string) {
+    await prepare();
+    await current.db.query('UPDATE handler_dispatcher SET manifest = $1', [manifest]);
+    const before = await snapshot();
+    await expect(command('--dry-run')).rejects.toThrow();
+    expect(await snapshot()).toEqual(before);
+  }
+  it.each(['invalid-json', '{}', '[{"name":"update-openfga","eventTypes":[42]}]'])(
+    'refuses malformed dispatcher manifest %s without changing state', invalidManifest);
+
+  async function invalidCheckpoint(sequence: number) {
+    await prepare();
+    await current.db.query('UPDATE handler_dispatcher SET sequence = $1', [sequence]);
+    const before = await snapshot();
+    await expect(command('--dry-run')).rejects.toThrow('checkpoint is outside');
+    expect(await snapshot()).toEqual(before);
+  }
+  it.each([-1, 5])('refuses a checkpoint outside saved history (%s)', invalidCheckpoint);
+
+  async function invalidDispatcherState(missing: boolean) {
+    await prepare();
+    if (missing) {
+      await current.db.query('DELETE FROM handler_dispatcher');
+    } else {
+      await current.db.query("UPDATE handler_dispatcher SET silo = 'other'");
+    }
+    const before = await snapshot();
+    await expect(command('--dry-run')).rejects.toThrow('state missing or silo mismatch');
+    expect(await snapshot()).toEqual(before);
+  }
+  it.each([false, true])('refuses missing or foreign dispatcher state (missing: %s)',
+    invalidDispatcherState);
+
+  async function missingDatabaseLock() {
+    const runtime = await prepare();
+    await runtime.stop();
+    const database = { query: current.db.query.bind(current.db),
+      transaction: current.db.transaction.bind(current.db) };
+    const options = { ...runtime.options, db: database };
+    const unlocked = new HandlerRuntime(options);
+    await expect(upgradeHandlers(unlocked, current.nats.store))
+      .rejects.toThrow('requires a database lock');
+    expect((await snapshot()).jobs).toEqual([]);
+  }
+  it('refuses a database adapter without a lasting lock', missingDatabaseLock);
+
+  async function invalidBatch(missing: boolean) {
+    const runtime = await prepare();
+    await runtime.stop();
+    await current.waitForConnectionsClosed();
+    let scanning = runtime;
+    if (missing) {
+      const options = { ...runtime.options, handlers: [] };
+      scanning = new HandlerRuntime(options);
+    } else {
+      const insert = runtime.boss.insert.bind(runtime.boss);
+      async function fewerIds(...args: Parameters<typeof insert>) {
+        const ids = await insert(...args);
+        return ids?.slice(1) ?? null;
+      }
+      vi.spyOn(runtime.boss, 'insert').mockImplementation(fewerIds);
+    }
+    const changes = [{ handler: 'update-openfga', addedTypes: ['member.role_changed'],
+      removedTypes: [], eventCount: 0 }];
+    let message = 'Handler batch enqueue refused';
+    if (missing) {
+      message = 'Backfill handler missing';
+    }
+    await expect(scanUpgrade(scanning, current.nats.store, changes, 4,
+      'target-manifest', oldManifest, undefined, false)).rejects.toThrow(message);
+    expect((await snapshot()).jobs).toEqual([]);
+    const progress = await current.db.query('SELECT sequence, jobs FROM handler_upgrade');
+    expect(progress.rows).toEqual([{ sequence: '0', jobs: '0' }]);
+  }
+  it.each([false, true])('rolls back an incomplete job batch (handler missing: %s)', invalidBatch);
+
+  async function sessionAppearsDuringScan(betweenChunks: boolean) {
+    const runtime = await prepare();
+    let target = 4;
+    if (betweenChunks) {
+      const history = [];
+      for (let index = 0; index < 253; index++) {
+        history.push(event(`later-history-${index}`, 'member-alice', 'member.role_changed'));
+      }
+      await current.nats.seed(history);
+      target = 257;
+      await current.db.query('UPDATE handler_dispatcher SET sequence = $1', [target]);
+    }
+    await runtime.stop();
+    await current.waitForConnectionsClosed();
+    const subscribe = current.nats.store.subscribe.bind(current.nats.store);
+    let session: PoolClient | undefined;
+    async function* reconnects(from: number, signal?: AbortSignal) {
+      session ??= await current.pool.connect();
+      yield* subscribe(from, signal);
+    }
+    const source = { head: current.nats.store.head.bind(current.nats.store), subscribe: reconnects };
+    try {
+      await expect(upgradeHandlers(runtime, source)).rejects.toThrow('other database sessions');
+      const progress = await current.db.query('SELECT sequence FROM handler_upgrade');
+      expect(Number(progress.rows[0]?.['sequence'])).toBe(Math.min(target, 256));
+      const state = await current.db.query('SELECT manifest FROM handler_dispatcher');
+      expect(state.rows[0]?.['manifest']).toBe(oldManifest);
+      const released = await current.db.query(
+        "SELECT id FROM pgboss.job WHERE start_after <> 'infinity'");
+      expect(released.rows).toEqual([]);
+    } finally {
+      session?.release();
+    }
+  }
+  it.each([false, true])('rechecks sessions before publication and between chunks (%s)',
+    sessionAppearsDuringScan);
+
+  async function parkedJobsCannotRun() {
+    const runtime = await prepare();
+    await runtime.stop();
+    await current.waitForConnectionsClosed();
+    await current.crash('upgrade-inside-publication');
+    await runtime.start();
+    const before = await current.effects();
+    await runtime.work(1);
+    const attempted = await runtime.boss.fetch('update-openfga', { includeMetadata: true });
+    expect(attempted).toEqual([]);
+    expect(await current.effects()).toEqual(before);
+    const jobs = await current.db.query("SELECT state FROM pgboss.job WHERE start_after = 'infinity'");
+    expect(jobs.rows).toHaveLength(7);
+  }
+  it('keeps a partial upgrade parked even when a worker starts too early', parkedJobsCannotRun);
+
+  async function failedScanProgress() {
+    const runtime = await prepare();
+    await runtime.stop();
+    await current.waitForConnectionsClosed();
+    function noHistory(): AsyncIterable<never> {
+      throw new Error('History unavailable');
+    }
+    const source = { head: current.nats.store.head.bind(current.nats.store), subscribe: noHistory };
+    await expect(upgradeHandlers(runtime, source)).rejects.toThrow('History unavailable');
+    expect((await snapshot()).jobs).toEqual([]);
+    return runtime;
+  }
+
+  async function incompatibleResume(column: string) {
+    await failedScanProgress();
+    if (column === 'target') {
+      await current.db.query('UPDATE handler_upgrade SET target = 3');
+    } else if (column === 'previous') {
+      await current.db.query("UPDATE handler_upgrade SET previous = '[]'");
+    } else {
+      await current.db.query("UPDATE handler_upgrade SET manifest = '[]'");
+    }
+    const before = await snapshot();
+    const progress = await current.db.query('SELECT * FROM handler_upgrade');
+    await expect(command('--dry-run')).rejects.toThrow('unfinished upgrade');
+    await expect(command('--confirm-writers-stopped')).rejects.toThrow('unfinished upgrade');
+    expect(await snapshot()).toEqual(before);
+    expect(await current.db.query('SELECT * FROM handler_upgrade')).toEqual(progress);
+  }
+  it.each(['manifest', 'previous', 'target'])(
+    'refuses a resume with an incompatible %s and keeps saved progress', incompatibleResume);
+
+  async function rejectsForeignHistory() {
+    const runtime = await prepare();
+    await runtime.stop();
+    await current.waitForConnectionsClosed();
+    let attempts = 0;
+    const subscribe = current.nats.store.subscribe.bind(current.nats.store);
+    async function* foreign(from: number, signal?: AbortSignal) {
+      attempts += 1;
+      for await (const row of subscribe(from, signal)) {
+        yield { ...row, event: { ...row.event, silo: 'other' } };
+      }
+    }
+    const source = { head: current.nats.store.head.bind(current.nats.store), subscribe: foreign };
+    const before = await snapshot();
+    await expect(upgradeHandlers(runtime, source)).rejects.toThrow('silo mismatch');
+    expect(attempts).toBe(1);
+    expect(await snapshot()).toEqual(before);
+    const progress = await current.db.query('SELECT sequence, jobs FROM handler_upgrade');
+    expect(progress.rows).toEqual([{ sequence: '0', jobs: '0' }]);
+  }
+  it('rejects another silo in the scan without retrying or saving jobs', rejectsForeignHistory);
+
+  async function exhaustsHistoryRetries() {
+    const runtime = await prepare();
+    await runtime.stop();
+    await current.waitForConnectionsClosed();
+    let attempts = 0;
+    function timeout(): AsyncIterable<never> {
+      attempts += 1;
+      const error = new Error('History timeout');
+      error.name = 'TimeoutError';
+      throw error;
+    }
+    const source = { head: current.nats.store.head.bind(current.nats.store), subscribe: timeout };
+    await expect(upgradeHandlers(runtime, source)).rejects.toThrow('History timeout');
+    expect(attempts).toBe(6);
+    expect((await snapshot()).jobs).toEqual([]);
+    const progress = await current.db.query('SELECT sequence, jobs FROM handler_upgrade');
+    expect(progress.rows).toEqual([{ sequence: '0', jobs: '0' }]);
+    await current.waitForConnectionsClosed();
+    await upgradeHandlers(runtime, current.nats.store);
+    expect((await snapshot()).jobs).toHaveLength(7);
+  }
+  it('stops after five history retries and can resume without lost or duplicate jobs',
+    exhaustsHistoryRetries);
+
+  async function interruptedTransaction(mode: string) {
+    const runtime = await prepare();
+    await runtime.stop();
+    await current.waitForConnectionsClosed();
+    await current.crash(mode);
+    const jobs = await current.db.query<{ parked: boolean }>(
+      "SELECT start_after = 'infinity' AS parked FROM pgboss.job");
+    const progress = await current.db.query('SELECT sequence, jobs FROM handler_upgrade');
+    const state = await current.db.query('SELECT manifest, sequence FROM handler_dispatcher');
+    expect(state.rows[0]?.['sequence']).toBe('4');
+    if (mode === 'upgrade-inside-chunk') {
+      expect(jobs.rows).toEqual([]);
+      expect(progress.rows).toEqual([{ sequence: '0', jobs: '0' }]);
+      expect(state.rows[0]?.['manifest']).toBe(oldManifest);
+    } else if (mode === 'upgrade-inside-publication') {
+      expect(jobs.rows).toHaveLength(7);
+      expect(jobs.rows).toEqual(Array.from({ length: 7 }, parkedJob));
+      expect(progress.rows).toEqual([{ sequence: '4', jobs: '7' }]);
+      expect(state.rows[0]?.['manifest']).toBe(oldManifest);
+    } else {
+      expect(jobs.rows).toHaveLength(7);
+      expect(jobs.rows).toEqual(Array.from({ length: 7 }, releasedJob));
+      expect(progress.rows).toEqual([]);
+      expect(state.rows[0]?.['manifest']).not.toBe(oldManifest);
+    }
+    await current.waitForConnectionsClosed();
+    await upgradeHandlers(runtime, current.nats.store);
+    const completed = await snapshot();
+    expect(completed.jobs).toHaveLength(7);
+    expect((await current.db.query('SELECT * FROM handler_upgrade')).rows).toEqual([]);
+    await current.waitForConnectionsClosed();
+    await upgradeHandlers(runtime, current.nats.store);
+    expect(await snapshot()).toEqual(completed);
+    await runtime.start();
+    await runtime.work(1);
+    async function finished() {
+      return (await current.effects()).length === 9;
+    }
+    await until(finished);
+  }
+  function parkedJob() {
+    return { parked: true };
+  }
+  function releasedJob() {
+    return { parked: false };
+  }
+  it.each(['upgrade-inside-chunk', 'upgrade-inside-publication', 'upgrade-after-publication'])(
+    'recovers atomically from SIGKILL at %s and runs each unreceipted effect once',
+    interruptedTransaction);
+
   async function operatesFailedJobs() {
     const runtime = await prepare();
     await runtime.enqueue(runtime.options.handlers[0]!, event('failed-original'), current.db);
@@ -332,6 +591,23 @@ function upgradeTests() {
     expect((await current.db.query('SELECT * FROM handler_receipts')).rows).toHaveLength(3);
   }
   it('lists and cancels one failed original without changing receipts', operatesFailedJobs);
+
+  async function refusesDiagnosticCancellation() {
+    const runtime = await prepare();
+    const id = await runtime.boss.send('update-openfga-dead', event('diagnostic-copy'));
+    await current.db.query("UPDATE pgboss.job SET state = 'failed'");
+    const env = { ...process.env, DATABASE_URL: current.connectionString };
+    const before = await snapshot();
+    await expect(execute('npm', ['run', 'ops', '--', 'jobs', '--cancel', 'invalid-id'], { env }))
+      .rejects.toThrow('must be a UUID');
+    await expect(execute('npm', ['run', 'ops', '--', 'jobs', '--cancel', id!], { env }))
+      .rejects.toThrow('No failed job');
+    const listed = await execute('npm', ['run', 'ops', '--', 'jobs'], { env });
+    expect(listed.stdout).not.toContain(id);
+    expect(await snapshot()).toEqual(before);
+  }
+  it('refuses malformed cancellation ids and leaves failed diagnostic copies untouched',
+    refusesDiagnosticCancellation);
 
   async function historicalAndLiveTogether() {
     const runtime = await prepare();

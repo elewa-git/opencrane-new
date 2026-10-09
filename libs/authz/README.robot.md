@@ -30,8 +30,10 @@ stream; they do not silently complete. Invitations do not grant membership.
 `member.joined` writes membership and an optional owner/admin role.
 `member.role_changed` replaces the elevated role and requires existing membership.
 Owners also pass admin checks; every elevated check requires membership.
-`member.removed` deletes all that person's silo tuples. A later join can restore
-membership. IDs encode both silo and member without delimiter collisions.
+`member.removed` deletes that person's membership and role tuples on the silo.
+It keeps grants, team membership, conversation participants and assistant links.
+A later join restores membership and makes those saved relationships available again.
+IDs encode both silo and member without delimiter collisions.
 Checks always request higher consistency, with no application cache. Errors and
 one-second HTTP timeouts return `allowed: false`, `status: 'unavailable'`, and an
 internal error with its cause. Do not return that error to an API caller.
@@ -145,3 +147,11 @@ Member roles saved before ownership was seeded can still be applied. They keep
 any later applied ownership change for that person. An old demotion that happened
 before the seed can remove a stale owner role when the seed did not include that
 person. New owner changes still require the ownership stream.
+
+Saved relationships stay independent of silo membership. A delayed grant, team
+addition, participant addition or personal assistant creation still writes its
+relationship after the member is removed. Only a later applied change to that
+relationship can replace it. Membership checks in the server and models process
+still refuse removed people. The real OpenFGA tests save join, relationship and
+removal, apply join and removal, backfill the relationship, then save and apply a
+rejoin. The resulting tuples and receipts equal a clean rebuild of that history.

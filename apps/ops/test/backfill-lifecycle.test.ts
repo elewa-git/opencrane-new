@@ -39,3 +39,26 @@ async function oldAssistantAfterOwnerRemoval() {
 }
 it('does not claim a computer for an old assistant whose owner was removed',
   oldAssistantAfterOwnerRemoval);
+
+async function oldLossKeepsLatestLoss() {
+  const nats = await natsFixture();
+  try {
+    const old: EventEnvelope = event('first-loss', 'computer-assistant', 'computer.lost');
+    old.data = { assistantId: 'assistant', computerId: 'computer' };
+    const latest = { ...old, id: 'latest-loss', commandId: 'latest-loss' };
+    await nats.seed([old, latest]);
+    const handler = lifecycleHandlers(nats.store)[1];
+    await handler.handle(old, noSql);
+    const unchanged = await history(nats.store, old.subject);
+    expect(unchanged).toHaveLength(2);
+    expect(unchanged.at(-1)?.event.id).toBe(latest.id);
+    await handler.handle(latest, noSql);
+    const claimed = await history(nats.store, old.subject);
+    expect(claimed).toHaveLength(3);
+    expect(claimed.at(-1)?.event.type).toBe('computer.claimed');
+  } finally {
+    await nats.close();
+  }
+}
+it('claims only for the latest saved loss even when the newer event is another loss',
+  oldLossKeepsLatestLoss);

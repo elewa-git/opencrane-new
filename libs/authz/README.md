@@ -36,7 +36,10 @@ only while they can still read the chat. Group membership does not grant chat ac
 3. **An operator rebuilds permissions.** The rebuild reads the event history into a new OpenFGA store. The server and the background workers can then switch to the new store.
 
 When a release adds an older event to a reaction, the worker checks later saved
-permission changes before applying it. Removed access stays removed.
+permission changes before applying it. Removing a person from the silo keeps
+recorded grants, group membership, conversation participants and assistant links.
+These records are available again if the person rejoins. The server and models
+process still check current silo membership before allowing a request.
 
 ## How to run or test it
 
