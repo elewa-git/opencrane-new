@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, readdir, rename, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rename, rm, readFile, writeFile } from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import type { EventEnvelope, MemoryIdentity } from '@opencrane/events';
-import { memoryKeys, memoryProjection, memoryScopeId, ProjectionRunner } from '../src/index.ts';
+import { getEventDefinition, type EventEnvelope, type MemoryIdentity } from '@opencrane/events';
+import { memoryKeys, memoryProjection, memoryScopeId, ProjectionRunner, readMemoryFacts } from '../src/index.ts';
 import type { Db, Projection, Query } from '../src/index.ts';
 import { database } from './database.ts';
 
@@ -98,17 +98,18 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
       expect(JSON.stringify(before.changes)).not.toContain('ciphertext');
       expect(JSON.stringify(before.changes)).not.toContain('Deliveries');
       const scopeParameters = [first.silo, first.scopeId];
-      const ordered = await storage.db.query(`SELECT memory_id FROM memory_facts
-        WHERE silo = $1 AND scope_id = $2 ORDER BY position, memory_id`, scopeParameters);
-      expect(ordered.rows).toEqual([{ memory_id: 'first' }, { memory_id: 'last' }]);
+      const ordered = await readMemoryFacts(storage.db, first.silo, first.scopeId);
+      expect(ordered).toEqual([{ memory_id: 'first' }, { memory_id: 'last' }]);
       const search = await storage.db.query(`SELECT memory_id FROM memory_facts
         WHERE silo = $1 AND scope_id = $2 AND search_vector @@ to_tsquery('simple', $3)
         ORDER BY position`, [...scopeParameters, 'deliver:* & café']);
-      expect(search.rows).toEqual(ordered.rows);
-      const excluded = await storage.db.query(`SELECT memory_id FROM memory_facts
-        WHERE silo = $1 AND scope_id = $2 AND search_vector @@ to_tsquery('simple', $3)`,
-      [...scopeParameters, 'banana']);
-      expect(excluded.rows).toEqual([]);
+      expect(search.rows).toEqual(ordered);
+      const excluded = await readMemoryFacts(storage.db, first.silo, first.scopeId, 'banana');
+      expect(excluded).toEqual([]);
+      expect(await readMemoryFacts(storage.db, 'other', first.scopeId)).toEqual([]);
+      const bobScope = memoryScopeId('test', 'person', 'bob');
+      expect(await readMemoryFacts(storage.db, 'test', bobScope, 'banana'))
+        .toEqual([{ memory_id: 'foreign' }]);
       const indexResult = await storage.db.query<{ indexdef: string }>(
         "SELECT indexdef FROM pg_indexes WHERE indexname = 'memory_facts_search'",
       );
@@ -224,8 +225,140 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
         ciphertext: data.ciphertext, key_id: 'key:old', content_status: 'quarantined',
         search_text: null, search_vector: null }]);
       await runner.rebuild(projection);
+      expect((await state()).changes).toEqual([
+        expect.objectContaining({ outcome: 'quarantined' }),
+      ]);
       expect(await readdir(directory)).toEqual([]);
       expect(await runner.checkpoint(projection)).toBe(1);
     });
+
+  it.each(['memory.corrected', 'memory.forgotten', 'memory.consolidated'])(
+    '%s stops replay without changing rows or the checkpoint', async function unsupported(type) {
+      await append('first');
+      await runner.run(projection);
+      const before = await state();
+      const saved = event('unsupported');
+      const definition = getEventDefinition(type)!;
+      const envelope = { ...saved, type, subject: 'scope-old', data: definition.example };
+      await nats.seed([envelope]);
+      await expect(runner.run(projection)).rejects.toThrow('Memory change is not supported');
+      expect(await state()).toEqual(before);
+      expect(await runner.checkpoint(projection)).toBe(1);
+    });
+
+  it('refuses direct application before writing any rows', async function direct() {
+    await expect(projection.apply(storage.db, event('direct'), 1))
+      .rejects.toThrow('requires ProjectionRunner preparation');
+    expect((await state()).facts).toEqual([]);
+    expect(await runner.checkpoint(projection)).toBe(0);
+  });
+
+  it.each(['invalid', 'dependencies', 'key', 'damaged', 'tag'])(
+    '%s stops preparation without a transaction or checkpoint advance', async function refused(kind) {
+      const identity = await append('first');
+      const history = await Array.fromAsync(nats.reader.readStream(`scope-${identity.scopeId}`));
+      const original = history[0]!.event;
+      const encrypted = keys.encrypt(identity, 'private fixture text');
+      const dependency = { scopeId: identity.scopeId, memoryId: 'parent', revision: 1 };
+      let data = { ...original.data };
+      let message = 'Invalid saved memory event';
+      if (kind === 'invalid') {
+        data['pinned'] = 'invalid';
+      } else if (kind === 'dependencies') {
+        data['dependsOn'] = [dependency, dependency];
+      } else if (kind === 'key') {
+        data['keyId'] = `key:${'b'.repeat(64)}`;
+        message = 'Memory key identity mismatch';
+      } else if (kind === 'damaged') {
+        await writeFile(`${directory}/${encrypted.keyId.slice(4)}`, Buffer.alloc(31));
+        message = 'Memory key store damaged';
+      } else {
+        const bytes = Buffer.from(String(data['ciphertext']), 'base64');
+        bytes[12] = bytes[12]! ^ 1;
+        data['ciphertext'] = bytes.toString('base64');
+        message = 'authenticate';
+      }
+      const envelope = { ...original, data };
+      // Supply raw saved input to exercise the projection's own checks before any SQL work.
+      const source = {
+        head: () => Promise.resolve(1),
+        async *subscribe() {
+          yield { event: envelope, sequence: 1 };
+        },
+      };
+      const before = await state();
+      let transactions = 0;
+      const originalDb = storage.db;
+      async function transaction<Result>(work: (tx: Query) => Promise<Result>) {
+        transactions += 1;
+        return originalDb.transaction(work);
+      }
+      const observed = { query: originalDb.query.bind(originalDb), transaction };
+      const stopped = new ProjectionRunner(observed, source, logger);
+      await expect(stopped.run(projection)).rejects.toThrow(message);
+      expect(transactions).toBe(0);
+      expect(await state()).toEqual(before);
+      expect(await runner.checkpoint(projection)).toBe(0);
+    });
+
+  it('keeps a newer row and its dependencies when a stale or repeated write arrives',
+    async function revisions() {
+      const first = await append('first');
+      await runner.run(projection);
+      const rows = await Array.fromAsync(nats.reader.readStream(`scope-${first.scopeId}`));
+      const original = rows[0]!.event;
+      const encrypted = keys.encrypt(first, 'Replacement text');
+      for (const revision of [1, 2]) {
+        // Represent a row from a later correction without accepting a new write schema here.
+        await storage.db.query('UPDATE memory_facts SET revision=$1', [revision]);
+        const before = (await state()).facts;
+        const dependency = { scopeId: first.scopeId, memoryId: 'parent', revision: 1 };
+        const data = { ...original.data, ...encrypted, dependsOn: [dependency] };
+        const envelope = { ...original, id: `repeat-${revision}`,
+          commandId: `repeat-${revision}`, data };
+        await nats.seed([envelope]);
+        await runner.run(projection);
+        expect((await state()).facts).toEqual(before);
+        expect((await state()).dependencies).toEqual([]);
+      }
+      expect(await runner.checkpoint(projection)).toBe(3);
+      expect((await state()).changes).toHaveLength(3);
+    });
+
+  it('keeps written change history identical after a key is destroyed and replayed',
+    async function outcomes() {
+      const first = await append('first');
+      await runner.run(projection);
+      const before = (await state()).changes;
+      expect(before).toEqual([expect.objectContaining({ outcome: 'written' })]);
+      keys.delete(first);
+      await runner.rebuild(projection);
+      expect((await state()).changes).toEqual(before);
+      expect((await state()).facts).toEqual([
+        expect.objectContaining({ content_status: 'unavailable', search_text: null }),
+      ]);
+    });
+
+  it('checks later keys before dropping any live tables during rebuild', async function preflight() {
+    await append('first');
+    const later = await append('later');
+    await runner.run(projection);
+    const before = await state();
+    const encrypted = keys.encrypt(later, 'fixture');
+    const path = `${directory}/${encrypted.keyId.slice(4)}`;
+    const bytes = await readFile(path);
+    await writeFile(path, Buffer.alloc(31));
+    const generation = await storage.db.query('SELECT * FROM projection_generations');
+    const processed = await storage.db.query('SELECT * FROM projection_events ORDER BY event_id');
+    await expect(runner.rebuild(projection)).rejects.toThrow('Memory key store damaged');
+    expect(await state()).toEqual(before);
+    expect(await runner.checkpoint(projection)).toBe(2);
+    expect(await storage.db.query('SELECT * FROM projection_generations')).toEqual(generation);
+    expect(await storage.db.query('SELECT * FROM projection_events ORDER BY event_id'))
+      .toEqual(processed);
+    await writeFile(path, bytes);
+    await runner.rebuild(projection);
+    expect(await state()).toEqual(before);
+  });
 
 });
