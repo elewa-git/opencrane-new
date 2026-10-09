@@ -59,7 +59,7 @@ function watcher(assistantId = 'assistant') {
   return { approvals, send, socket };
 }
 async function poll(approvals: ReturnType<typeof bridgeApprovals>) {
-  approvals.poll();
+  approvals.poll(await nats.store.head());
   await approvals.settled();
 }
 
@@ -144,12 +144,22 @@ async function retriesFailedRead() {
   await append(`approval-${approvalId}`, 'approval.decided', {
     approvalId, decidedBy: 'alice', decision: 'rejected',
   });
-  const head = vi.spyOn(nats.store, 'head');
-  head.mockRejectedValueOnce(new Error('Read unavailable'));
-  await poll(approvals);
-  expect(send).not.toHaveBeenCalled();
-  await poll(approvals);
-  expect(send).toHaveBeenCalledTimes(1);
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementationOnce(failedRead);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const failedAt = Date.now();
+    await poll(approvals);
+    expect(send).not.toHaveBeenCalled();
+    read.mockClear();
+    await poll(approvals);
+    expect(read).not.toHaveBeenCalled();
+    vi.setSystemTime(failedAt + 1000);
+    await poll(approvals);
+    expect(send).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
 }
 it('wakes when an approval changes and retries a failed read without another event',
   retriesFailedRead);
@@ -188,9 +198,9 @@ async function checksIndependentReads() {
   const reads = vi.spyOn(nats.store, 'head').mockImplementation(readHead);
   approvals.receive({ ...waiting, approvalId: blocked });
   approvals.receive(waiting);
-  approvals.poll();
+  approvals.poll(await nats.store.head());
   approvals.receive({ ...waiting, approvalId: blocked });
-  approvals.poll();
+  approvals.poll(await nats.store.head());
   try {
     const { until } = await import('@opencrane/authz/testing');
     function replied() { return send.mock.calls.length === 1; }
@@ -221,7 +231,9 @@ async function boundsWaitingEntries() {
   socket.readyState = WebSocket.CLOSED;
   await poll(approvals);
   expect(approvals.size).toBe(0);
-  expect(send).not.toHaveBeenCalled();
+  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({
+    type: 'approval_settled', approvalId: '40'.padStart(64, '0'), state: 'outcome_unknown',
+  }));
 }
 it('bounds waiting entries, refuses unknown fields and forgets a closed link',
   boundsWaitingEntries);
@@ -292,3 +304,87 @@ function firstEventArgument(value: unknown) {
   const first: unknown = value[0];
   return first;
 }
+
+async function* failedRead(): AsyncGenerator<never> {
+  await Promise.resolve();
+  throw new Error('Read unavailable');
+}
+
+async function refusesMissingRequest() {
+  const { approvals, send } = watcher();
+  const position = await nats.store.head();
+  approvals.receive(waiting);
+  await poll(approvals);
+  expect(approvals.size).toBe(0);
+  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({
+    type: 'approval_settled', approvalId, state: 'outcome_unknown',
+  }));
+  expect(await nats.store.head()).toBe(position);
+  const read = vi.spyOn(nats.store, 'readStream');
+  await poll(approvals);
+  expect(read).not.toHaveBeenCalled();
+}
+it('refuses a missing request once without writing events or retrying', refusesMissingRequest);
+
+async function backsOffRepeatedFailures() {
+  await seedRequest({ policySequence: await seedLiveTurn() });
+  const { approvals, send } = watcher();
+  approvals.receive(waiting);
+  const read = vi.spyOn(nats.store, 'readStream').mockImplementation(failedRead);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const startedAt = Date.now();
+    await poll(approvals);
+    expect(read).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(startedAt + 999);
+    await poll(approvals);
+    expect(read).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(startedAt + 1000);
+    await poll(approvals);
+    expect(read).toHaveBeenCalledTimes(2);
+    vi.setSystemTime(startedAt + 2999);
+    await poll(approvals);
+    expect(read).toHaveBeenCalledTimes(2);
+    vi.setSystemTime(startedAt + 3000);
+    await poll(approvals);
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(send).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+}
+it('backs off repeated read failures for each entry', backsOffRepeatedFailures);
+
+async function leavesQuietEntriesUnread() {
+  await seedRequest({ policySequence: await seedLiveTurn() });
+  const { approvals } = watcher();
+  approvals.receive(waiting);
+  await poll(approvals);
+  const head = vi.spyOn(nats.store, 'head');
+  await poll(approvals);
+  expect(head.mock.calls).toEqual([[]]);
+  // Check positions once a new event appears, even if it concerns another stream.
+  await append('unrelated', 'fixture.changed', {});
+  head.mockClear();
+  await poll(approvals);
+  expect(head).toHaveBeenCalledWith(`approval-${approvalId}`, expect.any(Number));
+}
+it('checks entry positions only after the overall position moves', leavesQuietEntriesUnread);
+
+async function settlesChangedPolicy() {
+  await seedRequest({ policySequence: await seedLiveTurn() });
+  const { approvals, send } = watcher();
+  approvals.receive(waiting);
+  await poll(approvals);
+  await append('mcp-fixture', 'mcp.server_unpublished', {
+    serverId: 'fixture', unpublishedBy: 'alice',
+  });
+  await poll(approvals);
+  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({
+    type: 'approval_settled', approvalId, state: 'cancelled',
+  }));
+  const rows = [];
+  for await (const row of nats.store.readStream(`approval-${approvalId}`)) rows.push(row);
+  expect(rows.at(-1)?.event.type).toBe('approval.cancelled');
+}
+it('cancels a held approval promptly after its tool policy changes', settlesChangedPolicy);
