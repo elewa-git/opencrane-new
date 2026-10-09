@@ -1,9 +1,11 @@
 import { expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { countReads, expectNoWholeReads } from '@opencrane/event-store/testing';
 import { grantStream } from '@opencrane/authz';
 import { BudgetActor, envelope } from '../src/actor.ts';
 import { startDecision } from '../src/decision.ts';
 import { decisionActivity } from '../src/decision-activity.ts';
+import { readDecisionGrants } from '../src/decision-grants.ts';
 import { fixture } from './fixture.ts';
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -15,8 +17,9 @@ const turnBinding = {
 };
 
 async function decide(setup: Fixture, url = setup.options.decisionUrl,
-  headers = setup.headers) {
-  const request = { method: 'POST', headers, body: JSON.stringify(body) };
+  headers = setup.headers, modelId = body.model) {
+  const requestBody = { ...body, model: modelId };
+  const request = { method: 'POST', headers, body: JSON.stringify(requestBody) };
   const response = await fetch(`${url}/authorize`, request);
   return { status: response.status, text: await response.text() };
 }
@@ -418,3 +421,70 @@ async function refusesTeamGrantChangedDuringSummary() {
 }
 it('refuses an untyped revoke during catch-up for a granted team that does not own the assistant',
   refusesTeamGrantChangedDuringSummary, 40_000);
+
+const volumeModelIds = [
+  'gpt-6-luna', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-sol',
+  'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.5-pro',
+];
+
+async function manyModelsStayCachedInOneProcess() {
+  const setup = await fixture(100_000_000, 100_000_000);
+  const store = setup.nats.store;
+  const positions = new Map<string, number>();
+  try {
+    await setup.stopDispatch();
+    const events = [];
+    for (const modelId of volumeModelIds) {
+      let members = 1000;
+      if (modelId === 'gpt-6-luna') members = 10_000;
+      const subject = grantStream('model', modelId);
+      for (let index = 0; index < members; index++) {
+        const grant = { resourceType: 'model', resourceId: modelId,
+          granteeId: randomUUID(), granteeKind: 'member', grantedBy: 'alice' };
+        const event = envelope('test', subject, 'grant.given', grant, randomUUID());
+        events.push(event);
+      }
+    }
+    await setup.nats.seed(events);
+    // Finish fixture warm-up outside the gateway's two-second request budget.
+    for (const modelId of volumeModelIds) {
+      await readDecisionGrants(store, 'test', modelId, Infinity);
+      const subject = grantStream('model', modelId);
+      positions.set(subject, await store.head(subject));
+    }
+    const reads = countReads(store);
+    const measurements: { modelId: string; milliseconds: number }[] = [];
+    for (let pass = 0; pass < 2; pass++) {
+      for (const modelId of volumeModelIds) {
+        const claims = { ...setup.t, model: modelId };
+        const token = await setup.sign(claims, 'decision-service', 120);
+        const headers = { ...await setup.issue(), 'x-turn-token': token };
+        reads.clear();
+        const began = performance.now();
+        const result = await decide(setup, setup.options.decisionUrl, headers, modelId);
+        const milliseconds = Math.round(performance.now() - began);
+        expect(result.status, result.text).toBe(200);
+        expect(milliseconds).toBeLessThan(2000);
+        const subject = grantStream('model', modelId);
+        function isThisModelsGrantRead(call: (typeof reads.calls)[number]) {
+          return call.subject === subject;
+        }
+        const grantReads = reads.calls.filter(isThisModelsGrantRead);
+        expect(grantReads.length).toBeGreaterThan(0);
+        for (const call of grantReads) {
+          expect(call.fromSequence).toBeGreaterThan(positions.get(subject) ?? 0);
+          expect(call.rows).toBe(0);
+        }
+        const measurement = { modelId, milliseconds };
+        measurements.push(measurement);
+      }
+    }
+    expect(setup.actor.state.reservations).toHaveLength(volumeModelIds.length * 2);
+    expect(setup.received()).toBe(0);
+    console.info(JSON.stringify({ measurements }));
+  } finally {
+    await setup.close();
+  }
+}
+it('keeps 10,000 members on one model and eight models with 1,000 members cached in one process',
+  manyModelsStayCachedInOneProcess, 180_000);
