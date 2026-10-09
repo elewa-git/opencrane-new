@@ -21,6 +21,7 @@ const commandInput = fields.extend({ commandId: identifier, text: memoryTextSche
 export const changeParams = z.strictObject({ scopeId: z.string().regex(/^[a-f0-9]{64}$/u),
   commandId: identifier });
 type Input = z.infer<typeof commandInput>;
+let memoryWriteInProgress = false;
 
 function commandReference(silo: string, scopeId: string, requester: string, commandId: string) {
   const hash = createHash('sha256');
@@ -123,6 +124,20 @@ function checkDependencies(rows: StoredEvent[], scope: Scope, input: Input,
 }
 
 export async function remember(options: MemoryOptions, requester: string, scope: Scope, raw: unknown) {
+  // Allow one memory write per process, including writes to the same scope.
+  // Bound slow permission work too. Refuse extra work without taking a connection or queuing it.
+  if (memoryWriteInProgress) {
+    throw new Error('Memory write busy');
+  }
+  memoryWriteInProgress = true;
+  try {
+    return await rememberFact(options, requester, scope, raw);
+  } finally {
+    memoryWriteInProgress = false;
+  }
+}
+
+async function rememberFact(options: MemoryOptions, requester: string, scope: Scope, raw: unknown) {
   // Check write permission before inspecting private content or reserving a database client.
   const initialAccess = await scopeAccess(options, requester, scope, false, undefined, true);
   if (!initialAccess.canWrite) {
@@ -147,23 +162,7 @@ export async function remember(options: MemoryOptions, requester: string, scope:
     const keys = memoryKeys(options.keyDirectory);
     checkDependencies(state.rows, scope, input, keys, options.silo);
   }
-  async function execute(db: import('@opencrane/projections').Db) {
-    const lockedOptions = { ...options, db };
-    return rememberLocked(lockedOptions, requester, scope, input, reference, state.rows);
-  }
-  // Refuse a busy command promptly so one duplicate cannot hold up other database work.
-  return options.db.lock(`memory-command:${reference}`, execute, { timeoutMs: 100 });
-}
-async function rememberLocked(options: MemoryOptions, requester: string, scope: Scope,
-  input: Input, reference: string, rows: StoredEvent[]) {
-  const keys = memoryKeys(options.keyDirectory!);
-  const identity = { silo: options.silo, ...scope, memoryId: reference, revision: 1 };
-  const journal = commandJournal(options.keyDirectory!, reference);
-  // Read only changes since the earlier history, and release the database client promptly
-  // if NATS is slow. Full scope replay must not occupy the shared connection pool.
-  const state = await commandHistory(options, scope.scopeId, requester, input.commandId,
-    performance.now() + 100, rows);
-  // Read content first. Watch only streams that decide permission during the two-second check.
+  // Finish permission history and OpenFGA checks before taking a database connection.
   const fresh = await authorityFence(options.store, performance.now(), [`member-${requester}`]);
   const checks = memoryAccessChecks(options, requester, fresh);
   await readActiveMember(options.store, options.binding, requester, 'member', checks.applied);
@@ -171,9 +170,26 @@ async function rememberLocked(options: MemoryOptions, requester: string, scope: 
   if (!access.canWrite) {
     throw new MemoryRefused();
   }
+  await fresh();
+  async function execute() {
+    return rememberLocked(options, requester, scope, input, reference, state.rows,
+      fresh, access.audience);
+  }
+  return options.db.lock(`memory-command:${reference}`, execute, { timeoutMs: 100 });
+}
+async function rememberLocked(options: MemoryOptions, requester: string, scope: Scope,
+  input: Input, reference: string, rows: StoredEvent[],
+  fresh: Awaited<ReturnType<typeof authorityFence>>, audience: { kind: string; ownerId: string }) {
+  const keys = memoryKeys(options.keyDirectory!);
+  const identity = { silo: options.silo, ...scope, memoryId: reference, revision: 1 };
+  const journal = commandJournal(options.keyDirectory!, reference);
+  // Read only changes since the earlier history, and release the database client promptly
+  // if NATS is slow. Full scope replay must not occupy the shared connection pool.
+  const state = await commandHistory(options, scope.scopeId, requester, input.commandId,
+    performance.now() + 100, rows);
   if (state.original) {
     journal.remove();
-    return originalReceipt(state.original, keys, input, access.audience);
+    return originalReceipt(state.original, keys, input, audience);
   }
   const { text: _text, ...metadata } = input;
   const hash = createHash('sha256');
@@ -199,7 +215,7 @@ async function rememberLocked(options: MemoryOptions, requester: string, scope: 
     appendUntil: Date.now() + Math.max(0, fresh.deadline - performance.now()),
     expectedSequence: rows.at(-1)?.sequence ?? 0,
     stage: 'prepared' as const };
-  return appendPrepared(options, input, entry, rows, fresh, access.audience);
+  return appendPrepared(options, input, entry, rows, fresh, audience);
 }
 async function appendPrepared(options: MemoryOptions, input: Input,
   entry: NonNullable<ReturnType<ReturnType<typeof commandJournal>['read']>>,

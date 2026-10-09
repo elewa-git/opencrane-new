@@ -129,7 +129,7 @@ string fields; new appends check the member-id format separately.
 The event store calls it before append, so mismatched ids cannot block later consumers.
 
 `memoryWrittenDataSchema` exports the typed version-1 fields for server validation.
-Storage commands are in the companion draft.
+`apps/server` uses these fields to check human memory writes.
 
 `member.joined` accepts optional `identity: { issuer, sub }` for email-only
 acceptance. Issuer is a URL and subject is a non-empty string. Bound invitation

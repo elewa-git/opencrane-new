@@ -53,8 +53,10 @@ contains a reference or preview. Member statements return the neutral label "a m
 statement", without memberId or commandId, including after the author has left.
 Source checks need the server's existing chat settings and conversation read table.
 No source preview is stored or returned.
-Oversized authorised detail returns 503. Command status and storage are in the companion draft. The fresh empty runner and HTTP read test passes with real services.
+Oversized authorised detail returns 503. The fresh empty runner and HTTP read test
+passes with real services.
 Full fresh-install memory journeys and native turns remain NOT RUN.
+
 `POST /api/memory/:scopeId/facts` accepts commandId, text, kind, pinned, expiresAt,
 sources and dependsOn. It accepts human writers only and checks Origin. Person ownership
 and group membership grant write access. Notes require `memory_write` from saved grants
@@ -67,14 +69,22 @@ Commands and events have separate 16 KiB limits. Dependencies require a live sam
 Write permission is checked before inspecting scope history, dependencies or sources.
 Chat access is checked before an indexed message lookup in the conversation read table.
 The lookup checks that the worker has caught up, then checks one saved event in NATS.
-These content checks finish before the command lock and the final two-second access check.
-The final check watches only member, assistant, team and write-grant streams. Each command
-makes one conditional append at the scope position read from history. A PostgreSQL advisory
-lock keeps attempts for the same command together across servers. Memory commands wait at
-most 100 ms for this lock; a busy lock returns 503. Work inside the lock uses its own
-checked-out database client. It reads only scope events newer than the earlier history,
+These content checks finish before the final two-second access check. The final check
+watches only member, assistant, team and write-grant streams. Member and scope permission
+history, and OpenFGA checks, finish before taking a database connection or command lock.
+The watched stream positions are checked before taking the lock and again before append.
+Each command makes one conditional append at the scope position read from history.
+
+Each process allows one memory write at a time, including writes in the same scope.
+Extra writers receive 503 without waiting in a queue or taking a connection. The limit
+covers permission checks, history reads and appends. A slow append therefore holds at
+most one shared database connection within that process. The limit is per
+process; separate server processes each have their own limit and pool.
+A PostgreSQL advisory lock keeps attempts for the same command together across servers.
+Memory commands wait at most 100 ms for this lock; a busy lock returns 503. Work inside the
+lock holds one database client. It reads only scope events newer than the earlier history,
 with a 100 ms deadline. Refusal checks use the same read limit and the remaining write
-deadline. No conversation content is read inside the lock.
+deadline. No conversation content or OpenFGA checks run inside the lock.
 
 The full encrypted event size is checked before a revision key is created. Changed saved
 inputs return 409. Lost replies return `outcome: "unknown"`; clients check
@@ -98,7 +108,7 @@ before taking a database connection, then checks that the record has not changed
 the command lock. A damaged record, busy lock or event-store outage leaves the record
 for a later check and never stops startup.
 Keep all servers for a silo on the same database and key directory.
-Fact detail is in the companion draft. Fresh-install memory journeys and native turns remain NOT RUN.
+Fresh-install memory journeys and native turns remain NOT RUN.
 
 The Node service exposes sign-in routes, invitation acceptance, the organisation MCP
 register, a health check and authenticated WebSocket routes. It does not serve static

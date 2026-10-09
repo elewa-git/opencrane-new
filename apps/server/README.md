@@ -38,7 +38,8 @@ flowchart LR
   without naming its author. Reports destroyed or quarantined facts without text.
   Checks write permission before inspecting a fact. Records human facts and checks
   the original command when a reply is lost. Checks chat access before looking up
-  a source message. Slow scope checks leave database connections available.
+  a source message. Slow permission checks leave database connections free. The server
+  saves one memory write at a time, so a slow write leaves room for other requests.
   Keeps the fact's key while a delayed write could still be saved.
   These reads need the memory worker and its existing private key directory.
   It returns current facts only after the read table has caught up with their events.

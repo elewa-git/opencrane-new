@@ -25,9 +25,7 @@ let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
 let keys: ReturnType<typeof memoryKeys>;
 let directory: string;
-let memory: import('../src/memory/access.ts').MemoryOptions;
-import type { MemoryOptions } from '../src/memory/access.ts';
-import { reconcileCommands } from '../src/memory/commands.ts';
+let memory: MemoryOptions & { keyDirectory: string };
 let count = 0;
 const projection = memoryProjection({ decrypt });
 function decrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
@@ -1539,11 +1537,11 @@ it('keeps database queries available during distinct slow scope reads', async fu
   const reads = new Map<string, number>();
   let delayed = 0;
   function noop() {}
-  let notifyBoth: () => void = noop;
-  function notifyWhenBothRead(resolve: () => void) {
-    notifyBoth = resolve;
+  let notifyRead: () => void = noop;
+  function notifyWhenRead(resolve: () => void) {
+    notifyRead = resolve;
   }
-  const bothDelayed = new Promise<void>(notifyWhenBothRead);
+  const readDelayed = new Promise<void>(notifyWhenRead);
   let releaseReads: () => void = noop;
   function releaseWhenFinished(resolve: () => void) {
     releaseReads = resolve;
@@ -1553,10 +1551,10 @@ it('keeps database queries available during distinct slow scope reads', async fu
     if (scopes.has(subject)) {
       const count = (reads.get(subject) ?? 0) + 1;
       reads.set(subject, count);
-      if (count > 1) {
+      if (count === 1) {
         delayed++;
-        if (delayed === 2) {
-          notifyBoth();
+        if (delayed === 1) {
+          notifyRead();
         }
         let timer: ReturnType<typeof setTimeout> | undefined;
         function startDeadline(_resolve: (value: never) => void, reject: (error: Error) => void) {
@@ -1581,7 +1579,7 @@ it('keeps database queries available during distinct slow scope reads', async fu
   }
   const requests = assistants.map(send);
   try {
-    await bothDelayed;
+    await readDelayed;
     const result = await pool.query('SELECT 1');
     expect(result.rows).toHaveLength(1);
   } finally {
@@ -1707,7 +1705,7 @@ it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as cons
     let completed = 0;
     async function pause() {
       delayed++;
-      if (isAppend || delayed === 2) {
+      if (delayed === 1) {
         notify();
       }
       await released;
@@ -1739,7 +1737,7 @@ it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as cons
     }
     const originalAppend = nats.store.append.bind(nats.store);
     async function slowAppend(command: Parameters<typeof originalAppend>[0]) {
-      if (isAppend && command.event.type === 'memory.written') {
+      if (isAppend) {
         await pause();
       }
       return originalAppend(command);
@@ -1773,7 +1771,7 @@ it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as cons
         expect(delayed).toBe(1);
         expect(pool.totalCount - pool.idleCount).toBe(1);
       } else {
-        expect(delayed).toBe(assistants.length);
+        expect(delayed).toBe(1);
         expect(pool.totalCount - pool.idleCount).toBe(0);
       }
     } finally {
