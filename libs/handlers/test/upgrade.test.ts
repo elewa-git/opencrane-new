@@ -409,13 +409,42 @@ function upgradeTests() {
     await current.waitForConnectionsClosed();
     const subscribe = current.nats.store.subscribe.bind(current.nats.store);
     let session: PoolClient | undefined;
+    let sessionPid: number | undefined;
     async function* reconnects(from: number, signal?: AbortSignal) {
       session ??= await current.pool.connect();
+      const identity = await session.query<{ pid: number }>(
+        'SELECT pg_backend_pid() AS pid');
+      sessionPid = identity.rows[0]?.pid;
       yield* subscribe(from, signal);
     }
-    const source = { head: current.nats.store.head.bind(current.nats.store), subscribe: reconnects };
+    const head = current.nats.store.head.bind(current.nats.store);
+    const source = { head, subscribe: reconnects };
     try {
-      await expect(upgradeHandlers(runtime, source)).rejects.toThrow('other database sessions');
+      const upgrade = upgradeHandlers(runtime, source);
+      async function captureUpgradeError() {
+        try {
+          await upgrade;
+          return undefined;
+        } catch (error) {
+          return error;
+        }
+      }
+      const upgradeOutcome = captureUpgradeError();
+      async function reconnectSessionIsVisible() {
+        if (sessionPid === undefined) {
+          return false;
+        }
+        const result = await current.db.query(
+          'SELECT pid FROM pg_stat_activity WHERE pid = $1', [sessionPid]);
+        return result.rows.length === 1;
+      }
+      await until(reconnectSessionIsVisible);
+      const error = await upgradeOutcome;
+      expect(error).toBeInstanceOf(Error);
+      if (!(error instanceof Error)) {
+        throw new Error('Expected the upgrade to reject after the session reconnected');
+      }
+      expect(error.message).toContain('other database sessions');
       const progress = await current.db.query('SELECT sequence FROM handler_upgrade');
       expect(Number(progress.rows[0]?.['sequence'])).toBe(Math.min(target, 256));
       const state = await current.db.query('SELECT manifest FROM handler_dispatcher');
