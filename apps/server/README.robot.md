@@ -1129,12 +1129,20 @@ Tests cover its exact expiry boundary and acceptance of a route-created invitati
 Acceptance refuses active identities itself, including joins after
 the candidate read and delayed member projections.
 
-Email-only join checks current member events through the admission-history reader
-before the two-second access check. It keeps the invitation’s member id and records issuer
-and subject on `member.joined`. The search stops after ten seconds or 10,000 member
-events and refuses incomplete results. The member projection applies this account
-binding and can rebuild it. Same-email accounts compete through one conditional
-append. See the [email acceptance contract](../../docs/api/members.md#email-only-invitation-acceptance).
+Email-only acceptance requires the members projection through `DATABASE_URL`.
+It reads up to 100 candidate ids by issuer and subject with their checkpoint in
+one query. It includes member events after that checkpoint and verifies each
+candidate from its own stream. It refuses incomplete reads, more than 10,000
+unapplied events or more than 10,000 events in one candidate stream. Its event reads
+have a ten-second deadline and finish before the two-second access check.
+Older unrelated member history does not count towards these limits.
+It keeps the invitation’s member id and records issuer and subject on `member.joined`.
+The final check confirms the member position has not moved, and the conditional
+append uses that position across `member-*`. Concurrent accepts on different
+invitations cannot admit the same account twice. Other member changes also require
+a retry with the same command. The projection can rebuild the account binding.
+Bound acceptance needs no database and retains its own member-stream append.
+See the [email acceptance contract](../../docs/api/members.md#email-only-invitation-acceptance).
 
 ## Waiting tool calls
 

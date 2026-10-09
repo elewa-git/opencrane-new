@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { hasActiveIdentity } from './admission.ts';
+import { readActiveIdentity } from './admission.ts';
 import { z } from 'zod';
 import { authorityFence, currentMembership, isAuthorityChanged } from '@opencrane/models';
 import { memberInvitedDataSchema, memberJoinedDataSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import type { Query } from '@opencrane/projections';
 
 export const joinInputSchema = z.object({
   memberId: z.string().min(1).max(200).regex(/^[^.*>\s]+$/u),
@@ -138,9 +139,9 @@ function validateHistory(events: StoredEvent[], input: JoinInput, context: JoinC
   return undefined;
 }
 
-/** The route supplies an authenticated identity and deployment-owned silo, never body claims. */
+/** Use the route's checked identity and configured silo instead of request-body claims. */
 export async function joinMember(
-  store: JoinStore, input: JoinInput, context: JoinContext, now: () => Date,
+  store: JoinStore, input: JoinInput, context: JoinContext, now: () => Date, db?: Query,
 ): Promise<Outcome> {
   try {
     const subject = `member-${input.memberId}`;
@@ -149,11 +150,13 @@ export async function joinMember(
     if (refused) return refused;
     const previous = retry(events, input, context);
     if (previous) return previous;
-    const invitation = await confirmInvitation(store, events, input, context, now);
-    if ('status' in invitation) return invitation;
+    const confirmed = await confirmInvitation(store, events, input, context, now, db);
+    if ('status' in confirmed) return confirmed;
+    const invitation = confirmed.invitation;
     const id = randomUUID();
+    const condition = joinCondition(events, confirmed);
     const command = {
-      expectedSequence: events.at(-1)?.sequence ?? 0,
+      ...condition,
       event: {
         id, commandId: input.commandId, type: 'member.joined', source: 'opencrane-server',
         time: now().toISOString(), subject, silo: context.silo,
@@ -180,6 +183,18 @@ export async function joinMember(
   } catch (cause) {
     return { status: 'unavailable', cause };
   }
+}
+
+function joinCondition(events: StoredEvent[], confirmed: ConfirmedInvitation) {
+  if (confirmed.memberSequence !== undefined) {
+    return {
+      expectedSequence: confirmed.memberSequence,
+      expectedSubject: 'member-*',
+      deadline: confirmed.deadline,
+    };
+  }
+  const expectedSequence = events.at(-1)?.sequence ?? 0;
+  return { expectedSequence, deadline: confirmed.deadline };
 }
 
 function joinData(input: JoinInput, invitation: Invitation, context: JoinContext) {
@@ -232,15 +247,23 @@ const identityHistorySchema = z.object({
 });
 
 
+interface ConfirmedInvitation {
+  invitation: Invitation;
+  memberSequence: number | undefined;
+  deadline: number;
+}
+
 async function confirmInvitation(store: JoinStore, events: StoredEvent[], input: JoinInput,
-  context: JoinContext, now: () => Date): Promise<Invitation | JoinResult> {
+  context: JoinContext, now: () => Date, db?: Query): Promise<ConfirmedInvitation | JoinResult> {
   const invitation = pending(events, input, context, now());
   if ('status' in invitation) return invitation;
-  // Check events so a delayed members read table cannot hide an active account.
+  let memberSequence: number | undefined;
   if (!invitation.invitedIdentity) {
-    const active = await hasActiveIdentity(
-      store, context.silo, context.issuer, context.sub, now());
-    if (active) return { status: 'refused', reason: 'already_member' };
+    if (!db) return { status: 'unavailable' };
+    const identity = await readActiveIdentity(
+      store, db, context.silo, context.issuer, context.sub, now());
+    if (identity.active) return { status: 'refused', reason: 'already_member' };
+    memberSequence = identity.memberSequence;
   }
   const subjects = [
     `member-${input.memberId}`, `member-${invitation.invitedBy}`, `ownership-${context.silo}`,
@@ -271,7 +294,17 @@ async function confirmInvitation(store: JoinStore, events: StoredEvent[], input:
     }
     throw error;
   }
-  return pending(events, input, context, now());
+  if (memberSequence !== undefined) {
+    const latest = await store.head('member-*', fresh.deadline);
+    if (latest !== memberSequence) {
+      const rechecked = await changedEmailInvitation(store, input, context, now());
+      return rechecked ?? { status: 'refused', reason: 'concurrent_change' };
+    }
+  }
+  const checked = pending(events, input, context, now());
+  if ('status' in checked) return checked;
+  // Keep the same member position in the append so another invitation cannot join this account.
+  return { invitation: checked, memberSequence, deadline: fresh.deadline };
 }
 
 async function changedEmailInvitation(store: JoinStore, input: JoinInput,

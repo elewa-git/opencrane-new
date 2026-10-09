@@ -7,11 +7,13 @@ import {
   SessionInvalidError,
   type AuthConfig,
 } from '@opencrane/auth';
+import type { Query } from '@opencrane/projections';
 import { joinInputSchema, joinMember, type JoinResult, type JoinStore } from './join.ts';
 
 export interface MembershipOptions {
   silo: string;
   store: JoinStore;
+  db?: Query;
   now?: () => Date;
 }
 
@@ -51,7 +53,7 @@ export function registerMemberRoutes(app: FastifyInstance, config: AuthConfig, o
       email: session.email, emailVerified: session.emailVerified,
       authTime: session.authTime,
     };
-    const result = await joinMember(options.store, input.data, context, now);
+    const result = await joinMember(options.store, input.data, context, now, options.db);
     if (result.status === 'unavailable') {
       // Keep upstream errors inside the command boundary: they can contain credentials.
       request.log.error({ operation: 'member.joined' }, 'member join unavailable');

@@ -133,12 +133,24 @@ The `memberId` in the body must be the invitation's id. The one `member.joined`
 event records `identity: { issuer, sub }` from the session and server configuration.
 It also keeps the invitation's role, email and assistant choice.
 
-Before the final two-second access check, acceptance checks current member events
-for an active binding to that issuer and subject anywhere in the silo. It returns
-409 `already_member` even when the members read table has not caught up. This search
-uses the existing admission-history reader, with a ten-second deadline and 10,000-event
-limit across member streams. An incomplete search or foreign-silo event returns 503.
+Before the final two-second access check, acceptance finds up to 100 candidate
+member ids by issuer and subject in the members projection. It reads the ids and
+projection checkpoint in one database query, then reads only member events after
+that checkpoint to include accounts the background worker has not applied yet.
+It checks each candidate's own events to decide whether the account is active.
+An active account returns 409 `already_member`, including when its email changed.
+Missing projection tables, over 100 candidates, over 10,000 unapplied member events,
+over 10,000 events in one candidate stream, an incomplete read or foreign-silo data
+return 503. The event reads have a ten-second deadline. Accumulated unrelated history
+before the checkpoint does not count towards these limits.
 It never reopens a removed stream. These history reads finish before the access check.
+
+The final check also confirms that no member stream changed since the identity search.
+The append uses that same position across `member-*`. Two invitations accepted by
+the same account therefore cannot both save a join, even when both requests finish
+checking access together. A change on another member stream returns 409
+`concurrent_change`; the caller can retry its unchanged command. This check also
+refuses unrelated member changes, so acceptance may need a retry during busy periods.
 
 Two accounts can have the same verified email. They compete for the same invitation
 stream through one conditional append. The account that stores the join binds the
@@ -199,8 +211,9 @@ An earlier event binding another issuer or subject also prevents acceptance.
 Active targets and owner-role invitations remain refused. The inviter must still be an active Owner or Admin by
 member and ownership events; otherwise the response is 403 with
 `{ status: refused, reason: inviter_authority_ended }`.
-The final access check watches only the joining member, inviter and ownership
-streams for at most two seconds. A changed stream or unavailable check returns
+The final access check watches the joining member, inviter and ownership streams
+for at most two seconds. Email-only acceptance also checks the latest member position.
+A changed watched stream or unavailable check returns
 503 and saves no join in that attempt, except a confirmed inviter demotion or
 removal returns 403 `inviter_authority_ended`. Email-only acceptance also reloads
 the invitation after a changed-stream check: a saved join returns its receipt,
@@ -208,9 +221,10 @@ and another account's binding returns 409 `wrong_identity`. An unavailable reche
 Expiry is checked again after the final access check.
 
 There is an accepted small risk between that last check and append: the inviter
-can lose authority in that window. The append is conditional only on the joining
-member stream, so it cannot also reject a change to the inviter or ownership
-stream. The current command keeps that single-stream write contract.
+can lose authority in that window. Email-only acceptance rejects any member-stream
+change at append, including an inviter demotion or removal. An ownership change
+can still happen between the final check and append. Bound acceptance checks only
+the joining member at append. Each command still writes one event to one stream.
 
 For an admission that has not been removed, an exact saved-command retry returns
 its original receipt before checking expiry, email claims or the inviter again. It never restores membership after removal.

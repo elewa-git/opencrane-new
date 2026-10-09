@@ -43,7 +43,7 @@ function resolveMember(_silo: string, _issuer: string, sub: string) {
 function server() {
   const options = { silo: 'acme', store: nats.store, binding, db: pgDb(dbs.queue), now,
     feed: { memberId: resolveMember } };
-  const membership = { silo: 'acme', store: nats.store, now };
+  const membership = { silo: 'acme', store: nats.store, db: pgDb(dbs.queue), now };
   return buildServer(config, { invitationEmail: options, membership });
 }
 async function append(subject: string, type: string, data: unknown, apply = false) {
@@ -63,6 +63,7 @@ async function fixture() {
     const data = { memberId: role, displayName: role, email: `${role}@example.test`, role };
     await append(`member-${role}`, 'member.joined', data, true);
   }
+  await prepareAcceptanceProjection();
   app = server();
 }
 beforeEach(fixture);
@@ -620,9 +621,10 @@ async function createCompetingInvitations() {
 function acceptInvitation(payload: unknown) {
   const identity = { sub: 'person', orgId: 'org-acme', roles: [], email,
     emailVerified: true, authTime: clock.getTime() / 1000, exp: 2000000000 };
-  const headers = { origin: 'https://app.example.test',
+  const headers = { origin: 'https://app.example.test', 'content-type': 'application/json',
     cookie: `${config.cookieName}=${encodeSession(config, identity)}` };
-  const options = { method: 'POST' as const, url: '/members/join', headers, payload };
+  const options = { method: 'POST' as const, url: '/members/join', headers,
+    payload: JSON.stringify(payload) };
   return app.inject(options);
 }
 
@@ -713,3 +715,64 @@ async function ignoresAlreadyProjectedHistory() {
 }
 it('accepts without reading more than ten thousand already projected unrelated member events',
   ignoresAlreadyProjectedHistory);
+
+
+async function checksProjectedIdentityAgainstEvents(kind: string) {
+  const identity = { issuer: config.issuerUrl, sub: 'person' };
+  const data = { memberId: 'existing-person', email: 'old-address@example.test',
+    displayName: 'Person', role: 'member', invitationId: 'existing-invitation', identity };
+  const record = { ...event(randomUUID(), 'member-existing-person', 'member.joined'),
+    silo: 'acme', principal: { kind: 'human', id: 'person' }, data };
+  expect((await nats.store.append({ event: record, expectedSequence: 0 })).status)
+    .toBe('appended');
+  const runner = await prepareAcceptanceProjection();
+  // Keep the candidate in the read table but make its status disagree with its events.
+  await dbs.queue.query("UPDATE members SET status = 'invited' WHERE member_id = $1",
+    ['existing-person']);
+  if (kind === 'removed') {
+    const removal = { ...event(randomUUID(), record.subject, 'member.removed'),
+      silo: 'acme', data: { memberId: 'existing-person', removedBy: 'admin' } };
+    const expectedSequence = await nats.store.head(record.subject);
+    expect((await nats.store.append({ event: removal, expectedSequence })).status)
+      .toBe('appended');
+  }
+  const created = await request('POST');
+  expect(created.statusCode).toBe(200);
+  const payload = { memberId,
+    invitationId: created.json<{ invitationId: string }>().invitationId,
+    commandId: 'accept-with-projected-candidate', displayName: 'Person' };
+  const response = await acceptInvitation(payload);
+  if (kind === 'removed') {
+    expect(response.statusCode).toBe(200);
+    await runner.run(members);
+    const bindings = await dbs.queue.query(
+      `SELECT members.member_id FROM members JOIN member_identities USING (silo, member_id)
+        WHERE members.status = 'joined' AND member_identities.sub = $1`, ['person']);
+    expect(bindings.rows).toEqual([{ member_id: memberId }]);
+  } else {
+    expect(response.json()).toEqual({ status: 'refused', reason: 'already_member' });
+    expect(await records()).toHaveLength(1);
+  }
+}
+it.each(['active', 'removed'])(
+  'checks a projected identity from another email against current events (%s)',
+  checksProjectedIdentityAgainstEvents);
+
+async function refusesIncompleteUnprojectedHistory() {
+  const created = await request('POST');
+  expect(created.statusCode).toBe(200);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* incompleteHistory(...args: Parameters<typeof read>) {
+    if (args[0] === 'member-*') return;
+    yield* read(...args);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(incompleteHistory);
+  const payload = { memberId,
+    invitationId: created.json<{ invitationId: string }>().invitationId,
+    commandId: 'accept-with-incomplete-history', displayName: 'Person' };
+  const response = await acceptInvitation(payload);
+  expect(response.statusCode).toBe(503);
+  expect(await records()).toHaveLength(1);
+}
+it('refuses an incomplete read of member events after the projection checkpoint',
+  refusesIncompleteUnprojectedHistory);

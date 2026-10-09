@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { legacyMemberRole } from '@opencrane/events';
 import { history } from '@opencrane/models';
+import type { Query } from '@opencrane/projections';
 
 const identityFields = z.object({ issuer: z.string(), sub: z.string() });
 const fields = z.object({
@@ -97,14 +98,94 @@ export async function deriveAdmission(store: EventStore, silo: string, issuer: s
   return { status: 'admission_limit' as const };
 }
 
-export async function hasActiveIdentity(store: Pick<EventStore, 'readStream'>, silo: string,
-  issuer: string, subject: string, now: Date): Promise<boolean> {
-  const streams = await memberStreams(store, silo, performance.now() + 10_000);
-  for (const rows of streams.values()) {
-    const state = admission(rows, issuer, subject, now);
-    if (state.bound && state.membership === 'joined') {
-      return true;
+interface IdentityCandidate extends Record<string, unknown> {
+  sequence: string | number;
+  member_id: string | null;
+}
+
+type IdentityStore = Pick<EventStore, 'readStream' | 'head'>;
+
+async function projectedIdentity(db: Query, silo: string, issuer: string, subject: string) {
+  // Read the ids and checkpoint together so a rebuild cannot mix two versions of the table.
+  const result = await db.query<IdentityCandidate>(
+    `SELECT checkpoint.sequence, candidate.member_id
+      FROM projection_checkpoints AS checkpoint
+      LEFT JOIN (
+        SELECT members.member_id FROM members
+        JOIN member_identities AS identity USING (silo, member_id)
+        WHERE members.silo = $1 AND identity.issuer = $2 AND identity.sub = $3
+      ) AS candidate ON true
+      WHERE checkpoint.name = 'members' LIMIT 101`, [silo, issuer, subject]);
+  const sequence = Number(result.rows[0]?.sequence);
+  if (!Number.isSafeInteger(sequence) || sequence < 0 || result.rows.length > 100) {
+    throw new Error('Identity projection unavailable');
+  }
+  const candidates = new Set<string>();
+  for (const row of result.rows) {
+    if (row.member_id !== null) {
+      candidates.add(`member-${row.member_id}`);
     }
   }
-  return false;
+  return { sequence, candidates };
+}
+
+async function includeUnprojectedIdentities(store: IdentityStore, silo: string, issuer: string,
+  subject: string, sequence: number, memberHead: number, candidates: Set<string>,
+  deadline: number) {
+  if (sequence >= memberHead) return;
+  let read = 0;
+  let lastSequence = sequence;
+  // Read only the unapplied events. A delayed projection must not hide a recent join.
+  for await (const row of store.readStream('member-*', sequence + 1, deadline)) {
+    if (row.sequence > memberHead) break;
+    read += 1;
+    if (row.event.silo !== silo || read > 10_000) {
+      throw new Error('Identity history unavailable');
+    }
+    lastSequence = row.sequence;
+    const data = fields.parse(row.event.data);
+    const identity = data.invitedIdentity ?? data.identity;
+    if (identity?.issuer === issuer && identity.sub === subject) {
+      candidates.add(row.event.subject);
+    }
+    if (candidates.size > 100) {
+      throw new Error('Too many matching members');
+    }
+  }
+  if (lastSequence !== memberHead) {
+    throw new Error('Identity history incomplete');
+  }
+}
+
+async function identityHistory(store: IdentityStore, memberSubject: string, silo: string,
+  memberHead: number, deadline: number) {
+  const rows: StoredEvent[] = [];
+  for await (const row of store.readStream(memberSubject, 1, deadline)) {
+    if (row.sequence > memberHead) break;
+    if (row.event.silo !== silo || row.event.subject !== memberSubject || rows.length >= 10_000) {
+      throw new Error('Identity history unavailable');
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+export async function readActiveIdentity(store: IdentityStore, db: Query, silo: string,
+  issuer: string, subject: string, now: Date) {
+  const deadline = performance.now() + 10_000;
+  const memberHead = await store.head('member-*', deadline);
+  const projected = await projectedIdentity(db, silo, issuer, subject);
+  await includeUnprojectedIdentities(store, silo, issuer, subject, projected.sequence,
+    memberHead, projected.candidates, deadline);
+  for (const candidate of projected.candidates) {
+    const rows = await identityHistory(store, candidate, silo, memberHead, deadline);
+    const state = admission(rows, issuer, subject, now);
+    if (state.conflicting && state.bound) {
+      throw new Error('Identity history mismatch');
+    }
+    if (state.bound && state.membership === 'joined') {
+      return { active: true, memberSequence: memberHead };
+    }
+  }
+  return { active: false, memberSequence: memberHead };
 }

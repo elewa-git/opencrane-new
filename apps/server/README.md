@@ -15,7 +15,7 @@ flowchart LR
   server -->|records changes, model grants, chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, chat rows, facts and source messages, model access and computer state| postgres
+  server -->|reads members and invitation accounts, chat rows, memory sources, models and computers| postgres
   server -->|sends turns, tool lists and approval outcomes; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -91,7 +91,9 @@ use it to refuse calls if the tool changes to Ask during the turn.
    is confirmed when they accept; the server does not look them up in Zitadel.
    An admin can save or renew an email invitation and recover its saved result.
    The server finds matching emails in its member table and checks their events.
-   Acceptance records the signed-in account and refuses an account already active in the silo.
+   Acceptance finds account records in the member table and checks their events.
+   It reads newer events too, so delayed background work cannot hide an active account.
+   It records the signed-in account and keeps concurrent invitations from admitting it twice.
 4. **A person chats with an assistant.** The server sends the turn to that person's
    computer and passes the assistant's progress back to the browser as it arrives. The
   person can stop the turn. A personal turn may include a short list of reviewed

@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { Pool } from 'pg';
 import type { FastifyInstance } from 'fastify';
+import { databases } from '@opencrane/authz/testing';
 import { encodeSession, type SessionData } from '@opencrane/auth';
 import { connectEventStore, type StoredEvent } from '@opencrane/event-store';
 import { event, natsFixture } from '@opencrane/event-store/testing';
@@ -21,11 +22,28 @@ const session: SessionData = {
 const input = { memberId: 'alice', invitationId: 'invite-alice', commandId: 'join-alice', displayName: 'Alice' };
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let app: FastifyInstance;
+let dbs: Awaited<ReturnType<typeof databases>>;
+
+async function openAcceptanceDatabase() {
+  dbs = await databases();
+}
+async function closeAcceptanceDatabase() {
+  await dbs?.close();
+}
+beforeAll(openAcceptanceDatabase, 120_000);
+afterAll(closeAcceptanceDatabase);
 
 beforeEach(async () => {
   clock = new Date('2026-10-01T12:00:00Z');
   nats = await natsFixture();
   await seedInviter();
+  const db = pgDb(dbs.queue);
+  await members.drop(db);
+  const runner = new ProjectionRunner(db, nats.reader, createLogger('test'));
+  await runner.initialise(members);
+  await db.query("UPDATE projection_checkpoints SET sequence = 0 WHERE name = 'members'");
+  await db.query("DELETE FROM projection_events WHERE projection = 'members'");
+  await runner.run(members);
   app = server(nats.store);
 });
 afterEach(async () => {
@@ -34,7 +52,7 @@ afterEach(async () => {
 });
 
 function server(store: JoinStore) {
-  return buildServer(config, { membership: { silo: 'acme', store, now: () => clock } });
+  return buildServer(config, { membership: { silo: 'acme', store, db: pgDb(dbs.queue), now: () => clock } });
 }
 function accept(body: unknown = input, identity: SessionData = session) {
   return app.inject({ method: 'POST', url: '/members/join', payload: JSON.stringify(body), headers: {
@@ -137,7 +155,7 @@ it.skipIf(!process.env['PG_TEST_URL'])('accepts through real NATS to PostgreSQL 
     expect(response.json<JoinResult>()).toEqual({ status: 'joined', memberId: 'alice', sequence: 3 });
     expect(append).toHaveBeenCalledTimes(1);
     expect(append.mock.calls[0]?.[0].expectedSequence).toBe(2);
-    // The command has no database handle; the row changes only when the listener runs.
+    // Leave writes to the background worker; acceptance only reads the database.
     expect((await pool.query('SELECT status FROM members WHERE member_id = \'alice\'')).rows).toEqual([{ status: 'invited' }]);
     await runner.run(members);
     const expected = [{ silo: 'acme', member_id: 'alice', email: 'alice@example.test',
@@ -702,7 +720,7 @@ async function refusesActiveIdentity(kind: string) {
   expect(await nats.store.head()).toBe(before);
 }
 it.each(['joined', 'bound', 'bootstrap', 'other-issuer', 'other-subject', 'departed'])(
-  'checks current issuer and subject across the silo (%s) without any read table',
+  'checks current issuer and subject across the silo (%s) while the read table is delayed',
   refusesActiveIdentity);
 
 const emailInvitationRefusals = [
