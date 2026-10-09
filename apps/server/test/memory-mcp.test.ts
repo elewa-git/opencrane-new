@@ -348,6 +348,21 @@ it('refuses changed MCP policy at both the gateway and backend', async function 
   await mode(setup, 'allow');
 });
 
+async function refusesMissingPermission(granteeKind: string) {
+  const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+  const fields = { resourceType: 'memory_read', resourceId: scopeId,
+    granteeKind, granteeId, revokedBy: 'alice' };
+  const revoked = envelope('test', grantStream('memory_read', scopeId), 'grant.revoked', fields);
+  await setup.auth.handler.handle(revoked, setup.db);
+  try {
+    await assertRecallRefused(setup, app);
+  } finally {
+    await grantMemory(setup, granteeKind, granteeId, false);
+  }
+}
+it.each(['member', 'assistant'])('requires OpenFGA memory permission for the %s too',
+  refusesMissingPermission);
+
 const wrongIdentities = [
   { silo: 'other' }, { computer: 'other' }, { generation: 2 }, { requester: 'bob' },
   { conversation: 'other' }, { assistant: 'other' }, { turn: 'missing' },

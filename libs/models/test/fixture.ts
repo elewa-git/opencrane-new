@@ -62,7 +62,10 @@ export async function waitForModelGrants(auth: ReturnType<typeof memberAuthorisa
     auth.use('person', memberId, 'model', model.id), auth.use('assistant', assistantId, 'model', model.id),
   ]))).every(result => result.allowed));
 }
-export async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel = 'gpt-6-luna', team = false, grants: 'manual' | 'reactions' | 'legacy' = 'manual', teamPayer: string | null = 'sales', executionMode?: 'restricted' | 'memory_free') {
+export async function fixture(daily = 2000, monthly = 20000, real = false,
+  allowedModel = 'gpt-6-luna', team = false,
+  grants: 'manual' | 'reactions' | 'legacy' = 'manual', teamPayer: string | null = 'sales',
+  executionMode?: 'restricted' | 'memory_free') {
   const directory = await mkdtemp(`${tmpdir()}/oc-models-`);
   const dbs = await databases(), nats = await natsFixture();
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });

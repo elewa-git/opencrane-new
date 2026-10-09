@@ -59,7 +59,7 @@ const restrictions = [
   { field: 'bodyDigest', value: 'b'.repeat(64) },
   { field: 'contentAccess', value: 'shared_only' },
 ];
-async function refusesRestriction({ field, value }: (typeof restrictions)[number]) {
+async function refusesRestriction({ field, value }: { field: string; value: unknown }) {
   const payload = { ...timedClaims(), [field]: value };
   const token = await sign(payload);
   await expect(verifyMemoryContext(token, identity, parsed)).rejects.toThrow();
