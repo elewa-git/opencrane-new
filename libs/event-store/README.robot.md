@@ -31,7 +31,10 @@ missing file paths fail closed and credentials in URLs are rejected.
 Envelope subjects retain the catalogue's `member-alice` format. The adapter
 maps the first hyphen to `ev.member.alice`; ids may contain further hyphens,
 but no dots, whitespace or NATS wildcards. Event types must use their
-registered stream prefix. `commandId` and `principal` are required for
+registered stream prefix. Conversation and participant event data must name the same
+conversation as the subject. New group creations allow at most 97 people, including
+the creator. New participant ids follow the member-id format; stored events keep
+the earlier parsing rules. `commandId` and `principal` are required for
 appends, including an explicit system principal for system commands.
 New `memory.written` appends require version 1 and a scope id equal to SHA-256
 of JSON `[silo, scopeKind, ownerId]`. A mismatched owner, kind or silo is rejected

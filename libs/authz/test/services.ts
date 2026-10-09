@@ -77,7 +77,6 @@ export async function openfga(postgres?: string) {
     "127.0.0.1::8080",
     image,
     "run",
-    "--max-tuples-per-write=103",
     ...database,
     "--http-addr",
     "0.0.0.0:8080",

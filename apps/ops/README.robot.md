@@ -2,7 +2,8 @@
 
 For people, read [README.md](README.md) first.
 
-`@opencrane/ops` rebuilds the `members`, `groups`, `providers`, `model-access`, `mcp-catalogue`, `computers`, `budgets`, `audit` and `memory` PostgreSQL
+`@opencrane/ops` rebuilds the `members`, `groups`, `providers`, `model-access`,
+`mcp-catalogue`, `computers`, `budgets`, `audit`, `conversations` and `memory` PostgreSQL
 projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. The replay entrypoint never publishes events or runs reactions. Run it from the
 repository root on Node 22.
@@ -20,6 +21,7 @@ npm run replay -- model-access --dry-run
 npm run replay -- computers --dry-run
 npm run replay -- budgets --dry-run
 npm run replay -- audit --dry-run
+npm run replay -- conversations --dry-run
 npm run replay -- memory --dry-run
 npm run replay -- openfga --dry-run
 ```
@@ -79,6 +81,26 @@ while a required read table is behind, routes return HTTP 503 with
 and logs the failure; restore the directory and deletion markers before restarting it.
 `apps/server/test/memory-worker.test.ts` starts the real worker with disposable NATS,
 PostgreSQL and OpenFGA, and checks fresh empty reads and missing configuration.
+
+## Rebuild conversations offline
+
+Stop conversation readers and workers, then run:
+
+```sh
+npm run replay -- conversations --confirm-conversations-stopped
+```
+
+Set `DATABASE_URL` and the projection-reader NATS settings above. The command takes
+the `conversations` advisory lock and rebuilds the feed, metadata and participant
+intervals through a fixed event position. It resets processed event ids and the
+checkpoint and increases the generation. The normal worker refuses to start when
+saved creations exist but the new metadata or interval tables are empty; it names
+this command so an upgrade cannot silently miss old conversations.
+
+Keep readers stopped until replay succeeds. A failure may leave only the successfully
+rebuilt part; rerun after fixing it. Reapply any separately configured table grants
+before restarting readers. `--verify` is refused; `--dry-run` only checks event history.
+Replay never appends events or runs reactions.
 
 ## Rebuild memory offline
 

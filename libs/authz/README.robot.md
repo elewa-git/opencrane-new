@@ -120,5 +120,6 @@ The server still refuses group mode. Creation and participant IAM jobs share `co
 The [queue upgrade procedure](../handlers/README.robot.md#conversation-job-keys)
 keeps old and new jobs from running under different keys.
 
-OpenFGA needs `--max-tuples-per-write=103`: 100 participants plus creator, silo and
-event receipt commit together. The dev stack and fixtures set this limit.
+New group creations have at most 97 people including the creator. The person tuples,
+creator, silo and event receipt fit OpenFGA's default 100-tuple atomic write limit.
+The dev stack and fixtures use that default.

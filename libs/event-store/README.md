@@ -49,6 +49,9 @@ flowchart LR
 - Check that the NATS event stream keeps its history and cannot be deleted.
 - Require encrypted NATS connections and the right credentials for each role.
 
+Conversation writes check that the saved conversation id matches the subject.
+New group chats are limited to 97 people so their permission update fits in one write.
+
 ## Processes it handles
 
 1. **The server records a change.** It sends the new event and the number of the

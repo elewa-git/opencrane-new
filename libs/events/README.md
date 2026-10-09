@@ -54,6 +54,9 @@ Older events without that choice still parse.
 Group chat records name each participant explicitly. Participant changes use a
 separate event stream so ordinary messages do not change access.
 
+New group chats record at most 97 people, including their creator. Older saved
+events keep their original reading rules.
+
 ## Processes it handles
 
 1. **The event store checks an event before saving it.** It passes the event to

@@ -589,5 +589,5 @@ The check adds no provider write, does not repair the setting and does not touch
 external users or other organisations. Tests use an isolated provider fixture;
 they verify that a refusal leaves provider state unchanged.
 
-OpenFGA accepts 103 tuples per atomic write so a 100-person chat audience, its
-creator, silo and event receipt can be saved together.
+OpenFGA uses its default limit of 100 tuples per atomic write. A new group chat has
+at most 97 people, leaving space for its creator, silo and event receipt.

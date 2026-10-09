@@ -1,18 +1,14 @@
 import { conversationCreatedDataSchema, conversationEventId, decisionRecordedDataSchema,
   getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
-import type { Projection } from './runner.ts';
-import type { Query } from './db.ts';
+import { ProjectionRunner, type EventSource, type Projection } from './runner.ts';
+import type { Logger } from '@opencrane/observability';
+import type { Db, Query } from './db.ts';
 
 export const conversations: Projection = {
   name: 'conversations',
   async create(db) {
-    await db.query(`CREATE TABLE IF NOT EXISTS conversation_feed (
-      silo TEXT NOT NULL, conversation_id TEXT NOT NULL, position BIGINT NOT NULL,
-      event_id TEXT NOT NULL, type TEXT NOT NULL, data JSONB NOT NULL, time TEXT NOT NULL,
-      PRIMARY KEY (silo, conversation_id, position))`);
-    await createParticipationTables(db);
-    await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_silo_type
-      ON conversation_feed (silo, type)`);
+    await createConversationTables(db);
+    await refuseMissingParticipation(db);
   },
   async drop(db) {
     await db.query('DROP TABLE IF EXISTS conversation_participants, conversations, conversation_feed');
@@ -28,6 +24,45 @@ export const conversations: Projection = {
     await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
   },
 };
+
+async function createConversationTables(db: Query): Promise<void> {
+  await db.query(`CREATE TABLE IF NOT EXISTS conversation_feed (
+    silo TEXT NOT NULL, conversation_id TEXT NOT NULL, position BIGINT NOT NULL,
+    event_id TEXT NOT NULL, type TEXT NOT NULL, data JSONB NOT NULL, time TEXT NOT NULL,
+    PRIMARY KEY (silo, conversation_id, position))`);
+  await createParticipationTables(db);
+  await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_silo_type
+    ON conversation_feed (silo, type)`);
+}
+
+async function refuseMissingParticipation(db: Query): Promise<void> {
+  const result = await db.query<{ has_creations: boolean; has_conversations: boolean;
+    has_participants: boolean }>(`SELECT
+      EXISTS (SELECT 1 FROM conversation_feed WHERE type = 'conversation.created') AS has_creations,
+      EXISTS (SELECT 1 FROM conversations) AS has_conversations,
+      EXISTS (SELECT 1 FROM conversation_participants) AS has_participants`);
+  const state = result.rows[0];
+  if (state?.has_creations && (!state.has_conversations || !state.has_participants)) {
+    throw new Error('Conversation tables need rebuilding. Stop conversation readers and workers, '
+      + 'then run npm run replay -- conversations --confirm-conversations-stopped');
+  }
+}
+
+/** Stop readers and workers before replacing the feed and participation tables. */
+export async function rebuildConversationsProjection(db: Db, source: EventSource, logger: Logger) {
+  if (!db.lock) {
+    throw new Error('Conversations replay requires projection locking');
+  }
+  // Allow replay to initialise empty upgrade tables that the normal worker must refuse.
+  const replayProjection: Projection = { ...conversations, create: createConversationTables };
+  async function rebuild(locked: Db): Promise<number> {
+    const runner = new ProjectionRunner(locked, source, logger);
+    await runner.initialise(replayProjection);
+    await runner.rebuild(replayProjection);
+    return runner.checkpoint(replayProjection);
+  }
+  return db.lock(conversations.name, rebuild);
+}
 
 function conversationFeedEntry(event: EventEnvelope) {
   if (event.type === 'decision.recorded') {
@@ -193,7 +228,7 @@ async function foldParticipant(db: Query, event: EventEnvelope,
   }
   const active = current.rows.some(matchesParticipant);
   if (event.type === 'participant.added' && !active) {
-    if (current.rows.length >= 100) throw new Error('Conversation participant limit');
+    if (current.rows.length >= 97) throw new Error('Conversation participant limit');
     await startParticipant(db, event, conversationId, participantId, position);
   }
   if (event.type === 'participant.removed' && active) {

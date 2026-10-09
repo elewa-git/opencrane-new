@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import {
   getEventDefinition,
+  conversationEventId,
+  chatIdSchema,
+  groupConversationCommandSchema,
   memoryWrittenIdentity,
   memoryWrittenEventSchema,
   parseEventByType,
@@ -60,7 +63,7 @@ export function validateCommand(
     return undefined;
   }
   const event = parsed.event;
-  if (!validCurrentMemoryWrite(event)) {
+  if (!validConversationWrite(event) || !validCurrentMemoryWrite(event)) {
     return undefined;
   }
   if (!validMigrationFence(command, event)) {
@@ -79,6 +82,37 @@ export function validateCommand(
   return event.subject.startsWith(`${getEventDefinition(event.type)?.stream}-`)
     ? event
     : undefined;
+}
+
+function validConversationWrite(event: EventEnvelope): boolean {
+  const stream = getEventDefinition(event.type)?.stream;
+  if (stream !== 'conversation' && stream !== 'participation') {
+    return true;
+  }
+  try {
+    conversationEventId(event);
+  } catch {
+    // Refuse inconsistent ids before a saved event can block replay or job routing.
+    return false;
+  }
+  if (typeof event.data !== 'object' || event.data === null) {
+    return false;
+  }
+  if (event.type === 'conversation.created' && Reflect.get(event.data, 'mode') === 'group') {
+    return groupConversationCommandSchema.safeParse(event.data).success;
+  }
+  if (stream !== 'participation') {
+    return true;
+  }
+  const actorField = event.type === 'participant.added' ? 'addedBy' : 'removedBy';
+  const fields = ['conversationId', 'participantId', actorField];
+  for (const field of fields) {
+    const id: unknown = Reflect.get(event.data, field);
+    if (!chatIdSchema.safeParse(id).success) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function validExpectedSubject(command: AppendCommand, event: EventEnvelope): boolean {

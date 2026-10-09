@@ -12,6 +12,7 @@ import {
   connectProjectionDb,
   readEvents,
   rebuildAuditProjection,
+  rebuildConversationsProjection,
   rebuildMemberProjection,
   rebuildGroupProjection,
   rebuildProviderProjection,
@@ -27,14 +28,16 @@ import {
 
 const usage =
   "Usage: npm run replay -- " +
-  "<members|groups|providers|model-access|mcp-catalogue|computers|budgets|audit|memory|openfga> " +
+  "<members|groups|providers|model-access|mcp-catalogue|computers|budgets|audit|" +
+  "conversations|memory|openfga> " +
   "[--dry-run] [--verify] [--confirm-openfga-stopped] [--confirm-memory-stopped] " +
-  "[--list-stores | --delete-store <id>]";
+  "[--confirm-conversations-stopped] [--list-stores | --delete-store <id>]";
 const replayOptions = {
   "dry-run": { type: "boolean", default: false },
   verify: { type: "boolean", default: false },
   "confirm-openfga-stopped": { type: "boolean", default: false },
   "confirm-memory-stopped": { type: "boolean", default: false },
+  "confirm-conversations-stopped": { type: "boolean", default: false },
   "list-stores": { type: "boolean", default: false },
   "delete-store": { type: "string" },
 } as const;
@@ -141,6 +144,21 @@ function validateMemoryReplay(
   }
 }
 
+function validateConversationsReplay(
+  projection: string, dryRun: boolean, stopped: boolean, verify: boolean,
+): void {
+  if (projection !== 'conversations' || dryRun) {
+    return;
+  }
+  if (!stopped) {
+    throw new Error('Conversations replay requires readers and workers to stop; '
+      + 'pass --confirm-conversations-stopped');
+  }
+  if (verify) {
+    throw new Error('Conversations replay is offline and does not support --verify');
+  }
+}
+
 async function replayMemory(db: Db, source: EventSource, env: NodeJS.ProcessEnv): Promise<number> {
   const keys = memoryKeys(required(env, 'MEMORY_KEY_DIRECTORY'));
   const custody = { decrypt: keys.decrypt };
@@ -171,6 +189,12 @@ async function replayPostgres(
       console.log(`PASS: memory rebuilt through event ${sequence}.`);
       return;
     }
+    if (projection === 'conversations') {
+      const logger = createLogger('replay-conversations');
+      const sequence = await rebuildConversationsProjection(database.db, source, logger);
+      console.log(`PASS: conversations rebuilt through event ${sequence}.`);
+      return;
+    }
     const rebuild = postgresRebuilds.get(projection);
     if (!rebuild) {
       throw new Error(usage);
@@ -198,25 +222,24 @@ export async function replay(
     options: replayOptions,
   });
   const projection = parsed.positionals[0];
-  if (!projection || parsed.positionals.length !== 1 || ![...postgresRebuilds.keys(), "memory", "openfga"].includes(projection)) {
+  const projections = [...postgresRebuilds.keys(), 'memory', 'conversations', 'openfga'];
+  if (!projection || parsed.positionals.length !== 1 || !projections.includes(projection)) {
     throw new Error(usage);
   }
   const listStores = parsed.values["list-stores"];
   const deleteStoreId = parsed.values["delete-store"];
   if (storeActionRequested(listStores, deleteStoreId)) {
-    validateStoreAction(
-      projection,
-      listStores,
-      deleteStoreId,
-      parsed.values["dry-run"] ||
-        parsed.values.verify ||
-        parsed.values["confirm-openfga-stopped"] || parsed.values["confirm-memory-stopped"],
-    );
+    const hasReplayOptions = parsed.values['dry-run'] || parsed.values.verify
+      || parsed.values['confirm-openfga-stopped'] || parsed.values['confirm-memory-stopped']
+      || parsed.values['confirm-conversations-stopped'];
+    validateStoreAction(projection, listStores, deleteStoreId, hasReplayOptions);
     await manageOpenFgaStores(listStores, deleteStoreId, env);
     return;
   }
   validateMemoryReplay(projection, parsed.values['dry-run'],
     parsed.values['confirm-memory-stopped'], parsed.values.verify);
+  validateConversationsReplay(projection, parsed.values['dry-run'],
+    parsed.values['confirm-conversations-stopped'], parsed.values.verify);
   const nats = await connectEventStore(env);
   try {
     if (parsed.values["dry-run"]) {

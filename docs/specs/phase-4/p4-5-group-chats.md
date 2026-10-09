@@ -74,15 +74,26 @@ registry stream ownership and protocol together. No new event type is needed her
 | `message.posted` | Existing `conversationId`, server-bound `authorId`, `authorKind: human`, `contentType: text`, `ciphertext`, `keyId`. Refuse execution-mode/assistant/Stop fields for human chats. |
 | `conversation.closed` | Existing `conversationId`, `closedBy`; #88 owns the command. Remains monotonic and never removes read access by itself. |
 
-Recommended bounds: ids use existing 1–200 character chat-id syntax and reserved
-provider prefix rule; 2–100 distinct initial participants including creator;
-at most 100 current participants; text keeps the existing trimmed 1–32,000 character
+Bounds: conversation, group and person ids use the member-id format: 1–200 characters,
+with no dots, whitespace or NATS wildcards (`*` and `>`). For example, `ext:jane` is
+valid. Conversation ids also reject the reserved `provider-` prefix.
+New groups have 2–97 distinct initial participants including the creator, and at most
+97 current participants. Creation writes one tuple per person plus creator, silo and
+event receipt, fitting OpenFGA's default 100-tuple atomic write limit.
+Stored-event parsing still accepts older 100-person creations and the older participant
+id rules, so a new command limit cannot make saved history unreadable.
+Text keeps the existing trimmed 1–32,000 character
 limit. Creation body limit 32 KiB; participant command 4 KiB. Bound names to existing
 directory limits. Oversized group snapshots refuse with guidance to select a subset;
 never silently truncate. Compare sorted ids for retries; order is not identity.
 
 Creation/messages stay on `conversation-<id>`. New participant commands append once
 to `participation-<id>`, a small stream containing access changes only (#216).
+Row 4 supplies `expectedSequence` for that stream on every append. Concurrent edits
+must conflict rather than both admitting a person against the same audience count.
+Row 4 must wait for row 2: `approvals.ts`, `view-access.ts` and `files/commands.ts`
+currently read participation only from `conversation-<id>`. Their shared access reader
+must include the new stream before any participant command is exposed.
 Change the two participant registry entries from `conversation` to `participation`.
 Existing stored participant events on conversation subjects remain readable during
 replay; never append new ones there. Validate exact subject, data id and silo in
@@ -129,6 +140,24 @@ principal, mode, ids and payload. Reused ids with altered data return 409. Persi
 creation retry never refreshes a group snapshot, re-adds someone or reopens a chat.
 Participant commands carry `expectedAccessPosition`; stale edits return 409 and
 require reload, not automatic broadened retries. One click changes one participant.
+
+Existing installations must stop conversation readers and workers, then run
+`npm run replay -- conversations --confirm-conversations-stopped` before restarting.
+The worker refuses to start when the feed already has creations but either new table
+is empty. Offline replay rebuilds the feed, metadata and intervals from the event log;
+it runs no reactions. It increases the generation so readers reload. `--verify` is
+refused for this offline command. A failed replay can leave a rebuilt prefix; keep
+readers stopped and rerun after fixing the failure.
+
+Inconsistent conversation history still stops this projection. When applying an event
+fails, the runner logs its id, subject and failure. The transaction rolls back that
+event and its checkpoint. Unreadable stored events also stop replay.
+Quarantining only that conversation safely needs every reader to check its unavailable
+state. Today's readers use the feed directly and do not have that check; skipping a
+removal could leave them serving content from incomplete access history. Do not hide
+that corruption by advancing the checkpoint. Database failures and missing event-log
+positions must also stop replay. Per-conversation quarantine can be added with the
+shared reader, after every read path refuses a quarantined conversation.
 
 ## 3. Assistant, payer and private context
 
@@ -229,7 +258,7 @@ Origin/session checks, strict protocol parsing and `Cache-Control: no-store`.
 
 New chat group reads are member-facing, bounded to 20 rows by default/50 maximum;
 they do not weaken the administrative `/api/groups` routes. Resolve a full snapshot
-only within the 100-person cap; recheck selected active ids and the reviewed group
+only within the 97-person cap; recheck selected active ids and the reviewed group
 position at create. Changed snapshot returns 409 for another explicit review.
 All current participants can read the current people list; only creator can mutate
 others. A successful leave replies once, then clears the client; later status reads
@@ -257,7 +286,7 @@ is an exception to the usual whole-feature PR rule; #87 closes after the full jo
 | 1 / 500 | Group schemas, participant stream ownership, replayable intervals and IAM tuples/ordering; no new commands. Update catalogue/registry and exact contracts. | Reject mixed modes/duplicate audience; replay creation/legacy/new joins/removal/re-add identically; delayed creation job cannot overwrite removal. |
 | 2 / 550 | Shared bounded participation reader and history/title filtering; sockets, files and live views accept its small access stream. No mutation endpoint yet. | Subscribe between removal append and IAM apply, including blocked content, then refuse within 2 s; late join cannot read pre-join text/metadata; 100,000-message history and streaming activity preserve readers. |
 | 3 / 550 | Member-facing group picker, explicit snapshot creation, group list/send and human dispatch guards. | Active member without assistant creates; stale/foreign snapshot denies; lost creation reply/retry fixes original audience; sends make zero turn/wake/upstream/reservation events. |
-| 4 / 600 | Creator add/remove and self-leave commands, CAS/retry/status, with all revocation paths from #216 exercised together. | Non-creator edit/creator leave denies; concurrent stale edits conflict; removed author cannot send; in-flight delivery/cache results are discarded; retry cannot re-add/reopen. |
+| 4 / 600 | After row 2 updates every access reader, creator add/remove and self-leave commands, CAS/retry/status, with all revocation paths from #216 exercised together. | Non-creator edit/creator leave denies; concurrent stale edits conflict; removed author cannot send; in-flight delivery/cache results are discarded; retry cannot re-add/reopen. |
 | 5 / 500 | Extend existing recipient picker/To line for multiple people and own-group snapshots; THR-06–08 and existing agent picker navigation. | No API append before first send; mode derives correctly; mixed selection refuses; stale snapshot requires review; keyboard/390 px long-chip and empty-picker cases. |
 | 6 / 500 | Reuse direct human transcript/send/status for group list and authors; THR-10–12/16. | Double Enter saves once; lost ack checks same ids; 100-row pages/reconnect have no gaps/duplicates; late HTTP/socket replies after purge stay invisible; no assistant controls. |
 | 7 / 450 | Participant picker and leave/revocation journey; THR-13/16 at both widths. | Creator locked; only permitted actions; stale colleague removed; applying/unknown/status are distinct; phone focus/Back/reduced motion and purge of all protected state. |
@@ -277,7 +306,7 @@ This task ran none of those checks: tests/build/live desktop/phone journeys NOT 
 - Creator leave/departure? Refuse voluntary leave now; no automatic successor.
   Silo departure denies the creator and leaves surviving participants readable and
   able to send, but without participant management. Ownership transfer is later work.
-- Group visibility/cap? Offer only the caller's current groups, with a 100-person
+- Group visibility/cap? Offer only the caller's current groups, with a 97-person
   chat cap. Larger groups require explicit colleague selection, never truncation.
 - Group-only snapshot of two people? Persist group mode when a group was selected;
   two individually selected people means direct. Never change saved mode later.

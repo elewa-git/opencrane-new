@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { EventEnvelope } from './envelope.ts';
 
-export const chatIdSchema = z.string().regex(/^[\w-]{1,200}$/u);
+export const chatIdSchema = z.string().min(1).max(200).regex(/^[^.*>\s]+$/u);
 function isUserConversation(id: string) {
   return !id.startsWith('provider-');
 }
@@ -29,6 +29,14 @@ const groupAudience = groupData.refine(hasGroupAudience,
   'Require distinct participants including the creator');
 export const groupConversationSchema = groupAudience.refine(hasPairedSnapshot,
   'Require both group snapshot fields');
+
+function fitsDefaultTupleWrite(data: { participantIds: string[] }) {
+  // Leave three tuples for the creator, silo and event receipt in OpenFGA's 100-tuple write.
+  return data.participantIds.length <= 97;
+}
+// Keep older 100-person records readable. Restrict only new creation commands.
+export const groupConversationCommandSchema = groupConversationSchema.refine(fitsDefaultTupleWrite,
+  'Group conversations allow at most 97 people including the creator');
 
 /** Match the recorded id exactly. Accept old participant subjects only when reading history. */
 export function conversationEventId(event: EventEnvelope): string {

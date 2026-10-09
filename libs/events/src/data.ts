@@ -1,4 +1,4 @@
-import { chatIdSchema, groupConversationSchema } from './conversation.ts';
+import { groupConversationSchema } from './conversation.ts';
 import { isToolCallText } from './tool-call.ts';
 // Data schemas for every event type in the registry except the four
 // examples in examples.ts. Each is built from what docs/architecture/events.md
@@ -281,11 +281,11 @@ export const conversationCreatedDataSchema = z.union([
 ]);
 
 export const participantAddedDataSchema = z
-  .object({ conversationId: chatIdSchema, participantId: chatIdSchema, addedBy: chatIdSchema })
+  .object({ conversationId: id, participantId: id, addedBy: id })
   .strict();
 
 export const participantRemovedDataSchema = z
-  .object({ conversationId: chatIdSchema, participantId: chatIdSchema, removedBy: chatIdSchema })
+  .object({ conversationId: id, participantId: id, removedBy: id })
   .strict();
 
 export const agentTurnStartedDataSchema = z
