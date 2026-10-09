@@ -198,7 +198,7 @@ async function conversationDesktop(options: ViewAccessOptions, memberId: string,
     options.deadline);
   if (access.created.mode !== 'agent_session') throw new Error('Access changed');
   const closed = await conversationClosed(store, options.db, silo, conversationId,
-    access.joinPosition, options.deadline ?? Infinity);
+    options.deadline ?? Infinity);
   if (closed) throw new Error('Access changed');
   const assistantId = access.created.assistantId;
   async function checkDesktop() {

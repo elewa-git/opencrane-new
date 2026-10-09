@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { toolApprovalRequestedDataSchema, type EventEnvelope } from '@opencrane/events';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
 import { approvalReviewSchema, type ApprovalCard } from '@opencrane/protocol';
 import { envelope, history } from './actor.ts';
@@ -93,7 +93,8 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
 
 export async function readApproval(store: EventStore, silo: string, approvalId: string,
   options: ApprovalReadOptions = {}):
-  Promise<{ request: Request; state: ApprovalCard['state']; sequence: number; requestPosition: number }> {
+  Promise<{ request: Request; state: ApprovalCard['state']; sequence: number;
+    requestPosition: number; conversationPosition: number }> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
   const rows = await history(store, `approval-${approvalId}`, silo, deadline);
@@ -106,9 +107,11 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
     if (event.type === 'approval.cancelled') state = 'cancelled';
   }
   const sequence = rows.at(-1)!.sequence;
+  let conversationPosition = 0;
   if (state === 'requested' || state === 'approved') {
-    const closed = await invalidated(store, silo, request, deadline, options.conversationRows);
-    const terminal = approvalTerminalState(closed, request.expiresAt, now);
+    const checked = await invalidated(store, silo, request, deadline, options.conversationRows);
+    conversationPosition = checked.conversationPosition;
+    const terminal = approvalTerminalState(checked.closed, request.expiresAt, now);
     if (terminal) {
       const result = await store.append({ event: envelope(silo, `approval-${approvalId}`, `approval.${terminal}`, { approvalId }), expectedSequence: sequence });
       if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
@@ -116,7 +119,7 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
       return readApproval(store, silo, approvalId, readOptions);
     }
   }
-  return { request, state, sequence, requestPosition: rows[0]!.sequence };
+  return { request, state, sequence, requestPosition: rows[0]!.sequence, conversationPosition };
 }
 
 function approvalTerminalState(closed: boolean, expiresAt: string, now: Date) {
@@ -156,33 +159,69 @@ async function invalidated(store: EventStore, silo: string, request: Request, de
   }
   const start = rows.findIndex(startsBoundTurn);
   const later = rows.slice(start + 1);
-  if (start < 0 || later.some(invalidatesBoundApproval)) return true;
-  const policy = await readToolPolicy(store, silo, request.serverId, deadline);
-  return !policy.published || policy.sequence !== request.policySequence || policy.connectionId !== request.connectionId;
+  const conversationPosition = rows.at(-1)?.sequence ?? 0;
+  let closed = start < 0 || later.some(invalidatesBoundApproval);
+  if (!closed) closed = await approvalPolicyChanged(store, silo, request, deadline);
+  return { closed, conversationPosition };
 }
 
-/** One conditional append, with no browser-provided binding, arguments or replacement review. */
-export async function decideApproval(store: EventStore, silo: string, approvalId: string, memberId: string,
-  decision: 'approved' | 'rejected', recentAuth: boolean,
-  fresh: FreshAuthority, now = new Date()) {
+async function approvalPolicyChanged(store: EventStore, silo: string, request: Request,
+  deadline: number) {
+  const policy = await readToolPolicy(store, silo, request.serverId, deadline);
+  return !policy.published || policy.sequence !== request.policySequence ||
+    policy.connectionId !== request.connectionId;
+}
+
+async function approvalChangedSinceRead(store: EventStore, silo: string,
+  current: Awaited<ReturnType<typeof readApproval>>, deadline: number) {
+  const request = current.request;
+  const subject = `conversation-${request.conversationId}`;
+  for await (const row of store.readStream(subject, current.conversationPosition + 1, deadline)) {
+    if (row.event.silo !== silo) throw new Error('Wrong silo');
+    if (invalidatesApproval(row.event, request.turnId)) return true;
+  }
+  return approvalPolicyChanged(store, silo, request, deadline);
+}
+
+// Reuse checked command facts and read only later conversation changes during the short check.
+export async function decideApproval(store: EventStore, silo: string, approvalId: string,
+  memberId: string, decision: 'approved' | 'rejected', recentAuth: boolean,
+  fresh: FreshAuthority, current: Awaited<ReturnType<typeof readApproval>>, now = new Date()) {
   const beganAt = performance.now();
-  const readOptions = { now, deadline: fresh.deadline ?? Infinity };
-  const current = await readApproval(store, silo, approvalId, readOptions);
-  if (current.request.requesterId !== memberId) throw new Error('Requester only');
+  if (current.request.approvalId !== approvalId || current.request.requesterId !== memberId) {
+    throw new Error('Requester only');
+  }
   if (current.state !== 'requested') return { status: 'conflict' } as const;
-  // Sensitive approvals marked for step-up need a recent authentication before approval.
-  if (decision === 'approved' && current.request.stepUp && !recentAuth) return { status: 'step_up_required' } as const;
+  if (decision === 'approved' && current.request.stepUp && !recentAuth) {
+    return { status: 'step_up_required' } as const;
+  }
+  const deadline = fresh.deadline ?? Infinity;
+  if (await approvalChangedSinceRead(store, silo, current, deadline)) {
+    return { status: 'conflict' } as const;
+  }
   await fresh();
+  if (await approvalChangedSinceRead(store, silo, current, deadline)) {
+    return { status: 'conflict' } as const;
+  }
   const checkedAt = new Date(now.getTime() + performance.now() - beganAt);
   if (Date.parse(current.request.expiresAt) <= checkedAt.getTime()) {
     const event = envelope(silo, `approval-${approvalId}`, 'approval.expired', { approvalId });
-    const result = await store.append({ event, expectedSequence: current.sequence });
+    const command: AppendCommand = { event, expectedSequence: current.sequence };
+    if (Number.isFinite(deadline)) command.deadline = deadline;
+    const result = await store.append(command);
     if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
     return { status: 'conflict' } as const;
   }
-  return store.append({ event: { ...envelope(silo, `approval-${approvalId}`, 'approval.decided', { approvalId, decidedBy: memberId, decision }),
-    principal: { kind: 'human', id: memberId }, source: 'opencrane-server' }, expectedSequence: current.sequence });
+  const data = { approvalId, decidedBy: memberId, decision };
+  const event = {
+    ...envelope(silo, `approval-${approvalId}`, 'approval.decided', data),
+    principal: { kind: 'human', id: memberId }, source: 'opencrane-server',
+  };
+  const command: AppendCommand = { event, expectedSequence: current.sequence };
+  if (Number.isFinite(deadline)) command.deadline = deadline;
+  return store.append(command);
 }
+
 async function consumeApproval(store: EventStore, silo: string, current: Awaited<ReturnType<typeof readApproval>>, permitId: string, fresh: () => Promise<void>, now: () => Date) {
   if (current.state !== 'approved') return false;
   await fresh(); // Fence first; the single-use append is the last authority acquisition.

@@ -1328,7 +1328,9 @@ async function participationVolume() {
         'message.posted', $2::jsonb, '2026-10-01T00:00:00Z'
       FROM generate_series(1, 100000) AS fixture(position)`,
     [previousHead, JSON.stringify(savedMessage)]);
-    await context.db.query("UPDATE projection_checkpoints SET sequence = $1 WHERE name = 'conversations'",
+    const checkpointSql = "UPDATE projection_checkpoints SET sequence = $1" +
+      " WHERE name = 'conversations'";
+    await context.db.query(checkpointSql,
       [previousHead + 100_000]);
     async function stream() {
       while (!stopped) {
@@ -1384,7 +1386,7 @@ async function refusesCloseBeforeBufferedReport() {
     }, false);
     const response = await context.app.inject({ url: '/api/conversations/agent/files',
       headers: context.headers() });
-    expect(response.statusCode, response.body).toBe(403);
+    expect.soft(response.statusCode, response.body).toBe(403);
     await expect(viewAccess(context.options, 'alice', 'agent')).rejects.toThrow();
   } finally {
     await context.close();
@@ -1395,6 +1397,7 @@ it('refuses files and desktop leases after an unprojected close followed by a re
 
 async function retainsVerifiedLegacyParticipation() {
   const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
     await context.agentSession('agent');
     const legacy = await context.append('conversation-agent', 'participant.added', {
@@ -1419,16 +1422,25 @@ async function retainsVerifiedLegacyParticipation() {
       expect(read).toHaveBeenCalledTimes(1);
       const saved = await context.nats.store.readEvent(read.mock.calls[0]![0]);
       expect(saved.event.id).toBe(legacy.id);
+      client = await openChatSocket(context, 'agent');
+      const started = performance.now();
       await context.append('participation-agent', 'participant.removed', {
         conversationId: 'agent', participantId: 'alice', removedBy: 'bob',
       }, false);
       const response = await context.app.inject({ url: '/api/conversations/agent/messages',
         headers: context.headers() });
       expect(response.statusCode, response.body).toBe(403);
+      function closed() {
+        return client?.socket.readyState === WebSocket.CLOSED;
+      }
+      await until(closed, 1900);
+      expect(performance.now() - started).toBeLessThan(2000);
+      expect(client.closeCode()).toBe(1008);
     } finally {
       read.mockRestore();
     }
   } finally {
+    await client?.close();
     await context.close();
   }
 }

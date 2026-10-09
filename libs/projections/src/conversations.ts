@@ -7,11 +7,14 @@ import type { Db, Query } from './db.ts';
 export const conversations: Projection = {
   name: 'conversations',
   async create(db) {
+    await requireLegacyReplay(db);
     await createConversationTables(db);
     await refuseMissingParticipation(db);
   },
   async drop(db) {
-    await db.query('DROP TABLE IF EXISTS conversation_participants, conversations, conversation_feed');
+    const tables = 'conversation_participants, conversations, conversation_feed, ' +
+      'conversation_legacy_participation';
+    await db.query(`DROP TABLE IF EXISTS ${tables}`);
   },
   async apply(db, event, position) {
     const entry = conversationFeedEntry(event);
@@ -19,11 +22,31 @@ export const conversations: Projection = {
     const { conversationId, data } = entry;
     await validateMode(db, event, conversationId);
     await foldConversation(db, event, conversationId, position);
+    if (event.subject === `conversation-${conversationId}` &&
+        event.type.startsWith('participant.')) {
+      await db.query('INSERT INTO conversation_legacy_participation VALUES ($1,$2,$3,$4)',
+        [event.silo, conversationId, position, event.id]);
+    }
     await db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
       [event.silo, conversationId, position, event.id, event.type, JSON.stringify(data), event.time]);
     await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
   },
 };
+
+async function requireLegacyReplay(db: Query) {
+  const result = await db.query<{ feed: string | null; legacy: string | null }>(
+    `SELECT to_regclass('conversation_feed')::text AS feed,
+      to_regclass('conversation_legacy_participation')::text AS legacy`);
+  const tables = result.rows[0];
+  if (!tables?.feed || tables.legacy) return;
+  const saved = await db.query<{ position: string }>(
+    `SELECT position FROM conversation_feed
+      WHERE type IN ('participant.added', 'participant.removed') LIMIT 1`);
+  if (saved.rows.length) {
+    throw new Error('Conversation tables need rebuilding. Stop conversation readers and workers, '
+      + 'then run npm run replay -- conversations --confirm-conversations-stopped');
+  }
+}
 
 async function createConversationTables(db: Query): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS conversation_feed (
@@ -31,6 +54,9 @@ async function createConversationTables(db: Query): Promise<void> {
     event_id TEXT NOT NULL, type TEXT NOT NULL, data JSONB NOT NULL, time TEXT NOT NULL,
     PRIMARY KEY (silo, conversation_id, position))`);
   await createParticipationTables(db);
+  await db.query(`CREATE TABLE IF NOT EXISTS conversation_legacy_participation (
+    silo TEXT NOT NULL, conversation_id TEXT NOT NULL, position BIGINT NOT NULL,
+    event_id TEXT NOT NULL, PRIMARY KEY (silo, conversation_id, position))`);
   await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_silo_type
     ON conversation_feed (silo, type)`);
   await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_message_event

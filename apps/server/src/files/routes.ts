@@ -247,7 +247,7 @@ async function authorise(options: FileOptions, config: AuthConfig, request: Fast
     if (request.method === 'GET') {
       await readPrivateSession(options, memberId, conversationId);
       const closed = await conversationClosed(options.store, options.db, options.silo,
-        conversationId, joinPosition, performance.now() + 2000);
+        conversationId, performance.now() + 2000);
       if (closed) throw new FileRefusal('conversation_refused');
     }
   } catch (error) {

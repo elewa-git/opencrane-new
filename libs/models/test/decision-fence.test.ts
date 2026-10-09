@@ -544,8 +544,9 @@ async function allowsApprovedToolDuringActivity(injection: Injection) {
     function currentAccess() {
       return Promise.resolve();
     }
+    const current = await readApproval(setup.nats.store, 'test', parsed.approvalId);
     const approved = await decideApproval(setup.nats.store, 'test', parsed.approvalId,
-      'alice', 'approved', true, currentAccess, setup.actor.now());
+      'alice', 'approved', true, currentAccess, current, setup.actor.now());
     expect(approved.status).toBe('appended');
     const race = injectDuringDecision(setup, injection);
     try {

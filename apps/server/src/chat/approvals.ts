@@ -49,30 +49,46 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
   } });
 }
 
-async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOptions, session: SessionData,
-  memberId: string, conversationId: string, joinPosition: number) {
-      const input = z.object({ approvalId: z.string().regex(/^[a-f0-9]{64}$/u), decision: z.enum(['approved', 'rejected']) }).strict().parse(req.body);
-      const readOptions = { deadline: performance.now() + 10_000 };
-      const { request, requestPosition } = await readApproval(
-        options.store, options.silo, input.approvalId, readOptions);
-      if (request.conversationId !== conversationId || request.requesterId !== memberId) return reply.code(403).send({ status: 'refused' });
-      if (requestPosition < joinPosition) return reply.code(403).send({ status: 'refused' });
-      const text = options.keys.decrypt(options.silo, conversationId, request);
-      approvalReviewSchema.parse(JSON.parse(text));
-      if (createHash('sha256').update(text).digest('hex') !== request.reviewDigest) throw new Error('Review unavailable');
-      const accessRequest = { memberId, conversationId, relation: 'post' as const };
-      const fresh = await writeChatAccess(options, accessRequest);
-      const access = await conversationParticipation(options, memberId, conversationId,
-        fresh.deadline, 'post');
-      if (requestPosition < access.joinPosition) {
-        return reply.code(403).send({ status: 'refused' });
-      }
-      fresh.include(`computer-${request.assistantId}`);
-      await currentAuthority(options.store, options.binding, memberId, request.assistantId,
-        conversationId, 'mcp_server', request.serverId, fresh, access.authorityRows);
-      const recent = isRecentStepUp(session, input.approvalId);
-      const result = await decideApproval(options.store, options.silo, input.approvalId, memberId, input.decision, recent, fresh);
-      return reply.code(result.status === 'appended' ? 200 : result.status === 'unavailable' ? 503 : result.status === 'step_up_required' ? 428 : 409).send({ status: result.status });
+async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOptions,
+  session: SessionData, memberId: string, conversationId: string, joinPosition: number) {
+  const inputSchema = z.object({
+    approvalId: z.string().regex(/^[a-f0-9]{64}$/u),
+    decision: z.enum(['approved', 'rejected']),
+  }).strict();
+  const input = inputSchema.parse(req.body);
+  const readOptions = { deadline: performance.now() + 10_000 };
+  const checked = await readApproval(options.store, options.silo, input.approvalId, readOptions);
+  const { request, requestPosition } = checked;
+  if (request.conversationId !== conversationId || request.requesterId !== memberId) {
+    return reply.code(403).send({ status: 'refused' });
+  }
+  if (requestPosition < joinPosition) return reply.code(403).send({ status: 'refused' });
+  const text = options.keys.decrypt(options.silo, conversationId, request);
+  approvalReviewSchema.parse(JSON.parse(text));
+  const reviewDigest = createHash('sha256').update(text).digest('hex');
+  if (reviewDigest !== request.reviewDigest) throw new Error('Review unavailable');
+  const accessRequest = { memberId, conversationId, relation: 'post' as const };
+  const fresh = await writeChatAccess(options, accessRequest);
+  const access = await conversationParticipation(options, memberId, conversationId,
+    fresh.deadline, 'post');
+  if (requestPosition < access.joinPosition) {
+    return reply.code(403).send({ status: 'refused' });
+  }
+  fresh.include(`computer-${request.assistantId}`);
+  await currentAuthority(options.store, options.binding, memberId, request.assistantId,
+    conversationId, 'mcp_server', request.serverId, fresh, access.authorityRows);
+  const recent = isRecentStepUp(session, input.approvalId);
+  const result = await decideApproval(options.store, options.silo, input.approvalId,
+    memberId, input.decision, recent, fresh, checked);
+  const statusCode = approvalDecisionStatus(result.status);
+  return reply.code(statusCode).send({ status: result.status });
+}
+
+function approvalDecisionStatus(status: Awaited<ReturnType<typeof decideApproval>>['status']) {
+  if (status === 'appended') return 200;
+  if (status === 'unavailable') return 503;
+  if (status === 'step_up_required') return 428;
+  return 409;
 }
 
 // D07 requires verified OIDC auth_time within five minutes; #141 tracks the configurable age question.

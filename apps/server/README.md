@@ -15,7 +15,7 @@ flowchart LR
   server -->|records changes, model grants, chat, computer facts and confirmed provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members and invitation accounts, chat rows, memory sources, models and computers| postgres
+  server -->|reads members and invitation accounts, chat rows, old joins, facts and source messages, models and computers| postgres
   server -->|sends turns, tool lists and approval outcomes; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -45,6 +45,8 @@ flowchart LR
 - Records changes as events and reads the current state from PostgreSQL.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
   Checks saved participation changes before returning private content.
+  Checks closing events even while read tables are catching up.
+  Gives late participants only files and screenshots saved since their latest join.
 - Offers a personal assistant only reviewed, free tools that both the person and assistant can use.
 - Returns spending records to current owners and admins. It reads the records first,
   then checks access, so a longer read does not use up the write access time limit.

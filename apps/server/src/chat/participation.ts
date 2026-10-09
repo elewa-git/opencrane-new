@@ -39,25 +39,42 @@ const changesKind: SummaryKind<Changes> = {
   budget: { limit: 8192, size: changeCount },
 };
 
-// Use the rebuilt table to locate old access events, then check the saved records.
-// Old workers must be stopped before replay; new commands cannot use the old subject.
-export async function legacyParticipation(store: Pick<EventStore, 'readEvent'>,
-  db: Query, silo: string, conversationId: string, deadline: number) {
-  const result = await db.query<{ position: string; event_id: string }>(
-    `SELECT position, event_id FROM conversation_feed WHERE silo = $1
-      AND conversation_id = $2 AND type IN ('participant.added', 'participant.removed')
-      ORDER BY position`, [silo, conversationId]);
-  const rows: StoredEvent[] = [];
-  for (const reference of result.rows) {
-    const position = Number(reference.position);
-    const row = await store.readEvent(position, deadline);
-    if (row.event.id !== reference.event_id || row.event.silo !== silo ||
-        conversationEventId(row.event) !== conversationId) {
-      throw new Error('Conversation access history changed');
+// Keep verified old changes separately. New changes belong to the small participation stream.
+const legacyReaders = new WeakMap<object, Pick<EventStore, 'readStream'>>();
+const legacyKind: SummaryKind<Changes> = {
+  ...changesKind, name: 'conversation-legacy-participation',
+};
+
+function legacyReader(store: Pick<EventStore, 'readEvent'>, db: Query) {
+  let reader = legacyReaders.get(store);
+  if (reader) return reader;
+  async function* readStream(subject: string, fromSequence = 1, deadline = Infinity) {
+    const [silo, conversationId] = z.tuple([z.string(), z.string()]).parse(JSON.parse(subject));
+    const result = await db.query<{ position: string; event_id: string }>(
+      `SELECT position, event_id FROM conversation_legacy_participation
+        WHERE silo = $1 AND conversation_id = $2 AND position >= $3 ORDER BY position`,
+      [silo, conversationId, fromSequence]);
+    for (const reference of result.rows) {
+      const row = await store.readEvent(Number(reference.position), deadline);
+      if (row.event.id !== reference.event_id || row.event.silo !== silo ||
+          row.event.subject !== `conversation-${conversationId}` ||
+          conversationEventId(row.event) !== conversationId) {
+        throw new Error('Conversation access history changed');
+      }
+      yield row;
     }
-    if (row.event.subject === `conversation-${conversationId}`) rows.push(row);
   }
-  return rows;
+  reader = { readStream };
+  legacyReaders.set(store, reader);
+  return reader;
+}
+
+// Stop old workers before replay. New commands cannot write to the old subject.
+export function legacyParticipation(store: Pick<EventStore, 'readEvent'>,
+  db: Query, silo: string, conversationId: string, deadline: number) {
+  const reader = legacyReader(store, db);
+  const subject = JSON.stringify([silo, conversationId]);
+  return readStreamSummary(reader, silo, subject, legacyKind, deadline, copyChanges);
 }
 
 async function participationCreation(store: Pick<EventStore, 'readStream'>,
@@ -78,7 +95,8 @@ async function participationCreation(store: Pick<EventStore, 'readStream'>,
   return creation;
 }
 
-function legacyChanges(legacy: StoredEvent[], silo: string, conversationId: string) {
+function legacyChanges(legacy: StoredEvent[] | Changes, silo: string, conversationId: string) {
+  if (legacy instanceof Map) return legacy;
   const changes: Changes = new Map();
   for (const row of legacy) {
     if (!row.event.type.startsWith('participant.')) continue;
@@ -92,7 +110,7 @@ function legacyChanges(legacy: StoredEvent[], silo: string, conversationId: stri
 
 export async function participation(store: Pick<EventStore, 'readStream'>,
   silo: string, conversationId: string, memberId: string,
-  legacy: StoredEvent[] = [], deadline = performance.now() + 2000) {
+  legacy: StoredEvent[] | Changes = [], deadline = performance.now() + 2000) {
   const creation = await participationCreation(store, silo, conversationId, deadline);
   const created = conversationCreatedDataSchema.parse(creation.event.data);
   const joins = new Map<string, StoredEvent>();
@@ -137,23 +155,36 @@ export function participationChanges(store: Pick<EventStore, 'readStream'>,
     changesKind, deadline, copyChanges);
 }
 
-export async function conversationClosed(store: Pick<EventStore, 'head' | 'readEvent'>,
-  db: Query, silo: string, conversationId: string, joinPosition: number, deadline: number) {
-  const result = await db.query<{ position: string; event_id: string }>(
-    `SELECT position, event_id FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
-      AND type = 'conversation.closed' ORDER BY position DESC LIMIT 1`, [silo, conversationId]);
+export async function conversationClosed(store: Pick<EventStore, 'readStream' | 'readEvent'>,
+  db: Query, silo: string, conversationId: string, deadline: number) {
+  // Read the close and worker position together so a replay cannot mix two table versions.
+  const result = await db.query<{ sequence: string; position: string | null;
+    event_id: string | null }>(
+    `SELECT c.sequence, f.position, f.event_id FROM projection_checkpoints c
+      LEFT JOIN conversation_feed f ON f.silo = $1 AND f.conversation_id = $2
+        AND f.type = 'conversation.closed'
+      WHERE c.name = 'conversations' ORDER BY f.position DESC LIMIT 1`,
+    [silo, conversationId]);
   const reference = result.rows[0];
-  let position: number;
-  if (reference) position = Number(reference.position);
-  else position = await store.head(`conversation-${conversationId}`, deadline);
-  if (!position || (!reference && position < joinPosition)) return false;
-  const row = await store.readEvent(position, deadline);
-  if (row.event.silo !== silo || conversationEventId(row.event) !== conversationId) {
-    throw new ParticipationRefused('Conversation refused');
+  if (!reference) throw new Error('Conversation projection unavailable');
+  if (reference.position !== null) {
+    const row = await store.readEvent(Number(reference.position), deadline);
+    if (row.event.silo !== silo || conversationEventId(row.event) !== conversationId ||
+        row.event.id !== reference.event_id || row.event.type !== 'conversation.closed') {
+      throw new Error('Conversation history changed');
+    }
+    return true;
   }
-  if (reference && (row.event.id !== reference.event_id ||
-      row.event.type !== 'conversation.closed')) throw new Error('Conversation history changed');
-  return row.event.type === 'conversation.closed';
+  // Confirm all later records. A buffered report after a close must never hide that close.
+  const fromSequence = Number(reference.sequence) + 1;
+  for await (const row of store.readStream(`conversation-${conversationId}`, fromSequence,
+    deadline)) {
+    if (row.event.silo !== silo || conversationEventId(row.event) !== conversationId) {
+      throw new ParticipationRefused('Conversation refused');
+    }
+    if (row.event.type === 'conversation.closed') return true;
+  }
+  return false;
 }
 
 type Membership = { active: boolean };

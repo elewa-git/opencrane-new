@@ -1179,10 +1179,25 @@ position from NATS. Removal refuses access before OpenFGA applies it; joins need
 applied receipt. Sockets watch member and participation streams, plus the actual team
 for private team sessions. They keep polling during blocked content reads and drain
 full pages before ready. History, titles and saved change status start at the latest join.
-Legacy event positions come from the rebuilt feed and are checked against NATS.
-File reads and desktop checks use indexed records, so their access checks do not scan
-conversation history. File commands load their history before checking participation.
+Legacy event positions come from `conversation_legacy_participation`, which contains
+only old conversation-stream changes. The reader checks each saved record against NATS
+once and retains the latest join or removal per person. Later reads fetch only newer
+legacy references; modern participation never enters that query. Stop readers before
+replay so retained facts cannot outlive replacement tables.
+File reads and desktop checks read the projected close together with the conversation
+worker's position. They confirm a projected close against NATS, or read every later
+conversation record when no close is projected. A buffered report cannot hide a close.
+If that backlog cannot be checked before the read deadline, access is unavailable.
+Approval decisions read history and the encrypted review before the two-second write
+check. They carry the checked approval sequence and conversation position forward,
+then check only later conversation changes and the current tool policy before append.
+The approval append also uses the remaining write deadline. File commands load their history before checking participation.
 The offline upgrade must finish with old workers stopped before readers restart.
 No participant mutation endpoint is available. Real-service regression tests cover
 removal, blocked delivery, re-joins, other access readers and 100,000 messages.
 Fresh-install browser qualification remains NOT RUN.
+
+Personal agent sessions retain screenshot capture for current participants who have a
+desktop grant. A late participant can list and download screenshots saved after their
+latest join. Older previews and downloads are refused, including after projection replay.
+Private team sessions still refuse participant capture.

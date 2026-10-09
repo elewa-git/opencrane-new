@@ -10,7 +10,7 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, visible approvals, provider changes and spending| models["libs/models<br/>AI access and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider changes and spending| models["libs/models<br/>AI access and spending"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
@@ -43,6 +43,7 @@ flowchart LR
   if its event could not be saved.
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.
   Keep approval lists within the caller’s current period of participation.
+  Reuse checked approval facts and read only later chat changes before a decision.
 - Check member or admin access for reads using saved membership and current permissions.
   Let one request reuse checks for the same saved access event.
 - Check that an invitation's sender still has authority before it is accepted.

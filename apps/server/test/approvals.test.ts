@@ -7,7 +7,7 @@ import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { approvalCardsSchema } from '@opencrane/protocol';
 import { auditTrail, readAudit, conversations } from '@opencrane/projections';
-import { history } from '@opencrane/models';
+import { history, readApproval, decideApproval } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
@@ -560,3 +560,37 @@ async function keepsApprovalHistoryOutsideShortCheck() {
 }
 it('carries checked approval facts into the short access check without rereading history',
   keepsApprovalHistoryOutsideShortCheck, 40_000);
+
+async function refusesApprovalChangeDuringFinalCheck(type: string) {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const { cards } = await setup.read();
+    const approvalId = cards[0]!.approvalId;
+    const current = await readApproval(setup.nats.store, 'test', approvalId);
+    async function changeDuringFinalCheck() {
+      if (type === 'message.posted') {
+        const encrypted = setup.keys.encrypt('test', 'conversation', 'Withdraw the request');
+        await setup.append('conversation-conversation', type, {
+          conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+          contentType: 'text', ...encrypted,
+        });
+      } else {
+        await setup.append('conversation-conversation', type, {
+          conversationId: 'conversation', closedBy: 'alice',
+        });
+      }
+    }
+    const result = await decideApproval(setup.nats.store, 'test', approvalId,
+      'alice', 'approved', true, changeDuringFinalCheck, current);
+    expect(result.status).toBe('conflict');
+    const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+    expect(rows).toHaveLength(1);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(['message.posted', 'conversation.closed'])(
+  'refuses an approval when %s arrives during its final access check',
+  refusesApprovalChangeDuringFinalCheck, 40_000);

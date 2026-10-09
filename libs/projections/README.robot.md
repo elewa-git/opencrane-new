@@ -273,7 +273,10 @@ uses the same read-only custody as rebuild.
 ## Conversation participation
 
 The projection builds `conversations` metadata and `conversation_participants`
-intervals. Global NATS sequences supply join and exclusive end positions; each bound
+intervals. `conversation_legacy_participation` keeps positions and event ids only for
+participant events saved on the old conversation subject. It excludes modern
+participation-stream events, so access readers do not point-read modern churn.
+Global NATS sequences supply join and exclusive end positions; each bound
 keeps its event id. Creation starts the initial intervals. Duplicate active joins and
 absent removals leave intervals unchanged; re-addition starts a new interval. Current participants
 have no end position. Named TypeScript functions enforce these rules, the 97-person
@@ -281,9 +284,10 @@ cap for new additions and keep closed conversations closed. SQL stores results.
 Exact current and legacy subjects enter the feed by data id; participant events require creation in the same silo.
 Metadata, intervals, feed and checkpoints commit together. Existing installations
 need an offline conversations rebuild. Startup refuses saved creations with empty
-metadata or participant tables and names the command:
+metadata or participant tables, or a missing legacy-reference table beside saved
+participant changes, and names the command:
 `npm run replay -- conversations --confirm-conversations-stopped`. Stop readers and
-workers before running it. Replay takes the projection lock, replaces all three tables,
+workers before running it. Replay takes the projection lock, replaces all four tables,
 resets event ids and the checkpoint, increases the generation and replays the log.
 A failure may leave a rebuilt prefix; keep readers stopped and rerun. It runs no
 reactions and does not offer `--verify`. The server filters group history using the caller’s latest join position.

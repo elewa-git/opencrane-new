@@ -374,8 +374,9 @@ async function preservesApprovalForWrongThread(field: 'threadId' | 'metadata') {
     function currentAccess() {
       return Promise.resolve();
     }
+    const current = await readApproval(setup.nats.store, 'test', approval.approvalId);
     const approved = await decideApproval(setup.nats.store, 'test', approval.approvalId,
-      'alice', 'approved', true, currentAccess, setup.actor.now());
+      'alice', 'approved', true, currentAccess, current, setup.actor.now());
     expect(approved.status).toBe('appended');
     const body = structuredClone(capture.body);
     if (field === 'threadId') {
@@ -427,7 +428,7 @@ async function bindsHeldApproval(change: string) {
       setup.advance(900_001);
     }
     const approved = await decideApproval(setup.nats.store, 'test', decision.approvalId,
-      'alice', 'approved', true, fresh, setup.actor.now());
+      'alice', 'approved', true, fresh, current, setup.actor.now());
     expect(approved.status).toBe(['timeout', 'decision-race'].includes(change) ? 'conflict' : 'appended');
     if (change === 'decision-race') {
       const rows = await history(setup.nats.store, `approval-${decision.approvalId}`, 'test');
