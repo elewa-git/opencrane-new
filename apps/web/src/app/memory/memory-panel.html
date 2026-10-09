@@ -1,0 +1,81 @@
+<section class="memory" aria-labelledby="memory-title">
+  <h2 id="memory-title" class="sr-only">Saved facts</h2>
+  @if (state() === 'loading') {
+    <p role="status">Loading memory…</p>
+  } @else if (state() === 'access') {
+    <div role="alert" tabindex="-1"><h2>Access changed</h2><p>Your memory is hidden.</p></div>
+  } @else if (state() === 'unavailable') {
+    <div role="status"><h2>Memory is unavailable</h2><p>Try again later.</p></div>
+  } @else {
+    <nav class="scopes" aria-label="Memory scope" (keydown)="scopeKeydown($event)">
+      @for (scope of scopes(); track scope.scopeId) {
+        <button type="button" [class.selected]="selectedScope() === scope.scopeId"
+          [attr.aria-pressed]="selectedScope() === scope.scopeId"
+          (click)="chooseScope(scope.scopeId)">{{ scopeName(scope) }}</button>
+      }
+    </nav>
+    @for (scope of scopes(); track scope.scopeId) {
+      @if (selectedScope() === scope.scopeId) {
+        <p class="audience">{{ scopeAudience(scope) }}</p>
+      }
+    }
+    <label class="search">Search memory
+      <input type="search" [value]="query()" (input)="queryChanged($event)"
+        maxlength="256" autocomplete="off" />
+    </label>
+    <div class="results" aria-live="polite">
+      @if (listState() === 'loading') { <p role="status">Searching memory…</p> }
+      @else if (listState() === 'unavailable') {
+        <p role="alert">Memory could not be loaded. Try changing the search.</p>
+      } @else if (listState() === 'empty') {
+        @if (query()) { <p>No matching facts.</p> }
+        @else { <p>No facts have been saved in this scope.</p> }
+      } @else {
+        <p class="count">{{ facts().length }} facts on this page</p>
+        @for (fact of facts(); track fact.memoryId) {
+          @if ('reason' in fact) {
+            <article class="fact"><span>Fact text is too large to show on this page.</span>
+              <small>The server could not fit its text on this page.</small></article>
+          } @else {
+            <button class="fact" type="button" (click)="openFact(fact, $event)">
+              <span>{{ fact.text }}</span><small>{{ fact.kind === 'preference' ? 'Preference' : 'Fact' }}
+                · {{ fact.pinned ? 'Pinned for initial context; loading is not enabled yet' : 'Not pinned' }}
+              </small>
+            </button>
+          }
+        }
+        @if (nextCursor()) {
+          <button class="next" type="button" (click)="nextPage()">Next page</button>
+        }
+      }
+    </div>
+    @if (selectedFact()) {
+      <aside class="detail" role="dialog" aria-modal="true" aria-labelledby="detail-title"
+        (keydown)="detailKeydown($event)">
+        <button id="memory-detail-back" class="back" type="button"
+          (click)="closeDetail()">‹ Back to memory</button>
+        <h2 id="detail-title">Fact details</h2>
+        @if (detailState() === '') { <p role="status">Loading fact…</p> }
+        @else if (detailState() === 'unavailable') {
+          <p role="alert">Details are unavailable right now.</p>
+        } @else if (detailState() === 'missing') {
+          <p role="status">This fact or its text is no longer available.</p>
+        } @else {
+          <p class="detail-text">{{ selectedFact()?.text }}</p>
+          <h3>Sources</h3>
+          @for (source of sources(); track $index) {
+            @if (source.status === 'available') {
+              @if (source.reference) {
+                <p><a [href]="sourceLink(source.reference.conversationId)">
+                  {{ source.label || 'Open source conversation' }}</a></p>
+              } @else { <p>{{ source.label || 'Source available' }}</p> }
+            } @else if (source.status === 'refused') {
+              <p>Source unavailable</p>
+            } @else { <p>Source could not be checked</p> }
+          }
+          @if (!sources().length) { <p>No source was recorded.</p> }
+        }
+      </aside>
+    }
+  }
+</section>

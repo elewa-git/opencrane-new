@@ -13,6 +13,7 @@ import { CaptureStatus } from './capture-status';
 import { ToolActivityLine } from './tool-activity-line';
 import { RecoveryNotice } from './recovery-notice';
 import { MemoryFreeNotice } from './memory-free-notice';
+import { MemoryPanel } from '../memory/memory-panel';
 import {
   ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, effect, inject, signal,
   viewChild, type OnInit,
@@ -41,7 +42,7 @@ import {
   imports: [
     HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
     SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, CaptureStatus,
-    ToolActivityLine, RecoveryNotice, MemoryFreeNotice,
+    ToolActivityLine, RecoveryNotice, MemoryFreeNotice, MemoryPanel,
     FoldLoader, ChatComposer, FilePreview, LiveView,
     NgTemplateOutlet, ChatIcon, BrandMark,
   ],
@@ -66,7 +67,7 @@ export class Workspace implements OnInit {
   protected readonly organisation = document.querySelector<HTMLMetaElement>('meta[name=opencrane-org]')?.content || 'Your organisation';
   protected readonly initials = computed(() => this.chat.displayName().split(/\s+/).map(word => word[0]).slice(0, 2).join('').toUpperCase());
   protected readonly rail = signal(false);
-  protected readonly panelTab = signal<'files' | 'activity'>('files');
+  protected readonly panelTab = signal<'files' | 'activity' | 'memory'>('files');
   protected readonly approvalWaiting = signal(false);
   protected readonly activity = computed(() => this.chat.turns().flatMap(turn => turn.tools));
   protected readonly desktop = signal(globalThis.innerWidth >= 1100);
