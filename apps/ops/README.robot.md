@@ -106,8 +106,10 @@ Fresh-install and multi-replica live qualification remain outstanding.
 
 The `create-assistant` reaction reads the assistant choice from `member.joined`.
 `personalAssistant: none` skips creation. `provision` and older joins without the
-field retain the existing stable personal assistant id. Bootstrap always retains
-its existing behaviour. Computer claims still follow `assistant.created`.
+field retain the existing stable personal assistant id. The reaction checks the
+member stream first and skips a late join delivery after `member.removed`.
+Bootstrap always retains its existing behaviour. Computer claims still follow
+`assistant.created`.
 `test/assistant-choice.test.ts` uses real NATS and PostgreSQL to check repeats,
 restart and SIGKILL after creation before the delivery can acknowledge completion.
 

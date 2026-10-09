@@ -21,10 +21,13 @@ async function teardown() {
 beforeEach(setup);
 afterEach(teardown);
 
-function joinEvent(personalAssistant?: string): EventEnvelope {
-  const joined = event('join-choice', 'member-alice', 'member.joined');
+function joinEvent(personalAssistant?: string, memberId = 'alice'): EventEnvelope {
+  const joined = event(`join-${memberId}`, `member-${memberId}`, 'member.joined');
   const data = {
-    memberId: 'alice', email: 'alice@example.test', displayName: 'Alice', role: 'member',
+    memberId,
+    email: `${memberId}@example.test`,
+    displayName: memberId,
+    role: 'member',
     personalAssistant,
   };
   return { ...joined, data };
@@ -59,7 +62,11 @@ async function provisionsOnce(choice: typeof provisioningChoices[number]) {
   const assistants = await history(nats.store, 'assistant-*');
   expect(assistants).toHaveLength(1);
   const assistant = assistants[0]!.event;
-  expect(assistant.data).toMatchObject({ ownerId: 'alice', kind: 'personal' });
+  expect(assistant.data).toMatchObject({
+    assistantId: 'personal-18057bf0c3ca2b90868f3f93d42e3b58',
+    ownerId: 'alice',
+    kind: 'personal',
+  });
   await deliver(nats.store, joined);
   await nats.stop();
   await nats.restart();
@@ -76,6 +83,46 @@ async function provisionsOnce(choice: typeof provisioningChoices[number]) {
 }
 it.each(provisioningChoices)('creates one assistant and computer for %s across restart',
   provisionsOnce);
+
+async function createsDifferentAssistantsForDifferentMembers() {
+  const alice = joinEvent('provision');
+  const bob = joinEvent('provision', 'bob');
+  await deliver(nats.store, alice);
+  await deliver(nats.store, bob);
+
+  const assistants = await history(nats.store, 'assistant-*');
+  expect(assistants).toHaveLength(2);
+  expect(assistants.map(({ event: created }) => created.data)).toEqual(expect.arrayContaining([
+    {
+      assistantId: 'personal-18057bf0c3ca2b90868f3f93d42e3b58',
+      ownerId: 'alice',
+      kind: 'personal',
+    },
+    {
+      assistantId: 'personal-1f0846e037591252476bc24f1a4df9f2',
+      ownerId: 'bob',
+      kind: 'personal',
+    },
+  ]));
+}
+it('creates a different personal assistant for each member',
+  createsDifferentAssistantsForDifferentMembers);
+
+async function doesNotProvisionAfterMemberRemoval() {
+  const joined = joinEvent('provision');
+  const removed = event('removed-alice', 'member-alice', 'member.removed');
+  const memberStream = await history(nats.store, 'member-alice');
+  await nats.store.append({
+    expectedSequence: memberStream.at(-1)?.sequence ?? 0,
+    event: removed,
+  });
+
+  await deliver(nats.store, joined);
+
+  expect(await history(nats.store, 'assistant-*')).toHaveLength(0);
+}
+it('does not provision an assistant after the member has been removed',
+  doesNotProvisionAfterMemberRemoval);
 
 async function keepsBootstrapProvisioning() {
   const owner = event('bootstrap-choice', 'member-bootstrap-owner', 'silo.owner_bootstrapped');

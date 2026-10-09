@@ -28,9 +28,11 @@ would exceed the requested 600-line change limit. They are not enabled here.
 
 These tests inspect real saved events. HTTP and reaction tests use disposable
 NATS; reaction tests also use disposable PostgreSQL transactions. The crash test
-kills a separate Node process after assistant creation and before delivery can
-acknowledge completion. A repeated delivery after restart keeps the same event.
-It does not test the full dispatch queue or live computer readiness.
+calls the reaction's `handle()` method directly. It kills a separate Node
+process after assistant creation and before the test can finish the handler
+call. A repeated call after restart keeps the same event. It does not run the
+handler runtime or test its full dispatch queue, and it does not test live
+computer readiness.
 
 ## Checks
 
@@ -48,11 +50,15 @@ The restored code passed all 76 changed tests after the mutations.
 | Changed tests twice and requested server regression files | PASS |
 | Independent review and CI | Pending on the draft PR |
 
-All eight temporary mutations caused assertion failures. They allowed invalid
-invitation/join choices, allowed a bootstrap choice, ignored the invitation choice,
-changed the older-event default, accepted a body override, removed the `none`
-check or changed the stable assistant id. Each original file was restored before
-the next mutation. No mutated code is part of this change.
+Mutation runs caught each of these gaps: invalid invitation and join choices,
+the bootstrap choice, the ignored invitation choice, the older-event default,
+the request body override, the missing `none` check and the changed stable
+assistant id. Three tests did not fail first because the strict schemas already
+refused the bad input: `refusesInvalidChoices`,
+`keepsBootstrapChoiceUnavailable` and `refusesAssistantOverride`. Mutation runs
+backed those tests. The `member.joined` type check in the reaction is covered
+only by accident by `keepsBootstrapProvisioning`. Each original file was
+restored after its mutation. No mutated code is part of this change.
 
 No full root test suite or fleet batch was run. Test, lint and typecheck commands
 use `nice -n 10`.

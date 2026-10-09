@@ -53,13 +53,18 @@ async function append(store: Store, trigger: EventEnvelope, events: StoredEvent[
 
 export function lifecycleHandlers(store: Store) {
   async function createPersonalAssistant(event: EventEnvelope) {
+    const memberId = field(event.data, 'memberId');
     if (event.type === 'member.joined') {
       const joined = memberJoinedDataSchema.parse(event.data);
       if (joined.personalAssistant === 'none') {
         return;
       }
+      const memberEvents = await history(store, event.subject);
+      const latestMemberEvent = memberEvents.at(-1)?.event;
+      if (latestMemberEvent?.type === 'member.removed') {
+        return;
+      }
     }
-    const memberId = field(event.data, 'memberId');
     const assistantId = stable('personal', event.silo, memberId);
     const subject = `assistant-${assistantId}`;
     const events = await history(store, subject);

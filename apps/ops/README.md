@@ -36,6 +36,8 @@ flowchart LR
    program that reacts to each new event. It updates permissions, gives the member model
    access and claims a computer for their assistant when the invitation requested one.
    A join that requests no assistant creates neither an assistant nor its computer.
+   Before creating one, the worker checks the member's events and skips a late
+   join delivery if the member has since been removed.
 3. **A computer sits idle.** After 15 minutes without activity (by default), the worker
    pauses it. When a new message arrives, the server asks for the computer back and the
    worker starts it again. The watcher reads new events as they arrive and only asks
