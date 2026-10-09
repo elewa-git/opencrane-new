@@ -584,3 +584,25 @@ server `bridge-channel.test.ts` and `turn-tools.test.ts`, models `codex-mcp.test
 The offline check uses `codex-mcp-resume.mjs --wire --held-approvals` with the real
 proxy and pinned Codex, Docker networking disabled, and local model/tool fixtures.
 The fresh-install governed chat journey remains NOT RUN here; it belongs to PR 6.
+
+## Held-call check results — 9 October 2026
+
+The [saved check](test/fixtures/codex-0.159.2-held-approvals.json) records the source
+SHA, image digest and results. Pinned Codex waited 310370 ms through the real proxy.
+Approval sent once; denial sent nothing. Another thread finished while both waited.
+Stop released its held call in 41 ms. UID 1001 could neither read the caller file
+nor reach the control socket. Docker networking was disabled. Only local fixtures
+ran; no paid model was called. These checks PASS.
+
+Lint, typecheck, event catalogue (98 events), Knip and changelog checks PASS.
+The changed batch passed twice (149 then 152 tests); final computer checks passed
+twice (66 each). The final expiry cases passed twice through the real gateway.
+Removing each of 25 guards made its test fail in a disposable copy. The actual
+source passed. Independent review completed in two passes; its three race findings
+were fixed. The final expiry path appends directly, avoiding another conversation
+read after the permission check.
+
+Rebase onto main `94f1ca05` changed no file contents. Both the server base and the
+final source kept identical Git tree hashes before and after rebase. No full root
+suite ran; CI remains the gate. The fresh-install chat journey and image publication
+remain NOT RUN. Deploy the updated server before the computer image.
