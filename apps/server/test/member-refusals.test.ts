@@ -17,7 +17,8 @@ const saved = { sequence: 1, event: record };
 function refusalStore(row: StoredEvent, count = 1) {
   async function* readStream() {
     for (let index = 0; index < count; index += 1) {
-      yield { ...row, sequence: index + 1 };
+      const stored = { ...row, sequence: index + 1 };
+      yield await Promise.resolve(stored);
     }
   }
   function head() {
@@ -94,10 +95,11 @@ function refusesUnsafePayload(field: string, value: unknown) {
   const parsed = memberCommandRefusedSchema.safeParse(payload);
   expect(parsed.success).toBe(false);
   if (!parsed.success) {
-    function identifiesField(issue: typeof parsed.error.issues[number]) {
+    const issues = parsed.error.issues;
+    function identifiesField(issue: typeof issues[number]) {
       return issue.path[0] === field || issue.code === 'unrecognized_keys';
     }
-    expect(parsed.error.issues.some(identifiesField)).toBe(true);
+    expect(issues.some(identifiesField)).toBe(true);
   }
 }
 it.each(invalidPayloads)('rejects unsafe refusal field %s (%#)', refusesUnsafePayload);

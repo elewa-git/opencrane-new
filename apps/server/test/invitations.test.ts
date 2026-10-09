@@ -1265,7 +1265,8 @@ function wrongAccountJoin(payload: unknown, sub = 'another-account', orgId = 'or
     emailVerified: true, authTime: clock.getTime() / 1000, exp: 2000000000 };
   const headers = { origin: 'https://app.example.test',
     cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  const options = { method: 'POST' as const, url: '/members/join', headers, payload };
+  const options = { method: 'POST' as const, url: '/members/join', headers,
+    payload: JSON.stringify(payload) };
   return app.inject(options);
 }
 
