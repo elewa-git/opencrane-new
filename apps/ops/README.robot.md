@@ -2,7 +2,7 @@
 
 For people, read [README.md](README.md) first.
 
-`@opencrane/ops` rebuilds the `members`, `groups`, `providers`, `model-access`, `mcp-catalogue`, `computers`, `budgets` and `audit` PostgreSQL
+`@opencrane/ops` rebuilds the `members`, `groups`, `providers`, `model-access`, `mcp-catalogue`, `computers`, `budgets`, `audit` and `memory` PostgreSQL
 projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. The replay entrypoint never publishes events or runs reactions. Run it from the
 repository root on Node 22.
@@ -20,6 +20,7 @@ npm run replay -- model-access --dry-run
 npm run replay -- computers --dry-run
 npm run replay -- budgets --dry-run
 npm run replay -- audit --dry-run
+npm run replay -- memory --dry-run
 npm run replay -- openfga --dry-run
 ```
 
@@ -60,6 +61,27 @@ tables and leaves the live projection and checkpoint untouched.
 Use a PostgreSQL role allowed to create and drop shadow tables, replace the live
 projection contents and take advisory locks. Run only the upgraded projection runner: an
 older writer does not take the lock and is unsafe during this operation.
+
+## Rebuild memory offline
+
+Stop memory readers and runners before this command, and keep them stopped until it succeeds:
+
+```sh
+npm run replay -- memory --confirm-memory-stopped
+```
+
+Set `DATABASE_URL`, the projection-reader NATS settings above and
+`MEMORY_KEY_DIRECTORY`. The key directory must exist with mode 0700 and contain
+its permanent deletion markers. The command replays the complete `EVENTS` stream
+through ProjectionRunner under the `memory` advisory lock. It drops and creates the
+three memory tables, resets their processed ids/checkpoint and increases their
+generation, then commits one event at a time. A failure leaves a rebuilt prefix;
+readers remain stopped and a rerun starts again. This offline command does not
+preserve table grants; reapply any separately configured grants before restarting readers.
+`--verify` is refused. `--dry-run` only checks complete event history; it does not
+check keys or projected content. Replay never provisions/deletes keys or runs reactions.
+The [projection contract](../../libs/projections/README.robot.md#memory-projection)
+lists rows, indexes and focused integration proof. No memory worker or public API is enabled yet.
 
 ## Rebuild OpenFGA offline
 

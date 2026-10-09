@@ -5,7 +5,7 @@
 Build and read rebuildable PostgreSQL tables from events.
 A [read table](../../GLOSSARY.md#read-table-projection) is a copy arranged so
 screens can load data quickly. The package keeps tables for members, groups,
-model providers, conversations, files, computers, tool servers and a history of
+model providers, conversations, files, computers, memory, tool servers and a history of
 who did what. The saved event log
 remains the record of what happened, so these tables can be rebuilt.
 
@@ -27,7 +27,7 @@ flowchart LR
   projections -->|writes tables| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions"]
-  projections -->|stores content keys| keys["Server files<br/>existing private key store"]
+  projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
 ```
 
 ## What it is responsible for
@@ -43,14 +43,15 @@ flowchart LR
   history table while the system runs.
 - Store the per-conversation encryption keys used on the dev stack, so chat text
   is only saved in encrypted form.
+- Build current memory rows and searchable text without copying text into change history.
 - Keep each memory revision key separately, with a permanent marker when it is deleted.
   Refuse a missing store or key, so a storage failure cannot look like deliberate deletion.
 - Send member-change notices after the table update commits.
 - Keep private conversation content out of the event-history table.
 - Avoid outside actions while rebuilding tables.
 
-Memory encryption runs only on the server. Memory read tables and their rebuild command
-are not built yet. Customer deployment and backup recovery still need testing.
+Memory encryption and searchable text stay on the server. The memory rebuild command
+runs with readers and workers stopped. Customer deployment and backup recovery still need testing.
 
 ## Processes it handles
 
@@ -65,7 +66,9 @@ are not built yet. Customer deployment and backup recovery still need testing.
    stay marked as not available yet.
 4. **Memory text is encrypted.** The internal helper uses an existing private key
    directory on the server. An empty deletion marker means the text was forgotten;
-   a missing key means storage failed. The application does not expose memory yet.
+   a missing key means storage failed. Replay reads keys before each database update.
+   It saves current text for search, or marks destroyed content unavailable.
+   The application does not expose memory yet.
 5. **An operator rebuilds a table.** They run `npm run replay -- members`. The
    command reads the whole event log again, builds fresh tables on the side and
    swaps them in. It does not run reactions or make outside calls.

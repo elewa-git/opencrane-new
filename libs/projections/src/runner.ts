@@ -8,6 +8,8 @@ export interface Projection {
   create(db: Query): Promise<void>;
   drop(db: Query): Promise<void>;
   apply(db: Query, event: EventEnvelope, position: number): Promise<void>;
+  /** Read outside dependencies before opening the transaction; return only database work. */
+  prepare?(event: EventEnvelope): Promise<Projection['apply']>;
 }
 export interface EventSource {
   head(): Promise<number>;
@@ -108,6 +110,10 @@ export class ProjectionRunner {
     attempt: number,
   ): Promise<number> {
     const event = stored.event;
+    let applyEvent = projection.apply.bind(projection);
+    if (projection.prepare) {
+      applyEvent = await projection.prepare(event);
+    }
     return runHandler(
       this.logger,
       {
@@ -138,7 +144,7 @@ export class ProjectionRunner {
             [projection.name, event.id],
           );
           if (!seen.rows.length) {
-            await projection.apply(tx, event, stored.sequence);
+            await applyEvent(tx, event, stored.sequence);
             await tx.query("INSERT INTO projection_events VALUES ($1, $2)", [
               projection.name,
               event.id,

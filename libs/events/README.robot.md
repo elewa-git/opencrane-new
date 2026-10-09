@@ -92,7 +92,8 @@ audience or offline mapping is supplied. The other old memory schemas remain.
 Saved memory events must use `parseEventByType`, or `memoryWrittenIdentity` when
 only their ownership fields are needed. `getEventDefinition('memory.written')`
 returns a `dataSchema` for version 1 only. Calling its `dataSchema.parse` on
-unversioned saved data throws; it is not the replay parser.
+unversioned saved data throws; it is not the replay parser. The exported
+`memoryWrittenEventSchema` supplies the typed full-event replay shape, including legacy writes.
 
 Server custody hashes JSON `[silo, scopeKind, ownerId]` with SHA-256 and checks
 the derived id before using any key. Version-1 event parsing checks identity field

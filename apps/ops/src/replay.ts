@@ -18,18 +18,23 @@ import {
   rebuildModelAccessProjection,
   rebuildMcpCatalogueProjection,
   rebuildComputersProjection,
+  memoryProjection,
+  memoryKeys,
+  ProjectionRunner,
+  type Db,
   type EventSource,
 } from "@opencrane/projections";
 
 const usage =
   "Usage: npm run replay -- " +
-  "<members|groups|providers|model-access|mcp-catalogue|computers|budgets|audit|openfga> " +
-  "[--dry-run] [--verify] [--confirm-openfga-stopped] " +
+  "<members|groups|providers|model-access|mcp-catalogue|computers|budgets|audit|memory|openfga> " +
+  "[--dry-run] [--verify] [--confirm-openfga-stopped] [--confirm-memory-stopped] " +
   "[--list-stores | --delete-store <id>]";
 const replayOptions = {
   "dry-run": { type: "boolean", default: false },
   verify: { type: "boolean", default: false },
   "confirm-openfga-stopped": { type: "boolean", default: false },
+  "confirm-memory-stopped": { type: "boolean", default: false },
   "list-stores": { type: "boolean", default: false },
   "delete-store": { type: "string" },
 } as const;
@@ -122,6 +127,66 @@ async function manageOpenFgaStores(
   console.log(`PASS: deleted OpenFGA store ${deleteStoreId}.`);
 }
 
+function validateMemoryReplay(
+  projection: string, dryRun: boolean, stopped: boolean, verify: boolean,
+): void {
+  if (projection !== 'memory' || dryRun) {
+    return;
+  }
+  if (!stopped) {
+    throw new Error('Memory replay requires readers and workers to stop; pass --confirm-memory-stopped');
+  }
+  if (verify) {
+    throw new Error('Memory replay is offline and does not support --verify');
+  }
+}
+
+async function replayMemory(db: Db, source: EventSource, env: NodeJS.ProcessEnv): Promise<number> {
+  const keys = memoryKeys(required(env, 'MEMORY_KEY_DIRECTORY'));
+  const custody = { decrypt: keys.decrypt };
+  const memory = memoryProjection(custody);
+  if (!db.lock) {
+    throw new Error('Memory replay requires projection locking');
+  }
+  async function rebuild(locked: Db) {
+    const runner = new ProjectionRunner(locked, source, createLogger('replay-memory'));
+    await runner.initialise(memory);
+    await runner.rebuild(memory);
+    return runner.checkpoint(memory);
+  }
+  return db.lock(memory.name, rebuild);
+}
+
+function reportDatabaseError(error: Error): void {
+  console.error(`PostgreSQL pool error: ${error.message}`);
+}
+
+async function replayPostgres(
+  projection: string, source: EventSource, env: NodeJS.ProcessEnv, verify: boolean,
+): Promise<void> {
+  const database = connectProjectionDb(required(env, 'DATABASE_URL'), reportDatabaseError);
+  try {
+    if (projection === 'memory') {
+      const sequence = await replayMemory(database.db, source, env);
+      console.log(`PASS: memory rebuilt through event ${sequence}.`);
+      return;
+    }
+    const rebuild = postgresRebuilds.get(projection);
+    if (!rebuild) {
+      throw new Error(usage);
+    }
+    const logger = createLogger(`replay-${projection}`);
+    const options = { verify };
+    const result = await rebuild(database.db, source, logger, options);
+    console.log(
+      `PASS: ${projection} switched atomically at event ${result.sequence}` +
+        (result.verified ? '; rebuilt state matched the live projection.' : '.'),
+    );
+  } finally {
+    await database.close();
+  }
+}
+
 export async function replay(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -133,7 +198,7 @@ export async function replay(
     options: replayOptions,
   });
   const projection = parsed.positionals[0];
-  if (!projection || parsed.positionals.length !== 1 || ![...postgresRebuilds.keys(), "openfga"].includes(projection)) {
+  if (!projection || parsed.positionals.length !== 1 || ![...postgresRebuilds.keys(), "memory", "openfga"].includes(projection)) {
     throw new Error(usage);
   }
   const listStores = parsed.values["list-stores"];
@@ -145,11 +210,13 @@ export async function replay(
       deleteStoreId,
       parsed.values["dry-run"] ||
         parsed.values.verify ||
-        parsed.values["confirm-openfga-stopped"],
+        parsed.values["confirm-openfga-stopped"] || parsed.values["confirm-memory-stopped"],
     );
     await manageOpenFgaStores(listStores, deleteStoreId, env);
     return;
   }
+  validateMemoryReplay(projection, parsed.values['dry-run'],
+    parsed.values['confirm-memory-stopped'], parsed.values.verify);
   const nats = await connectEventStore(env);
   try {
     if (parsed.values["dry-run"]) {
@@ -158,25 +225,7 @@ export async function replay(
       return;
     }
     if (projection !== "openfga") {
-      const database = connectProjectionDb(
-        required(env, "DATABASE_URL"),
-        (error) => console.error(`PostgreSQL pool error: ${error.message}`),
-      );
-      try {
-        const rebuild = postgresRebuilds.get(projection)!;
-        const result = await rebuild(
-          database.db,
-          nats.store,
-          createLogger(`replay-${projection}`),
-          { verify: parsed.values.verify },
-        );
-        console.log(
-          `PASS: ${projection} switched atomically at event ${result.sequence}` +
-            (result.verified ? "; rebuilt state matched the live projection." : "."),
-        );
-      } finally {
-        await database.close();
-      }
+      await replayPostgres(projection, nats.store, env, parsed.values.verify);
       return;
     }
     if (!parsed.values["confirm-openfga-stopped"]) {

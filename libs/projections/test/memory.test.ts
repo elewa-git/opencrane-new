@@ -4,7 +4,7 @@ import { mkdtemp, readdir, rename, rm } from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import type { MemoryIdentity } from '@opencrane/events';
+import type { EventEnvelope, MemoryIdentity } from '@opencrane/events';
 import { memoryKeys, memoryProjection, memoryScopeId, ProjectionRunner } from '../src/index.ts';
 import type { Db, Projection, Query } from '../src/index.ts';
 import { database } from './database.ts';
@@ -26,7 +26,8 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
     storage = await database('pg');
     directory = await mkdtemp('/tmp/memory-projection-');
     keys = memoryKeys(directory);
-    projection = memoryProjection({ decrypt: keys.decrypt });
+    const custody = { decrypt: keys.decrypt };
+    projection = memoryProjection(custody);
     runner = new ProjectionRunner(storage.db, nats.reader, logger);
     positions.clear();
     await runner.initialise(projection);
@@ -38,7 +39,10 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
     await rm(`${directory}-away`, { recursive: true, force: true });
   });
 
-  async function append(memoryId: string, ownerId = 'alice', text = 'Deliveries café 東京') {
+  async function append(
+    memoryId: string, ownerId = 'alice', text = 'Deliveries café 東京',
+    dependsOn: { scopeId: string; memoryId: string; revision: number }[] = [],
+  ) {
     const scopeId = memoryScopeId('test', 'person', ownerId);
     const identity: MemoryIdentity = {
       silo: 'test', scopeId, scopeKind: 'person', ownerId, memoryId, revision: 1,
@@ -47,7 +51,7 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
     const encrypted = keys.encrypt(identity, text);
     const data = {
       schemaVersion: 1, ...identity, kind: 'fact', pinned: false, expiresAt: null,
-      sources: [{ memberId: ownerId, commandId: memoryId }], dependsOn: [], ...encrypted,
+      sources: [{ memberId: ownerId, commandId: memoryId }], dependsOn, ...encrypted,
     };
     // Keep silo in the envelope, as required by the saved event contract.
     const { silo: _silo, ...payload } = data;
@@ -56,7 +60,9 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
     const expectedSequence = positions.get(scopeId) ?? 0;
     const result = await nats.store.append({ event: envelope, expectedSequence });
     expect(result.status).toBe('appended');
-    if (result.status !== 'appended') throw new Error('Fixture append failed');
+    if (result.status !== 'appended') {
+      throw new Error('Fixture append failed');
+    }
     positions.set(scopeId, result.sequence);
     return identity;
   }
@@ -76,11 +82,19 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
     async function rebuild() {
       const first = await append('first');
       await append('foreign', 'bob', 'Private banana');
-      await append('last');
+      const dependencies = [{ scopeId: first.scopeId, memoryId: 'first', revision: 1 }];
+      await append('last', 'alice', 'Deliveries café 東京', dependencies);
       await runner.run(projection);
       const before = await state();
       expect(before.facts).toHaveLength(3);
       expect(before.changes).toHaveLength(3);
+      expect(before.dependencies).toEqual([{ silo: 'test', scope_id: first.scopeId,
+        memory_id: 'last', revision: '1', dependency_id: 'first', dependency_revision: '1' }]);
+      const metadata = await storage.db.query(`SELECT owner_id, revision, kind, pinned,
+        expires_at, sources, content_status FROM memory_facts WHERE memory_id = 'first'`);
+      expect(metadata.rows).toEqual([{ owner_id: 'alice', revision: '1', kind: 'fact',
+        pinned: false, expires_at: null, sources: [{ memberId: 'alice', commandId: 'first' }],
+        content_status: 'available' }]);
       expect(JSON.stringify(before.changes)).not.toContain('ciphertext');
       expect(JSON.stringify(before.changes)).not.toContain('Deliveries');
       const scopeParameters = [first.silo, first.scopeId];
@@ -95,10 +109,13 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
         WHERE silo = $1 AND scope_id = $2 AND search_vector @@ to_tsquery('simple', $3)`,
       [...scopeParameters, 'banana']);
       expect(excluded.rows).toEqual([]);
+      const indexResult = await storage.db.query<{ indexdef: string }>(
+        "SELECT indexdef FROM pg_indexes WHERE indexname = 'memory_facts_search'",
+      );
+      expect(indexResult.rows[0]?.indexdef).toContain('USING gin');
       expect(before.indexes).toEqual(expect.arrayContaining([
         expect.objectContaining({ indexname: 'memory_facts_order' }),
-        expect.objectContaining({ indexname: 'memory_facts_search',
-          indexdef: expect.stringContaining('USING gin') }),
+        expect.objectContaining({ indexname: 'memory_facts_pkey' }),
       ]));
       const keyFiles = await readdir(directory);
       await storage.reopen();
@@ -113,6 +130,10 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
       const output = await execute(process.execPath, confirmedArgs, { env });
       expect(output.stdout).toContain('PASS: memory rebuilt through event 3');
       expect(await state()).toEqual(before);
+      const rebuiltSearch = await storage.db.query(`SELECT memory_id FROM memory_facts
+        WHERE silo = $1 AND scope_id = $2 AND search_vector @@ to_tsquery('simple', $3)
+        ORDER BY position`, [...scopeParameters, 'deliver:* & café']);
+      expect(rebuiltSearch.rows).toEqual(search.rows);
       expect(await readdir(directory)).toEqual(keyFiles);
       runner = new ProjectionRunner(storage.db, nats.reader, logger);
       expect(await runner.checkpoint(projection)).toBe(3);
@@ -120,13 +141,14 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
 
   it('rolls back rows, processed id and checkpoint after a failure during application',
     async function rollback() {
-      await append('first');
+      const first = await append('first');
       await runner.run(projection);
       const before = await state();
-      await append('second');
-      async function prepare(envelope: Parameters<Projection['apply']>[1]) {
+      const dependency = [{ scopeId: first.scopeId, memoryId: 'first', revision: 1 }];
+      await append('second', 'alice', 'Deliveries café 東京', dependency);
+      async function prepare(envelope: EventEnvelope) {
         const apply = await projection.prepare!(envelope);
-        async function fail(tx: Query, event: Parameters<Projection['apply']>[1], position: number) {
+        async function fail(tx: Query, event: EventEnvelope, position: number) {
           await apply(tx, event, position);
           throw new Error('Injected crash after memory writes');
         }
@@ -157,7 +179,13 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
       expect(unavailable.rows).toEqual([
         { content_status: 'unavailable', search_text: null, search_vector: null },
       ]);
-      await append('live');
+      const live = await append('live');
+      const encrypted = keys.encrypt(live, 'fixture');
+      const keyPath = `${directory}/${encrypted.keyId.slice(4)}`;
+      await rename(keyPath, `${keyPath}-away`);
+      await expect(runner.run(projection)).rejects.toThrow('Memory key store unavailable');
+      expect(await runner.checkpoint(projection)).toBe(1);
+      await rename(`${keyPath}-away`, keyPath);
       await rename(directory, `${directory}-away`);
       let transactions = 0;
       const original = storage.db;
@@ -165,7 +193,7 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
         transactions += 1;
         return original.transaction(work);
       }
-      const observed: Db = { query: original.query, transaction };
+      const observed: Db = { query: original.query.bind(original), transaction };
       const stopped = new ProjectionRunner(observed, nats.reader, logger);
       await expect(stopped.run(projection)).rejects.toThrow('Memory key store unavailable');
       expect(transactions).toBe(0);
@@ -182,4 +210,22 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
         { memory_id: 'live', search_text: 'Deliveries café 東京' },
       ]);
     });
+
+  it('quarantines legacy ciphertext without guessing its owner or creating a key',
+    async function legacy() {
+      const data = { scopeId: 'old', memoryId: 'legacy', ciphertext: 'AAAAAAAAAAAAAAAAAAAA',
+        keyId: 'key:old' };
+      const envelope = { ...event('legacy'), type: 'memory.written', subject: 'scope-old', data };
+      await nats.seed([envelope]);
+      await runner.run(projection);
+      const rows = await storage.db.query(`SELECT scope_kind, owner_id, revision, ciphertext,
+        key_id, content_status, search_text, search_vector FROM memory_facts`);
+      expect(rows.rows).toEqual([{ scope_kind: null, owner_id: null, revision: null,
+        ciphertext: data.ciphertext, key_id: 'key:old', content_status: 'quarantined',
+        search_text: null, search_vector: null }]);
+      await runner.rebuild(projection);
+      expect(await readdir(directory)).toEqual([]);
+      expect(await runner.checkpoint(projection)).toBe(1);
+    });
+
 });
