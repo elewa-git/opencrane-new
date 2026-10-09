@@ -231,9 +231,10 @@ async function boundsWaitingEntries() {
   socket.readyState = WebSocket.CLOSED;
   await poll(approvals);
   expect(approvals.size).toBe(0);
-  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({
+  const refusal = {
     type: 'approval_settled', approvalId: '40'.padStart(64, '0'), state: 'outcome_unknown',
-  }));
+  };
+  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify(refusal));
 }
 it('bounds waiting entries, refuses unknown fields and forgets a closed link',
   boundsWaitingEntries);
@@ -317,9 +318,8 @@ async function refusesMissingRequest() {
   approvals.receive(waiting);
   await poll(approvals);
   expect(approvals.size).toBe(0);
-  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({
-    type: 'approval_settled', approvalId, state: 'outcome_unknown',
-  }));
+  const refusal = { type: 'approval_settled', approvalId, state: 'outcome_unknown' };
+  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify(refusal));
   expect(await nats.store.head()).toBe(position);
   const read = vi.spyOn(nats.store, 'readStream');
   await poll(approvals);
@@ -328,11 +328,15 @@ async function refusesMissingRequest() {
 it('refuses a missing request once without writing events or retrying', refusesMissingRequest);
 
 async function backsOffRepeatedFailures() {
-  await seedRequest({ policySequence: await seedLiveTurn() });
+  const policySequence = await seedLiveTurn();
+  const overrides = { policySequence };
+  await seedRequest(overrides);
   const { approvals, send } = watcher();
   approvals.receive(waiting);
-  const read = vi.spyOn(nats.store, 'readStream').mockImplementation(failedRead);
-  vi.useFakeTimers({ toFake: ['Date'] });
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(failedRead);
+  const timers = { toFake: ['Date' as const] };
+  vi.useFakeTimers(timers);
   try {
     const startedAt = Date.now();
     await poll(approvals);
@@ -357,7 +361,9 @@ async function backsOffRepeatedFailures() {
 it('backs off repeated read failures for each entry', backsOffRepeatedFailures);
 
 async function leavesQuietEntriesUnread() {
-  await seedRequest({ policySequence: await seedLiveTurn() });
+  const policySequence = await seedLiveTurn();
+  const overrides = { policySequence };
+  await seedRequest(overrides);
   const { approvals } = watcher();
   approvals.receive(waiting);
   await poll(approvals);
@@ -365,9 +371,10 @@ async function leavesQuietEntriesUnread() {
   await poll(approvals);
   expect(head.mock.calls).toEqual([[]]);
   // Check positions once a new event appears, even if it concerns another stream.
-  await append('member-other', 'member.joined', {
+  const member = {
     memberId: 'other', email: 'other@example.test', displayName: 'Other', role: 'member',
-  });
+  };
+  await append('member-other', 'member.joined', member);
   head.mockClear();
   await poll(approvals);
   expect(head).toHaveBeenCalledWith(`approval-${approvalId}`, expect.any(Number));
@@ -375,17 +382,17 @@ async function leavesQuietEntriesUnread() {
 it('checks entry positions only after the overall position moves', leavesQuietEntriesUnread);
 
 async function settlesChangedPolicy() {
-  await seedRequest({ policySequence: await seedLiveTurn() });
+  const policySequence = await seedLiveTurn();
+  const overrides = { policySequence };
+  await seedRequest(overrides);
   const { approvals, send } = watcher();
   approvals.receive(waiting);
   await poll(approvals);
-  await append('mcp-fixture', 'mcp.server_unpublished', {
-    serverId: 'fixture', unpublishedBy: 'alice',
-  });
+  const unpublished = { serverId: 'fixture', unpublishedBy: 'alice' };
+  await append('mcp-fixture', 'mcp.server_unpublished', unpublished);
   await poll(approvals);
-  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({
-    type: 'approval_settled', approvalId, state: 'cancelled',
-  }));
+  const settlement = { type: 'approval_settled', approvalId, state: 'cancelled' };
+  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify(settlement));
   const rows = [];
   for await (const row of nats.store.readStream(`approval-${approvalId}`)) rows.push(row);
   expect(rows.at(-1)?.event.type).toBe('approval.cancelled');

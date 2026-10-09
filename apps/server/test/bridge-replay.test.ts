@@ -1090,10 +1090,12 @@ async function approvalWatcherFixture() {
   const stop = new AbortController();
   const tokens = await bridgeTokens(fixture);
   const db = pgDb(dbs.queue);
-  const runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-approvals'));
+  const logger = createLogger('bridge-approvals');
+  const runner = new ProjectionRunner(db, fixture.store, logger);
   const sockets = new Map<string, import('ws').WebSocket>();
   const frames = new Map<string, unknown[]>();
-  function captureComputer(socket: import('ws').WebSocket, request: import('node:http').IncomingMessage) {
+  function captureComputer(socket: import('ws').WebSocket,
+    request: import('node:http').IncomingMessage) {
     const computerId = request.url?.includes('other-computer:8081') ? 'other-computer' : 'computer';
     sockets.set(computerId, socket);
     const received: unknown[] = [];
@@ -1109,40 +1111,41 @@ async function approvalWatcherFixture() {
   async function append(subject: string, type: string, data: unknown) {
     const event = envelope('test', subject, type, data);
     const expectedSequence = await fixture.store.head(subject);
-    expect((await fixture.store.append({ event, expectedSequence })).status).toBe('appended');
+    const command = { event, expectedSequence };
+    const result = await fixture.store.append(command);
+    expect(result.status).toBe('appended');
   }
   for (const [assistantId, computerId] of [
     ['assistant', 'computer'], ['other-assistant', 'other-computer'],
   ] as const) {
     if (assistantId === 'other-assistant') {
-      await append(`assistant-${assistantId}`, 'assistant.created', {
-        assistantId, ownerId: 'alice', kind: 'personal',
-      });
+      const assistant = { assistantId, ownerId: 'alice', kind: 'personal' };
+      await append(`assistant-${assistantId}`, 'assistant.created', assistant);
       fixture.keys.provision('test', 'other');
       const command = { id: 'create-other', conversationId: 'other', assistantId };
-      await chatCommand(fixture.store, fixture.keys, { silo: 'test', memberId: 'alice' }, command);
+      const member = { silo: 'test', memberId: 'alice' };
+      await chatCommand(fixture.store, fixture.keys, member, command);
       const message = { id: 'message-other', conversationId: 'other', text: 'Hello' };
-      await chatCommand(fixture.store, fixture.keys, { silo: 'test', memberId: 'alice' }, message);
+      await chatCommand(fixture.store, fixture.keys, member, message);
     }
-    await append(`computer-${assistantId}`, 'computer.claimed', {
-      assistantId, computerId, generation: 1, tokenId: `token:${computerId}`,
-    });
-    await append(`computer-${assistantId}`, 'computer.ready', {
-      assistantId, computerId, generation: 1, podUid: computerId,
-    });
+    const claimed = { assistantId, computerId, generation: 1, tokenId: `token:${computerId}` };
+    await append(`computer-${assistantId}`, 'computer.claimed', claimed);
+    const ready = { assistantId, computerId, generation: 1, podUid: computerId };
+    await append(`computer-${assistantId}`, 'computer.ready', ready);
   }
-  await append('conversation-alice', 'agent.turn_started', {
+  const started = {
     conversationId: 'alice', turnId: 'message-alice', assistantId: 'assistant', threadId: 'alice-thread',
-  });
-  await append('mcp-fixture', 'mcp.server_discovered', {
+  };
+  await append('conversation-alice', 'agent.turn_started', started);
+  const discovered = {
     serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
     schemaDigest: 'a'.repeat(64), toolCount: 0,
-  });
-  await append('mcp-fixture', 'mcp.server_published', {
-    serverId: 'fixture', publishedBy: 'alice',
-  });
+  };
+  await append('mcp-fixture', 'mcp.server_discovered', discovered);
+  const published = { serverId: 'fixture', publishedBy: 'alice' };
+  await append('mcp-fixture', 'mcp.server_published', published);
   const approvalId = 'a'.repeat(64);
-  await append(`approval-${approvalId}`, 'tool.approval_requested', {
+  const request = {
     approvalId, assistantId: 'assistant', conversationId: 'alice', turnId: 'message-alice',
     requesterId: 'alice', tool: 'write', serverId: 'fixture', connectionId: 'installed',
     toolRevision: approvalId, schemaDigest: approvalId, profile: 'none',
@@ -1150,11 +1153,13 @@ async function approvalWatcherFixture() {
     digestVersion: 'lossless-json-v1', argumentsDigest: approvalId,
     expiresAt: '2099-01-01T00:00:00.000Z', stepUp: false,
     ciphertext: 'AAAAAAAAAAAAAAAAAAAAAA==', keyId: 'key:fixture', reviewDigest: approvalId,
-  });
+  };
+  await append(`approval-${approvalId}`, 'tool.approval_requested', request);
   await runner.initialise(conversations);
   await runner.run(conversations);
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
-  vi.spyOn(kube, 'credentials').mockResolvedValue();
+  const credentials = vi.spyOn(kube, 'credentials');
+  credentials.mockResolvedValue();
   const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   return { fixture, dbs, stop, sockets, frames, work, append };
@@ -1170,26 +1175,37 @@ async function wakesApprovalsThroughWatcher() {
   function isResume(value: unknown) {
     return typeof value === 'object' && value !== null && Reflect.get(value, 'type') === 'resume';
   }
+  function computerReceived(computerId: string, isFrame: (value: unknown) => boolean) {
+    const received = frames.get(computerId);
+    return received?.some(isFrame) === true;
+  }
   function bothConnected() {
-    return frames.get('computer')?.some(isResume) === true &&
-      frames.get('other-computer')?.some(isResume) === true;
+    return computerReceived('computer', isResume) && computerReceived('other-computer', isResume);
   }
   function isSettlement(value: unknown) {
     return typeof value === 'object' && value !== null &&
       Reflect.get(value, 'type') === 'approval_settled';
   }
-  function decisionArrived() { return frames.get('computer')?.some(isSettlement) === true; }
-  function readBlocked() { return blockedReads === 1; }
+  function decisionArrived() {
+    return computerReceived('computer', isSettlement);
+  }
+  function readBlocked() {
+    return blockedReads === 1;
+  }
   function isNewTurn(value: unknown) {
     return typeof value === 'object' && value !== null &&
       Reflect.get(value, 'type') === 'turn' && Reflect.get(value, 'id') === 'next-bob';
   }
-  function newTurnArrived() { return frames.get('computer')?.some(isNewTurn) === true; }
+  function newTurnArrived() {
+    return computerReceived('computer', isNewTurn);
+  }
   function isReportAck(value: unknown) {
     return typeof value === 'object' && value !== null &&
       Reflect.get(value, 'type') === 'ack' && Reflect.get(value, 'sequence') === 1;
   }
-  function reportAcknowledged() { return frames.get('computer')?.some(isReportAck) === true; }
+  function reportAcknowledged() {
+    return computerReceived('computer', isReportAck);
+  }
   try {
     await until(bothConnected);
     const computer = sockets.get('computer')!;
@@ -1204,15 +1220,18 @@ async function wakesApprovalsThroughWatcher() {
     }
     computer.send(JSON.stringify(signal));
     await until(requestedStateWasRead, 2000);
-    expect(frames.get('computer')?.filter(isSettlement)).toEqual([]);
-    await append(`approval-${approvalId}`, 'approval.decided', {
-      approvalId, decidedBy: 'alice', decision: 'approved',
-    });
+    const computerFrames = frames.get('computer')!;
+    const beforeDecision = computerFrames.filter(isSettlement);
+    expect(beforeDecision).toEqual([]);
+    const decision = { approvalId, decidedBy: 'alice', decision: 'approved' };
+    await append(`approval-${approvalId}`, 'approval.decided', decision);
     await until(decisionArrived, 5000);
-    expect(frames.get('computer')?.filter(isSettlement)).toEqual([
-      { type: 'approval_settled', approvalId, state: 'approved' },
-    ]);
-    expect(frames.get('other-computer')?.filter(isSettlement)).toEqual([]);
+    const settlements = computerFrames.filter(isSettlement);
+    const expectedSettlement = { type: 'approval_settled', approvalId, state: 'approved' };
+    expect(settlements).toEqual([expectedSettlement]);
+    const otherFrames = frames.get('other-computer')!;
+    const otherSettlements = otherFrames.filter(isSettlement);
+    expect(otherSettlements).toEqual([]);
     const head = fixture.store.head.bind(fixture.store);
     function readHead(subject?: string, deadline?: number) {
       if (subject === `approval-${blockedId}`) {
@@ -1221,8 +1240,10 @@ async function wakesApprovalsThroughWatcher() {
       }
       return head(subject, deadline);
     }
-    vi.spyOn(fixture.store, 'head').mockImplementation(readHead);
-    computer.send(JSON.stringify({ ...signal, approvalId: blockedId }));
+    const positions = vi.spyOn(fixture.store, 'head');
+    positions.mockImplementation(readHead);
+    const blockedSignal = { ...signal, approvalId: blockedId };
+    computer.send(JSON.stringify(blockedSignal));
     await until(readBlocked, 2000);
     const report = { sequence: 1, previousSequence: 0, conversationId: 'bob',
       turnId: 'message-bob', assistantId: 'assistant', type: 'agent.message_delta',
@@ -1230,7 +1251,9 @@ async function wakesApprovalsThroughWatcher() {
     computer.send(JSON.stringify(report));
     await until(reportAcknowledged, 1000);
     const bob = await chatHistory(fixture.store, 'test', 'bob');
-    function isStoredReport(row: typeof bob[number]) { return row.event.report?.sequence === 1; }
+    function isStoredReport(row: typeof bob[number]) {
+      return row.event.report?.sequence === 1;
+    }
     expect(bob.some(isStoredReport)).toBe(true);
     const completed = { sequence: 2, previousSequence: 1, conversationId: 'bob',
       turnId: 'message-bob', assistantId: 'assistant', type: 'agent.turn_completed' };
@@ -1239,12 +1262,13 @@ async function wakesApprovalsThroughWatcher() {
         Reflect.get(value, 'type') === 'ack' && Reflect.get(value, 'sequence') === 2;
     }
     function completionAcknowledged() {
-      return frames.get('computer')?.some(isCompletionAck) === true;
+      return computerReceived('computer', isCompletionAck);
     }
     computer.send(JSON.stringify(completed));
     await until(completionAcknowledged, 1000);
     const command = { id: 'next-bob', conversationId: 'bob', text: 'Continue' };
-    await chatCommand(fixture.store, fixture.keys, { silo: 'test', memberId: 'bob' }, command);
+    const member = { silo: 'test', memberId: 'bob' };
+    await chatCommand(fixture.store, fixture.keys, member, command);
     await until(newTurnArrived, 1000);
     expect(blockedReads).toBe(1);
   } finally {

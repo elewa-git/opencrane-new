@@ -1,7 +1,8 @@
 # Approval watcher review fixes
 
 Date: 9 October 2026. Branch: `work/p3-5-be-pr5`, draft PR #283.
-Base: `origin/main` at `243238cf`. The rebase completed, and
+Base: `origin/main` at `fb80d1ee`. The second rebase completed after main advanced. Both README sections were kept.
+
 `git merge-base --is-ancestor origin/main HEAD` returned success.
 
 The local checks use this worktree, disposable NATS and PostgreSQL, and real
@@ -9,7 +10,7 @@ WebSockets. This is not a fresh installation. No paid model call is made.
 
 ## Tests before fixes
 
-PASS: test commit `db8485eb` came before the implementation changes. Running
+PASS: test commit `03f5cc2e` came before the implementation changes. Running
 `bridge-approvals.test.ts` against the old implementation failed six cases:
 missing requests, capacity refusal, retry timing, repeated failure back-off,
 quiet position checks and changed tool policies. Sixteen existing cases passed.
