@@ -32,6 +32,8 @@ export {
   chatRowSchema,
   chatFeedSchema,
   chatListSchema,
+  chatGroupsSchema,
+  chatGroupSnapshotSchema,
   chatContextSchema,
   computerStateSchema,
   memoryAdmissionSchema,
