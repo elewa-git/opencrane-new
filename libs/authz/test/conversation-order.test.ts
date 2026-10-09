@@ -6,6 +6,7 @@ import { pgDb } from '@opencrane/projections';
 import { dispatch, HandlerRuntime, provisionDispatcher } from '@opencrane/handlers';
 import { createStore, memberAuthorisation, rebuildMembers } from '../src/index.ts';
 import { databases, openfga, until } from './services.ts';
+import { objectId } from '../src/client.ts';
 
 function participantId(_unused: unknown, index: number) {
   const memberId = `member_${index}`;
@@ -52,7 +53,7 @@ async function ordersConversationJobs() {
   }
   try {
     const member = event('member', 'member-alice');
-    const audience = Array.from({ length: 98 }, participantId);
+    const audience = Array.from({ length: 95 }, participantId);
     audience.push('alice', 'bob');
     const creationData = { conversationId: 'chat', createdBy: 'alice', mode: 'group',
       participantIds: audience };
@@ -82,11 +83,14 @@ async function ordersConversationJobs() {
       conversationId: 'chat', participantId: 'bob', removedBy: 'alice',
     });
     const bob = event('bob', 'member-bob');
-    const records = [bob, member, created, removed];
+    const records = [bob, member, created];
     for (const saved of records) {
       const command = { event: saved, expectedSequence: 0 };
       expect((await nats.store.append(command)).status).toBe('appended');
     }
+    // Publish directly to prove routing also works for records saved before the upgrade.
+    const rawRemoval = await nats.connection.request('ev.participation.chat', JSON.stringify(removed));
+    expect(rawRemoval.json()).toMatchObject({ seq: 4 });
     await authorisation.handler.handle(member, db);
     await authorisation.handler.handle(bob, db);
     await runtime.start();
@@ -123,11 +127,44 @@ async function ordersConversationJobs() {
 
     expect((await authorisation.conversation('alice', 'chat', 'manage_participants')).allowed)
       .toBe(true);
+    const lateGroup = record('late-group', 'conversation-late', 'conversation.created', {
+      conversationId: 'late', createdBy: 'alice', mode: 'group',
+      participantIds: ['alice', 'ext:jane'],
+    });
+    await authorisation.handler.handle(lateGroup, db);
+    expect((await authorisation.conversation('ext:jane', 'late', 'read')).allowed).toBe(false);
+    const jane = { ...event('jane', 'member-ext:jane'),
+      data: { memberId: 'ext:jane', role: 'member' } };
+    await authorisation.handler.handle(jane, db);
+    expect((await authorisation.conversation('ext:jane', 'late', 'read')).allowed).toBe(true);
+    expect((await authorisation.conversation('ext:jane', 'late', 'manage_participants')).allowed)
+      .toBe(false);
+    const fixedModes = [
+      { conversationId: 'direct', mode: 'direct', createdBy: 'alice',
+        participantIds: ['alice', 'bob'] },
+      { conversationId: 'session', mode: 'agent_session', createdBy: 'alice',
+        assistantId: 'assistant' },
+    ];
+    for (const data of fixedModes) {
+      const fixed = record(data.conversationId, `conversation-${data.conversationId}`,
+        'conversation.created', data);
+      await authorisation.handler.handle(fixed, db);
+      const url = `${authorisation.binding.apiUrl}/stores/${authorisation.binding.storeId}/read`;
+      const target = objectId('conversation', 'test', data.conversationId);
+      const query = { tuple_key: { relation: 'creator', object: target } };
+      const response = await fetch(url, { method: 'POST',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify(query) });
+      expect(response.ok).toBe(true);
+      const tuples: unknown = await response.json();
+      expect(tuples).toEqual({ tuples: [] });
+      expect((await authorisation.conversation('alice', data.conversationId,
+        'manage_participants')).allowed).toBe(false);
+    }
     const wrongSubject = { ...removed, id: 'wrong', subject: 'participation-other' };
     await expect(authorisation.handler.handle(wrongSubject, db))
       .rejects.toThrow('Conversation subject mismatch');
     const foreign = { ...removed, id: 'foreign', silo: 'other' };
-    await expect(authorisation.handler.handle(foreign, db)).rejects.toThrow();
+    await expect(authorisation.handler.handle(foreign, db)).rejects.toThrow('Invalid authorisation event or silo');
   } finally {
     releaseCreation();
     stop.abort();
