@@ -42,13 +42,14 @@ async function append(subject: string, type: string, data: unknown, apply = true
   return record;
 }
 async function write(ownerId: string, scopeKind: MemoryIdentity['scopeKind'],
-  memoryId: string, text = 'Deliveries café 東京', pinned = false, silo = 'acme') {
+  memoryId: string, text = 'Deliveries café 東京', pinned = false, silo = 'acme',
+  sources: { conversationId: string; messageId: string }[] = []) {
   const scopeId = memoryScopeId(silo, scopeKind, ownerId);
   const identity = { silo, scopeId, scopeKind, ownerId, memoryId, revision: 1 };
   keys.provision(identity);
   const encrypted = keys.encrypt(identity, text);
   const data = { schemaVersion: 1, scopeId, scopeKind, ownerId, memoryId, revision: 1,
-    kind: 'fact', pinned, expiresAt: null, sources: [], dependsOn: [], ...encrypted };
+    kind: 'fact', pinned, expiresAt: null, sources, dependsOn: [], ...encrypted };
   return append(`scope-${scopeId}`, 'memory.written', data, true, silo);
 }
 function resolveMember(_silo: string, _issuer: string, subject: string) {
@@ -661,4 +662,43 @@ it('refuses grants for outsiders, inactive assistants and unapplied revocations'
   await append('team-sales', 'team.member_removed',
     { teamId: 'sales', memberId: 'bob', removedBy: 'owner' }, false);
   expect((await get(`${path('sales', 'group')}/facts`)).statusCode).toBe(404);
+});
+
+it('returns authorised fact detail within 16 KiB and uses uniform refusals', async function detail() {
+  const response = await get(`${path('bob')}/facts/own`);
+  expect(response.statusCode).toBe(200);
+  expect(response.headers['cache-control']).toBe('no-store');
+  expect(response.json()).toMatchObject({ fact: { memoryId: 'own', revision: 1,
+    text: 'Deliveries café 東京' }, sources: [] });
+  expect(Buffer.byteLength(response.body)).toBeLessThanOrEqual(16384);
+  for (const url of [`${path('bob')}/facts/unseen`, `${path('owner')}/facts/private`,
+    `/api/memory/${memoryScopeId('foreign', 'person', 'bob')}/facts/foreign`]) {
+    expect((await get(url)).json()).toEqual({ status: 'refused' });
+  }
+  await storage.queue.query('UPDATE memory_facts SET search_text=$1 WHERE memory_id=$2',
+    ['\u0001'.repeat(4096), 'own']);
+  expect((await get(`${path('bob')}/facts/own`)).statusCode).toBe(503);
+});
+it('resolves source status separately and hides denied source references', async function sources() {
+  await append('conversation-detail_chat', 'conversation.created', {
+    conversationId: 'detail_chat', createdBy: 'bob', mode: 'direct', participantIds: ['bob', 'owner'],
+  });
+  const message = await append('conversation-detail_chat', 'message.posted', {
+    conversationId: 'detail_chat', authorId: 'bob', authorKind: 'human',
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text',
+  });
+  const references = [{ conversationId: 'detail_chat', messageId: message.id }];
+  await write('bob', 'person', 'with_source', 'A sourced fact', false, 'acme', references);
+  await runner.run(projection);
+  const url = `${path('bob')}/facts/with_source`;
+  expect((await get(url)).json()).toMatchObject({ sources: [{ status: 'available',
+    reference: references[0] }] });
+  await append('conversation-detail_chat', 'participant.removed', {
+    conversationId: 'detail_chat', participantId: 'bob', removedBy: 'owner',
+  });
+  const refused = await get(url);
+  expect(refused.statusCode).toBe(200);
+  expect(refused.json()).toMatchObject({ fact: { text: 'A sourced fact' },
+    sources: [{ status: 'refused' }] });
+  expect(refused.body).not.toContain('detail_chat');
 });
