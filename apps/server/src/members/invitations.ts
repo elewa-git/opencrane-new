@@ -220,7 +220,8 @@ export async function invitationStatus(store: EventStore, binding: Binding,
   const deadline = performance.now() + 10_000;
   const rows = await invitationHistory(store, `member-${memberId}`, binding.silo, deadline);
   function matches(row: StoredEvent) {
-    return row.event.type === 'member.invited' && row.event.commandId === commandId;
+    return row.event.type === 'member.invited' && row.event.commandId === commandId
+      && row.event.principal?.kind === 'human' && row.event.principal.id === actor;
   }
   const row = rows.find(matches);
   if (!row) {
