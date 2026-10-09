@@ -1359,6 +1359,14 @@ conditionally append once to `participation-<id>`. Saved command positions use
 participant controls and group sends use separate routes.
 `test/chat-access-regression.test.ts` covers the commands with real NATS, PostgreSQL
 and OpenFGA, alongside socket, history, file, desktop and approval refusals.
+The test for the last participant slot holds two additions after their final access
+checks, immediately before the real append. It checks one saved event, one HTTP 409, exactly 97 current
+participants and no event from a later stale edit.
+The removed-author test checks the error returned by the real HTTP access check.
+It requires `ParticipationRefused` while OpenFGA still permits posting. Removing
+that participation check makes the test fail, even though group sends are still
+refused for active participants. A successful group send followed by removal is
+NOT RUN until the group send routes are integrated.
 
 The [participant command receipt](../../docs/process/p4-5-pr4-evidence.md) records checks
 and the remaining live qualification.
