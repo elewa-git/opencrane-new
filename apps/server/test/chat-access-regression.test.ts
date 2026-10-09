@@ -16,7 +16,7 @@ import {
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { envelope } from '@opencrane/models';
-import { chatMessageSchema } from '@opencrane/protocol';
+import { chatMessageSchema, chatParticipantsSchema } from '@opencrane/protocol';
 import type { ChatOptions } from '../src/chat/routes.ts';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer } from '../src/websocket.ts';
@@ -1501,8 +1501,14 @@ async function createParticipantGroup(context: Fixture, participantIds = ['alice
 }
 
 async function joinParticipantMember(context: Fixture, memberId: string) {
+  const emailName = memberId.replaceAll(':', '-');
+  await context.append(`member-${memberId}`, 'member.invited', {
+    memberId, invitationId: `invite-${memberId}`, email: `${emailName}@example.test`,
+    role: 'member', invitedBy: 'alice', invitedIdentity: { issuer: context.config.issuerUrl,
+      sub: memberId },
+  }, false);
   await context.append(`member-${memberId}`, 'member.joined', {
-    memberId, invitationId: `invite-${memberId}`, email: `${memberId}@example.test`,
+    memberId, invitationId: `invite-${memberId}`, email: `${emailName}@example.test`,
     displayName: memberId, role: 'member',
   });
   await context.runner.run(members);
@@ -1518,7 +1524,8 @@ async function participantRequest(context: Fixture, payload?: unknown, memberId 
 async function participantPosition(context: Fixture) {
   const response = await participantRequest(context);
   expect(response.statusCode, response.body).toBe(200);
-  return response.json<{ accessPosition: number }>().accessPosition;
+  const people = chatParticipantsSchema.parse(response.json());
+  return people.accessPosition;
 }
 
 async function managesGroupParticipants() {
@@ -1594,7 +1601,9 @@ async function serialisesParticipantEdits() {
       expectedAccessPosition };
     const writes = [participantRequest(context, first), participantRequest(context, second)];
     const responses = await Promise.all(writes);
-    function statusCode(response: typeof responses[number]) { return response.statusCode; }
+    function statusCode(response: typeof responses[number]) {
+      return response.statusCode;
+    }
     const codes = responses.map(statusCode);
     codes.sort();
     expect(codes).toEqual([200, 409]);
@@ -1658,7 +1667,9 @@ async function leavesGroupAndRevokesReaders(blocked: boolean) {
     const started = performance.now();
     const closed = once(client.socket, 'close');
     const left = await participantRequest(context, ownLeave, 'bob');
-    function socketClosed() { return client?.socket.readyState === WebSocket.CLOSED; }
+    function socketClosed() {
+      return client?.socket.readyState === WebSocket.CLOSED;
+    }
     await until(socketClosed, 1900);
     await closed;
     expect(performance.now() - started).toBeLessThan(2000);
@@ -1687,3 +1698,60 @@ async function leavesGroupAndRevokesReaders(blocked: boolean) {
 }
 it.each([false, true])('revokes every read path after self-leave (blocked socket: %s)',
   leavesGroupAndRevokesReaders, 120_000);
+
+async function checksParticipantAdmissionAfterColdHistory() {
+  const context = await fixture();
+  const read = context.nats.store.readStream.bind(context.nats.store);
+  const head = context.nats.store.head.bind(context.nats.store);
+  let delayed = false;
+  let revokeTarget = false;
+  let targetChecks = 0;
+  async function* slowColdHistory(subject: string, from = 1, deadline = Infinity) {
+    if (subject === 'conversation-participants' && from > 1 && !delayed) {
+      delayed = true;
+      await delay(2200);
+    }
+    yield* read(subject, from, deadline);
+  }
+  async function removeTargetDuringAdmission(subject?: string, deadline?: number) {
+    if (revokeTarget && subject === 'member-bob') {
+      targetChecks++;
+      if (targetChecks === 1) {
+        await context.append('member-bob', 'member.removed', {
+          memberId: 'bob', removedBy: 'alice',
+        }, false);
+      }
+    }
+    return head(subject, deadline);
+  }
+  try {
+    await createParticipantGroup(context);
+    const expectedAccessPosition = await participantPosition(context);
+    const encrypted = context.keys.encrypt('test', 'participants', 'Saved history');
+    await context.append('conversation-participants', 'message.posted', {
+      conversationId: 'participants', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...encrypted,
+    }, false);
+    context.nats.store.readStream = slowColdHistory;
+    const remove = { id: 'cold-remove', action: 'remove', participantId: 'bob',
+      expectedAccessPosition };
+    const removed = await participantRequest(context, remove);
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect(delayed).toBe(true);
+    const before = await context.nats.store.head('participation-participants');
+    const add = { id: 'revoked-target', action: 'add', participantId: 'bob',
+      expectedAccessPosition: before };
+    context.nats.store.head = removeTargetDuringAdmission;
+    revokeTarget = true;
+    const response = await participantRequest(context, add);
+    expect(response.statusCode, response.body).toBe(409);
+    expect(targetChecks).toBe(1);
+    expect(await head('participation-participants')).toBe(before);
+  } finally {
+    context.nats.store.readStream = read;
+    context.nats.store.head = head;
+    await context.close();
+  }
+}
+it('loads cold close history before admission and refuses a target removed during addition',
+  checksParticipantAdmissionAfterColdHistory, 120_000);

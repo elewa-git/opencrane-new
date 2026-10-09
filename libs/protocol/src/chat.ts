@@ -127,3 +127,16 @@ export type ChatConversation = z.infer<typeof chatListSchema>['rows'][number];
 export function sessionSlug(text: string): string {
   return text.toLowerCase().match(/[\p{L}\p{N}]+/gu)?.slice(0, 4).join('-').slice(0, 24).replace(/-+$/, '') || 'personal-session';
 }
+
+
+export const chatParticipantCommandSchema = z.union([
+  z.strictObject({ id: chatIdSchema, action: z.enum(['add', 'remove']),
+    participantId: chatIdSchema, expectedAccessPosition: z.int().nonnegative() }),
+  z.strictObject({ id: chatIdSchema, action: z.literal('leave'),
+    expectedAccessPosition: z.int().nonnegative() }),
+]);
+export const chatParticipantsSchema = z.strictObject({
+  rows: z.array(z.strictObject({ memberId: chatIdSchema, displayName: z.string().nullable() })),
+  joinPosition: z.int().positive(), accessPosition: z.int().positive(),
+  canManage: z.boolean(), canLeave: z.boolean(),
+});

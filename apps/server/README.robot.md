@@ -518,11 +518,11 @@ new messages and computer changes within the existing poll delay without repeati
 content queries on an idle page.
 The server shares the OpenFGA client for each silo and permission model. It checks
 access at subscription, then calls OpenFGA again only when a watched access record changes.
-It watches member stream positions and, for a team assistant, its team stream.
-Personal sessions never watch conversation history for access. Participants are fixed
-when a chat is created, and the chat socket does not watch participant changes. Any
-participant command must land with #216, which adds a small access stream for those
-changes and covers chat, live view and file access.
+It watches member and participation stream positions and, for a team assistant, its team stream.
+Personal sessions never watch conversation history for access. Initial participants are recorded
+when a chat is created. Chat sockets watch later changes on the small participation
+stream. Chat, live view, file and approval access check those saved changes before
+OpenFGA catches up.
 Each access poll has a 1.5-second limit and ends before reading content. Access
 polling continues during a slow content read, so a member-stream removal still
 closes the socket within two seconds without waiting for OpenFGA to apply it.
@@ -1329,7 +1329,7 @@ It checks the same generic refusal for unknown, foreign and removed participant 
 Separate cases check changed audiences, changed positions, departed members without
 a group association, and group changes before and during the write check. Each
 refusal leaves the conversation stream empty.
-No participant mutation endpoint is available. Fresh-install qualification remains NOT RUN.
+Participant controls use separate commands. Fresh-install qualification remains NOT RUN.
 
 ## Delivering the admitted model to computers
 
@@ -1348,3 +1348,14 @@ This is the computer-delivery slice of P4-22 row 4. New-turn selection from own 
 default bindings, migration commands and the recorded switch-on event remain for
 a later change. Managed calls and retirement stay unavailable. Existing deployments
 keep the deployment-key path; bound tokens still refuse before reserving money.
+
+## Human group participant commands
+
+The [group participant API](../../docs/api/direct-chats.md#group-participants) defines
+reads, creator edits, self-leave, stale positions, limits and saved retries. Commands
+load access, close and command histories before their two-second write check, then
+conditionally append once to `participation-<id>`. Saved command positions use
+`readStreamSummary`; retry payloads are checked with `readEvent`. Group creation,
+participant controls and group sends use separate routes.
+`test/chat-access-regression.test.ts` covers the commands with real NATS, PostgreSQL
+and OpenFGA, alongside socket, history, file, desktop and approval refusals.

@@ -41,6 +41,8 @@ export {
   type MemoryAdmission,
   chatColleaguesSchema,
   chatChangeSchema,
+  chatParticipantCommandSchema,
+  chatParticipantsSchema,
   type ChatRow,
   type ChatConversation,
 } from './chat.ts';

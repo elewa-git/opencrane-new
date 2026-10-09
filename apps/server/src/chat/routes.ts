@@ -1,3 +1,5 @@
+import { chatIdSchema } from '@opencrane/events';
+import { participantCommand, participantList } from './participants.ts';
 import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { creationEvent, privateSessionReader, sharedAssistantAuthority,
   writePrivateSession } from './private-session.ts';
@@ -91,6 +93,13 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
   };
   app.route(conversationsRoute);
   app.route(messagesRoute);
+  const participantsRoute = {
+    method: ['GET', 'POST'] as ('GET' | 'POST')[],
+    url: '/api/conversations/:conversationId/participants',
+    bodyLimit: 4096,
+    handler,
+  };
+  app.route(participantsRoute);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     const session = sessionFor(request, config, new Date());
@@ -103,6 +112,10 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) throw new ChatRefused('Membership required');
       const { conversationId, commandId } = parameters.parse(request.params);
+      if (request.routeOptions.url === participantsRoute.url) {
+        const participantConversationId = chatIdSchema.parse(conversationId);
+        return await participantReply(request, reply, options, memberId, participantConversationId);
+      }
       const relation: 'post' | 'read' = request.method === 'POST' ? 'post' : 'read';
       const allowApplying = commandId !== undefined;
       const accessRequest = { memberId, conversationId, relation, allowApplying };
@@ -126,6 +139,19 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       return chatRefusal(request, reply, error);
     }
   }
+}
+
+async function participantReply(request: FastifyRequest, reply: FastifyReply,
+  options: ChatOptions, memberId: string, conversationId: string) {
+  if (request.method === 'GET') {
+    const result = await participantList(options, memberId, conversationId);
+    return reply.send(result);
+  }
+  const result = await participantCommand(options, memberId, conversationId, request.body);
+  const code = appendStatusCode(result);
+  let response: unknown = { status: result.status };
+  if (result.status === 'appended') response = result;
+  return reply.code(code).send(response);
 }
 
 function trustedRequest(
