@@ -350,7 +350,8 @@ it.each(['refused', 'unavailable'] as const)('handles actsFor %s',
   async function acting(status) {
     await notes(`acting-${status}`);
     const result = { allowed: false, status: 'ok' as const };
-    const unavailable = { allowed: false, status: 'unavailable' as const };
+    const unavailable = { allowed: false as const, status: 'unavailable' as const,
+      error: new Error('Permissions unavailable') };
     const response = status === 'refused' ? result : unavailable;
     const spy = vi.spyOn(auth, 'actsFor').mockResolvedValue(response);
     try {
@@ -364,7 +365,7 @@ it.each(['refused', 'unavailable'] as const)('handles actsFor %s',
 
 it('waits for an unapplied assistant creation', async function assistantApplying() {
   const current = await notes('assistant-applying');
-  const original = auth.applied;
+  const original = auth.applied.bind(auth);
   function applied(eventId: string) {
     if (eventId === current.created.id) return Promise.resolve(false);
     return original(eventId);
@@ -432,7 +433,7 @@ it('refuses mismatched silo bindings and missing member bindings', async functio
     expect((await get('/api/memory/scopes')).statusCode).toBe(404);
     memory.silo = silo;
     function absentMember() {
-      return Promise.resolve(null);
+      return Promise.resolve(undefined);
     }
     memory.feed.memberId = absentMember;
     expect((await get('/api/memory/scopes')).statusCode).toBe(404);
@@ -564,6 +565,30 @@ it('checks each saved grant once per request and checks again on the next reques
       expect(appliedSpy.mock.calls.filter(isGrantCheck)).toHaveLength(2);
     } finally {
       readSpy.mockRestore();
+      appliedSpy.mockRestore();
+    }
+  });
+
+it('reuses applied membership checks across scopes only within one request',
+  async function membershipCache() {
+    await notes('membership-cache', 'team', 'sales');
+    const appliedSpy = vi.spyOn(auth, 'applied');
+    try {
+      const url = '/api/memory/scopes?groupId=sales&assistantId=membership-cache';
+      const response = await get(url);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ scopes: [
+        { scopeKind: 'person' }, { scopeKind: 'group' },
+        { scopeKind: 'assistant_notes', canRead: true },
+      ] });
+      const seen = new Set<string>();
+      for (const [eventId] of appliedSpy.mock.calls) {
+        expect(seen.has(eventId), eventId).toBe(false);
+        seen.add(eventId);
+      }
+      appliedSpy.mockResolvedValue(false);
+      expect((await get(url)).statusCode).toBe(503);
+    } finally {
       appliedSpy.mockRestore();
     }
   });
