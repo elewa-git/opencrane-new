@@ -9,8 +9,9 @@ import type { EventEnvelope } from '@opencrane/events';
 async function acceptsQueuedLegacyJobs() {
   const storage = await fixture();
   const applied: string[] = [];
-  async function handle(saved: EventEnvelope) {
+  function handle(saved: EventEnvelope) {
     applied.push(saved.id);
+    return Promise.resolve();
   }
   const handler = registerHandler('update-openfga', handle);
   const options = { db: storage.db, silo: 'test', handlers: [handler],
@@ -32,10 +33,12 @@ async function acceptsQueuedLegacyJobs() {
     }
     const newAdded = { ...added, subject: 'participation-chat' };
     expect(handlerJobKey('update-openfga', newAdded)).toBe('conversation-chat');
-    expect(handlerJobKey('update-conversations', newAdded)).toBe('participation-chat');
+    expect(handlerJobKey('update-members', newAdded)).toBe('participation-chat');
     // Start after the old jobs are queued, as an upgraded worker would.
     await runtime.work();
-    function allApplied() { return applied.length === records.length; }
+    function allApplied() {
+      return Promise.resolve(applied.length === records.length);
+    }
     await until(allApplied);
     expect(applied).toEqual(['creation', 'added', 'removed']);
     expect(await runtime.deadLetters('update-openfga')).toEqual([]);

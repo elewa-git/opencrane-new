@@ -74,7 +74,7 @@ async function refusesWrongConversationIdentity() {
         participantIds: ['alice', 'bob'] } },
       { type: 'participant.added', subject: 'participation-wrong', data: {
         conversationId: 'chat', participantId: 'bob', addedBy: 'alice' } },
-      { type: 'participant.removed', subject: 'participation-wrong', data: {
+      { type: 'participant.removed', subject: 'participation-wrong-remove', data: {
         conversationId: 'chat', participantId: 'bob', removedBy: 'alice' } },
     ];
     for (const sample of samples) {

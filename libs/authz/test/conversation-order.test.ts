@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import type { EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
-import { pgDb } from '@opencrane/projections';
+import { pgDb, type Query } from '@opencrane/projections';
 import { dispatch, HandlerRuntime, provisionDispatcher } from '@opencrane/handlers';
 import { createStore, memberAuthorisation, rebuildMembers } from '../src/index.ts';
 import { databases, openfga, until } from './services.ts';
@@ -11,6 +11,51 @@ import { objectId } from '../src/client.ts';
 function participantId(_unused: unknown, index: number) {
   const memberId = `member_${index}`;
   return memberId.padEnd(200, 'x');
+}
+
+type MemberAuthorisation = ReturnType<typeof memberAuthorisation>;
+
+function record(id: string, subject: string, type: string, data: unknown) {
+  return { ...event(id, subject, type), data };
+}
+
+async function checkLaterMember(authorisation: MemberAuthorisation, db: Query) {
+  const lateGroup = record('late-group', 'conversation-late', 'conversation.created', {
+    conversationId: 'late', createdBy: 'alice', mode: 'group',
+    participantIds: ['alice', 'ext:jane'],
+  });
+  await authorisation.handler.handle(lateGroup, db);
+  expect((await authorisation.conversation('ext:jane', 'late', 'read')).allowed).toBe(false);
+  const jane = event('jane', 'member-ext:jane');
+  await authorisation.handler.handle(jane, db);
+  expect((await authorisation.conversation('ext:jane', 'late', 'read')).allowed).toBe(true);
+  expect((await authorisation.conversation('ext:jane', 'late', 'manage_participants')).allowed)
+    .toBe(false);
+}
+
+async function checkFixedModes(authorisation: MemberAuthorisation, db: Query) {
+  const fixedModes = [
+    { conversationId: 'direct', mode: 'direct', createdBy: 'alice',
+      participantIds: ['alice', 'bob'] },
+    { conversationId: 'session', mode: 'agent_session', createdBy: 'alice',
+      assistantId: 'assistant' },
+  ];
+  for (const data of fixedModes) {
+    const fixed = record(data.conversationId, `conversation-${data.conversationId}`,
+      'conversation.created', data);
+    await authorisation.handler.handle(fixed, db);
+    const url = `${authorisation.binding.apiUrl}/stores/${authorisation.binding.storeId}/read`;
+    const target = objectId('conversation', 'test', data.conversationId);
+    const query = { tuple_key: { relation: 'creator', object: target } };
+    const options = { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(query) };
+    const response = await fetch(url, options);
+    expect(response.ok).toBe(true);
+    const tuples: unknown = await response.json();
+    expect(tuples).toMatchObject({ tuples: [] });
+    expect((await authorisation.conversation('alice', data.conversationId,
+      'manage_participants')).allowed).toBe(false);
+  }
 }
 
 async function ordersConversationJobs() {
@@ -47,9 +92,6 @@ async function ordersConversationJobs() {
   let task: Promise<void> | undefined;
   function ignoreStop() {
     return undefined;
-  }
-  function record(id: string, subject: string, type: string, data: unknown) {
-    return { ...event(id, subject, type), data };
   }
   try {
     const member = event('member', 'member-alice');
@@ -127,38 +169,8 @@ async function ordersConversationJobs() {
 
     expect((await authorisation.conversation('alice', 'chat', 'manage_participants')).allowed)
       .toBe(true);
-    const lateGroup = record('late-group', 'conversation-late', 'conversation.created', {
-      conversationId: 'late', createdBy: 'alice', mode: 'group',
-      participantIds: ['alice', 'ext:jane'],
-    });
-    await authorisation.handler.handle(lateGroup, db);
-    expect((await authorisation.conversation('ext:jane', 'late', 'read')).allowed).toBe(false);
-    const jane = event('jane', 'member-ext:jane');
-    await authorisation.handler.handle(jane, db);
-    expect((await authorisation.conversation('ext:jane', 'late', 'read')).allowed).toBe(true);
-    expect((await authorisation.conversation('ext:jane', 'late', 'manage_participants')).allowed)
-      .toBe(false);
-    const fixedModes = [
-      { conversationId: 'direct', mode: 'direct', createdBy: 'alice',
-        participantIds: ['alice', 'bob'] },
-      { conversationId: 'session', mode: 'agent_session', createdBy: 'alice',
-        assistantId: 'assistant' },
-    ];
-    for (const data of fixedModes) {
-      const fixed = record(data.conversationId, `conversation-${data.conversationId}`,
-        'conversation.created', data);
-      await authorisation.handler.handle(fixed, db);
-      const url = `${authorisation.binding.apiUrl}/stores/${authorisation.binding.storeId}/read`;
-      const target = objectId('conversation', 'test', data.conversationId);
-      const query = { tuple_key: { relation: 'creator', object: target } };
-      const response = await fetch(url, { method: 'POST',
-        headers: { 'content-type': 'application/json' }, body: JSON.stringify(query) });
-      expect(response.ok).toBe(true);
-      const tuples: unknown = await response.json();
-      expect(tuples).toMatchObject({ tuples: [] });
-      expect((await authorisation.conversation('alice', data.conversationId,
-        'manage_participants')).allowed).toBe(false);
-    }
+    await checkLaterMember(authorisation, db);
+    await checkFixedModes(authorisation, db);
     const wrongSubject = { ...removed, id: 'wrong', subject: 'participation-other' };
     await expect(authorisation.handler.handle(wrongSubject, db))
       .rejects.toThrow('Conversation subject mismatch');
