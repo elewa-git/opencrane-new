@@ -864,6 +864,43 @@ async function checksRoleBeforeReadingGrantHistory() {
 }
 it('checks the caller role before POST and status GET read grants', checksRoleBeforeReadingGrantHistory);
 
+async function grantHistoryFinishesBeforeTheShortCheck() {
+  const store = nats.store;
+  const subject = grantStream('model', 'gpt-6-sol');
+  const read = store.readStream.bind(store);
+  const appendCommand = store.append.bind(store);
+  let historyFinished = false;
+  let fullReads = 0;
+  store.readStream = async function* readGrantHistory(name, from, deadline) {
+    if (name === subject && (from ?? 1) === 1) {
+      fullReads++;
+      expect((deadline ?? 0) - performance.now()).toBeGreaterThan(2000);
+    }
+    yield* read(name, from, deadline);
+    if (name === subject && (from ?? 1) === 1) historyFinished = true;
+  };
+  store.append = async function saveAfterHistory(command) {
+    const record = z.object({ subject: z.string() }).parse(command.event);
+    if (record.subject === subject) {
+      expect(historyFinished).toBe(true);
+      expect(command.historyChecked).toBe(true);
+    }
+    return appendCommand(command);
+  };
+  try {
+    const expected = await store.head(subject);
+    const body = changeBody('history-before-check', 'grant', 'member', 'bob', expected);
+    const response = await writeAccess(body);
+    expect(response.statusCode).toBe(200);
+    expect(fullReads).toBe(1);
+  } finally {
+    store.readStream = read;
+    store.append = appendCommand;
+  }
+}
+it('reads grant history once before the two-second check and appends with historyChecked',
+  grantHistoryFinishesBeforeTheShortCheck);
+
 async function teamHistoryIsReadOnceBeforeTheCheck() {
   await append('team-support', 'team.member_added', {
     teamId: 'support', memberId: 'owner', addedBy: 'owner',

@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { countReads, expectNoWholeReads } from '@opencrane/event-store/testing';
+import { grantStream } from '@opencrane/authz';
 import { BudgetActor, envelope } from '../src/actor.ts';
 import { startDecision } from '../src/decision.ts';
 import { decisionActivity } from '../src/decision-activity.ts';
@@ -264,6 +265,89 @@ async function refusesRestoredHistory(subject: string) {
     await setup.close();
   }
 }
-it.each(['computer-assistant', 'conversation-conversation'])(
+it.each(['computer-assistant', 'conversation-conversation', grantStream('model', 'gpt-6-luna')])(
   'refuses %s history restored below its summary without reserving more money',
   refusesRestoredHistory, 40_000);
+
+async function readsLongGrantsBeforeAccessCheck() {
+  const setup = await fixture();
+  const store = setup.nats.store;
+  const subject = grantStream('model', 'gpt-6-luna');
+  const read = store.readStream.bind(store);
+  let accessStarted = false;
+  const fullReads: boolean[] = [];
+  async function* recordGrantRead(...args: Parameters<typeof read>) {
+    if (args[0] === 'member-alice') accessStarted = true;
+    if (args[0] === subject && args[1] === 1) fullReads.push(accessStarted);
+    yield* read(...args);
+  }
+  try {
+    const events = [];
+    for (let index = 0; index < 3000; index++) {
+      const grant = { resourceType: 'model', resourceId: 'gpt-6-luna',
+        granteeId: `other-${index}`, granteeKind: 'member', grantedBy: 'alice' };
+      events.push(envelope('test', subject, 'grant.given', grant, `grant-${index}`));
+    }
+    await setup.nats.seed(events);
+    vi.spyOn(store, 'readStream').mockImplementation(recordGrantRead);
+    const warmed = await decide(setup);
+    expect([200, 403]).toContain(warmed.status);
+    expect(fullReads).toEqual([false]);
+    const catchUpDeadline = performance.now() + 15_000;
+    let ready = warmed;
+    while (ready.status !== 200 && performance.now() < catchUpDeadline) {
+      ready = await decide(setup);
+    }
+    expect(ready.status, ready.text).toBe(200);
+    const summaryPosition = await store.head(subject);
+    const reads = countReads(store);
+    const began = performance.now();
+    const result = await decide(setup);
+    expect(result.status, result.text).toBe(200);
+    expect(performance.now() - began).toBeLessThan(2000);
+    function isGrantRead(call: (typeof reads.calls)[number]) {
+      return call.subject === subject;
+    }
+    const grantReads = reads.calls.filter(isGrantRead);
+    expect(grantReads.length).toBeGreaterThan(0);
+    for (const call of grantReads) {
+      expect(call.fromSequence).toBeGreaterThan(summaryPosition);
+      expect(call.rows).toBe(0);
+    }
+    expect(setup.actor.state.reservations).toHaveLength(2);
+    expect(setup.received()).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('reads 3,000 model grants before the access check and admits within two seconds on later rows',
+  readsLongGrantsBeforeAccessCheck, 60_000);
+
+async function refusesGrantChangedBeforeAccessCheck() {
+  const setup = await fixture();
+  const subject = grantStream('model', 'gpt-6-luna');
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  let changed = false;
+  async function* revokeAfterSummary(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] !== subject || changed) return;
+    changed = true;
+    const revocation = { resourceType: 'model', resourceId: 'gpt-6-luna',
+      granteeId: 'alice', revokedBy: 'alice' };
+    await setup.append(subject, 'grant.revoked', revocation);
+  }
+  vi.spyOn(setup.nats.store, 'readStream').mockImplementation(revokeAfterSummary);
+  try {
+    const result = await decide(setup);
+    expect(changed).toBe(true);
+    expect(result.status, result.text).toBe(403);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    expect(setup.received()).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('refuses a grant revoked between its summary read and the access check while IAM still allows',
+  refusesGrantChangedBeforeAccessCheck, 40_000);
