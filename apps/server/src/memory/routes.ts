@@ -10,7 +10,6 @@ import { detailFact, listFacts, memorySnapshot, readInput, readParams,
 
 export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
   options?: MemoryOptions) {
-
   app.get('/api/memory/scopes', handle);
   app.get('/api/memory/:scopeId/facts', handle);
   app.get('/api/memory/:scopeId/facts/:memoryId', handle);
@@ -49,10 +48,6 @@ export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
       const query = readInput.parse(request.query);
       return await listFacts(options, requester, scope, query, config.cookieSecret);
     } catch (error) {
-      if (error instanceof MemoryBusy) {
-        reply.header('retry-after', '1');
-        return reply.code(503).send({ status: 'unavailable', reason: 'memory_busy' });
-      }
       let status = 503;
       if (error instanceof z.ZodError) {
         status = 422;

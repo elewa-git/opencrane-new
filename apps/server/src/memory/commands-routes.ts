@@ -7,6 +7,7 @@ import { scopeAccess, resolveScope, memoryAccessChecks, MemoryRefused,
   type MemoryOptions } from './access.ts';
 import { remember, readCommand, changeParams, reconcileCommands } from './commands.ts';
 import { MemoryBusy } from './admission.ts';
+import { MemoryConflict, readParams } from './reads.ts';
 
 export function registerMemoryCommands(app: FastifyInstance, config: AuthConfig,
   options?: MemoryOptions) {
@@ -78,8 +79,8 @@ export function registerMemoryCommands(app: FastifyInstance, config: AuthConfig,
 
 async function handleCommand(request: FastifyRequest, options: MemoryOptions, requester: string,
   checks: ReturnType<typeof memoryAccessChecks>) {
-  const params = changeParams.strip().parse(request.params);
-  const scope = await resolveScope(options, requester, params.scopeId);
+  const path = readParams.strip().parse(request.params);
+  const scope = await resolveScope(options, requester, path.scopeId);
   if (request.method === 'POST') {
     const result = await remember(options, requester, scope, request.body);
     if (result.outcome === 'conflict' || result.outcome === 'failed') {
@@ -87,6 +88,7 @@ async function handleCommand(request: FastifyRequest, options: MemoryOptions, re
     }
     return { status: 200, body: result };
   }
+  const params = changeParams.parse(request.params);
   const access = await scopeAccess(options, requester, scope, true, checks);
   if (!access.canRead && !access.canWrite) {
     throw new MemoryRefused();
