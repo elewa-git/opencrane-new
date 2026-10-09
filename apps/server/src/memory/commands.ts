@@ -59,6 +59,18 @@ function originalInput(row: StoredEvent, keys: ReturnType<typeof memoryKeys>) {
   return { commandId: saved.commandId, text, kind: saved.data.kind, pinned: saved.data.pinned,
     expiresAt: saved.data.expiresAt, sources: saved.data.sources, dependsOn: saved.data.dependsOn };
 }
+function originalReceipt(row: StoredEvent, keys: ReturnType<typeof memoryKeys>, input: Input,
+  audience: { kind: string; ownerId: string }) {
+  const receipt = savedReceipt(row, audience);
+  const original = originalInput(row, keys);
+  if (original === null) {
+    return { outcome: 'unavailable', memoryId: receipt.memoryId };
+  }
+  if (digest(commandInput.parse(original)) !== digest(input)) {
+    throw new MemoryConflict();
+  }
+  return receipt;
+}
 function digest(input: Input) {
   const hash = createHash('sha256');
   hash.update(JSON.stringify(input));
@@ -133,14 +145,7 @@ async function rememberLocked(options: MemoryOptions, requester: string, scope: 
     throw new MemoryRefused();
   }
   if (state.original) {
-    const original = originalInput(state.original, keys);
-    if (original === null) {
-      return { outcome: 'unavailable', memoryId: reference };
-    }
-    if (digest(commandInput.parse(original)) !== digest(input)) {
-      throw new MemoryConflict();
-    }
-    return savedReceipt(state.original, access.audience);
+    return originalReceipt(state.original, keys, input, access.audience);
   }
   const inputDigest = digest(input);
   const pending = journal.read();
@@ -197,7 +202,7 @@ async function appendPrepared(options: MemoryOptions, input: Input,
     // Check the original command again before destroying any key after a definite refusal.
     const reconciled = await commandHistory(options, scope.scopeId, requester, input.commandId);
     if (reconciled.original) {
-      return savedReceipt(reconciled.original, audience);
+      return originalReceipt(reconciled.original, keys, input, audience);
     }
     journal.save({ ...entry, stage: 'failed' });
     keys.delete(identity);
