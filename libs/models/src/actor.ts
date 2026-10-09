@@ -17,7 +17,8 @@ type ModelUsage = {
 // Keep a hold for three minutes so usage reports have time to arrive.
 const SETTLE_TIMEOUT_MS = 180_000;
 
-export async function history(store: EventStore, subject: string, silo: string, deadline = Infinity) {
+export async function history(store: Pick<EventStore, 'readStream'>,
+  subject: string, silo: string, deadline = Infinity) {
   const rows = [];
   for await (const row of store.readStream(subject, 1, deadline)) {
     if (row.event.silo !== silo) throw new Error('Wrong silo');

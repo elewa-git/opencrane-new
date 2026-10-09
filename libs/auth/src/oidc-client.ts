@@ -118,7 +118,18 @@ export async function completeLogin(
   // reached, whichever comes first.
   const exp = Math.min(claims.exp, Math.floor(Date.now() / 1000) + config.sessionMaxAgeSeconds);
 
-  return { session: { sub: claims.sub, orgId, roles, authTime, exp, ...(typeof claims['name'] === 'string' ? { name: claims['name'] } : {}), idToken: tokens.id_token! } };
+  const session: SessionData = {
+    sub: claims.sub, orgId, roles, authTime, exp,
+    emailVerified: claims['email_verified'] === true,
+    idToken: tokens.id_token!,
+  };
+  if (typeof claims['email'] === 'string') {
+    session.email = claims['email'];
+  }
+  if (typeof claims['name'] === 'string') {
+    session.name = claims['name'];
+  }
+  return { session };
 }
 
 /**

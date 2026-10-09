@@ -10,7 +10,7 @@ This is a shared library used by the back end, background workers and the models
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks sign-in and session organisation| auth["libs/auth<br/>sign-in and passes"]
+  server["apps/server<br/>back end"] -.->|checks sign-in and session organisation| auth["libs/auth<br/>checked sign-in details and passes"]
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.-> auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
@@ -21,6 +21,8 @@ flowchart LR
 ## What it is responsible for
 
 - Send a person to Zitadel and check the sign-in response using OIDC, a standard sign-in method.
+- Keep the email and its verification result from the checked sign-in token.
+  Limit the stored email length.
 - Keep the signed-in person, and the details of a sign-in still in progress, in encrypted cookies.
 - Check that a person belongs to this [silo](../../GLOSSARY.md#silo)'s organisation and that a sensitive action follows a recent sign-in.
 - Refuse identity exceptions at production startup. Development and tests can name

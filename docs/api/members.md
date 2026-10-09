@@ -56,11 +56,11 @@ This read checks access once and uses no write freshness check.
 
 At acceptance, the server checks the signed-in identity using its issuer and subject.
 The ID token must have `email_verified=true`, and its email must match the invited
-email after trimming and ignoring case. The organisation check must pass. The server
-derives the member id at acceptance from the silo, issuer, subject and admission
-number. These acceptance checks are planned for PR 3; this route does not create an
-invitation or grant membership. The existing `/members/join` command still requires
-an invitation bound to a sign-in identity.
+email after trimming and ignoring ASCII letter case. The organisation check must
+pass. The planned email invitation flow will derive the member id at acceptance
+from the silo, issuer, subject and admission number. The email-input route does
+not create an invitation or grant membership. The existing `/members/join` command
+still requires an invitation bound to a sign-in identity.
 
 ## Admission member ids
 
@@ -77,3 +77,71 @@ from another silo makes the search unavailable. It appends nothing.
 
 The [rework receipt](../process/p4-3-pr2-rework.md) records the checks run for this route.
 The complete fresh-install invitation journey is NOT RUN.
+
+## Bound invitation acceptance
+
+The existing `POST /members/join` remains available for invitations already bound
+to an issuer and subject. Its strict body is `{ memberId, invitationId, commandId,
+displayName }`, at most 1 KiB. It returns `Cache-Control: no-store`.
+Fresh acceptance requires the exact Origin and configured organisation, including
+for accounts allowlisted for general sign-in. The encrypted session must keep an
+ID-token email with `email_verified=true`. Both addresses must use ASCII characters;
+other addresses return `unsupported_email`. The server trims both addresses and
+compares their ASCII lower-case forms. Request-body email claims are refused.
+A matching account without an email or verification claim receives `sign_in_again`.
+An unverified or different email receives `wrong_identity`. Identity checks happen
+before pending-state and expiry checks, so another account learns no invitation state.
+
+Fresh acceptance requires the session's `authTime` to be within the last 60 minutes,
+including the exact 60-minute boundary. Older, missing or future sign-in times
+return `sign_in_again`. A silent provider sign-in does not reset this time.
+Session emails have a maximum of 320 characters. Sign-in rejects a session cookie
+larger than 3,800 bytes, including its name and attributes, with a clear error and
+clears both cookies rather than sending a cookie the browser may drop.
+
+### Zitadel deployment requirements
+
+In the silo's organisation, self-registration must be off. No external identity
+provider may assert verified emails. Only trusted admins may set emails as verified;
+this includes organisation owners, user managers and holders of management tokens.
+These controls are part of the acceptance security requirements: a verified email
+is trusted only because the deployment controls who can assert it.
+
+The OIDC app must have `idTokenUserinfoAssertion=true` so Zitadel includes the
+email claims in the checked ID token. `infra/dev-stack` reads the owner app and
+the selected secondary app and stops setup with a clear message if this setting
+is missing or not boolean true. That check writes no Zitadel setting. A trusted
+admin must correct the app before setup can continue.
+
+Emails are not unique in Zitadel. An email is not an account identifier.
+These existing invitations also require the exact issuer and subject. A future
+email-only invitation must allow only one account to complete acceptance.
+
+### Current access and retries
+
+A removed stream returns 403 `access_removed`, including a repeat of its saved join.
+An earlier event binding another issuer or subject also prevents acceptance.
+Active targets and owner-role invitations remain refused. The inviter must still be an active Owner or Admin by
+member and ownership events; otherwise the response is 403 with
+`{ status: refused, reason: inviter_authority_ended }`.
+The final access check watches only the joining member, inviter and ownership
+streams for at most two seconds. A changed stream or unavailable check returns
+503 and saves no join in that attempt, except a confirmed inviter demotion or
+removal returns 403 `inviter_authority_ended`. An unavailable recheck stays 503.
+Expiry is checked again after the final access check.
+
+There is an accepted small risk between that last check and append: the inviter
+can lose authority in that window. The append is conditional only on the joining
+member stream, so it cannot also reject a change to the inviter or ownership
+stream. The current command keeps that single-stream write contract.
+
+For an admission that has not been removed, an exact saved-command retry returns
+its original receipt before checking expiry, email claims or the inviter again. It never restores membership after removal.
+Changed display-name or invitation arguments refuse reuse of the command id.
+A lost append reply can return 503 even though the join was stored; repeat the
+same command to find the saved result.
+
+The size-limited first change adds these protections and stores sign-in email
+claims. Email invitation creation, renewal, admission selection at acceptance and
+assistant choice follow in the second change. List/status reads remain separate
+work. No Zitadel directory request or credential is added.

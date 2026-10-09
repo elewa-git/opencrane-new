@@ -29,12 +29,30 @@ async function list(path: string, queries: unknown[] = []) {
   return z.object({ result: z.array(object).default([]) }).parse(await api(path, { queries })).result;
 }
 const exactName = (value: string) => [{ nameQuery: { name: value, method: 'TEXT_QUERY_METHOD_EQUALS' } }];
+
+const appEmailClaimsSchema = z.object({ app: z.object({
+  details: z.object({ resourceOwner: z.string() }),
+  oidcConfig: z.object({ idTokenUserinfoAssertion: z.unknown().optional() }),
+}) });
+
+async function checkEmailClaims(projectId: string, appId: string) {
+  const path = `/management/v1/projects/${projectId}/apps/${appId}`;
+  const response = await api(path);
+  const result = appEmailClaimsSchema.parse(response);
+  assert(result.app.details.resourceOwner === orgId, 'Refusing another organisation');
+  const message =
+    `Zitadel app ${appId} must have idTokenUserinfoAssertion=true for invitation acceptance; ` +
+    'setup only reads this setting. A trusted admin must correct it before setup can continue.';
+  assert(result.app.oidcConfig.idTokenUserinfoAssertion === true, message);
+}
+
 async function restoreOwnerApp() {
   assert(!secondary, 'Only the owner stack may restore the owner app');
   orgId = '393311211338337681';
   const projectId = '393311211539664273', appId = '393311211707436433';
   const org = z.object({ org: object }).parse(await api('/management/v1/orgs/me')).org;
   assert(org.id === orgId && org.name === name, 'Refusing another organisation');
+  await checkEmailClaims(projectId, appId);
   const path = `/management/v1/projects/${projectId}/apps/${appId}`;
   const schema = z.object({ app: z.object({ id: z.literal(appId), name: z.literal('OpenCrane 2 Dev Web'),
     details: z.object({ resourceOwner: z.literal(orgId) }),
@@ -64,6 +82,7 @@ async function secondarySetup() {
   z.object({ project: z.object({ id: z.literal(projectId), name: z.literal(name),
     details: z.object({ resourceOwner: z.literal(orgId) }) }) })
     .parse(await api(`/management/v1/projects/${projectId}`));
+  await checkEmailClaims(projectId, '393311211707436433');
   // Retain only this slot's OIDC credentials when down removes its disposable stack.
   const credentials = `${homedir()}/.config/opencrane/dev-stack-ci-${stackId}`;
   await mkdir(credentials, { recursive: true, mode: 0o700 });
@@ -80,6 +99,7 @@ async function secondarySetup() {
   let clientId: string;
   if (appId) {
     assert(appId !== '393311211707436433', 'Refusing the owner app');
+    await checkEmailClaims(projectId, appId);
     const app = z.object({ app: z.object({ name: z.literal(appName),
       details: z.object({ resourceOwner: z.literal(orgId) }),
       oidcConfig: z.object({ clientId: z.string(), devMode: z.literal(true),
@@ -99,6 +119,7 @@ async function secondarySetup() {
     await retain('zitadel-client-secret', app.clientSecret);
     appId = app.appId;
     clientId = app.clientId;
+    await checkEmailClaims(projectId, appId);
   }
   const users: Record<string, { id: string; login: string; passwordFile: string }> = {};
   for (const role of ['owner', 'member', 'without-assistant', 'wrong-account']) {
@@ -154,6 +175,7 @@ try {
   let appId = apps[0]?.id;
   let clientId: string;
   if (appId) {
+    await checkEmailClaims(projectId, appId);
     const result = z.object({ app: z.object({ oidcConfig: z.object({ clientId: z.string() }) }) })
       .parse(await api(`/management/v1/projects/${projectId}/apps/${appId}`));
     clientId = result.app.oidcConfig.clientId;
@@ -168,6 +190,7 @@ try {
     await save('zitadel-client-secret', app.clientSecret);
     appId = app.appId;
     clientId = app.clientId;
+    await checkEmailClaims(projectId, appId);
   }
   const users: Record<string, { id: string; login: string; passwordFile: string }> = {};
   for (const role of ['owner', 'member']) {

@@ -1,0 +1,1 @@
+Invitation acceptance requires a recent sign-in with a verified ASCII email and current inviter authority. Removed members cannot reuse a saved join. Sign-in reports an error when session details exceed browser cookie limits.

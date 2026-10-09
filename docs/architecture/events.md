@@ -146,6 +146,11 @@ without either field. Email is contact data, never proof of identity. The server
 also checks the session organisation against its configured organisation and
 every event's silo against its configured silo. It accepts only the latest,
 still-pending invitation, before its expiry, using its email and role.
+Fresh acceptance also requires a verified session email equal to the invitation
+email after trimming and ignoring case. The inviter must still be an active
+Owner or Admin. A removed stream or earlier different identity cannot be reused.
+The final access check watches the joining member, inviter and ownership streams.
+General sign-in exceptions do not bypass the exact organisation check here.
 
 `member.joined` from this command always carries `invitationId`. The command id
 is scoped to the accepting principal and member subject. An exact retry returns

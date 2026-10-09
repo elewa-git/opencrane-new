@@ -139,7 +139,8 @@ function roleWithOwnership(state: StoredEvent | undefined, changes: StoredEvent[
   return memberRole ?? '';
 }
 /** Ownership supplies owner transitions; member streams retain identity and other roles. */
-export async function currentMembership(store: EventStore, silo: string, memberId: string,
+export async function currentMembership(store: Pick<EventStore, 'readStream'>,
+  silo: string, memberId: string,
   fresh?: { include: (...subjects: string[]) => void; deadline: number }) {
   const subject = ownershipSubject(silo);
   fresh?.include(`member-${memberId}`, subject);

@@ -448,3 +448,43 @@ it.each(['missing', 'old', 'future', 'swapped_session', 'different_requester'])(
   } });
   expect(reply.statusCode).toBe(400);
 });
+
+async function refusesLargeSessionCookie() {
+  const claims = { name: 'x'.repeat(2500) };
+  const user = { ...DEFAULT_MOCK_USER, claims };
+  const stack = await startStack({ user });
+  const response = await signIn(stack);
+  expect(response.statusCode).toBe(400);
+  expect(response.json()).toEqual({ error: 'Sign-in details are too large for a session cookie' });
+  expect(findCookie(response, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
+  expect(findCookie(response, stack.config.flowCookieName)).toMatchObject({ value: '', maxAge: 0 });
+}
+it('refuses to write a session cookie over 3,800 bytes with a clear sign-in error',
+  refusesLargeSessionCookie);
+
+async function explainsLargeCookieToBrowser() {
+  const user = { ...DEFAULT_MOCK_USER, claims: { name: 'x'.repeat(2500) } };
+  const stack = await startStack({ user });
+  const login = await startLogin(stack);
+  const cookies = { [stack.config.flowCookieName]: login.flowCookie };
+  const headers = { accept: 'text/html' };
+  const request = { url: login.callbackQuery, cookies, headers };
+  const response = await stack.app.inject(request);
+  expect(response.statusCode).toBe(400);
+  expect(response.body).toContain('Sign-in details are too large for a session cookie');
+  expect(response.headers.location).toBeUndefined();
+  expect(findCookie(response, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
+}
+it('explains an oversized sign-in cookie to the browser', explainsLargeCookieToBrowser);
+
+async function refusesOversizedEmailClaim() {
+  const claims = { email: `${'a'.repeat(308)}@example.test`, email_verified: true };
+  const user = { ...DEFAULT_MOCK_USER, claims };
+  const stack = await startStack({ user });
+  const response = await signIn(stack);
+  expect(response.statusCode).toBe(400);
+  expect(response.json()).toEqual({ error: 'Invalid sign-in session details' });
+  expect(findCookie(response, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
+}
+it('refuses a signed email claim longer than 320 characters without writing a session',
+  refusesOversizedEmailClaim);

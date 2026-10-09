@@ -21,22 +21,25 @@ describe('main.ts under the real Node runtime', () => {
       const env = { ...TEST_OIDC_ENV, OIDC_EXPECTED_ORG_ID: 'org-acme',
         ...nats.env(), SILO_ID: 'acme' };
       server = await startServer(env);
+      // Acceptance checks that the inviter is still an active Admin.
+      await appendInviter(nats.store);
       const invited = event('invite-process', 'member-alice', 'member.invited');
       await nats.store.append({ expectedSequence: 0, event: { ...invited, silo: 'acme',
-        data: { ...invited.data, invitationId: 'invite-process',
-          invitedIdentity: { issuer: env.OIDC_ISSUER_URL, sub: 'alice' },
+        data: { ...invited.data, invitationId: 'invite-process', invitedBy: 'inviter',
+          email: 'alice@example.test', invitedIdentity: { issuer: env.OIDC_ISSUER_URL, sub: 'alice' },
           expiresAt: new Date(Date.now() + 60_000).toISOString() } } });
       const config = loadAuthConfig(env);
       const cookie = encodeSession(config, { sub: 'alice', orgId: 'org-acme', roles: [],
+        email: 'alice@example.test', emailVerified: true,
         authTime: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 });
       const response = await fetch(`http://127.0.0.1:${server.port}/members/join`, {
         method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://app.example.test',
           cookie: `${config.cookieName}=${cookie}` },
         body: JSON.stringify({ memberId: 'alice', invitationId: 'invite-process', commandId: 'join-process', displayName: 'Alice' }),
       });
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ status: 'joined', memberId: 'alice', sequence: 2 });
-      expect(await nats.store.head()).toBe(2);
+      const body: unknown = await response.json();
+      expect({ status: response.status, body }).toEqual({ status: 200, body: { status: 'joined', memberId: 'alice', sequence: 4 } });
+      expect(await nats.store.head()).toBe(4);
     } finally {
       await server?.stop();
       await nats.close();
@@ -90,3 +93,12 @@ describe('main.ts under the real Node runtime', () => {
     expect(lines.some((line) => 'reqId' in line)).toBe(false);
   }, 40_000);
 });
+
+async function appendInviter(store: Awaited<ReturnType<typeof natsFixture>>['store']) {
+  const invited = event('inviter-invite', 'member-inviter', 'member.invited');
+  await store.append({ expectedSequence: 0, event: { ...invited, silo: 'acme',
+    data: { ...invited.data, invitationId: 'inviter-invite', role: 'admin' } } });
+  const joined = event('inviter-join', 'member-inviter', 'member.joined');
+  await store.append({ expectedSequence: 1, event: { ...joined, silo: 'acme',
+    data: { ...joined.data, invitationId: 'inviter-invite', role: 'admin' } } });
+}

@@ -659,3 +659,8 @@ the decision service. If the current policy is Ask, `mcpPolicy` returns a
 header keep the existing Ask flow. Unknown and repeated mode values are refused.
 The real gateway test covers Allow changing to Ask with no new tool request or
 `tool.approval_requested` event. No paid model call is made.
+
+Invitation acceptance reuses `authorityFence` and `currentMembership`.
+Their store arguments accept the read methods they use, allowing the server's
+join command to keep its small store contract. `history` and membership reads
+need `readStream`; the access check also needs `head`. Their behaviour is unchanged.

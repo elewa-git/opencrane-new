@@ -28,7 +28,8 @@ original sequence; changed content, colleague or caller with that id refuses.
 An active original creator can retry a persisted creation after closure or the
 colleague's removal; a new creation still requires two active members. New messages
 also require both participants to remain active. This prevents messages building
-up for a departed recipient who could read them on rejoining with the same id.
+up for a departed recipient. A returning person needs a new admission member id;
+that id does not regain access to the old conversation.
 A post refused because the other person left returns 409; history stays readable.
 Retries of persisted messages still report the original append. Creation
 does not reopen a closed conversation or add people.

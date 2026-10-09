@@ -565,3 +565,17 @@ slot's computer namespace and its three named admission policies. It builds a
 second image digest under a slot-specific tag. It uses disposable PostgreSQL
 databases through `PG_TEST_URL`. Run it with the rest of that slot stopped.
 The owner namespace and configuration directory must never be used.
+
+## Invitation sign-in requirements
+
+The [acceptance API](../../docs/api/members.md#zitadel-deployment-requirements)
+requires self-registration off in the silo's organisation, no external identity
+providers that assert verified emails, and only trusted admins setting verified
+emails. Emails are not unique in Zitadel. Each app must have
+`idTokenUserinfoAssertion=true` so its checked ID token includes email claims.
+
+`zitadel-setup.ts` reads the owner app and the selected secondary app to check
+this setting. Setup fails with a clear message if it is missing, false or a string.
+The check adds no provider write, does not repair the setting and does not touch
+external users or other organisations. Tests use an isolated provider fixture;
+they verify that a refusal leaves provider state unchanged.

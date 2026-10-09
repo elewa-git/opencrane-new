@@ -5,8 +5,10 @@ import ts from 'typescript';
 import { expect, it } from 'vitest';
 
 const source = join(import.meta.dirname, '..', 'src');
-// Limit the first-owner claim to the installation's own organisation, even in development.
-const strictOnPurpose = ['members/bootstrap.ts'];
+// Claiming the first owner and accepting an invitation stay limited to the installation's own
+// organisation, even in development. A person allowed in by name from elsewhere cannot join
+// through an invitation.
+const strictOnPurpose = ['members/bootstrap.ts', 'members/routes.ts'];
 const apiRouteExceptions = ['members/bootstrap.ts'];
 // Keep /healthz in server.ts public. It is outside /api and needs no session.
 const routeMethods = new Set([
