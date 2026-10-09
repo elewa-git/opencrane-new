@@ -19,7 +19,7 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { wireSubject } from '@opencrane/event-store';
 import {
-  members, computers, conversations, pgDb, ProjectionRunner, connectMemberFeed,
+  members, groups, computers, conversations, pgDb, ProjectionRunner, connectMemberFeed,
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { envelope, history } from '@opencrane/models';
@@ -64,7 +64,7 @@ async function directFixture() {
   await append('assistant-assistant', 'assistant.created', {
     assistantId: 'assistant', ownerId: 'alice', kind: 'personal',
   });
-  for (const projection of [members, conversations, computers]) {
+  for (const projection of [members, groups, conversations, computers]) {
     await runner.initialise(projection);
     await runner.run(projection);
   }
@@ -78,8 +78,12 @@ async function directFixture() {
       cookie: `${config.cookieName}=${encodeSession(config, session)}`,
     };
   }
-  async function create() {
-    const input = { id: 'create', conversationId: 'direct', mode: 'direct', colleagueId: 'bob' };
+  async function create(mode = 'direct') {
+    const directInput = { id: 'create', conversationId: 'direct', mode: 'direct', colleagueId: 'bob' };
+    const groupInput = { id: 'create', conversationId: 'direct', mode: 'group',
+      participantIds: ['alice', 'bob'] };
+    let input: typeof directInput | typeof groupInput = directInput;
+    if (mode === 'group') input = groupInput;
     const response = await app.inject({
       method: 'POST', url: '/api/conversations', headers: headers(), payload: input,
     });
@@ -444,7 +448,9 @@ function rowId(row: ReturnType<typeof chatFeedSchema.parse>['rows'][number]) {
   return row.id;
 }
 
-it('keeps human messages out of the bridge, computer, approval and budget paths', async () => {
+it.each(['direct', 'group'])(
+  'keeps %s messages out of the bridge, computer, approval and budget paths',
+  async (mode) => {
   const fixture = await directFixture();
   let requests = 0;
   function recordRequest(request: IncomingMessage, response: ServerResponse) {
@@ -457,7 +463,7 @@ it('keeps human messages out of the bridge, computer, approval and budget paths'
   const stop = new AbortController();
   let work: Promise<void> | undefined;
   try {
-    await fixture.create();
+    await fixture.create(mode);
     await fixture.app.inject({
       method: 'POST', url: '/api/conversations/direct/messages', headers: fixture.headers(),
       payload: { id: 'human', text: 'Ordinary text @agent' },
@@ -823,3 +829,125 @@ async function refusesRemovedMemberBeforeCreationPermissions() {
 
 it('still refuses a removed member while creation permissions are applying',
   refusesRemovedMemberBeforeCreationPermissions, 120_000);
+
+
+async function seedChatGroup(fixture: Awaited<ReturnType<typeof directFixture>>) {
+  await fixture.append('team-sales', 'team.created', {
+    teamId: 'sales', name: 'Sales', createdBy: 'carol',
+  });
+  for (const memberId of ['alice', 'bob']) {
+    await fixture.append('team-sales', 'team.member_added', {
+      teamId: 'sales', memberId, addedBy: 'carol',
+    });
+  }
+  await fixture.runner.run(groups);
+  const response = await fixture.app.inject({
+    url: '/api/chat/groups/sales', headers: fixture.headers('bob'),
+  });
+  expect(response.statusCode).toBe(200);
+  return response.json<{ groupId: string; position: number; members: unknown[] }>();
+}
+
+it('offers only own groups and denies stale or foreign reviewed snapshots', async () => {
+  const fixture = await directFixture();
+  try {
+    const snapshot = await seedChatGroup(fixture);
+    expect(snapshot.members).toEqual([
+      { memberId: 'alice', displayName: 'alice' }, { memberId: 'bob', displayName: 'bob' },
+    ]);
+    const list = await fixture.app.inject({
+      url: '/api/chat/groups?q=Sales&limit=50', headers: fixture.headers('bob'),
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json()).toEqual({ rows: [{ groupId: 'sales', name: 'Sales' }], next: null });
+    const outsider = await fixture.app.inject({
+      url: '/api/chat/groups/sales', headers: fixture.headers('carol'),
+    });
+    expect(outsider.statusCode).toBe(403);
+    expect(outsider.body).not.toContain('alice');
+    const input = { id: 'group-create', conversationId: 'group', mode: 'group',
+      participantIds: ['alice', 'bob'], groupId: 'sales', groupSnapshotPosition: snapshot.position };
+    const creation = { method: 'POST' as const, url: '/api/conversations',
+      headers: fixture.headers('carol'), payload: { ...input, participantIds: ['bob', 'carol'] } };
+    expect((await fixture.app.inject(creation)).statusCode).toBe(403);
+    await fixture.append('team-sales', 'team.member_removed', {
+      teamId: 'sales', memberId: 'alice', removedBy: 'carol',
+    }, false);
+    const stale = { ...creation, headers: fixture.headers('bob'), payload: input };
+    expect((await fixture.app.inject(stale)).statusCode).toBe(409);
+    expect(await fixture.nats.store.head('conversation-group')).toBe(0);
+    const removed = await fixture.app.inject({
+      url: '/api/chat/groups/sales', headers: fixture.headers(),
+    });
+    expect(removed.statusCode).toBe(403);
+    const invalid = await fixture.app.inject({
+      url: '/api/chat/groups?limit=51', headers: fixture.headers('bob'),
+    });
+    expect(invalid.statusCode).toBe(400);
+  } finally {
+    await fixture.close();
+  }
+}, 120_000);
+
+it('keeps a lost creation reply tied to the reviewed audience for a member without an assistant',
+  async () => {
+    const fixture = await directFixture();
+    try {
+      const snapshot = await seedChatGroup(fixture);
+      const input = { id: 'group-create', conversationId: 'group', mode: 'group',
+        participantIds: ['alice', 'bob'], groupId: 'sales', groupSnapshotPosition: snapshot.position };
+      const request = { method: 'POST' as const, url: '/api/conversations',
+        headers: fixture.headers('bob'), payload: input };
+      const append = fixture.options.store.append.bind(fixture.options.store);
+      async function loseReply(command: Parameters<typeof append>[0]) {
+        await append(command);
+        throw new Error('Lost reply');
+      }
+      fixture.options.store.append = loseReply;
+      expect((await fixture.app.inject(request)).statusCode).toBe(503);
+      fixture.options.store.append = append;
+      const rows = await history(fixture.nats.store, 'conversation-group', 'test');
+      expect(rows).toHaveLength(1);
+      await fixture.auth.handler.handle(rows[0]!.event, fixture.db);
+      await fixture.append('team-sales', 'team.member_removed', {
+        teamId: 'sales', memberId: 'bob', removedBy: 'carol',
+      });
+      await fixture.append('team-sales', 'team.member_added', {
+        teamId: 'sales', memberId: 'carol', addedBy: 'carol',
+      });
+      const retry = { ...request, payload: { ...input, participantIds: ['bob', 'alice'] } };
+      const response = await fixture.app.inject(retry);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ status: 'appended', sequence: rows[0]!.sequence });
+      const changed = { ...request, payload: { ...input, participantIds: ['bob', 'carol'] } };
+      expect((await fixture.app.inject(changed)).statusCode).toBe(409);
+      const send = { method: 'POST' as const, url: '/api/conversations/group/messages',
+        headers: fixture.headers('bob'), payload: { id: 'human-group', text: 'Hello @agent' } };
+      expect((await fixture.app.inject(send)).statusCode).toBe(200);
+      const stop = { ...send, payload: { id: 'stop-group', stopTurnId: 'human-group' } };
+      expect((await fixture.app.inject(stop)).statusCode).toBe(409);
+      const execution = { ...send,
+        payload: { id: 'execution-group', text: 'Hello', executionMode: 'memory_free' } };
+      expect((await fixture.app.inject(execution)).statusCode).toBe(409);
+      await fixture.runner.run(conversations);
+      const feed = await fixture.app.inject({
+        url: '/api/conversations/group/messages', headers: fixture.headers('bob'),
+      });
+      expect(feed.statusCode).toBe(200);
+      expect(chatFeedSchema.parse(feed.json()).computerState).toBe('not_applicable');
+      const list = await fixture.app.inject({
+        url: '/api/conversations', headers: fixture.headers('bob'),
+      });
+      expect(chatListSchema.parse(list.json()).rows).toMatchObject([
+        { mode: 'group', participantIds: ['alice', 'bob'], createdBy: 'bob' },
+      ]);
+      const outsider = await fixture.app.inject({
+        url: '/api/conversations/group/messages', headers: fixture.headers('carol'),
+      });
+      expect(outsider.statusCode).toBe(403);
+      const saved = await history(fixture.nats.store, 'conversation-group', 'test');
+      expect(saved.map(eventType)).toEqual(['conversation.created', 'message.posted']);
+    } finally {
+      await fixture.close();
+    }
+  }, 120_000);
