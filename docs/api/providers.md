@@ -204,3 +204,11 @@ records the cache budget and the limits on cold reads.
 - `PROVIDER_SECRETS_DIR` is not wired into the dev stack. Both the server and models
   process need the same private secret directory before a fresh-install provider
   journey can run. Missing wiring denies verification rather than proving it works.
+
+## Saved provider choices
+
+`GET /api/org/providers/:providerId/bindings` returns saved `rows`, `expectedProviderSequence`, real `assistantCount` values and `ordinaryCallsAvailable: false`.
+Its `routines.status` is `absent` after checked empty history, otherwise `unsupported`. Reader failure or changing history returns 503.
+`POST` accepts `commandId`, `expectedProviderSequence`, `expectedRevision`, `kind` (`assistant` or `silo_default`), `dependantId`, `task: chat_turn`, `expectedBindingSequence`, and `action: select|pause`.
+Select requires `model`; a move also requires `expectedSourceRevision`. Pause keeps the provider and model. The existing changes GET recovers the original receipt; retry uses the same body and id.
+Saved choices do not yet control ordinary calls. Retirement remains unavailable.

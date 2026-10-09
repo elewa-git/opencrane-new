@@ -1163,3 +1163,5 @@ Allow tools still fail if policy changes to Ask mid-turn.
 Human group events are now valid stored records. Existing chat reads, lists and
 subscriptions refuse group mode until its bounded access reader is introduced.
 Creation and participant commands for that mode are not exposed yet.
+
+Provider binding POSTs use the existing organisation, exact Origin and current Owner/Admin checks with a 4,096-byte limit. GET reads checked event histories, reports real default counts and marks routine history as absent or unsupported. Reader failure or changing history returns 503. See [the provider API](../../docs/api/providers.md).

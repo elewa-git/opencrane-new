@@ -474,6 +474,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | `provider.created` | Owner/Admin command | provider metadata and OpenFGA silo relation | No key, model call or grant. |
 | `provider.key_saved` | Owner/Admin command after secret custody | provider metadata | Invalidate current reachability/model evidence; never a grant. |
 | `provider.models_selected` | Owner/Admin command | provider metadata | Registry selection only; grants belong to P4-22. |
+| `provider.model_binding_set` | Owner/Admin command | provider metadata and model bindings | Record one assistant or silo default choice or pause. No key rotation, grant or ordinary call. The default reaction records the first verified connection once the chat model is enabled. |
 | `provider.verification_requested` | Owner/Admin command | provider metadata | Explicit live check only; no replay dispatch. |
 | `provider.verification_dispatched` | authenticated gateway admission | provider metadata | Consume one check, with existing budget reservation for paid tests. |
 | `provider.verification_recorded` | live verification reaction or explicit skip | provider metadata | Dated original-attempt outcome, including late results. No dispatch means unknown and zero-cost release; never raw responses or credentials. |
@@ -493,6 +494,7 @@ events. Desktop admission additionally requires an explicit member
 | `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |
 | `update-openfga` | `provider.created`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
 | `seed-ownership` | `silo.owner_bootstrapped` |
+| `seed-provider-default` | `provider.verification_recorded`, `provider.models_selected` |
 | `seed-model-grants` | `member.joined`, `silo.owner_bootstrapped`, `assistant.created` |
 | `create-assistant` | `member.joined`, `silo.owner_bootstrapped` |
 | `claim-computer` | `assistant.created`, `computer.lost` |

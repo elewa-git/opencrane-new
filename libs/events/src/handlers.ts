@@ -26,6 +26,7 @@ export const handlerSubscriptions = {
     "grant.revoked",
   ],
   "seed-ownership": ["silo.owner_bootstrapped"],
+  "seed-provider-default": ["provider.verification_recorded", "provider.models_selected"],
   "seed-model-grants": ["member.joined", "silo.owner_bootstrapped", "assistant.created"],
   "create-assistant": ["member.joined", "silo.owner_bootstrapped"],
   "claim-computer": ["assistant.created", "computer.lost"],

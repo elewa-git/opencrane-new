@@ -12,11 +12,16 @@ async function removeReplay(tx: Query) {
 }
 async function state(db: Query, table: 'providers' | 'providers_replay') {
   const result = await db.query(`SELECT * FROM ${table} ORDER BY silo, provider_id`);
-  return result.rows;
+  const bindings = table === 'providers' ? 'model_bindings' : 'model_bindings_replay';
+  const choices = await db.query(`SELECT * FROM ${bindings} ORDER BY silo, kind, dependant_id, task`);
+  return { providers: result.rows, bindings: choices.rows };
 }
 async function switchTables(tx: Query, head: number, unchanged: boolean) {
   await tx.query("SET LOCAL lock_timeout = '250ms'");
-  await tx.query('LOCK TABLE providers, providers_replay IN ACCESS EXCLUSIVE MODE');
+  await tx.query(`LOCK TABLE providers, providers_replay, model_bindings, model_bindings_replay
+    IN ACCESS EXCLUSIVE MODE`);
+  await tx.query('TRUNCATE model_bindings');
+  await tx.query('INSERT INTO model_bindings SELECT * FROM model_bindings_replay');
   await tx.query('TRUNCATE providers');
   await tx.query('INSERT INTO providers SELECT * FROM providers_replay');
   await replayProviders.drop(tx);

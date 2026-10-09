@@ -765,3 +765,5 @@ Initial model grants check current membership for people and personal assistant
 owners. Removed members get no grants from older creation events. Existing grants
 and revocations remain unchanged. Tests are `actor.test.ts`, `loss-backfill.test.ts`
 and `grants-backfill.test.ts`; settlement history remains covered by `reconcile.test.ts`.
+
+Provider bindings read history before the two-second authority check and make one category-conditional append with `historyChecked`. Moves require both creation receipts, manage permissions and reviewed revisions. The default reaction never replaces a recorded choice or pause. Ordinary-call activation remains unavailable.

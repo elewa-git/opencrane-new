@@ -1,0 +1,1 @@
+Owners and admins can record provider choices and pauses for assistants or the silo default, inspect real assistant counts and recover saved results. The first verified connection becomes the default when its chat model is enabled. Routine gaps stay explicit. These records do not yet change ordinary model calls or enable retirement.

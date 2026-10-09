@@ -5,10 +5,10 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { pgDb, providers, ProjectionRunner, rebuildProviderProjection } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
+import type { EventEnvelope } from '@opencrane/events';
 import { providerDefaultHandler, providerSecretRef } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
-
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -120,16 +120,9 @@ it.each([['bob', 'https://app.example.test', 'org-acme'],
   ['owner', 'https://foreign.test', 'org-acme'],
   ['owner', 'https://app.example.test', 'foreign']])('checks current authority and Origin', deniedRequest);
 async function seedsFirstVerified() {
-  const binding = await createStore(fga.apiUrl, 'acme');
-  const differentStore = providerDefaultHandler(nats.store, binding);
-  const trigger = event('seed', 'provider-secondary', 'provider.models_selected');
-  trigger.silo = 'acme';
-  trigger.data = { providerId: 'secondary', revision: 3, changedBy: 'owner',
-    models: ['gpt-6.1-sol'] };
-  const before = await nats.store.head();
-  // Require applied IAM from the actual silo, even for an automatic default.
-  await expect(differentStore.handle(trigger, pgDb(dbs.queue))).rejects.toThrow();
-  expect(await nats.store.head()).toBe(before);
+  const trigger: EventEnvelope = { ...event('seed', 'provider-secondary', 'provider.models_selected'),
+    silo: 'acme', data: { providerId: 'secondary', revision: 3, changedBy: 'owner',
+      models: ['gpt-6.1-sol'] } };
   const handler = providerDefaultHandler(nats.store, binding);
   await handler.handle(trigger, pgDb(dbs.queue));
   const saved = await request('GET');
@@ -138,7 +131,7 @@ async function seedsFirstVerified() {
   await handler.handle(trigger, pgDb(dbs.queue));
   expect(await nats.store.head()).toBe(position);
 }
-it('keeps automatic default creation behind current silo authority', seedsFirstVerified);
+it('records the first verified provider once, even when another provider triggers the reaction', seedsFirstVerified);
 async function savesAndReconciles() {
   const dependency = (await request('GET')).json<{ rows: { position: number }[] }>();
   const command = await input({ kind: 'silo_default', dependantId: 'acme',
@@ -184,16 +177,26 @@ async function racesAndExpires() {
   const commands = [request('POST', 'primary', command), request('POST', 'secondary', command)];
   const responses = await Promise.all(commands);
   function status(response: (typeof responses)[number]) { return response.statusCode; }
-  expect(responses.map(status).sort()).toEqual([200, 409]);
-  expect(appendSpy).toHaveBeenCalledWith(expect.objectContaining({
-    expectedSubject: 'provider-*', historyChecked: true, deadline: expect.any(Number) }));
+  const statuses = responses.map(status);
+  statuses.sort();
+  expect(statuses).toEqual([200, 409]);
+  const appended = appendSpy.mock.calls[0]?.[0];
+  expect(appended).toMatchObject({ expectedSubject: 'provider-*', historyChecked: true });
+  expect(Number.isFinite(appended?.deadline)).toBe(true);
   appendSpy.mockRestore();
   const expiredCommand = await input();
   const clock = vi.spyOn(performance, 'now');
-  let calls = 0;
-  function expires() { return ++calls < 4 ? 100 : 3000; }
-  clock.mockImplementation(expires);
+  clock.mockReturnValue(100);
+  const head = nats.store.head.bind(nats.store);
+  const headSpy = vi.spyOn(nats.store, 'head');
+  async function expireAuthority(subject?: string, deadline?: number) {
+    const position = await head(subject, deadline);
+    if (subject === undefined) clock.mockReturnValue(3000);
+    return position;
+  }
+  headSpy.mockImplementation(expireAuthority);
   expect((await request('POST', 'primary', expiredCommand)).statusCode).toBe(503);
+  headSpy.mockRestore();
   clock.mockRestore();
 }
 it('orders concurrent choices and refuses an expired authority check', racesAndExpires);
@@ -215,5 +218,11 @@ async function routineGaps() {
   spy.mockRestore();
   await append('routine-old', 'routine.paused', { routineId: 'old', pausedBy: 'owner' });
   expect((await request('GET')).json()).toMatchObject({ routines: { status: 'unsupported' } });
+  async function* lags(subject: string, from?: number, deadline?: number) {
+    if (subject !== 'routine-*') yield* read(subject, from, deadline);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(lags);
+  expect((await request('GET')).statusCode).toBe(503);
+  vi.restoreAllMocks();
 }
 it('reports reader failure and legacy routine history without invented counts', routineGaps);

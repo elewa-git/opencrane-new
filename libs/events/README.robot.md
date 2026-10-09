@@ -134,3 +134,5 @@ Storage commands are in the companion draft.
 acceptance. Issuer is a URL and subject is a non-empty string. Bound invitation
 joins keep their old event shape. The member projection checks that the recorded
 subject matches the human principal and applies the binding for later reads.
+
+`provider.model_binding_set` records assistant or `silo_default` choices for `chat_turn`, including model, active/paused state, previous binding position and reviewed category/configuration positions. It changes no key, verification evidence or grant.

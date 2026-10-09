@@ -17,6 +17,12 @@ export const providerKeySchema = z.object({ ...base,
 }).strict();
 export const providerModelsSchema = z.object({ ...base,
   models: z.array(modelId).max(11) }).strict();
+export const providerBindingSchema = z.object({ ...base,
+  kind: z.enum(['assistant', 'silo_default']), dependantId: id, task: z.literal('chat_turn'),
+  expectedProviderSequence: z.int().nonnegative(), sourceRevision: revision.optional(),
+  previousBindingSequence: z.int().nonnegative(), state: z.enum(['active', 'paused']),
+  model: modelId, reason: z.literal('Paused by an administrator').optional(),
+}).strict();
 const verification = { ...base, attemptId: id, kind: z.enum(['reachability', 'model']),
   model: modelId.optional(), reservedCents: centsSchema.optional() };
 export const providerRequestedSchema = z.object(verification).strict();
@@ -41,6 +47,9 @@ export const providerEvents = [
   event('provider.models_selected', 'provider', 'An admin selected registry models without grants.',
     providerModelsSchema, { providerId: 'primary', revision: 3, changedBy: 'owner',
       models: ['gpt-6.1-sol'] }),
+  event('provider.model_binding_set', 'provider', 'An admin recorded a provider choice or pause.',
+    providerBindingSchema, { ...baseExample(), kind: 'silo_default', dependantId: 'acme',
+      task: 'chat_turn', expectedProviderSequence: 0, previousBindingSequence: 0, state: 'active', model: 'gpt-6.1-sol' }),
   event('provider.verification_requested', 'provider', 'An admin requested a revision-bound check.',
     providerRequestedSchema, verificationExample),
   event('provider.verification_dispatched', 'provider', 'A check consumed its single dispatch.',
@@ -48,3 +57,5 @@ export const providerEvents = [
   event('provider.verification_recorded', 'provider', 'Safe dated check evidence was recorded.',
     providerResultSchema, { ...verificationExample, outcome: 'pass' }),
 ];
+
+function baseExample() { return { providerId: 'primary', revision: 3, changedBy: 'owner' }; }
