@@ -137,6 +137,16 @@ Conversation creation checks each participant separately, so a later removal can
 restore their access. The [full reaction audit](../handlers/README.robot.md#old-event-audit)
 lists every currently enabled pair and its test.
 
+Conversation backfill compares global event positions across `conversation-<id>`
+and `participation-<id>`. The first stream holds creation and older participant
+changes; the second holds new participant changes. A later applied participant
+change takes precedence over an older addition or removal. Creation still writes
+its immutable creator and silo links, but skips a participant whose latest applied
+change is removal. Re-addition restores participation only; the server enforces
+the new history interval. Silo rejoin cannot undo an explicit participant removal.
+The cross-stream cases in `test/projection.test.ts` compare permissions and event
+receipts against a clean rebuild before and after silo removal and rejoin.
+
 Ownership transfers check the owner's authority at the saved transfer, using the
 ownership events before it. A later step-down or member removal of the person who
 made the transfer does not undo a valid transfer to somebody else. Old grant

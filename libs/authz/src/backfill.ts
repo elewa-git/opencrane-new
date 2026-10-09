@@ -1,5 +1,6 @@
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema, ownershipSteppedDownSchema,
+import { conversationEventId, legacyMemberRole, ownershipSeededSchema,
+  ownershipTransferredSchema, ownershipSteppedDownSchema,
   type EventEnvelope } from '@opencrane/events';
 
 function value(event: EventEnvelope, name: string): unknown {
@@ -20,9 +21,6 @@ function sameTarget(previous: EventEnvelope, later: EventEnvelope): boolean {
   }
   if (previous.type.startsWith('ownership.') || previous.type.startsWith('team.member_')) {
     return value(previous, 'memberId') === value(later, 'memberId');
-  }
-  if (previous.type.startsWith('participant.')) {
-    return value(previous, 'participantId') === value(later, 'participantId');
   }
   return previous.type.startsWith('member.') || previous.type === 'silo.owner_bootstrapped';
 }
@@ -116,6 +114,14 @@ export async function supersededEvent(
   event: EventEnvelope,
   applied: (eventId: string) => Promise<boolean>,
 ): Promise<boolean> {
+  if (event.type.startsWith('participant.')) {
+    const participantId = value(event, 'participantId');
+    if (typeof participantId !== 'string') {
+      throw new Error('Invalid participant identity');
+    }
+    const later = await laterParticipantChange(store, event, participantId, applied);
+    return later !== undefined;
+  }
   let found = false;
   let sequence: number | undefined;
   for await (const row of store.readStream(event.subject)) {
@@ -145,24 +151,60 @@ export async function supersededEvent(
   return false;
 }
 
+async function laterParticipantChange(
+  store: Pick<EventStore, 'readStream'>,
+  event: EventEnvelope,
+  participantId: string,
+  applied: (eventId: string) => Promise<boolean>,
+): Promise<StoredEvent | undefined> {
+  const conversationId = conversationEventId(event);
+  let sequence: number | undefined;
+  for await (const row of store.readStream(event.subject)) {
+    if (row.event.silo !== event.silo) {
+      throw new Error('Authorisation history silo mismatch');
+    }
+    if (row.event.id === event.id) {
+      sequence = row.sequence;
+      break;
+    }
+  }
+  if (sequence === undefined) {
+    return undefined;
+  }
+  // Compare global positions because older participant changes used the conversation stream.
+  const subjects = [`conversation-${conversationId}`, `participation-${conversationId}`];
+  let latest: StoredEvent | undefined;
+  for (const subject of subjects) {
+    for await (const row of store.readStream(subject, sequence + 1)) {
+      if (row.event.silo !== event.silo) {
+        throw new Error('Authorisation history silo mismatch');
+      }
+      if (!['participant.added', 'participant.removed'].includes(row.event.type)) {
+        continue;
+      }
+      if (conversationEventId(row.event) !== conversationId) {
+        throw new Error('Conversation history identity mismatch');
+      }
+      if (value(row.event, 'participantId') !== participantId ||
+          (latest !== undefined && row.sequence <= latest.sequence)) {
+        continue;
+      }
+      if (await applied(row.event.id)) {
+        latest = row;
+      }
+    }
+  }
+  return latest;
+}
+
 export async function removedParticipant(
   store: Pick<EventStore, 'readStream'>,
   event: EventEnvelope,
   participantId: string,
   applied: (eventId: string) => Promise<boolean>,
 ): Promise<boolean> {
-  const later: StoredEvent[] = [];
-  let found = false;
-  for await (const row of store.readStream(event.subject)) {
-    if (row.event.id === event.id) {
-      found = true;
-    } else if (found && value(row.event, 'participantId') === participantId &&
-        ['participant.added', 'participant.removed'].includes(row.event.type) &&
-        await applied(row.event.id)) {
-      later.push(row);
-    }
-  }
-  return later.at(-1)?.event.type === 'participant.removed';
+  const later = await laterParticipantChange(store, event, participantId, applied);
+  return later?.event.type === 'participant.removed';
 }
 
 /** Check authority at the saved transfer, before later step-downs or removals. */

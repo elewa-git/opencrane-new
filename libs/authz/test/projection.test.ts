@@ -679,6 +679,75 @@ async function oldPermissionKeepsLaterChange(test: OldPermissionCase) {
 it.each(oldPermissionCases)('old $type preserves later applied permissions',
   oldPermissionKeepsLaterChange);
 
+const crossStreamParticipantCases = [
+  { oldType: 'conversation.created', laterType: 'participant.removed' },
+  { oldType: 'participant.added', laterType: 'participant.removed' },
+  { oldType: 'participant.removed', laterType: 'participant.added' },
+];
+
+function participantChange(id: string, type: string, subject: string) {
+  let data: Record<string, unknown>;
+  if (type === 'participant.added') {
+    data = { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' };
+  } else {
+    data = { conversationId: 'chat', participantId: 'bob', removedBy: 'alice' };
+  }
+  return savedPermission(id, type, subject, data);
+}
+
+async function preservesParticipantChangeAcrossStreams(
+  test: typeof crossStreamParticipantCases[number],
+) {
+  const nats = await natsFixture();
+  try {
+    const alice = member('alice', 'member.joined', 'alice');
+    const bob = member('bob', 'member.joined', 'bob');
+    const creationData = { conversationId: 'chat', createdBy: 'alice', mode: 'group',
+      participantIds: ['alice', 'bob'] };
+    const created = savedPermission('created', 'conversation.created', 'conversation-chat',
+      creationData);
+    let old = created;
+    const history = [alice, bob, created];
+    const initial = [alice, bob];
+    if (test.oldType !== 'conversation.created') {
+      old = participantChange('old-participant', test.oldType, created.subject);
+      history.push(old);
+      initial.push(created);
+    }
+    const later = participantChange('later-participant', test.laterType, 'participation-chat');
+    history.push(later);
+    await nats.seed(history);
+    const binding = await createStore(fga.apiUrl, 'test');
+    const projection = memberAuthorisation(binding, nats.store);
+    await apply(projection, initial);
+    await apply(projection, [later, old, old]);
+    const allowed = test.laterType === 'participant.added';
+    expect((await projection.conversation('bob', 'chat', 'read')).allowed).toBe(allowed);
+    expect((await projection.conversation('bob', 'chat', 'post')).allowed).toBe(allowed);
+    expect((await projection.conversation('bob', 'chat', 'manage_participants')).allowed)
+      .toBe(false);
+    expect((await projection.conversation('alice', 'chat', 'manage_participants')).allowed)
+      .toBe(true);
+    const rebuildOptions = { verifyAgainst: projection.binding };
+    const rebuilt = await rebuildMembers(fga.apiUrl, 'test', nats.reader, rebuildOptions);
+    expect(rebuilt.verified).toBe(true);
+
+    const removed = member('bob-removed', 'member.removed', 'bob');
+    const rejoined = member('bob-rejoined', 'member.joined', 'bob');
+    await nats.seed([removed, rejoined]);
+    await apply(projection, [removed, rejoined]);
+    expect((await projection.conversation('bob', 'chat', 'read')).allowed).toBe(allowed);
+    const rejoinedRebuild = await rebuildMembers(fga.apiUrl, 'test', nats.reader, rebuildOptions);
+    expect(rejoinedRebuild.verified).toBe(true);
+  } finally {
+    await nats.close();
+  }
+}
+it.each(crossStreamParticipantCases)(
+  'old $oldType keeps a later $laterType on the participation stream',
+  preservesParticipantChangeAcrossStreams,
+);
+
 async function stableCreation(type: string) {
   const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'));
   let data: Record<string, unknown>;

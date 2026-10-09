@@ -88,8 +88,9 @@ export class HandlerRuntime {
   }
 
   async enqueue(handler: Handler, event: EventEnvelope, tx: Query): Promise<void> {
+    const singletonKey = handlerJobKey(handler.name, event);
     const id = await this.boss.send(handler.name, event, {
-      singletonKey: event.subject,
+      singletonKey,
       db: transactionAdapter(tx),
     });
     if (!id) {
@@ -105,7 +106,8 @@ export class HandlerRuntime {
       return 0;
     }
     function job(event: EventEnvelope) {
-      return { data: event, singletonKey: event.subject };
+      const singletonKey = handlerJobKey(handler.name, event);
+      return { data: event, singletonKey };
     }
     const jobs = events.map(job);
     const options = { db: transactionAdapter(tx), returnId: true };

@@ -28,7 +28,7 @@ assistants and claims computers.
 ```mermaid
 flowchart LR
   ops["apps/ops<br/>workers"] -->|starts work| handlers["libs/handlers<br/>reaction jobs"]
-  nats["NATS JetStream<br/>event log"] -->|new and saved events| handlers
+  nats["NATS JetStream<br/>event log"] -->|new events and upgrade history| handlers
   reactions["libs/models and libs/authz<br/>registered reactions"] -.->|registers reactions| handlers
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
   handlers -.-> events["libs/events<br/>reaction list"]
@@ -48,7 +48,8 @@ flowchart LR
 - Add historical jobs for new subscriptions during a stopped-service upgrade.
 
 Chat creation and participant permission jobs run in the same conversation order,
-even though their events use separate streams.
+even though their events use separate streams. Both new jobs and historical jobs
+queued during an upgrade use that order.
 
 ## Processes it handles
 

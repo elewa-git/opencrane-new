@@ -208,7 +208,11 @@ Consumer creation/reset belongs to the authorised provisioning job, following
 
 `update-openfga` keys creation and participant changes by the checked conversation
 id (`conversation-<id>`), retaining creation's key. Other handlers keep subject keys.
-Enqueue and worker validation use the same function for exact current and legacy subjects.
+Live enqueue, historical batch enqueue and worker validation use `handlerJobKey`
+for exact current and legacy subjects. The real PostgreSQL and NATS checks in
+`test/conversation-jobs.test.ts` cover historical creation, removal and re-addition
+in saved order. `libs/authz/test/conversation-order.test.ts` holds creation open
+while removal is queued, then checks permissions and a complete OpenFGA rebuild.
 
 Before upgrading, stop writers and dispatch. Drain queued and running IAM jobs with
 the old worker; repair and retry failed jobs first. Stop that worker, deploy worker

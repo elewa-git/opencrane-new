@@ -14,7 +14,7 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.-> authz
   ops["apps/ops<br/>background workers"] -.-> authz
   authz -->|checks and updates access| fga["OpenFGA<br/>permissions service"]
-  authz -->|reads later changes| store["libs/event-store<br/>saved events"]
+  authz -->|reads later joins and removals| store["libs/event-store<br/>saved events"]
   authz -.-> handlers["libs/handlers<br/>background jobs"]
 ```
 
@@ -40,6 +40,11 @@ permission changes before applying it. Removing a person from the silo keeps
 recorded grants, group membership, conversation participants and assistant links.
 These records are available again if the person rejoins. The server and models
 process still check current silo membership before allowing a request.
+
+Removing someone from a conversation deletes their participant permission.
+A delayed creation or join keeps a later removal, even when the events use
+different streams. Adding the person again gives them access from their new join.
+The server checks that history limit separately from OpenFGA permissions.
 
 ## How to run or test it
 

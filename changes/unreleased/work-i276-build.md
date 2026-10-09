@@ -14,3 +14,7 @@ assistant links now survive silo removal and rejoin, matching a clean permission
 rebuild. Recovery tests cover interruption inside a job chunk and final publication,
 incompatible resume records, rejected silo history and exhausted history retries.
 Large-queue polling remains limited; million-event throughput is not qualified.
+
+Live and historical conversation permission jobs now share the same conversation
+queue key. Delayed creation and participant changes check both old and new event
+streams, so they keep later removals and re-additions without changing creator rights.

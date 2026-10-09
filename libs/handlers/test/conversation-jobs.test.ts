@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { event } from '@opencrane/event-store/testing';
-import { HandlerRuntime, registerHandler } from '../src/index.ts';
+import { HandlerRuntime, registerHandler, upgradeHandlers } from '../src/index.ts';
 import { handlerJobKey } from '../src/job-key.ts';
 import { fixture, until } from './helpers.ts';
 import { createLogger } from '@opencrane/observability';
@@ -49,3 +49,52 @@ async function acceptsQueuedLegacyJobs() {
 }
 it('uses the conversation key for both forms and accepts jobs queued before the upgrade',
   acceptsQueuedLegacyJobs);
+
+async function queuesHistoricalConversationJobs() {
+  const fixtureOptions = { idleTimeoutMillis: 50 };
+  const storage = await fixture(fixtureOptions);
+  const applied: string[] = [];
+  function handle(saved: EventEnvelope) {
+    applied.push(saved.id);
+    return Promise.resolve();
+  }
+  const handler = registerHandler('update-openfga', handle);
+  const runtime = await storage.runtime([handler]);
+  try {
+    const creation = { ...event('creation', 'conversation-chat', 'conversation.created'),
+      data: { conversationId: 'chat', createdBy: 'alice', mode: 'group',
+        participantIds: ['alice', 'bob'] } };
+    const removed = { ...event('removed', 'participation-chat', 'participant.removed'),
+      data: { conversationId: 'chat', participantId: 'bob', removedBy: 'alice' } };
+    const added = { ...event('added', 'participation-chat', 'participant.added'),
+      data: { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' } };
+    await storage.nats.seed([creation, removed, added]);
+    await storage.db.query(`CREATE TABLE handler_dispatcher (
+      id INTEGER PRIMARY KEY, silo TEXT, manifest TEXT, sequence BIGINT)`);
+    await storage.db.query("INSERT INTO handler_dispatcher VALUES (1, 'test', '[]', 3)");
+    await runtime.stop();
+    await storage.waitForConnectionsClosed();
+    await upgradeHandlers(runtime, storage.nats.store);
+    const jobs = await storage.db.query(
+      "SELECT data->>'id' AS event_id, singleton_key FROM pgboss.job ORDER BY created_on",
+    );
+    const expected = [
+      { event_id: 'creation', singleton_key: 'conversation-chat' },
+      { event_id: 'removed', singleton_key: 'conversation-chat' },
+      { event_id: 'added', singleton_key: 'conversation-chat' },
+    ];
+    expect(jobs.rows).toEqual(expected);
+    await runtime.start();
+    await runtime.work();
+    function allApplied() {
+      return Promise.resolve(applied.length === expected.length);
+    }
+    await until(allApplied);
+    expect(applied).toEqual(['creation', 'removed', 'added']);
+    expect(await runtime.deadLetters('update-openfga')).toEqual([]);
+  } finally {
+    await storage.close();
+  }
+}
+it('backfills creation, removal and re-addition on one conversation key in saved order',
+  queuesHistoricalConversationJobs);
