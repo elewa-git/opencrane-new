@@ -1,8 +1,11 @@
 import { expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
+import { z } from 'zod';
 import { countReads, expectNoWholeReads } from '@opencrane/event-store/testing';
 import { grantStream } from '@opencrane/authz';
-import { BudgetActor, envelope } from '../src/actor.ts';
+import { BudgetActor, envelope, history } from '../src/actor.ts';
+import { totals } from '../src/state.ts';
 import { startDecision } from '../src/decision.ts';
 import { decisionActivity } from '../src/decision-activity.ts';
 import { readDecisionGrants } from '../src/decision-grants.ts';
@@ -109,6 +112,16 @@ it('keeps decision reads flat at 10, 100 and 500 turns and at 10 and 3,000 chat 
 
 async function coldProcessEventuallyReadsOnlyTheTail() {
   const setup = await fixture();
+  const resumeHistory = Promise.withResolvers<void>();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  let historyPaused = false;
+  async function* pauseColdHistory(...args: Parameters<typeof read>) {
+    if (args[0] === 'conversation-conversation' && args[1] === 1 && !historyPaused) {
+      historyPaused = true;
+      await resumeHistory.promise;
+    }
+    yield* read(...args);
+  }
   try {
     const events = [];
     for (let index = 2; index < 3000; index++) {
@@ -117,17 +130,29 @@ async function coldProcessEventuallyReadsOnlyTheTail() {
         output, `output-${index}`));
     }
     await setup.nats.seed(events);
-    await decide(setup);
+    const slowHistory = vi.spyOn(setup.nats.store, 'readStream');
+    slowHistory.mockImplementation(pauseColdHistory);
+    try {
+      // Stop history before admission so the timeout cannot move to the final access check.
+      const refused = await decide(setup);
+      expect(historyPaused).toBe(true);
+      expect(refused.status, refused.text).toBe(403);
+      expect(setup.actor.state.reservations).toHaveLength(0);
+      expect(setup.received()).toBe(0);
+      resumeHistory.resolve();
+      // Wait for the timed-out read to finish rather than using another admission to warm it.
+      await decisionActivity(setup.nats.store, 'test', 'assistant', 'conversation', 'turn',
+        performance.now() + 15_000);
+    } finally {
+      resumeHistory.resolve();
+      slowHistory.mockRestore();
+    }
     const reads = countReads(setup.nats.store);
-    const hangGuard = performance.now() + 15_000;
-    let response: Awaited<ReturnType<typeof decide>>;
-    do {
-      reads.clear();
-      response = await decide(setup);
-      if (response.status === 200) break;
-      expect(response.status, response.text).toBe(403);
-    } while (performance.now() < hangGuard);
+    const response = await decide(setup);
     expect(response.status, response.text).toBe(200);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+    expect(setup.received()).toBe(0);
     expectNoWholeReads(reads.calls);
     for (const call of reads.calls) {
       if (call.subject === 'conversation-conversation') {
@@ -140,6 +165,59 @@ async function coldProcessEventuallyReadsOnlyTheTail() {
 }
 it('lets a cold models process catch up and then admits using only the chat tail',
   coldProcessEventuallyReadsOnlyTheTail, 60_000);
+
+const modelAllowSchema = z.object({
+  type: z.literal('decision.recorded'),
+  data: z.object({ outcome: z.literal('allow'), reason: z.literal('model_allowed') }),
+});
+
+async function refusesTimeoutAfterAllowRecord() {
+  const setup = await fixture();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let auditDelayed = false;
+  async function delaySavedAllow(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    if (result.status === 'appended' && modelAllowSchema.safeParse(command.event).success) {
+      auditDelayed = true;
+      await delay(2200);
+    }
+    return result;
+  }
+  try {
+    const allowed = await decide(setup);
+    expect(allowed.status, allowed.text).toBe(200);
+    const existingReservation = structuredClone(setup.actor.state.reservations[0]);
+    if (!existingReservation) throw new Error('Expected the first call to hold money');
+    await setup.slowDecisions();
+    const writes = vi.spyOn(setup.nats.store, 'append');
+    writes.mockImplementation(delaySavedAllow);
+    try {
+      const refused = await setup.call();
+      expect(auditDelayed).toBe(true);
+      expect(refused.status, refused.text).toBe(503);
+      expect(JSON.parse(refused.text)).toEqual({ error: 'Decision audit unavailable' });
+      expect(setup.received()).toBe(0);
+      expect(setup.actor.state.reservations).toHaveLength(2);
+      expect(setup.actor.state.reservations[0]).toEqual(existingReservation);
+      expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+      expect(totals(setup.actor.state, setup.actor.now()).reservedCents)
+        .toBe(existingReservation.amountCents);
+      const refusedReservation = setup.actor.state.reservations[1];
+      expect(refusedReservation?.settledCents).toBe(0);
+      const budgetHistory = await history(setup.nats.store, 'budget-test', 'test');
+      expect(budgetHistory.at(-1)?.event).toMatchObject({
+        type: 'budget.settled', data: { reservationId: refusedReservation?.id,
+          settledCents: 0, outcome: 'not_dispatched' },
+      });
+    } finally {
+      writes.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses a timeout after saving Allow without sending or releasing an earlier hold',
+  refusesTimeoutAfterAllowRecord, 40_000);
 
 const invalidStarts = [
   { label: 'missing start', data: {}, source: 'opencrane-server', missing: true },

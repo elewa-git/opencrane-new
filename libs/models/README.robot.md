@@ -586,6 +586,11 @@ older turns with 10 and 3,000 chat events. It counts credentials, activity, acce
 reservation and audit reads together. The 500-turn count and long-chat count may
 exceed their short equivalents by at most two rows. It also checks cold catch-up,
 fresh suspension or closure, start source and all turn bindings without new holds.
+The cold catch-up test pauses the first chat read until admission times out, then
+waits for that read to finish before checking a new admission on later rows.
+A separate real-gateway test delays a saved allow record beyond two seconds.
+It checks the 503 refusal, no provider call, the earlier reservation still held,
+and a zero-cent `not_dispatched` settlement for the refused call alone.
 It also checks that restoring either subject below its summary refuses another
 call without holding more money.
 `test/decision-activity.test.ts` checks warm reads, removed output/text, saved order
