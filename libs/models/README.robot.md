@@ -904,9 +904,8 @@ both fields and any recorded model with the first `computer.turn_started`.
 Ordinary model calls with provider claims are refused before any hold, including
 when they match the recorded turn. The gateway still uses the deployment key.
 
-Remaining work: select the assistant or silo default binding at turn admission,
-send the selected model to the computer, migrate with separate resumable commands,
-and record a switch-on event that cannot strand running turns. Managed dispatch
+Remaining work: migrate with separate resumable commands and build a switch-on
+command that cannot strand running turns. Managed dispatch
 also needs the real gateway proof and provider/key checks from row 5. There is no
 switch-on command or retirement in this first change.
 
@@ -971,7 +970,21 @@ join for other chats. Authority still uses the current join. Neither helper read
 ## Private turn memory preview
 
 `memoryRights` returns a `confirm(deadline)` function for preview reads. It checks saved grants, current permissions and tool policy again using the conversation history already read. The final short check never reloads that history. Turn starts do not grant access or refuse a memory read.
-
 ## Memory reference validity
-
 `memoryReferences(rows, silo, scopeId, custody)` checks metadata and key status without reading fact text. It keeps the first metadata for an equal revision, as the projection does. It walks historical dependencies, refuses cycles and keeps legacy corrections or tombstones unusable. Missing or damaged custody raises an error. Private turn previews omit references that cannot be checked.
+## Turn admission after the recorded switch-on event
+`provider-turn-routing` keeps the current binding for each dependant and task,
+plus the silo's switch-on marker. It reads new provider events before each use;
+it does not retain the full history. Turn admission reads it before the short
+payer check. An own binding, including a pause, takes precedence over the default.
+Before the marker exists, saved choices do not alter ordinary traffic.
+The decision service requires both provider claims after the marker exists.
+It rechecks mode before reserving money and returning a permit. Other provider
+configuration changes do not invalidate unrelated calls. Provider-bound model
+calls still refuse on the deployment-key route, so they cannot spend on its key.
+The managed-only gateway, startup fallback-key refusal and safe switch-on command
+are not built in this slice. This marker has no production command or reaction.
+`apps/server/test/provider-turn-admission.test.ts` checks selection, pause precedence,
+missing choices and original choices on replay and closure. The provider contract
+test checks old-token refusal through the real gateway before any hold or send.
+Fresh-install migration and managed dispatch remain NOT RUN.

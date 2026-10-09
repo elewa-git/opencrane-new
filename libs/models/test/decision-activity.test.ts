@@ -29,7 +29,11 @@ async function readsOnlyNewActivity() {
       performance.now() + 2000);
     expectNoWholeReads(reads.calls);
     for (const call of reads.calls) {
-      expect(call.fromSequence).toBeGreaterThan(1);
+      if (call.subject === 'provider-*') {
+        expect(call.fromSequence).toBe(1);
+      } else {
+        expect(call.fromSequence).toBeGreaterThan(1);
+      }
       expect(call.rows).toBe(0);
     }
   } finally {

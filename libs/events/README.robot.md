@@ -199,3 +199,9 @@ additions require `joinKind: explicit_child`. They grant no parent rights. No em
 `reviewRevision`, a 64-character lowercase SHA-256 value. Older events omit it;
 new removal routes require it. It identifies the departure inventory the admin
 reviewed. It contains no private history or credentials.
+
+`provider.managed_calls_enabled` records the silo's managed-call mode on the reviewed
+provider stream. Its data names that provider, its unchanged revision, the changer
+and the reviewed provider-category position. It carries no key and grants no access.
+The switch-on command is not built yet. It must drain running legacy turns before
+saving this event; schema validation alone cannot prove that condition.

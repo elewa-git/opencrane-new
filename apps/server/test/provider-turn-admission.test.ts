@@ -136,3 +136,24 @@ function foldsSwitchWithoutChangingConfiguration() {
 }
 it('validates and folds switch-on without rotating the provider configuration',
   foldsSwitchWithoutChangingConfiguration);
+
+async function refusesModeChangeDuringAdmission() {
+  await setup();
+  const readStream = nats.store.readStream.bind(nats.store);
+  let switched = false;
+  async function* switchDuringPayerRead(subject: string, from?: number, deadline?: number) {
+    if (subject === 'budget-test' && !switched) {
+      switched = true;
+      await switchOn();
+    }
+    yield* readStream(subject, from, deadline);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(switchDuringPayerRead);
+  await expect(turnCommand(nats.store, context, input)).rejects.toThrow(
+    'Provider setup changed; try again');
+  const rows = [];
+  for await (const row of readStream('computer-assistant')) rows.push(row);
+  expect(rows).toHaveLength(1);
+}
+it('refuses a legacy start when switch-on arrives during the payer read',
+  refusesModeChangeDuringAdmission);

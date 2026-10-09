@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { getEventDefinition, computerTurnStartedDataSchema } from '@opencrane/events';
 import { BudgetActor, history } from '../src/actor.ts';
 import { priceTableId } from '../src/state.ts';
@@ -167,3 +167,30 @@ async function refusesLegacyTrafficAfterSwitch() {
 }
 it('refuses old tokens after switch-on before holding money or contacting a provider',
   refusesLegacyTrafficAfterSwitch);
+
+
+async function refusesModeChangeBeforeReservation() {
+  const setup = await fixture();
+  const reserve = setup.actor.reserve.bind(setup.actor);
+  async function switchBeforeReserve(...args: Parameters<typeof reserve>) {
+    await setup.append('provider-primary', 'provider.created', {
+      providerId: 'primary', provider: 'openai', name: 'Primary', revision: 1, changedBy: 'alice',
+    });
+    await setup.append('provider-primary', 'provider.managed_calls_enabled', {
+      providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+    });
+    return reserve(...args);
+  }
+  const reserving = vi.spyOn(setup.actor, 'reserve').mockImplementation(switchBeforeReserve);
+  try {
+    expect((await setup.call()).status).toBe(403);
+    expect(reserving).toHaveBeenCalledOnce();
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    reserving.mockRestore();
+    await setup.close();
+  }
+}
+it('refuses switch-on racing the budget queue without holding money',
+  refusesModeChangeBeforeReservation);

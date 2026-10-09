@@ -3,7 +3,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { pgDb, providers, ProjectionRunner, rebuildProviderProjection } from '@opencrane/projections';
+import { pgDb, providers, ProjectionRunner, rebuildProviderProjection, readProviders } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import type { EventEnvelope } from '@opencrane/events';
 import { providerDefaultHandler, providerSecretRef } from '@opencrane/models';
@@ -226,3 +226,25 @@ async function routineGaps() {
   vi.restoreAllMocks();
 }
 it('reports reader failure and legacy routine history without invented counts', routineGaps);
+
+
+async function replaysRecordedSwitchOn() {
+  const db = pgDb(dbs.queue);
+  await runner.run(providers);
+  const before = (await readProviders(db, 'acme', 'primary'))[0];
+  if (!before) throw new Error('Missing fixture provider');
+  const expectedProviderSequence = await nats.store.head('provider-*');
+  await append('provider-primary', 'provider.managed_calls_enabled', {
+    providerId: 'primary', revision: before.revision, changedBy: 'owner', expectedProviderSequence,
+  });
+  await runner.run(providers);
+  const saved = await readProviders(db, 'acme', 'primary');
+  expect(saved[0]).toMatchObject({
+    ...before, position: await nats.store.head('provider-primary'), managedCallsEnabled: true,
+  });
+  const logger = createLogger('switch-replay', { level: 'silent' });
+  await rebuildProviderProjection(db, nats.reader, logger, { verify: true });
+  expect(await readProviders(db, 'acme', 'primary')).toEqual(saved);
+}
+it('rebuilds the recorded switch-on without changing keys, models or verification',
+  replaysRecordedSwitchOn);

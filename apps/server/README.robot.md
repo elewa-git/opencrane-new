@@ -1347,9 +1347,7 @@ Renewal after a recorded pause keeps that choice and does not start Codex again.
 The test verifies signed claims. It uses a recording Codex driver, not a live Codex
 process or paid provider.
 
-This is the computer-delivery slice of P4-22 row 4. New-turn selection from own or
-default bindings, migration commands and the recorded switch-on event remain for
-a later change. Managed calls and retirement stay unavailable. Existing deployments
+This is the computer-delivery slice of P4-22 row 4. Migration commands and safe switch-on remain for a later change. Managed calls and retirement stay unavailable. Existing deployments
 keep the deployment-key path; bound tokens still refuse before reserving money.
 
 ## Human group participant commands
@@ -1495,9 +1493,7 @@ Effective inherited access and public child commands are later work. No child em
 ## Private turn memory preview
 
 `GET /api/memory/turns/:conversationId/:turnId` returns a bounded preview for a saved private turn. It does not issue a token, record loaded facts or send text to a computer. It returns at most 32 references and 16,384 UTF-8 bytes. Each category reads at most 33 candidates. The shared `memoryReferences` check validates each fact and all its supporting facts before decryption and again before release. Expired, erased, superseded or unchecked references are omitted. The server checks access again without reading chat history. Denied scopes have no ids, counts or omission flags. Missing turn ownership returns 404; service, permission, content or projection uncertainty returns 503. All responses use `Cache-Control: no-store`. Fresh-install qualification is NOT RUN.
-
 ## Reviewed member removal
-
 The [removal contract](../../docs/api/members.md#reviewed-member-removal) covers
 review conflicts, receipts and delayed table and permission updates.
 Removal compares the reviewed revision, then checks the inventory category positions
@@ -1517,3 +1513,14 @@ The socket and desktop tests remove through HTTP with slow content reads.
 `test/removal-gateway.test.ts` covers gateway refusal with existing and fresh credentials
 while IAM is delayed.
 Fresh-install qualification and browser canvas clearing remain NOT RUN.
+## Provider choices at new-turn admission
+After `provider.managed_calls_enabled`, a new turn selects the assistant's own
+`chat_turn` binding or the silo default. An own pause takes precedence over the
+default. Missing choices and pauses record a failed turn admission. Started turns
+keep their original provider, binding position and model on replay and closure.
+The bridge signs and returns that recorded model through its existing path.
+Provider history is read with its own ten-second deadline before payer access is
+checked. The final check refuses a mode change before saving a legacy start.
+There is no switch-on route in this slice. Safe migration must first stop new legacy
+admissions and drain running legacy turns. Managed dispatch remains refused until
+its gateway and provider checks are built.

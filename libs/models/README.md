@@ -12,6 +12,8 @@ This shared library is used by the server, background workers and personal compu
 flowchart LR
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, child joins, owner appointments and spending| models["libs/models<br/>AI rules and spending"]
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices and spending| models["libs/models<br/>AI rules and provider choice"]
+  ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
@@ -40,7 +42,11 @@ flowchart LR
   A thread can read the person's own facts, its assistant's notes and that assistant's group facts.
   It can save facts only in the requester’s own memory, with a separate write grant.
   These calls need saved grants, current permissions and an explicitly recorded private turn.
-- Choose an AI model for each task from a fixed routing table.
+- After managed calls are switched on, uses the assistant's saved provider choice or the
+  silo default for each new turn. A running turn keeps its original choice. An assistant's
+  own pause stops new model work. No command switches this on yet, so existing installs
+  keep their current path.
+- Choose an AI model from a fixed task table before switch-on.
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
 - Hold money before an AI call and settle the charge when usage is reported.

@@ -4,6 +4,7 @@ import type { Binding } from '@opencrane/authz';
 import { optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
 import { authorityFence, groupMembership, PayingGroupRefused, MemberAccessRefused,
   activeMember, currentMembership } from '@opencrane/models';
+  activeMember, providerTurnAdmission, managedProviderCallsEnabled } from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
@@ -46,7 +47,7 @@ type TurnContext = {
 };
 export class TurnAdmissionRejected extends ReportRejected {}
 
-type WriteAuthority = Awaited<ReturnType<typeof authorityFence>>;
+type WriteAuthority = () => Promise<void>;
 
 /** Append one lifecycle event. Reports cannot reopen a closed turn. */
 export async function turnCommand(store: EventStore, context: TurnContext, input: TurnInput) {
@@ -207,7 +208,8 @@ function decideTurn(facts: ComputerFacts, conversation: ChatFacts, input: TurnIn
 }
 function verifyBinding(saved: StoredEvent | undefined, expected: TurnBinding) {
   const stored = saved && binding.parse(saved.event.data);
-  if (!saved || JSON.stringify(stored) !== JSON.stringify(expected)) {
+  const expectedBinding = binding.parse(expected);
+  if (!saved || JSON.stringify(stored) !== JSON.stringify(expectedBinding)) {
     throw new ReportRejected('Turn binding conflict');
   }
 }
@@ -313,7 +315,20 @@ async function admitTurn(store: EventStore, context: TurnContext, conversation: 
   const required = requiredExecutionMode(details.kind, requested);
   if (mode !== required) throw new TurnAdmissionRejected('Execution mode mismatch');
   requireFreshPrivateThread(facts, data, mode);
-  return payingGroup(store, context, conversation, data.requesterId, details);
+  // Read provider configuration before starting the short access check.
+  const admission = await providerTurnAdmission(store, context.silo,
+    context.assistantId, performance.now() + 10_000);
+  applyProviderChoice(data, admission);
+  const payer = await payingGroup(store, context, conversation, data.requesterId, details);
+  const deadline = payer.fresh?.deadline ?? performance.now() + 2000;
+  async function confirmAdmission() {
+    const enabled = await managedProviderCallsEnabled(store, context.silo, deadline);
+    if (enabled !== admission.enabled) {
+      throw new TurnAdmissionRejected('Provider setup changed; try again');
+    }
+    await payer.fresh?.();
+  }
+  return { payer: payer.payer, fresh: confirmAdmission };
 }
 
 
@@ -324,4 +339,21 @@ function addLifecycleDetails(data: { executionMode?: ExecutionMode; status?: 'co
   } else {
     data.status = status;
   }
+}
+
+function applyProviderChoice(data: TurnBinding,
+  admission: Awaited<ReturnType<typeof providerTurnAdmission>>) {
+  if (!admission.enabled) {
+    return;
+  }
+  const choice = admission.choice;
+  if (!choice) {
+    throw new TurnAdmissionRejected('Choose a provider and model before starting model work');
+  }
+  if (choice.state === 'paused') {
+    throw new TurnAdmissionRejected('Model work is paused by an administrator');
+  }
+  data.providerId = choice.providerId;
+  data.bindingSequence = choice.bindingSequence;
+  data.model = choice.model;
 }

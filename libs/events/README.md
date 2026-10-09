@@ -29,6 +29,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads owner, assistant and provider choices| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices and switch-on| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turn and spending data| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> zod["Zod<br/>data checks"]
@@ -43,6 +44,8 @@ flowchart LR
 - Defines tool dispatch records, unsupported consent refusals, requester retries and safe invitation refusal records.
 - Records the departure review used for a member removal. Older removals still replay.
 - Defines owner appointment requests and confirmations on member records.
+
+- Define the record that says managed provider calls were switched on.
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.
 - Define the wrapper every event shares (its id, its type, what it is about,

@@ -1,0 +1,1 @@
+New turns can use an assistant's saved provider choice or the silo default after switch-on is recorded. Paused or missing choices refuse new work. Running turns keep their original model and provider. Old passes are refused before holding money after switch-on. Existing installations keep their current path because the safe switch-on command and managed gateway are not built yet.
