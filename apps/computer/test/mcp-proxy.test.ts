@@ -17,7 +17,7 @@ const call = { jsonrpc: '2.0', id: 7, method: 'tools/call',
 const loadA = 'a'.repeat(32);
 const loadB = 'b'.repeat(32);
 
-async function fixture() {
+async function fixture(approvalSupport = false) {
   const directory = mkdtempSync(`${tmpdir()}/mcp-proxy-`);
   const received: { raw: string; headers: IncomingMessage['headers']; url: string | undefined }[] = [];
   let status = 200;
@@ -25,6 +25,8 @@ async function fixture() {
   let drop = false;
   let partial = false;
   let oversized = false;
+  let deferred = false;
+  let deliver: (() => void) | undefined;
   let reply = '{"jsonrpc":"2.0","id":7,"result":{"content":[]}}';
   async function receive(incoming: IncomingMessage, response: ServerResponse) {
     const chunks: Buffer[] = [];
@@ -50,7 +52,9 @@ async function fixture() {
     }
     response.statusCode = status;
     if (marked) response.setHeader('x-opencrane-decision', 'refused');
-    response.end(reply);
+    function finishReply() { response.end(reply); }
+    if (deferred) deliver = finishReply;
+    else finishReply();
   }
   function handle(incoming: IncomingMessage, response: ServerResponse) {
     void receive(incoming, response);
@@ -61,8 +65,12 @@ async function fixture() {
   const address = gateway.address();
   if (!address || typeof address === 'string') throw new Error('Missing gateway');
   const controlSocket = `${directory}/control.sock`;
+  const waiting = vi.fn().mockReturnValue(true);
+  async function renew(thread: string) { await grant(thread); }
+  const driver = { waiting, renew };
   const local = await proxy(`http://127.0.0.1:${address.port}`,
-    { callerPath: `${directory}/caller`, controlSocket, port: 0 });
+    { callerPath: `${directory}/caller`, controlSocket, port: 0 }, undefined, driver);
+  local.approvals.resume(approvalSupport);
   async function control(path: string, input: unknown) {
     function send(resolve: (status: number | undefined) => void, reject: (error: Error) => void) {
       function accept(response: IncomingMessage) {
@@ -107,6 +115,8 @@ async function fixture() {
   function answer(code: number, marker = false, text = '{"reason":"policy_block"}') {
     status = code; marked = marker; reply = text;
   }
+  function deferReply() { deferred = true; }
+  function deliverReply() { deliver?.(); }
   function disconnect() { drop = true; }
   function partialReply() { partial = true; }
   function oversizedReply() { oversized = true; }
@@ -118,7 +128,7 @@ async function fixture() {
     rmSync(directory, { recursive: true, force: true });
   }
   return { catalogue, grant, send, sendRaw, control, answer, disconnect, partialReply,
-    oversizedReply, close, received };
+    oversizedReply, deferReply, deliverReply, close, received, approvals: local.approvals, waiting };
 }
 
 async function discoveryIsPrivate() {
@@ -324,3 +334,63 @@ async function remembersFirstList() {
 }
 it('keeps the first list discovery when binding the thread and refuses changed definitions',
   remembersFirstList);
+
+const approvalId = 'a'.repeat(64);
+async function heldCall(state: string) {
+  const test = await fixture(true);
+  try {
+    const ask = [{ ...tools[0]!, modes: { read: 'ask' as const } }];
+    await test.catalogue(loadA, 'chat-A', 'thread-A', ask);
+    await test.grant();
+    test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId }));
+    const pending = test.send();
+    await vi.waitFor(waiting);
+    function waiting() { expect(test.waiting).toHaveBeenCalledOnce(); }
+    expect(test.received).toHaveLength(1);
+    test.answer(state === 'retry403' ? 403 : 200, true);
+    if (state === 'stop-sent' || state === 'rollback-sent') test.deferReply();
+    const sentAlready = state === 'stop-sent' || state === 'rollback-sent';
+    const releasing = state === 'drop' || state === 'rollback';
+    const decision = state === 'retry403' || sentAlready || releasing ? 'approved' : state;
+    if (state === 'drop') await test.control('/drop', { thread: 'thread-A' });
+    if (state === 'rollback') test.approvals.resume(false);
+    const settled = test.approvals.settle(approvalId, decision);
+    if (sentAlready) {
+      function sent() { expect(test.received).toHaveLength(2); }
+      await vi.waitFor(sent);
+      if (state === 'stop-sent') test.approvals.endThread('thread-A');
+      else test.approvals.resume(false);
+      expect((await pending).text).toContain('may have received');
+      test.deliverReply();
+    }
+    await settled;
+    const result = await pending;
+    const sent = state === 'approved' || state === 'retry403' || sentAlready;
+    expect(test.received).toHaveLength(sent ? 2 : 1);
+    if (sent) {
+      expect(test.received[1]?.raw).toBe(result.raw);
+      expect(test.received[1]?.headers['x-opencrane-approval-id']).toBe(approvalId);
+    } else expect(result.text).toContain('Nothing was sent');
+    await test.approvals.settle(approvalId, 'approved');
+    expect(test.received).toHaveLength(sent ? 2 : 1);
+  } finally { await test.close(); }
+}
+it.each(['approved', 'denied', 'expired', 'cancelled', 'outcome_unknown', 'retry403', 'stop-sent', 'rollback-sent', 'drop', 'rollback'])(
+  'holds marked Ask, then handles %s once with unchanged bytes', heldCall);
+async function malformedApproval(kind: string) {
+  const test = await fixture(kind !== 'unsupported');
+  try {
+    await test.catalogue();
+    await test.grant();
+    const id = kind === 'bad-id' ? 'bad' : approvalId;
+    const reason = kind === 'wrong-reason' ? 'approval_required' : 'approval_requested';
+    test.answer(kind === '402' ? 402 : 403, kind !== 'unmarked',
+      JSON.stringify({ reason, approvalId: id }));
+    const result = await test.send();
+    expect(result.text).toContain('isError');
+    expect(test.waiting).not.toHaveBeenCalled();
+    expect(test.received).toHaveLength(1);
+  } finally { await test.close(); }
+}
+it.each(['unsupported', 'bad-id', 'wrong-reason', 'unmarked', '402'])(
+  'never holds a refusal with %s', malformedApproval);

@@ -41,7 +41,8 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
   const approvalId = hash(JSON.stringify([silo, binding, reviewDigest]));
   const subject = `approval-${approvalId}`;
   if (!(await history(store, subject, silo, deadline)).length) {
-    const request = { ...binding, approvalId, expiresAt: new Date(now.getTime() + 86400_000).toISOString(), stepUp: review.stepUp,
+    const lifetime = approvalLifetime(policy.waitLimited);
+    const request = { ...binding, approvalId, expiresAt: new Date(now.getTime() + lifetime).toISOString(), stepUp: review.stepUp,
       ...keys.encrypt(silo, bound.conversationId, text), reviewDigest };
     const result = await store.append({ event: envelope(silo, subject, 'tool.approval_requested', request, `request-${approvalId}`), expectedSequence: 0 });
     if (result.status !== 'appended' && result.status !== 'conflict') throw new Error('Approval persistence unavailable');
@@ -126,6 +127,7 @@ async function invalidated(store: EventStore, silo: string, request: Request, de
 export async function decideApproval(store: EventStore, silo: string, approvalId: string, memberId: string,
   decision: 'approved' | 'rejected', recentAuth: boolean,
   fresh: FreshAuthority, now = new Date()) {
+  const beganAt = performance.now();
   const readOptions = { now, deadline: fresh.deadline ?? Infinity };
   const current = await readApproval(store, silo, approvalId, readOptions);
   if (current.request.requesterId !== memberId) throw new Error('Requester only');
@@ -133,6 +135,11 @@ export async function decideApproval(store: EventStore, silo: string, approvalId
   // Sensitive approvals marked for step-up need a recent authentication before approval.
   if (decision === 'approved' && current.request.stepUp && !recentAuth) return { status: 'step_up_required' } as const;
   await fresh();
+  const checkedAt = new Date(now.getTime() + performance.now() - beganAt);
+  if (Date.parse(current.request.expiresAt) <= checkedAt.getTime()) {
+    await readApproval(store, silo, approvalId, { ...readOptions, now: checkedAt });
+    return { status: 'conflict' } as const;
+  }
   return store.append({ event: { ...envelope(silo, `approval-${approvalId}`, 'approval.decided', { approvalId, decidedBy: memberId, decision }),
     principal: { kind: 'human', id: memberId }, source: 'opencrane-server' }, expectedSequence: current.sequence });
 }
@@ -176,11 +183,23 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
 export async function approvalDecision(store: EventStore, silo: string, bound: Binding,
   policy: Awaited<ReturnType<typeof mcpPolicy>>, keys: ReviewKeys | undefined,
   now: () => Date, fresh: FreshAuthority, requestId: string, conversationRows?: StoredEvent[]) {
+  if (policy.expectedApproval && policy.outcome !== 'ask') {
+    return { outcome: 'deny' as const, reason: 'approval_mismatch', approvalId: undefined };
+  }
   if (policy.outcome !== 'ask' || !policy.review || !keys) return { outcome: policy.outcome, reason: policy.reason, approvalId: undefined };
   await fresh();
   const deadline = fresh.deadline ?? Infinity;
   const approval = await askApproval(store, silo, bound, policy, keys, now(), deadline, conversationRows);
+  if (policy.expectedApproval && policy.expectedApproval !== approval.request.approvalId) {
+    return { outcome: 'deny' as const, reason: 'approval_mismatch',
+      approvalId: approval.request.approvalId };
+  }
   const used = await consumeApproval(store, silo, approval, requestId, fresh, now);
   return { outcome: used ? 'allow' as const : 'ask' as const,
     reason: used ? 'approval_used' : `approval_${approval.state}`, approvalId: approval.request.approvalId };
+}
+
+function approvalLifetime(waitLimited: boolean) {
+  if (waitLimited) return 900_000;
+  return 86400_000;
 }

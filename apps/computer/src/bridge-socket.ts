@@ -12,6 +12,8 @@ export interface BridgeSocketState {
 }
 
 interface TurnRunnerPort {
+  resume(supported: boolean): void;
+  approvalSettled(value: Record<string, unknown>): void;
   start(turn: ReturnType<typeof parseTurn>): Promise<void>;
   interrupt(value: Record<string, unknown>): Promise<void>;
   acknowledge(sequence: unknown, value?: Record<string, unknown>): void;
@@ -95,6 +97,11 @@ function dispatch(
   const type = input['type'];
   if (type === 'resume') {
     sendReports(input['since']);
+    runner.resume(input['approvalWaiting'] === true);
+    return;
+  }
+  if (type === 'approval_settled' && state.resumed) {
+    runner.approvalSettled(input);
     return;
   }
   if (type === 'ack') {

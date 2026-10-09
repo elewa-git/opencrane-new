@@ -24,7 +24,13 @@ export function bridgeChannel(server: Server, driver: TurnDriver) {
     socketState.socket?.close(code, reason);
   }
 
-  const runner = turnRunner(driver, journal, sendReport, closeCurrentSocket);
+  function signal(value: Record<string, unknown>) {
+    const socket = socketState.socket;
+    if (socketState.resumed && socket?.readyState === socket?.OPEN) {
+      socket?.send(JSON.stringify(value));
+    }
+  }
+  const runner = turnRunner(driver, journal, sendReport, closeCurrentSocket, signal);
 
   function reportCount() {
     return journal.reports.length;
@@ -42,5 +48,6 @@ export function bridgeChannel(server: Server, driver: TurnDriver) {
     runner.complete(value);
   }
 
-  return { notification, close: bridge.close };
+  return { notification, approvalWaiting: runner.approvalWaiting.bind(runner),
+    renew: runner.renew.bind(runner), close: bridge.close };
 }

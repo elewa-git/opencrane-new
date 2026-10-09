@@ -1073,3 +1073,8 @@ The optional invitation clock sets session checks, event time and seven-day expi
 Tests cover its exact expiry boundary and a route-created invitation refused by join.
 Follow-up acceptance must refuse active identities itself, including joins after
 the candidate read and delayed member projections.
+
+## Waiting tool calls
+
+Turn lists now include reviewed, zero-cost Ask tools only when discovery carries a review.
+Allow tools still fail if policy changes to Ask mid-turn.

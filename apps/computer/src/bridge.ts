@@ -22,7 +22,14 @@ process.on('unhandledRejection', stopped);
 process.umask(0o077);
 const gateway = new URL(process.env['GATEWAY'] ?? 'http://127.0.0.1:3000');
 if (gateway.protocol !== 'http:' || gateway.username || gateway.password || gateway.pathname !== '/') throw new Error('Invalid gateway');
-const { caller } = await proxy(gateway.origin, undefined, process.env['PROXY_CALLER_TOKEN']);
+function waiting(thread: string, approvalId: string) {
+  return channel.approvalWaiting(thread, approvalId);
+}
+function renew(thread: string) { return channel.renew(thread); }
+const approvalDriver = { waiting, renew };
+const runtimeProxy = await proxy(gateway.origin, undefined,
+  process.env['PROXY_CALLER_TOKEN'], approvalDriver);
+const { caller } = runtimeProxy;
 writeFileSync('/home/codex/.codex/environments.toml', memoryFreeEnvironments());
 writeFileSync('/home/codex/.codex/config.toml', memoryFreeConfig(process.env['MODEL'] ?? 'stub-model'));
 const child = spawn('codex', ['app-server', '--stdio'], { cwd: '/workspace', env: {
@@ -134,6 +141,9 @@ const server = createServer((req, res) => {
 
 const channel = bridgeChannel(server, {
   file: receiveFile,
+  approvalResume: runtimeProxy.approvals.resume,
+  approvalSettled: runtimeProxy.approvals.settle,
+  endHolds: runtimeProxy.approvals.endThread,
   journal: '/home/agent/codex/bridge-reports.jsonl',
   credential() {
     const value = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);

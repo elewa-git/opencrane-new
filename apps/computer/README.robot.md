@@ -108,7 +108,7 @@ from tool-server replies. Unmarked failures and lost replies say the tool may ha
 received the request. Each tool carries its `allow` mode in the turn list. The proxy sets
 `x-opencrane-tool-mode: allow` itself. The gateway passes it to the decision service,
 which refuses an Allow tool changed to Ask before creating an approval card.
-Approval waits are later work.
+Approval waits are described below.
 
 `test/codex-mcp-wire.mjs` runs from `build.sh` against the built image with Docker
 networking disabled. It imports the real memory-free config and `threadLoads()`,
@@ -562,27 +562,25 @@ The owner-changeable default for the follow-up is
 `APPROVAL_WAIT_LIMIT_MS = 900000` (15 minutes). The measured call did not end
 early, so there is no need to reduce that default.
 
-The server must be deployed before an image sends `approval_waiting`. Older
-servers reject unknown messages and stop recovery for that computer. This part
-keeps the computer Allow-only and sends no new socket messages. The follow-up
-must require `approvalWaiting: true` on every server `resume` before sending a
-wait signal, and answer a plain
-tool refusal with no send when support is absent. It must also renew the grant
-through `waitForGrant`, send approved held bytes once, and end holds before
-`turn/interrupt` and on release. Those behaviours are not claimed here.
+The server must be deployed before an image sends `approval_waiting`. Every
+`resume` must carry `approvalWaiting: true`; rollback ends waits with a plain refusal.
+The proxy holds only a marked 403 `approval_requested` with a 64-hex id. Holds stay
+in the bridge process, outside the shell user's access. It preserves the original
+bytes. Before retry, the runner repeats its own start report through `waitForGrant`
+and installs the fresh token. Missing tokens fail after ten seconds. Duplicate
+signals and identical calls sharing an id produce one retry; every held request
+receives an answer. Other states renew and return a plain tool error. Stop, release,
+`/drop` and client disconnection end holds before any later wake can send them.
 
-PR 5b has four explicit release requirements from review 1:
+`APPROVAL_WAIT_LIMIT_MS` is 900000. The decision service also expires approvals
+opened with `x-opencrane-tool-mode: ask` after 900000 ms. Its clock starts before
+the hold, so an expired hold cannot leave an approvable card. The retry adds
+`x-opencrane-approval-id`; the gateway passes it to the decision service, which
+refuses a different approval or a policy now on Allow. The server still checks the
+requester, tool arguments, conversation, turn and thread before sending anything.
 
-- Run `--wire` with a hold longer than five minutes through the real production
-  proxy. Check that Codex accepts the eventual reply and completes the same turn.
-  The 16-minute stub measurement above does not prove this path.
-- Check `approvalWaiting: true` on every `resume`, including reconnects after a
-  server rollback. If support disappears, fail waiting calls without a tool send.
-- When identical calls in one turn share an approval id, answer every held call
-  and send the tool request only once. Test both the replies and the send count.
-- When the computer gives up waiting, end the saved approval through an event
-  before a later human decision can approve it. Test a decision racing with that
-  deadline. A card must not stay approvable until the turn eventually closes.
-
-These checks are NOT RUN in PR 5a. Held-call storage and these computer behaviours
-are part of PR 5b, rather than part of this server deployment.
+Tests: `approval-holds.test.ts`, `approval-runner.test.ts`, `mcp-proxy.test.ts`,
+server `bridge-channel.test.ts` and `turn-tools.test.ts`, models `codex-mcp.test.ts`.
+The offline check uses `codex-mcp-resume.mjs --wire --held-approvals` with the real
+proxy and pinned Codex, Docker networking disabled, and local model/tool fixtures.
+The fresh-install governed chat journey remains NOT RUN here; it belongs to PR 6.

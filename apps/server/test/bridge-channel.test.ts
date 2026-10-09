@@ -15,8 +15,11 @@ import { bridgeChannel } from '../../computer/src/channel.ts';
 it('authenticates, overlaps conversations and replays a strict report sequence after disconnect', async () => {
   const directory = await mkdtemp(`${tmpdir()}/bridge-`), server = createServer();
   let calls = 0;
+  const approvalResume = vi.fn();
+  const approvalSettled = vi.fn().mockResolvedValue(undefined);
   const turnModels: unknown[] = [];
   const channel = bridgeChannel(server, {
+    approvalResume, approvalSettled,
     rpc(method, input) {
       if (method === 'thread/start') return Promise.resolve({ thread: { id: `thread-${++calls}` } });
       if (method === 'turn/start') { turnModels.push(input['model']); }
@@ -31,20 +34,25 @@ it('authenticates, overlaps conversations and replays a strict report sequence a
   const url = `ws://127.0.0.1:${address.port}/bridge`;
   let socket: WebSocket | undefined;
   const reports: { sequence: number; conversationId: string; type: string }[] = [];
-  const connect = async (since: number) => {
+  const connect = async (since: number, supported = false) => {
     const ws = new WebSocket(url, { headers: { 'x-bridge-token': 'short-lived-test-capability' } });
     ws.on('message', raw => {
       const report = z.object({ sequence: z.number(), conversationId: z.string(), type: z.string() }).parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown);
       reports.push(report); ws.send(JSON.stringify({ type: 'ack', sequence: report.sequence, token: 'test-turn', expiresAt: Date.now()+120_000 }));
     });
-    await once(ws, 'open'); ws.send(JSON.stringify({ type: 'resume', since })); return ws;
+    await once(ws, 'open'); ws.send(JSON.stringify({ type: 'resume', since, approvalWaiting: supported })); return ws;
   };
   try {
     const bad = new WebSocket(url); bad.on('error', () => undefined);
     await once(bad, 'unexpected-response'); bad.terminate();
-    socket = await connect(0);
+    socket = await connect(0, true);
     for (const conversationId of ['alice', 'bob']) socket.send(JSON.stringify({ type: 'turn', id: conversationId, conversationId, assistantId: 'assistant', text: 'Hello', token: 'test-turn', expiresAt: Date.now()+60_000 }));
     await until(() => reports.filter(r => r.type === 'agent.message_delta').length === 2);
+    expect(approvalResume).toHaveBeenLastCalledWith(true);
+    const settlement = { type: 'approval_settled', approvalId: 'a'.repeat(64), state: 'approved' };
+    socket.send(JSON.stringify(settlement));
+    await until(() => approvalSettled.mock.calls.length === 1);
+    expect(approvalSettled).toHaveBeenCalledWith(settlement.approvalId, 'approved');
     expect(calls).toBe(2);
     expect(turnModels).toEqual(['gpt-6.1-sol', 'gpt-6.1-sol']);
     channel.notification({ method: 'item/reasoning/summaryTextDelta', params: { threadId: 'thread-1', delta: 'Checking the request.' } });
@@ -55,6 +63,7 @@ it('authenticates, overlaps conversations and replays a strict report sequence a
     channel.notification({ method: 'turn/completed', params: { threadId: 'thread-2', turn: { status: 'completed' } } });
     socket = await connect(last);
     await until(() => reports.filter(r => r.type === 'agent.turn_completed').length === 2);
+    expect(approvalResume).toHaveBeenLastCalledWith(false);
     expect(reports.map(r => r.sequence)).toEqual(Array.from({ length: reports.length }, (_, i) => i+1));
     socket.send(JSON.stringify({ type: 'turn', id: 'alice', conversationId: 'alice', assistantId: 'assistant', text: 'Hello', token: 'test-turn', expiresAt: Date.now()+60_000 }));
     expect(calls).toBe(2);

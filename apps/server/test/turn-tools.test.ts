@@ -263,3 +263,16 @@ it('leaves out entries the computer would refuse and repeated server keys', asyn
   expect(tools).toHaveLength(1);
   expect(tools[0]).toMatchObject({ serverId: 'valid' });
 });
+
+async function offersReviewedAsk() {
+  const state = serverState('ask', { policyTools: [{ name: 'read', revision: 'a'.repeat(64),
+    reviewed: true, costCents: 0, mode: 'ask' }] });
+  const input = { rows: [{ serverId: 'ask' }], requesterId: 'person', assistantId: 'assistant',
+    baseMessageBytes: 100, readServer, canUse };
+  function readServer() { return Promise.resolve(state); }
+  function canUse() { return Promise.resolve(true); }
+  expect(await buildTurnTools(input)).toEqual([]);
+  Object.assign(state.discoveryTools[0]!, { review: { action: 'Save' } });
+  expect(await buildTurnTools(input)).toMatchObject([{ modes: { read: 'ask' } }]);
+}
+it('offers Ask only when discovery includes its review', offersReviewedAsk);

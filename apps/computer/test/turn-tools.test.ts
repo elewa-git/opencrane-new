@@ -9,9 +9,11 @@ const server = { key: 'oc_0123456789', serverId: 'fixture', connectionId: 'insta
 
 function parsesBoundedTools() {
   expect(parseTurn({ ...frame, tools: [server] })).toMatchObject({ tools: [server] });
+  const ask = { ...server, modes: { write: 'ask' } };
+  expect(parseTurn({ ...frame, tools: [ask] }).tools).toEqual([ask]);
   expect(parseTurn(frame)).not.toHaveProperty('tools');
   const invalidLists = [
-    [{ ...server, modes: { write: 'ask' } }],
+
     [{ ...server, modes: { write: 'block' } }],
     [{ ...server, modes: undefined }],
     [{ ...server, key: 'fixture' }], [{ ...server, serverId: 'bad/id' }],

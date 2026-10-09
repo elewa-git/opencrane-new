@@ -664,3 +664,9 @@ Invitation acceptance reuses `authorityFence` and `currentMembership`.
 Their store arguments accept the read methods they use, allowing the server's
 join command to keep its small store contract. `history` and membership reads
 need `readStream`; the access check also needs `head`. Their behaviour is unchanged.
+
+## Waiting tool calls
+
+Computer Ask calls (`x-opencrane-tool-mode: ask`) create approvals with a 15-minute
+expiry. Retries carry `x-opencrane-approval-id` through the gateway and may consume
+only that approval. A changed approval or an Allow policy refuses the retry.

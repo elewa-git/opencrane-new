@@ -52,12 +52,15 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
         location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
       extAuthz: { host: new URL(decisionUrl).host,
         includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id',
-          'mcp-protocol-version', 'mcp-method', 'mcp-name', 'x-opencrane-tool-mode'],
+          'mcp-protocol-version', 'mcp-method', 'mcp-name', 'x-opencrane-tool-mode',
+          'x-opencrane-approval-id'],
         includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
         protocol: { http: { path: JSON.stringify(`/authorize${path}`),
           addRequestHeaders: { 'mcp-name': MCP_DECISION_TOOL_NAME,
             'x-opencrane-tool-mode':
-              'default(request.headers.join()["x-opencrane-tool-mode"], "")' },
+              'default(request.headers.join()["x-opencrane-tool-mode"], "")',
+            'x-opencrane-approval-id':
+              'default(request.headers.join()["x-opencrane-approval-id"], "")' },
           includeResponseHeaders: ['x-request-id'] } },
         failureMode: { denyWithStatus: 503 } },
       transformations: { request: { replace: `{${MCP_UPSTREAM_HEADERS.join(', ')}}` } },

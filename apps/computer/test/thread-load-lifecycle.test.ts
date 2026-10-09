@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { threadLoads } from '../src/thread-loads.ts';
+import { approvalHolds } from '../src/approval-holds.ts';
 import { mcpProxy } from '../src/mcp-proxy.ts';
 import { parseTurn, type ToolServer } from '../src/turn-frame.ts';
 
@@ -7,7 +8,10 @@ const tools: ToolServer[] = [{ key: 'oc_0123456789', serverId: 'server',
   connectionId: 'installed', definitions: ['{"name":"read"}'], modes: { read: 'allow' } }];
 
 function fixture() {
-  const proxy = mcpProxy('http://127.0.0.1:1', new Map());
+  function waiting() { return false; }
+  async function renew() {}
+  const holds = approvalHolds({ waiting, renew });
+  const proxy = mcpProxy('http://127.0.0.1:1', new Map(), holds);
   const operations: string[] = [];
   let conversation = '';
   let failBinding = false;
@@ -167,3 +171,24 @@ async function prunesAfterFailedBindingAndDrop() {
 }
 it('keeps no confirmed load when both resume binding and catalogue drop fail',
   prunesAfterFailedBindingAndDrop);
+
+async function keepsSiblingHolds() {
+  vi.useFakeTimers();
+  try {
+    function waiting() { return true; }
+    function renew() { return Promise.resolve(); }
+    function answer() {}
+    const holds = approvalHolds({ waiting, renew });
+    const local = mcpProxy('http://unused', new Map(), holds);
+    const loadKey = 'a'.repeat(32);
+    local.catalogue({ loadKey, conversation: 'chat', thread: 'thread', tools });
+    holds.resume(true);
+    holds.add({ approvalId: 'a'.repeat(64), thread: 'thread', send: renew, answer });
+    local.extendThread('thread', Date.now() + 120_000);
+    await vi.advanceTimersByTimeAsync(120_001);
+    expect(local.size).toBe(1);
+    local.dropThread('thread');
+    expect(local.size).toBe(0);
+  } finally { vi.useRealTimers(); }
+}
+it('keeps the tool list while another approval in that thread still waits', keepsSiblingHolds);

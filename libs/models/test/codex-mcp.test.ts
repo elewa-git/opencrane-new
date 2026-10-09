@@ -1,3 +1,4 @@
+import { setTimeout as pause } from 'node:timers/promises';
 import { expect, it } from 'vitest';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { z } from 'zod';
@@ -406,3 +407,51 @@ async function refusesEmptyWindowId() {
   await refusesEmptyMetadataField('windowId');
 }
 it('refuses an empty windowId', refusesEmptyWindowId);
+
+async function bindsHeldApproval(change: string) {
+  const setup = await fixture();
+  try {
+    const base = await prepareCapturedCall(setup, 'ask');
+    const headers = { ...base, 'x-opencrane-tool-mode': 'ask' };
+    const options = { method: 'POST', headers, body: JSON.stringify(capture.body) };
+    const url = `http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`;
+    const asked = await fetch(url, options);
+    const decision = z.object({ approvalId: z.string() }).parse(await asked.json());
+    const current = await readApproval(setup.nats.store, 'test', decision.approvalId);
+    expect(Date.parse(current.request.expiresAt) - setup.actor.now().getTime()).toBe(900_000);
+    async function fresh() {
+      if (change === 'decision-race') await pause(30);
+    }
+    if (change === 'decision-race') setup.advance(899_990);
+    if (change === 'timeout') {
+      setup.advance(900_001);
+    }
+    const approved = await decideApproval(setup.nats.store, 'test', decision.approvalId,
+      'alice', 'approved', true, fresh, setup.actor.now());
+    expect(approved.status).toBe(['timeout', 'decision-race'].includes(change) ? 'conflict' : 'appended');
+    if (change === 'decision-race') {
+      const rows = await history(setup.nats.store, `approval-${decision.approvalId}`, 'test');
+      expect(rows.at(-1)?.event.type).toBe('approval.expired');
+    }
+    const retryHeaders = { ...headers, 'x-opencrane-approval-id': decision.approvalId };
+    const retry = { ...options, headers: retryHeaders };
+    if (change === 'wrong-id') retryHeaders['x-opencrane-approval-id'] = 'f'.repeat(64);
+    if (change === 'bytes') {
+      const body = structuredClone(capture.body);
+      body.params.arguments.note = 'Another note';
+      retry.body = JSON.stringify(body);
+    }
+    if (change === 'allow') {
+      await setup.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture',
+        connectionId: 'installed', toolName: 'write', toolRevision: 'a'.repeat(64),
+        mode: 'allow', setBy: 'alice' });
+    }
+    const result = await fetch(url, retry);
+    expect(result.status, await result.text()).toBe(change === 'same' ? 200 : 403);
+    expect(setup.received()).toBe(change === 'same' ? 1 : 0);
+    expect((await fetch(url, retry)).status).toBe(403);
+    expect(setup.received()).toBe(change === 'same' ? 1 : 0);
+  } finally { await setup.close(); }
+}
+it.each(['same', 'wrong-id', 'bytes', 'allow', 'timeout', 'decision-race'])(
+  'uses only this held approval through the real gateway: %s', bindsHeldApproval, 40_000);

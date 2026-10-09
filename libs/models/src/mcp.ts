@@ -60,15 +60,15 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
   const tool = policy.tools.find(hasRequestedName);
   let decision = toolDecision(tool);
   const offeredMode = headers['x-opencrane-tool-mode'];
-  if (offeredMode !== undefined && offeredMode !== '' && offeredMode !== 'allow') {
-    throw new Error('MCP turn mode refused');
-  }
+  requireOfferedMode(offeredMode);
   // Refuse changed Allow tools before creating an approval nobody can answer yet.
   if (offeredMode === 'allow' && decision.outcome === 'ask') {
     decision = { outcome: 'deny', reason: 'policy_block' };
   }
   const review = await reviewMetadata(store, silo, server, call.params.name, deadline);
-  return { ...decision, policy, revision: tool?.revision, name: call.params.name, args, ...review };
+  const expectedApproval = expectedApprovalId(headers);
+  return { ...decision, waitLimited: offeredMode === 'ask', expectedApproval,
+    policy, revision: tool?.revision, name: call.params.name, args, ...review };
 }
 function toolDecision(tool: Awaited<ReturnType<typeof readToolPolicy>>['tools'][number] | undefined) {
   const mode = tool?.reviewed ? tool.mode : 'block';
@@ -123,4 +123,18 @@ export function parseMcpCall(body: string) {
     throw new Error('Object arguments required');
   }
   return { call, args };
+}
+
+function requireOfferedMode(mode: unknown) {
+  if (mode !== undefined && mode !== '' && mode !== 'allow' && mode !== 'ask') {
+    throw new Error('MCP turn mode refused');
+  }
+}
+function expectedApprovalId(headers: IncomingHttpHeaders) {
+  const value = headers['x-opencrane-approval-id'];
+  if (value === undefined || value === '') return undefined;
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/u.test(value)) {
+    throw new Error('MCP approval id refused');
+  }
+  return value;
 }

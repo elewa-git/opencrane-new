@@ -1,5 +1,6 @@
 import { request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { setTimeout as pause } from 'node:timers/promises';
+import { approvalHolds } from './approval-holds.ts';
 import { json, record } from './http.ts';
 import { parseTools, type ToolServer } from './turn-frame.ts';
 
@@ -23,7 +24,8 @@ const UNCONFIRMED = 'The tool did not confirm a result. It may have received the
   + 'OpenCrane will not send it again.';
 const UNAVAILABLE = 'This tool is not available in this conversation. Nothing was sent.';
 
-export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>) {
+export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
+  approvals: ReturnType<typeof approvalHolds>) {
   const catalogues = new Map<string, Catalogue>();
   const current = new Map<string, string>();
 
@@ -35,8 +37,9 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>) {
       if (servers.has(server.key)) throw new Error('Repeated server key');
       for (const text of server.definitions) {
         const definition = toolDefinition(text);
-        if (server.modes[String(definition['name'])] !== 'allow') {
-          throw new Error('Tool is not Allow');
+        if (server.modes[String(definition['name'])] !== 'allow'
+          && server.modes[String(definition['name'])] !== 'ask') {
+          throw new Error('Tool is not offered');
         }
       }
       servers.set(server.key, server);
@@ -78,7 +81,8 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>) {
       if (load.thread !== thread) continue;
       clearTimeout(load.expiry);
       function expired() { drop({ loadKey }); }
-      load.expiry = setTimeout(expired, Math.max(0, expires - Date.now()));
+      const deadline = Math.max(expires, approvals.until(thread));
+      load.expiry = setTimeout(expired, Math.max(0, deadline - Date.now()));
       load.expiry.unref();
     }
   }
@@ -97,6 +101,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>) {
   }
 
   function dropThread(thread: string) {
+    approvals.endThread(thread);
     for (const [loadKey, load] of catalogues) {
       if (load.thread === thread) drop({ loadKey });
     }
@@ -137,7 +142,26 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>) {
       toolError(response, id, UNAVAILABLE);
       return;
     }
-    await forward(incoming, response, gateway, server, grant, String(thread), id, raw);
+    const boundLoad = load;
+    const boundServer = server;
+    function hold(approvalId: string) {
+      // Keep this load while its short-lived grant expires during the wait.
+      extendThread(String(thread), Date.now() + 17 * 60_000);
+      function answer(text: string) { toolError(response, id, text); }
+      async function send() {
+        const renewed = liveCallGrant(boundLoad, boundServer, metadata, params['name'], grants);
+        if (!renewed) { answer(UNAVAILABLE); return; }
+        await forward(incoming, response, gateway, boundServer, renewed, String(thread),
+          id, raw, undefined, approvalId);
+      }
+      function disconnected() {
+        if (!response.writableEnded) approvals.endThread(String(thread));
+      }
+      response.once('close', disconnected);
+      const held = { approvalId, thread: String(thread), send, answer };
+      approvals.add(held);
+    }
+    await forward(incoming, response, gateway, server, grant, String(thread), id, raw, hold);
   }
   return { catalogue, drop, dropThread, extendThread, discovered, handle,
     get size() { return catalogues.size; },
@@ -192,7 +216,7 @@ function toolDefinition(text: string) {
 function listsTool(server: ToolServer, name: unknown) {
   for (const text of server.definitions) {
     if (toolDefinition(text)['name'] === name && typeof name === 'string'
-      && server.modes[name] === 'allow') return true;
+      && (server.modes[name] === 'allow' || server.modes[name] === 'ask')) return true;
   }
   return false;
 }
@@ -235,7 +259,8 @@ function refusalText(raw: Buffer) {
 }
 
 function forward(incoming: IncomingMessage, response: ServerResponse, gateway: string,
-  server: ToolServer, grant: ProxyGrant, thread: string, id: unknown, raw: Buffer) {
+  server: ToolServer, grant: ProxyGrant, thread: string, id: unknown, raw: Buffer,
+  hold?: (approvalId: string) => void, approvalId?: string) {
   function send(resolve: () => void) {
     let settled = false;
     function failed() {
@@ -259,13 +284,19 @@ function forward(incoming: IncomingMessage, response: ServerResponse, gateway: s
       function end() {
         if (settled) return;
         settled = true;
+        if (response.destroyed || response.writableEnded) {
+          resolve();
+          return;
+        }
         const bytes = Buffer.concat(chunks);
         if (upstream.statusCode === 200) {
           response.writeHead(200, { 'content-type': 'application/json' });
           response.end(bytes);
         } else if ((upstream.statusCode === 402 || upstream.statusCode === 403)
           && upstream.headers['x-opencrane-decision'] === 'refused') {
-          toolError(response, id, refusalText(bytes));
+          const approvalId = requestedApproval(upstream.statusCode, bytes);
+          if (hold && approvalId) hold(approvalId);
+          else toolError(response, id, refusalText(bytes));
         } else toolError(response, id, UNCONFIRMED);
         resolve();
       }
@@ -277,6 +308,7 @@ function forward(incoming: IncomingMessage, response: ServerResponse, gateway: s
       'session-id': thread, 'content-type': 'application/json', accept: 'application/json',
       'mcp-protocol-version': VERSION, 'mcp-method': 'tools/call',
       'mcp-name': String(incoming.headers['mcp-name']),
+      'x-opencrane-approval-id': approvalId ?? '',
       'x-opencrane-tool-mode': server.modes[String(incoming.headers['mcp-name'])] };
     const path = `/mcp/${server.serverId}/${server.connectionId}`;
     const outgoing = request(`${gateway}${path}`, { method: 'POST', headers }, receive);
@@ -289,4 +321,18 @@ function forward(incoming: IncomingMessage, response: ServerResponse, gateway: s
     outgoing.end(raw);
   }
   return new Promise<void>(send);
+}
+
+function requestedApproval(status: number | undefined, bytes: Buffer) {
+  if (status !== 403) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(bytes.toString('utf8'));
+    const body = record(parsed);
+    const approvalId = body['approvalId'];
+    if (body['reason'] === 'approval_requested' && typeof approvalId === 'string'
+      && /^[a-f0-9]{64}$/u.test(approvalId)) return approvalId;
+  } catch {
+    // Refuse unreadable decisions without keeping a call open.
+  }
+  return undefined;
 }

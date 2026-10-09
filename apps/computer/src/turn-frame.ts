@@ -7,7 +7,7 @@ export interface ToolServer {
   connectionId: string;
   serverInfo?: { name: string; version: string };
   definitions: string[];
-  modes: Record<string, 'allow'>;
+  modes: Record<string, 'allow' | 'ask'>;
 }
 
 export interface Turn {
@@ -98,10 +98,10 @@ function parseToolServer(value: unknown): ToolServer {
     || !definitions.every(isDefinition)) {
     throw new Error('Invalid tool definitions');
   }
-  const modes: Record<string, 'allow'> = {};
+  const modes: Record<string, 'allow' | 'ask'> = {};
   const suppliedModes = record(server['modes']);
   for (const [name, mode] of Object.entries(suppliedModes)) {
-    if (!name || name.length > 200 || mode !== 'allow') throw new Error('Invalid tool mode');
+    if (!name || name.length > 200 || (mode !== 'allow' && mode !== 'ask')) throw new Error('Invalid tool mode');
     modes[name] = mode;
   }
   const toolServer: ToolServer = { key, serverId, connectionId, definitions, modes };

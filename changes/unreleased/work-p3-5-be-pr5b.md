@@ -1,0 +1,1 @@
+Reviewed Ask tools now wait for the requester in the same chat turn. Approval sends the original call once with a fresh pass. Denial, Stop, server rollback and the 15-minute limit end the wait without sending the tool call.

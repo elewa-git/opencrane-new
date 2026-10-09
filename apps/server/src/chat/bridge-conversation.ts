@@ -267,6 +267,7 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
         name: tool.name,
         revision: tool.revision,
         ...(tool.definition ? { definition: tool.definition } : {}),
+        ...(tool.review ? { review: tool.review } : {}),
       };
     }
     function policyTool(tool: (typeof policy.tools)[number]) {
