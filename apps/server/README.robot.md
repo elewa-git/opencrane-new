@@ -34,9 +34,13 @@ The [worker instructions](../ops/README.robot.md#run-the-live-memory-worker) cov
 
 `test/memory.test.ts` runs HTTP reads with real NATS, PostgreSQL and OpenFGA.
 Set `PG_TEST_URL` to a PostgreSQL service that permits disposable databases.
-Detail, source links, command status and storage are the second part of P4-12 PR 2.
-Its write checks, shared-source rules, idempotency and unused-key reconciliation remain
-unimplemented. The fresh empty runner and HTTP read test passes with real services.
+`GET /api/memory/:scopeId/facts/:memoryId` returns one authorised, unexpired fact
+and separately checked source statuses within 16 KiB. Unknown, foreign and forbidden
+fact ids use the same 404. Source checks use existing conversation permissions;
+a denied source never returns its reference or preview. No source preview is stored
+or returned. Source outages mark that source unavailable without hiding a readable fact.
+Source checks need the server's existing chat settings and conversation key directory.
+Oversized authorised detail returns 503. Command status and storage are in the companion draft. The fresh empty runner and HTTP read test passes with real services.
 Full fresh-install memory journeys and native turns remain NOT RUN.
 
 The Node service exposes sign-in routes, invitation acceptance, the organisation MCP

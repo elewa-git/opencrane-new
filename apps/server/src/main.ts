@@ -98,6 +98,7 @@ const app = buildServer(authConfig, {
   ...(realtime && events && modelDb && memoryKeysConfigured ? { memory: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
+    ...(chat ? { chat } : {}),
   } } : {}),
   ...(realtime && events && modelDb ? { ownership: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,

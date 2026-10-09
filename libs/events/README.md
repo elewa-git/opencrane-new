@@ -22,7 +22,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.-> events["libs/events<br/>event, memory text and participant checks"]
+  server["apps/server<br/>back end"] -.-> events["libs/events<br/>event, memory text, metadata and participant checks"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant choices| events

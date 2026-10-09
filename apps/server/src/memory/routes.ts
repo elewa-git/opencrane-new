@@ -5,13 +5,14 @@ import { readActiveMember, MemberAccessRefused, PayingGroupRefused } from '@open
 import { sessionFor } from '../members/routes.ts';
 import { scopeAccess, scopeFor, resolveScope, memoryAccessChecks, MemoryRefused,
   type MemoryOptions } from './access.ts';
-import { listFacts, memorySnapshot, readInput, readParams,
+import { detailFact, listFacts, memorySnapshot, readInput, readParams,
   scopeInput, limits, MemoryConflict } from './reads.ts';
 
 export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
   options?: MemoryOptions) {
   app.get('/api/memory/scopes', handle);
   app.get('/api/memory/:scopeId/facts', handle);
+  app.get('/api/memory/:scopeId/facts/:memoryId', handle);
 
   async function handle(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
@@ -35,11 +36,14 @@ export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
       if (request.routeOptions.url === '/api/memory/scopes') {
         return await discoverScopes(request, options, requester, checks);
       }
-      const params = readParams.parse(request.params);
+      const params = readParams.strip().parse(request.params);
       const scope = await resolveScope(options, requester, params.scopeId);
       const access = await scopeAccess(options, requester, scope, false, checks);
       if (!access.canRead) {
         throw new MemoryRefused();
+      }
+      if (request.routeOptions.url?.endsWith('/:memoryId')) {
+        return await readDetail(request, options, requester, scope);
       }
       const query = readInput.parse(request.query);
       return await listFacts(options, requester, scope, query, config.cookieSecret);
@@ -90,4 +94,14 @@ async function discoverScopes(request: FastifyRequest, options: MemoryOptions, r
     }
   }
   return { scopes, limits };
+}
+
+const detailIdentifier = z.object({ memoryId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u) });
+async function readDetail(request: FastifyRequest, options: MemoryOptions, requester: string,
+  scope: Awaited<ReturnType<typeof resolveScope>>) {
+  const detail = detailIdentifier.safeParse(request.params);
+  if (!detail.success) {
+    throw new MemoryRefused();
+  }
+  return detailFact(options, requester, scope, detail.data.memoryId);
 }

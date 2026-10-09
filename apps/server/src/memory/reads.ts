@@ -1,5 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import { MemoryRefused } from './access.ts';
+import { sourceStatuses } from './detail-sources.ts';
 import type { MemoryOptions, Scope } from './access.ts';
 
 export class MemoryConflict extends Error {}
@@ -170,4 +172,23 @@ async function requireSameProjection(options: MemoryOptions, state: Snapshot) {
     Number(current.sequence) < state.position) {
     throw new Error('Memory rebuild in progress');
   }
+}
+
+export async function detailFact(options: MemoryOptions, requester: string, scope: Scope,
+  memoryId: string) {
+  const state = await memorySnapshot(options, scope);
+  const values = [options.silo, scope.scopeId, state.position, state.generation, memoryId];
+  const result = await options.db.query(`SELECT ${factColumns}, sources FROM memory_facts
+    WHERE silo=$1 AND scope_id=$2 AND ${currentProjection()} AND memory_id=$5`, values);
+  await requireSameProjection(options, state);
+  const row = result.rows[0];
+  if (!row) throw new MemoryRefused();
+  const fact = publicFact(row);
+  if (fact.expiresAt !== null && Date.parse(fact.expiresAt) <= Date.now()) throw new MemoryRefused();
+  const sources = await sourceStatuses(options, requester, row['sources']);
+  const response = { scopeId: scope.scopeId, fact, sources };
+  if (Buffer.byteLength(JSON.stringify(response)) > limits.pageBytes) {
+    throw new Error('Memory detail exceeds size limit');
+  }
+  return response;
 }

@@ -5,10 +5,9 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { computers, groups, memoryKeys, memoryProjection, memoryScopeId,
+import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
   pgDb, ProjectionRunner } from '@opencrane/projections';
 import type { MemoryIdentity } from '@opencrane/events';
-import type { ModelAccessOptions } from '../src/models/access-routes.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -21,7 +20,7 @@ let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
 let keys: ReturnType<typeof memoryKeys>;
 let directory: string;
-let memory: ModelAccessOptions;
+let memory: import('../src/memory/access.ts').MemoryOptions;
 let count = 0;
 const projection = memoryProjection({ decrypt });
 function decrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
@@ -102,6 +101,7 @@ async function setup() {
   for (const target of [projection, groups, computers]) await runner.run(target);
   memory = { silo: 'acme', store: nats.store, db, binding,
     feed: { memberId: resolveMember } };
+  memory.chat = { ...memory, keys: conversationKeys(directory) };
   app = buildServer(config, { memory });
 }
 async function cleanup() {

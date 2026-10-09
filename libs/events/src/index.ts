@@ -56,7 +56,7 @@ export { agentToolCallStartedDataSchema, agentToolCallFinishedDataSchema } from 
 
 export { computerTurnStartedDataSchema, computerTurnClosedDataSchema } from './data.ts';
 
-export { memoryWrittenIdentity, memoryWrittenEventSchema, memoryRevisionIdentitySchema, memoryTextSchema,
+export { memoryWrittenDataSchema, memoryWrittenIdentity, memoryWrittenEventSchema, memoryRevisionIdentitySchema, memoryTextSchema,
   type MemoryIdentity } from './memory.ts';
 
 export { conversationEventId, chatIdSchema, groupConversationCommandSchema } from './conversation.ts';
