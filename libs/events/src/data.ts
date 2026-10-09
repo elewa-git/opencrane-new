@@ -131,6 +131,7 @@ export const memberInvitedDataSchema = z
     // Older invitations replay, but cannot be accepted without both fields.
     invitedIdentity: z.object({ issuer: z.url(), sub: id }).strict().optional(),
     expiresAt: z.iso.datetime({ offset: true }).optional(),
+    personalAssistant: z.enum(['provision', 'none']).optional(),
   })
   .strict();
 

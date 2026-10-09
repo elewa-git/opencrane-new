@@ -83,6 +83,13 @@ The complete fresh-install invitation journey is NOT RUN.
 The existing `POST /members/join` remains available for invitations already bound
 to an issuer and subject. Its strict body is `{ memberId, invitationId, commandId,
 displayName }`, at most 1 KiB. It returns `Cache-Control: no-store`.
+Acceptance records the invitation's `personalAssistant: provision|none` choice
+in its one `member.joined` event. An older invitation without the field means
+`provision`. The request body cannot change the choice. `none` skips personal
+assistant creation and the computer claim that follows it; it still admits the member.
+An exact retry, including after a lost reply, returns the saved join receipt.
+It does not rerun assistant creation. Email invitation creation, renewal and
+binding an account at acceptance remain separate work.
 Fresh acceptance requires the exact Origin and configured organisation, including
 for accounts allowlisted for general sign-in. The encrypted session must keep an
 ID-token email with `email_verified=true`. Both addresses must use ASCII characters;

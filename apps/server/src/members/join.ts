@@ -153,8 +153,7 @@ export async function joinMember(
         id, commandId: input.commandId, type: 'member.joined', source: 'opencrane-server',
         time: now().toISOString(), subject, silo: context.silo,
         principal: { kind: 'human', id: context.sub },
-        data: { memberId: input.memberId, invitationId: input.invitationId,
-          displayName: input.displayName, email: invitation.email, role: invitation.role },
+        data: joinData(input, invitation),
       },
     };
     const result = await store.append(command);
@@ -176,6 +175,18 @@ export async function joinMember(
   } catch (cause) {
     return { status: 'unavailable', cause };
   }
+}
+
+function joinData(input: JoinInput, invitation: Invitation) {
+  const personalAssistant = invitation.personalAssistant ?? 'provision';
+  return {
+    memberId: input.memberId,
+    invitationId: input.invitationId,
+    displayName: input.displayName,
+    email: invitation.email,
+    role: invitation.role,
+    personalAssistant,
+  };
 }
 
 function isMembershipAdmission(row: StoredEvent) {

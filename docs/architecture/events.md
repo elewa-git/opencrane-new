@@ -114,9 +114,9 @@ the personal default.
 | Event | Emitted by | Projections (content) | Reactions (logic) |
 | --- | --- | --- | --- |
 | `org.created` | install | org | create the budget stream with defaults; generate gateway config |
-| `member.invited` | admin command | invitations, members (pending) | send the invitation |
+| `member.invited` | admin command | invitations, members (pending) | none; link only, no email delivery |
 | `silo.owner_bootstrapped` | authenticated installation-token claim | members, identities | OpenFGA owner/member; seed ownership; emit `assistant.created` (personal); seed model `grant.given` |
-| `member.joined` | invitation accepted | members | OpenFGA `member`; emit `assistant.created` (personal); seed model `grant.given` |
+| `member.joined` | invitation accepted | members | OpenFGA `member`; emit personal `assistant.created` unless `personalAssistant: none`; seed model `grant.given` |
 | `member.role_changed` | non-owner role command | members | OpenFGA role tuples |
 | `member.removed` | non-owner removal command | members | OpenFGA delete; emit `connection.revoked` for each connection; suspend the person's computer; audit |
 | `ownership.seeded` | fenced installation migration or bootstrap reaction | current owner set | OpenFGA seed receipt after existing owner tuples converge |
@@ -152,10 +152,17 @@ Owner or Admin. A removed stream or earlier different identity cannot be reused.
 The final access check watches the joining member, inviter and ownership streams.
 General sign-in exceptions do not bypass the exact organisation check here.
 
+Invitations can record `personalAssistant: provision|none`. Acceptance copies
+that choice into `member.joined`. A missing choice in an older invitation means
+`provision`. The accepting person cannot supply or change it in the request.
+The `create-assistant` reaction skips joins with `none`, so those joins create
+no personal assistant or computer. Bootstrap and older joins without the field
+keep their existing assistant creation. Repeated delivery keeps the same assistant id.
+
 `member.joined` from this command always carries `invitationId`. The command id
 is scoped to the accepting principal and member subject. An exact retry returns
-the earlier sequence without appending, even after invitation expiry or later
-removal; it reports the earlier command's success and does not restore membership.
+the earlier sequence without appending, even after invitation expiry. A removed
+stream refuses all joins, including repeats; no retry restores membership.
 Changed invitation/display-name arguments with the same key are refused. A race
 with another command reloads history and returns a refusal without a second
 append; the caller can retry after reconsidering the result. Invitation creation

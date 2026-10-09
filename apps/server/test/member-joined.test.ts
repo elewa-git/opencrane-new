@@ -60,6 +60,63 @@ async function history() {
   return records;
 }
 
+const assistantChoices = ['none', 'provision', undefined] as const;
+async function carriesAssistantChoice(choice: typeof assistantChoices[number]) {
+  await invite({ personalAssistant: choice });
+  const response = await accept();
+  expect(response.statusCode).toBe(200);
+  expect(response.json<JoinResult>().status).toBe('joined');
+  const records = await history();
+  expect(records).toHaveLength(2);
+  expect(records[1]?.event.data).toMatchObject({
+    memberId: 'alice', personalAssistant: choice ?? 'provision',
+  });
+  expect((await accept()).json<JoinResult>().status).toBe('already_joined');
+  expect(await history()).toEqual(records);
+}
+it.each(assistantChoices)('stores the invitation assistant choice (%s) in one join',
+  carriesAssistantChoice);
+
+async function refusesAssistantOverride() {
+  await invite({ personalAssistant: 'none' });
+  const body = { ...input, personalAssistant: 'provision' };
+  const response = await accept(body);
+  expect(response.statusCode).toBe(400);
+  expect(response.json<JoinResult>()).toEqual({ status: 'refused', reason: 'invalid_request' });
+  expect(await history()).toHaveLength(1);
+}
+it('refuses an assistant choice supplied by the accepting person', refusesAssistantOverride);
+
+async function keepsChoiceAfterLostReply() {
+  await invite({ personalAssistant: 'none' });
+  const append = nats.store.append.bind(nats.store);
+  async function loseReply(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    expect(result.status).toBe('appended');
+    return { status: 'unavailable' as const, cause: new Error('Reply lost') };
+  }
+  const transport = {
+    head: nats.store.head.bind(nats.store),
+    readStream: nats.store.readStream.bind(nats.store),
+    append: loseReply,
+  };
+  await app.close();
+  app = server(transport);
+  expect((await accept()).statusCode).toBe(503);
+  const saved = await history();
+  expect(saved).toHaveLength(2);
+  expect(saved[1]?.event.data).toMatchObject({ personalAssistant: 'none' });
+  await app.close();
+  await nats.stop();
+  await nats.restart();
+  app = server(nats.store);
+  expect((await accept()).json<JoinResult>()).toEqual({
+    status: 'already_joined', memberId: 'alice', sequence: saved[1]?.sequence,
+  });
+  expect(await history()).toEqual(saved);
+}
+it('keeps the saved assistant choice after a lost join reply and restart', keepsChoiceAfterLostReply);
+
 it.skipIf(!process.env['PG_TEST_URL'])('accepts through real NATS to PostgreSQL 17, restarts and rebuilds the members projection', async () => {
   const schema = `join_${randomUUID().replaceAll('-', '')}`;
   const admin = new Pool({ connectionString: process.env['PG_TEST_URL'] });
