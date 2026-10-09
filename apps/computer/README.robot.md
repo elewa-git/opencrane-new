@@ -539,7 +539,8 @@ On 8 October 2026, pinned Codex 0.159.2 kept a local MCP tool request open for
 The computer image ran with `docker run --network none`; its model was a local
 stub. No paid model call was made. The local MCP listener used a 17-minute
 `requestTimeout` and Codex used `tool_timeout_sec: 1200`. The production proxy
-listener now also sets `requestTimeout` explicitly to 17 minutes.
+listener now also sets `requestTimeout` explicitly to 17 minutes. That setting
+limits the time allowed to receive a request; it does not limit a held reply.
 The [saved measurement](test/fixtures/codex-0.159.2-approval-hold.json) records
 the image digest, timing and completed turn. This measures Codex waiting for a
 stub MCP reply; the production proxy's approval-hold and release path is not
@@ -564,8 +565,24 @@ early, so there is no need to reduce that default.
 The server must be deployed before an image sends `approval_waiting`. Older
 servers reject unknown messages and stop recovery for that computer. This part
 keeps the computer Allow-only and sends no new socket messages. The follow-up
-must require `approvalWaiting: true` in the server's `resume` before sending a
+must require `approvalWaiting: true` on every server `resume` before sending a
 wait signal, and answer a plain
 tool refusal with no send when support is absent. It must also renew the grant
 through `waitForGrant`, send approved held bytes once, and end holds before
 `turn/interrupt` and on release. Those behaviours are not claimed here.
+
+PR 5b has four explicit release requirements from review 1:
+
+- Run `--wire` with a hold longer than five minutes through the real production
+  proxy. Check that Codex accepts the eventual reply and completes the same turn.
+  The 16-minute stub measurement above does not prove this path.
+- Check `approvalWaiting: true` on every `resume`, including reconnects after a
+  server rollback. If support disappears, fail waiting calls without a tool send.
+- When identical calls in one turn share an approval id, answer every held call
+  and send the tool request only once. Test both the replies and the send count.
+- When the computer gives up waiting, end the saved approval through an event
+  before a later human decision can approve it. Test a decision racing with that
+  deadline. A card must not stay approvable until the turn eventually closes.
+
+These checks are NOT RUN in PR 5a. Held-call storage and these computer behaviours
+are part of PR 5b, rather than part of this server deployment.

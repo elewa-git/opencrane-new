@@ -307,8 +307,8 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   try {
     while (!signal.aborted) {
       try {
-        for (const link of links.values()) link.approvals.poll();
         const head = await options.store.head();
+        for (const link of links.values()) link.approvals.poll(head);
         if (head === previousHead && !pending) {
           await delay(250, undefined, { signal });
           continue;

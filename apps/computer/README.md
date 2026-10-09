@@ -50,8 +50,9 @@ turn ends. A tool changed from Allow to Ask is refused. Ask tools are not offere
 3. **A person uploads a file.** The server passes the scanned file to the bridge. The bridge puts it in the workspace for Codex to read.
 4. **A computer resumes.** Its files remain on its disk. The bridge sends any reports that the server has not confirmed yet.
 
-The local HTTP listener allows enough time for a tool request to wait for a person's
-decision. Waiting calls are not enabled yet; tools still have to be allowed in advance.
+The local HTTP listener allows up to 17 minutes to receive a request. This setting
+does not limit how long its reply can wait. Waiting calls are not enabled yet;
+tools still have to be allowed in advance.
 
 ## How to run or test it
 
