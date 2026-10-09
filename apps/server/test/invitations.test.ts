@@ -851,3 +851,29 @@ async function refusesRenewedInvitation(interval: string) {
 }
 it.each(renewalIntervals)('refuses a superseded Admin invitation renewed %s',
   refusesRenewedInvitation);
+
+async function boundsRefusalsPerDay() {
+  const attempts = [input, { ...input, commandId: 'another-refused-command' }];
+  for (const attempt of attempts) {
+    const response = await request('POST', attempt, 'member');
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({
+      status: 'refused', reason: 'access_refused', recorded: true,
+    });
+  }
+  const subject = `memberaudit-${memberId}`;
+  const firstDay = await history(nats.store, subject, 'acme');
+  expect(firstDay).toHaveLength(1);
+  expect(firstDay[0]?.event).toMatchObject({ type: 'member.command_refused',
+    principal: { kind: 'human', id: 'member' }, data: {
+      memberId, operation: 'invite', reason: 'access_refused',
+      originalCommandId: input.commandId,
+    } });
+  expect(JSON.stringify(firstDay)).not.toContain(email);
+  clock = new Date('2026-10-02T12:00:00Z');
+  expect((await request('POST', input, 'member')).statusCode).toBe(403);
+  expect(await history(nats.store, subject, 'acme')).toHaveLength(2);
+  expect(await records()).toEqual([]);
+}
+it('keeps at most one safe refusal per person, target, operation, reason and UTC day',
+  boundsRefusalsPerDay);
