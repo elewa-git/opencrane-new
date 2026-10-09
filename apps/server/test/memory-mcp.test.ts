@@ -381,8 +381,11 @@ async function refusesBackendIdentity(overrides: Record<string, unknown>, body =
     database.mockRestore();
   }
 }
+async function refusesWrongIdentity(overrides: Record<string, unknown>) {
+  await refusesBackendIdentity(overrides);
+}
 it.each(wrongIdentities)('refuses a signed backend context with another identity: %j',
-  refusesBackendIdentity);
+  refusesWrongIdentity);
 
 it('refuses a signed body whose thread differs from the recorded start',
   async function recordedThread() {
