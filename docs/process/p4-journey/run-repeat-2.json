@@ -1,0 +1,144 @@
+{
+  "commit": "92b4827736f2ba6073a0cd395aca616ec44ff70b",
+  "attempt": "repeat-2",
+  "viewportWidths": [
+    1280,
+    390
+  ],
+  "durationMs": 134171,
+  "assertions": [
+    {
+      "id": "providers.paid_model_answer",
+      "status": "PAID / NOT RUN",
+      "statement": "The real provider answer check needs a paid call and was not run.",
+      "evidence": {
+        "paidCallMade": false,
+        "attempt": "repeat-2"
+      },
+      "screenshots": []
+    },
+    {
+      "id": "shared_assistant.member_disk_isolation",
+      "status": "NOT PROVEN",
+      "statement": "Separate member disks and browser profiles for assistant sessions are not built.",
+      "evidence": {
+        "assistantBrowserProfiles": false,
+        "assistantComputerDisks": 1
+      },
+      "screenshots": []
+    },
+    {
+      "id": "groups.list",
+      "status": "PASS",
+      "statement": "The group page shows the names returned by the server.",
+      "evidence": {
+        "groupCount": 1
+      },
+      "screenshots": [
+        "run-repeat-2/groups-list-1280.png",
+        "run-repeat-2/groups-list-390.png"
+      ]
+    },
+    {
+      "id": "groups.create",
+      "status": "PASS",
+      "statement": "The Owner creates a local group and can open its detail page.",
+      "evidence": {
+        "groupId": "journey-group-cf01187b-b735-4b64-8906-ab-8dd2b0f9",
+        "groupName": "Journey group cf01187b-b735-4b64-8906-ab83621cc52b"
+      },
+      "screenshots": [
+        "run-repeat-2/groups-created-1280.png",
+        "run-repeat-2/groups-created-390.png"
+      ]
+    },
+    {
+      "id": "groups.search",
+      "status": "PASS",
+      "statement": "Searching by the new group name finds its row at 1280px and 390px.",
+      "evidence": {
+        "groupName": "Journey group cf01187b-b735-4b64-8906-ab83621cc52b"
+      },
+      "screenshots": [
+        "run-repeat-2/groups-search-1280.png",
+        "run-repeat-2/groups-search-390.png"
+      ]
+    },
+    {
+      "id": "groups.detail",
+      "status": "PASS",
+      "statement": "Group detail shows the member and model grant.",
+      "evidence": {
+        "memberId": "zitadel-member",
+        "modelId": "gpt-6.1-sol"
+      },
+      "screenshots": [
+        "run-repeat-2/groups-detail-1280.png",
+        "run-repeat-2/groups-detail-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.admin_create",
+      "status": "PASS",
+      "statement": "The admin can choose this group, its payer and its model grant.",
+      "evidence": {
+        "groupName": "Journey group cf01187b-b735-4b64-8906-ab83621cc52b",
+        "payerGroup": "journey-group-cf01187b-b735-4b64-8906-ab-8dd2b0f9",
+        "modelId": "gpt-6.1-sol"
+      },
+      "screenshots": [
+        "run-repeat-2/shared-assistant-create-1280.png",
+        "run-repeat-2/shared-assistant-create-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.review",
+      "status": "PASS",
+      "statement": "The review names the fixed paying group before the assistant is created.",
+      "evidence": {
+        "payerGroup": "journey-group-cf01187b-b735-4b64-8906-ab-8dd2b0f9"
+      },
+      "screenshots": [
+        "run-repeat-2/shared-assistant-review-1280.png",
+        "run-repeat-2/shared-assistant-review-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.create_request",
+      "status": "PASS",
+      "statement": "The server accepts the assistant create request from the review.",
+      "evidence": {
+        "responseStatus": 200,
+        "assistantId": "team-89b5d487-5e58-4356-8303-dca365e28fcb",
+        "commandKeys": [
+          "assistantId",
+          "commandId",
+          "grants",
+          "groupId",
+          "name",
+          "payingGroupId"
+        ],
+        "hasStage": false,
+        "groupId": "journey-group-cf01187b-b735-4b64-8906-ab-8dd2b0f9",
+        "payingGroupId": "journey-group-cf01187b-b735-4b64-8906-ab-8dd2b0f9",
+        "name": "Shared journey 3e1150c2-ca55-4efb-8c6a-a808a1f8a7af",
+        "grantIds": [
+          "model:gpt-6.1-sol"
+        ]
+      },
+      "screenshots": [
+        "run-repeat-2/shared-assistant-create-response-1280.png",
+        "run-repeat-2/shared-assistant-create-response-390.png"
+      ]
+    },
+    {
+      "id": "journey.execution",
+      "status": "FAIL",
+      "statement": "The browser checks did not all finish.",
+      "evidence": {
+        "reason": "The shared assistant Shared journey 3e1150c2-ca55-4efb-8c6a-a808a1f8a7af was not ready; computer events: computer.claimed"
+      },
+      "screenshots": []
+    }
+  ]
+}

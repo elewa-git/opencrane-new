@@ -27,6 +27,8 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
   async function summary() {
     return readBudgetSummary(owner, origin);
   }
+  await owner.goto(`${origin}/org/spending`);
+  await owner.getByText('Spending loaded', { exact: true }).waitFor();
   const starting = await summary();
   const groupId = starting.defaultPayingGroupId;
   assert(groupId);
@@ -36,8 +38,9 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
   }
   const save = async (scope: 'global' | 'paying_group' | 'assistant', scopeId: string, cents: number) => {
     await owner.goto(`${origin}/org/spending`);
-    await owner.getByText('Spending loaded', { exact: true }).waitFor();
-    await owner.getByLabel('Budget scope', { exact: true }).selectOption(scope);
+    const budgetScope = owner.getByLabel('Budget scope', { exact: true });
+    await budgetScope.waitFor({ state: 'visible' });
+    await budgetScope.selectOption(scope);
     if (scope === 'global') await owner.getByLabel('Daily safety cap (euro cents)', { exact: true }).fill('5000');
     else await owner.getByLabel(scope === 'assistant' ? 'Assistant id' : 'Paying group id', { exact: true }).fill(scopeId);
     await owner.getByLabel('Monthly ceiling (euro cents)', { exact: true }).fill(String(cents));

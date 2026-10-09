@@ -37,7 +37,17 @@ function fixtureRoot(value: unknown): HTMLElement {
   return value;
 }
 
-const createBodySchema = z.object({ assistantId: z.string(), commandId: z.string() });
+const createBodySchema = z.object({
+  commandId: z.string(),
+  assistantId: z.string(),
+  groupId: z.string(),
+  payingGroupId: z.string(),
+  name: z.string(),
+  grants: z.array(z.object({
+    resourceType: z.enum(['model', 'mcp_server']),
+    resourceId: z.string(),
+  })),
+}).strict();
 
 function readCreateBody(init: RequestInit | undefined): z.infer<typeof createBodySchema> {
   if (typeof init?.body !== 'string') throw new Error('Expected a JSON create body');

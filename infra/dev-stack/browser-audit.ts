@@ -30,6 +30,12 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
     const deadline = Date.now() + 90_000;
     for (;;) {
       const response: APIResponse = await page.request.get(`${origin}${path}?turnId=${turn.id}`);
+      if (response.status() === 503) {
+        // Wait for the audit history to catch up with the saved turn decision.
+        assert(Date.now() < deadline, 'Audit history is available after the saved turn');
+        await delay(100);
+        continue;
+      }
       assert.equal(response.status(), 200);
       const history = auditResponseSchema.parse(await response.json());
       const row = history.rows.find(row => row.turnId === turn.id && row.decision === 'allow' && row.outcome === 'success');

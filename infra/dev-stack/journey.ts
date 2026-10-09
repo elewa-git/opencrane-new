@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { once } from 'node:events';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
@@ -20,6 +20,7 @@ import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.ts';
 import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
+import { browserPhase4, type Phase4Assertion } from './browser-phase4.ts';
 import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
 import { namespace, secondary } from './identity.ts';
@@ -42,6 +43,60 @@ let ws: WebSocket | undefined;
 let chat: Awaited<ReturnType<typeof chatJourney>> | undefined;
 let browser: Awaited<ReturnType<typeof browserSessions>> | undefined;
 const identities = new Map<string, { sub: string; cookie: string }>();
+const phase4Assertions: Phase4Assertion[] = [];
+const phase4Attempt = process.env['P4_JOURNEY_ATTEMPT'] ?? 'manual';
+
+async function writePhase4Receipt(durationMs: number) {
+  const receiptDirectory = `${directory}/p4-journey/${phase4Attempt}`;
+  await mkdir(receiptDirectory, { recursive: true });
+  const receiptPath = `${receiptDirectory}/receipt.json`;
+  const commit = await currentCommit();
+  const receipt = {
+    commit,
+    attempt: phase4Attempt,
+    viewportWidths: [1280, 390],
+    durationMs,
+    assertions: phase4Assertions,
+  };
+  await writeFile(receiptPath, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
+}
+
+async function currentCommit(): Promise<string> {
+  const result = await promisify(execFile)('git', ['rev-parse', 'HEAD'], { cwd: root });
+  return result.stdout.trim();
+}
+async function runPhase4Journey() {
+  assert(browser, 'The Phase 4 journey needs real signed-in browser sessions');
+  const startedAt = performance.now();
+  let journeyFailure: unknown;
+  try {
+    await browserPhase4({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
+      origin, directory, attempt: phase4Attempt, silo, modelStubPort: settings['MODEL_STUB_PORT']!,
+      secondaryStack: secondary,
+      store: events.store, append, assertions: phase4Assertions });
+  } catch (error) {
+    journeyFailure = error;
+    phase4Assertions.push({ id: 'journey.execution', status: 'FAIL',
+      statement: 'The browser checks did not all finish.',
+      evidence: { reason: errorMessage(error) }, screenshots: [] });
+  }
+  try {
+    await writePhase4Receipt(Math.round(performance.now() - startedAt));
+  } catch (receiptError) {
+    if (journeyFailure) {
+      throw new AggregateError([journeyFailure, receiptError],
+        'The journey failed and its private receipt could not be written.');
+    }
+    throw receiptError;
+  }
+  if (journeyFailure) throw journeyFailure;
+  console.log(`PASS Phase 4 browser journey; receipt run-${phase4Attempt}.json`);
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return 'The browser journey returned an unknown error.';
+}
 async function until(check: () => Promise<boolean> | boolean, label: string) {
   const deadline = Date.now() + 120_000;
   while (!(await check())) {
@@ -104,28 +159,79 @@ async function computerEvents(assistantId: string) {
   for await (const stored of events.store.readStream(`computer-${assistantId}`)) result.push(stored.event);
   return result;
 }
+type ModelGrantExpectation = {
+  granteeId: string;
+  modelIds: string[];
+};
+
+function isActiveModel(model: typeof models[number]) {
+  return !model.retired;
+}
+
+function isModelGrant(grant: unknown): grant is { resourceType: string; resourceId: string } {
+  if (!grant || typeof grant !== 'object') return false;
+  if (!('resourceType' in grant) || !('resourceId' in grant)) return false;
+  return grant.resourceType === 'model' && typeof grant.resourceId === 'string';
+}
+
+function selectedModelIds(data: Record<string, unknown>) {
+  const grants = data['grants'];
+  if (!Array.isArray(grants)) return [];
+  const modelGrants = grants.filter(isModelGrant);
+  return modelGrants.map(readModelGrantId);
+}
+
+function readModelGrantId(grant: { resourceType: string; resourceId: string }) {
+  return grant.resourceId;
+}
+
 async function modelGrantsRecorded() {
-  const grantees = new Map<string, string>();
+  const expectations = new Map<string, ModelGrantExpectation[]>();
   const grants = new Set<string>();
+  const activeModelIds = models.filter(isActiveModel).map(readActiveModelId);
   const head = await events.store.head();
   if (head) for await (const { event } of readEvents(events.store, 1, head)) {
     assert.equal(event.silo, silo);
     const data = event.data as Record<string, unknown>;
-    if (event.type === 'member.joined' || event.type === 'assistant.created') {
-      const grantee = data[event.type === 'member.joined' ? 'memberId' : 'assistantId'];
-      assert(typeof grantee === 'string');
-      grantees.set(event.subject, grantee);
+    if (event.type === 'member.joined') {
+      const memberId = data['memberId'];
+      assert(typeof memberId === 'string');
+      expectations.set(event.subject, [{ granteeId: memberId, modelIds: activeModelIds }]);
     }
-    if (event.type === 'member.removed') grantees.delete(event.subject);
+    if (event.type === 'assistant.created') {
+      const assistantId = data['assistantId'];
+      assert(typeof assistantId === 'string');
+      if (data['kind'] === 'team') {
+        // Keep shared assistants to the models named in their saved selection.
+        const ownerId = data['ownerId'];
+        assert(typeof ownerId === 'string');
+        const selectedIds = selectedModelIds(data);
+        expectations.set(event.subject, [
+          { granteeId: assistantId, modelIds: selectedIds },
+          { granteeId: ownerId, modelIds: selectedIds },
+        ]);
+      } else {
+        expectations.set(event.subject, [{ granteeId: assistantId, modelIds: activeModelIds }]);
+      }
+    }
+    if (event.type === 'member.removed') expectations.delete(event.subject);
     // An explicit revocation also counts: migration must preserve that decision.
     if (data['resourceType'] === 'model' && ['grant.given', 'grant.revoked'].includes(event.type)) {
       grants.add(JSON.stringify([data['resourceId'], data['granteeId']]));
     }
   }
-  for (const grantee of grantees.values()) for (const model of models.filter(model => !model.retired)) {
-    if (!grants.has(JSON.stringify([model.id, grantee]))) return false;
+  for (const entityExpectations of expectations.values()) {
+    for (const expectation of entityExpectations) {
+      for (const modelId of expectation.modelIds) {
+        if (!grants.has(JSON.stringify([modelId, expectation.granteeId]))) return false;
+      }
+    }
   }
   return true;
+}
+
+function readActiveModelId(model: typeof models[number]) {
+  return model.id;
 }
 try {
   await until(modelGrantsRecorded, 'model grant history for existing members/assistants');
@@ -288,6 +394,8 @@ try {
         computer!.assistant_id);
     }
   }
+  const phase4Requested = process.env['P4_JOURNEY_ATTEMPT'] !== undefined;
+  if (secondary && browser && phase4Requested) await runPhase4Journey();
   for (const projection of ['members', 'mcp-catalogue']) {
     const result = await promisify(execFile)('npm', ['run', 'replay', '--', projection, '--verify'], {
       cwd: root, env: { ...base, ...await readEnv('projection') }, timeout: 60_000 });

@@ -4,7 +4,7 @@
 
 A set of scripts that starts a full local copy of OpenCrane for development and testing.
 It brings the services and apps together on a developer machine. It can also run browser
-checks from sign-in through chat and file upload.
+checks from sign-in through chat, file upload and organisation features.
 
 ## Where it fits
 
@@ -19,7 +19,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes| apps["apps/server, ops, web<br/>OpenCrane programs"]
-  stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>checks, Codex call fixtures and daily run"]
+  stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>browser checks, saved-data repeats and daily run"]
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|uses local cluster| devbox
 ```
@@ -34,6 +34,8 @@ flowchart LR
 - Run browser checks against real local services. The approval check sends Codex's
   tool request shape. The thread id ties the call to its live chat turn. The call id
   links the tool's attempts and progress reports.
+- Check group management, direct chats, shared assistants and provider key saving in a fresh stack.
+- Keep one extra computer place so a saved-data repeat can start a new shared assistant.
 - Measure reply arrival, process memory and open files during live-view checks.
 - Keep up to three separate development stacks on one machine.
 - Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.
@@ -46,7 +48,9 @@ flowchart LR
    Admission checks allow only the checked image and settings.
 2. **A developer checks a change.** A browser signs in, sends a chat message and checks
    that the reply remains after a reload. Other checks cover uploads, approvals, budgets
-   and the computer screen. Budget checks restore the test limits even if a browser step fails.
+   and the computer screen. The organisation checks also cover groups, direct chats, shared
+   assistants and saving a provider key. Budget checks restore the test limits even if a
+   browser step fails.
    Failed approval checks save the card's text and a screenshot before closing the test turn.
 3. **A developer runs a separate stack.** `claim.sh` reserves one of two spare test stacks, numbered 1 and 2.
    Its services use separate data and ports, and `down.sh --id` removes that stack and

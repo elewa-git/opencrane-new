@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -u
 
+unset P4_JOURNEY_ATTEMPT
+
 script_directory=$(CDPATH='' cd "$(dirname "$0")" && pwd -P)
 repository_root=$(CDPATH='' cd "$script_directory/../.." && pwd -P)
 ledger_directory="$HOME/.opencrane/daily-fresh"

@@ -102,7 +102,8 @@ nav[aria-label=Breadcrumb] a { display: inline-flex; min-height: 44px; align-ite
 @media (max-width: 700px) {
   .page-heading { display: block; }
   .page-actions { flex-direction: column; margin-top: 16px; }
-  .page-actions .button, .overlay-actions .button { width: 100%; min-height: 44px; }
+  .page-actions .button, .overlay-actions .button { width: 100%; min-height: 44px;
+    white-space: nowrap; }
   .tabs { flex-wrap: wrap; }
   .register-header { display: none; }
   .group-row { display: flex; flex-wrap: wrap; align-items: start;

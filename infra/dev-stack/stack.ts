@@ -52,6 +52,11 @@ async function fingerprint(pid: number) {
     return undefined;
   }
 }
+async function processNiceValue(pid: number): Promise<number> {
+  const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
+  const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+  return Number(fields[16]);
+}
 async function processId(name: string) {
   const file = `${directory}/${name}.pid`;
   if (!(await exists(file))) return undefined;
@@ -145,7 +150,11 @@ async function start(name: string, args: string[], env: Record<string, string>) 
       stdio: ['ignore', log.fd, log.fd] });
     await once(child, 'spawn');
     const pid = child.pid!;
-    if (name === 'web') setPriority(pid, 10);
+    if (name === 'web') {
+      const niceValue = await processNiceValue(pid);
+      // Avoid changing a priority the parent already lowered for this web process.
+      if (niceValue < 10) setPriority(pid, 10);
+    }
     await save(`${name}.pid`, `${pid} ${await fingerprint(pid)}`);
     child.unref();
   } finally { await log.close(); }
@@ -222,8 +231,21 @@ async function provisionComputers(settings: Record<string, string>) {
     await run('kubectl', ['create', 'namespace', namespace]);
   }
   if (secondary) {
-    await save('quota.json', JSON.stringify({ apiVersion: 'v1', kind: 'ResourceQuota', metadata: { name: 'journey-limit', namespace },
-      spec: { hard: { pods: '4', 'limits.memory': '2Gi', persistentvolumeclaims: '4', 'requests.storage': '4Gi' } } }));
+    // Keep one extra disk so a repeat can retain saved data and start a new shared assistant.
+    const quota = {
+      apiVersion: 'v1',
+      kind: 'ResourceQuota',
+      metadata: { name: 'journey-limit', namespace },
+      spec: {
+        hard: {
+          pods: '6',
+          'limits.memory': '3Gi',
+          persistentvolumeclaims: '6',
+          'requests.storage': '6Gi',
+        },
+      },
+    };
+    await save('quota.json', JSON.stringify(quota));
     await run('kubectl', ['apply', '-f', `${directory}/quota.json`]);
   }
   await run('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
@@ -402,7 +424,9 @@ async function up(fresh: boolean) {
       ...(tokenBootstrap ? { BOOTSTRAP_TOKEN_FILE: `${directory}/bootstrap-token.json` } : {}),
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
-      CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`, KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
+      CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
+      PROVIDER_SECRETS_DIR: `${directory}/provider-secrets`,
+      KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');
   await start('web', [`${root}/node_modules/@angular/cli/bin/ng.js`, 'serve', '--project', 'web', '--host', '127.0.0.1',
@@ -442,7 +466,9 @@ async function up(fresh: boolean) {
 }
 async function journey() {
   const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
-    { ...base, DEV_STACK_DIR: directory }, 900_000);
+    { ...base, DEV_STACK_DIR: directory,
+      ...(process.env['P4_JOURNEY_ATTEMPT']
+        ? { P4_JOURNEY_ATTEMPT: process.env['P4_JOURNEY_ATTEMPT'] } : {}) }, 1_200_000);
   console.log(output.trim());
 }
 async function status() {

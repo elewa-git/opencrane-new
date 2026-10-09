@@ -1,0 +1,330 @@
+{
+  "commit": "fd7a48add6948c3f93970a0c8ad7816f72247e91",
+  "attempt": "fresh-1",
+  "viewportWidths": [
+    1280,
+    390
+  ],
+  "durationMs": 48461,
+  "assertions": [
+    {
+      "id": "providers.paid_model_answer",
+      "status": "PAID / NOT RUN",
+      "statement": "The real provider answer check needs a paid call and was not run.",
+      "evidence": {
+        "paidCallMade": false,
+        "attempt": "fresh-1"
+      },
+      "screenshots": []
+    },
+    {
+      "id": "shared_assistant.member_disk_isolation",
+      "status": "NOT PROVEN",
+      "statement": "Separate member disks and browser profiles for assistant sessions are not built.",
+      "evidence": {
+        "assistantBrowserProfiles": false,
+        "assistantComputerDisks": 1
+      },
+      "screenshots": []
+    },
+    {
+      "id": "groups.list",
+      "status": "PASS",
+      "statement": "The group page shows the names returned by the server.",
+      "evidence": {
+        "groupCount": 0
+      },
+      "screenshots": [
+        "run-fresh-1/groups-list-1280.png",
+        "run-fresh-1/groups-list-390.png"
+      ]
+    },
+    {
+      "id": "groups.create",
+      "status": "PASS",
+      "statement": "The Owner creates a local group and can open its detail page.",
+      "evidence": {
+        "groupId": "journey-group-ce9d9741-31a5-4e3d-84ac-b7-1fdddb68",
+        "groupName": "Journey group ce9d9741-31a5-4e3d-84ac-b701b220d0cd"
+      },
+      "screenshots": [
+        "run-fresh-1/groups-created-1280.png",
+        "run-fresh-1/groups-created-390.png"
+      ]
+    },
+    {
+      "id": "groups.search",
+      "status": "PASS",
+      "statement": "Searching by the new group name finds its row at 1280px and 390px.",
+      "evidence": {
+        "groupName": "Journey group ce9d9741-31a5-4e3d-84ac-b701b220d0cd"
+      },
+      "screenshots": [
+        "run-fresh-1/groups-search-1280.png",
+        "run-fresh-1/groups-search-390.png"
+      ]
+    },
+    {
+      "id": "groups.detail",
+      "status": "PASS",
+      "statement": "Group detail shows the member and model grant.",
+      "evidence": {
+        "memberId": "zitadel-member",
+        "modelId": "gpt-6.1-sol"
+      },
+      "screenshots": [
+        "run-fresh-1/groups-detail-1280.png",
+        "run-fresh-1/groups-detail-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.admin_create",
+      "status": "PASS",
+      "statement": "The admin can choose this group, its payer and its model grant.",
+      "evidence": {
+        "groupName": "Journey group ce9d9741-31a5-4e3d-84ac-b701b220d0cd",
+        "payerGroup": "journey-group-ce9d9741-31a5-4e3d-84ac-b7-1fdddb68",
+        "modelId": "gpt-6.1-sol"
+      },
+      "screenshots": [
+        "run-fresh-1/shared-assistant-create-1280.png",
+        "run-fresh-1/shared-assistant-create-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.review",
+      "status": "PASS",
+      "statement": "The review names the fixed paying group before the assistant is created.",
+      "evidence": {
+        "payerGroup": "journey-group-ce9d9741-31a5-4e3d-84ac-b7-1fdddb68"
+      },
+      "screenshots": [
+        "run-fresh-1/shared-assistant-review-1280.png",
+        "run-fresh-1/shared-assistant-review-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.create_request",
+      "status": "PASS",
+      "statement": "The server accepts the assistant create request from the review.",
+      "evidence": {
+        "responseStatus": 200,
+        "assistantId": "team-e3d84071-7479-4ee3-a6ea-ad5278704b29",
+        "commandKeys": [
+          "assistantId",
+          "commandId",
+          "grants",
+          "groupId",
+          "name",
+          "payingGroupId"
+        ],
+        "hasStage": false,
+        "groupId": "journey-group-ce9d9741-31a5-4e3d-84ac-b7-1fdddb68",
+        "payingGroupId": "journey-group-ce9d9741-31a5-4e3d-84ac-b7-1fdddb68",
+        "name": "Shared journey 5572bf81-259c-4ba8-b0ae-d1250aa5b426",
+        "grantIds": [
+          "model:gpt-6.1-sol"
+        ]
+      },
+      "screenshots": [
+        "run-fresh-1/shared-assistant-create-response-1280.png",
+        "run-fresh-1/shared-assistant-create-response-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.created",
+      "status": "PASS",
+      "statement": "The saved assistant event names the owner group, payer, model and display name.",
+      "evidence": {
+        "assistantId": "team-e3d84071-7479-4ee3-a6ea-ad5278704b29",
+        "payerGroup": "journey-group-ce9d9741-31a5-4e3d-84ac-b7-1fdddb68",
+        "ownerGroup": "journey-group-ce9d9741-31a5-4e3d-84ac-b7-1fdddb68",
+        "creationMatchesReview": true
+      },
+      "screenshots": [
+        "run-fresh-1/shared-assistant-created-1280.png",
+        "run-fresh-1/shared-assistant-created-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.computer_ready_for_selection",
+      "status": "PASS",
+      "statement": "The assistant appears in the member selection list after its computer record is ready.",
+      "evidence": {
+        "assistantId": "team-e3d84071-7479-4ee3-a6ea-ad5278704b29",
+        "status": "ready"
+      },
+      "screenshots": [
+        "run-fresh-1/shared-assistant-created-1280.png",
+        "run-fresh-1/shared-assistant-created-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.member_choice",
+      "status": "PASS",
+      "statement": "The member can choose the shared assistant for a private session.",
+      "evidence": {
+        "assistantId": "team-e3d84071-7479-4ee3-a6ea-ad5278704b29",
+        "assistantName": "Shared journey 5572bf81-259c-4ba8-b0ae-d1250aa5b426"
+      },
+      "screenshots": [
+        "run-fresh-1/shared-assistant-choice-1280.png",
+        "run-fresh-1/shared-assistant-choice-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.session_recorded",
+      "status": "PASS",
+      "statement": "The server records the member\u2019s private session with this shared assistant.",
+      "evidence": {
+        "assistantId": "team-e3d84071-7479-4ee3-a6ea-ad5278704b29",
+        "payingGroupId": "journey-group-ce9d9741-31a5-4e3d-84ac-b7-1fdddb68",
+        "conversationId": "e37c7fde-e3ea-4648-8736-fcf09b3aba25",
+        "responseStatus": 200
+      },
+      "screenshots": [
+        "run-fresh-1/shared-assistant-session-response-1280.png",
+        "run-fresh-1/shared-assistant-session-response-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.private_chat",
+      "status": "PASS",
+      "statement": "The member loads a private chat, sends a prompt and sees a reply.",
+      "evidence": {
+        "assistantId": "team-e3d84071-7479-4ee3-a6ea-ad5278704b29",
+        "payingGroupId": "journey-group-ce9d9741-31a5-4e3d-84ac-b7-1fdddb68",
+        "createdBy": "zitadel-member",
+        "privateUrl": "http://127.0.0.1:25106/workspace?conversation=e37c7fde-e3ea-4648-8736-fcf09b3aba25"
+      },
+      "screenshots": [
+        "run-fresh-1/shared-assistant-private-chat-1280.png",
+        "run-fresh-1/shared-assistant-private-chat-390.png"
+      ]
+    },
+    {
+      "id": "groups.removal_review",
+      "status": "PASS",
+      "statement": "Removal review explains what access ends and when.",
+      "evidence": {},
+      "screenshots": [
+        "run-fresh-1/groups-removal-review-1280.png",
+        "run-fresh-1/groups-removal-review-390.png"
+      ]
+    },
+    {
+      "id": "groups.remove_member",
+      "status": "PASS",
+      "statement": "The removed member no longer sees the shared assistant through the server.",
+      "evidence": {
+        "removedMemberId": "zitadel-member",
+        "sharedAssistantHidden": true
+      },
+      "screenshots": [
+        "run-fresh-1/groups-removed-1280.png",
+        "run-fresh-1/groups-removed-390.png"
+      ]
+    },
+    {
+      "id": "direct_chat.start_390",
+      "status": "PASS",
+      "statement": "The direct chat names only the chosen colleague before the first message.",
+      "evidence": {
+        "colleague": "zitadel-owner"
+      },
+      "screenshots": [
+        "run-fresh-1/direct-chat-recipient-390.png"
+      ]
+    },
+    {
+      "id": "direct_chat.start_1280",
+      "status": "PASS",
+      "statement": "The direct chat recipient screen fits at 1280px.",
+      "evidence": {
+        "colleague": "zitadel-owner"
+      },
+      "screenshots": [
+        "run-fresh-1/direct-chat-recipient-1280.png"
+      ]
+    },
+    {
+      "id": "direct_chat.receive",
+      "status": "PASS",
+      "statement": "The colleague receives the member message at 1280px and 390px.",
+      "evidence": {
+        "conversationId": "direct-9cf7a77b-344e-4d4b-9fad-863d650735f7",
+        "author": "zitadel-member"
+      },
+      "screenshots": [
+        "run-fresh-1/direct-chat-received-1280.png",
+        "run-fresh-1/direct-chat-received-390.png"
+      ]
+    },
+    {
+      "id": "direct_chat.exchange_and_no_agent",
+      "status": "PASS",
+      "statement": "Both people exchange ordered messages. No assistant turn, model request or agent control appears.",
+      "evidence": {
+        "memberMessages": 2,
+        "modelRequests": 0,
+        "assistantRequests": 0,
+        "messageOrder": true
+      },
+      "screenshots": [
+        "run-fresh-1/direct-chat-exchange-1280.png",
+        "run-fresh-1/direct-chat-exchange-390.png"
+      ]
+    },
+    {
+      "id": "providers.list",
+      "status": "PASS",
+      "statement": "The provider page shows the names returned by the server.",
+      "evidence": {
+        "providerCount": 0
+      },
+      "screenshots": [
+        "run-fresh-1/provider-list-1280.png",
+        "run-fresh-1/provider-list-390.png"
+      ]
+    },
+    {
+      "id": "providers.key_save",
+      "status": "PASS",
+      "statement": "The fake key is saved without a leak or a claim that it works.",
+      "evidence": {
+        "providerId": "646f3ec9-7d90-4831-83ed-dadc6863dc1f",
+        "saved": true,
+        "reachable": false,
+        "modelAnswer": false,
+        "placeholderInPage": false,
+        "placeholderInEvents": false,
+        "placeholderInLogs": false
+      },
+      "screenshots": [
+        "run-fresh-1/provider-key-saved-1280.png",
+        "run-fresh-1/provider-key-saved-390.png"
+      ]
+    },
+    {
+      "id": "providers.key_input_cleared",
+      "status": "PASS",
+      "statement": "The key input is empty after the save, when it remains on screen.",
+      "evidence": {
+        "inputState": "clear"
+      },
+      "screenshots": [
+        "run-fresh-1/provider-key-saved-1280.png",
+        "run-fresh-1/provider-key-saved-390.png"
+      ]
+    },
+    {
+      "id": "ownership.transfer",
+      "status": "NOT PROVEN",
+      "statement": "The signed-in test account is an admin, so it cannot appoint an owner.",
+      "evidence": {
+        "viewerRole": "admin"
+      },
+      "screenshots": []
+    }
+  ]
+}

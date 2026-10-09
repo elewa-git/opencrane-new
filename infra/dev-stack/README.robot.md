@@ -328,6 +328,36 @@ Failure exits non-zero. Private logs identify a failed stage without printing
 credentials. `status` reports the host processes, Compose and Tailscale service.
 The owner's own browser sign-in remains a manual check and is **NOT RUN** by these scripts.
 
+### Organisation browser checks
+
+`journey.ts` calls `browser-phase4.ts` after the existing browser checks. It reuses
+the signed-in owner and member pages. Group create and removal go through the live
+screen; adding the seeded member uses the same authenticated group command because
+the member picker is not built. A model grant is added to the disposable event store
+so the group can create a shared assistant. The member starts a private session with
+that assistant. The direct chat sends one message each way and reads the conversation
+stream to check message order. The model stub exposes `/journey-counts`; the journey
+compares its model request count before and after the direct exchange.
+
+The provider check saves the text `journey-placeholder-not-a-provider-key`. It is a
+fake value, never a provider credential. The check confirms that the input clears and
+that the text is absent from the page, browser storage, provider events and process
+logs. The local server keeps the key in a private folder inside the disposable stack,
+outside the event store. Stack cleanup removes that folder. It does not ask the provider
+to answer. Each assertion is written to
+`docs/process/p4-journey/run-<attempt>.json`; screenshots sit beside this receipt in
+`run-<attempt>/`. Set `P4_JOURNEY_ATTEMPT` to keep the two fresh run receipts apart.
+
+The spare stack allows six computer pods and disks, with up to 3 GiB of memory
+and 6 GiB of disk requests. The sixth place lets a saved-data repeat start a new
+shared assistant computer while keeping the previous run's data.
+
+The ownership transfer check runs only when PR #262 is merged. A development event
+gives the signed-in test account the Owner role before the ownership screen opens.
+The transfer itself goes through the live review and owner screen. Separate member
+disks and browser profiles are not built. A real provider answer needs a paid call;
+the check records it as **PAID / NOT RUN** and sends no request.
+
 Run the repository gates with the existing control database:
 
 ```sh
