@@ -837,7 +837,6 @@ and fresh-install journeys remain NOT RUN. A matching signed context can be used
 directly at the backend while it is still valid. This does not establish complete
 section-3 qualification of the memory specification.
 
-
 Final checks use `nice -n 10`. The targeted tests run twice with
 `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`:
 
