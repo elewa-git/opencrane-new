@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { dirname } from 'node:path';
+import { request, type IncomingMessage } from 'node:http';
+import { setTimeout as pause } from 'node:timers/promises';
+import { proxy } from '../../computer/src/proxy.ts';
 import type { MemoryIdentity } from '@opencrane/events';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { fixture } from '@opencrane/models/testing';
-import { envelope, parseMemoryRequest } from '@opencrane/models';
+import { envelope, parseMemoryRequest, startDecision } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -131,14 +134,14 @@ async function isolatedBackend(target: typeof setup) {
   return backend;
 }
 
-async function signedRecall(target: typeof setup) {
-  const parsed = parseMemoryRequest(JSON.stringify(call), headers);
+async function signedRecall(target: typeof setup, overrides = {}, body = call) {
+  const parsed = parseMemoryRequest(JSON.stringify(body), headers);
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
     computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
     thread: 'thread', operation: 'recall', scopes: [scopeId], contentAccess: 'private',
     bodyDigest: parsed.bodyDigest, callId: metadata.callId,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
-  return target.tokens.memoryContext(claims, Date.now() + 2000);
+  return target.tokens.memoryContext({ ...claims, ...overrides }, Date.now() + 2000);
 }
 
 async function assertRecallRefused(target: typeof setup, backend: typeof app) {
@@ -325,6 +328,235 @@ it('refuses changed MCP policy at both the gateway and backend', async function 
   }
   await mode(setup, 'allow');
 });
+
+const wrongIdentities = [
+  { silo: 'other' }, { computer: 'other' }, { generation: 2 }, { requester: 'bob' },
+  { conversation: 'other' }, { assistant: 'other' }, { turn: 'missing' },
+];
+async function refusesBackendIdentity(overrides: Record<string, unknown>) {
+  const token = await signedRecall(setup, overrides);
+  const database = vi.spyOn(setup.db, 'query');
+  try {
+    const requestHeaders = { ...headers, 'x-memory-context': token };
+    const requestOptions = { method: 'POST' as const, url: route,
+      headers: requestHeaders, payload: call };
+    const response = await app.inject(requestOptions);
+    expect(response.statusCode).toBe(403);
+    expect(database).not.toHaveBeenCalled();
+  } finally {
+    database.mockRestore();
+  }
+}
+it.each(wrongIdentities)('refuses a signed backend context with another identity: %j',
+  refusesBackendIdentity);
+
+it('refuses a signed body whose thread differs from the recorded start',
+  async function recordedThread() {
+    const otherMetadata = { ...metadata, threadId: 'other' };
+    const body = { ...call, params: { ...call.params, _meta: otherMetadata } };
+    const token = await signedRecall(setup, { thread: 'other' }, body);
+    const database = vi.spyOn(setup.db, 'query');
+    try {
+      const requestHeaders = { ...headers, 'x-memory-context': token };
+      const options = { method: 'POST' as const, url: route,
+        headers: requestHeaders, payload: body };
+      const response = await app.inject(options);
+      expect(response.statusCode).toBe(403);
+      expect(database).not.toHaveBeenCalled();
+    } finally {
+      database.mockRestore();
+    }
+  });
+
+it('refuses a start saved by another process and a computer that is no longer ready',
+  async function computerState() {
+    const fields = { assistantId: 'assistant', computerId: 'computer',
+      conversationId: 'conversation', turnId: 'forged', threadId: 'thread',
+      requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default',
+      executionMode: 'restricted' };
+    const start = envelope('test', 'computer-assistant', 'computer.turn_started', fields);
+    start.source = 'opencrane-computer';
+    await setup.nats.seed([start]);
+    await refusesBackendIdentity({ turn: 'forged' });
+    await setup.append('computer-assistant', 'computer.lost',
+      { assistantId: 'assistant', computerId: 'computer' });
+    try {
+      await assertRecallRefused(setup, app);
+    } finally {
+      await setup.append('computer-assistant', 'computer.ready',
+        { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
+    }
+  });
+
+it('refuses conflicting secondary Codex thread metadata at both admission points',
+  async function secondaryThread() {
+    const otherMetadata = { ...metadata, 'x-codex-turn-metadata': { thread_id: 'other' } };
+    const body = { ...call, params: { ...call.params, _meta: otherMetadata } };
+    const token = await signedRecall(setup, {}, body);
+    const database = vi.spyOn(setup.db, 'query');
+    try {
+      const requestHeaders = { ...headers, 'x-memory-context': token };
+      const options = { method: 'POST' as const, url: route,
+        headers: requestHeaders, payload: body };
+      expect((await app.inject(options)).statusCode).toBe(403);
+      capability = '';
+      expect((await setup.call(headers, body, route)).status).toBe(403);
+      expect(capability).toBe('');
+      expect(database).not.toHaveBeenCalled();
+    } finally {
+      database.mockRestore();
+    }
+  });
+
+const revokedGrants = [
+  { resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'member', granteeId: 'alice' },
+  { resourceType: 'mcp_server', resourceId: 'memory', granteeKind: 'member', granteeId: 'alice' },
+  { resourceType: 'mcp_server', resourceId: 'memory', granteeKind: 'assistant',
+    granteeId: 'assistant' },
+];
+async function refusesRevokedGrant(grant: (typeof revokedGrants)[number]) {
+  const subject = grantStream(grant.resourceType, grant.resourceId);
+  const revoked = await setup.append(subject, 'grant.revoked', { ...grant, revokedBy: 'alice' });
+  try {
+    await assertRecallRefused(setup, app);
+  } finally {
+    await setup.auth.handler.handle(revoked, setup.db);
+    const restored = await setup.append(subject, 'grant.given', { ...grant, grantedBy: 'alice' });
+    await setup.auth.handler.handle(restored, setup.db);
+  }
+}
+it.each(revokedGrants)('refuses a pending backend $resourceType revoke for $granteeKind',
+  refusesRevokedGrant);
+
+it('refuses when signing or verification is unavailable without reading facts',
+  async function unavailableKeys() {
+    const noSigner = await startDecision(setup.actor, setup.identity, setup.binding);
+    const originalDecisionUrl = setup.options.decisionUrl;
+    const database = vi.spyOn(setup.db, 'query');
+    try {
+      setup.options.decisionUrl = noSigner.url;
+      await setup.restart();
+      capability = '';
+      expect((await setup.call(headers, call, route)).status).toBe(403);
+      expect(capability).toBe('');
+      const identity = { ...setup.identity, jwks: { keys: [] } };
+      const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
+        binding: setup.binding, feed: { memberId }, identity };
+      const noVerifier = buildServer(testAuthConfig(), { memory });
+      try {
+        const token = await signedRecall(setup);
+        const requestHeaders = { ...headers, 'x-memory-context': token };
+        const options = { method: 'POST' as const, url: route,
+          headers: requestHeaders, payload: call };
+        expect((await noVerifier.inject(options)).statusCode).toBe(403);
+      } finally {
+        await noVerifier.close();
+      }
+      expect(database).not.toHaveBeenCalled();
+    } finally {
+      database.mockRestore();
+      setup.options.decisionUrl = originalDecisionUrl;
+      await setup.restart();
+      await noSigner.close();
+    }
+  });
+
+const admissionChanges = ['grant', 'computer', 'file', 'deadline'];
+async function changesDuringAdmission(change: string) {
+  const subject = grantStream('memory_read', scopeId);
+  const originalHead = setup.nats.store.head;
+  let injected = false;
+  async function readHead(watched?: string, deadline?: number) {
+    if (watched === subject && !injected) {
+      injected = true;
+      if (change === 'grant') {
+        await setup.append(subject, 'grant.revoked', { resourceType: 'memory_read',
+          resourceId: scopeId, granteeId: 'alice', revokedBy: 'alice' });
+      } else if (change === 'computer') {
+        await setup.append('computer-assistant', 'computer.lost',
+          { assistantId: 'assistant', computerId: 'computer' });
+      } else if (change === 'file') {
+        await setup.append('conversation-conversation', 'file.uploaded', {
+          conversationId: 'conversation', fileId: 'file', uploadedBy: 'alice',
+          name: 'notes.txt', sizeBytes: 1, mediaType: 'text/plain' });
+      } else {
+        await pause(2100);
+      }
+    }
+    return originalHead(watched, deadline);
+  }
+  const token = await signedRecall(setup);
+  const database = vi.spyOn(setup.db, 'query');
+  const reading = vi.spyOn(setup.nats.store, 'head').mockImplementation(readHead);
+  try {
+    const requestHeaders = { ...headers, 'x-memory-context': token };
+    const options = { method: 'POST' as const, url: route,
+      headers: requestHeaders, payload: call };
+    const response = await app.inject(options);
+    expect(injected).toBe(true);
+    expect(response.statusCode, response.body).toBe(change === 'file' ? 200 : 403);
+    if (change !== 'file') expect(database).not.toHaveBeenCalled();
+  } finally {
+    reading.mockRestore();
+    database.mockRestore();
+    if (change === 'grant') await grantMemory(setup, 'member', 'alice');
+    if (change === 'computer') {
+      await setup.append('computer-assistant', 'computer.ready',
+        { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
+    }
+  }
+}
+it.each(admissionChanges)('rechecks changes during backend admission: %s',
+  changesDuringAdmission);
+
+async function controlProxy(socketPath: string, path: string, input: unknown) {
+  function send(resolve: (status: number | undefined) => void, reject: (error: Error) => void) {
+    function accept(response: IncomingMessage) {
+      response.resume();
+      function ended() { resolve(response.statusCode); }
+      response.once('end', ended);
+    }
+    const outgoing = request({ socketPath, path, method: 'POST' }, accept);
+    outgoing.once('error', reject);
+    outgoing.end(JSON.stringify(input));
+  }
+  expect(await new Promise(send)).toBe(200);
+}
+
+it('recalls through the thread proxy, real gateway and backend with replaced credentials',
+  async function completePath() {
+    const directory = dirname(setup.options.configFile);
+    const controlSocket = `${directory}/memory-control.sock`;
+    const options = { callerPath: `${directory}/memory-caller`, controlSocket, port: 0 };
+    const local = await proxy(`http://127.0.0.1:${setup.options.port}`, options);
+    try {
+      const loadKey = 'a'.repeat(32);
+      const toolKey = 'oc_0123456789';
+      const definition = JSON.stringify({ name: 'recall', inputSchema: { type: 'object' } });
+      const tool = { key: toolKey, serverId: 'memory', connectionId: 'server',
+        modes: { recall: 'allow' }, definitions: [definition] };
+      const catalogue = { loadKey, conversation: 'conversation', thread: 'thread', tools: [tool] };
+      await controlProxy(controlSocket, '/catalogue', catalogue);
+      const grant = { thread: 'thread', conversation: 'conversation',
+        computer: setup.headers.authorization.slice('Bearer '.length),
+        token: setup.headers['x-turn-token'], expires: Date.now() + 60_000 };
+      await controlProxy(controlSocket, '/grant', grant);
+      const poisoned = { ...headers, authorization: `Bearer ${local.caller}`,
+        'x-turn-token': 'forged', 'session-id': 'other', 'x-requester-id': 'bob' };
+      const requestOptions = { method: 'POST', headers: poisoned, body: JSON.stringify(call) };
+      const response = await fetch(`${local.url}/mcp/${loadKey}/${toolKey}`, requestOptions);
+      const text = await response.text();
+      expect(response.status, text).toBe(200);
+      expect(text).toContain('fact_22');
+      expect(decodeJwt(capability)).toMatchObject({ requester: 'alice', thread: 'thread' });
+      const model = await setup.call({ 'x-memory-context': 'poisoned-memory-header' });
+      expect(model.status, model.text).toBe(200);
+      expect(setup.providerHeaders()).not.toContain('x-memory-context');
+      await setup.settled();
+    } finally {
+      await local.close();
+    }
+  });
 
 it('rechecks stale grants at the backend and refuses an ended turn upstream', async function stale() {
   expect((await setup.call(headers, call, route)).status).toBe(200);
