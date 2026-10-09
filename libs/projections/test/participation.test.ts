@@ -146,12 +146,14 @@ async function comparesOldAndNewParticipation() {
 it('gives old and new removals identical intervals, ignores repeats and preserves closed state',
   comparesOldAndNewParticipation);
 
-async function refusesParticipantOverflow() {
+async function refusesParticipantOverflow(initialCount: number) {
   const storage = await database('pg');
   const nats = await natsFixture();
   try {
-    function participantId(_unused: unknown, index: number) { return `person-${index}`; }
-    const participantIds = Array.from({ length: 99 }, participantId);
+    function participantId(_unused: unknown, index: number) {
+      return `person-${index}`;
+    }
+    const participantIds = Array.from({ length: initialCount - 1 }, participantId);
     participantIds.push('alice');
     const creation = envelope('test', 'conversation-chat', 'conversation.created', {
       conversationId: 'chat', createdBy: 'alice', mode: 'group', participantIds });
@@ -165,10 +167,11 @@ async function refusesParticipantOverflow() {
     await expect(runner.run(conversations)).rejects.toThrow('Conversation participant limit');
     expect(await runner.checkpoint(conversations)).toBe(1);
     expect((await readConversation(storage.db, 'test', 'chat')).rows).toHaveLength(1);
-    expect((await storage.db.query('SELECT * FROM conversation_participants')).rows).toHaveLength(100);
+    expect((await storage.db.query('SELECT * FROM conversation_participants')).rows).toHaveLength(initialCount);
   } finally {
     await nats.close();
     await storage.close();
   }
 }
-it('rolls back the 101st participant and keeps the last good checkpoint', refusesParticipantOverflow);
+it.each([97, 100])('rolls back an addition to %i participants and keeps the last good checkpoint',
+  refusesParticipantOverflow);

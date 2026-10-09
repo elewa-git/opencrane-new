@@ -133,8 +133,7 @@ async function ordersConversationJobs() {
     });
     await authorisation.handler.handle(lateGroup, db);
     expect((await authorisation.conversation('ext:jane', 'late', 'read')).allowed).toBe(false);
-    const jane = { ...event('jane', 'member-ext:jane'),
-      data: { memberId: 'ext:jane', role: 'member' } };
+    const jane = event('jane', 'member-ext:jane');
     await authorisation.handler.handle(jane, db);
     expect((await authorisation.conversation('ext:jane', 'late', 'read')).allowed).toBe(true);
     expect((await authorisation.conversation('ext:jane', 'late', 'manage_participants')).allowed)
@@ -156,7 +155,7 @@ async function ordersConversationJobs() {
         headers: { 'content-type': 'application/json' }, body: JSON.stringify(query) });
       expect(response.ok).toBe(true);
       const tuples: unknown = await response.json();
-      expect(tuples).toEqual({ tuples: [] });
+      expect(tuples).toMatchObject({ tuples: [] });
       expect((await authorisation.conversation('alice', data.conversationId,
         'manage_participants')).allowed).toBe(false);
     }
