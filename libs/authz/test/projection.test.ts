@@ -853,3 +853,67 @@ async function oldMemberRoleBeforeOwnershipSeed(promoted: boolean) {
 it.each([false, true])(
   'an old member role keeps ownership changes that followed it (old owner role: %s)',
   oldMemberRoleBeforeOwnershipSeed);
+
+const retainedRelationships = [
+  { type: 'grant.given', subject: grantStream('model', 'gpt-6-luna'), data: {
+    resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice',
+    granteeKind: 'member', grantedBy: 'bob' } },
+  { type: 'team.member_added', subject: 'team-sales', data: {
+    teamId: 'sales', memberId: 'alice', addedBy: 'bob' } },
+  { type: 'participant.added', subject: 'conversation-chat', data: {
+    conversationId: 'chat', participantId: 'alice', addedBy: 'bob' } },
+  { type: 'conversation.created', subject: 'conversation-chat', data: {
+    conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice',
+    mode: 'agent_session' } },
+  { type: 'assistant.created', subject: 'assistant-personal', data: {
+    assistantId: 'personal', ownerId: 'alice', kind: 'personal' } },
+];
+
+async function relationshipAfterRemovalAndRejoin(test: typeof retainedRelationships[number]) {
+  const nats = await natsFixture();
+  try {
+    const joined = member('relationship-join');
+    const old = savedPermission('recorded-relationship', test.type, test.subject, test.data);
+    const removed = member('relationship-removal', 'member.removed');
+    const history = [joined];
+    if (test.type === 'participant.added') {
+      history.push(savedPermission('conversation-for-participant', 'conversation.created',
+        'conversation-chat', { conversationId: 'chat', assistantId: 'assistant',
+          createdBy: 'bob', mode: 'agent_session' }));
+    }
+    const initial = [...history];
+    history.push(old, removed);
+    await nats.seed(history);
+    const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'), nats.store);
+    await apply(projection, initial);
+    await apply(projection, [removed, old]);
+    expect(await projection.check('alice', 'member')).toMatchObject({ allowed: false });
+    expect(await projection.applied(old.id)).toBe(true);
+    if (test.type.startsWith('participant.') || test.type === 'conversation.created') {
+      expect(await projection.conversation('alice', 'chat', 'read'))
+        .toMatchObject({ allowed: false });
+    }
+    const rejoined = member('relationship-rejoin');
+    await nats.seed([rejoined]);
+    await apply(projection, [rejoined]);
+    expect(await projection.check('alice', 'member')).toMatchObject({ allowed: true });
+    let restored;
+    if (test.type === 'grant.given') {
+      restored = await projection.use('person', 'alice', 'model', 'gpt-6-luna');
+    } else if (test.type === 'team.member_added') {
+      restored = await projection.team('alice', 'sales');
+    } else if (test.type === 'assistant.created') {
+      restored = await projection.actsFor('alice', 'personal');
+    } else {
+      restored = await projection.conversation('alice', 'chat', 'read');
+    }
+    expect(restored).toMatchObject({ allowed: true });
+    const rebuilt = await rebuildMembers(fga.apiUrl, 'test', nats.reader);
+    expect(await snapshot(projection.binding)).toEqual(await snapshot(rebuilt.binding));
+  } finally {
+    await nats.close();
+  }
+}
+it.each(retainedRelationships)(
+  'backfilled $type survives member removal and rejoin exactly as a clean rebuild',
+  relationshipAfterRemovalAndRejoin);
