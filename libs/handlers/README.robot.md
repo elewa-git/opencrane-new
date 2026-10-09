@@ -17,8 +17,10 @@ const runtime = new HandlerRuntime({ db, logger, silo: 'acme', handlers: [
   registerHandler('update-members', (event, tx) => members.apply(tx, event)),
 ] });
 await runtime.start();
-await runtime.work(4);
-await dispatch(connection, runtime, abortController.signal);
+async function startWorkers() {
+  await runtime.work(4);
+}
+await dispatch(connection, runtime, abortController.signal, startWorkers);
 await runtime.stop();
 ```
 
@@ -68,20 +70,36 @@ and receipts currently grow without pruning. Monitor database capacity.
 Stop dispatchers/workers before recovery. PostgreSQL is disposable execution
 state and content: rebuild it together with the consumer from EVENTS, with
 external reactions disabled. Keep receipts while preserving external state.
-Changing the enabled handler set requires a controlled rebuild/backfill;
-do not reset just the checkpoint or switch subscriptions on a live consumer.
+Subscription upgrades preserve the database, consumer and receipts. They do not
+rebuild projections or reset the consumer. The dispatcher holds the PostgreSQL
+`handler-dispatcher` advisory lock for its whole lifetime, including when a changed
+manifest leaves it waiting for shutdown. It logs changed handlers, added/removed
+event types and `npm run ops -- upgrade-handlers --confirm-writers-stopped` before
+waiting. The ops host starts workers and the computer watcher only after this check.
 
-For a subscription change, stop writers and decision services as well. Drain
-in-flight jobs before replacing execution state. Rebuild the content projections
-and OpenFGA from EVENTS using the [operator replay commands](../../apps/ops/README.md),
-with reactions disabled. Re-provision the dispatcher consumer and its disposable
-queue/checkpoint database together against the new manifest, replaying EVENTS
-from the beginning; do not replace only the stored manifest or checkpoint.
-Preserve event-id receipts for any retained external state so replay cannot repeat
-external effects. Enable reactions and writers only after content/IAM catch up.
-This is the existing subscription rebuild requirement, not a change to job keys:
-member jobs keep their original `member-<id>` key and ownership jobs use
-`ownership-<silo>`. Live upgrade qualification is NOT RUN.
+The [operator upgrade procedure](../../apps/ops/README.robot.md#handler-subscription-upgrade)
+stops clients, drains old jobs with decision services available, then stops
+dispatchers, workers and decision services before installing the new code. The command refuses a held dispatcher
+lock and unfinished or failed original jobs. Diagnostic dead-letter copies do not
+block it. A rerun with an equal manifest changes nothing, even with queued backfill jobs.
+
+The command compares stored subscriptions with the current catalogue for the ops
+host's enabled handlers. Each added `(handler, eventType)` gets historical jobs in
+EVENTS order through the stored SQL checkpoint. Job insertion times keep that order
+within the single transaction. Removed handlers/types get no backfill. All jobs,
+the manifest and the unchanged checkpoint commit together; a failed scan rolls
+back those writes. Events beyond that checkpoint stay with the durable consumer,
+which sends them to all current subscribers after restart. New queue setup may
+remain after failure; no reaction runs in the command. Dry-run reports each changed
+handler, its added/removed types and matching historical event count without starting
+the queue runtime or writing data. Counts include already receipted events.
+
+Keep event-id receipts for retained external state. Workers check these receipts
+before invoking reactions, including newly subscribed historical events. External
+services still need their own event-id idempotency rule for a crash before the SQL
+receipt commits. Restart decision services and handlers first, check that jobs
+finish and permissions catch up, then restart clients and other event writers. Live upgrade qualification
+on a customer installation is NOT RUN.
 
 Run `PG_TEST_URL=<PostgreSQL admin URL> npm test -- libs/handlers/test`.
 The selected database is only a control database and the role needs `CREATEDB`:

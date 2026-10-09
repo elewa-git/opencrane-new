@@ -1,12 +1,12 @@
 import { handlerJobKey } from './job-key.ts';
 import { PgBoss, type Queue, type JobWithMetadata } from "pg-boss";
-import { parseEventByType } from "@opencrane/events";
+import { parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { runHandler, type Logger } from "@opencrane/observability";
 import type { Db, Query } from "@opencrane/projections";
 import { withinAttempt } from "./attempt.ts";
 import { checkHandlers, type Handler } from "./registration.ts";
 
-export function transactionAdapter(tx: Query) {
+function transactionAdapter(tx: Query) {
   return {
     executeSql: (sql: string, values?: unknown[]) => tx.query(sql, values),
   };
@@ -14,13 +14,15 @@ export function transactionAdapter(tx: Query) {
 
 // Set queued events to infinity before commit because pg-boss has no such setting.
 // Keep failed stream heads too, so later events cannot pass them.
-export async function retainJob(
+// Use the insertion time so backfill jobs in one transaction keep their event order.
+async function retainJob(
   tx: Query,
   name: string,
   id: string,
 ): Promise<void> {
   await tx.query(
-    "UPDATE pgboss.job SET keep_until = 'infinity' WHERE name = $1 AND id = $2",
+    "UPDATE pgboss.job SET keep_until = 'infinity', created_on = clock_timestamp() " +
+      "WHERE name = $1 AND id = $2",
     [name, id],
   );
 }
@@ -83,6 +85,17 @@ export class HandlerRuntime {
         throw new Error(`Incompatible handler queue: ${name}/${key}`);
       }
     }
+  }
+
+  async enqueue(handler: Handler, event: EventEnvelope, tx: Query): Promise<void> {
+    const id = await this.boss.send(handler.name, event, {
+      singletonKey: event.subject,
+      db: transactionAdapter(tx),
+    });
+    if (!id) {
+      throw new Error("Handler enqueue refused");
+    }
+    await retainJob(tx, handler.name, id);
   }
 
   async work(concurrency = 4): Promise<void> {

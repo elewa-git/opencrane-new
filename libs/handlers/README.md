@@ -28,7 +28,7 @@ assistants and claims computers.
 ```mermaid
 flowchart LR
   ops["apps/ops<br/>workers"] -->|starts work| handlers["libs/handlers<br/>reaction jobs"]
-  nats["NATS JetStream<br/>event log"] -->|new events| handlers
+  nats["NATS JetStream<br/>event log"] -->|new and saved events| handlers
   reactions["libs/models and libs/authz<br/>registered reactions"] -.->|registers reactions| handlers
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
   handlers -.-> events["libs/events<br/>reaction list"]
@@ -45,6 +45,7 @@ flowchart LR
 - Save a note that the job is done in the same database step as the reaction's
   changes, so its database changes are never applied twice.
 - Let an operator retry a failed job after fixing its cause.
+- Add historical jobs for new subscriptions during a stopped-service upgrade.
 
 Chat creation and participant permission jobs run in the same conversation order,
 even though their events use separate streams.
@@ -58,6 +59,13 @@ even though their events use separate streams.
 2. **A reaction fails.** Later jobs about the same thing wait, while jobs about
    other things carry on. An operator can repair the cause and retry the failed
    job.
+
+3. **A release changes subscriptions.** The dispatcher reports which reactions and
+   event types changed and waits for shutdown. With writers and workers stopped,
+   `npm run ops -- upgrade-handlers` adds historical jobs for new subscriptions.
+   Finished reactions keep their receipts, so they do not run again. The
+   [operator procedure](../../apps/ops/README.robot.md#handler-subscription-upgrade)
+   lists the stop, dry-run, upgrade and restart steps.
 
 ## How to run or test it
 

@@ -235,6 +235,51 @@ computer stream with suspension. A live turn prevents suspension; competing
 start/suspend commands use that stream's conditional append. An unexecuted message
 whose delivery loses to suspension is delivered again after wake.
 
+## Handler subscription upgrade
+
+This command updates the saved list of enabled handlers and the event types they
+receive. It keeps the events, queues and receipts (the saved notes that a handler
+has already finished an event).
+
+1. Stop `apps/server`, computers, the model gateway and other clients that request
+   decisions or append events. Leave NATS, PostgreSQL, OpenFGA and the model/budget
+   decision services available while the previous release's dispatcher drains jobs
+   and any events those reactions append. Budget settlement needs its decision
+   endpoint. Repair/retry failed originals using `runtime.replay` before continuing.
+2. After jobs finish, stop the dispatcher, all handler workers and model/budget
+   decision services through the installation's service manager (or scale their
+   Kubernetes workloads to zero). Wait for their processes to exit. If new code
+   already stopped on a mismatch, use the previous release to drain old jobs first.
+   The command refuses a running dispatcher or unfinished jobs.
+3. Install the new release. Set `DATABASE_URL`, `SILO_ID` and the NATS projection
+   reader settings listed above. Keep `MODEL_DECISION_URL` set exactly as it will
+   be for the dispatcher: it enables `settle-budget`. The shared enabled handler
+   list excludes `update-members`, whose tables the separate members runner updates.
+4. Inspect the plan, then apply it while writers and workers remain stopped:
+
+   ```sh
+   npm run ops -- upgrade-handlers --dry-run
+   npm run ops -- upgrade-handlers --confirm-writers-stopped
+   ```
+
+5. Restart the upgraded model/budget decision services, then the dispatcher and
+   workers. Keep the server, computers, gateway and other clients stopped while
+   backfill jobs run; settlement uses the decision endpoint and reactions may append
+   further events. Check that jobs finish without failed originals and that tables
+   and permissions catch up. Then restart clients and other event writers.
+
+Dry-run prints JSON with each changed handler, added/removed types and the number
+of matching historical events. It changes nothing. The command adds jobs only for
+new subscriptions through the stored dispatcher checkpoint; the durable consumer
+handles any later events on restart. It never invokes a reaction or publishes an
+event. Queue jobs and the new manifest/checkpoint commit in one transaction.
+Workers skip events already recorded in that handler's receipts. Removed handlers
+and types need only a manifest update; their old queues and receipts are retained.
+Rerunning after success is a no-op. An error leaves the old manifest and jobs in
+place; newly created empty queues may remain. The confirmation flag records the
+operator's stopped-writer check; only the dispatcher lock and jobs are checked
+by the command. Do not delete receipts or reset the consumer during this upgrade.
+
 ## Model grant upgrade
 
 With decision services and event writers stopped, use the silo's NATS command
@@ -254,8 +299,7 @@ The dev stack runs this command on every `up.sh` and `up.sh --fresh`, after
 NATS provisioning and before decision startup. Repeated startup first stops
 the server, dispatcher and model services so writers cannot race the migration.
 For silos upgrading from the membership-only model, rebuild OpenFGA with the
-updated model and perform the existing controlled dispatcher subscription
-rebuild to enable `seed-model-grants` before startup. Reactions then cover new
+updated model and run the handler subscription upgrade command to enable `seed-model-grants` before startup. Reactions then cover new
 members and assistants. The journey checks existing members/assistants have
 model grant history (including preserved revocations), and waits for new member
 and assistant grants in OpenFGA before chat.

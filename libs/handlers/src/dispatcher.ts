@@ -1,4 +1,4 @@
-import { handlerJobKey } from './job-key.ts';
+import { once } from "node:events";
 import {
   AckPolicy,
   DeliverPolicy,
@@ -8,7 +8,8 @@ import {
 import type { NatsConnection } from "@nats-io/transport-node";
 import { decodeEvent } from "@opencrane/event-store";
 import { checkHandlers } from "./registration.ts";
-import { HandlerRuntime, retainJob, transactionAdapter } from "./queue.ts";
+import { HandlerRuntime } from "./queue.ts";
+import { subscriptionChanges, type DispatcherState } from "./upgrade.ts";
 
 const configuration = {
   durable_name: "handler-dispatcher",
@@ -48,6 +49,23 @@ export async function dispatch(
   connection: NatsConnection,
   runtime: HandlerRuntime,
   signal: AbortSignal,
+  ready?: () => Promise<void>,
+): Promise<void> {
+  const db = runtime.options.db;
+  if (!db.lock) {
+    throw new Error("Dispatcher requires a database lock");
+  }
+  async function run() {
+    await dispatchLocked(connection, runtime, signal, ready);
+  }
+  await db.lock("handler-dispatcher", run);
+}
+
+async function dispatchLocked(
+  connection: NatsConnection,
+  runtime: HandlerRuntime,
+  signal: AbortSignal,
+  ready?: () => Promise<void>,
 ): Promise<void> {
   const { db, silo, handlers } = runtime.options;
   const manifest = checkHandlers(handlers);
@@ -58,7 +76,25 @@ export async function dispatch(
     "INSERT INTO handler_dispatcher VALUES (1, $1, $2, 0) ON CONFLICT DO NOTHING",
     [silo, manifest],
   );
+  const state = await db.query<DispatcherState>(
+    "SELECT silo, manifest, sequence FROM handler_dispatcher WHERE id = 1",
+  );
+  const row = state.rows[0];
+  if (!row || row.silo !== silo) {
+    throw new Error("Dispatcher silo mismatch");
+  }
+  if (row.manifest !== manifest) {
+    const changes = subscriptionChanges(row.manifest, manifest);
+    const command = "npm run ops -- upgrade-handlers --confirm-writers-stopped";
+    runtime.options.logger.error({ changes },
+      `Dispatcher subscriptions changed: ${JSON.stringify(changes)}. Stop writers and run ${command}`);
+    if (!signal.aborted) {
+      await once(signal, "abort");
+    }
+    return;
+  }
   const consumer = await durableConsumer(connection);
+  await ready?.();
   while (!signal.aborted) {
     const message = await consumer.next({ expires: 1000 });
     if (!message) {
@@ -80,7 +116,7 @@ export async function dispatch(
       const row = state.rows[0];
       if (!row || row.silo !== silo || row.manifest !== manifest) {
         throw new Error(
-          "Dispatcher subscriptions changed; a controlled rebuild is required",
+          "Dispatcher state changed during dispatch",
         );
       }
       if (message.seq <= Number(row.sequence)) {
@@ -91,14 +127,7 @@ export async function dispatch(
       }
       for (const handler of handlers) {
         if (handler.eventTypes.includes(event.type)) {
-          const id = await runtime.boss.send(handler.name, event, {
-            singletonKey: handlerJobKey(handler.name, event),
-            db: transactionAdapter(tx),
-          });
-          if (!id) {
-            throw new Error("Handler enqueue refused");
-          }
-          await retainJob(tx, handler.name, id);
+          await runtime.enqueue(handler, event, tx);
         }
       }
       await tx.query(

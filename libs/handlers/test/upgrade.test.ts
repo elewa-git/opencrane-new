@@ -26,10 +26,11 @@ function upgradeTests() {
     current = await fixture();
     await current.append("joined");
     await current.append("role", "member-alice", "member.role_changed");
+    await current.append("role-again", "member-alice", "member.role_changed");
     await current.append("owner", "member-bootstrap-owner", "silo.owner_bootstrapped");
     await current.db.query(`CREATE TABLE handler_dispatcher (
       id INTEGER PRIMARY KEY, silo TEXT, manifest TEXT, sequence BIGINT)`);
-    await current.db.query("INSERT INTO handler_dispatcher VALUES (1, 'test', $1, 3)",
+    await current.db.query("INSERT INTO handler_dispatcher VALUES (1, 'test', $1, 4)",
       [oldManifest]);
     const names: HandlerName[] = ["update-openfga", "seed-ownership", "seed-model-grants",
       "create-assistant", "claim-computer", "settle-budget"];
@@ -40,7 +41,7 @@ function upgradeTests() {
       return registerHandler(name, apply);
     }
     const handlers = names.map(testHandler);
-    const runtime = await current.runtime(handlers);
+    const runtime = await current.runtime(handlers, { retryLimit: 5 });
     await current.db.query("INSERT INTO handler_receipts VALUES ('update-openfga', 'joined')");
     await current.db.query("INSERT INTO handler_receipts VALUES ('create-assistant', 'joined')");
     await effect(event("joined"), current.db, "update-openfga");
@@ -66,6 +67,7 @@ function upgradeTests() {
 
   async function backfill() {
     const runtime = await prepare();
+    await current.append("tail", "member-alice");
     const preview = await command("--dry-run");
     expect(preview.stdout).toContain("seed-model-grants");
     expect(preview.stdout).toContain("member.joined");
@@ -76,20 +78,29 @@ function upgradeTests() {
     expect(await snapshot()).toEqual(upgraded);
     await runtime.work(1);
     async function applied() {
-      return (await current.effects()).length === 8;
+      return (await current.effects()).length === 9;
     }
     await until(applied);
     const effects = await current.effects();
     const expected = ["create-assistant:joined", "create-assistant:owner", "seed-model-grants:joined",
       "seed-model-grants:owner", "seed-ownership:owner", "update-openfga:joined",
-      "update-openfga:owner", "update-openfga:role"];
+      "update-openfga:owner", "update-openfga:role", "update-openfga:role-again"];
     // Skip the newly subscribed event whose receipt already records its effect.
-    function key(row: typeof effects[number]) { return `${row.handler}:${row.event_id}`; }
-    expect(effects.map(key).sort()).toEqual(expected.sort());
+    function key(row: typeof effects[number]) {
+      return `${row.handler}:${row.event_id}`;
+    }
+    const appliedKeys = effects.map(key);
+    const sortedKeys = [...appliedKeys];
+    sortedKeys.sort();
+    expected.sort();
+    expect(sortedKeys).toEqual(expected);
+    expect(appliedKeys.indexOf("update-openfga:role"))
+      .toBeLessThan(appliedKeys.indexOf("update-openfga:role-again"));
     void current.startDispatch(runtime);
-    await current.append("tail", "member-alice");
-    await current.checkpoint(4);
-    async function tailApplied() { return (await current.effects()).length === 11; }
+    await current.checkpoint(5);
+    async function tailApplied() {
+      return (await current.effects()).length === 12;
+    }
     await until(tailApplied);
   }
   it("backfills new subscriptions once, preserves old effects and resumes the durable consumer", backfill);
@@ -123,10 +134,14 @@ function upgradeTests() {
     const stop = new AbortController();
     const ready = vi.fn();
     const task = dispatch(current.nats.dispatcherConnection, runtime, stop.signal, ready);
-    function observeFailure() { return undefined; }
+    function observeFailure() {
+      return undefined;
+    }
     void task.catch(observeFailure);
     try {
-      async function warned() { return log.mock.calls.length > 0; }
+      function warned() {
+        return Promise.resolve(log.mock.calls.length > 0);
+      }
       await until(warned, 2000);
       const message = JSON.stringify(log.mock.calls);
       expect(message).toContain("npm run ops -- upgrade-handlers");

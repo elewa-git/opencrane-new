@@ -47,6 +47,9 @@ const db: Db = {
     return result;
   },
 };
+if (mode.startsWith("dispatcher")) {
+  db.lock = base.lock!.bind(base);
+}
 if (mode.startsWith("projection")) {
   const { store } = await connectEventStore();
   const runner = new ProjectionRunner(db, store, logger);
