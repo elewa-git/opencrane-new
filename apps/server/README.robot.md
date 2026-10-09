@@ -1213,7 +1213,6 @@ desktop grant. A late participant can list and download screenshots saved after 
 latest join. Older previews and downloads are refused, including after projection replay.
 Private team sessions still refuse participant capture.
 
-
 ## Governed personal recall
 
 `POST /mcp/memory/server` serves stateless 2026-07-28 discovery, listing and personal recall.

@@ -192,7 +192,6 @@ that assert verified emails, only trusted admins setting verified emails, and
 The server limits the complete session cookie header to 3,800 bytes and refuses
 larger sign-in sessions with a clear error.
 
-
 `tokenIssuer.memoryContext(payload, expiresAt)` signs ES256 passes for `memory-mcp`.
 Expiry is the earlier of the supplied deadline and two seconds from issuance.
 The memory server checks claims and lifetime separately from computer/turn credentials.

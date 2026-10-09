@@ -135,15 +135,32 @@ function digestContext(facts: unknown) {
 function activeTurn(turnToken: z.infer<typeof legacyTurnSchema>,
   facts: Awaited<ReturnType<typeof decisionActivity>>['computer'],
   computerSequence: number) {
+  requireTurnDelegation(turnToken);
+  requireCurrentComputer(facts.lifecycle, computerSequence);
+  return requireRecordedActiveTurn(turnToken, facts.firstStart, facts.firstClose);
+}
+
+function requireTurnDelegation(turnToken: z.infer<typeof legacyTurnSchema>) {
   if (turnToken.delegation[0] !== turnToken.requester) throw new Error('Delegation refused');
-  const computer = facts.lifecycle;
+}
+
+function requireCurrentComputer(
+  computer: Awaited<ReturnType<typeof decisionActivity>>['computer']['lifecycle'],
+  computerSequence: number,
+) {
   // Check the same ready computer that supplied the token's current identity.
   // Refuse a suspension or replacement saved between those two reads.
   if (computer?.event.type !== 'computer.ready' || computer.sequence !== computerSequence) {
     throw new Error('Computer changed');
   }
-  const turn = facts.firstStart;
-  if (!turn || facts.firstClose || turn.event.source !== 'opencrane-server') {
+}
+
+function requireRecordedActiveTurn(
+  turnToken: z.infer<typeof legacyTurnSchema>,
+  turn: Awaited<ReturnType<typeof decisionActivity>>['computer']['firstStart'],
+  firstClose: Awaited<ReturnType<typeof decisionActivity>>['computer']['firstClose'],
+): StoredEvent {
+  if (!turn || firstClose || turn.event.source !== 'opencrane-server') {
     throw new Error('Turn is not active');
   }
   const recorded = data(turn.event);

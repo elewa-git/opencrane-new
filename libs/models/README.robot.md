@@ -802,7 +802,6 @@ The binding guard tests cover both save orders with an append barrier, status
 recovery, retry access expiry and revocation, failed appends and individual saved
 event identity checks.
 
-
 ## Memory recall capabilities (P4-12 PR 3a)
 
 Only `/mcp/memory/server` receives signed `x-memory-context` after ext_authz checks
