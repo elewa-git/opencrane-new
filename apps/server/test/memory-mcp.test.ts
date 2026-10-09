@@ -115,6 +115,87 @@ async function close() {
 beforeAll(prepare, 120_000);
 afterAll(close);
 
+async function scopedRecall(team: boolean) {
+  const target = await fixture(2000, 20000, false, 'gpt-6-luna', team, 'manual',
+    'sales', 'restricted');
+  let backend: typeof app | undefined;
+  try {
+    await target.stopDispatch();
+    await target.runtime.stop();
+    await govern(target);
+    const custody = memoryKeys(dirname(target.options.configFile));
+    function decryptScoped(identity: MemoryIdentity,
+      encrypted: { ciphertext: string; keyId: string }) {
+      return custody.decrypt(identity, encrypted);
+    }
+    const scopedProjection = memoryProjection({ decrypt: decryptScoped });
+    await target.runner.initialise(scopedProjection);
+    const scopes: Pick<MemoryIdentity, 'scopeKind' | 'ownerId'>[] = [
+      { scopeKind: 'person' as const, ownerId: 'alice' },
+      { scopeKind: 'assistant_notes' as const, ownerId: 'assistant' },
+    ];
+    if (team) scopes.push({ scopeKind: 'group' as const, ownerId: 'sales' });
+    for (const scope of scopes) {
+      const selectedId = memoryScopeId('test', scope.scopeKind, scope.ownerId);
+      const identity = { silo: 'test', ...scope, scopeId: selectedId,
+        memoryId: scope.scopeKind, revision: 1 };
+      custody.provision(identity);
+      const encrypted = custody.encrypt(identity, `Only ${scope.scopeKind} facts`);
+      const fact = { schemaVersion: 1, ...scope, scopeId: selectedId,
+        memoryId: scope.scopeKind, revision: 1, kind: 'fact', pinned: false,
+        expiresAt: null, sources: [], dependsOn: [], ...encrypted };
+      await target.append(`scope-${selectedId}`, 'memory.written', fact);
+      for (const granteeKind of ['member', 'assistant']) {
+        const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+        const fields = { resourceType: 'memory_read', resourceId: selectedId,
+          granteeKind, granteeId, grantedBy: 'alice' };
+        const grant = await target.append(grantStream('memory_read', selectedId),
+          'grant.given', fields);
+        await target.auth.handler.handle(grant, target.db);
+      }
+    }
+    await target.runner.run(scopedProjection);
+    const memory = { silo: 'test', store: target.nats.store, db: target.db,
+      binding: target.binding, feed: { memberId }, identity: target.identity };
+    backend = buildServer(testAuthConfig(), { memory });
+    let issued = '';
+    function captureScoped(request: import('fastify').FastifyRequest,
+      _reply: import('fastify').FastifyReply, done: () => void) {
+      issued = String(request.headers['x-memory-context'] ?? '');
+      done();
+    }
+    backend.addHook('preHandler', captureScoped);
+    const address = await backend.listen({ host: '127.0.0.1', port: 0 });
+    const upstream = new URL(address).host;
+    target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream });
+    await target.restart();
+    for (const scope of scopes) {
+      const selectedId = memoryScopeId('test', scope.scopeKind, scope.ownerId);
+      const argumentsValue = { scopeId: selectedId, query: '' };
+      const body = { ...call, params: { ...call.params, arguments: argumentsValue } };
+      const response = await target.call(headers, body, route);
+      expect(response.status, `${scope.scopeKind}: ${response.text}`).toBe(200);
+      const result = JSON.parse(response.text) as { result: { structuredContent: unknown } };
+      expect(result.result.structuredContent).toMatchObject({ returnedCount: 1,
+        facts: [{ memoryId: scope.scopeKind, text: `Only ${scope.scopeKind} facts` }] });
+      expect(decodeJwt(issued)).toMatchObject({ scopes: [selectedId], contentAccess: 'private' });
+      const revokedFields = { resourceType: 'memory_read', resourceId: selectedId,
+        granteeKind: 'member', granteeId: 'alice', revokedBy: 'alice' };
+      const revoked = await target.append(grantStream('memory_read', selectedId),
+        'grant.revoked', revokedFields);
+      const direct = { method: 'POST' as const, url: route,
+        headers: { ...headers, 'x-memory-context': issued }, payload: body };
+      expect((await backend.inject(direct)).statusCode).toBe(403);
+      expect((await target.call(headers, body, route)).status).toBe(403);
+      await target.auth.handler.handle(revoked, target.db);
+    }
+  } finally {
+    await backend?.close();
+    await target.close();
+  }
+}
+it.each([false, true])('recalls only the selected scope with live grants (team=%s)', scopedRecall);
+
 async function grantMemory(target: typeof setup, kind: string, granteeId: string,
   recorded = true) {
   const subject = grantStream('memory_read', scopeId);

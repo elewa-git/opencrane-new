@@ -1,4 +1,4 @@
-import { beforeAll, expect, it } from 'vitest';
+import { beforeAll, expect, it, vi } from 'vitest';
 import { exportJWK, generateKeyPair, SignJWT, type JWTPayload } from 'jose';
 import { parseMemoryRequest } from '../src/mcp.ts';
 import { verifyMemoryContext } from '../src/memory-context.ts';
@@ -123,6 +123,33 @@ async function refusesLifetime(lifetime: string) {
   await expect(verifyMemoryContext(token, identity, parsed)).rejects.toThrow();
 }
 it.each(lifetimes)('refuses a %s lifetime', refusesLifetime);
+
+it('refuses expiry within the current second', async function fractionalExpiry() {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_800_000_000_750);
+  try {
+    const payload = { ...timedClaims(), iat: 1_799_999_999, exp: 1_800_000_000.5 };
+    const token = await sign(payload);
+    await expect(verifyMemoryContext(token, identity, parsed)).rejects.toThrow();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+const discoveryHeaders = [
+  { 'mcp-protocol-version': '2026-01-01' },
+  { 'mcp-name': 'recall' },
+];
+function refusesDiscoveryHeader(changed: Record<string, string>) {
+  const body = { jsonrpc: '2.0', id: 1, method: 'server/discover',
+    params: { _meta: metadata } };
+  const matching = { ...headers, 'mcp-method': 'server/discover', 'mcp-name': '' };
+  const poisoned = { ...matching, ...changed };
+  function parse() { parseMemoryRequest(JSON.stringify(body), poisoned); }
+  expect(parse).toThrow();
+}
+it.each(discoveryHeaders)('refuses an independent discovery header mismatch %j',
+  refusesDiscoveryHeader);
 
 const invalidArguments = [
   { scopeId, extra: true }, { scopeId, memoryId: 'fact' },
