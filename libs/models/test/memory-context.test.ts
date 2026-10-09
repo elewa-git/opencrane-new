@@ -125,7 +125,7 @@ const invalidArguments = [
   { scopeId, limit: 21 }, { scopeId, limit: 1.5 }, { scopeId, limit: '1' },
   { scopeId, query: 1 },
 ];
-async function refusesArguments(argumentsValue: Record<string, unknown>) {
+function refusesArguments(argumentsValue: Record<string, unknown>) {
   const body = { ...request, params: { ...request.params, arguments: argumentsValue } };
   const raw = JSON.stringify(body);
   function parse() { parseMemoryRequest(raw, headers); }

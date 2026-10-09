@@ -1,6 +1,6 @@
 import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from 'jose';
 import { z } from 'zod';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { grantStream, type Binding } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
 import { authorityFence, currentAuthority } from './authority.ts';
@@ -75,9 +75,7 @@ async function requireRecordedGrants(store: EventStore, silo: string,
     if (row.sequence > fresh.head) break;
     const event = row.event;
     const fields = data(event);
-    if (event.silo !== silo || fields['resourceType'] !== resourceType ||
-        fields['resourceId'] !== resourceId) continue;
-    if (event.type !== 'grant.given' && event.type !== 'grant.revoked') continue;
+    if (!isResourceGrant(event, fields, silo, resourceType, resourceId)) continue;
     const allowed = event.type === 'grant.given';
     const kind = fields['granteeKind'];
     // Apply old revocations without a kind to both identities, as OpenFGA does.
@@ -90,6 +88,13 @@ async function requireRecordedGrants(store: EventStore, silo: string,
     }
   }
   if (!memberAllowed || !assistantAllowed) throw new Error('Recorded memory grant refused');
+}
+
+function isResourceGrant(event: StoredEvent['event'], fields: Record<string, unknown>,
+  silo: string, resourceType: string, resourceId: string) {
+  if (event.silo !== silo || fields['resourceType'] !== resourceType ||
+      fields['resourceId'] !== resourceId) return false;
+  return event.type === 'grant.given' || event.type === 'grant.revoked';
 }
 
 async function memoryPolicy(store: EventStore, silo: string,
