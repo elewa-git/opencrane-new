@@ -1,0 +1,114 @@
+{
+  "measuredAt": "2026-10-09T02:46:27.421Z",
+  "sourceSha": "a12ab2c6fd521335fde6fafdd0773dad0c4c88a3",
+  "baseSha": "c9ef4b436fa0e7dbff00ac681878891ade4ef526",
+  "image": "ocn-p3-5-pr5b-fix1-computer",
+  "imageDigest": "sha256:19e6a714caff03b3f6b10ac385ec29cc187172605025a5df3c2f6f7302601d4d",
+  "version": "codex-cli 0.159.2",
+  "network": "none",
+  "model": "local fixture",
+  "freshSilo": false,
+  "command": "nice -n 10 docker run --rm --network none --entrypoint node ocn-p3-5-pr5b-fix1-computer --experimental-strip-types /app/test/codex-mcp-resume.mjs --wire --held-approvals",
+  "expected": "Approval sends once, denial sends nothing, another thread finishes, and runner Stop finishes within five seconds.",
+  "result": "PASS",
+  "approvalHold": {
+    "heldMs": 310394,
+    "approvedSends": 1,
+    "deniedSends": 0,
+    "stopMs": 42
+  },
+  "stopPath": "turnRunner.interrupt",
+  "checks": [
+    {
+      "name": "R1_zero",
+      "result": "PASS"
+    },
+    {
+      "name": "R2",
+      "result": "PASS"
+    },
+    {
+      "name": "R3",
+      "result": "PASS"
+    },
+    {
+      "name": "R4",
+      "result": "PASS"
+    },
+    {
+      "name": "R5",
+      "result": "PASS"
+    },
+    {
+      "name": "R6",
+      "result": "PASS"
+    },
+    {
+      "name": "R7",
+      "result": "NOT RUN",
+      "detail": "Reload checks passed."
+    },
+    {
+      "name": "R8",
+      "result": "NOT RUN",
+      "detail": "The standalone probe checks expiry; the real proxy uses a 60-second TTL."
+    },
+    {
+      "name": "shell_caller",
+      "result": "PASS",
+      "detail": {
+        "uid": 1001,
+        "credentialDenied": true,
+        "status": 401,
+        "control": "EACCES",
+        "gatewayCallsAdded": 0
+      }
+    }
+  ],
+  "imageContents": "PASS: source matches this checkout; no runtime credentials or build caches.",
+  "guardChecks": [
+    {
+      "guard": "computer approval support",
+      "result": "PASS",
+      "withoutGuard": "Old computer receives Ask and closes its socket."
+    },
+    {
+      "guard": "held caller disconnection",
+      "result": "PASS",
+      "withoutGuard": "Approval sends a second request after Codex aborts."
+    },
+    {
+      "guard": "turn stopped before hold creation",
+      "result": "PASS",
+      "withoutGuard": "The late 403 leaves Stop waiting past the one-second test limit."
+    }
+  ],
+  "remaining": [
+    "Full root suite: NOT RUN, as requested.",
+    "Fresh-install chat journey: NOT RUN.",
+    "Image publication: NOT RUN."
+  ],
+  "sourceChecks": {
+    "typecheck": "PASS: all workspaces",
+    "events": "PASS: 98 event types",
+    "knip": "PASS",
+    "changelog": "PASS",
+    "firstTestBatch": {
+      "result": "PASS",
+      "files": 10,
+      "passed": 186,
+      "skipped": 1
+    },
+    "changedTestsSecondRun": {
+      "result": "PASS",
+      "files": 7,
+      "passed": 113
+    },
+    "correctedTestAssertionsRepeat": {
+      "result": "PASS",
+      "files": 2,
+      "passed": 61
+    },
+    "lint": "PASS: complete npm run lint"
+  }
+}

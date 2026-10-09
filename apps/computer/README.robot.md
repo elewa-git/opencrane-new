@@ -612,3 +612,32 @@ Rebase onto main `94f1ca05` changed no file contents. Both the server base and t
 final source kept identical Git tree hashes before and after rebase. No full root
 suite ran; CI remains the gate. The fresh-install chat journey and image publication
 remain NOT RUN. Either deployment order is safe with the support check above.
+
+## Review fix checks — 9 October 2026
+
+The [new saved check](test/fixtures/codex-0.159.2-held-approvals-review1.json)
+records source `a12ab2c6`, the image digest and the offline command. The rebase onto
+main `c9ef4b43` completed and was checked. Docker networking was disabled, and all
+model replies came from a local fixture. No paid model was called.
+
+Pinned Codex held its call for 310394 ms through the real proxy. Approval sent
+once, denial sent nothing and another thread completed during the wait. Stop went
+through the runner's `interrupt()` and completed in 42 ms. UID 1001 could neither
+read the caller credential nor reach the control socket. The image content check
+confirmed that its source matched the checkout. These checks PASS.
+
+Removing each of the computer support, caller disconnection and late-Stop guards
+made its targeted test fail. With the guards restored, the tests pass. The caller
+case aborts the request, then approves; without the guard it sends again. The late
+Stop case calls the runner while the first gateway call is waiting, then returns
+403; without the guard it keeps the request open.
+
+The full root test suite, fresh-install chat journey and image publication remain
+NOT RUN. The wire mode's separate fallback and TTL probes also remain NOT RUN,
+as recorded in the saved check.
+
+The complete lint command, typecheck, the event catalogue (98 events), Knip and
+the changelog check PASS.
+The wider regression batch passed 186 tests with one skip. All seven changed test
+files passed again, with 113 tests. The two corrected test assertion files also
+passed a separate 61-test rerun. No full root test suite ran.
