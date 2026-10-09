@@ -1013,3 +1013,157 @@ async function refusesForeignAndUnknownGroupMembers() {
 }
 it('gives foreign, unknown and removed group members the same generic refusal',
   refusesForeignAndUnknownGroupMembers, 120_000);
+
+async function refusesDepartedGroupParticipant() {
+  const fixture = await directFixture();
+  try {
+    // Leave IAM unchanged to prove that saved removal events decide membership.
+    await fixture.append('member-bob', 'member.removed', {
+      memberId: 'bob', removedBy: 'carol',
+    }, false);
+    const payload = { id: 'departed', conversationId: 'departed', mode: 'group',
+      participantIds: ['alice', 'bob'] };
+    const request = { method: 'POST' as const, url: '/api/conversations',
+      headers: fixture.headers(), payload };
+    const response = await fixture.app.inject(request);
+    const saved = await history(fixture.nats.store, 'conversation-departed', 'test');
+    expect(saved).toEqual([]);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+  } finally {
+    await fixture.close();
+  }
+}
+it('refuses a departed selected member when group creation has no group association',
+  refusesDepartedGroupParticipant, 120_000);
+
+async function refusesChangedSnapshotPosition() {
+  const fixture = await directFixture();
+  try {
+    const snapshot = await seedChatGroup(fixture);
+    await fixture.append('team-sales', 'team.member_removed', {
+      teamId: 'sales', memberId: 'alice', removedBy: 'carol',
+    });
+    await fixture.append('team-sales', 'team.member_added', {
+      teamId: 'sales', memberId: 'alice', addedBy: 'carol',
+    });
+    const current = await readCurrentSnapshot();
+    expect(current.members).toEqual(snapshot.members);
+    expect(current.position).toBeGreaterThan(snapshot.position);
+    const payload = { id: 'position-only', conversationId: 'position-only', mode: 'group',
+      participantIds: ['alice', 'bob'], groupId: 'sales',
+      groupSnapshotPosition: snapshot.position };
+    const request = { method: 'POST' as const, url: '/api/conversations',
+      headers: fixture.headers('bob'), payload };
+    const response = await fixture.app.inject(request);
+    const saved = await history(fixture.nats.store, 'conversation-position-only', 'test');
+    expect(saved).toEqual([]);
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ status: 'refused' });
+  } finally {
+    await fixture.close();
+  }
+
+  async function readCurrentSnapshot() {
+    const request = { url: '/api/chat/groups/sales', headers: fixture.headers('bob') };
+    const response = await fixture.app.inject(request);
+    expect(response.statusCode).toBe(200);
+    return chatGroupSnapshotSchema.parse(response.json());
+  }
+}
+it('refuses a changed snapshot position even when the reviewed audience is unchanged',
+  refusesChangedSnapshotPosition, 120_000);
+
+async function refusesChangedSnapshotAudience() {
+  const fixture = await directFixture();
+  try {
+    const snapshot = await seedChatGroup(fixture);
+    const payload = { id: 'audience-only', conversationId: 'audience-only', mode: 'group',
+      participantIds: ['bob', 'carol'], groupId: 'sales',
+      groupSnapshotPosition: snapshot.position };
+    const request = { method: 'POST' as const, url: '/api/conversations',
+      headers: fixture.headers('bob'), payload };
+    const response = await fixture.app.inject(request);
+    const saved = await history(fixture.nats.store, 'conversation-audience-only', 'test');
+    expect(saved).toEqual([]);
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ status: 'refused' });
+  } finally {
+    await fixture.close();
+  }
+}
+it('refuses a changed reviewed audience even when the snapshot position matches',
+  refusesChangedSnapshotAudience, 120_000);
+
+async function refusesGroupChangeBeforeWriteCheck() {
+  const fixture = await directFixture();
+  const originalHead = fixture.options.store.head.bind(fixture.options.store);
+  let changed = false;
+  async function changeBeforeWriteCheck(subject?: string, deadline?: number) {
+    if (subject === undefined && !changed) {
+      changed = true;
+      // Change the group after its snapshot read but before the write check starts.
+      await fixture.append('team-sales', 'team.member_removed', {
+        teamId: 'sales', memberId: 'alice', removedBy: 'carol',
+      }, false);
+    }
+    return originalHead(subject, deadline);
+  }
+  try {
+    const snapshot = await seedChatGroup(fixture);
+    fixture.options.store.head = changeBeforeWriteCheck;
+    const payload = { id: 'snapshot-race', conversationId: 'snapshot-race', mode: 'group',
+      participantIds: ['alice', 'bob'], groupId: 'sales',
+      groupSnapshotPosition: snapshot.position };
+    const request = { method: 'POST' as const, url: '/api/conversations',
+      headers: fixture.headers('bob'), payload };
+    const response = await fixture.app.inject(request);
+    expect(changed).toBe(true);
+    const saved = await history(fixture.nats.store, 'conversation-snapshot-race', 'test');
+    expect(saved).toEqual([]);
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ status: 'refused' });
+  } finally {
+    fixture.options.store.head = originalHead;
+    await fixture.close();
+  }
+}
+it('refuses a group change between the creation snapshot read and the write check',
+  refusesGroupChangeBeforeWriteCheck, 120_000);
+
+async function refusesGroupChangeDuringWriteCheck() {
+  const fixture = await directFixture();
+  const originalHead = fixture.options.store.head.bind(fixture.options.store);
+  let changed = false;
+  async function changeAfterPositionRead(subject?: string, deadline?: number) {
+    const position = await originalHead(subject, deadline);
+    if (subject === 'team-sales' && !changed) {
+      changed = true;
+      // Return the old position so the last access check must catch the change.
+      await fixture.append('team-sales', 'team.member_removed', {
+        teamId: 'sales', memberId: 'alice', removedBy: 'carol',
+      }, false);
+    }
+    return position;
+  }
+  try {
+    const snapshot = await seedChatGroup(fixture);
+    fixture.options.store.head = changeAfterPositionRead;
+    const payload = { id: 'write-race', conversationId: 'write-race', mode: 'group',
+      participantIds: ['alice', 'bob'], groupId: 'sales',
+      groupSnapshotPosition: snapshot.position };
+    const request = { method: 'POST' as const, url: '/api/conversations',
+      headers: fixture.headers('bob'), payload };
+    const response = await fixture.app.inject(request);
+    expect(changed).toBe(true);
+    const saved = await history(fixture.nats.store, 'conversation-write-race', 'test');
+    expect(saved).toEqual([]);
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ status: 'refused' });
+  } finally {
+    fixture.options.store.head = originalHead;
+    await fixture.close();
+  }
+}
+it('refuses a group change after its position was read during the write check',
+  refusesGroupChangeDuringWriteCheck, 120_000);
