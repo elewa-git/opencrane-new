@@ -82,11 +82,11 @@ async function keepsVisibleActivityAfterClose() {
     const created = await fixture.append('conversation.created', creation);
     expect(await fixture.metadata()).toMatchObject({ latest_activity: String(created.position) });
     const message = await fixture.append('message.posted', postedMessage);
-    await fixture.append('conversation.closed', { closedBy: 'alice' });
+    const firstClose = await fixture.append('conversation.closed', { closedBy: 'alice' });
     for (const report of lateReports) {
       const saved = await fixture.append(report.type, report.fields);
       expect(await fixture.metadata()).toMatchObject({
-        latest_activity: String(message.position), closed: true, position: String(saved.position),
+        latest_activity: String(firstClose.position), closed: true, position: String(saved.position),
       });
     }
     await fixture.assertRebuildEquality();
@@ -111,7 +111,9 @@ async function keepsFirstCloseEvidence() {
       closed_position: String(firstClose.position), closed_by: 'alice',
       closed_at: firstClose.event.time,
     };
-    expect(await fixture.metadata()).toMatchObject(evidence);
+    expect(await fixture.metadata()).toMatchObject({
+      ...evidence, latest_activity: String(firstClose.position),
+    });
     const secondClose = await fixture.append('conversation.closed', { closedBy: 'bob' });
     expect(await fixture.metadata()).toMatchObject(evidence);
     expect(await fixture.metadata()).toMatchObject({ position: String(secondClose.position) });
