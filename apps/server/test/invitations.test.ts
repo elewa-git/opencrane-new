@@ -967,10 +967,10 @@ async function recordsWrongAccount() {
 it('records a wrong-account annotation without the other account details or a join',
   recordsWrongAccount);
 
-function organisationHistory(sub = 'admin', orgId = 'org-acme') {
+function organisationHistory(sub = 'admin', orgId = 'org-acme', url = '/api/org/history') {
   const session = { sub, orgId, roles: ['owner'], authTime: 1790856000, exp: 2000000000 };
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  const options = { method: 'GET' as const, url: '/api/org/history', headers };
+  const options = { method: 'GET' as const, url, headers };
   return app.inject(options);
 }
 async function rebuildsSafeInvitationHistory() {
@@ -1362,3 +1362,14 @@ async function refusesMalformedRefusalReplay() {
 }
 it('refuses malformed refusal replay and retains the previously authorised HTTP history',
   refusesMalformedRefusalReplay);
+
+
+async function refusesForeignAuditSession(url: string) {
+  const response = await organisationHistory('admin', 'other-org', url);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(response.headers['cache-control']).toBe('no-store');
+}
+it.each(['/api/org/history', '/api/conversations/private-chat/history'])(
+  'refuses an extra sign-in identity from another organisation on %s', refusesForeignAuditSession,
+);
