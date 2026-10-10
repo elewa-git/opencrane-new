@@ -290,12 +290,12 @@ it('omits preview text when a supporting key is destroyed after candidate select
   dependencyLostBeforeRelease);
 
 async function uniformConversationRefusals() {
-  await append('conversation-preview-direct', 'conversation.created', {
-    conversationId: 'preview-direct', mode: 'direct', createdBy: 'preview',
-    participantIds: ['preview', 'bob'] });
-  await append('conversation-preview-foreign', 'conversation.created', {
-    conversationId: 'preview-foreign', mode: 'agent_session', createdBy: 'bob',
-    assistantId: 'personal' });
+  const directConversation = { conversationId: 'preview-direct', mode: 'direct',
+    createdBy: 'preview', participantIds: ['preview', 'bob'] };
+  await append('conversation-preview-direct', 'conversation.created', directConversation);
+  const foreignConversation = { conversationId: 'preview-foreign', mode: 'agent_session',
+    createdBy: 'bob', assistantId: 'personal' };
+  await append('conversation-preview-foreign', 'conversation.created', foreignConversation);
   const foreign = await get('/api/memory/turns/preview-foreign/anything', 'preview');
   expect(foreign.statusCode).toBe(404);
   expect(foreign.json()).toEqual({ status: 'refused' });
@@ -305,9 +305,19 @@ async function uniformConversationRefusals() {
     expect(response.body).toBe(foreign.body);
     expect(response.headers['cache-control']).toBe('no-store');
   }
+  const denied = { allowed: false, status: 'ok' as const };
+  const permission = vi.spyOn(auth, 'conversation');
+  permission.mockResolvedValue(denied);
+  try {
+    const forbidden = await get(previewUrl, 'preview');
+    expect(forbidden.statusCode).toBe(foreign.statusCode);
+    expect(forbidden.body).toBe(foreign.body);
+  } finally {
+    permission.mockRestore();
+  }
 }
 
-it('returns the same refusal for absent, foreign private and unsuitable conversations',
+it('returns the same refusal for absent, foreign, forbidden and unsuitable conversations',
   uniformConversationRefusals);
 
 async function unavailableConversationHistory() {
@@ -318,7 +328,8 @@ async function unavailableConversationHistory() {
     }
     yield* original(subject, from, deadline);
   }
-  const reading = vi.spyOn(nats.store, 'readStream').mockImplementation(unavailable);
+  const reading = vi.spyOn(nats.store, 'readStream');
+  reading.mockImplementation(unavailable);
   try {
     const response = await get(previewUrl, 'preview');
     expect(response.statusCode).toBe(503);
