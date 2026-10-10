@@ -55,7 +55,9 @@ flowchart LR
 - Records and renews email invitations for owners and admins. Reads saved command results.
 - Returns member headers to members and the email directory to current owners and admins.
 - Explains recorded access and reviews departure effects without private content.
-  Keeps checking their access while a live member connection is open.
+  Reports incomplete reviews while access changes are being applied, and returns only
+  counts and dates for private history. Removal is not available yet.
+- Keeps checking member access while a live connection is open.
 - Records changes as events and reads the current state from PostgreSQL.
 - Keep the original provider choice when repeating or closing a recorded turn.
   Pass its model to the turn-token issuer and the computer that runs the turn.

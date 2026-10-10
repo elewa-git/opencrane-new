@@ -1417,6 +1417,12 @@ The Owner/Admin GETs `/api/members/:memberId/access` and `/api/members/:memberId
 check events and OpenFGA once. They stop after ten seconds or 10,000 inventory records.
 Checked event positions, computer rows and history totals form the review revision.
 Behind tables and unsupported ownership, routines or connections block completion.
+The latest grant changes include revocations for each member, group or assistant.
+The latest group removals are kept even when no access rows remain. Both reads
+stay incomplete until OpenFGA receipts confirm these changes were applied.
+Shared-assistant selection checks the group membership and its receipt independently
+of resource grants, as well as the assistant creation receipt. A missing membership
+receipt reports unavailable selection rather than denied access.
 Failed reads return 503. Only counts and dates leave conversation tables.
 Tool, publication and connection readiness stay unavailable. Removal stays disabled.
 `test/member-inventory.test.ts` uses real services. Fresh-install qualification: NOT RUN.

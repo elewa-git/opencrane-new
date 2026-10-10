@@ -12,9 +12,10 @@ const publicResources = new Set(['model', 'mcp_server', 'mcp_tool', 'shared_desk
 const checkpointQuery = `SELECT name, sequence FROM projection_checkpoints
   WHERE name IN ('computers', 'conversations') ORDER BY name`;
 type Assistant = ReturnType<typeof assistantCreatedDataSchema.parse>;
+type Grant = ReturnType<typeof grantGivenDataSchema.parse>;
 type GrantFact = {
   record: StoredEvent;
-  grant: { resourceType: string; resourceId: string; granteeId: string; granteeKind: string };
+  grant: Pick<Grant, 'resourceType' | 'resourceId' | 'granteeId' | 'granteeKind'>;
 };
 
 async function recordedInputs(options: GroupOptions, deadline: number) {
@@ -52,6 +53,7 @@ function groupFacts(rows: StoredEvent[], memberId: string) {
         removals.delete(fields.teamId);
       } else {
         memberships.delete(fields.teamId);
+        // Keep the removal so an empty group list still checks its IAM receipt.
         removals.set(fields.teamId, row);
       }
     }
@@ -75,7 +77,8 @@ function latestGrants(rows: StoredEvent[]) {
     let fields;
     if (row.event.type === 'grant.given') fields = grantGivenDataSchema.parse(row.event.data);
     else fields = grantRevokedDataSchema.parse(row.event.data);
-    const kinds = fields.granteeKind ? [fields.granteeKind] : ['member', 'team', 'assistant'];
+    let kinds: Grant['granteeKind'][] = ['member', 'team', 'assistant'];
+    if (fields.granteeKind) kinds = [fields.granteeKind];
     for (const kind of kinds) {
       const key = JSON.stringify([fields.resourceType, fields.resourceId, kind, fields.granteeId]);
       // Keep removals until their receipts confirm that OpenFGA has applied them.
@@ -174,12 +177,13 @@ async function accessRows(options: GroupOptions, memberId: string, inputs: Store
     }
     row.sources.push(source);
   }
-  await addSharedAssistants(options, memberId, inputs, groups, rows, deadline);
+  await addSharedAssistants(options, memberId, inputs, groups, rows, unavailable, deadline);
   return Array.from(rows.values());
 }
 
 async function addSharedAssistants(options: GroupOptions, memberId: string, inputs: StoredEvent[],
-  groups: ReturnType<typeof groupFacts>, rows: Map<string, MemberAccessRow>, deadline: number) {
+  groups: ReturnType<typeof groupFacts>, rows: Map<string, MemberAccessRow>,
+  unavailable: Set<string>, deadline: number) {
   const auth = memberAuthorisation(options.binding);
   for (const record of inputs) {
     if (record.event.type !== 'assistant.created') continue;
@@ -187,7 +191,15 @@ async function addSharedAssistants(options: GroupOptions, memberId: string, inpu
     const membership = groups.memberships.get(assistant.ownerId);
     if (assistant.kind !== 'team' || !membership) continue;
     if (performance.now() >= deadline) throw new Error('Inventory deadline exceeded');
-    const person = await checkedPermission(options, record, auth.actsFor(memberId, assistant.assistantId));
+    const team = await checkedPermission(options, membership,
+      auth.team(memberId, assistant.ownerId));
+    let person: MemberAccessRow['eligibility']['person'] = 'unavailable';
+    if (team === 'allowed') {
+      person = await checkedPermission(options, record,
+        auth.actsFor(memberId, assistant.assistantId));
+    } else {
+      unavailable.add('group_membership');
+    }
     const source = { kind: 'group' as const, groupId: assistant.ownerId,
       groupName: groups.names.get(assistant.ownerId), eventId: record.event.id,
       sequence: record.sequence };
