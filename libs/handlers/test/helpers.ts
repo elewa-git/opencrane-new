@@ -30,7 +30,7 @@ export async function until(check: () => Promise<boolean>, timeout = 15_000) {
     await delay(25);
   }
 }
-export async function fixture(options: { idleTimeoutMillis?: number } = {}) {
+export async function fixture(options: { idleTimeoutMillis?: number; max?: number } = {}) {
   const url = new URL(process.env["PG_TEST_URL"] ?? "");
   const admin = new Pool({ connectionString: url.href });
   const name = `handlers_${randomUUID().replaceAll("-", "")}`;

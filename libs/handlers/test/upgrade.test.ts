@@ -26,8 +26,9 @@ function upgradeTests() {
   }
   afterEach(close);
 
-  async function prepare() {
-    current = await fixture({ idleTimeoutMillis: 50 });
+  async function prepare(poolOptions: { max?: number } = {}) {
+    const options = { idleTimeoutMillis: 50, ...poolOptions };
+    current = await fixture(options);
     await current.append("joined");
     await current.append("role", "member-alice", "member.role_changed");
     await current.append("role-again", "member-alice", "member.role_changed");
@@ -297,7 +298,9 @@ function upgradeTests() {
   it('keeps committed chunks after a crash and resumes without duplicate jobs', resumesSavedChunk);
 
   async function retriesReadTimeout() {
-    const runtime = await prepare();
+    // Keep fixture queries on one connection during the exclusive history retry.
+    const poolOptions = { max: 1 };
+    const runtime = await prepare(poolOptions);
     await runtime.stop();
     await current.waitForConnectionsClosed();
     const original = current.nats.store.subscribe.bind(current.nats.store);
