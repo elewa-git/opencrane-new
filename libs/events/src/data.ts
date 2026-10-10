@@ -443,12 +443,31 @@ export const mcpServerRegisteredDataSchema = z.discriminatedUnion('kind', [
     ...mcpServerRegisteredFields }).strict(),
 ]);
 
+const catalogueDates = {
+  checkedAt: z.iso.datetime(), expiresAt: z.iso.datetime(),
+};
+function validCatalogueDates(value: { checkedAt?: string | undefined; expiresAt?: string | undefined }) {
+  if (value.checkedAt === undefined && value.expiresAt === undefined) return true;
+  if (!value.checkedAt || !value.expiresAt) return false;
+  const age = Date.parse(value.expiresAt) - Date.parse(value.checkedAt);
+  return age >= 0 && age <= 300_000;
+}
+
+export const mcpCatalogueCheckedDataSchema = z.discriminatedUnion('outcome', [
+  z.object({ serverId: id, outcome: z.literal('unchanged'), schemaDigest: digestSchema,
+    ...catalogueDates }).strict().refine(validCatalogueDates),
+  z.object({ serverId: id, outcome: z.literal('failed'), checkedAt: z.iso.datetime(),
+    reason: reasonCodeSchema }).strict(),
+]);
+
 export const mcpServerDiscoveredDataSchema = z
   .object({
     serverId: id,
     toolCount: z.int().nonnegative(),
     schemaDigest: digestSchema,
     serverInfo: z.object({ name: id, version: id }).strict().optional(),
+    checkedAt: catalogueDates.checkedAt.optional(),
+    expiresAt: catalogueDates.expiresAt.optional(),
     discoverResult: z.string().max(65536).optional(),
     rejectedTools: z.array(z.object({ name: z.string().regex(/^[a-zA-Z0-9_.-]{1,128}$/u).optional(),
       revision: digestSchema, reason: reasonCodeSchema }).strict()).max(1000).optional(),
@@ -457,7 +476,7 @@ export const mcpServerDiscoveredDataSchema = z
     tools: z.array(z.object({ name: id, revision: digestSchema, reviewed: z.boolean(),
       readOnly: z.boolean().optional(), destructive: z.boolean().optional(), costCents: centsSchema.max(0).optional(), review: toolReviewSchema.optional(), definition: z.string().max(32768).optional() }).strict()).max(1000).optional(),
   })
-  .strict();
+  .strict().refine(validCatalogueDates);
 
 export const mcpServerRejectedDataSchema = z
   .object({ serverId: id, reason: reasonCodeSchema })
@@ -478,7 +497,8 @@ export const mcpServerUnpublishedDataSchema = z
 // A registered MCP server's tool list or schemas changed (found by a drift
 // check). The computer's own tools are a different event: toolset.changed.
 export const mcpToolsChangedDataSchema = z
-  .object({ serverId: id, previousSchemaDigest: digestSchema, newSchemaDigest: digestSchema })
+  .object({ serverId: id, previousSchemaDigest: digestSchema, newSchemaDigest: digestSchema,
+    catalogue: mcpServerDiscoveredDataSchema.optional() })
   .strict();
 
 export const grantGivenDataSchema = z

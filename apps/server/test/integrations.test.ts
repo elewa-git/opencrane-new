@@ -167,15 +167,16 @@ it('returns the event-derived register and rebuilds to the same rows', async () 
   const body = integrationsResponseSchema.parse(response.json());
   expect(body.loadedAt).toBe('2026-10-01T09:40:00.000Z');
   expect(body.rows.map((row) => [row.serverId, row.status.kind])).toEqual([
-    ['odoo', 'ready'], ['warehouse', 'checking'], ['broken', 'failed'], ['pricing', 'needs_input'], ['review', 'needs_input'],
+    ['odoo', 'disabled'], ['warehouse', 'checking'], ['broken', 'failed'], ['pricing', 'disabled'], ['review', 'disabled'],
     ['retired', 'disabled'],
   ]);
+  expect(body.rows[0]?.status.label).toBe('Unavailable');
   expect(body.rows[0]).toMatchObject({ name: 'Odoo Accounting', version: '1.4.2', toolsAllowed: 0, toolsTotal: 14,
     source: { kind: 'catalogue', label: 'Catalogue', detail: 'catalogue:odoo' }, accountModel: 'Not provided' });
   expect(body.rows.find((row) => row.serverId === 'pricing')).toMatchObject({
     name: 'Pricing', version: 'Version not provided', source: { kind: 'remote_url' }, accountModel: 'Not provided',
   });
-  expect(body.rows.find((row) => row.serverId === 'review')?.status.detail).toBe('Pending review');
+  expect(body.rows.find((row) => row.serverId === 'review')?.status.label).toBe('Unavailable');
   expect(body.rows.some((row) => row.serverId === 'foreign')).toBe(false);
   const incremental = await catalogue.rows('test');
   await runner.rebuild(mcpCatalogue);

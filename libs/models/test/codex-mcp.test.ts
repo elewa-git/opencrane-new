@@ -420,6 +420,12 @@ async function bindsHeldApproval(change: string) {
     const url = `http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`;
     const asked = await fetch(url, options);
     const decision = z.object({ approvalId: z.string() }).parse(await asked.json());
+    if (change === 'unchanged') {
+      const checkedAt = new Date().toISOString();
+      const check = { serverId: 'fixture', outcome: 'unchanged', schemaDigest: 'a'.repeat(64),
+        checkedAt, expiresAt: new Date(Date.parse(checkedAt) + 300_000).toISOString() };
+      await setup.append('mcp-fixture', 'mcp.catalogue_checked', check);
+    }
     const current = await readApproval(setup.nats.store, 'test', decision.approvalId);
     expect(Date.parse(current.request.expiresAt) - setup.actor.now().getTime()).toBe(900_000);
     async function fresh() {
@@ -451,8 +457,8 @@ async function bindsHeldApproval(change: string) {
     }
 
     const result = await fetch(url, retry);
-    expect(result.status, await result.text()).toBe(change === 'same' ? 200 : 403);
-    expect(setup.received()).toBe(change === 'same' ? 1 : 0);
+    expect(result.status, await result.text()).toBe(['same', 'unchanged'].includes(change) ? 200 : 403);
+    expect(setup.received()).toBe(['same', 'unchanged'].includes(change) ? 1 : 0);
     if (change === 'bytes' || change === 'wrong-id') {
       const cards = await approvalCards(setup.nats.store, 'test', 'conversation',
         'alice', setup.keys);
@@ -460,10 +466,10 @@ async function bindsHeldApproval(change: string) {
       expect(cards[0]?.approvalId).toBe(decision.approvalId);
     }
     expect((await fetch(url, retry)).status).toBe(403);
-    expect(setup.received()).toBe(change === 'same' ? 1 : 0);
+    expect(setup.received()).toBe(['same', 'unchanged'].includes(change) ? 1 : 0);
   } finally { await setup.close(); }
 }
-it.each(['same', 'wrong-id', 'bytes', 'allow', 'timeout', 'decision-race'])(
+it.each(['same', 'unchanged', 'wrong-id', 'bytes', 'allow', 'timeout', 'decision-race'])(
   'uses only this held approval through the real gateway: %s', bindsHeldApproval, 40_000);
 
 it('keeps requester identity and the stored review digest when reading an approval', async () => {
@@ -505,3 +511,31 @@ it('keeps requester identity and the stored review digest when reading an approv
     await setup.close();
   }
 }, 40_000);
+
+
+async function refusesLegacyCatalogue() {
+  const setup = await fixture();
+  try {
+    const headers = await prepareCapturedCall(setup);
+    const rows = await history(setup.nats.store, 'mcp-fixture', 'test');
+    function isDiscovery(row: (typeof rows)[number]) {
+      return row.event.type === 'mcp.server_discovered';
+    }
+    const saved = rows.find(isDiscovery);
+    const data = z.record(z.string(), z.unknown()).parse(saved?.event.data);
+    const legacy = { ...data, checkedAt: undefined, expiresAt: undefined };
+    await setup.append('mcp-fixture', 'mcp.server_discovered', legacy);
+    const publication = { serverId: 'fixture', publishedBy: 'alice' };
+    await setup.append('mcp-fixture', 'mcp.server_published', publication);
+    const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
+      toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'alice' };
+    await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+    const request = { method: 'POST', headers, body: JSON.stringify(capture.body) };
+    const result = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`, request);
+    expect(result.status).toBe(403);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses legacy catalogue evidence at the real gateway', refusesLegacyCatalogue);

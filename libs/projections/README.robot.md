@@ -420,3 +420,20 @@ Takeover events start history rows even with request correlation. Records retain
 computer id, generation, takeover/lease references, reviewed requester event,
 affected-turn count and recorded time. Private turn ids and text are omitted.
 Replay rebuilds the same rows without opening a writer or running work.
+
+## Dated MCP catalogue evidence
+
+The tool register keeps the before and after tool lists and their original expiry dates.
+A published server without a fresh check is shown as unavailable.
+
+`mcp.server_discovered` stores a bounded snapshot with `checkedAt` and `expiresAt`.
+`mcp.tools_changed.catalogue` stores the next snapshot; replay retains the previous one.
+`mcp.catalogue_checked` renews a matching digest or records a failed check.
+Catalogue checks leave `policyRevision` stable; policy changes advance it.
+The latest `sequence` still advances for writes.
+Expiry uses the shortest discovery/page TTL, capped at 300,000 ms. Zero expires immediately.
+Undated legacy records remain unavailable until a new successful check supplies dates.
+Descriptions, schemas and examples remain untrusted text, including in saved snapshots.
+
+This is #48 PR 1. Watch scheduling, final dispatch permits, configuration acknowledgement
+and the comparison screens belong to later rows of the accepted design.

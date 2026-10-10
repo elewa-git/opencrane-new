@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { applyToolPolicy, emptyToolPolicy, mcpCatalogue, ProjectionRunner,
-  rebuildMcpCatalogueProjection } from '../src/index.ts';
+  rebuildMcpCatalogueProjection, isToolPolicyAvailable } from '../src/index.ts';
 import { database } from './database.ts';
 
 const checkedAt = '2026-10-10T12:00:00.000Z';
@@ -17,7 +17,7 @@ function discovered() {
   return applyToolPolicy(emptyToolPolicy(), record('mcp.server_discovered', discovery), 1);
 }
 
-it('keeps the policy revision and choices when unchanged evidence is renewed', () => {
+function renewsEvidence() {
   const before = discovered();
   const check = record('mcp.catalogue_checked', { serverId: 'fixture',
     schemaDigest: discovery.schemaDigest, checkedAt, expiresAt, outcome: 'unchanged' });
@@ -25,21 +25,23 @@ it('keeps the policy revision and choices when unchanged evidence is renewed', (
   expect(after).toMatchObject({ sequence: 2, policyRevision: 1, checkedAt, expiresAt });
   expect(after.tools).toEqual(before.tools);
   expect(after.catalogue).toBe(before.catalogue);
-});
+}
+it('keeps the policy revision and choices when unchanged evidence is renewed', renewsEvidence);
 
-it('retains before and after definitions and blocks changed tools', () => {
+function retainsSnapshots() {
   const before = discovered();
   const catalogue = { ...discovery, schemaDigest: 'c'.repeat(64), tools: [] };
   const change = record('mcp.tools_changed', { serverId: 'fixture',
     previousSchemaDigest: discovery.schemaDigest, newSchemaDigest: catalogue.schemaDigest,
     catalogue });
   const after = applyToolPolicy(before, change, 2);
-  expect(after.previousCatalogue).toBe(before.catalogue);
+  expect(after.previousCatalogue).toEqual(before.catalogue);
   expect(after.catalogue).toEqual(catalogue);
   expect(after).toMatchObject({ policyRevision: 2, published: false, tools: [] });
-});
+}
+it('retains before and after definitions and blocks changed tools', retainsSnapshots);
 
-it.skipIf(!process.env['PG_TEST_URL'])('rebuilds exact snapshots and original expiry from NATS', async () => {
+async function rebuildsEvidence() {
   const nats = await natsFixture();
   const storage = await database('pg');
   const logger = createLogger('catalogue-evidence', { level: 'silent' });
@@ -47,13 +49,18 @@ it.skipIf(!process.env['PG_TEST_URL'])('rebuilds exact snapshots and original ex
     const registration = record('mcp.server_registered', { serverId: 'fixture',
       kind: 'remote', locator: 'https://fixture.example.test', registeredBy: 'admin' });
     const capture = record('mcp.server_discovered', discovery);
-    await nats.seed([registration, capture]);
+    const catalogue = { ...discovery, schemaDigest: 'c'.repeat(64), tools: [] };
+    const change = record('mcp.tools_changed', { serverId: 'fixture',
+      previousSchemaDigest: discovery.schemaDigest, newSchemaDigest: catalogue.schemaDigest,
+      catalogue });
+    await nats.seed([registration, capture, change]);
     const runner = new ProjectionRunner(storage.db, nats.reader, logger);
     await runner.initialise(mcpCatalogue);
     await runner.run(mcpCatalogue);
     const before = await storage.db.query('SELECT policy FROM mcp_catalogue');
     expect(before.rows[0]?.['policy']).toMatchObject({ checkedAt, expiresAt,
-      catalogue: discovery });
+      catalogue: { ...discovery, schemaDigest: 'c'.repeat(64), tools: [] },
+      previousCatalogue: discovery });
     await storage.reopen();
     await rebuildMcpCatalogueProjection(storage.db, nats.reader, logger, { verify: true });
     expect((await storage.db.query('SELECT policy FROM mcp_catalogue')).rows).toEqual(before.rows);
@@ -61,4 +68,16 @@ it.skipIf(!process.env['PG_TEST_URL'])('rebuilds exact snapshots and original ex
     await storage.close();
     await nats.close();
   }
-});
+}
+it.skipIf(!process.env['PG_TEST_URL'])(
+  'rebuilds exact snapshots and original expiry from NATS', rebuildsEvidence);
+
+function failedEvidence() {
+  const published = { ...discovered(), published: true };
+  expect(isToolPolicyAvailable(published, Date.parse(expiresAt))).toBe(false);
+  const failure = record('mcp.catalogue_checked', { serverId: 'fixture', outcome: 'failed',
+    checkedAt, reason: 'discovery_timeout' });
+  const failed = applyToolPolicy(published, failure, 2);
+  expect(isToolPolicyAvailable(failed, Date.parse(checkedAt))).toBe(false);
+}
+it('refuses expired evidence and failed checks without a timer', failedEvidence);

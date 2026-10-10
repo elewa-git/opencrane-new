@@ -21,6 +21,13 @@ export const mcpEvents = [
       serverInfo: { name: 'Odoo', version: '1.4.2' } },
   ),
   event(
+    'mcp.catalogue_checked', 'mcp',
+    'A tool catalogue check recorded fresh unchanged evidence or a failure.',
+    data.mcpCatalogueCheckedDataSchema,
+    { serverId: 'mcp_1', outcome: 'unchanged', schemaDigest: DIGEST_EXAMPLE,
+      checkedAt: '2026-10-10T12:00:00.000Z', expiresAt: '2026-10-10T12:05:00.000Z' },
+  ),
+  event(
     'mcp.server_rejected',
     'mcp',
     'Validation (SSRF guard or image scan) failed, so the server was rejected.',

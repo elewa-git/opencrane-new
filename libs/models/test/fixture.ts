@@ -72,7 +72,14 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const binding = await createStore(fga.apiUrl, 'test');
   const auth = memberAuthorisation(binding);
   const append = async (subject: string, type: string, payload: unknown) => {
-    const event = { ...envelope('test', subject, type, payload), source: 'opencrane-server' };
+    let data = payload;
+    if (type === 'mcp.server_discovered') {
+      const checkedAt = new Date().toISOString();
+      const evidence = { checkedAt,
+        expiresAt: new Date(Date.parse(checkedAt) + 300_000).toISOString() };
+      data = { ...evidence, ...z.record(z.string(), z.unknown()).parse(payload) };
+    }
+    const event = { ...envelope('test', subject, type, data), source: 'opencrane-server' };
     // Seed saved history, including old participant subjects that commands now refuse.
     const savedHistory = [event];
     await nats.seed(savedHistory);

@@ -66,7 +66,8 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
   if (offeredMode === 'allow' && decision.outcome === 'ask') {
     decision = { outcome: 'deny', reason: 'policy_block' };
   }
-  const review = await reviewMetadata(store, silo, server, call.params.name, deadline);
+  const review = await reviewMetadata(
+    store, silo, server, call.params.name, deadline, policy.catalogue);
   const expectedApproval = expectedApprovalId(headers);
   return { ...decision, waitLimited: offeredMode === 'ask', expectedApproval,
     policy, revision: tool?.revision, name: call.params.name, args, ...review };
@@ -79,10 +80,10 @@ function toolDecision(tool: Awaited<ReturnType<typeof readToolPolicy>>['tools'][
   return { outcome, reason } as const;
 }
 async function reviewMetadata(store: EventStore, silo: string, server: string,
-  name: string, deadline: number) {
+  name: string, deadline: number,
+  catalogue: ReturnType<typeof mcpServerDiscoveredDataSchema.parse> | null) {
   const rows = await history(store, `mcp-${server}`, silo, deadline);
-  const discovered = rows.findLast(r => r.event.type === 'mcp.server_discovered');
-  const discovery = mcpServerDiscoveredDataSchema.parse(discovered?.event.data);
+  const discovery = mcpServerDiscoveredDataSchema.parse(catalogue);
   const review = discovery.tools?.find(t => t.name === name)?.review;
   const registered = rows.find(r => r.event.type === 'mcp.server_registered');
   const { kind, locator } = z.object({ kind: z.enum(['remote', 'hosted']), locator: z.string() }).parse(registered?.event.data);

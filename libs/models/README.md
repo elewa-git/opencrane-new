@@ -2,7 +2,7 @@
 
 ## What this is
 
-The AI access and spending library for OpenCrane. Its running part is the models process, a separate program whose start file lives in `apps/server` (`src/models-main.ts`). It runs beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), which forwards AI requests. The library also picks the model for each task, keeps the price list and [budgets](../../GLOSSARY.md#budget), holds the [tool rules](../../GLOSSARY.md#tool-rule-allow-ask-block) and the one-time approvals for Ask tools, and records who owns the silo.
+The AI access, fresh tool checks and spending library for OpenCrane. Its running part is the models process, a separate program whose start file lives in `apps/server` (`src/models-main.ts`). It runs beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), which forwards AI requests. The library also picks the model for each task, keeps the price list and [budgets](../../GLOSSARY.md#budget), holds the [tool rules](../../GLOSSARY.md#tool-rule-allow-ask-block) and the one-time approvals for Ask tools, and records who owns the silo.
 
 ## Where it fits
 
@@ -22,6 +22,9 @@ flowchart LR
   gateway -->|usage and tool dispatch records| models
   models -->|saves spending changes and reads activity, grants, closing records and spending stops| store["libs/event-store<br/>event log"]
 ```
+
+Tool calls need a fresh saved tool list. An unchanged check keeps a waiting approval valid.
+A change to the tools or their rules ends that approval.
 
 ## What it is responsible for
 

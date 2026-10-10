@@ -344,11 +344,12 @@ Readers replay these streams; replay never forwards or releases credentials.
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `mcp.server_registered` | admin | catalogue (draft; transport kind and optional catalogue reference) | validate (SSRF / image scan) → `mcp.server_discovered` or `mcp.server_rejected` |
-| `mcp.server_discovered` | reaction | catalogue (valid tools, schema digests, optional server identity and safe per-tool rejection reasons) | — |
+| `mcp.server_discovered` | reaction | catalogue (exact tool snapshots, digests, check and expiry dates, server identity and rejection reasons; old undated records remain unavailable) | — |
+| `mcp.catalogue_checked` | reaction | catalogue (unchanged digest with fresh check/expiry dates, or failed check; policyRevision stays unchanged) | — |
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
-| `mcp.tools_changed` | drift check | catalogue | quarantine the server in gateway config until re-reviewed |
+| `mcp.tools_changed` | drift check | catalogue (before/after snapshots, dated new catalogue and changed policyRevision) | quarantine the server in gateway config until re-reviewed |
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade | grants | OpenFGA tuples |
 | `connection.created` | person command after private secret staging | connections (secret *reference* only) | planned cleanup verifies that an orphan cannot become current before deleting its exact UID/version |
 | `connection.refreshed` | reaction (OAuth refresh) | connections | — |

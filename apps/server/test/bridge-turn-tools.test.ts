@@ -30,7 +30,10 @@ function serverEvents(modeValue: 'allow' | 'ask' = 'allow') {
     serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp',
     registeredBy: 'person',
   });
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
   const discovery = envelope('test', 'mcp-fixture', 'mcp.server_discovered', {
+    checkedAt, expiresAt,
     serverId: 'fixture', connectionId: 'connection', accountMode: 'none',
     schemaDigest: 'a'.repeat(64), toolCount: 1,
     discoverResult: 'PRIVATE_DISCOVERY_RESULT',
