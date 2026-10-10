@@ -13,6 +13,8 @@ import { CaptureStatus } from './capture-status';
 import { ToolActivityLine } from './tool-activity-line';
 import { RecoveryNotice } from './recovery-notice';
 import { MemoryFreeNotice } from './memory-free-notice';
+import { MemoryPanel } from '../memory/memory-panel';
+import { movePanelTab } from './panel-tab-keyboard';
 import {
   ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, effect, inject, signal,
   viewChild, type OnInit,
@@ -41,7 +43,7 @@ import {
   imports: [
     HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
     SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, CaptureStatus,
-    ToolActivityLine, RecoveryNotice, MemoryFreeNotice,
+    ToolActivityLine, RecoveryNotice, MemoryFreeNotice, MemoryPanel,
     FoldLoader, ChatComposer, FilePreview, LiveView,
     NgTemplateOutlet, ChatIcon, BrandMark,
   ],
@@ -66,7 +68,7 @@ export class Workspace implements OnInit {
   protected readonly organisation = document.querySelector<HTMLMetaElement>('meta[name=opencrane-org]')?.content || 'Your organisation';
   protected readonly initials = computed(() => this.chat.displayName().split(/\s+/).map(word => word[0]).slice(0, 2).join('').toUpperCase());
   protected readonly rail = signal(false);
-  protected readonly panelTab = signal<'files' | 'activity'>('files');
+  protected readonly panelTab = signal<'files' | 'activity' | 'memory'>('files');
   protected readonly approvalWaiting = signal(false);
   protected readonly activity = computed(() => this.chat.turns().flatMap(turn => turn.tools));
   protected readonly desktop = signal(globalThis.innerWidth >= 1100);
@@ -88,7 +90,6 @@ export class Workspace implements OnInit {
   protected readonly screenshotIds = computed(this.screenshotFileIds.bind(this));
   protected readonly rejectedScreenshotIds = computed(this.rejectedScreenshotFileIds.bind(this));
   protected readonly captureViewModel = computed(this.capturePresentation.bind(this));
-  protected readonly reconnectedAt = this.chat.reconnectedAt;
   protected readonly statusChecking = signal(false);
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
@@ -123,6 +124,7 @@ export class Workspace implements OnInit {
   protected selectPrivate(): void {
     this.chat.choosePrivate();
   }
+  protected readonly panelTabKeydown = movePanelTab;
   protected readonly turnOutcome = turnOutcome;
   protected readonly turnStatusIcon = turnStatusIcon;
   protected memoryAdmissionDetail(): string {

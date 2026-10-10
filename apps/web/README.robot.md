@@ -2,7 +2,7 @@
 
 For people, read [README.md](README.md) first.
 
-This Angular app provides the organisation settings shell and MCP register.
+This Angular app provides the organisation settings shell, MCP register and Memory panel.
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
@@ -294,6 +294,23 @@ turn and model requests and do not qualify a fresh installation. See the
 [direct-chat screen receipt](../../docs/process/p4-4-screens/README.md).
 
 ## Desktop view
+
+## Memory reads
+
+The workspace session panel reads `/api/memory/scopes`,
+`/api/memory/:scopeId/facts` and the selected fact detail route. It passes the selected
+session's group and assistant ids to scope discovery. It keeps results only in component
+memory and honours the server's
+`Cache-Control: no-store` response by making no browser cache of its own. Search and
+scope changes discard old list replies; scope changes and access loss also discard old
+detail replies. A refused read clears protected content. Source refusal hides its
+reference; source service failure leaves the fact visible and says the source could not
+be checked. A denied workspace session also clears every memory value and cancels its
+pending reads. A changed requester causes scope discovery to run again. The detail view
+uses the shared modal overlay, returns focus to its fact row and shows the scope audience,
+kind, revision, saved date and pin state. A rejected search is reported beside the search
+field. A stale page cursor is discarded and the first page is read again. This screen has
+no memory write actions.
 
 Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
 `/ws/conversations/:id/view`, through the existing frontend `/ws` proxy.

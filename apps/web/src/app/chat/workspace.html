@@ -147,9 +147,9 @@
             }
           </div>
         }
-        @if (reconnectedAt()) {
+        @if (chat.reconnectedAt()) {
           <div class="reconnected-line"><oc-icon name="done" />
-            Reconnected at {{ time(reconnectedAt()!) }}. You're caught up.
+            Reconnected at {{ time(chat.reconnectedAt()!) }}. You're caught up.
           </div>
         }
         @if (chat.selected() && !chat.denied()) {
@@ -341,7 +341,8 @@
         </span>
       </header>
     }
-    <div class="panel-tabs" role="tablist" aria-label="Session views">
+    <div class="panel-tabs" role="tablist" aria-label="Session views"
+      (keydown)="panelTabKeydown($event)">
       <button type="button" role="tab" [attr.aria-selected]="panelTab() === 'files'"
         (click)="panelTab.set('files')">
         Files<small class="tab-count">@if (chat.denied()) { –<span class="sr-only"> unavailable</span> } @else { {{ files().length + chat.attachments().length }} }</small>
@@ -350,15 +351,17 @@
         (click)="panelTab.set('activity')">
         Activity<small class="tab-count">@if (chat.denied()) { –<span class="sr-only"> unavailable</span> } @else { {{ activity().length }} }</small>
       </button>
+      <button type="button" role="tab" [attr.aria-selected]="panelTab() === 'memory'"
+        (click)="panelTab.set('memory')">Memory</button>
     </div>
-    @if (chat.selected() && !chat.denied()) {
+    @if (panelTab() !== 'memory' && chat.selected() && !chat.denied()) {
       <oc-live-view [conversationId]="chat.selected()" [capture]="captureViewModel()"
         [captureBusy]="captureBusy()" [captureChecking]="statusChecking()"
         [captureCanStart]="captureCanStart()"
         (captureRequested)="startCapture()"
         (captureRepeated)="repeatCapture()" (captureStatusChecked)="checkCaptureStatus()" />
     }
-    @if (chat.selected()) {
+    @if (panelTab() !== 'memory' && chat.selected()) {
       <a class="audit-link" [href]="'/history/' + chat.selected()">Action history</a>
     }
     @if (panelTab() === 'files') {
@@ -402,12 +405,18 @@
       @if (!chat.denied()) {
         <footer class="panel-footnote">Saved files remain in the transcript after retries and session close.</footer>
       }
-    } @else {
+    } @else if (panelTab() === 'activity') {
       <section class="panel-section" role="tabpanel" aria-label="Activity">
         @for (tool of activity(); track tool.id) { <button type="button" class="activity-row" (click)="jumpToTool(tool.id)"><time>{{ time(tool.time) }}</time><span>{{ tool.label }}<small>{{ tool.detail }}</small></span><oc-icon class="state-mark" [attr.data-state]="tool.failed ? 'failed' : 'done'" [name]="tool.failed ? 'failed' : 'done'" /></button> }
         @if (!activity().length) { <p>No activity yet.</p> }
       </section>
       <footer class="panel-footnote">An index of the transcript, not a copy — every row jumps to its message.</footer>
+    } @else {
+      <section class="panel-section memory-panel-section" role="tabpanel" aria-label="Memory">
+        <oc-memory-panel [groupId]="chat.selectedPayingGroupId() || undefined"
+          [assistantId]="chat.selectedAssistantId() || undefined"
+          [requesterId]="chat.memberId() || undefined" [accessDenied]="chat.denied()" />
+      </section>
     }
   </ng-template>
   <dialog class="search-dialog" #searchDialog aria-label="Find a session"><form method="dialog"><button type="submit" aria-label="Close session search">×</button></form><label for="session-search">Find a session</label><input id="session-search" type="search" placeholder="Session id" (input)="searchChanged($event)">@for (conversation of chat.conversations(); track conversation.conversationId) { @if (conversation.conversationId.includes(search())) { <button type="button" (click)="select(conversation.conversationId)"># session-{{ conversation.conversationId.slice(0, 8) }}</button> } }</dialog>

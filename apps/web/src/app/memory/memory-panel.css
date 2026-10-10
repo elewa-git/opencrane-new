@@ -1,0 +1,41 @@
+.memory { margin: 0; padding: 12px; color: #16191a; font-size: 13px; }
+.memory .scopes { gap: 4px; margin: 4px 0 12px; }
+.memory .scopes button { padding: 6px 8px; font-size: 11px; }
+.memory .search { font-size: 12px; }
+.memory .fact { padding: 10px; font-size: 12px; }
+.audience { margin: -10px 0 12px; color: #4f575a; }
+.heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.heading h1 { margin: 2px 0 20px; font-size: 32px; }
+.eyebrow { margin: 0; color: #4f575a; }
+.back { min-height: 44px; display: inline-flex; align-items: center; color: #075c68; }
+.scopes { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 20px; }
+.scopes button, .next { min-height: 44px; padding: 8px 16px; border: 1px solid #8d999c;
+  border-radius: 8px; background: white; color: #16191a; font: inherit; cursor: pointer; }
+.scopes button.selected { border-color: #087d8d; background: #e7f6f7; }
+.search { display: grid; gap: 8px; max-width: 560px; font-weight: 600; }
+.search input { min-height: 44px; padding: 8px 12px; border: 1px solid #647174;
+  border-radius: 6px; font: inherit; }
+.results { margin-top: 22px; }
+.count { color: #4f575a; }
+.fact { width: 100%; min-height: 76px; margin: 8px 0; padding: 14px 18px; text-align: left;
+  display: grid; gap: 8px; border: 1px solid #cdd4d5; border-radius: 8px; background: white;
+  color: inherit; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.fact small { color: #4f575a; }
+.detail { position: fixed; z-index: 3; inset: 0 0 0 auto; width: min(460px, 100%);
+  max-width: none; height: 100%; max-height: none; margin: 0; border: 0; border-radius: 0;
+  overflow-y: auto; padding: 28px; background: #fffdfa; color: #16191a;
+  box-shadow: -12px 0 32px #16191a26; }
+.detail::backdrop { background: #16191a66; }
+.detail h2 { margin-top: 28px; }
+.detail-text { padding: 18px; border: 1px solid #cdd4d5; border-radius: 8px; overflow-wrap: anywhere; }
+.fact-context { display: grid; gap: 10px; }
+.fact-context div { display: grid; grid-template-columns: 90px 1fr; gap: 12px; }
+.fact-context dt { color: #4f575a; }
+.fact-context dd { margin: 0; overflow-wrap: anywhere; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #0a8497;
+  outline-offset: 2px; }
+@media (max-width: 600px) { .detail { padding: 20px 16px; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important; }
+}

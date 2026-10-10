@@ -16,6 +16,7 @@ flowchart LR
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
   web -->|opens| people["People pages<br/>members, groups and owners"]
+  web -->|reads| memory["Memory panel<br/>scopes, facts and sources"]
 ```
 
 ## What it is responsible for
@@ -35,6 +36,8 @@ flowchart LR
   and a fixed paying group, including groups managed by an identity provider. Group
   membership does not grant desktop access.
 - Clears private information when the server refuses access.
+- Lets a signed-in person open Memory in the workspace session panel to read permitted
+  scopes, search facts and inspect source status.
 - Adapts the workspace and menus for phones and desktop screens.
 - Supports keyboard use in menus, dialogs and the chat workspace.
 - Not built yet: the organisation overview and Routines pages.
@@ -71,6 +74,9 @@ flowchart LR
     unknown outcome stays locked while the website checks its status.
 12. **A member starts a private shared session.** The website shows assistants they can use, confirms the fixed paying group, then opens their private conversation. Group membership does not give desktop access.
 13. **An Owner transfers ownership.** The website reviews the proposed successor and asks the server to record the transfer. It shows success only after the server confirms it. A lost reply keeps its command reference and offers a read-only status check.
+14. **A person reads memory.** The workspace session panel lists permitted scopes and facts,
+    searches and pages through them, and checks each source separately. Scope changes and
+    access loss discard old replies. Memory is not saved in browser storage.
 
 ## How to run or test it
 
