@@ -230,3 +230,7 @@ configuration and a fresh silo installation remain unqualified.
 
 `chat-state-<memberId>` maps to `ev.chat-state.<memberId>`, including category reads.
 Preference parsing binds the human principal to that member id. Access checks remain the caller's job.
+`expectedGlobalSequence` is supported for `ownership.seeded` and `member.removed`
+only. Removal checks the log position from before its inventory read, as well as
+the target member position. A changed log refuses the append atomically.
+This conservative check may refuse unrelated activity; it never affects readers.

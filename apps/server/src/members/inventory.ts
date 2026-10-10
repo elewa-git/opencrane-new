@@ -300,3 +300,10 @@ async function retainedContent(options: GroupOptions, memberId: string, head: nu
   return { current, positions: Array.from(positions.entries()), computers: computers.rows,
     history: { count: Number(total.count), firstAt: total.firstAt, lastAt: total.lastAt } };
 }
+
+export function reviewedRevision(inventoryRevision: string, memberSequence: number,
+  ownershipSequence: number) {
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify([inventoryRevision, memberSequence, ownershipSequence]));
+  return hash.digest('hex');
+}

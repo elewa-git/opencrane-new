@@ -315,3 +315,25 @@ unavailable responses. Access is checked after the database read, so an admin
 removed during that read receives no history. The existing audit worker and rebuild restore these records without granting
 access or contacting outside services. Invitation lists, intended-person reads,
 invitation read-table rebuilds and acceptance-command status remain follow-up work.
+
+## Reviewed member removal
+
+POST `/api/members/:memberId/remove` accepts `commandId`, `expectedSequence` and
+`reviewRevision` from the departure GET. It requires current Owner/Admin access
+and the same Origin. Incomplete reviews, changed revisions and owner targets
+return 409. An owner must step down first.
+
+One conditional append saves `member.removed` on the target member's stream.
+That stream also records ownership confirmation, so competing requests cannot
+save at the same reviewed member position. The append checks the whole log's
+position from before the inventory read too. Any intervening event causes 409,
+even if unrelated. Busy installations may need another review and attempt.
+History and inventory reads finish before the two-second access check begins.
+
+The receipt includes the original ids, member, sequence, time, reviewed revision,
+`removedAt` and `access: revoked`. GET `/api/members/:memberId/changes/:commandId`
+adds separate content and IAM progress. Revoked access does not wait for either.
+An exact retry returns the original receipt; changed arguments return
+`command_id_reused`. Status reads save nothing. Removed callers receive 403,
+including for status. An Admin who removes themselves and loses the reply
+learns the result from that 403. Cleanup remains unavailable.

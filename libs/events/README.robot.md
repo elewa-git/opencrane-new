@@ -195,3 +195,7 @@ The origin binds parent/source/intent/request/first-input ids and source/intent 
 Parent joins precede the source; intent follows it. Private legacy parsing is unchanged.
 Child participant changes carry `contextKind: shared_child` and `reviewPosition`;
 additions require `joinKind: explicit_child`. They grant no parent rights. No emitter exists.
+`memberRemovedDataSchema` is exported. `member.removed` accepts optional
+`reviewRevision`, a 64-character lowercase SHA-256 value. Older events omit it;
+new removal routes require it. It identifies the departure inventory the admin
+reviewed. It contains no private history or credentials.

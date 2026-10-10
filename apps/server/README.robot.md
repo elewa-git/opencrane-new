@@ -1443,7 +1443,8 @@ Shared-assistant selection checks the group membership and its receipt independe
 of resource grants, as well as the assistant creation receipt. A missing membership
 receipt reports unavailable selection rather than denied access.
 Failed reads return 503. Only counts and dates leave conversation tables.
-Tool, publication and connection readiness stay unavailable. Removal stays disabled.
+Tool, publication and connection readiness stay unavailable. A complete departure
+review enables removal for an active non-owner.
 `test/member-inventory.test.ts` uses real services. Fresh-install qualification: NOT RUN.
 
 ## Governed personal remember (P4-12 PR 3c)
@@ -1487,3 +1488,12 @@ Effective inherited access and public child commands are later work. No child em
 ## Private turn memory preview
 
 `GET /api/memory/turns/:conversationId/:turnId` returns a bounded preview for a saved private turn. It does not issue a token, record loaded facts or send text to a computer. It returns at most 32 references and 16,384 UTF-8 bytes. Each category reads at most 33 candidates. The shared `memoryReferences` check validates each fact and all its supporting facts before decryption and again before release. Expired, erased, superseded or unchecked references are omitted. The server checks access again without reading chat history. Denied scopes have no ids, counts or omission flags. Missing turn ownership returns 404; service, permission, content or projection uncertainty returns 503. All responses use `Cache-Control: no-store`. Fresh-install qualification is NOT RUN.
+## Reviewed member removal
+
+The [removal contract](../../docs/api/members.md#reviewed-member-removal) covers
+review conflicts, receipts and delayed table and permission updates.
+`test/member-removal.test.ts` covers refusals, lost replies, ownership races and replay.
+The socket and desktop tests remove through HTTP with slow content reads.
+`test/removal-gateway.test.ts` covers gateway refusal with existing and fresh credentials
+while IAM is delayed.
+Fresh-install qualification and browser canvas clearing remain NOT RUN.

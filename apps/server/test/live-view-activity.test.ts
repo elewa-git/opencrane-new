@@ -10,6 +10,7 @@ import { authorityFence, envelope, history, payingGroupAuthority } from '@opencr
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
+import { reviewedRemoval } from './support/reviewed-removal.ts';
 import { viewFixture } from './support/view-fixture.ts';
 import { recordLeaseNotices } from './support/rfb-viewer.ts';
 import { viewAccess } from '../src/computers/view-access.ts';
@@ -605,6 +606,9 @@ async function closesRemovedMemberBeforeSlowDesktopRead() {
   const current = await createFixture(openStreamingDesktop);
   await grantDirectly(current);
   const observed = await startViewer(current);
+  const options = { silo: 'test', store: current.nats.store, binding: current.binding,
+    feed: current.feed, db: current.db };
+  const remove = await reviewedRemoval(current.app, current.config, options, current.runner);
   const frame = Buffer.alloc(20);
   frame.writeUInt16BE(1, 2);
   frame.writeUInt16BE(1, 8);
@@ -648,9 +652,8 @@ async function closesRemovedMemberBeforeSlowDesktopRead() {
     await until(hasFrame);
     vi.spyOn(current.nats.store, 'readStream').mockImplementation(slowDesktopRead);
     await desktopReadStarted.promise;
-    const removed = revocation('member.removed');
-    await appendInjection(current, removed);
     const revokedAt = performance.now();
+    await remove();
     await observed.closed;
     const remaining = Math.max(0, revokedAt + 1700 - performance.now());
     await delay(remaining);

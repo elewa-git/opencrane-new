@@ -25,6 +25,7 @@ import { Client } from 'minio/dist/esm/minio.mjs';
 import { ownConversation, fileCommand } from '../src/files/commands.ts';
 import { viewAccess } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
+import { reviewedRemoval } from './support/reviewed-removal.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 import { conversationParticipationReader }
   from '../src/chat/access.ts';
@@ -85,7 +86,7 @@ async function fixture(countChecks = false) {
   function unusedScan(): Promise<'clean'> {
     throw new Error('Reads must not scan a file');
   }
-  const app = buildServer(config, { chat: options, files: { ...options, objects, scan: unusedScan } });
+  const app = buildServer(config, { chat: options, memberReads: options, files: { ...options, objects, scan: unusedScan } });
   async function append(subject: string, type: string, data: unknown, iam = true) {
     const event = envelope('test', subject, type, data);
     let actorId = 'alice';
@@ -1144,14 +1145,35 @@ async function removalDuringSlowSocketRead() {
   const context = await fixture();
   const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
   let socket: WebSocket | undefined;
+  const otherSockets: WebSocket[] = [];
   let wss: ReturnType<typeof attachWebSocketServer> | undefined;
   let pause: ReturnType<typeof pauseFirstHistoryRead> | undefined;
   try {
     await context.agentSession('agent');
+    await context.append('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob',
+    });
+    await context.append('conversation-direct-removal', 'conversation.created', {
+      conversationId: 'direct-removal', createdBy: 'alice', mode: 'direct',
+      participantIds: ['alice', 'bob'],
+    });
+    const remove = await reviewedRemoval(context.app, context.config, context.options,
+      context.runner);
     const address = await context.app.listen({ host: '127.0.0.1', port: 0 });
     const realtime = { feed: context.feed, binding: context.options.binding,
       chat: context.options };
     wss = attachWebSocketServer(context.app.server, context.app.log, context.config, realtime);
+    const subscriptions = [{ type: 'subscribe', topic: 'members', since: 0 },
+      { type: 'subscribe', topic: 'conversation', conversationId: 'direct-removal', since: 0 }];
+    for (const subscription of subscriptions) {
+      const connection = { headers: context.headers() };
+      const other = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, connection);
+      otherSockets.push(other);
+      await once(other, 'open');
+      const received = once(other, 'message');
+      other.send(JSON.stringify(subscription));
+      await received;
+    }
     pause = pauseFirstHistoryRead(context);
     const connectionOptions = { headers: context.headers() };
     socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, connectionOptions);
@@ -1166,22 +1188,32 @@ async function removalDuringSlowSocketRead() {
     await pause.reached;
     const closed = once(socket, 'close');
     const started = performance.now();
-    await context.append('member-alice', 'member.removed', {
-      memberId: 'alice', removedBy: 'bob',
-    }, false);
+    await remove();
     function expired(): never {
       throw new Error('Socket removal took more than two seconds');
     }
     const timeout = delay(2000).then(expired);
     const closure: unknown[] = await Promise.race([closed, timeout]);
     expect(performance.now() - started).toBeLessThan(2000);
+    function allClosed() {
+      return otherSockets.every(isClosed);
+    }
+    function isClosed(connection: WebSocket) {
+      return connection.readyState === WebSocket.CLOSED;
+    }
+    await until(allClosed, 1900);
+    expect(performance.now() - started).toBeLessThan(2000);
     expect(closure[0]).toBe(1008);
     expect(socket.readyState).toBe(WebSocket.CLOSED);
     expect(received.some(isRefused)).toBe(true);
     expect(received.some(isReady)).toBe(false);
+    const read = await fetch(`${address}/api/conversations/agent/messages`,
+      { headers: context.headers() });
+    expect(read.status).toBe(403);
   } finally {
     pause?.release();
     socket?.terminate();
+    for (const other of otherSockets) other.terminate();
     if (wss) {
       function closeServer(resolve: () => void) {
         wss!.close(resolve);

@@ -12,6 +12,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member access"]
   server -.->|checks access, refusal records, departure details, spending, memory and turn previews| libs["libs/*<br/>shared code"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member removal"]
+  server -.->|checks access, refusal records, departure details, spending and memory| libs["libs/*<br/>shared code"]
   server -->|records changes, memory facts, model grants, roles, participants, chats, computers and provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -27,6 +29,7 @@ flowchart LR
 - Read recorded child participants without reading the whole conversation.
 
 - Returns missing approval details and accepts requester retries after verified non-dispatch.
+- Lets admins review a departure, remove access and recover the saved removal receipt.
 - Records owner appointments as requests. Counts a successor only after confirmation.
 - Lets owners and admins save provider choices and pauses, count affected assistants
   and recover saved results. Conflicting requests cannot report an unsaved change

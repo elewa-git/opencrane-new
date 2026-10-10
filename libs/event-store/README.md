@@ -21,7 +21,7 @@ with `libs/events`.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -->|saves changes within the caller time limit| store["libs/event-store<br/>checked events and memory key references"]
+  server["apps/server<br/>back end"] -->|saves changes and checks removal reviews| store["libs/event-store<br/>checked events and memory key references"]
   models["libs/models<br/>AI rules and budgets"] -->|saves changes and updates saved facts| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams and finds numbered events| nats["NATS JetStream<br/>event service"]
@@ -36,6 +36,7 @@ flowchart LR
 - Require the current memory event version for new writes, while still reading old events.
   Check that its scope id matches its recorded owner, kind and silo before saving it.
   Refuse repeated dependencies and a key reference that belongs to another memory revision.
+- Refuse a reviewed removal if any event arrived after its inventory was read.
 - Stop retries when the caller's access time limit expires.
 - Return the earlier result when a caller repeats the same request.
 - Let callers that have checked their history save a change without reading that

@@ -23,7 +23,7 @@ export interface AppendCommand {
   historyChecked?: true;
   /** Check the whole category, such as member-*, instead of one entity. */
   expectedSubject?: string;
-  /** Use the full saved history only while changing event ownership. */
+  /** Refuse changed inventory for removal or changed membership during ownership migration. */
   expectedGlobalSequence?: number;
 }
 export type AppendResult =
@@ -66,7 +66,7 @@ export function validateCommand(
   if (!validConversationWrite(event) || !validCurrentMemoryWrite(event)) {
     return undefined;
   }
-  if (!validMigrationFence(command, event)) {
+  if (!validGlobalPosition(command, event)) {
     return undefined;
   }
   if (!validExpectedSubject(command, event)) {
@@ -155,12 +155,14 @@ function validHistoryCheck(command: AppendCommand): boolean {
   return Number.isFinite(deadline) && deadline >= 0;
 }
 
-function validMigrationFence(command: AppendCommand, event: EventEnvelope) {
+function validGlobalPosition(command: AppendCommand, event: EventEnvelope) {
   const sequence = command.expectedGlobalSequence;
   if (sequence === undefined) {
     return true;
   }
-  return event.type === 'ownership.seeded' && Number.isSafeInteger(sequence) && sequence >= 0;
+  const supported = event.type === 'ownership.seeded' ||
+    event.type === 'member.removed';
+  return supported && Number.isSafeInteger(sequence) && sequence >= 0;
 }
 
 export function sameCommand(a: EventEnvelope, b: EventEnvelope): boolean {
