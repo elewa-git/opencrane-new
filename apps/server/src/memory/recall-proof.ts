@@ -53,10 +53,14 @@ export function checkRecallProof(secret: string, context: MemoryContext, proof: 
   }
   const bytes = Buffer.from(encoded, 'base64url');
   // Bound decoded input before parsing, including signed payloads with excess whitespace.
-  if (bytes.length > 7500) throw new MemoryRefused();
+  if (bytes.length > 7500) {
+    throw new MemoryRefused();
+  }
   const payload: unknown = JSON.parse(bytes.toString());
   const [binding, references] = proofSchema.parse(payload);
-  if (binding !== threadBinding(context)) throw new MemoryRefused();
+  if (binding !== threadBinding(context)) {
+    throw new MemoryRefused();
+  }
   for (const dependency of dependencies) {
     function matches(saved: z.infer<typeof referenceSchema>) {
       return saved[0] === dependency.memoryId && saved[1] === dependency.revision;

@@ -87,7 +87,8 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       return { jsonrpc: '2.0', id: parsed.request.id, result };
     } catch (error) {
       if (error instanceof MemoryPersonScopeOnly) {
-        return reply.code(403).send({ status: 'refused', reason: 'agent_person_scope_only' });
+        const refusal = { status: 'refused', reason: 'agent_person_scope_only' };
+        return reply.code(403).send(refusal);
       }
       return reply.code(403).send({ status: 'refused' });
     }
