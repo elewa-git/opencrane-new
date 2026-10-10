@@ -1419,6 +1419,93 @@ async function keepsAnUnknownParticipantCommandWithItsConversation(): Promise<vo
 it('keeps an unknown participant command with its conversation',
   keepsAnUnknownParticipantCommandWithItsConversation);
 
+async function keepsUnknownParticipantCommandAfterWorkspaceNavigation(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  function loseParticipantReply(request: RequestRecord): Response | undefined {
+    if (request.url.endsWith('/participants') && request.method === 'POST') {
+      throw new TypeError('Reply lost after append');
+    }
+    if (request.url.includes('/changes/')) return reply({ status: 'not_found' }, 404);
+    return undefined;
+  }
+  api.override(loseParticipantReply);
+  const grace = Array.from(root(fixture).querySelectorAll('.participant-list li'))
+    .find((row) => row.textContent?.includes('Grace Achieng'));
+  grace?.querySelector<HTMLButtonElement>('button')?.click();
+  await settle(fixture);
+  const commandId = String(api.requests.find((request) =>
+    request.url.endsWith('/participants') && request.method === 'POST')?.body?.['id']);
+
+  const workspaceLink = root(fixture).querySelector<HTMLAnchorElement>(
+    '.back-link[href="/workspace"]');
+  const navigation = new MouseEvent('click', { bubbles: true, cancelable: true });
+  workspaceLink?.dispatchEvent(navigation);
+  expect(navigation.defaultPrevented).toBe(true);
+
+  buttonNamed(fixture, '‹ Back to conversation').click();
+  buttonNamed(fixture, 'Participants').click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('Check the original change status');
+  buttonNamed(fixture, 'Check status').click();
+  await settle(fixture);
+  expect(api.requests.filter((request) => request.url.endsWith('/participants')
+    && request.method === 'POST')).toHaveLength(1);
+  expect(api.requests.some((request) => request.url.endsWith(`/changes/${commandId}`))).toBe(true);
+  fixture.destroy();
+}
+
+it('keeps an unknown participant command when a workspace link is clicked',
+  keepsUnknownParticipantCommandAfterWorkspaceNavigation);
+
+async function replacesParticipantsAfterSocketResync(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  const currentConversation = {
+    conversationId: 'group-chat', createdBy: 'alice',
+    createdAt: '2026-10-06T09:00:00Z', mode: 'group',
+    participantIds: ['alice', 'carol'],
+  };
+  function currentParticipantState(request: RequestRecord): Response | undefined {
+    if (request.method !== 'GET') return undefined;
+    if (request.url === '/api/conversations') return reply({ rows: [currentConversation] });
+    if (request.url.endsWith('/participants')) {
+      return reply({ rows: [
+        { memberId: 'alice', displayName: 'Alex Kim' },
+        { memberId: 'carol', displayName: 'Chris Njeri' },
+      ], joinPosition: 1, accessPosition: 4, canManage: true, canLeave: false });
+    }
+    return undefined;
+  }
+  api.override(currentParticipantState);
+  const socket = api.sockets.at(-1);
+  if (!socket?.onmessage) throw new Error('Expected a conversation socket handler');
+  const resync = {
+    version: 1, topic: 'conversation', type: 'resync', conversationId: 'group-chat',
+    position: 3, generation: 2,
+  };
+  socket.onmessage(new MessageEvent('message', { data: JSON.stringify(resync) }));
+  await settle(fixture);
+
+  const participantRows = Array.from(root(fixture).querySelectorAll(
+    '.participant-list:first-of-type li'));
+  expect(participantRows.some((row) => row.textContent?.includes('Grace Achieng'))).toBe(false);
+  expect(participantRows.some((row) => row.textContent?.includes('Chris Njeri'))).toBe(true);
+  const conversationRow = root(fixture).querySelector('.conversation-row');
+  expect(conversationRow?.textContent).not.toContain('Grace Achieng');
+  expect(conversationRow?.textContent).toContain('Chris Njeri');
+  expect(root(fixture).querySelector('h1')?.textContent).not.toContain('Grace Achieng');
+  expect(root(fixture).querySelector('h1')?.textContent).toContain('Chris Njeri');
+  fixture.destroy();
+}
+
+it('replaces the participant picker and conversation title after socket resync',
+  replacesParticipantsAfterSocketResync);
+
 async function searchesAndPagesParticipantChoicesOnTheServer(): Promise<void> {
   const api = createFetchFixture();
   api.addGroupConversation();
