@@ -1,149 +1,202 @@
 # Immediate access invalidation: entry points and evidence
 
-Recorded on 10 October 2026 for #85, P4-3 row 7. Base: `bbe76e38`.
-This records source behaviour and disposable-service tests. It does not qualify
-member departure on a fresh installation. No public removal route is added.
+Recorded on 10 October 2026 for #85, P4-3 row 7 and draft PR #318.
+The branch rebased successfully onto `origin/main` at `bd4ec1a4` before these fixes.
+This records source checks and disposable-service tests. Fresh-install departure
+qualification remains NOT RUN. No public member removal route is added.
 
-## Membership checks at entry points
+## How membership is checked
 
-A browser cookie identifies a session; it does not prove current membership.
-The server resolves the member id and checks stored events. OpenFGA supplies the
-remaining permissions. Its `acts_for`, resource-use and team relationships can
-remain allowed until cleanup, so those answers cannot replace a membership check.
+A browser cookie identifies a session. It does not prove current membership.
+Member events decide whether the person still belongs to the silo.
+A stream is the saved event history for one thing, such as one member or chat. An invitation
+or role change after removal does not join them again. OpenFGA supplies the other
+permissions and can still contain old answers while its worker catches up.
 
-| Entry point | Event membership check and remaining permission check |
+`chatMembership` reads member events directly. `readActiveMember`, `activeMember`
+and `currentMembership` also require the applied permission receipt for the
+current member event. `currentAuthority` requires those receipts before gateway
+permissions can allow a call. Writes and turn starts check the positions of their
+small access streams again within two seconds. Content reads happen before that
+short check. A normal HTTP read checks access once; open feeds and desktop views
+repeat checks independently of content delivery.
+
+The tables list methods as well as paths. Paths in the first two tables are in
+`apps/server`. The coverage column names the test files, without `.test.ts`.
+Existing coverage is listed separately from the runs recorded below.
+Fastify also registers HEAD for each browser GET route. It uses the same handler
+and returns no response body. Those methods share the checks listed here.
+
+## Browser HTTP entry points
+
+| Methods and paths | Event membership check and other rules | Coverage |
+| --- | --- | --- |
+| GET `/api/members`, `/api/members/:memberId` | `currentMembership` / `readActiveMember`; directory needs Owner/Admin, headers need membership. | `realtime`, `realtime-guards` |
+| POST `/api/invitations`; GET `/api/invitations/:memberId/changes/:commandId` | Invitation routes use current member/owner events and admin permission. Writes use `activeMember`. | `invitations` |
+| GET/POST `/api/groups`, `/api/groups/:groupId`; GET `/api/groups/:groupId/changes/:commandId` | Group commands and reads use `activeMember` / `currentMembership`, then group and admin permissions. | `groups` |
+| GET/POST `/api/ownership`; GET `/api/ownership/changes/:commandId` | Current member and ownership events, then owner permission; writes confirm positions. | `ownership`, `ownership-ordering` |
+| GET/POST `/api/assistants`; GET `/api/assistants/:assistantId`, `/api/assistants/:assistantId/changes/:commandId` | Reads use `readActiveMember`; writes use `createSharedAssistant → activeMember`, plus admin, tools and paying group checks. | `shared-assistant`: all four routes after removal and invitation, with old SQL/IAM |
+| GET/POST `/api/org/providers`; GET `/api/org/providers/:providerId`; GET/POST `/api/org/providers/:providerId/bindings`; GET `/api/org/providers/:providerId/changes/:commandId`; POST `/api/org/providers/:providerId/key`; GET/POST `/api/org/providers/:providerId/verify` | `providerAuthority → activeMember`; current admin and provider authority before reads, writes, secret storage or verification. | `providers`, `provider-bindings`, `provider-binding-guards` |
+| GET/POST `/api/org/integrations`, `/api/org/models`, `/api/org/integrations/:serverId/tools`; GET `/api/org/integrations/:serverId/discovery`, `/api/org/integrations/discovery` | With the production event store, `activeMember` checks admin authority before register reads or changes. | `integrations` |
+| GET `/api/org/models/:modelId/access`, `/api/org/models/:modelId/access/candidates`, `/api/org/models/:modelId/access/changes/:commandId`; POST `/api/org/models/:modelId/access` | `providerAuthority → activeMember`, via `readActiveMember` for reads. | `model-access`: all four routes after removal and invitation, with old SQL/IAM |
+| GET `/api/org/computers` | `readActiveMember(..., 'admin')` before returning computer records. SQL identity lookup alone cannot allow the read. | `integrations`: removed admin, later invitation and old SQL/IAM |
+| GET `/api/chat`, `/api/chat/colleagues`, `/api/chat/groups`, `/api/chat/groups/:groupId` | `chatAccess → activeChatMember → chatMembership`; group choices also check actual group membership. | `chat-access-regression`, `direct-chat-http` |
+| GET/POST `/api/conversations`; GET/POST `/api/conversations/:conversationId/messages`; GET `/api/conversations/:conversationId/changes/:commandId` | `chatAccess` / `writeChatAccess`, then `conversationParticipationReader → chatMembership`. Personal assistant choice also needs `actsFor`; shared choice uses `sharedAssistantAuthority`. Private sessions check the actual team. | `chat-access-regression`, `direct-chat-http`, `shared-assistant` |
+| GET/POST `/api/conversations/:conversationId/approvals` | `chatAccess` / `writeChatAccess`; decisions also use `currentAuthority` and tool/approval rules. | `approvals` |
+| GET/POST `/api/conversations/:conversationId/files`; GET `/api/conversations/:conversationId/files/view` | `conversationParticipationReader → chatMembership`, private session, closure and latest join; commands use `ownConversation → verifyCurrentMember → chatMembership` before retry or append. | `file-upload-failures`, `file-command-refusals`, `upload` |
+| POST `/api/conversations/:conversationId/view` | `viewAccess → chatMembership`, participation and desktop permission before minting a ticket. | `live-view-activity`, `live-view-admission` |
+| POST `/api/conversations/:conversationId/screenshots` | `viewAccess` before opening and during capture; saving uses the guarded file command. | `screenshots`, `screenshot-browser` |
+| GET `/api/memory/scopes`, `/api/memory/:scopeId/facts`, `/api/memory/:scopeId/facts/:memoryId`, `/api/memory/:scopeId/changes/:commandId`; POST `/api/memory/:scopeId/facts` | `readActiveMember` before scope permissions; group notes also use `groupMembership`; writes confirm access positions. | `memory`, `memory-write-admission`, `memory-admission` |
+| GET `/api/org/history`, `/api/conversations/:conversationId/history` | `currentMembership` checks current member/owner facts before protected audit records. | `audit-browser` |
+| GET `/api/org/effects`, `/api/org/effects/:permitId`; POST `/api/org/effects/:permitId/resolve` | `currentMembership`; resolution reads history before checking current write access. | `libs/models/effects-read`, `decision-cost` |
+
+The integration options permit a store-free test setup. That setup has no event
+membership check and is not the production server configuration. Computer routes
+now require the event store whenever they are registered.
+
+## Browser sockets
+
+| Entry point | Event membership check and delivery rule | Coverage |
+| --- | --- | --- |
+| `/ws` upgrade, hello and client event validation | Organisation session only. These frames disclose no protected content. Topic subscription performs membership checks below. | `websocket`, `realtime-guards` |
+| `/ws`, member topic | `readActiveMember(..., 'admin')` before delivery and on independent polls. A 1,500 ms watchdog stops a hung check. | `realtime` |
+| `/ws`, personal, direct and group conversation topics | `conversationParticipationReader → chatMembership`, current participation and OpenFGA receipts. Private team sessions also use `groupMembership`. Access polling continues while a content read waits. | `chat-access-regression` |
+| `/ws/conversations/:conversationId/view`, including old ticket redemption and renewals | `viewAccess → chatMembership`; participation and desktop grants. Team grants check the team. Watches only member, participation and grant streams. | `live-view-activity`, `live-view-unavailable`, `view-lease` |
+
+## Gateway and models-process entry points
+
+| Entry point | Event membership check and other rules | Coverage |
+| --- | --- | --- |
+| Gateway POST `/v1/responses`; decision POST `/authorize` | `currentAuthority` requires member-state receipts, then person/assistant resource permissions and current turn/computer binding. Confirms access positions before admission. | `libs/models/gateway`, `decision-fence`, `decision-activity` |
+| Gateway POST `/mcp/:serverId/:connectionId`; decision POST `/authorize/mcp/:serverId/:connectionId` | Same current member authority; also tool revision, policy, mode and approval. A refusal sends nothing upstream. | `libs/models/gateway`, `decision-fence` |
+| Gateway POST `/mcp/memory/server`; decision POST `/authorize/mcp/memory/server`; server POST `/mcp/memory/server` | `prepareMemoryContext → currentAuthority` checks model and memory permissions. The server verifies the signed memory pass and checks current scope authority. Recorded private turn and current computer must match. | `memory-mcp`, `libs/models/memory-context` |
+| Gateway GET `/providers/openai/reachability`, `/providers/anthropic/reachability`; POST `/providers/openai/test`; corresponding decision `/authorize/providers/...`; decision POST `/providers/verify` | Signed provider capability, then `providerAuthority → activeMember` before provider dispatch or key release. | `providers`, provider verification tests in `libs/models` |
+| Decision POST `/budgets` | `configureBudget → activeMember`, admin permission and signed command. | `integrations` |
+| Decision GET `/jwks.json`; gateway readiness port | Public verification keys and readiness only; no human membership or private content. | `libs/models/gateway-start` |
+| Decision POST `/settle`, `/computer-lost` | Internal calls check saved event references and recorded work. No new human work, credential or protected content is authorised; no member check is required to finish accounting. | `libs/models/decision-cost` |
+
+## Computer entry points
+
+| Entry point | Event membership check and delivery rule | Coverage |
+| --- | --- | --- |
+| Server sends queued turn text and tool catalogue over computer `/bridge` | `sendWaitingTurn → chatMembership` after building the list, before sending. Tool selection also requires person/assistant `auth.use`. | `bridge-turn-tools`, `bridge-replay` |
+| Computer `/bridge` sends first `agent.turn_started` | `turnCommand`: personal admission uses `requireTurnMember → chatMembership`; shared admission uses `activeMember` and actual/paying group membership. Confirms member positions before append. | `computer-turns`, `shared-assistant` |
+| Computer repeats `agent.turn_started`, including reconnect/token renewal | `requireTurnMember` checks every repeated start. After private history loads, the bridge checks membership again before minting a token and confirms the position before releasing token/context. | `shared-assistant`: personal/shared, first/repeated, old SQL/IAM, removal during history; `computer-turns` |
+| Server sends file metadata and bytes over `/bridge` | `ownConversation → chatMembership` before `sendFile`; participation, private session and closure checks still apply. `fileCommand` checks again before saving the receipt. | `bridge-file-access`: removed uploader, later invitation, zero bytes and unchanged history; `upload` |
+| Computer `/bridge` report, completion, failure, tool progress and file acknowledgement frames | Current computer credential and saved conversation/turn/report binding. Terminal reports finish earlier work without new human admission. File acknowledgement uses the membership check above. | `bridge-replay`, `computer-turns`, `upload` |
+| Server `/bridge` resume, acknowledgement, stop and approval notifications | Bound computer/turn and saved approval rules. These control earlier work; start acknowledgements that release token/context use the repeated check above. | `bridge-replay`, `bridge-turn-tools`, `approvals` |
+| Computer POST `/credentials`; GET `/health`; `/bridge` WebSocket upgrade | Isolated runtime control network, current computer credential and expiry. These do not prove human membership. Protected work is checked by the server and gateway above. | `apps/computer/test/run.mjs`, `apps/server/bridge-proxy` |
+| Computer local POST `/grant`, `/drop`, `/catalogue`, `/catalogue/ready`, `/catalogue/drop` on `/run/codex/control.sock` | File permissions restrict the control socket. Turn credentials come from guarded server admission; these local controls do not read human events. | `apps/computer/test/run.mjs`, `mcp-proxy` |
+| Computer local POST `/v1/responses`, `/mcp/:loadKey/:serverKey` | Local caller and current thread pass, then the gateway event membership checks above. | `apps/computer/test/run.mjs`, `mcp-proxy`; `libs/models/gateway` |
+| Computer local Codex `/run/codex/app.sock`, executor `/run/executor/private.sock`, private executor connections, and desktop TCP service | Process/file permissions and isolated network. No direct human member reader. Browser desktop bytes pass `viewAccess`; execution uses the admitted turn. | `apps/computer/test/private-capabilities.mjs`, `live-view-proxy` |
+
+Computer credentials in `libs/auth` prove the current computer grant and turn
+binding. They do not prove human membership. Every path releasing a human turn
+credential now performs the event membership checks recorded above.
+
+## Entry points that establish identity
+
+GET `/healthz` returns readiness only. GET `/auth/login`, `/auth/callback`,
+`/auth/me` and POST `/auth/logout` manage or describe the caller's own session;
+they do not grant silo membership. Tests: `auth-flow`, `auth-logging` and `websocket-auth`.
+POST `/api/silo/claim` checks the one-time bootstrap claim and a fresh signed-in
+identity on an unclaimed installation. POST `/members/join` checks an invitation,
+verified identity and the inviter's current event authority. The prospective
+member cannot already be required to have joined. Tests: `bootstrap-claim`,
+`bootstrap-browser`, `member-joined` and `invitations`.
+
+## Closing events without message scans
+
+New `conversation.closed` events use `participation-<conversationId>`, alongside
+participant changes. No event type was added. New writes to the old conversation
+subject are refused; old records still parse and replay. Chat histories, summaries,
+approval reads and gateway activity checks include both forms.
+
+Desktop and file readers confirm an indexed older close by its exact event id
+and position. Otherwise they read only the participation stream. They never scan
+message history during an access check. Cold and warm desktop tests keep the
+worker behind conversation creation and refuse any attempt to read later messages.
+
+Upgrades stop old server writers, catch up the conversations worker, then start
+the new server. Startup refuses if the conversation checkpoint is behind the
+conversation stream. This one-time check prevents an unindexed older close from
+being missed. Fresh installs with no conversations need no checkpoint. New closing
+events do not need the worker to catch up after startup. Stop readers for table
+replacement or event-store restoration, then restart them to clear summaries.
+
+## Failing-first changes
+
+Each new failing test was committed before its production fix.
+
+| Test commit | Failure before the fix |
 | --- | --- |
-| Member headers, colleagues and admin directory (`members/read-routes.ts`) | `currentMembership` and `readActiveMember` read member and ownership facts. Member headers need active membership; the email directory needs Owner/Admin. |
-| Member live feed (`realtime.ts`) | `readActiveMember(..., 'admin')` before delivery and on independent polls. A 1,500 ms watchdog stops a hung check. SQL content work cannot block access polling. |
-| Invitations, groups, ownership, provider settings and tool administration | `activeMember`, `readActiveMember` or `currentMembership` check member and ownership streams. Writes also check whether those streams changed before append. |
-| Chat context, lists, history, message status and message/turn commands (`chat/routes.ts`, `chat/access.ts`) | `activeChatMember` uses `chatMembership`, then OpenFGA membership. `conversationParticipationReader` checks membership before and after conversation permission. Writes load history before their short access check. |
-| Personal, direct and group chat sockets (`chat/access.ts`, `chat/realtime.ts`) | Current member and participation positions trigger event reads. Private team sessions also check the actual team. Separate access polling continues during a blocked content read. |
-| Group chat choices (`chat/groups.ts`) | The route's `chatAccess` checks current silo membership before `auth.team`. Group event facts and the caller's join receipt establish the group membership. |
-| Personal assistant choice and chat creation (`chat/routes.ts`) | The route checks `chatAccess` or `writeChatAccess` before `auth.actsFor`. Shared assistants additionally use `sharedAssistantAuthority`. |
-| Private team session reads and turn starts (`chat/private-session.ts`) | `groupMembership` reads silo membership and the actual team before `auth.actsFor`. Writes also use `activeMember`; the paying group is checked separately. |
-| Approval GET/POST (`chat/approvals.ts`) | `chatAccess` checks membership for reads. Decisions use `writeChatAccess`, then `currentAuthority` for resource use. |
-| File list/download/upload (`files/routes.ts`) | `conversationParticipationReader` checks current membership even if the SQL identity row and OpenFGA permission remain old. Private-session and closure checks still apply. |
-| File commands and computer file delivery (`files/commands.ts`) | `verifyCurrentMember` uses `chatMembership` after content history loads. It refuses missing or removed membership before a retry receipt or append. |
-| Desktop tickets, upgrades and lease renewals (`computers/view-access.ts`) | `chatMembership` denies inactive membership independently of slower desktop reads. `participation` checks the audience; `auth.view` checks conversation and desktop permissions. Direct grants watch the member and grant streams. Team grants also use `payingGroupAuthority`. |
-| Screenshot capture (`computers/screenshots.ts`) | `viewAccess` checks membership before opening the desktop and again during capture. Saving also goes through the guarded file command. |
-| Model and MCP decisions (`libs/models/src/decision.ts`, `authority.ts`) | `currentAuthority` reads member-state events and requires their OpenFGA receipts before `auth.actsFor` and both person/assistant `auth.use` checks. An unapplied removal denies rather than trusting old permissions. The decision checks watched positions again before allowing the gateway. |
-| Gateway memory recall (`libs/models/src/memory-context.ts`) | `currentAuthority` checks both model and memory resource permissions, including member-state receipts. The saved turn and current computer credential must also match. |
-| Browser memory reads/writes (`memory/routes.ts`, `commands-routes.ts`) | `readActiveMember` checks current membership before scope checks call `auth.actsFor` or `auth.use`. Team notes also use `groupMembership`. |
-| Pending computer turn tool lists (`chat/bridge-conversation.ts`) | `auth.use` chooses tool metadata from a previously authorised message. Every actual tool call still goes through the current event-based gateway decision above. The list builder itself does not check whether the requester is still a silo member. |
-| Computer turn starts and reports (`chat/turns.ts`, `chat/bridge.ts`) | Shared assistant admission uses `activeMember` and `groupMembership`. Personal admission and repeat token issuance do not check whether the requester is still a silo member. Every model/tool request still passes the current event-based decision. |
-| Computer/turn credentials (`libs/auth/src/credentials.ts`) | These prove the current computer grant and turn binding, not human membership. Minting a computer token does not authorise model/tool use; each request still passes the event-based decision above. |
-| Audit and effect reads (`audit/routes.ts`, `effects/routes.ts`) | `currentMembership` checks current member/owner facts before protected data is returned. |
+| `3ae0cbba` | Removed admin got HTTP 200 from the computer register instead of 403. |
+| `3e136225` | Removed requesters could start personal turns and receive repeated personal/shared tokens and private context. |
+| `87c0c8df` | Cold desktop access scanned message history; current participation-stream closes were rejected by append. |
+| `1a85d5f7` | A queued file delivered 19 bytes after removal even though its receipt was refused. |
+| `849aca73` | The startup upgrade check was absent; route tests cover all assistant and model-access paths after removal and invitation. |
+| `f62325cc` | Queued turn text/tools were sent after removal and invitation. |
+| `8528df83` | A close arriving during the final approval check still allowed the decision to append. Fixed in `92640da4`. |
 
-Paths are relative to `apps/server/src` unless otherwise stated. The names above
-are code names; the list contains no customer data or credentials.
-
-## Existing limits outside this change
-
-`GET /api/org/computers` still checks its SQL identity lookup and OpenFGA admin
-permission without reading member events. Removal has not been proved to stop
-access to that register immediately. The pending tool-list builder also does not
-check whether the requester is still a silo member. Personal turn starts and
-repeated tokens rely on later model/tool refusal too. These limits are unchanged
-by the two last-event fixes. They must be resolved or qualified before reporting
-that member departure is complete.
-
-Reads check permission when they begin; an already authorised HTTP content read
-is not continuously polled. Streaming browser feeds and desktop bytes do have
-independent expiry checks. The closure reader may inspect conversation records
-that its worker has not checked yet; desktop freshness never watches that stream.
-Personal connections and credential release for personal MCP accounts are absent
-in this version. Existing MCP connections are credential-free.
-
-## Failure before the fix
-
-Test commit: `f4e99e0e`, before production changes. Command:
-
-```sh
-PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npx vitest run \
-  apps/server/test/live-view-activity.test.ts \
-  apps/server/test/file-upload-failures.test.ts \
-  -t 'later invitation|after removal followed' --maxWorkers=1
-```
-
-The run failed three assertions:
-
-- A viewer with a hung desktop read stayed open past two seconds after removal
-  followed by an invitation.
-- A new desktop ticket returned 200 instead of 403 after those events.
-- A file command appended an event instead of refusing it. File HTTP reads and
-  uploads already refused through the shared participation reader.
-
-The unchanged focused command then passed all four selected cases after both
-checks switched to `chatMembership`. SQL and OpenFGA were deliberately left old.
-The tests use disposable NATS, PostgreSQL and OpenFGA. The desktop test uses a real
-WebSocket with a scripted RFB stream and records frame and close times. It asserts
-no desktop bytes after 1,500 ms, close before 2,000 ms, and a saved access-change
-stop event. Ticket tests also redeem a ticket minted before removal. The file test
-checks the conversation stream position remains unchanged after refusal.
+Existing desktop and file failing-first tests also remain in the branch. They
+assert byte cut-off, closure within two seconds, refusal of new/old tickets and
+no file append with SQL and OpenFGA deliberately left old.
 
 ## Verification and remaining qualification
 
-Production code tested: [6a6b7923](https://github.com/elewa-git/opencrane-new/commit/6a6b79230543bb587c50b4fa1b3977fbd3a549df).
-The following evidence update changes documentation only.
-The environment used the local disposable PostgreSQL test server with isolated
-fixture databases, disposable NATS/OpenFGA, a scripted desktop peer and the real
-agentgateway binary with a recording upstream. No paid model call was made.
+Production code: `92640da4`. All 24 changed root Vitest files passed twice after
+fixes and complete-file retries. Each run set
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and used
+`nice -n 10 npx vitest run ... --maxWorkers=1`.
 
-| Check | Result and observation |
+| Check | Result |
 | --- | --- |
-| `npm ci` and requested tool symlinks | PASS. This worktree has its own installed dependencies. |
-| `nice -n 10 npm run lint` | PASS, including Knip and `npm run lint:changelog`. Fifteen existing warnings; no errors. |
-| `nice -n 10 npm run typecheck` | PASS across all workspaces. |
-| `npm run check:events` | PASS: 99 event types agree. No event contract changed. |
-| Regression batch below | PASS: 102 tests across five files. |
-| Second changed-test run | PASS: 48 tests across the two changed test files. |
-| Selected existing removal proofs below | PASS: seven selected tests; the other 148 cases were skipped. |
-| Browser canvas checks below | PASS: 18 tests across three files. |
-| Independent review | PASS after the second and final pass verified the test style fix. No remaining blocker. |
+| Full lint, including dependency rules, Knip, Markdown, links, fixtures and changelog | PASS on the final source. Fifteen existing warnings; no errors. |
+| Final root typecheck, plus server and models checks after their edits | PASS. Includes web application, spec and browser-fixture typechecks. |
+| Event catalogue | PASS: 99 types agree. The closing event changes stream ownership. |
+| Changed root tests, twice | PASS after repairs and full-file retries. Two optional cases remain NOT RUN: paid model calls and the approval browser journey. |
+| Full chat/access file, twice | PASS: 42 tests each, including 100,000 messages, cold/warm desktop checks with delayed tables, and the older-close upgrade guard. |
+| Full shared-assistant repeat | PASS: 33 tests, in addition to its successful second batch run. |
+| Full approval file after the closing check fix, twice | PASS: 30 tests each; its optional browser case is skipped. |
+| Connector and budget migration fixtures, twice | PASS: 23 tests each across two files. |
+| Membership guard tests, twice | PASS: five tests each. |
+| Event schemas and membership guards | PASS: 664 tests across 13 files. |
+| Full provider and memory files | PASS: 153 tests across two files. |
+| Approval callers after the final fix | PASS: nine selected gateway/captured Codex cases; 89 other cases skipped in that focused run. |
+| Web typecheck and build | PASS. Existing CSS budget and CommonJS build warnings remain. |
+| Full web tests; changed web files again with `PG_TEST_URL` set | PASS: 588 tests across 40 files, then 62 tests across two files. |
+| `nice -n 10 npm run visual:chat` | PASS: Chromium fixture checks and captures at 1280/390 widths. |
 
-The first regression batch used:
+The two broad root batches covered 22 and 21 files. Nineteen other test files
+passed in both. The first batch also hit a NATS timeout while seeding the large
+chat and a shared-assistant setup timeout while the host was busy. Both complete
+files subsequently passed twice without increasing any deadline. Both batches
+found the approval closing-check bug. After fixing it, that complete file passed
+twice. These failed runs are not reported as successful batches.
 
-```sh
-PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npx vitest run \
-  apps/server/test/live-view-activity.test.ts \
-  apps/server/test/file-upload-failures.test.ts \
-  apps/server/test/file-command-refusals.test.ts \
-  apps/server/test/live-view-unavailable.test.ts \
-  apps/server/test/view-lease.test.ts --maxWorkers=1
-```
+An exploratory name-filtered route run was stopped because some provider and
+memory tests need earlier tests to prepare their shared fixtures. Both files
+then passed in full. The web runs also found inherited read-only dialog mocks;
+the corrected full suite and changed-file repeat passed.
 
-The second run used the same command with only `live-view-activity.test.ts` and
-`file-upload-failures.test.ts`. Both runs set `PG_TEST_URL`.
-The existing desktop activity tests throw if a freshness check watches
-`conversation-chat`. Chat messages, files and turn reports keep the viewer open.
-The outage and late-reply cases keep the original lease deadlines.
-
-The existing socket and gateway proofs used:
-
-```sh
-PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npx vitest run \
-  apps/server/test/chat-access-regression.test.ts \
-  apps/server/test/realtime.test.ts \
-  libs/models/test/gateway.test.ts \
-  libs/models/test/authority-standalone.test.ts \
-  -t 'revokes a socket within two seconds while its content read is waiting|closes within two seconds of.*while SQL content and IAM are delayed|enforces reviewed tool modes at the real gateway|refuses standalone|refuses group spending' \
-  --maxWorkers=1
-```
-
-Those tests prove chat and admin-feed closure during blocked content reads,
-refusal of stale member authority without waiting for IAM, and gateway refusal
-without another upstream call. They also cover authority expiry and a removal
-that lands after the member history was read.
-
-The existing browser tests used:
+The batches and complete-file repeats cover the 24 changed paths returned by:
 
 ```sh
-nice -n 10 npm test -w @opencrane/web -- \
-  --watch=false --include='src/app/live-view/*.spec.ts'
+git diff --name-only bd4ec1a4...HEAD -- '*test.ts'
 ```
 
-Fresh-install removal, a real desktop canvas on a newly installed silo, live
-identity/provider checks and the combined departure/cleanup journey are NOT RUN.
-The browser's existing lease tests cover canvas clearing locally; they are not
-fresh-install evidence. The full root suite is NOT RUN, as requested. #85 remains
-open for the later removal rows and live qualification.
+The first large batch also included the unchanged participation projection tests.
+It did not yet include the later membership and connector fixture files; those
+have separate complete repeats above. The second large batch ran chat/access
+separately so the 100,000-message seed could complete without the earlier load.
+Approval, shared-assistant and chat/access complete-file retries replaced their
+failed or skipped results. No paid model call was made.
+
+Captures are saved locally at `/tmp/p4-3-row7-captures-pjsrq1gx/comparison`.
+Existing checked-in images were restored after capture because no browser
+production code changed. These images show the scripted browser fixtures.
+Round 1 review was FIX THEN LAND. A second independent review is NOT RUN by this
+fix task. Fresh-install removal, real desktop canvas timing on a newly installed
+silo, live identity/provider checks and the combined departure/cleanup journey
+remain NOT RUN. Local captures are browser fixture checks, not fresh-install
+qualification. The full root suite is NOT RUN, as requested. #85 stays open.
