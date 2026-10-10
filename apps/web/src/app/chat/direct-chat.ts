@@ -220,7 +220,7 @@ export class DirectChat implements OnInit, OnDestroy {
       const candidate = directColleagueById(this.knownColleagues(), otherId);
       selectedColleague = candidate ?? { memberId: otherId, displayName: null };
     } else if (conversation.mode !== 'group') {
-      return;
+        return;
     }
     const changed = this.selectedConversationId() !== conversationId;
     if (changed) this.rememberDraft();
@@ -458,7 +458,8 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   private rememberDraft(): void {
-    if (this.colleague()) this.drafts.set(this.draftKey(), this.draft());
+    if (!this.colleague() && !this.isGroupConversation()) return;
+    this.drafts.set(this.draftKey(), this.draft());
   }
 
   private restoreDraft(): void {
