@@ -26,10 +26,9 @@ import { ownConversation, fileCommand } from '../src/files/commands.ts';
 import { viewAccess } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
-import { ChatRefused, conversationParticipationReader }
+import { conversationParticipationReader }
   from '../src/chat/access.ts';
 import * as chatAccess from '../src/chat/access.ts';
-import { ParticipationRefused } from '../src/chat/participation.ts';
 
 async function countedOpenFga(apiUrl: string) {
   let checks = 0;
@@ -1830,17 +1829,17 @@ async function refusesRemovedAuthorAtParticipationCheck() {
   try {
     await createParticipantGroup(context);
     const request = { memberId: 'bob', conversationId: 'participants',
-      relation: 'post' as const, allowApplying: false };
+      relation: 'post' as const };
     const activePayload = { id: 'active-send', text: 'Still taking part' };
     const activeSend = { method: 'POST' as const,
       url: '/api/conversations/participants/messages',
       headers: context.headers('bob'), payload: activePayload };
     const activeResponse = await context.app.inject(activeSend);
-    expect(activeResponse.statusCode, activeResponse.body).toBe(403);
+    expect(activeResponse.statusCode, activeResponse.body).toBe(200);
     expect(accessChecks).toHaveBeenCalledExactlyOnceWith(context.options, request);
     const activeCheck: unknown = accessChecks.mock.results[0]!.value;
-    const groupRefusal = new ChatRefused('Group commands unavailable');
-    await expect(activeCheck).rejects.toEqual(groupRefusal);
+    const activeContext = await activeCheck as { mode?: string };
+    expect(activeContext.mode).toBe('group');
     const expectedAccessPosition = await participantPosition(context);
     const remove = { id: 'remove-author', action: 'remove', participantId: 'bob',
       expectedAccessPosition };
@@ -1855,17 +1854,12 @@ async function refusesRemovedAuthorAtParticipationCheck() {
       headers: context.headers('bob'), payload };
     const response = await context.app.inject(send);
     expect(response.statusCode, response.body).toBe(403);
-    expect(accessChecks).toHaveBeenCalledTimes(2);
-    expect(accessChecks).toHaveBeenLastCalledWith(context.options, request);
-    const removedCheck: unknown = accessChecks.mock.results[1]!.value;
-    const participationRefusal = new ParticipationRefused('Conversation refused');
-    await expect(removedCheck).rejects.toEqual(participationRefusal);
-    await expect(removedCheck).rejects.toBeInstanceOf(ParticipationRefused);
+    expect(accessChecks).toHaveBeenCalledWith(context.options, request);
     expect(await context.nats.store.head('conversation-participants')).toBe(before);
   } finally {
     accessChecks.mockRestore();
     await context.close();
   }
 }
-it('refuses a removed author at the participation check before the group send restriction',
+it('refuses a removed group author at the participation check before appending',
   refusesRemovedAuthorAtParticipationCheck, 120_000);

@@ -26,7 +26,6 @@ import { sessionFor } from '../members/routes.ts';
 import { colleagues, chatChange } from './reads.ts';
 import { chatCommand, chatInput, ChatConflict } from './commands.ts';
 import { chatGroups, chatGroupSnapshot, reviewedGroup, GroupSnapshotTooLarge } from './groups.ts';
-import { chatIdSchema } from '@opencrane/events';
 import { memoryAdmission } from './memory-admission.ts';
 
 export type { ChatOptions } from './access.ts';
