@@ -106,7 +106,7 @@ async function read<T>(url: string, signal: AbortSignal, schema: z.ZodType<T>)
   : Promise<DirectOutcome<T>> {
   try {
     const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
-    if (!response.ok) return failure(response.status, 'GET');
+    if (!response.ok) return failure(response.status);
     const raw: unknown = await response.json();
     const parsed = schema.safeParse(raw);
     if (!parsed.success) return { kind: 'unavailable' };
@@ -124,7 +124,7 @@ async function write<T>(
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body), signal,
     });
-    if (!response.ok) return failure(response.status, 'POST');
+    if (!response.ok) return failure(response.status);
     const raw: unknown = await response.json();
     const parsed = schema.safeParse(raw);
     if (!parsed.success) return { kind: 'unavailable' };
@@ -134,14 +134,13 @@ async function write<T>(
   }
 }
 
-function failure(status: number, method: 'GET' | 'POST'): DirectOutcome<never> {
+function failure(status: number): DirectOutcome<never> {
   if (status === 425) return { kind: 'access_applying', status };
   if (status === 404) return { kind: 'not_found', status };
-  if (status === 401 || (method === 'GET' && status === 403)) {
+  if (status === 401 || status === 403) {
     return { kind: 'access_changed', status };
   }
   if (status === 400) return { kind: 'invalid', status };
-  if (status === 403) return { kind: 'refused', status };
   if (status === 409) return { kind: 'conflict', status };
   return { kind: 'unavailable', status };
 }
