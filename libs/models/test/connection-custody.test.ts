@@ -18,7 +18,8 @@ const secretSchema = z.object({
   immutable: z.literal(true), type: z.literal('Opaque'),
   metadata: z.object({ name: z.string(), namespace: z.string(),
     uid: z.string().default('uid-original'), resourceVersion: z.string().default('1'),
-    labels: z.record(z.string(), z.string()), annotations: z.record(z.string(), z.string()) }),
+    labels: z.record(z.string(), z.string()), annotations: z.record(z.string(), z.string()),
+    finalizers: z.array(z.string()).optional(), deletionTimestamp: z.string().optional() }),
   data: z.object({ token: z.string() }),
 });
 type Secret = z.infer<typeof secretSchema>;
@@ -43,10 +44,11 @@ async function fixture() {
   let deletes = 0;
   let loseCreate = false;
   let changeOnDelete = false;
+  let readsUnavailable = false;
   let unavailable = false;
   let preconditions: unknown;
   async function handle(request: IncomingMessage, response: ServerResponse) {
-    if (unavailable) {
+    if (unavailable || (readsUnavailable && request.method === 'GET')) {
       response.writeHead(503).end(material);
       return;
     }
@@ -82,6 +84,12 @@ async function fixture() {
         return;
       }
       deletes += 1;
+      if (secret?.metadata.finalizers?.length) {
+        secret.metadata.deletionTimestamp = '2026-10-10T00:00:00Z';
+        secret.metadata.resourceVersion = '2';
+        response.end(JSON.stringify(secret));
+        return;
+      }
       secret = undefined;
       response.end('{}');
       return;
@@ -112,20 +120,22 @@ async function fixture() {
   return { custody, restart, directory, get secret() { return secret!; }, get creates() { return creates; },
     get deletes() { return deletes; }, get preconditions() { return preconditions; },
     loseCreate() { loseCreate = true; }, changeOnDelete() { changeOnDelete = true; },
-    fail() { unavailable = true; } };
+    fail() { unavailable = true; },
+    failReads() { readsUnavailable = true; }, restoreReads() { readsUnavailable = false; },
+    finishDeletion() { secret = undefined; } };
 }
 
-async function recoversLostCreate() {
+async function recoversRecordedCreate() {
   const store = await fixture();
-  store.loseCreate();
   const first = await store.custody.stage(stage, material);
-  expect(first.status).toBe('recovered');
+  expect(first.status).toBe('staged');
+  const expectedRecovery = { status: 'recovered', identity: first.identity };
   const recovered = await store.restart().recover(stage);
-  expect(recovered).toEqual(first);
+  expect(recovered).toEqual(expectedRecovery);
   const attempts = [store.custody.stage(stage, material), store.restart().stage(stage, material)];
   const repeated = await Promise.all(attempts);
-  expect(repeated[0]).toEqual(first);
-  expect(repeated[1]).toEqual(first);
+  expect(repeated[0]).toEqual(expectedRecovery);
+  expect(repeated[1]).toEqual(expectedRecovery);
   expect(store.creates).toBe(1);
   expect(JSON.stringify(first).includes(material)).toBe(false);
   const filenames = await readdir(store.directory);
@@ -137,7 +147,68 @@ async function recoversLostCreate() {
   const changedGeneration = { ...stage, generation: 2 };
   expect((await store.restart().stage(changedGeneration, material)).status).toBe('conflict');
 }
-it('recovers one private generation after a lost create reply', recoversLostCreate);
+it('recovers one recorded private generation across restart and retries', recoversRecordedCreate);
+
+
+async function refusesUnrecordedCreate(replace: boolean) {
+  const store = await fixture();
+  store.loseCreate();
+  store.failReads();
+  expect(await store.custody.stage(stage, material)).toEqual({ status: 'unknown' });
+  const filenames = await readdir(store.directory);
+  expect(filenames.length).toBeGreaterThan(0);
+  for (const filename of filenames) {
+    const record = await readFile(`${store.directory}/${filename}`, 'utf8');
+    expect(record.includes('"uid"')).toBe(false);
+    expect(record.includes(material)).toBe(false);
+  }
+  const original = structuredClone(store.secret);
+  if (replace) {
+    store.secret.metadata.uid = 'uid-replacement';
+    const expectedReplacement = structuredClone(original);
+    expectedReplacement.metadata.uid = 'uid-replacement';
+    expect(store.secret).toEqual(expectedReplacement);
+  }
+  store.restoreReads();
+  expect(await store.restart().recover(stage)).toEqual({ status: 'conflict' });
+  expect(await store.restart().stage(stage, material)).toEqual({ status: 'conflict' });
+  expect(await store.restart().remove(stage)).toEqual({ status: 'conflict' });
+  expect(await readdir(store.directory)).toEqual(filenames);
+  expect(store.creates).toBe(1);
+  expect(store.deletes).toBe(0);
+}
+it.each([false, true])(
+  'refuses an unrecorded create identity after a lost reply (replacement: %s)',
+  refusesUnrecordedCreate,
+);
+
+async function refusesImmediateLostCreate() {
+  const store = await fixture();
+  store.loseCreate();
+  expect(await store.custody.stage(stage, material)).toEqual({ status: 'conflict' });
+  expect(await store.restart().recover(stage)).toEqual({ status: 'conflict' });
+  expect(store.creates).toBe(1);
+  const recoveredFiles = await readdir(store.directory);
+  for (const filename of recoveredFiles) {
+    const record = await readFile(`${store.directory}/${filename}`, 'utf8');
+    expect(record.includes('"uid"')).toBe(false);
+  }
+}
+it('refuses to pin the first Secret read after a lost create reply', refusesImmediateLostCreate);
+
+
+async function refusesSecondCreate() {
+  const store = await fixture();
+  store.loseCreate();
+  store.failReads();
+  expect(await store.custody.stage(stage, material)).toEqual({ status: 'unknown' });
+  store.finishDeletion();
+  store.restoreReads();
+  expect(await store.restart().stage(stage, material)).toEqual({ status: 'unknown' });
+  expect(store.creates).toBe(1);
+  expect(store.deletes).toBe(0);
+}
+it('never creates again when an unrecorded original has disappeared', refusesSecondCreate);
 
 const bindings = ['siloId', 'userId', 'serverId', 'connectionId', 'profileId',
   'purpose', 'endpointDigest', 'operationId', 'expectedSequence', 'appendUntil'] as const;
@@ -190,6 +261,26 @@ async function deletesExactly() {
   expect(store.deletes).toBe(1);
 }
 it('requires an exact identity and sends both deletion preconditions', deletesExactly);
+
+
+async function retainsFinalisedSecret() {
+  const store = await fixture();
+  const saved = await store.custody.stage(stage, material);
+  expect(saved.status).toBe('staged');
+  store.secret.metadata.finalizers = ['fixture.test/retain'];
+  expect(await store.custody.remove(stage, saved.identity)).toEqual({ status: 'unknown' });
+  expect(store.secret.data.token).toBe(Buffer.from(material).toString('base64'));
+  expect(store.secret.metadata.deletionTimestamp).toBe('2026-10-10T00:00:00Z');
+  expect(store.secret.metadata.resourceVersion).toBe('2');
+  expect(store.preconditions).toEqual({ uid: 'uid-original', resourceVersion: '1' });
+  expect(store.deletes).toBe(1);
+  expect(await store.restart().remove(stage, saved.identity)).toEqual({ status: 'unknown' });
+  expect(store.deletes).toBe(1);
+  store.finishDeletion();
+  expect(await store.restart().remove(stage, saved.identity)).toEqual({ status: 'deleted' });
+  expect(store.deletes).toBe(1);
+}
+it('keeps deletion unresolved until a finalised Secret is absent', retainsFinalisedSecret);
 
 async function retainsDeletionRace() {
   const store = await fixture();
