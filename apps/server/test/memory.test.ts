@@ -2384,3 +2384,85 @@ async function fairQueueAcrossScopesAndSessions() {
 
 it('lets another member save with four occupied slots and a flood across scopes and sessions',
   fairQueueAcrossScopesAndSessions);
+
+const bindingInput = { commandId: 'bind-own', expectedRevision: 0,
+  assistantId: 'personal', payingGroupId: 'sales', enabled: true, acceptedCapCents: 100 };
+function bind(scopePath: string, payload: unknown, memberId = 'bob') {
+  const session = { sub: `idp-${memberId}`, orgId: 'org-acme', roles: ['owner'],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { origin: new URL(config.redirectUri).origin,
+    cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const url = `${scopePath}/maintenance/binding`;
+  return app.inject({ method: 'POST', url, headers, payload });
+}
+it('requires explicit nightly cost acceptance and the consenting member themselves',
+  async function explicitBinding() {
+    const position = await nats.store.head();
+    const missingAcceptance = { ...bindingInput, acceptedCapCents: undefined };
+    expect((await bind(path('bob'), missingAcceptance)).statusCode).toBe(422);
+    expect((await bind(path('bob'), bindingInput, 'admin')).statusCode).toBe(404);
+    expect((await bind(path('owner'), bindingInput)).statusCode).toBe(404);
+    expect(await nats.store.head()).toBe(position);
+  });
+it('checks assistant audience and paying group membership without changing facts',
+  async function bindingMatrix() {
+    const refused = [
+      { ...bindingInput, payingGroupId: 'missing' },
+      { ...bindingInput, assistantId: 'missing' },
+      { ...bindingInput, assistantId: 'personal', commandId: 'wrong-group' },
+    ];
+    const position = await nats.store.head();
+    expect((await bind(path('bob'), refused[0])).statusCode).toBe(404);
+    expect((await bind(path('bob'), refused[1])).statusCode).toBe(404);
+    expect((await bind(path('sales', 'group'), refused[2])).statusCode).toBe(404);
+    expect((await bind(path('personal', 'assistant_notes'), bindingInput)).statusCode).toBe(404);
+    expect(await nats.store.head()).toBe(position);
+    const saved = await bind(path('bob'), bindingInput);
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ outcome: 'saved', binding: {
+      memberId: 'bob', assistantId: 'personal', payingGroupId: 'sales',
+      acceptedCapCents: 100, enabled: true, revision: 1 }, dispatch: 'disabled' });
+    const shared = { ...bindingInput, commandId: 'bind-group', assistantId: 'shared' };
+    expect((await bind(path('sales', 'group'), shared)).statusCode).toBe(200);
+  });
+it('returns the original binding receipt and conflicts on changed or stale commands',
+  async function originalBinding() {
+    const position = await nats.store.head();
+    expect((await bind(path('bob'), bindingInput)).statusCode).toBe(200);
+    const changed = { ...bindingInput, enabled: false };
+    expect((await bind(path('bob'), changed)).statusCode).toBe(409);
+    const stale = { ...bindingInput, commandId: 'stale-binding' };
+    expect((await bind(path('bob'), stale)).statusCode).toBe(409);
+    expect(await nats.store.head()).toBe(position);
+    await runner.run(projection);
+    const receipt = await get(`${path('bob')}/changes/bind-own`);
+    expect(receipt.statusCode).toBe(200);
+    expect(receipt.json()).toMatchObject({ outcome: 'saved', binding: { revision: 1 } });
+    const status = await get(`${path('bob')}/maintenance`);
+    expect(status.statusCode).toBe(200);
+    expect(status.headers['cache-control']).toBe('no-store');
+    expect(status.json()).toMatchObject({ status: 'qualification_blocked', dispatch: 'disabled',
+      nextAt: null, binding: { memberId: 'bob', revision: 1 } });
+    expect((await get(`${path('bob')}/maintenance`, 'admin')).statusCode).toBe(404);
+    expect((await get(`${path('sales', 'group')}/maintenance`, 'admin')).statusCode).toBe(404);
+  });
+it('rebuilds binding status without any key, model, tool, computer or scheduler port',
+  async function replayBinding() {
+    const before = await get(`${path('bob')}/maintenance`);
+    function absentKeys() {
+      return null;
+    }
+    const metadataProjection = memoryProjection({ decrypt: absentKeys });
+    const database = pgDb(storage.queue);
+    const rowsBefore = await database.query(
+      'SELECT * FROM memory_maintenance_bindings ORDER BY scope_id');
+    await runner.rebuild(metadataProjection);
+    const after = await get(`${path('bob')}/maintenance`);
+    expect(after.statusCode).toBe(200);
+    expect(after.json()).toEqual(before.json());
+    const rowsAfter = await database.query(
+      'SELECT * FROM memory_maintenance_bindings ORDER BY scope_id');
+    expect(rowsAfter.rows).toEqual(rowsBefore.rows);
+    // Restore the shared fact tables for the rest of this file's existing tests.
+    await runner.rebuild(projection);
+  });
