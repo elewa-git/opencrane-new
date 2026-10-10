@@ -15,7 +15,7 @@ export const siloOwnerBootstrappedDataSchema = memberJoinedDataSchema.omit({
 const safeReference = z.string().regex(/^[\w-]{1,200}$/u);
 export const memberCommandRefusedSchema = z.object({
   memberId: safeReference,
-  originalCommandId: safeReference,
+  originalCommandDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   invitationId: safeReference.optional(),
   operation: z.enum(['invite', 'join']),
   inputDigest: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -27,7 +27,7 @@ export const memberCommandRefusedSchema = z.object({
 
 export const identityEvents = [
   event('member.command_refused', 'memberaudit', 'A trusted invitation request was refused.',
-    memberCommandRefusedSchema, { memberId: 'mem_2', originalCommandId: 'invite-bob',
+    memberCommandRefusedSchema, { memberId: 'mem_2', originalCommandDigest: 'b'.repeat(64),
       operation: 'invite', inputDigest: 'a'.repeat(64), reason: 'access_refused' }),
   event('silo.owner_bootstrapped', 'member', 'The installation token admitted the first owner.',
     siloOwnerBootstrappedDataSchema, { memberId: 'bootstrap-owner', email: 'alice@example.com',

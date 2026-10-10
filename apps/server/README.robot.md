@@ -1396,3 +1396,9 @@ limits, daily join refusal limits and safe HTTP history after replay.
 `test/member-refusals.test.ts` checks refusal fields, invalid history, the
 10,000-record limit and real NATS read deadlines. Set `PG_TEST_URL` to a
 PostgreSQL service that allows disposable databases for the route tests.
+
+
+Refusal status reads compare a SHA-256 digest of the requested command id with
+`originalCommandDigest`. Refusal events never store the raw id. Invitation events
+and status replies retain their existing command ids. The event security checks
+reject raw command-reference fields without adding a field-name exception.

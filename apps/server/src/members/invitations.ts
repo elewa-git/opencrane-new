@@ -7,7 +7,7 @@ import type { Binding } from '@opencrane/authz';
 import { activeMember, authorityFence, isAuthorityChanged, readActiveMember,
   currentMembership } from '@opencrane/models';
 import { invitationCommandSchema, invitationChangeSchema } from '@opencrane/protocol';
-import { refusalHistory } from './refusals.ts';
+import { refusalDigest, refusalHistory } from './refusals.ts';
 import type { Query } from '@opencrane/projections';
 
 type Input = z.infer<typeof invitationCommandSchema>;
@@ -262,9 +262,10 @@ export async function invitationChange(store: EventStore, binding: Binding,
     return invitationChangeSchema.parse(change);
   }
   const refusals = await refusalHistory(store, binding.silo, memberId, deadline);
+  const commandDigest = refusalDigest(commandId);
   for (const row of refusals) {
     const data = memberCommandRefusedSchema.parse(row.event.data);
-    if (data.originalCommandId === commandId && data.operation === 'invite'
+    if (data.originalCommandDigest === commandDigest && data.operation === 'invite'
       && row.event.principal?.kind === 'human' && row.event.principal.id === actor) {
       const change = { status: 'refused', commandId,
         changeId: row.event.id, type: row.event.type, sequence: row.sequence,

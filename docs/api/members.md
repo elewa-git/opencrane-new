@@ -295,8 +295,10 @@ Trusted create and acceptance refusals can save `member.command_refused` on
 Records contain safe ids, an operation, a bounded reason and a SHA-256 digest
 (a fixed-length value calculated from the request). The event key includes the
 person, operation, target, reason and UTC day. Concurrent attempts and different
-command ids therefore leave at most one such record per day. Only the first
-attempt's command id is retained; later ids may have no status result.
+command ids therefore leave at most one such record per day. Only a SHA-256 digest of the first
+attempt's command id is retained; later ids may have no status result. Status reads
+compare the digest of the supplied id. Raw command ids are excluded from refusal
+data because their allowed characters can still spell a secret or a person's name.
 Refusal history stops at 10,000 events and two seconds.
 
 Eligible refusal replies include `recorded: true|false`. Audit errors preserve
