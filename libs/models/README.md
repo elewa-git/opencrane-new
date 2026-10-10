@@ -13,6 +13,7 @@ flowchart LR
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, child joins, owner appointments and spending| models["libs/models<br/>AI rules and spending"]
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices and spending| models["libs/models<br/>AI rules and provider choice"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices and spending revisions| models["libs/models<br/>AI rules, provider choice and spending"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth<br/>access passes"]
@@ -49,6 +50,8 @@ flowchart LR
 - Choose an AI model from a fixed task table before switch-on.
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
+  Keep the revision shown to admins valid after switch-on when no spending change
+  was saved, so they can retry a refused edit without releasing a hold first.
 - Hold money before an AI call and settle the charge when usage is reported.
   Keep the budget state in memory after replay, so saving each change does not
   read all the old spending events again.

@@ -138,7 +138,10 @@ export class BudgetActor {
       const payload = budgetCeilingSetDataSchema.parse(raw);
       const prior = (await history(this.store, `budget-${this.silo}`, this.silo)).find(r => r.event.commandId === commandId);
       if (prior) return { status: JSON.stringify(prior.event.data) === JSON.stringify(payload) ? 'appended' : 'conflict' };
-      if (expectedSequence !== undefined && expectedSequence !== this.sequence) return { status: 'conflict' };
+      // Compare the client's revision with budget events; switch-on only moves the writer.
+      if (expectedSequence !== undefined && expectedSequence !== this.state.sequence) {
+        return { status: 'conflict' };
+      }
       await fresh?.();
       await this.append('budget.ceiling_set', payload, commandId, fresh);
       return { status: 'appended' };

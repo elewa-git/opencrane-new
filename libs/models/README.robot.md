@@ -1005,5 +1005,13 @@ Any change from another budget writer still stops the old actor. It reads only
 events after its saved position when checking an append conflict.
 Retrying a spending-limit change checks the caller's access again within its
 original deadline. A refused change does not stop settlement of existing holds.
+The actor compares the client's expected revision with `state.sequence`, the last
+budget event shown in replies and the projection. Its private `sequence` includes
+switch-on records and is used for conditional appends. Skipping a marker changes
+only that writer position. An access-expired limit change or a refused reservation
+therefore leaves the reported revision valid for the next spending-limit change.
+A saved budget event advances both positions and makes an older client revision
+conflict. `test/actor.test.ts` checks retries with the projected revision, with and
+without an open hold, and after switch-on refuses a reservation.
 A decision audit uses a fresh command id and `historyChecked: true` against zero.
 No earlier event can share that new command id.

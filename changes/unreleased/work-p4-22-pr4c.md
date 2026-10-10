@@ -3,3 +3,5 @@ New turns can use an assistant's saved provider choice or the silo default after
 Holds saved before switch-on still settle, release or expire without restarting
 the models process. A refused unsent call releases its hold at zero cents, and
 late usage settles once at its original price. New holds remain refused.
+
+Spending-limit edits can retry after switch-on using the revision shown to the admin, even if an earlier access check expired or a new spending hold was refused. Existing holds do not need to be released first.
