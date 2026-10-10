@@ -33,3 +33,30 @@ Local logs: `/tmp/p4-22-pr4c-red.log`, `/tmp/p4-22-pr4c-focused.log`,
 `/tmp/p4-22-pr4c-lint.log` and `/tmp/p4-22-pr4c-final-typecheck.log`.
 The pull request records the final source commit. These checks establish source
 readiness for this slice, not completion of the managed-provider capability.
+
+## Access-boundary correction after rebase
+
+Date: 10 October 2026. Source: `4dc987796ec064eb82601a0646e4f0f9a88109a0`.
+Rebased only this branch's two original commits onto `dc2f0351` from `origin/main`.
+The rebase finished. Kept the merged role and group-participant documentation.
+Environment: Linux, Node 22, local worktree; disposable NATS, OpenFGA and recording
+gateway; PostgreSQL test server at `127.0.0.1:55432`. This is not a fresh install.
+
+Model decisions now read switch-on from `budget-<silo>`, never `provider-*`.
+The event parser rejects switch-on on another stream. Saving that marker also
+stops an old budget writer from holding more money. Provider metadata replay
+keeps its own stream position. Refused bound calls still hold and spend zero cents.
+Decision audits use a fresh command id and `historyChecked`.
+
+PASS: all four changed test files plus both unchanged authority test files,
+twice, 56 tests per pass. The second pass also ran the event parser and registry
+checks: 84 tests across eight files in total. Both runs set `PG_TEST_URL` and use
+`nice -n 10` with one worker. The 100,000-event guard passes without wildcard reads.
+PASS: full lint, root typecheck, event catalogue (100 types), Knip and changelog.
+The first lint run found a complexity error; a named subject check fixed it.
+The final lint run has 15 existing warnings and no errors.
+
+Logs: `/tmp/p4-22-pr4c-tests-1.log`, `/tmp/p4-22-pr4c-tests-2.log`,
+`/tmp/p4-22-pr4c-lint-final.log` and `/tmp/p4-22-pr4c-typecheck.log`.
+NOT RUN: full root suite, paid provider calls, fresh-install managed-provider
+qualification and another independent review of this correction.
