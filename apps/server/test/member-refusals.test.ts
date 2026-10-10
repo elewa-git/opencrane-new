@@ -2,13 +2,13 @@ import { expect, it, vi } from 'vitest';
 import { getEventDefinition, memberCommandRefusedSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { refusalHistory, recordMemberRefusal } from '../src/members/refusals.ts';
+import { refusalDigest, refusalHistory, recordMemberRefusal } from '../src/members/refusals.ts';
 
 const memberId = 'invited-person';
 const subject = `memberaudit-${memberId}`;
 const time = new Date('2026-10-01T12:00:00Z');
 const input = { memberId, commandId: 'invite-person' };
-const data = { memberId, originalCommandId: input.commandId, operation: 'invite' as const,
+const data = { memberId, originalCommandDigest: refusalDigest(input.commandId), operation: 'invite' as const,
   inputDigest: 'a'.repeat(64), reason: 'access_refused' as const };
 const record = { ...event('refusal', subject, 'member.command_refused'),
   silo: 'acme', principal: { kind: 'human' as const, id: 'admin' }, data };
@@ -82,7 +82,7 @@ it('refuses a history read after its deadline with real NATS', respectsReadDeadl
 
 const invalidPayloads: [string, unknown][] = [
   ['memberId', 'private@example.test'], ['memberId', 'x'.repeat(201)],
-  ['originalCommandId', 'private free text'], ['originalCommandId', 'x'.repeat(201)],
+  ['originalCommandDigest', 'private free text'], ['originalCommandDigest', 'A'.repeat(64)],
   ['invitationId', 'private@example.test'], ['invitationId', 'x'.repeat(201)],
   ['operation', 'remove'], ['reason', 'private free text'],
   ['inputDigest', 'private@example.test'], ['inputDigest', 'A'.repeat(64)],
@@ -116,3 +116,25 @@ it.each([
   ['memberId', 'private@example.test'], ['commandId', 'private free text'],
   ['invitationId', 'x'.repeat(201)],
 ])('does not record invalid refusal input %s', skipsInvalidRefusalInput);
+
+
+async function hidesRawCommandReference(commandId: string) {
+  const nats = await natsFixture();
+  try {
+    const attempted = { ...input, commandId };
+    const recorded = await recordMemberRefusal(nats.store, 'acme', 'admin',
+      'invite', attempted, 'access_refused', time);
+    expect(recorded).toBe(true);
+    const rows = await refusalHistory(nats.store, 'acme', memberId, performance.now() + 10_000);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.event.data).toMatchObject({
+      originalCommandDigest: refusalDigest(commandId),
+    });
+    expect(JSON.stringify(rows)).not.toContain(commandId);
+  } finally {
+    await nats.close();
+  }
+}
+it.each(['sk_live_private_secret_canary', 'Alice_Smith'])(
+  'stores no raw command reference for %s', hidesRawCommandReference,
+);
