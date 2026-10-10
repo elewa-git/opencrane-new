@@ -125,6 +125,10 @@ async function close() {
   await app?.close();
   await setup?.close();
 }
+async function renewGatewayCredentials() {
+  const renewed = await setup.issue();
+  Object.assign(setup.headers, renewed);
+}
 beforeAll(prepare, 120_000);
 afterAll(close);
 
@@ -456,6 +460,28 @@ it.each([undefined, 'memory_free'] as const)(
       await target.close();
     }
   }, 120_000);
+
+async function renewExpiredTurnCredentials() {
+  const later = Date.now() + 121_000;
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(later);
+  try {
+    capability = '';
+    expect((await setup.call(headers, call, route)).status).toBe(403);
+    expect(capability).toBe('');
+    await renewGatewayCredentials();
+    const response = await setup.call(headers, call, route);
+    expect(response.status, response.text).toBe(200);
+    const claims = decodeJwt(setup.headers['x-turn-token']);
+    const issuedAt = z.int().parse(claims.iat);
+    const expiresAt = z.int().parse(claims.exp);
+    expect(expiresAt - issuedAt).toBe(120);
+  } finally {
+    clock.mockRestore();
+    await renewGatewayCredentials();
+  }
+}
+it('renews an expired credential for the same live turn without extending its lifetime',
+  renewExpiredTurnCredentials);
 
 it('replaces caller context and returns bounded facts as data through the real gateway',
   async function recall() {
