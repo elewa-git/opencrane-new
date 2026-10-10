@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
+import type { EventEnvelope } from '@opencrane/events';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { bridgeChannel } from '../../computer/src/channel.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
@@ -19,7 +20,7 @@ async function refusesQueuedFileAfterRemoval() {
   keys.provision('test', 'chat');
   const joined = event('joined', 'member-alice', 'member.joined');
   joined.data = { ...joined.data, memberId: 'alice' };
-  const assistant = event('assistant', 'assistant-assistant', 'assistant.created');
+  const assistant: EventEnvelope = event('assistant', 'assistant-assistant', 'assistant.created');
   assistant.data = { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' };
   await nats.seed([joined, assistant]);
   const member = { silo: 'test', memberId: 'alice' };
@@ -32,7 +33,7 @@ async function refusesQueuedFileAfterRemoval() {
     mime: 'text/plain', size: bytes.length, sha256: hash.digest('hex'),
     objectKey: 'test/chat/queued-file', uploadedBy: 'alice' };
   await fileCommand(nats.store, 'test', 'alice', 'upload', 'file.uploaded', file);
-  const removed = event('removed', 'member-alice', 'member.removed');
+  const removed: EventEnvelope = event('removed', 'member-alice', 'member.removed');
   removed.data = { memberId: 'alice', removedBy: 'owner' };
   const invited = event('later-invitation', 'member-alice', 'member.invited');
   invited.data = { ...invited.data, memberId: 'alice' };
