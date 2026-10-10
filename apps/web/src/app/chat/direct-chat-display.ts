@@ -38,6 +38,22 @@ export function directMessageText(row: ChatRow): string {
   return typeof row.data['text'] === 'string' ? row.data['text'] : '';
 }
 
+export function directIsOwnMessage(row: ChatRow, memberId: string): boolean {
+  return row.type === 'message.posted' && row.data['authorId'] === memberId;
+}
+
+export function directAuthorName(row: ChatRow, memberId: string, recipientName: string): string {
+  if (directIsOwnMessage(row, memberId)) return 'You';
+  return recipientName;
+}
+
+export function directRecipientName(
+  colleague: { memberId: string; displayName: string | null } | undefined,
+): string {
+  if (!colleague) return '';
+  return colleague.displayName?.trim() || colleague.memberId;
+}
+
 export function formatDirectTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';

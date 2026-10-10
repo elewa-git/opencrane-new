@@ -91,6 +91,7 @@ function createFetchFixture() {
     const overridden = replyOverride?.(request);
     if (overridden) return overridden;
     if (url.pathname === '/api/chat') return reply({ ...alice, assistantId: 'assistant-not-used' });
+    if (url.pathname === '/api/chat/groups') return reply({ rows: [], next: null });
     if (url.pathname === '/api/chat/colleagues') {
       const query = url.searchParams.get('q')?.toLowerCase() ?? '';
       function matchesQuery(person: (typeof colleagues)[number]): boolean {
@@ -234,6 +235,11 @@ async function chooseColleague(fixture: ComponentFixture<DirectChat>, name: stri
     throw new Error(`Expected ${name}; screen shows ${root(fixture).textContent}`);
   }
   candidate.click();
+  fixture.detectChanges();
+  await fixture.whenStable();
+  const useSelection = root(fixture).querySelector<HTMLButtonElement>('.finish-selection');
+  if (!useSelection) throw new Error('Expected the recipient review action');
+  useSelection.click();
   fixture.detectChanges();
   await fixture.whenStable();
 }
@@ -433,6 +439,28 @@ async function createsTwoChats(): Promise<void> {
 }
 
 it('creates two direct chats in one visit with a fresh command for each message', createsTwoChats);
+
+it('creates group mode for several people only after the first message', createsGroupFromPeople);
+
+async function createsGroupFromPeople(): Promise<void> {
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  const options = root(fixture).querySelectorAll<HTMLButtonElement>('.colleague-option');
+  options[0]?.click();
+  options[1]?.click();
+  fixture.detectChanges();
+  expect(api.requests.some(isCreatePost)).toBe(false);
+  enterMessage(fixture, 'Hello everyone');
+  function groupWasCreated(): void {
+    const create = api.requests.find(isCreatePost);
+    expect(create?.body?.['mode']).toBe('group');
+  }
+  await vi.waitFor(groupWasCreated);
+  const create = api.requests.find(isCreatePost);
+  expect(create?.body).toMatchObject({ mode: 'group', participantIds: ['alice', 'bob', 'carol'] });
+  expect(create?.body?.['colleagueId']).toBeUndefined();
+  fixture.destroy();
+}
 
 function searchFor(fixture: ComponentFixture<DirectChat>, query: string): void {
   const field = root(fixture).querySelector<HTMLInputElement>('#colleague-search');
@@ -1006,6 +1034,7 @@ function assertOnlyHumanRequests(api: ReturnType<typeof createFetchFixture>): vo
   for (const request of api.requests) {
     const pathname = new URL(request.url, location.origin).pathname;
     const allowed = pathname === '/api/chat' || pathname === '/api/chat/colleagues'
+      || pathname === '/api/chat/groups'
       || pathname === '/api/conversations'
       || /^\/api\/conversations\/[\w-]+\/(messages|changes\/[\w-]+)$/.test(pathname);
     expect(allowed, `Unexpected direct-chat request: ${pathname}`).toBe(true);

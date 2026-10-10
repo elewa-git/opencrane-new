@@ -1,4 +1,5 @@
 import { computed, signal, type WritableSignal } from '@angular/core';
+import type { Colleague, ReviewedSnapshot } from './recipient-picker';
 import { newDirectCommandId } from './direct-chat-address';
 import {
   checkDirectChange, createDirectChat, fetchDirectHistory, sendDirectMessage, type DirectFailure,
@@ -15,6 +16,9 @@ type PendingChange = {
   conversationId: string;
   text: string;
   colleagueId: string;
+  participantIds?: string[];
+  groupId?: string;
+  groupSnapshotPosition?: number;
 };
 
 type DirectSendScreen = {
@@ -24,6 +28,18 @@ type DirectSendScreen = {
   created(conversationId: string): void;
   confirmed(conversationId: string): Promise<void>;
   accessChanged(): void;
+};
+
+type RecipientSend = {
+  busy: boolean;
+  ready: boolean;
+  recipient: Colleague | undefined;
+  people: Colleague[];
+  snapshot: ReviewedSnapshot | undefined;
+  memberId: string;
+  conversationId: string;
+  isExisting: boolean;
+  text: string;
 };
 
 // Keep creation and its first message together until the message has a receipt.
@@ -149,6 +165,51 @@ export class DirectChatSending {
     await this.sendPending(pending);
   }
 
+  async createGroupConversation(
+    conversationId: string,
+    participantIds: string[],
+    text: string,
+    groupId?: string,
+    groupSnapshotPosition?: number,
+  ): Promise<void> {
+    const pending: PendingChange = {
+      phase: 'creating', state: 'applying', checking: false,
+      commandId: newDirectCommandId('create'), messageId: newDirectCommandId('message'),
+      conversationId, text, colleagueId: '', participantIds,
+      ...(groupId ? { groupId } : {}),
+      ...(groupSnapshotPosition === undefined ? {} : { groupSnapshotPosition }),
+    };
+    this.pending.set(pending);
+    this.failure.set('');
+    await this.sendPending(pending);
+  }
+
+  async sendToRecipients(input: RecipientSend): Promise<void> {
+    if (input.busy || !input.ready || !input.text.trim()) return;
+    if (!input.recipient && input.people.length === 0) return;
+    if (input.isExisting) {
+      if (input.recipient) {
+        await this.postMessage(input.conversationId, input.text, input.recipient.memberId);
+      }
+      return;
+    }
+    const participantIds = uniqueMemberIds(input.memberId, input.people);
+    if (participantIds.length > 97) return;
+    if (input.snapshot || input.people.length > 1) {
+      await this.createGroupConversation(
+        input.conversationId,
+        participantIds,
+        input.text,
+        input.snapshot?.groupId,
+        input.snapshot?.position,
+      );
+      return;
+    }
+    if (input.recipient) {
+      await this.createConversation(input.conversationId, input.recipient.memberId, input.text);
+    }
+  }
+
   async postMessage(
     conversationId: string, text: string, colleagueId: string,
   ): Promise<void> {
@@ -166,10 +227,7 @@ export class DirectChatSending {
     this.screen.status.set(this.applyingMessage());
     let result;
     if (pending.phase === 'creating') {
-      const body = {
-        id: pending.commandId, conversationId: pending.conversationId,
-        mode: 'direct' as const, colleagueId: pending.colleagueId,
-      };
+      const body = this.creationBody(pending);
       result = await createDirectChat(body, this.screen.signal);
     } else {
       result = await this.sendWithAccessRetry(pending);
@@ -180,6 +238,24 @@ export class DirectChatSending {
       return;
     }
     this.handleWriteFailure(result.kind, pending);
+  }
+
+  private creationBody(pending: PendingChange) {
+    if (pending.participantIds) {
+      return {
+        id: pending.commandId,
+        conversationId: pending.conversationId,
+        mode: 'group' as const,
+        participantIds: pending.participantIds,
+        ...(pending.groupId ? { groupId: pending.groupId } : {}),
+        ...(pending.groupSnapshotPosition === undefined ? {}
+          : { groupSnapshotPosition: pending.groupSnapshotPosition }),
+      };
+    }
+    return {
+      id: pending.commandId, conversationId: pending.conversationId,
+      mode: 'direct' as const, colleagueId: pending.colleagueId,
+    };
   }
 
   private async confirmPending(pending: PendingChange): Promise<void> {
@@ -281,7 +357,9 @@ export class DirectChatSending {
 
 
   private failureMessage(kind: DirectFailure, pending: PendingChange): string {
-    if (kind === 'conflict') return 'This conversation changed. Refresh and review it before sending.';
+    if (kind === 'conflict') {
+      return 'Group membership changed. Choose the group again to review its current members.';
+    }
     if (kind === 'refused') return 'You cannot send this message to that person.';
     if (kind === 'invalid') return 'The message could not be accepted.';
     return `The change was not completed. Reference: ${pending.commandId}.`;
@@ -305,4 +383,10 @@ export class DirectChatSending {
   }
 
 
+}
+
+function uniqueMemberIds(memberId: string, people: Colleague[]): string[] {
+  const participantIds = [memberId];
+  for (const person of people) participantIds.push(person.memberId);
+  return [...new Set(participantIds)];
 }

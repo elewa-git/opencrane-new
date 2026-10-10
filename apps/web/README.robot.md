@@ -55,11 +55,17 @@ including `/auth/callback`. Local HTTP development requires local-only cookie se
 as described in the [server README](../server/README.md).
 The browser uses same-origin auth and WebSocket URLs; no credentials are built into assets.
 
-`/workspace/direct` is the direct-chat screen. It reads `/api/chat` only for the
-current member id, `/api/chat/colleagues` for joined-colleague search, and
-`/api/conversations` for direct conversation rows. It creates a direct conversation
-with `{ id, conversationId, mode: "direct", colleagueId }`, then sends text with
-`{ id, text }` to `/api/conversations/:id/messages`. The server encrypts the text
+`/workspace/direct` is the human-chat screen. It reads `/api/chat` for the current
+member id, `/api/chat/colleagues` for joined-colleague search, `/api/chat/groups`
+for groups the member belongs to, and `/api/chat/groups/:groupId` for a current
+member snapshot and team position. It creates a direct conversation with
+`{ id, conversationId, mode: "direct", colleagueId }` for one colleague. Several
+colleagues or a reviewed group use `{ mode: "group", participantIds, groupId?,
+groupSnapshotPosition? }`. A person selects at most 96 other members, so the creator
+and audience never exceed the server limit of 97. The snapshot position is sent with
+the first create; a conflict tells the person to choose the group again and review it.
+No create request happens while the person is still choosing recipients. The first
+message gets a separate request after access is applied. The server encrypts the text
 and records it as a human message. The screen never sends a turn, stop, assistant,
 memory or model request. A lost reply keeps its command id and uses
 `/api/conversations/:id/changes/:commandId` for a status read. Unknown status never
@@ -67,6 +73,13 @@ causes an automatic resend. A 401 or refused history read clears names, the draf
 and transcript, then focuses the access message. The screen subscribes to the
 conversation feed after loading history and resumes from its event position after
 the existing WebSocket service reconnects. Repeated positions are ignored.
+
+The recipient picker shows up to three chips and a count for the remaining people.
+The chips wrap at phone width, and each remove button has a 44px target. A group
+snapshot cannot be edited in place; choosing it again reads a fresh snapshot. A blank
+search says when no people match, and group-list failure leaves colleague selection
+available. Choose an assistant opens the existing private-session picker. If people
+are already selected, the picker refuses that choice and keeps the draft.
 
 ## Contract and verification
 
@@ -459,3 +472,6 @@ captures show the detail and invalid form at desktop and phone widths:
 [validation](../../docs/process/p4-12-memory/captures/MEM-31-1280.png),
 [saved receipt](../../docs/process/p4-12-memory/captures/MEM-32-1280.png), and
 [unknown receipt](../../docs/process/p4-12-memory/captures/MEM-30-1280-unknown.png).
+
+The [group recipient captures](../../docs/process/p4-5-pr5/receipt.md) show this picker
+at desktop and phone sizes with fixture replies.

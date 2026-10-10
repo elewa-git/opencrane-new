@@ -12,6 +12,11 @@ function closeDialog(this: HTMLDialogElement): void {
   this.dispatchEvent(new Event('close'));
 }
 
+function installDialogMethods(dialog: HTMLDialogElement): void {
+  Object.defineProperty(dialog, 'showModal', { configurable: true, value: showModal });
+  Object.defineProperty(dialog, 'close', { configurable: true, value: closeDialog });
+}
+
 const firstConversation = {
   conversationId: 'chat', assistantId: 'assistant', createdBy: 'me', mode: 'agent_session',
   createdAt: '2026-10-04T10:00:00Z', title: 'Original session', status: 'open',
@@ -64,8 +69,7 @@ async function phoneWorkspace(): Promise<ComponentFixture<Workspace>> {
   await vi.waitFor(loaded);
   await fixture.whenStable();
   const root = rootElement(fixture);
-  const methods = { showModal, close: closeDialog };
-  for (const dialog of root.querySelectorAll('dialog')) Object.assign(dialog, methods);
+  for (const dialog of root.querySelectorAll('dialog')) installDialogMethods(dialog);
   return fixture;
 }
 

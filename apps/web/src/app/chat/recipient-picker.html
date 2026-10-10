@@ -5,35 +5,85 @@
     <button type="button" class="change-recipient" [disabled]="disabled()"
       (click)="change()">{{ draft() ? 'Change' : 'New chat' }}</button>
     @if (draft()) {
-      <p class="draft-note">Showing up to 20 colleagues. Narrow the search to find others.</p>
-    <p class="draft-note">Draft — nothing is sent or created until your first message.</p>
+      <p class="draft-note">Draft — nothing is sent or created until your first message.</p>
     }
   </section>
 } @else {
-  <section class="draft" aria-label="Direct conversation recipients">
+  <section class="draft" aria-label="Conversation recipients">
     <div class="to-label">To</div>
-    <p class="draft-note">One colleague → direct conversation between two people.</p>
-    <label class="sr-only" for="colleague-search">Search colleagues</label>
-    <input #searchField id="colleague-search" type="search" autocomplete="off"
-      [value]="query()" [disabled]="disabled()" (input)="queryChanged($event)" />
-    @if (searchState() === 'loading') {
+    <p class="draft-note">Choose people or review a snapshot of one of your groups.</p>
+    @if (snapshot(); as reviewed) {
+      <p class="snapshot-note">Group snapshot: later membership changes don’t change this
+        conversation’s participants.</p>
+      <button class="snapshot-title" type="button" (click)="clearGroup()">
+        {{ reviewed.name }} ({{ reviewed.members.length }} people, as of now) · Change</button>
+    } @else {
+      <label class="sr-only" for="colleague-search">Search colleagues</label>
+      <input #searchField id="colleague-search" type="search" autocomplete="off"
+        [value]="query()" [disabled]="disabled()" (input)="queryChanged($event)" />
+      @if (groups().length) {
+        <label class="group-label" for="own-group">Your groups</label>
+        <select #groupSelector id="own-group" [disabled]="disabled()"
+          (change)="groupChanged($event)">
+          <option value="">Choose a group</option>
+          @for (group of groups(); track group.groupId) {
+            <option [value]="group.groupId">{{ group.name }}</option>
+          }
+        </select>
+      }
+    }
+    @if (!snapshot()) {
+      <button class="assistant-choice" type="button" [disabled]="disabled()"
+        (click)="chooseAssistant()">Choose one assistant</button>
+    }
+    @if (selectionError()) { <p class="selection-error" role="alert">{{ selectionError() }}</p> }
+    @if (!snapshot() && searchState() === 'loading') {
       <p>Loading colleagues…</p>
-    } @else if (searchState() === 'failed') {
+    } @else if (!snapshot() && searchState() === 'failed') {
       <p>Could not search colleagues. Try again.</p>
-    } @else if (colleagues().length) {
+    } @else if (!snapshot() && colleagues().length) {
       <div class="colleague-options" role="group" aria-label="Colleagues">
         @for (colleague of colleagues(); track colleague.memberId) {
           <button type="button" class="colleague-option" [disabled]="disabled()"
             (click)="select(colleague)">
-            <span>{{ displayName(colleague) }}</span>
-            <small>Direct conversation</small>
+            <span>{{ displayName(colleague) }}</span><small>Add person</small>
           </button>
         }
       </div>
-    } @else if (query().trim()) {
+    } @else if (!snapshot() && query().trim()) {
       <p class="empty-search">No colleagues match this search.</p>
+    } @else if (!snapshot() && !groups().length && searchState() === 'ready') {
+      <p class="empty-search">No colleagues or groups are available yet.</p>
     }
-    <p class="draft-note">Showing up to 20 colleagues. Narrow the search to find others.</p>
+    @if (people().length) {
+      <div class="selected-people" aria-label="Selected people">
+        @for (colleague of visiblePeople(); track colleague.memberId) {
+          <span class="person-chip">
+            {{ displayName(colleague) }}
+            @if (!snapshot()) {
+              <button type="button" [attr.aria-label]="'Remove ' + displayName(colleague)"
+                [disabled]="disabled()" (click)="remove(colleague)">×</button>
+            }
+          </span>
+        }
+        @if (people().length > 3) {
+          <span class="more-chip">+ {{ people().length - 3 }} more</span>
+        }
+      </div>
+      @if (snapshot() ? people().length > 97 : people().length > 96) {
+        <p class="selection-error" role="alert">
+          A conversation can have no more than 97 people, including you.</p>
+      }
+      <p class="mode-note">
+        @if (snapshot()) { Group conversation · {{ people().length }} people }
+        @else if (people().length > 1) { Group conversation · {{ people().length + 1 }} people }
+        @else { Direct conversation · 2 people }
+      </p>
+      @if (people().length === 1 && !snapshot()) {
+        <button class="finish-selection" type="button" [disabled]="disabled()"
+          (click)="finishSelection()">Use selection</button>
+      }
+    }
     <p class="draft-note">Draft — nothing is sent or created until your first message.</p>
   </section>
 }
