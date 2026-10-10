@@ -7,7 +7,11 @@ import {
 } from '@opencrane/events';
 import { z } from 'zod';
 import { creationEvent } from '../chat/private-session.ts';
-import { participation, ParticipationRefused } from '../chat/participation.ts';
+import {
+  participation,
+  ParticipationRefused,
+  chatMembership,
+} from '../chat/participation.ts';
 import { chatHistory } from '../chat/commands.ts';
 import { FileRefusal, parseFileInput } from './refusals.ts';
 
@@ -72,14 +76,17 @@ async function verifyCurrentMember(
   silo: string,
   memberId: string,
 ) {
-  let removed = false;
-  for await (const row of store.readStream(`member-${memberId}`)) {
-    if (row.event.silo !== silo) {
-      throw new FileRefusal('conversation_refused');
+  let active: boolean;
+  try {
+    active = await chatMembership(store, silo, memberId);
+  } catch (error) {
+    if (!(error instanceof ParticipationRefused)) {
+      throw error;
     }
-    removed = row.event.type === 'member.removed';
+    const cause = { cause: error };
+    throw new FileRefusal('conversation_refused', cause);
   }
-  if (removed) {
+  if (!active) {
     throw new FileRefusal('conversation_refused');
   }
 }

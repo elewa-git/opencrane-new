@@ -655,16 +655,15 @@ async function closesRemovedMemberBeforeSlowDesktopRead(laterInvitation: boolean
     const revokedAt = performance.now();
     await remove();
     if (laterInvitation) {
-      const invited = eventInjection('member-alice', 'member.invited', {
+      const invitation = {
         memberId: 'alice', invitationId: 'later-invite', email: 'a@example.test',
         role: 'member', invitedBy: 'owner',
-      });
+      };
+      const invited = eventInjection('member-alice', 'member.invited', invitation);
       await appendInjection(current, invited);
     }
     await delay(2000);
     expect(observed.result(), 'Removal must close the viewer within two seconds').toBeDefined();
-    const remaining = Math.max(0, revokedAt + 1700 - performance.now());
-    await delay(remaining);
     // Keep sending frames so the test proves the server stops desktop bytes after removal.
     expect(frameTimes.at(-1)).toBeLessThan(revokedAt + 1500);
     await expectRevoked(current, observed, revokedAt, 'member.removed / slow desktop read');
@@ -759,10 +758,11 @@ async function refusesRemovedMemberTickets() {
   await grantDirectly(current);
   const admitted = await admit(current);
   await appendInjection(current, revocation('member.removed'));
-  const invited = eventInjection('member-alice', 'member.invited', {
+  const invitation = {
     memberId: 'alice', invitationId: 'later-invite', email: 'a@example.test',
     role: 'member', invitedBy: 'owner',
-  });
+  };
+  const invited = eventInjection('member-alice', 'member.invited', invitation);
   await appendInjection(current, invited);
   const response = await admission(current);
   expect(response.statusCode).toBe(403);

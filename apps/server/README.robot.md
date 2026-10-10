@@ -1514,6 +1514,28 @@ Effective inherited access and public child commands are later work. No child em
 
 `GET /api/memory/turns/:conversationId/:turnId` returns a bounded preview for a saved private turn. It does not issue a token, record loaded facts or send text to a computer. It returns at most 32 references and 16,384 UTF-8 bytes. Each category reads at most 33 candidates. The shared `memoryReferences` check validates each fact and all its supporting facts before decryption and again before release. Expired, erased, superseded or unchecked references are omitted. The server checks access again without reading chat history. Denied scopes have no ids, counts or omission flags. Missing turn ownership returns 404; service, permission, content or projection uncertainty returns 503. All responses use `Cache-Control: no-store`. Fresh-install qualification is NOT RUN.
 
+## Immediate access invalidation (P4-3 row 7, #85)
+
+Desktop and file command checks use `chatMembership`, the shared event reader.
+It starts inactive, activates only on join or owner bootstrap, and ends membership
+on removal. An invitation or role change after removal does not activate it.
+The reader checks the silo and member id and retains only current membership and
+its checked position. Later checks read new member events instead of keeping the
+whole history. Missing membership is refused too.
+
+Desktop freshness subjects are the member, `participation-<conversationId>` and
+shared-desktop grant streams. Team grants also check the member and team streams.
+No conversation stream is watched. Creation and old participation facts use the
+shared participation reader; the closure reader still checks a delayed worker's
+unchecked records, as described above. Chat activity does not invalidate a desktop
+lease. Access checks keep their existing 1,200 ms deadline. A confirmed refusal stops
+the check while other reads are still waiting.
+
+The [entry-point record](../../docs/process/p4-3-row7-access.md) lists the checked
+paths, existing limits, failing-first results and remaining live qualification.
+This change adds no member removal route or cleanup reaction.
+
+
 ## Reviewed member removal
 
 The [removal contract](../../docs/api/members.md#reviewed-member-removal) covers

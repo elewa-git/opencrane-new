@@ -294,13 +294,13 @@ it('refuses an empty upload with typed 400 at the upload and HTTP boundaries', e
 
 async function refusesFilesAfterRemovalAndInvitation() {
   const store = options.store;
-  const removed = envelope('test', 'member-alice', 'member.removed', {
-    memberId: 'alice', removedBy: 'owner',
-  });
-  const invited = envelope('test', 'member-alice', 'member.invited', {
+  const removal = { memberId: 'alice', removedBy: 'owner' };
+  const invitation = {
     memberId: 'alice', invitationId: 'later-invite', email: 'a@example.test',
     role: 'member', invitedBy: 'owner',
-  });
+  };
+  const removed = envelope('test', 'member-alice', 'member.removed', removal);
+  const invited = envelope('test', 'member-alice', 'member.invited', invitation);
   // Leave SQL and OpenFGA unchanged to prove that stored removal stops access.
   for (const event of [removed, invited]) {
     const expectedSequence = await store.head(event.subject);
@@ -311,10 +311,11 @@ async function refusesFilesAfterRemovalAndInvitation() {
   const upload = uploadRequest('after-removal');
   const list = { url: upload.url, headers: upload.headers };
   const download = viewRequest();
+  const refusedResponse = { status: 'refused', error: 'Conversation refused' };
   for (const request of [list, download, upload]) {
     const response = await app.inject(request);
     expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({ status: 'refused', error: 'Conversation refused' });
+    expect(response.json()).toEqual(refusedResponse);
   }
   const before = await store.head('conversation-conversation');
   const file = {
@@ -323,7 +324,8 @@ async function refusesFilesAfterRemovalAndInvitation() {
     objectKey: 'test/after-removal', uploadedBy: 'alice',
   };
   const command = fileCommand(store, 'test', 'alice', 'after-removal', 'file.uploaded', file);
-  await expect(command).rejects.toMatchObject({ kind: 'conversation_refused', statusCode: 403 });
+  const refusedCommand = { kind: 'conversation_refused', statusCode: 403 };
+  await expect(command).rejects.toMatchObject(refusedCommand);
   expect(await store.head('conversation-conversation')).toBe(before);
 }
 it('refuses file reads, uploads and commands after removal followed by an invitation',

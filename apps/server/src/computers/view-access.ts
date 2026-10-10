@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import type { Query } from '@opencrane/projections';
-import { participation, participationChanges, legacyParticipation, conversationClosed } from '../chat/participation.ts';
+import {
+  participation,
+  participationChanges,
+  legacyParticipation,
+  conversationClosed,
+  chatMembership,
+} from '../chat/participation.ts';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { isEventStoreUnavailable, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import {
@@ -131,11 +137,11 @@ async function checkViewAccess(options: ViewAccessOptions, memberId: string, con
   if (options.binding.silo !== silo) throw new Error('Wrong silo');
   const auth = memberAuthorisation(options.binding);
   const denied = Promise.withResolvers<never>();
-  function refuseRemovedMember(rows: StoredEvent[]) {
-    if (rows.at(-1)?.event.type === 'member.removed') {
+  function refuseRemovedMember(active: boolean) {
+    if (!active) {
       denied.reject(new Error('Access changed'));
     }
-    return rows;
+    return active;
   }
   function refuseConversationRead(permission: Awaited<ReturnType<typeof auth.conversation>>) {
     if (permission.status === 'ok' && !permission.allowed) {
@@ -143,7 +149,7 @@ async function checkViewAccess(options: ViewAccessOptions, memberId: string, con
     }
     return permission;
   }
-  const memberRead = history(store, `member-${memberId}`, silo, options.deadline);
+  const memberRead = chatMembership(store, silo, memberId, options.deadline);
   const permissionRead = auth.conversation(memberId, conversationId, 'read');
   async function refuseRemovedParticipant() {
     const changes = await participationChanges(store, silo, conversationId, options.deadline);

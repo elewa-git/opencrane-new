@@ -186,10 +186,15 @@ Switching on calls through managed providers is still unavailable.
    then sends it on to the model provider.
 9. **A person watches the assistant's desktop.** The server checks their conversation
    access and desktop grant. A confirmed member removal or conversation permission denial
+<<<<<<< HEAD
    ends the view straight away, even if another access read is slow.
 10. **An admin opens groups or ownership.** The server loads the records, then checks
     current access before replying. Slow histories can finish. A removal during
     loading denies the reply; unrelated chat activity does not interrupt it.
+=======
+   ends the view straight away, even if another access read is slow. A later invitation
+   on a removed member’s event stream does not restore desktop or file access.
+>>>>>>> 318c3ea6 (🔒 Keep member removal effective for desktop and file access)
 
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.
