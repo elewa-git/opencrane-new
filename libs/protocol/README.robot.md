@@ -126,6 +126,7 @@ participants and optional recorded group association. See the
 `chatParticipantCommandSchema` and `chatParticipantsSchema` define the strict
 [group participant request and list](../../docs/api/direct-chats.md#group-participants).
 The server tests check both the input rules and the list reply with real services.
+
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
