@@ -6,20 +6,8 @@ on:
   pull_request:
 
 jobs:
-  check:
+  checks:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: mirror.gcr.io/library/postgres:17.6-alpine
-        env:
-          POSTGRES_PASSWORD: test-only
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready --health-interval 5s
-          --health-timeout 5s --health-retries 10
-    env:
-      PG_TEST_URL: postgres://postgres:test-only@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,13 +33,6 @@ jobs:
       - name: Install pinned Lychee
         run: sh scripts/fetch-lychee.sh && .tools/lychee --version
 
-      - name: Install pinned NATS server
-        run: sh scripts/fetch-nats.sh
-
-      # Browser tests use the Chromium build that matches the pinned playwright package.
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
       - name: Lint
         # Give typed ESLint room: the whole repo now needs more than the default heap.
         env:
@@ -61,9 +42,50 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # Authz tests start/stop loopback-only OpenFGA containers and migrate a
-      # disposable database on the PostgreSQL service above. Linux host networking
-      # lets OpenFGA reach that service without exposing its API beyond localhost.
+      - name: Check the event catalogue matches the registry
+        run: npm run check:events
+
+      # apps/web builds and tests through the Angular CLI, so it needs its own steps.
+      - name: Build apps/web
+        run: npm run build -w apps/web
+
+      - name: Test apps/web
+        run: npm run test -w apps/web
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:17.6-alpine
+        env:
+          POSTGRES_PASSWORD: test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PG_TEST_URL: postgres://postgres:test-only@127.0.0.1:5432/postgres
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install pinned NATS server
+        run: sh scripts/fetch-nats.sh
+
+      # Authz tests use disposable Docker containers and the PostgreSQL service above.
       - name: Verify Docker for real OpenFGA tests
         run: docker info
 
@@ -79,15 +101,25 @@ jobs:
             computer.cache-from=type=gha,scope=upload-computer
             computer.cache-to=type=gha,scope=upload-computer,mode=max
 
-      - name: Test
-        run: npm test
+      # Browser tests use the Chromium build that matches the pinned playwright package.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
 
-      - name: Check the event catalogue matches the registry
-        run: npm run check:events
+      - name: Test shard ${{ matrix.shard }} of 4
+        run: npm test -- --shard=${{ matrix.shard }}/4
 
-      # apps/web builds and tests through the Angular CLI, so it needs its own steps.
-      - name: Build apps/web
-        run: npm run build -w apps/web
-
-      - name: Test apps/web
-        run: npm run test -w apps/web
+  ci-ok:
+    if: always()
+    needs: [checks, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require checks and every test shard to pass
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          if [ "$CHECKS_RESULT" != "success" ] || [ "$TEST_RESULT" != "success" ]; then
+            echo "Checks result: $CHECKS_RESULT"
+            echo "Test shards result: $TEST_RESULT"
+            exit 1
+          fi
