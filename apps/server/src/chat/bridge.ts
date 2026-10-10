@@ -59,7 +59,8 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
   if (options.binding) context.binding = options.binding;
   const result = await recordReport(options.store, options.keys, context, value);
   const acknowledgement: {
-    type: string; sequence: number; token?: string; expiresAt?: number; refused?: string; context?: unknown;
+    type: string; sequence: number; token?: string; expiresAt?: number;
+    model?: string; refused?: string; context?: unknown;
   } = { type: 'ack', sequence: report.sequence };
   if (report.type.startsWith('agent.turn_')) {
     const status = turnStatus(report.type);
@@ -79,6 +80,7 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
         const turn = { ...binding, assistantId: input.assistantId,
           model: binding.model ?? modelForTask(binding.task) };
         const grant = await credentials.turn(turn);
+        acknowledgement.model = turn.model;
         acknowledgement.token = grant.value;
         acknowledgement.expiresAt = grant.expiresAt;
         if (privateHistory !== undefined) acknowledgement.context = privateHistory;

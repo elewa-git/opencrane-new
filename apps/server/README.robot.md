@@ -1330,3 +1330,21 @@ Separate cases check changed audiences, changed positions, departed members with
 a group association, and group changes before and during the write check. Each
 refusal leaves the conversation stream empty.
 No participant mutation endpoint is available. Fresh-install qualification remains NOT RUN.
+
+## Delivering the admitted model to computers
+
+Start acknowledgements include `model` alongside the signed turn pass. Both use
+one choice from the saved start, or the task table for legacy starts. Repeating a
+start after a binding moves or pauses keeps its original model and provider claims.
+
+`test/bridge-replay.test.ts` checks the server and computer bridge together through
+real NATS and WebSocket connections. Both memory-free and restricted runners pass
+`gpt-6-luna` to the Codex `turn/start` boundary when the saved start selects it.
+Renewal after a recorded pause keeps that choice and does not start Codex again.
+The test verifies signed claims. It uses a recording Codex driver, not a live Codex
+process or paid provider.
+
+This is the computer-delivery slice of P4-22 row 4. New-turn selection from own or
+default bindings, migration commands and the recorded switch-on event remain for
+a later change. Managed calls and retirement stay unavailable. Existing deployments
+keep the deployment-key path; bound tokens still refuse before reserving money.

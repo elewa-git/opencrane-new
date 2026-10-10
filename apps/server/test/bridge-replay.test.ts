@@ -1310,7 +1310,7 @@ async function reissuesSavedProviderModel() {
       assistantId: 'assistant', type: 'agent.turn_started', threadId: 'thread-alice',
     };
     const acknowledgement = z.object({
-      type: z.literal('ack'), sequence: z.literal(1), token: z.string(),
+      type: z.literal('ack'), sequence: z.literal(1), token: z.string(), model: z.literal('gpt-6-luna'),
     });
     function hasAcknowledgement(message: unknown) {
       return acknowledgement.safeParse(message).success;
@@ -1365,3 +1365,108 @@ async function reissuesSavedProviderModel() {
 }
 it('returns the saved provider model in a bridge token after reconnect and a binding change',
   reissuesSavedProviderModel);
+
+async function deliversSavedModelToComputer(mode: 'memory_free' | 'restricted') {
+  const fixture = await replayFixture(['alice']);
+  const server = createServer();
+  const requests: Record<string, unknown>[] = [];
+  const grants: string[] = [];
+  const privateClosed = Promise.withResolvers<void>();
+  function rpc(method: string, params: Record<string, unknown>) {
+    if (method === 'turn/start') {
+      requests.push(params);
+    }
+    return Promise.resolve({ thread: { id: 'thread-alice', ephemeral: true, path: null } });
+  }
+  function credential() {
+    return { value: 'computer-pass', expiresAt: Date.now() + 60_000 };
+  }
+  function grant(_thread: string, _conversation: string, token: string) {
+    if (token) {
+      grants.push(token);
+    }
+    return Promise.resolve();
+  }
+  function closePrivate() {
+    privateClosed.resolve();
+  }
+  function privateSession() {
+    return Promise.resolve({ rpc, close: closePrivate, closed: privateClosed.promise });
+  }
+  const driver = {
+    rpc, credential, grant, privateSession, journal: `${fixture.directory}/model-reports`,
+  };
+  const channel = bridgeChannel(server, driver);
+  let link: Awaited<ReturnType<typeof connectBridge>> | undefined;
+  try {
+    const tokens = await bridgeTokens(fixture);
+    const computer = { assistantId: 'assistant', computerId: 'computer', generation: 1 };
+    const claimed = { ...computer, tokenId: 'token:test' };
+    const ready = { ...computer, podUid: 'pod' };
+    const started = {
+      assistantId: 'assistant', computerId: 'computer', conversationId: 'alice',
+      turnId: 'message-alice', threadId: 'thread-alice', requesterId: 'alice',
+      task: 'chat_turn', payingGroupId: 'personal-default', executionMode: mode,
+      providerId: 'primary', bindingSequence: 42, model: 'gpt-6-luna',
+    };
+    await fixture.seed([
+      envelope('test', 'computer-assistant', 'computer.claimed', claimed),
+      envelope('test', 'computer-assistant', 'computer.ready', ready),
+      envelope('test', 'computer-assistant', 'computer.turn_started', started),
+    ]);
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('No computer port');
+    }
+    const connection = {
+      ...fixture.context, bearer: 'computer-pass',
+      url: `ws://127.0.0.1:${address.port}/bridge`,
+    };
+    const options = { silo: 'test', store: fixture.store, keys: fixture.keys };
+    link = await connectBridge(options, connection, tokens);
+    const turn = {
+      type: 'turn', id: 'message-alice', conversationId: 'alice', assistantId: 'assistant',
+      text: 'Hello', token: 'delivery-pass', expiresAt: Date.now() + 60_000,
+      executionMode: mode,
+    };
+    link.socket.send(JSON.stringify(turn));
+    function hasExecuted() {
+      return requests.length === 1;
+    }
+    await until(hasExecuted, 2000);
+    expect(requests[0]).toMatchObject({ model: 'gpt-6-luna', threadId: 'thread-alice' });
+    const claims = await tokens.verify(grants[0]!, turnTokenAudience);
+    expect(claims).toMatchObject({
+      model: 'gpt-6-luna', providerId: 'primary', bindingSequence: 42,
+    });
+    const moved = {
+      providerId: 'secondary', revision: 3, changedBy: 'alice',
+      previousBindingSequence: 42, expectedProviderSequence: 42,
+      kind: 'assistant', dependantId: 'assistant', task: 'chat_turn',
+      state: 'paused', model: 'gpt-6.1-sol', reason: 'Paused by an administrator',
+    };
+    await fixture.seed([
+      envelope('test', 'provider-secondary', 'provider.model_binding_set', moved),
+    ]);
+    await channel.renew('thread-alice');
+    const renewed = await tokens.verify(grants[1]!, turnTokenAudience);
+    expect(renewed).toMatchObject({
+      model: 'gpt-6-luna', providerId: 'primary', bindingSequence: 42,
+    });
+    expect(requests).toHaveLength(1);
+  } finally {
+    channel.notification({ method: 'turn/completed', params: {
+      threadId: 'thread-alice', turn: { status: 'completed' },
+    } });
+    link?.socket.terminate();
+    await link?.settled();
+    await channel.close();
+    server.close();
+    await fixture.close();
+  }
+}
+it.each(['memory_free', 'restricted'] as const)(
+  'delivers the saved model to a %s computer and keeps it when renewing after a pause',
+  deliversSavedModelToComputer);
