@@ -743,6 +743,26 @@ the write even when the member table and OpenFGA have not caught up.
 CSRF token, optimistic sequence and pending settlement state. No screen is added.
 Flat group administration is available through the [groups HTTP interface](../../docs/api/groups.md).
 
+Group list, group detail, group command status, ownership and ownership command
+status GETs load their results before checking current event-backed membership
+and OpenFGA access once. Event history loading has its own ten-second deadline.
+These reads do not use `authorityFence`, compare stream positions or read wildcard
+subjects. They keep the existing Owner/Admin rules and ownership step-down
+status exception. All replies use `Cache-Control: no-store`.
+
+`test/group-ownership-reads.test.ts` covers all five GET routes with more than two
+seconds of simulated loading, removal during loading before OpenFGA catches up,
+and unrelated chat activity. It also checks finite event-read deadlines and no
+wildcard reads. The slow-read cases check that no stream-position checks run.
+From the root, run the following command with `PG_TEST_URL` set:
+
+```sh
+nice -n 10 npx vitest run apps/server/test/group-ownership-reads.test.ts --maxWorkers=1
+```
+
+Fresh-install qualification is NOT RUN. This is the read-ordering part of #109;
+the accepted design is [in the spending and overview note](../../docs/specs/phase-4/p4-26-spending-overview.md).
+
 ## First-owner bootstrap (#12)
 
 A production install generates one random 256-bit token with a 24-hour expiry:

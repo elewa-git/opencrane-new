@@ -45,6 +45,13 @@ A status read may omit pending step-down receipts because both Owner and Admin
 can read this evidence. Owner additions, membership and migration receipts still
 apply; commands require every authority receipt. After a lost response, retain the
 original command id and use Check status.
+
+Both GET routes load their results under a ten-second event-history limit, then
+check current event-backed Owner/Admin membership and OpenFGA once. A removal
+during loading denies the response even if OpenFGA has not caught up. Reads do
+not use the two-second write check or compare stream positions. Slow history
+and unrelated chat activity do not refuse an authorised caller.
+
 An absent command returns 404 `not_found`; an in-flight append may still finish.
 The backend accepts retries of the original command and payload without another
 append, even after successful step-down. The designed unknown-outcome state uses

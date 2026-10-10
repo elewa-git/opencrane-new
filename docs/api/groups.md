@@ -31,6 +31,12 @@ An absent command returns 404 `not_found`; it does not prove an in-flight write
 will never complete. Reconcile or retry only the same command and payload.
 The change route reads existing event history, not a separate ledger.
 
+All GET routes load their result before checking current event-backed Owner/Admin
+membership and OpenFGA once. Change history has its own ten-second read limit.
+A removal during loading denies the response even if OpenFGA has not caught up.
+Reads do not use the two-second write check or compare stream positions, so slow
+histories and unrelated chat activity do not refuse an authorised caller.
+
 ## Group rows
 
 Each row contains `groupId`, `name`, `position` (last group event),
@@ -62,7 +68,7 @@ or invalid history. Errors contain only `status: "refused"` or `"unavailable"`.
 The status route additionally returns 404 for an absent command. Foreign event
 streams fail closed without disclosing their contents.
 
-Revocation fences exact member, assistant, resource and relevant team subjects.
+Writes check exact member, assistant, resource and relevant team subjects.
 The fence starts before permission reads and retains the original two-second
 request budget. Standalone destination-authority checks create and verify their
 own fence. Lagging or unavailable IAM cannot authorise a call. Group-derived desktop sockets

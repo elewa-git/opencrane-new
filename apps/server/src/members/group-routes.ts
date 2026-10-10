@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { authorityFence, history } from '@opencrane/models';
+import { history } from '@opencrane/models';
 import { readGroups, type Query, type connectMemberFeed } from '@opencrane/projections';
 import { sessionFor } from './routes.ts';
-import { activeMember, groupCommand, GroupConflict, GroupRefused } from './groups.ts';
+import { readActiveMember, groupCommand, GroupConflict, GroupRefused } from './groups.ts';
 
 export interface GroupOptions {
   silo: string;
@@ -46,8 +46,9 @@ export function registerGroupRoutes(
   }
 }
 
-async function readChange(options: GroupOptions, groupId: string, commandId: string) {
-  const rows = await history(options.store, `team-${groupId}`, options.silo);
+async function readChange(options: GroupOptions, groupId: string, commandId: string,
+  deadline: number) {
+  const rows = await history(options.store, `team-${groupId}`, options.silo, deadline);
   function matchesCommand(row: StoredEvent) {
     return row.event.commandId === commandId;
   }
@@ -76,17 +77,16 @@ function trustedRequest(request: FastifyRequest, config: AuthConfig,
 
 async function read(reply: FastifyReply, options: GroupOptions, memberId: string,
   groupId?: string, commandId?: string) {
-  const fresh = await authorityFence(options.store, performance.now(), [`member-${memberId}`]);
-  const authority = { requiredRole: 'admin' as const, fresh };
-  await activeMember(options.store, options.binding, memberId, authority);
+  const deadline = performance.now() + 10_000;
   let result;
   if (groupId && commandId) {
-    result = await readChange(options, groupId, commandId);
+    result = await readChange(options, groupId, commandId, deadline);
   } else {
     const rows = await readGroups(options.db, options.silo, groupId);
     result = { rows };
   }
-  await fresh();
+  // Check access after loading so a removal during the read cannot expose the result.
+  await readActiveMember(options.store, options.binding, memberId, 'admin');
   return reply.code('status' in result && result.status === 'not_found' ? 404 : 200).send(result);
 }
 
