@@ -1078,3 +1078,105 @@ async function refusesOnlyTheTurnWhenPrivateContextIsUnavailable() {
 }
 it('refuses only the private turn when context is unavailable and keeps other members connected',
   refusesOnlyTheTurnWhenPrivateContextIsUnavailable);
+
+const removedBridgeCases = [
+  { personal: true, repeat: false },
+  { personal: true, repeat: true },
+  { personal: false, repeat: false },
+  { personal: false, repeat: true },
+];
+async function refusesRemovedBridgeRequester(testCase: typeof removedBridgeCases[number]) {
+  const name = `removed-${testCase.personal}-${testCase.repeat}`;
+  const turnId = `queued-${name}`;
+  const test = await privateServerFixture(name, testCase.personal);
+  try {
+    await append('budget-test', 'budget.ceiling_set', {
+      scope: 'global', ceilingCents: 20000, setBy: 'owner', defaultPayingGroupId: 'sales',
+    });
+    await test.post('alice', turnId);
+    const start = { threadId: 'removed-thread',
+      executionMode: testCase.personal ? 'memory_free' : 'restricted' };
+    if (testCase.repeat) {
+      const first = await test.report('alice', turnId, 'agent.turn_started', start);
+      expect(first).toHaveProperty('token');
+    }
+    await append('member-alice', 'member.removed', {
+      memberId: 'alice', removedBy: 'owner',
+    }, false);
+    await append('member-alice', 'member.invited', {
+      memberId: 'alice', invitationId: 'later-invite', role: 'member',
+      email: 'alice@example.test', invitedBy: 'owner',
+      invitedIdentity: { issuer: config.issuerUrl, sub: 'alice' },
+    }, false);
+    expect(await auth.check('alice', 'member')).toMatchObject({ allowed: true });
+    const refused = await test.report('alice', turnId, 'agent.turn_started', start);
+    expect(test.link.rejection).toBeUndefined();
+    expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
+    expect(refused).toMatchObject({ refused: 'Active silo membership required' });
+    expect(refused).not.toHaveProperty('token');
+    expect(refused).not.toHaveProperty('context');
+    expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
+  } finally {
+    vi.restoreAllMocks();
+    await test.close();
+    await restoreAliceMembership();
+  }
+}
+it.each(removedBridgeCases)(
+  'refuses bridge tokens after removal with old SQL and IAM, personal=$personal repeat=$repeat',
+  refusesRemovedBridgeRequester);
+
+async function refusesRemovalDuringPrivateHistory() {
+  const test = await privateServerFixture('removed-context');
+  const readStream = nats.store.readStream.bind(nats.store);
+  let removed = false;
+  async function* removeDuringHistory(subject: string, from?: number, deadline?: number) {
+    if (subject === 'conversation-removed-context-alice') {
+      const rows = await history(nats.store, `computer-${test.context.assistantId}`, 'test');
+      function isStarted(row: typeof rows[number]) {
+        return row.event.type === 'computer.turn_started';
+      }
+      if (!removed && rows.some(isStarted)) {
+        removed = true;
+        await append('member-alice', 'member.removed', {
+          memberId: 'alice', removedBy: 'owner',
+        }, false);
+      }
+    }
+    yield* readStream(subject, from, deadline);
+  }
+  try {
+    await test.post('alice', 'private-turn');
+    const reads = vi.spyOn(nats.store, 'readStream');
+    reads.mockImplementation(removeDuringHistory);
+    const start = { threadId: 'private-thread', executionMode: 'restricted' };
+    const refused = await test.report('alice', 'private-turn', 'agent.turn_started', start);
+    expect(test.link.rejection).toBeUndefined();
+    expect(removed).toBe(true);
+    expect(test.link.rejection).toBeUndefined();
+    expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
+    expect(refused).toMatchObject({ refused: 'Active silo membership required' });
+    expect(refused).not.toHaveProperty('token');
+    expect(refused).not.toHaveProperty('context');
+    reads.mockRestore();
+  } finally {
+    vi.restoreAllMocks();
+    await test.close();
+    await restoreAliceMembership();
+  }
+}
+it('refuses credentials and private context when removal arrives during the history read',
+  refusesRemovalDuringPrivateHistory);
+
+async function restoreAliceMembership() {
+  const rows = await history(nats.store, 'member-alice', 'test');
+  for (const row of rows) {
+    if (auth.handler.eventTypes.includes(row.event.type)) {
+      await auth.handler.handle(row.event, pgDb(dbs.queue));
+    }
+  }
+  await append('member-alice', 'member.joined', {
+    memberId: 'alice', invitationId: 'later-invite', role: 'member',
+    email: 'alice@example.test', displayName: 'Alice',
+  });
+}

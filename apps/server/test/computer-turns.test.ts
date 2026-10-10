@@ -28,6 +28,9 @@ function computerEvent(id: string, type: string, data: Record<string, unknown>) 
 async function setup(kind: 'personal' | 'team' = 'personal') {
   nats = await natsFixture();
   await nats.seed([
+    { ...fixtureEvent('joined', 'member-alice', 'member.joined'), data: {
+      memberId: 'alice', invitationId: 'invite-alice', role: 'member',
+    } },
     { ...event('created', 'conversation-chat', 'conversation.created'), data: {
       conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
     } },
@@ -277,3 +280,28 @@ async function keepsRecordedProviderChoice() {
 }
 it('keeps the recorded provider and model on replay and closure after a binding moves',
   keepsRecordedProviderChoice);
+
+const removedTurnCases = [false, true];
+async function refusesRemovedTurnRequester(repeat: boolean) {
+  await setup();
+  if (repeat) await turnCommand(nats.store, context, input);
+  await nats.seed([
+    { ...fixtureEvent('removed', 'member-alice', 'member.removed'), data: {
+      memberId: 'alice', removedBy: 'admin',
+    } },
+    { ...fixtureEvent('invited-again', 'member-alice', 'member.invited'), data: {
+      memberId: 'alice', invitationId: 'next-invite', role: 'member',
+    } },
+  ]);
+  const before = await nats.store.head(subject);
+  await expect(turnCommand(nats.store, context, input))
+    .rejects.toThrow('Active silo membership required');
+  const rows = await Array.fromAsync(nats.store.readStream(subject, before + 1));
+  function isStart(row: typeof rows[number]) {
+    return row.event.type === 'computer.turn_started';
+  }
+  expect(rows.some(isStart)).toBe(false);
+}
+it.each(removedTurnCases)(
+  'refuses personal turn admission after removal and invitation, repeated start=%s',
+  refusesRemovedTurnRequester);
