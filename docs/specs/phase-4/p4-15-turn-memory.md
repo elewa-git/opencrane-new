@@ -249,7 +249,7 @@ requester/assistant/computer generation, turn/thread, scope and content generati
 original ≤2-second capability expiry for backend/append checks. Ended, forged, mismatched,
 replaced, revoked or stale calls fail before effects. No direct backend bypass or silent retry.
 
-#99 can reuse the one-scope shared-only/restricted preparation, complete input revisions,
+\#99 can reuse the one-scope shared-only/restricted preparation, complete input revisions,
 conditional correct command and authorised metadata trail. Do not build its scheduler here.
 Its dirty-scope/date/input key, active owner, assistant, payer and allowance must be recorded
 before computer dispatch; existing budget admission still refuses unknown price/exhaustion.
@@ -308,7 +308,7 @@ cancel an accepted append. No localStorage, IndexedDB, service-worker or respons
 ## 6. Serial PR outcomes and failing-first evidence
 
 Land from green main, server before screens, at most two stacked PRs. #94/#95 working contracts,
-#96 qualification and #200 hardening are prerequisites, not work silently hidden inside these
+\#96 qualification and #200 hardening are prerequisites, not work silently hidden inside these
 budgets. Each estimate counts hand-written additions AND deletions, tests/docs/release note;
 each is ≤600. Unqualified native admission remains disabled throughout the preparatory PRs.
 
