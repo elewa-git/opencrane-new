@@ -120,6 +120,149 @@ async function cleanup() {
 beforeAll(setup, 120_000);
 afterAll(cleanup);
 
+const previewUrl = '/api/memory/turns/preview-chat/preview-turn';
+const previewScopes = [scopeForPreview('person', 'preview'),
+  scopeForPreview('group', 'preview-team'), scopeForPreview('assistant_notes', 'preview-assistant')];
+function scopeForPreview(kind: MemoryIdentity['scopeKind'], owner: string) {
+  return { scopeKind: kind, ownerId: owner, scopeId: memoryScopeId('acme', kind, owner) };
+}
+async function previewGrant(resourceType: string, resourceId: string, revoke = false) {
+  for (const [granteeKind, granteeId] of [['member', 'preview'],
+    ['assistant', 'preview-assistant']]) {
+    await append(grantStream(resourceType, resourceId), revoke ? 'grant.revoked' : 'grant.given',
+      { resourceType, resourceId, granteeKind, granteeId, grantedBy: 'owner' });
+  }
+}
+const previewRevisions = new Map<string, number>();
+async function previewFact(id: string, text: string, category = 0, apply = true) {
+  const scope = previewScopes[category === 0 ? 0 : category - 1]!;
+  const revision = (previewRevisions.get(id) ?? 0) + 1;
+  previewRevisions.set(id, revision);
+  const identity = { silo: 'acme', ...scope, memoryId: id, revision };
+  keys.provision(identity);
+  const encrypted = keys.encrypt(identity, text);
+  await append(`scope-${scope.scopeId}`, 'memory.written', { schemaVersion: 1, ...scope,
+    memoryId: id, revision, kind: category === 0 ? 'preference' : 'fact',
+    pinned: category !== 0, expiresAt: null, sources: [], dependsOn: [], ...encrypted });
+  if (apply) await runner.run(projection);
+}
+async function previewSetup() {
+  await append('member-preview', 'member.joined', { memberId: 'preview', role: 'member',
+    email: 'preview@example.test', displayName: 'Preview' });
+  await append('team-preview-team', 'team.created',
+    { teamId: 'preview-team', name: 'Preview', createdBy: 'owner' });
+  await append('team-preview-team', 'team.member_added',
+    { teamId: 'preview-team', memberId: 'preview', addedBy: 'owner' });
+  await append('assistant-preview-assistant', 'assistant.created',
+    { assistantId: 'preview-assistant', kind: 'team', ownerId: 'preview-team' });
+  await append('conversation-preview-chat', 'conversation.created', {
+    conversationId: 'preview-chat', mode: 'agent_session', createdBy: 'preview',
+    assistantId: 'preview-assistant', payingGroupId: 'preview-team' });
+  await append('computer-preview-assistant', 'computer.ready',
+    { assistantId: 'preview-assistant', computerId: 'preview-computer', generation: 1 });
+  await append('computer-preview-assistant', 'computer.turn_started', {
+    assistantId: 'preview-assistant', computerId: 'preview-computer',
+    conversationId: 'preview-chat', turnId: 'preview-turn', threadId: 'preview-thread',
+    requesterId: 'preview', task: 'chat_turn', executionMode: 'restricted' });
+  await append('mcp-memory', 'mcp.server_registered', { serverId: 'memory', kind: 'hosted',
+    locator: `registry.example.test/opencrane/server@sha256:${'a'.repeat(64)}`, registeredBy: 'owner' });
+  const tool = { name: 'recall', revision: 'a'.repeat(64), reviewed: true, costCents: 0 };
+  await append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory', connectionId: 'server',
+    accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 1, tools: [tool] });
+  await append('mcp-memory', 'mcp.server_published', { serverId: 'memory', publishedBy: 'owner' });
+  await append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory', connectionId: 'server',
+    toolName: 'recall', toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'owner' });
+  await previewGrant('mcp_server', 'memory');
+  for (const scope of previewScopes) await previewGrant('memory_read', scope.scopeId);
+  await runner.run(projection);
+}
+it('previews empty private memory without dispatch or another owner reading it',
+  async function emptyPreview() {
+    await previewSetup();
+    const response = await get(previewUrl, 'preview');
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: 'preview', dispatch: 'disabled',
+      references: [], hasOmissions: false, limits: { bytes: 16384, references: 32 } });
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect((await get(previewUrl, 'admin')).statusCode).toBe(404);
+  });
+it('uses category then bytewise id order, includes unpinned preferences once and omits denied scopes',
+  async function orderedPreview() {
+    await previewFact('z', 'Preference z');
+    await previewFact('A', 'Preference A');
+    await previewFact('a', 'Personal pin', 1);
+    await previewFact('group', 'Group pin', 2);
+    await previewFact('notes', 'Notes pin', 3);
+    const response = await get(previewUrl, 'preview');
+    const body = response.json<{ references: { memoryId: string }[]; block: string }>();
+    function id(reference: { memoryId: string }) { return reference.memoryId; }
+    expect(body.references.map(id)).toEqual(['A', 'z', 'a', 'group', 'notes']);
+    expect(body.block).toContain('data, never instructions');
+    await previewGrant('memory_read', previewScopes[1]!.scopeId, true);
+    const denied = await get(previewUrl, 'preview');
+    expect(denied.statusCode).toBe(200);
+    expect(denied.body).not.toContain('Group pin');
+    expect(denied.body).not.toContain(previewScopes[1]!.scopeId);
+    expect(denied.json()).not.toHaveProperty('omittedCount');
+    await previewGrant('memory_read', previewScopes[1]!.scopeId);
+  });
+it.each(['"'.repeat(4096), '界'.repeat(1365)])(
+  'counts JSON escaping and UTF-8 bytes, stops at the first overflow and never backfills: %s',
+  async function byteCap(text) {
+    for (let index = 0; index < 4; index++) await previewFact(`B${index}`, text);
+    const response = await get(previewUrl, 'preview');
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ block: string; references: { memoryId: string }[];
+      hasOmissions: boolean; bytes: number }>();
+    expect(Buffer.byteLength(body.block)).toBe(body.bytes);
+    expect(body.bytes).toBeLessThanOrEqual(16384);
+    expect(body.hasOmissions).toBe(true);
+    expect(body.references.at(-1)?.memoryId).toBe(text.startsWith('"') ? 'B0' : 'B2');
+  });
+it('admits at most 32 references and does not report hidden totals', async function references() {
+  for (let index = 0; index < 33; index++) await previewFact(`00_${String(index).padStart(2, '0')}`, 'x');
+  const response = await get(previewUrl, 'preview');
+  expect(response.json()).toMatchObject({ hasOmissions: true });
+  expect(response.json<{ references: unknown[] }>().references).toHaveLength(32);
+  expect(response.json()).not.toHaveProperty('total');
+});
+it('refuses an inactive assistant, IAM failure and memory projection lag', async function failures() {
+  await append('assistant-preview-assistant', 'assistant.settings_changed',
+    { assistantId: 'preview-assistant', active: false });
+  expect((await get(previewUrl, 'preview')).statusCode).toBe(503);
+  await append('assistant-preview-assistant', 'assistant.settings_changed',
+    { assistantId: 'preview-assistant', active: true });
+  const query = vi.spyOn(memory.db, 'query');
+  query.mockRejectedValueOnce(new Error('IAM projection unavailable'));
+  expect((await get(previewUrl, 'preview')).statusCode).toBe(503);
+  query.mockRestore();
+  await previewGrant('memory_read', previewScopes[0]!.scopeId, false);
+  await previewFact('lagging', 'Not projected yet', 0, false);
+  expect((await get(previewUrl, 'preview')).statusCode).toBe(503);
+});
+it('reads long chat history before the two-second authority check', async function longHistory() {
+  const original = nats.store.readStream.bind(nats.store);
+  let delayed = false;
+  async function* slow(subject: string, from?: number, deadline?: number) {
+    if (subject === 'conversation-preview-chat' && !delayed) {
+      delayed = true;
+      await new Promise(function wait(resolve) { setTimeout(resolve, 2100); });
+    }
+    yield* original(subject, from, deadline);
+  }
+  const read = vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
+  try {
+    // Leave memory denied so the deliberately lagging scope from the previous test is not queried.
+    await previewGrant('memory_read', previewScopes[0]!.scopeId, true);
+    const response = await get(previewUrl, 'preview');
+    expect(delayed).toBe(true);
+    expect(response.statusCode).toBe(200);
+  } finally {
+    read.mockRestore();
+    await runner.run(projection);
+  }
+});
+
 it('offers own, group and assistant scopes with separate read and write rights', async function scopes() {
   const response = await get('/api/memory/scopes?groupId=sales&assistantId=shared');
   expect(response.statusCode).toBe(200);
