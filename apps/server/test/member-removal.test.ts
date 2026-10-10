@@ -24,6 +24,7 @@ let dbs: Awaited<ReturnType<typeof databases>>;
 let app: ReturnType<typeof buildServer>;
 let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
+let db: ReturnType<typeof pgDb>;
 let counter = 0;
 let keyDirectory: string;
 async function append(subject: string, type: string, data: unknown) {
@@ -72,7 +73,7 @@ async function initialise() {
   dbs = await databases();
   const binding = await createStore(fga.apiUrl, 'test');
   auth = memberAuthorisation(binding, nats.reader);
-  const db = pgDb(dbs.queue);
+  db = pgDb(dbs.queue);
   runner = new ProjectionRunner(db, nats.reader, createLogger('removal-test'));
   for (const projection of [members, conversations, computers]) await runner.initialise(projection);
   await append('member-owner', 'member.joined', {
@@ -305,6 +306,63 @@ async function removesDuringOtherMembersPosts() {
 }
 it('removes a member while another member keeps posting during the checks and append',
   removesDuringOtherMembersPosts);
+
+async function projectsDuringInventory(targetChanges: boolean) {
+  const memberId = targetChanges ? 'changed-during-read' : 'projected-during-read';
+  const assistantId = `${memberId}-helper`;
+  await join(memberId);
+  await append(`assistant-${assistantId}`, 'assistant.created', {
+    assistantId, kind: 'personal', ownerId: memberId,
+  });
+  await project();
+  const input = await review(memberId);
+  const query = db.query.bind(db);
+  let projected = false;
+  async function projectBetweenReads<Row extends Record<string, unknown>>(
+    sql: string, parameters?: unknown[],
+  ): Promise<{ rows: Row[] }> {
+    const result = await query<Row>(sql, parameters);
+    if (!projected && sql.includes('FROM computers WHERE silo = $1 AND owner_id = $2')) {
+      projected = true;
+      if (targetChanges) {
+        await append(`computer-${assistantId}`, 'computer.suspended', {
+          assistantId, computerId: `${memberId}-computer`,
+        });
+      } else {
+        const keys = conversationKeys(keyDirectory);
+        keys.provision('test', 'projected-other-chat');
+        const encrypted = keys.encrypt('test', 'projected-other-chat', 'Another member posts');
+        const data = { conversationId: 'projected-other-chat', authorId: 'posting-member',
+          authorKind: 'human', contentType: 'text', ...encrypted };
+        await append('conversation-projected-other-chat', 'message.posted', data);
+      }
+      await project();
+    }
+    return result;
+  }
+  const querySpy = vi.spyOn(db, 'query');
+  querySpy.mockImplementation(projectBetweenReads);
+  const response = await request(memberId, 'remove', input);
+  querySpy.mockRestore();
+  expect(projected).toBe(true);
+  expect(response.statusCode, response.body).toBe(targetChanges ? 409 : 200);
+  const rows = await history(nats.reader, `member-${memberId}`, 'test');
+  if (targetChanges) {
+    expect(response.json()).toMatchObject({ reason: 'incomplete_review' });
+    expect(rows).toHaveLength(1);
+    expect(rows.at(-1)?.event.type).toBe('member.joined');
+    expect((await currentMembership(nats.reader, 'test', memberId)).role).toBe('member');
+  } else {
+    expect(response.json()).toMatchObject({ access: 'revoked',
+      reviewRevision: input.reviewRevision });
+    expect(rows.at(-1)?.event.type).toBe('member.removed');
+    expect((await currentMembership(nats.reader, 'test', memberId)).role).toBe('');
+  }
+}
+it.each([false, true])(
+  'checks only the target when events are projected between inventory reads: target changes %s',
+  projectsDuringInventory,
+);
 
 async function refusesTargetChangeBeforeAppend() {
   const memberId = 'target-changed-at-append';
