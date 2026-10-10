@@ -48,7 +48,7 @@ export async function chatChange(
   const row = result.rows[0];
   if (!row) return { status: 'not_found' as const };
   let iam = 'current';
-  if (row.type === 'conversation.created') {
+  if (['conversation.created', 'participant.added', 'participant.removed'].includes(row.type)) {
     const applied = await memberAuthorisation(options.binding).applied(row.event_id);
     if (!applied) iam = 'applying';
   }

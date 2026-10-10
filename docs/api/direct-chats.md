@@ -94,3 +94,41 @@ message routes. Lifecycle commands remain separate work; existing assistant sess
 keep their creation/send behaviour.
 
 Source and qualification evidence: [P4-4 backend receipt](../process/p4-4-backend-evidence.md).
+
+## Group participants
+
+These routes work for saved human group chats. They do not change direct chats or
+assistant sessions. Group creation and sends are supplied separately.
+
+`GET /api/conversations/:conversationId/participants` returns
+`{ rows: [{ memberId, displayName }], joinPosition, accessPosition, canManage, canLeave }`.
+Names may be null. Current participants can read the list. The creator can manage
+other people and cannot leave. Other participants can leave but cannot manage others.
+
+`POST` to the same route accepts `{ id, action: "add" | "remove", participantId,
+expectedAccessPosition }` or `{ id, action: "leave", expectedAccessPosition }`.
+The body limit is 4 KiB. Ids contain 1–200 characters, without dots, spaces or NATS
+wildcards. Addition requires an active same-silo member and fewer than 97 current
+participants. Removal also accepts a person who has left the silo. Removing yourself
+is equivalent to leaving. A closed group refuses new edits.
+
+Each edit saves one event on `participation-<id>`. Use the list's `accessPosition`:
+a stale position or concurrent edit returns 409 and requires a reload. Retain the
+original command id and payload through an uncertain response. A matching saved
+retry returns its original sequence, even after a later removal or closure. It does
+not add anyone again or reopen the chat. A different actor, action or target returns
+409. Saved retries ignore the old access position; self-remove and leave name the
+same removal.
+
+The existing change-status route reports participant events and their OpenFGA
+receipt as `current` or `applying`. A leaving person receives their append reply
+once; later retries and all reads, including status, return generic 403. Remaining
+participants can check the saved removal. An append confirms saving, not delivery.
+
+History and live updates use the latest join interval. Removal denies history,
+people, status, files, views and approvals before IAM applies the removal. Sockets
+close within two seconds and discard blocked content. Human groups have no files,
+computer or approvals. The browser must clear protected content and ignore late
+HTTP responses on refusal. Participant admission checks closure immediately before
+append; an already admitted edit can finish during a concurrent close, but cannot
+reopen it. These two streams do not form one transaction.

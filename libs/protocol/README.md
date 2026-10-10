@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat and group picker, members, invitations, uploads and model access"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, group picker and participants, invitations, uploads and model access"]
   server["apps/server<br/>back end"] -.-> protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -27,12 +27,14 @@ flowchart LR
 - Check invitation email requests, create and renew commands, and status parameters.
   Keep member headers separate from the admin directory.
 - Check own-group picker pages, reviewed member snapshots and human group chat rows.
+- Check group chat participant edits and the current people list.
 - Check flat group rows and create or remove commands for the People & groups screen.
 
 ## Processes it handles
 
 1. **A browser sends a live message.** The server checks the message against the shared schema before handling it. The browser checks server replies before showing them.
 2. **A person opens a conversation or settings page.** The server returns data in a shared shape, and the browser checks that shape before drawing the page.
+   Group participant requests carry the last access position so stale edits can be refused.
 3. **A person reviews the history of changes.** The server filters the response, then both sides use the same shapes for the request and result.
 
 Chat replies include a typed computer state. After a computer is lost, they also

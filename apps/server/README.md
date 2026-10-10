@@ -12,7 +12,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat, participation and permission checks"]
   server -.->|checks access and passes for personal, assistant and group facts| libs["libs/*<br/>shared code"]
-  server -->|records changes, memory facts, model grants, chats, computer facts and provider choices| nats["NATS<br/>event log"]
+  server -->|records changes, memory facts, model grants, participants, chats, computers and provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chat rows, closes, joins, facts, models and computers| postgres
@@ -78,6 +78,8 @@ flowchart LR
   summary that is too large is dropped on its own, leaving other chats warm.
 - Lets silo members create a group chat from reviewed people and exchange messages
   without starting assistant work. Offers only groups they belong to.
+- Lets group chat creators add or remove people, and lets other participants leave.
+  Refuses stale edits and keeps saved retries from adding someone again.
 - Lets two silo members exchange private messages without starting assistant work.
   Tells the browser when a new chat is waiting for its permissions, so it can keep the draft.
 - Runs a separate models process. It keeps AI budgets, approves or refuses each AI request,
@@ -144,6 +146,9 @@ use it to refuse calls if the tool changes to Ask during the turn.
    then returns messages and live updates. Busy chats and slow reads keep working.
    A removed participant loses access even before the permissions service catches up.
    A person who joins later sees messages from their latest join onwards.
+   Group creators can edit the people list. Other participants can leave.
+   Lists reuse permission facts within the request and check for changes after each
+   answer from the permissions service.
 7. **An admin adds a tool server.** The server checks the remote address, lists its
    tools and leaves them blocked until an admin reviews them.
 8. **An assistant asks an AI model for help.** The request goes through agentgateway, the

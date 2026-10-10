@@ -122,3 +122,7 @@ defines permission checks, conflicts and recovery.
 picker replies. `chatListSchema` accepts human group rows with their explicit
 participants and optional recorded group association. See the
 [group API](../../docs/api/group-chats.md) for the server checks and limits.
+
+`chatParticipantCommandSchema` and `chatParticipantsSchema` define the strict
+[group participant request and list](../../docs/api/direct-chats.md#group-participants).
+The server tests check both the input rules and the list reply with real services.

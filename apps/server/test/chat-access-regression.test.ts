@@ -10,13 +10,13 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { wireSubject } from '@opencrane/event-store';
+import { wireSubject, type AppendCommand, type AppendResult } from '@opencrane/event-store';
 import {
   members, computers, conversations, files, pgDb, ProjectionRunner, connectMemberFeed,
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { envelope } from '@opencrane/models';
-import { chatMessageSchema } from '@opencrane/protocol';
+import { chatMessageSchema, chatParticipantsSchema } from '@opencrane/protocol';
 import type { ChatOptions } from '../src/chat/routes.ts';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer } from '../src/websocket.ts';
@@ -26,7 +26,9 @@ import { ownConversation, fileCommand } from '../src/files/commands.ts';
 import { viewAccess } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
-import { conversationParticipationReader } from '../src/chat/access.ts';
+import { conversationParticipationReader }
+  from '../src/chat/access.ts';
+import * as chatAccess from '../src/chat/access.ts';
 
 async function countedOpenFga(apiUrl: string) {
   let checks = 0;
@@ -190,13 +192,13 @@ it.each(removalsAfterPermission)(
   'refuses $type after IAM replies when a list reader reuses checked membership',
   refusesRemovalAfterPermission, 30_000);
 
-async function openChatSocket(context: Fixture, conversationId: string, waitReady = true) {
+async function openChatSocket(context: Fixture, conversationId: string, waitReady = true, memberId = 'alice') {
   const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
   const address = await context.app.listen({ host: '127.0.0.1', port: 0 });
   const realtime = { feed: context.feed, binding: context.options.binding,
     chat: context.options };
   const wss = attachWebSocketServer(context.app.server, context.app.log, context.config, realtime);
-  const connectionOptions = { headers: context.headers() };
+  const connectionOptions = { headers: context.headers(memberId) };
   const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, connectionOptions);
   function receive(raw: Buffer) {
     received.push(chatMessageSchema.parse(JSON.parse(raw.toString()) as unknown));
@@ -1491,3 +1493,372 @@ async function retainsVerifiedLegacyParticipation() {
 }
 it('checks legacy participation once and skips modern events during repeated churn reads',
   retainsVerifiedLegacyParticipation, 120_000);
+
+async function createParticipantGroup(context: Fixture, participantIds = ['alice', 'bob']) {
+  context.keys.provision('test', 'participants');
+  await context.append('conversation-participants', 'conversation.created', {
+    conversationId: 'participants', mode: 'group', createdBy: 'alice', participantIds,
+  });
+  await context.runner.run(conversations);
+}
+
+async function joinParticipantMember(context: Fixture, memberId: string) {
+  const emailName = memberId.replaceAll(':', '-');
+  await context.append(`member-${memberId}`, 'member.invited', {
+    memberId, invitationId: `invite-${memberId}`, email: `${emailName}@example.test`,
+    role: 'member', invitedBy: 'alice', invitedIdentity: { issuer: context.config.issuerUrl,
+      sub: memberId },
+  }, false);
+  await context.append(`member-${memberId}`, 'member.joined', {
+    memberId, invitationId: `invite-${memberId}`, email: `${emailName}@example.test`,
+    displayName: memberId, role: 'member',
+  });
+  await context.runner.run(members);
+}
+
+async function participantRequest(context: Fixture, payload?: unknown, memberId = 'alice') {
+  const request = { method: payload ? 'POST' as const : 'GET' as const,
+    url: '/api/conversations/participants/participants', headers: context.headers(memberId),
+    ...(payload ? { payload } : {}) };
+  return context.app.inject(request);
+}
+
+async function participantPosition(context: Fixture) {
+  const response = await participantRequest(context);
+  expect(response.statusCode, response.body).toBe(200);
+  const people = chatParticipantsSchema.parse(response.json());
+  return people.accessPosition;
+}
+
+async function managesGroupParticipants() {
+  const context = await fixture();
+  try {
+    await createParticipantGroup(context);
+    await joinParticipantMember(context, 'ext:jane');
+    const expectedAccessPosition = await participantPosition(context);
+    const add = { id: 'add-jane', action: 'add', participantId: 'ext:jane',
+      expectedAccessPosition };
+    const denied = await participantRequest(context, add, 'bob');
+    expect(denied.statusCode).toBe(403);
+    const creatorLeave = { id: 'creator-leave', action: 'leave', expectedAccessPosition };
+    expect((await participantRequest(context, creatorLeave)).statusCode).toBe(403);
+    const invalidTarget = { id: 'absent', action: 'add', participantId: 'foreign',
+      expectedAccessPosition };
+    expect((await participantRequest(context, invalidTarget)).statusCode).toBe(403);
+    expect(await context.nats.store.head('participation-participants')).toBe(0);
+    const invalid = { ...add, expectedAccessPosition: undefined };
+    expect((await participantRequest(context, invalid)).statusCode).toBe(400);
+    const oversized = { ...add, id: 'a'.repeat(5000) };
+    expect((await participantRequest(context, oversized)).statusCode).toBe(413);
+    const added = await participantRequest(context, add);
+    expect(added.statusCode, added.body).toBe(200);
+    const saved = added.json<{ sequence: number }>();
+    await context.runner.run(conversations);
+    const statusRequest = { url: '/api/conversations/participants/changes/add-jane',
+      headers: context.headers() };
+    const applying = await context.app.inject(statusRequest);
+    expect(applying.json()).toMatchObject({ projection: { iam: 'applying' } });
+    const row = await context.nats.store.readEvent(saved.sequence);
+    expect(row.event.subject).toBe('participation-participants');
+    await context.auth.handler.handle(row.event, context.db);
+    const current = await context.app.inject(statusRequest);
+    expect(current.json()).toMatchObject({ projection: { iam: 'current' } });
+    const people = await participantRequest(context, undefined, 'ext:jane');
+    expect(people.json()).toMatchObject({ canManage: false, canLeave: true,
+      joinPosition: saved.sequence, accessPosition: saved.sequence });
+    expect(people.body).toContain('ext:jane');
+    const remove = { id: 'remove-jane', action: 'remove', participantId: 'ext:jane',
+      expectedAccessPosition: saved.sequence };
+    await context.append('member-ext:jane', 'member.removed', {
+      memberId: 'ext:jane', removedBy: 'alice',
+    }, false);
+    expect((await participantRequest(context, remove)).statusCode).toBe(200);
+    const before = await context.nats.store.head('participation-participants');
+    const retry = await participantRequest(context, add);
+    expect(retry.json()).toMatchObject(saved);
+    expect(await context.nats.store.head('participation-participants')).toBe(before);
+    const changed = { ...add, participantId: 'bob' };
+    expect((await participantRequest(context, changed)).statusCode).toBe(409);
+    await context.append('conversation-participants', 'conversation.closed', {
+      conversationId: 'participants', closedBy: 'alice',
+    }, false);
+    expect((await participantRequest(context, add)).statusCode).toBe(200);
+    const newEdit = { id: 'closed-edit', action: 'remove', participantId: 'bob',
+      expectedAccessPosition: before };
+    expect((await participantRequest(context, newEdit)).statusCode).toBe(409);
+    expect((await participantRequest(context, undefined, 'ext:jane')).statusCode).toBe(403);
+  } finally {
+    await context.close();
+  }
+}
+it('checks creator rights, saved retries, departed targets, closure and IAM receipts',
+  managesGroupParticipants, 120_000);
+
+function pauseParticipantAppends(context: Fixture) {
+  const append = context.nats.store.append.bind(context.nats.store);
+  const ready = Promise.withResolvers<void>();
+  const commands: AppendCommand[] = [];
+  const results: AppendResult[] = [];
+  async function appendTogether(command: AppendCommand) {
+    commands.push(command);
+    if (commands.length === 2) ready.resolve();
+    // Hold both requests after admission so only the real append decides which is saved.
+    await ready.promise;
+    const result = await append(command);
+    results.push(result);
+    return result;
+  }
+  context.nats.store.append = appendTogether;
+  function restore() {
+    ready.resolve();
+    context.nats.store.append = append;
+  }
+  return { commands, results, restore };
+}
+
+async function serialisesParticipantEdits() {
+  const context = await fixture();
+  let paused: ReturnType<typeof pauseParticipantAppends> | undefined;
+  try {
+    const participantIds = ['alice', 'bob'];
+    for (let index = 0; index < 94; index++) {
+      participantIds.push(`person-${index}`);
+    }
+    await createParticipantGroup(context, participantIds);
+    await joinParticipantMember(context, 'carol');
+    await joinParticipantMember(context, 'dave');
+    const expectedAccessPosition = await participantPosition(context);
+    const subject = 'participation-participants';
+    const expectedSequence = await context.nats.store.head(subject);
+    expect(expectedSequence).toBe(0);
+    const first = { id: 'add-carol', action: 'add', participantId: 'carol',
+      expectedAccessPosition };
+    const second = { id: 'add-dave', action: 'add', participantId: 'dave',
+      expectedAccessPosition };
+    paused = pauseParticipantAppends(context);
+    const writes = [participantRequest(context, first), participantRequest(context, second)];
+    const responses = await Promise.all(writes);
+    paused.restore();
+    expect(paused.commands).toHaveLength(2);
+    const expectedEvent = { subject, type: 'participant.added' };
+    for (const command of paused.commands) {
+      expect(command.expectedSequence).toBe(expectedSequence);
+      expect(command.event).toMatchObject(expectedEvent);
+    }
+    function appendStatus(result: AppendResult) {
+      return result.status;
+    }
+    const appendStatuses = paused.results.map(appendStatus);
+    appendStatuses.sort();
+    expect(appendStatuses).toEqual(['appended', 'conflict']);
+    function statusCode(response: typeof responses[number]) {
+      return response.statusCode;
+    }
+    const codes = responses.map(statusCode);
+    codes.sort();
+    expect(codes).toEqual([200, 409]);
+    const rows = [];
+    for await (const row of context.nats.store.readStream(subject)) {
+      rows.push(row);
+    }
+    expect(rows).toHaveLength(1);
+    const saved = rows[0]!;
+    expect(saved.event.type).toBe('participant.added');
+    let addedParticipantId = 'carol';
+    if (responses[1]!.statusCode === 200) addedParticipantId = 'dave';
+    const savedAddition = { conversationId: 'participants', addedBy: 'alice',
+      participantId: addedParticipantId };
+    expect(saved.event.data).toEqual(savedAddition);
+    participantIds.push(addedParticipantId);
+    participantIds.sort();
+    const people = await participantRequest(context);
+    const audience = chatParticipantsSchema.parse(people.json());
+    function memberId(person: typeof audience.rows[number]) {
+      return person.memberId;
+    }
+    const savedParticipantIds = audience.rows.map(memberId);
+    savedParticipantIds.sort();
+    expect(savedParticipantIds).toEqual(participantIds);
+    expect(savedParticipantIds).toHaveLength(97);
+    const creatorActions = { canManage: true, canLeave: false };
+    expect(audience).toMatchObject(creatorActions);
+    const staleEdit = { id: 'stale-remove', action: 'remove', participantId: 'bob',
+      expectedAccessPosition };
+    const staleResponse = await participantRequest(context, staleEdit);
+    expect(staleResponse.statusCode, staleResponse.body).toBe(409);
+    expect(await context.nats.store.head(subject)).toBe(saved.sequence);
+  } finally {
+    paused?.restore();
+    await context.close();
+  }
+}
+it('races two additions for the 97th participant through the real conditional append',
+  serialisesParticipantEdits, 120_000);
+
+async function capsGroupParticipants() {
+  const context = await fixture();
+  try {
+    const participantIds = ['alice', 'bob'];
+    for (let index = 0; index < 95; index++) participantIds.push(`person-${index}`);
+    await createParticipantGroup(context, participantIds);
+    const expectedAccessPosition = await participantPosition(context);
+    const add = { id: 'too-many', action: 'add', participantId: 'carol',
+      expectedAccessPosition };
+    expect((await participantRequest(context, add)).statusCode).toBe(409);
+    expect(await context.nats.store.head('participation-participants')).toBe(0);
+  } finally {
+    await context.close();
+  }
+}
+it('refuses a 98th current participant', capsGroupParticipants, 120_000);
+
+async function leavesGroupAndRevokesReaders(blocked: boolean) {
+  const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  let pause: ReturnType<typeof pauseFirstHistoryRead> | undefined;
+  try {
+    await createParticipantGroup(context);
+    const expectedAccessPosition = await participantPosition(context);
+    client = await openChatSocket(context, 'participants', true, 'bob');
+    if (blocked) {
+      pause = pauseFirstHistoryRead(context);
+      const encrypted = context.keys.encrypt('test', 'participants', 'Never deliver this');
+      await context.append('conversation-participants', 'message.posted', {
+        conversationId: 'participants', authorId: 'alice', authorKind: 'human',
+        contentType: 'text', ...encrypted,
+      }, false);
+      await context.runner.run(conversations);
+      await pause.reached;
+    }
+    const leave = { id: 'leave-alice', action: 'remove', participantId: 'alice',
+      expectedAccessPosition };
+    expect((await participantRequest(context, leave, 'bob')).statusCode).toBe(403);
+    const ownLeave = { id: 'leave-bob', action: 'leave', expectedAccessPosition };
+    const started = performance.now();
+    const closed = once(client.socket, 'close');
+    const left = await participantRequest(context, ownLeave, 'bob');
+    function socketClosed() {
+      return client?.socket.readyState === WebSocket.CLOSED;
+    }
+    await until(socketClosed, 1900);
+    await closed;
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(client.closeCode()).toBe(1008);
+    expect(left.statusCode, left.body).toBe(200);
+    expect((await participantRequest(context, ownLeave, 'bob')).statusCode).toBe(403);
+    // Keep the group readable with one person. Removal does not change its mode.
+    expect((await participantRequest(context)).statusCode).toBe(200);
+    for (const path of ['messages', 'files', 'approvals', 'changes/leave-bob', 'participants']) {
+      const response = await context.app.inject({
+        url: `/api/conversations/participants/${path}`, headers: context.headers('bob'),
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    }
+    await expect(viewAccess(context.options, 'bob', 'participants')).rejects.toThrow();
+    expect(client.received.some(isRefused)).toBe(true);
+    expect(JSON.stringify(client.received)).not.toContain('Never deliver this');
+  } finally {
+    pause?.release();
+    await client?.close();
+    await context.close();
+  }
+}
+it.each([false, true])('revokes every read path after self-leave (blocked socket: %s)',
+  leavesGroupAndRevokesReaders, 120_000);
+
+async function checksParticipantAdmissionAfterColdHistory() {
+  const context = await fixture();
+  const read = context.nats.store.readStream.bind(context.nats.store);
+  const head = context.nats.store.head.bind(context.nats.store);
+  let delayed = false;
+  let revokeTarget = false;
+  let targetChecks = 0;
+  async function* slowColdHistory(subject: string, from = 1, deadline = Infinity) {
+    if (subject === 'conversation-participants' && from > 1 && !delayed) {
+      delayed = true;
+      await delay(2200);
+    }
+    yield* read(subject, from, deadline);
+  }
+  async function removeTargetDuringAdmission(subject?: string, deadline?: number) {
+    if (revokeTarget && subject === 'member-bob') {
+      targetChecks++;
+      if (targetChecks === 1) {
+        await context.append('member-bob', 'member.removed', {
+          memberId: 'bob', removedBy: 'alice',
+        }, false);
+      }
+    }
+    return head(subject, deadline);
+  }
+  try {
+    await createParticipantGroup(context);
+    const expectedAccessPosition = await participantPosition(context);
+    const encrypted = context.keys.encrypt('test', 'participants', 'Saved history');
+    await context.append('conversation-participants', 'message.posted', {
+      conversationId: 'participants', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...encrypted,
+    }, false);
+    context.nats.store.readStream = slowColdHistory;
+    const remove = { id: 'cold-remove', action: 'remove', participantId: 'bob',
+      expectedAccessPosition };
+    const removed = await participantRequest(context, remove);
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect(delayed).toBe(true);
+    const before = await context.nats.store.head('participation-participants');
+    const add = { id: 'revoked-target', action: 'add', participantId: 'bob',
+      expectedAccessPosition: before };
+    context.nats.store.head = removeTargetDuringAdmission;
+    revokeTarget = true;
+    const response = await participantRequest(context, add);
+    expect(response.statusCode, response.body).toBe(409);
+    expect(targetChecks).toBe(1);
+    expect(await head('participation-participants')).toBe(before);
+  } finally {
+    context.nats.store.readStream = read;
+    context.nats.store.head = head;
+    await context.close();
+  }
+}
+it('loads cold close history before admission and refuses a target removed during addition',
+  checksParticipantAdmissionAfterColdHistory, 120_000);
+
+async function refusesRemovedAuthorAtParticipationCheck() {
+  const context = await fixture();
+  const accessChecks = vi.spyOn(chatAccess, 'writeChatAccess');
+  try {
+    await createParticipantGroup(context);
+    const request = { memberId: 'bob', conversationId: 'participants',
+      relation: 'post' as const };
+    const activePayload = { id: 'active-send', text: 'Still taking part' };
+    const activeSend = { method: 'POST' as const,
+      url: '/api/conversations/participants/messages',
+      headers: context.headers('bob'), payload: activePayload };
+    const activeResponse = await context.app.inject(activeSend);
+    expect(activeResponse.statusCode, activeResponse.body).toBe(200);
+    expect(accessChecks).toHaveBeenCalledExactlyOnceWith(context.options, request);
+    await expect(accessChecks.mock.results[0]!.value)
+      .resolves.toHaveProperty('mode', 'group');
+    const expectedAccessPosition = await participantPosition(context);
+    const remove = { id: 'remove-author', action: 'remove', participantId: 'bob',
+      expectedAccessPosition };
+    const removed = await participantRequest(context, remove);
+    expect(removed.statusCode, removed.body).toBe(200);
+    // Keep IAM unchanged to prove that the saved removal stops the author first.
+    const permission = await context.auth.conversation('bob', 'participants', 'post');
+    expect(permission.allowed).toBe(true);
+    const before = await context.nats.store.head('conversation-participants');
+    const payload = { id: 'removed-send', text: 'Forbidden' };
+    const send = { method: 'POST' as const, url: '/api/conversations/participants/messages',
+      headers: context.headers('bob'), payload };
+    const response = await context.app.inject(send);
+    expect(response.statusCode, response.body).toBe(403);
+    expect(accessChecks).toHaveBeenCalledWith(context.options, request);
+    expect(await context.nats.store.head('conversation-participants')).toBe(before);
+  } finally {
+    accessChecks.mockRestore();
+    await context.close();
+  }
+}
+it('refuses a removed group author at the participation check before appending',
+  refusesRemovedAuthorAtParticipationCheck, 120_000);
