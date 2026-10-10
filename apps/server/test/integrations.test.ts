@@ -314,6 +314,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('link', { name: 'Integrations', exact: true }).click();
     await page.locator('.register-row').first().waitFor();
 
+    await prepareReviewedOdooCatalogue();
     const toolsLoaded = page.waitForResponse(r => r.url().endsWith('/odoo/tools'));
     await page.goto(`${base}/org/integrations/odoo/tools`);
     expect((await toolsLoaded).status()).toBe(200);
@@ -505,7 +506,7 @@ it('restricts the model and spending read to projected owners and admins', async
   expect((await app.inject({ method: 'GET', url: '/api/org/models', headers: headers('oidc-alice', 'other') })).statusCode).toBe(403);
 });
 
-it('saves a reviewed connection revision policy through one conditional event and replays it', async () => {
+async function prepareReviewedOdooCatalogue() {
   const readDefinition = losslessJson(
     '{"name":"read","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}');
   const writeDefinition = losslessJson('{"name":"write","inputSchema":{"type":"object"}}');
@@ -520,12 +521,17 @@ it('saves a reviewed connection revision policy through one conditional event an
   await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDigest: catalogueDigest(tools),
     checkedAt, expiresAt, connectionId: 'installed-odoo', accountMode: 'none', tools });
   await runner.run(mcpCatalogue);
+  return writeDefinition.digest;
+}
+
+it('saves a reviewed connection revision policy through one conditional event and replays it', async () => {
+  const writeRevision = await prepareReviewedOdooCatalogue();
   const url = '/api/org/integrations/odoo/tools';
   const read = await app.inject({ url, headers: headers('oidc-alice') });
   expect(read.statusCode).toBe(200);
   const state = read.json<{ sequence: number; tools: { name: string; mode: string; suggestion: string }[] }>();
   expect(state.tools).toMatchObject([{ name: 'read', mode: 'block', suggestion: 'allow' }, { name: 'write', mode: 'block', suggestion: 'ask' }]);
-  const payload = { commandId: 'policy-write', expectedSequence: state.sequence, connectionId: 'installed-odoo', toolName: 'write', toolRevision: writeDefinition.digest, mode: 'allow' };
+  const payload = { commandId: 'policy-write', expectedSequence: state.sequence, connectionId: 'installed-odoo', toolName: 'write', toolRevision: writeRevision, mode: 'allow' };
   for (const sub of ['oidc-bob', 'oidc-mallory']) expect((await app.inject({ method: 'POST', url,
     headers: { ...headers(sub), origin: new URL(config.redirectUri).origin }, payload })).statusCode).toBe(403);
   const save = () => app.inject({ method: 'POST', url, headers: { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin }, payload });

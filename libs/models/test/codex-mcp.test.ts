@@ -22,9 +22,11 @@ async function prepareCapturedCall(setup: Fixture, toolMode: 'allow' | 'ask' = '
   const review = { action: 'Write note', consequence: 'The order note changes.',
     targetArgument: 'order', fields: ['order', 'note'], stepUp: false };
   const tool = { name: 'write', revision: toolRevision, definition: toolDefinition.canonical, reviewed: true, costCents: 0, review };
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + ttlMs).toISOString();
   const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
     schemaDigest: catalogueDigest, toolCount: 1, tools: [tool],
-    checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + ttlMs).toISOString() };
+    checkedAt, expiresAt };
   await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
   const publication = { serverId: 'fixture', publishedBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.server_published', publication);
@@ -549,6 +551,9 @@ it('refuses legacy catalogue evidence at the real gateway', refusesLegacyCatalog
 async function refusesForgedEvidence(attack: 'revision' | 'server') {
   const setup = await fixture();
   try {
+    // Test gateway reads of bad saved history without sending it to background handlers.
+    await setup.stopDispatch();
+    await setup.runtime.stop();
     const base = await prepareCapturedCall(setup, 'ask', attack === 'server' ? 10_000 : 300_000);
     const headers = { ...base, 'x-opencrane-tool-mode': 'ask' };
     const request = { method: 'POST', headers, body: JSON.stringify(capture.body) };
