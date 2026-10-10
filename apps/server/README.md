@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member access"]
-  server -.->|checks access, refusal records, departure details, spending and memory| libs["libs/*<br/>shared code"]
+  server -.->|checks access, refusal records, departure details, spending, memory and turn previews| libs["libs/*<br/>shared code"]
   server -->|records changes, memory facts, model grants, roles, participants, chats, computers and provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]

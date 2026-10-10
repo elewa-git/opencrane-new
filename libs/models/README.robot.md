@@ -967,3 +967,8 @@ references and command checks are described in `apps/server/README.robot.md`.
 `conversationParticipation` builds initial joins from a parsed creation record.
 `conversationHistoryPosition` returns child creation for shared history and the current
 join for other chats. Authority still uses the current join. Neither helper reads history.
+
+
+## Private turn memory preview
+
+`memoryRights` returns a `confirm(deadline)` function for preview reads. It checks saved grants, current permissions and tool policy again using the conversation history already read. The final short check never reloads that history. Turn starts do not grant access or refuse a memory read.

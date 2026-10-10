@@ -33,6 +33,7 @@ flowchart LR
 ## What it is responsible for
 
 - Rebuild child participants and their recorded parent references from saved events.
+- Keep an index for reading initial memory in a stable order.
 - Keeps delegated task relationships and outcomes in read tables. Rebuilding these
   tables starts no tasks and changes no permissions or spending.
 - Copies recorded tool dispatch evidence into conversation feeds without calling a tool.

@@ -236,6 +236,10 @@ secret-store qualification are NOT RUN.
 
 ## Memory projection
 
+Initial turn memory reads use `memory_facts_initial`, an index on silo, scope, kind
+and memory id with PostgreSQL's bytewise `C` order. The server chooses eligible
+categories and bounds each read to 33 candidates. No new projection state is added.
+
 `memoryProjection({ decrypt })` gives ProjectionRunner read-only custody. Its optional
 `prepare(event)` step returns database work after key resolution, before the SQL transaction.
 The runner commits all rows, the processed id and the checkpoint together. Calling

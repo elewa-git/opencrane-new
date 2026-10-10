@@ -7,7 +7,7 @@ import { data } from './state.ts';
 import { decisionChatSummary } from './decision-summary.ts';
 
 const harmlessConversationTypes = [
-  'file.uploaded', 'file.rejected', 'file.delivered', 'message.posted',
+  'file.uploaded', 'file.rejected', 'file.delivered', 'message.posted', 'agent.turn_started',
   ...outputReportTypes,
 ];
 
