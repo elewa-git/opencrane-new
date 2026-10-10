@@ -147,6 +147,13 @@ export class DirectChat implements OnInit, OnDestroy {
     this.pageError.set('');
     const requestedId = requestedDirectConversationId();
     if (requestedId) {
+      const requestedConversation = directConversationById(this.conversations(), requestedId);
+      if (!requestedConversation) {
+        this.pageState.set('failed');
+        this.pageError.set('Direct conversations are unavailable right now.');
+        this.statusText.set(this.pageError());
+        return;
+      }
       await this.selectConversation(requestedId);
     } else {
       this.announceRead('Direct conversations loaded.');
