@@ -1434,7 +1434,9 @@ Owner-role invitation remains invited; the active owner remains an owner.
 
 The Owner/Admin GETs `/api/members/:memberId/access` and `/api/members/:memberId/departure`
 check events and OpenFGA once. They stop after ten seconds or 10,000 inventory records.
-Checked event positions, computer rows and history totals form the review revision.
+Checked inventory event positions, computer rows and history totals form the review
+revision. Projection checkpoints check that tables are current and stable during the
+read; their progress alone does not change the reviewed departure facts.
 Behind tables and unsupported ownership, routines or connections block completion.
 The latest grant changes include revocations for each member, group or assistant.
 The latest group removals are kept even when no access rows remain. Both reads
@@ -1492,7 +1494,15 @@ Effective inherited access and public child commands are later work. No child em
 
 The [removal contract](../../docs/api/members.md#reviewed-member-removal) covers
 review conflicts, receipts and delayed table and permission updates.
+Removal compares the reviewed revision, then checks the inventory category positions
+again before append. These checks remain separate from the small member and ownership
+streams that decide access. The conditional append checks the target member position;
+ordinary removal does not use the event store's migration-only global condition.
+The inventory check and target append are separate operations. Only changes on the
+target member stream are ordered atomically against removal.
 `test/member-removal.test.ts` covers refusals, lost replies, ownership races and replay.
+It also saves messages from another member throughout removal, refuses a late change
+to the target's role and refuses an inventory change during the final access check.
 The socket and desktop tests remove through HTTP with slow content reads.
 `test/removal-gateway.test.ts` covers gateway refusal with existing and fresh credentials
 while IAM is delayed.

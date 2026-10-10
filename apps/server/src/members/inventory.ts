@@ -238,13 +238,23 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   const routines = versionAbsence(inputs.rows, 'routine', unavailable);
   const content = await retainedContent(options, memberId, head);
   if (!content.current) unavailable.add('retained_content');
-  for (const [subject, position] of Object.entries(inputs.positions)) {
-    if (await options.store.head(subject, deadline) !== position) unavailable.add('changed_inventory');
+  async function checkCurrent(checkDeadline: number) {
+    for (const [subject, position] of Object.entries(inputs.positions)) {
+      const currentPosition = await options.store.head(subject, checkDeadline);
+      if (currentPosition !== position) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (!await checkCurrent(deadline)) {
+    unavailable.add('changed_inventory');
   }
   const hash = createHash('sha256');
   hash.update(JSON.stringify([1, inputs.positions, content]));
   return { rows, complete: unavailable.size === 0, unavailableSections: Array.from(unavailable),
-    reviewRevision: hash.digest('hex'), ownedSharedWork: [], personalConnections, routines,
+    reviewRevision: hash.digest('hex'), checkCurrent, ownedSharedWork: [],
+    personalConnections, routines,
     personalComputer: content.computers, retainedHistory: content.history };
 }
 
@@ -297,7 +307,8 @@ async function retainedContent(options: GroupOptions, memberId: string, head: nu
   }
   const total = history.rows[0];
   if (!total) throw new Error('History count unavailable');
-  return { current, positions: Array.from(positions.entries()), computers: computers.rows,
+  // Use checkpoints to detect behind or moving tables, not as departure facts.
+  return { current, computers: computers.rows,
     history: { count: Number(total.count), firstAt: total.firstAt, lastAt: total.lastAt } };
 }
 

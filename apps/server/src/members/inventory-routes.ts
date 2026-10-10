@@ -52,7 +52,7 @@ async function sendInventory(reply: FastifyReply, request: FastifyRequest, optio
   memberId: string, target: Awaited<ReturnType<typeof currentMembership>>,
   inventory: Awaited<ReturnType<typeof memberInventory>>, memberSequence: number) {
   const checkedAt = new Date().toISOString();
-  const { rows, ...departure } = inventory;
+  const { rows, checkCurrent: _checkCurrent, ...departure } = inventory;
   if (request.routeOptions.url?.endsWith('/access')) {
     const unavailableSections = [...inventory.unavailableSections];
     if (rows.length) unavailableSections.push('use_availability');

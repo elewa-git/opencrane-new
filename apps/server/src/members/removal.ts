@@ -49,7 +49,6 @@ export async function removalCommand(options: GroupOptions, actor: string,
   const rows = await history(store, subject, silo, deadline);
   const saved = previous(rows, actor, input);
   if (saved) return saved;
-  const snapshot = await store.head(undefined, deadline);
   const target = await currentMembership(store, silo, memberId, undefined, deadline);
   if (target.role === 'owner') throw new RemovalConflict('ownership_stream_required');
   if (!target.role) throw new RemovalConflict('active_target_required');
@@ -75,9 +74,11 @@ export async function removalCommand(options: GroupOptions, actor: string,
     type: 'member.removed', source: 'opencrane-server', time: new Date().toISOString(),
     principal: { kind: 'human' as const, id: actor }, data };
   await fresh();
-  // Refuse inventory changes in the gap before saving. Access checks still watch small streams.
+  // Check only the reviewed inventory inputs. Chat messages do not change these positions.
+  await requireCurrentInventory(inventory, fresh.deadline);
+  await fresh();
   const command = { event, expectedSequence: input.expectedSequence,
-    expectedGlobalSequence: snapshot, deadline: fresh.deadline, historyChecked: true as const };
+    deadline: fresh.deadline, historyChecked: true as const };
   const result = await store.append(command);
   if (result.status === 'unavailable' || result.status === 'rejected') {
     throw new Error('Removal append unavailable');
@@ -87,6 +88,13 @@ export async function removalCommand(options: GroupOptions, actor: string,
   if (completed) return completed;
   throw new RemovalConflict('concurrent_change');
 }
+async function requireCurrentInventory(inventory: Awaited<ReturnType<typeof memberInventory>>,
+  deadline: number) {
+  if (!await inventory.checkCurrent(deadline)) {
+    throw new RemovalConflict('stale_review');
+  }
+}
+
 export async function removalStatus(options: GroupOptions, actor: string,
   memberId: string, commandId: string) {
   const rows = await history(options.store, `member-${memberId}`, options.silo,

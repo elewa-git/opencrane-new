@@ -30,6 +30,7 @@ flowchart LR
 
 - Returns missing approval details and accepts requester retries after verified non-dispatch.
 - Lets admins review a departure, remove access and recover the saved removal receipt.
+  Other members can keep posting messages while removal is being saved.
 - Records owner appointments as requests. Counts a successor only after confirmation.
 - Lets owners and admins save provider choices and pauses, count affected assistants
   and recover saved results. Conflicting requests cannot report an unsaved change
