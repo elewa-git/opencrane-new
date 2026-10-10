@@ -311,6 +311,7 @@ async function projectsDuringInventory(targetChanges: boolean) {
   const memberId = targetChanges ? 'changed-during-read' : 'projected-during-read';
   const assistantId = `${memberId}-helper`;
   await join(memberId);
+  if (!targetChanges) await join('inventory-poster');
   await append(`assistant-${assistantId}`, 'assistant.created', {
     assistantId, kind: 'personal', ownerId: memberId,
   });
@@ -332,7 +333,7 @@ async function projectsDuringInventory(targetChanges: boolean) {
         const keys = conversationKeys(keyDirectory);
         keys.provision('test', 'projected-other-chat');
         const encrypted = keys.encrypt('test', 'projected-other-chat', 'Another member posts');
-        const data = { conversationId: 'projected-other-chat', authorId: 'posting-member',
+        const data = { conversationId: 'projected-other-chat', authorId: 'inventory-poster',
           authorKind: 'human', contentType: 'text', ...encrypted };
         await append('conversation-projected-other-chat', 'message.posted', data);
       }
@@ -363,6 +364,79 @@ it.each([false, true])(
   'checks only the target when events are projected between inventory reads: target changes %s',
   projectsDuringInventory,
 );
+
+async function refusesChangedHistory(projected: boolean) {
+  const memberId = projected ? 'projected-target-history' : 'pending-target-history';
+  await join(memberId);
+  const input = await review(memberId);
+  const query = db.query.bind(db);
+  let changed = false;
+  async function createBetweenReads<Row extends Record<string, unknown>>(
+    sql: string, parameters?: unknown[],
+  ): Promise<{ rows: Row[] }> {
+    const result = await query<Row>(sql, parameters);
+    if (!changed && sql.includes('FROM computers WHERE silo = $1 AND owner_id = $2')) {
+      changed = true;
+      await append(`conversation-${memberId}`, 'conversation.created', {
+        conversationId: memberId, assistantId: 'history-helper', createdBy: memberId,
+      });
+      if (projected) await project();
+    }
+    return result;
+  }
+  const querySpy = vi.spyOn(db, 'query');
+  querySpy.mockImplementation(createBetweenReads);
+  const response = await request(memberId, 'remove', input);
+  querySpy.mockRestore();
+  expect(changed).toBe(true);
+  expect(response.statusCode, response.body).toBe(409);
+  expect(response.json()).toMatchObject({ reason: 'incomplete_review' });
+  const rows = await history(nats.reader, `member-${memberId}`, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows.at(-1)?.event.type).toBe('member.joined');
+  expect((await currentMembership(nats.reader, 'test', memberId)).role).toBe('member');
+  await project();
+  const departure = await request(memberId, 'departure');
+  expect(departure.json()).toMatchObject({ complete: true, retainedHistory: { count: 1 } });
+  const refreshed = await review(memberId);
+  expect((await request(memberId, 'remove', refreshed)).statusCode).toBe(200);
+}
+it.each([false, true])(
+  'refuses target history created between inventory reads: projected %s', refusesChangedHistory,
+);
+
+async function refusesPendingHistoryBeforeAppend() {
+  const memberId = 'history-before-append';
+  await join(memberId);
+  const input = await review(memberId);
+  const readHead = nats.store.head.bind(nats.store);
+  let changed = false;
+  async function createDuringAccess(subject?: string, deadline?: number) {
+    const position = await readHead(subject, deadline);
+    const checkingAccess = deadline !== undefined && deadline - performance.now() <= 2000;
+    if (!changed && subject === `member-${memberId}` && checkingAccess) {
+      changed = true;
+      await append(`conversation-${memberId}`, 'conversation.created', {
+        conversationId: memberId, assistantId: 'history-helper', createdBy: memberId,
+      });
+    }
+    return position;
+  }
+  const headSpy = vi.spyOn(nats.store, 'head');
+  headSpy.mockImplementation(createDuringAccess);
+  const response = await request(memberId, 'remove', input);
+  headSpy.mockRestore();
+  expect(changed).toBe(true);
+  expect(response.statusCode, response.body).toBe(409);
+  expect(response.json()).toMatchObject({ reason: 'stale_review' });
+  const rows = await history(nats.reader, `member-${memberId}`, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows.at(-1)?.event.type).toBe('member.joined');
+  expect((await currentMembership(nats.reader, 'test', memberId)).role).toBe('member');
+  await project();
+}
+it('refuses an unprojected target history change during the final access check',
+  refusesPendingHistoryBeforeAppend);
 
 async function refusesTargetChangeBeforeAppend() {
   const memberId = 'target-changed-at-append';
