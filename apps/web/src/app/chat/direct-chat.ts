@@ -219,7 +219,7 @@ export class DirectChat implements OnInit, OnDestroy {
   protected async selectConversation(conversationId: string): Promise<void> {
     if (this.composerBusy()) return;
     const conversation = directConversationById(this.conversations(), conversationId);
-    if (!conversation) return;
+    if (!conversation || (conversation.mode !== 'direct' && conversation.mode !== 'group')) return;
     let selectedColleague: Colleague | undefined;
     if (conversation.mode === 'direct') {
       const otherId = otherParticipant(conversation.participantIds, this.currentMemberId);
