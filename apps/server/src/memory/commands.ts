@@ -3,7 +3,7 @@ import { opendir } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { authorityFence, readActiveMember } from '@opencrane/models';
+import { authorityFence, MemoryPersonScopeOnly, readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryIdentity } from '@opencrane/projections';
 import { memoryTextSchema, memoryWrittenDataSchema, memoryWrittenEventSchema,
   } from '@opencrane/events';
@@ -22,15 +22,19 @@ const commandInput = fields.extend({ commandId: identifier, text: memoryTextSche
 export const changeParams = z.strictObject({ scopeId: z.string().regex(/^[a-f0-9]{64}$/u),
   commandId: identifier });
 type Input = z.infer<typeof commandInput>;
+type PrincipalKind = 'human' | 'agent';
+type AgentWrite = { deadline: number; conversation: string; turn: string; requestId: string;
+  confirm: () => Promise<unknown> };
 
-function commandReference(silo: string, scopeId: string, requester: string, commandId: string) {
+function commandReference(silo: string, scopeId: string, requester: string, commandId: string,
+  principalKind: PrincipalKind = 'human') {
   const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, 'human', requester, scopeId, commandId]));
+  hash.update(JSON.stringify([silo, principalKind, requester, scopeId, commandId]));
   return hash.digest('hex');
 }
 async function commandHistory(options: MemoryOptions, scopeId: string,
   requester: string, commandId: string, deadline = performance.now() + 10_000,
-  knownRows: StoredEvent[] = []) {
+  knownRows: StoredEvent[] = [], principalKind: PrincipalKind = 'human') {
   const rows = [...knownRows];
   const fromSequence = (rows.at(-1)?.sequence ?? 0) + 1;
   for await (const row of options.store.readStream(`scope-${scopeId}`, fromSequence, deadline)) {
@@ -40,7 +44,7 @@ async function commandHistory(options: MemoryOptions, scopeId: string,
     rows.push(row);
   }
   function matches(row: StoredEvent) {
-    return row.event.commandId === commandId && row.event.principal?.kind === 'human' &&
+    return row.event.commandId === commandId && row.event.principal?.kind === principalKind &&
       row.event.principal.id === requester;
   }
   return { rows, original: rows.find(matches) };
@@ -123,7 +127,19 @@ function checkDependencies(rows: StoredEvent[], scope: Scope, input: Input,
   }
 }
 
-export async function remember(options: MemoryOptions, requester: string, scope: Scope, raw: unknown) {
+function requireAgentPersonScope(scope: Scope, requester: string) {
+  if (scope.scopeKind !== 'person' || scope.ownerId !== requester) {
+    throw new MemoryPersonScopeOnly();
+  }
+}
+
+export async function remember(options: MemoryOptions, requester: string, scope: Scope,
+  raw: unknown, agent?: AgentWrite) {
+  let principalKind: PrincipalKind = 'human';
+  if (agent) {
+    requireAgentPersonScope(scope, requester);
+    principalKind = 'agent';
+  }
   // Check write permission before inspecting private content or reserving a database client.
   const initialAccess = await scopeAccess(options, requester, scope, false, undefined, true);
   if (!initialAccess.canWrite) {
@@ -134,12 +150,16 @@ export async function remember(options: MemoryOptions, requester: string, scope:
       (parsed.kind === 'preference' && scope.scopeKind !== 'person')) {
     throw new z.ZodError([]);
   }
-  const input = { ...parsed, sources: statementSources(parsed, requester) };
+  let sources = parsed.sources;
+  if (!agent) sources = statementSources(parsed, requester);
+  const input = { ...parsed, sources };
   if (!options.keyDirectory || !options.db.lock) {
     throw new Error('Memory custody unavailable');
   }
-  const reference = commandReference(options.silo, scope.scopeId, requester, input.commandId);
-  const state = await commandHistory(options, scope.scopeId, requester, input.commandId);
+  const reference = commandReference(options.silo, scope.scopeId, requester, input.commandId,
+    principalKind);
+  const state = await commandHistory(options, scope.scopeId, requester, input.commandId,
+    performance.now() + 10_000, [], principalKind);
   if (!state.original) {
     if (input.expiresAt !== null && Date.parse(input.expiresAt) <= Date.now()) {
       throw new z.ZodError([]);
@@ -149,7 +169,8 @@ export async function remember(options: MemoryOptions, requester: string, scope:
     checkDependencies(state.rows, scope, input, keys, options.silo);
   }
   // Finish permission history and OpenFGA checks before taking a database connection.
-  const fresh = await authorityFence(options.store, performance.now(), [`member-${requester}`]);
+  const fresh = await authorityFence(options.store, performance.now(), [`member-${requester}`],
+    agent?.deadline);
   const checks = memoryAccessChecks(options, requester, fresh);
   await readActiveMember(options.store, options.binding, requester, 'member', checks.applied);
   const access = await scopeAccess(options, requester, scope, false, checks, true);
@@ -159,7 +180,7 @@ export async function remember(options: MemoryOptions, requester: string, scope:
   await fresh();
   async function execute() {
     return rememberLocked(options, requester, scope, input, reference, state.rows,
-      fresh, access.audience);
+      fresh, access.audience, principalKind, agent);
   }
   // Finish permission checks before waiting for a write slot or taking a database client.
   const release = await acquireMemoryWrite(options.silo, requester, scope.scopeId);
@@ -172,14 +193,15 @@ export async function remember(options: MemoryOptions, requester: string, scope:
 }
 async function rememberLocked(options: MemoryOptions, requester: string, scope: Scope,
   input: Input, reference: string, rows: StoredEvent[],
-  fresh: Awaited<ReturnType<typeof authorityFence>>, audience: { kind: string; ownerId: string }) {
+  fresh: Awaited<ReturnType<typeof authorityFence>>, audience: { kind: string; ownerId: string },
+  principalKind: PrincipalKind, agent?: AgentWrite) {
   const keys = memoryKeys(options.keyDirectory!);
   const identity = { silo: options.silo, ...scope, memoryId: reference, revision: 1 };
   const journal = commandJournal(options.keyDirectory!, reference);
   // Read only changes since the earlier history, and release the database client promptly
   // if NATS is slow. Full scope replay must not occupy the shared connection pool.
   const state = await commandHistory(options, scope.scopeId, requester, input.commandId,
-    performance.now() + 100, rows);
+    performance.now() + 100, rows, principalKind);
   if (state.original) {
     journal.remove();
     return originalReceipt(state.original, keys, input, audience);
@@ -204,17 +226,17 @@ async function rememberLocked(options: MemoryOptions, requester: string, scope: 
   if (keys.status(identity) === 'destroyed') {
     return { outcome: 'failed', memoryId: reference };
   }
-  const entry = { identity, requester, commandId: input.commandId, inputDigest,
+  const entry = { identity, requester, principalKind, commandId: input.commandId, inputDigest,
     appendUntil: Date.now() + Math.max(0, fresh.deadline - performance.now()),
     expectedSequence: rows.at(-1)?.sequence ?? 0,
     stage: 'prepared' as const };
-  return appendPrepared(options, input, entry, rows, fresh, audience);
+  return appendPrepared(options, input, entry, rows, fresh, audience, agent);
 }
 async function appendPrepared(options: MemoryOptions, input: Input,
   entry: NonNullable<ReturnType<ReturnType<typeof commandJournal>['read']>>,
   rows: StoredEvent[], fresh: Awaited<ReturnType<typeof authorityFence>>,
-  audience: { kind: string; ownerId: string }) {
-  const { identity, requester } = entry;
+  audience: { kind: string; ownerId: string }, agent?: AgentWrite) {
+  const { identity, requester, principalKind } = entry;
   const reference = identity.memoryId;
   const scope = { scopeId: identity.scopeId, scopeKind: identity.scopeKind, ownerId: identity.ownerId };
   const keys = memoryKeys(options.keyDirectory!);
@@ -226,16 +248,23 @@ async function appendPrepared(options: MemoryOptions, input: Input,
   const data = { schemaVersion: 1, ...scope, memoryId: reference, revision: 1,
     kind: input.kind, pinned: input.pinned, expiresAt: input.expiresAt,
     sources: input.sources, dependsOn: input.dependsOn, ...placeholder };
+  let correlation = {};
+  if (agent) {
+    correlation = { conversation: agent.conversation, turn: agent.turn, request: agent.requestId };
+  }
   const event = memoryWrittenEventSchema.parse({ id: reference, commandId: input.commandId,
       silo: options.silo, subject: `scope-${scope.scopeId}`, type: 'memory.written',
       source: 'opencrane-server', time: new Date().toISOString(),
-      principal: { kind: 'human', id: requester }, correlation: {}, data });
+      principal: { kind: principalKind, id: requester }, correlation, data });
   journal.save(entry);
   try {
     keys.provision(identity);
     const encrypted = keys.encrypt(identity, input.text);
     event.data = { ...data, ...encrypted };
+    checkDependencies(rows, scope, input, keys, options.silo);
     await fresh();
+    // Recheck the original deadline, live turn and watched grants just before saving.
+    if (agent) await agent.confirm();
     journal.save({ ...entry, stage: 'unknown' });
     const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0,
       historyChecked: true as const, deadline: fresh.deadline };
@@ -255,7 +284,7 @@ async function appendPrepared(options: MemoryOptions, input: Input,
     // Check the original command again before destroying any key after a definite refusal.
     const readDeadline = Math.min(fresh.deadline, performance.now() + 100);
     const reconciled = await commandHistory(options, scope.scopeId, requester, input.commandId,
-      readDeadline, rows);
+      readDeadline, rows, principalKind);
     if (reconciled.original) {
       journal.remove();
       return originalReceipt(reconciled.original, keys, input, audience);
@@ -331,7 +360,7 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
     return;
   }
   const expected = commandReference(options.silo, entry.identity.scopeId,
-    entry.requester, entry.commandId);
+    entry.requester, entry.commandId, entry.principalKind);
   if (reference !== expected || entry.identity.memoryId !== reference) {
     throw new Error('Invalid memory command record');
   }
@@ -339,7 +368,7 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
     return;
   }
   const state = await commandHistory(options, entry.identity.scopeId,
-    entry.requester, entry.commandId, performance.now() + 1000);
+    entry.requester, entry.commandId, performance.now() + 1000, [], entry.principalKind);
   function finishRecovery() {
     const current = journal.read();
     // Ignore a read taken while another server was changing this command's record.

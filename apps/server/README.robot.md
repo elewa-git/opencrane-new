@@ -1297,6 +1297,9 @@ Deployment keeps the backend behind the gateway; unsigned direct requests are re
 The [memory capability contract](../../libs/models/README.robot.md) explains signature,
 scope, policy and current grant checks. Replies fit within 16 KiB.
 `test/memory-mcp.test.ts` uses real agentgateway, NATS, PostgreSQL and OpenFGA.
+Its shared fixture renews gateway credentials before each test on the same live turn.
+The turn token still lasts two minutes. Long test runs must reach the intended memory
+check rather than fail earlier because a previous test's token has expired.
 The successful fixture records a `restricted` execution mode. A legacy start without
 a mode is refused, as is `memory_free`. Both the requester and assistant need
 recorded grants of the right identity kind and current OpenFGA permission.
@@ -1426,3 +1429,34 @@ receipt reports unavailable selection rather than denied access.
 Failed reads return 503. Only counts and dates leave conversation tables.
 Tool, publication and connection readiness stay unavailable. Removal stays disabled.
 `test/member-inventory.test.ts` uses real services. Fresh-install qualification: NOT RUN.
+
+## Governed personal remember (P4-12 PR 3c)
+
+`remember` uses the human command path with an agent principal bound to the requester.
+Its command id is separate from human command ids. Retries return the original receipt;
+changed input conflicts. Recovery checks the recorded principal kind, including after a
+saved append loses its reply. The event links the conversation, turn and decision request.
+
+A recall page includes `recallProof`, a signed list of returned fact ids and revisions.
+It binds the silo, requester, assistant, computer generation, conversation, turn, thread,
+content class and selected scope. It contains no fact text and needs no saved permit table.
+Proof bytes count towards the 16 KiB reply limit. Page-limit placeholders are excluded.
+Remember requires this proof, non-empty same-scope `dependsOn`, and empty `sources`.
+The command also checks that dependency revisions still exist, decrypt and have not expired.
+An agent cannot claim a human statement. This proof checks references, not whether the
+model's wording follows logically from them.
+
+The final append rechecks the original capability deadline, live turn and watched grants.
+Every agent write to group or assistant-notes scope returns `agent_person_scope_only`,
+even with valid shared recall references and write grants. The command also refuses
+another person's scope. Claimed `shared_only` contexts remain refused. Server-recorded
+shared-only execution, its input isolation and shared agent writes are deferred to a later PR
+after #94. Native turns still
+receive no memory tools. Fresh-install qualification and backend network isolation are NOT RUN.
+
+Source evidence for the 10 October 2026 rework is recorded in the
+[rework receipt](../../docs/process/p4-12-pr3c-rework.md). The seven-file memory set
+passed 271 tests twice with `PG_TEST_URL` set. After the lint corrections, the final
+changed memory files passed 99 tests twice. Web tests passed 589 tests, and the existing
+chat fixture produced 24 captures. The receipt records source checks, initial failures
+and the remaining live qualification. No full root suite ran.

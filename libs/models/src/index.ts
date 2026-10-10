@@ -33,4 +33,4 @@ export { activeMember, readActiveMember, MemberAccessRefused } from './member-au
 export { providerBindingCommand, providerDependencies, providerDefaultHandler } from './provider-bindings.ts';
 
 export { parseMemoryRequest } from './mcp.ts';
-export { memoryRights, verifyMemoryContext } from './memory-context.ts';
+export { MemoryPersonScopeOnly, memoryRights, verifyMemoryContext, type MemoryContext } from './memory-context.ts';

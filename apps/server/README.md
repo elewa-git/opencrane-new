@@ -29,6 +29,7 @@ flowchart LR
   as saved. Ordinary calls keep their existing setup.
 - Serves personal facts, the bound assistant's notes and its group facts after checking
   the gateway pass, saved grants, current permissions and the recorded turn mode.
+  Saves an agent's facts only in the requester's own memory, from references recalled by that thread.
 - Signs people in and keeps their browser session.
 - Uses the shared organisation check for session routes and WebSocket connections.
   Production refuses extra sign-in identities. Development can allow named identities

@@ -1,0 +1,133 @@
+# Governed personal remember: rework evidence
+
+Date: 10 October 2026. Source: `3d29b997` plus the documentation in this receipt.
+Environment: Linux, Node 22.23.3, this development worktree. This is not a fresh silo.
+The tests use real disposable NATS, PostgreSQL, OpenFGA and agentgateway services.
+`PG_TEST_URL` was set for both final memory runs. Credentials are omitted from this receipt.
+All checks ran under `nice -n 10`. No full root suite ran.
+
+## Scope
+
+An agent can save facts only in its requester's person scope. A group or assistant-notes
+write returns `agent_person_scope_only`, including with valid shared recall references and
+write grants. The command also refuses another person's scope. Shared-only execution and
+shared agent writes are deferred to a later PR after #94. No part of that execution is built here.
+
+## Failing-first checks
+
+The new tests were committed in `40078fa4` before their fixes in `e5f69401`.
+The shared-scope reason tests and decoded-proof-limit test failed first. The command test
+also showed that another person's scope did not get the explicit agent refusal reason.
+Tests of existing guards passed without production changes.
+
+A same-length HMAC forgery changes one byte of a valid 32-byte keyed hash. The MCP test
+asserts refusal, no memory append and an unchanged scope position. In a separate run,
+removing HMAC equality made the new unit test fail. The original check was restored.
+The mutation log is `/tmp/pr319-hmac-mutation.log`.
+
+The existing model-registry test fixture made dialog methods read-only. Its regression
+was committed in `7e5c848a` and failed before the fixture fix in `d007a19a`.
+The change lets each overlay test replace its own methods. Browser behaviour is unchanged.
+
+## Final results
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Full lint, including Knip and changelog | PASS | `/tmp/pr319-lint-green.log` |
+| Typecheck, all workspaces and affected packages after lint fixes | PASS | `/tmp/pr319-typecheck-final.log`, `/tmp/pr319-ts-fix2.log` |
+| Event catalogue, 99 types | PASS | `/tmp/pr319-events.log` |
+| Seven-file memory set, PostgreSQL configured | PASS: 271 tests twice | `/tmp/pr319-targeted-green-1.log`, `/tmp/pr319-targeted-green-2.log` |
+| Final changed memory files after lint fixes | PASS: 99 tests twice | `/tmp/pr319-changed-final-1.log`, `/tmp/pr319-changed-final-2.log` |
+| Web build | PASS, existing warnings | `/tmp/pr319-web-build.log` |
+| Web tests with one worker | PASS: 589 tests | `/tmp/pr319-web-tests-final.log` |
+| Browser captures | PASS: 24 captures | `/tmp/pr319-captures/visual.json` |
+
+The seven-file memory set covers MCP writes, signed recall proofs, access checks, capability
+claims, human commands, recovery, worker replay and native tool exclusion. Negative tests
+isolate proof bindings and bounds, unavailable references, dependency scope and revision,
+saved assistant and grant records, turn identity and conversation closure. Preparation
+races prove that key loss or a closed turn refuses the write and removes its temporary record.
+Recovery tests cover saved replies, prepared crashes, definite failures and older records
+without a principal kind.
+
+The browser captures use the existing chat fixture and the production web build. They cover
+private and memory-free choices, recovery and lost output at 1280, 390 and 320 pixels, with
+normal and reduced motion. They do not qualify native memory or new memory screens.
+Captures and their JSON receipt are in `/tmp/pr319-captures/`.
+
+Initial parallel runs under host load had timeout failures. The first completed lint run
+also found a complexity limit and unsafe test assertions. The guard was split into a
+small named function, and the test fixtures now use full types and verified claims. The full lint attempt was
+stopped to reduce load. Final checks above come from sequential reruns. The web runner
+used a temporary configuration containing only `maxWorkers: 1`; deadlines were unchanged.
+Build warnings about existing stylesheet budgets and the noVNC CommonJS import remain.
+
+## Remaining qualification
+
+Fresh-install remember and recall, backend network isolation, stale content-generation
+rejection and native memory: **NOT RUN**. The draft awaits the orchestrator's next review.
+
+## Rebase repair — 10 October 2026
+
+Base: `6ebd942c` (`origin/main`, including #316). The rebase carried only this PR's
+12 original commits and the new regression commit. It completed successfully.
+Environment: the same Linux development worktree, with real disposable services and
+`PG_TEST_URL` set. This is not a fresh installation. No full root suite ran.
+
+The train reported eight failures at the shared recall step. A local run reproduced
+five of them in 139.85 seconds. The three earlier cases passed in that run. This
+difference comes from when the shared turn token reaches its two-minute expiry.
+The later tests were using credentials issued once during the file's initial setup.
+They failed before reaching their individual memory checks.
+
+No merged main change was found to alter this refusal. Comparing the pre-rebase PR
+with main showed unchanged token lifetimes, memory rights, backend memory MCP and
+memory command code. The tool audit additions in #311 are outside the memory
+decision branch. The group, member and browser changes did not change this shared
+personal fixture. The existing token expiry check correctly refused an old token.
+
+The regression was committed first in `63f1c94b`. It advances the clock by 121 seconds,
+proves that the old credential is refused before reaching the backend, and requires
+renewal for the same live turn to succeed with a 120-second token. It failed before
+the fixture fix and passed afterwards. Reissuing from the fixture's old clock was
+insufficient. The fix moves that test clock to the current time before issuing new
+credentials and renews them before each test. It keeps the original turn, grants,
+memory contents, assertions and production deadlines.
+
+All eight train failures have this same cause and fix:
+
+- refuses another person scope at the command boundary;
+- refuses an expired dependency at the command boundary;
+- rechecks dependencies after preparing the new revision key;
+- cleans recovery records only after a definite failure: prepared;
+- cleans recovery records only after a definite failure: unknown;
+- cleans recovery records only after a definite failure: legacy;
+- refuses a turn closed during write preparation;
+- rechecks stale grants at the backend and refuses an ended turn upstream.
+
+The repair changes test setup and documentation only. No production code changed
+in the repair. The original PR still contains its governed personal remember code.
+The models README repair removes saved conflict markers and retains both main's
+access and approval notes and this PR's personal remember contract.
+
+Failing-first logs: `/tmp/pr319-credential-red.log` and
+`/tmp/pr319-credential-green.log`. The initial changed-file failure log is
+`/tmp/pr319-rebase-failing.log`.
+
+The final test runs used source `8745e819`. All four changed test files ran twice,
+with `PG_TEST_URL` set and under `nice -n 10`. The three memory files are also the
+complete file list named by the train. They used one worker. The web test ran
+through Angular's test builder with only the changed model-registry file selected.
+
+| Check | Result | Logs |
+| --- | --- | --- |
+| Memory MCP, recall proof and memory rights | PASS: 100 tests twice | `/tmp/pr319-rebase-tests-1.log`, `/tmp/pr319-rebase-tests-2.log` |
+| Changed model-registry tests | PASS: 60 tests twice | `/tmp/pr319-rebase-web-1.log`, `/tmp/pr319-rebase-web-2.log` |
+| Full lint, including Knip and changelog | PASS | `/tmp/pr319-rebase-lint-final.log` |
+| Typecheck, all workspaces | PASS | `/tmp/pr319-rebase-typecheck-final.log` |
+| Event catalogue, 103 types | PASS | `/tmp/pr319-rebase-events.log` |
+| Separate changelog check | PASS | `/tmp/pr319-rebase-changelog.log` |
+
+The memory runs took 138.14 and 146.34 seconds, both longer than the old shared
+credential's lifetime. Neither run skipped tests. Fresh-install journeys and
+the remaining live conditions listed above remain **NOT RUN**.

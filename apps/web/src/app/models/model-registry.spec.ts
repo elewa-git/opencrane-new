@@ -6,12 +6,12 @@ import type { ProviderRow } from './provider-api';
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
   configurable: true,
   writable: true,
-  value: function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); },
+  value: openTestDialog,
 });
 Object.defineProperty(HTMLDialogElement.prototype, 'close', {
   configurable: true,
   writable: true,
-  value: function close(this: HTMLDialogElement): void { this.removeAttribute('open'); },
+  value: closeTestDialog,
 });
 
 const taskRouting = { chat_turn: { model: 'gpt-6.1-sol', reason: 'Chat' } };
@@ -1163,17 +1163,26 @@ it.each(['create', 'key', 'models', 'quote'] as const)(
     }
   });
 
+function openTestDialog(this: HTMLDialogElement): void {
+  this.setAttribute('open', '');
+}
+
+function closeTestDialog(this: HTMLDialogElement): void {
+  this.removeAttribute('open');
+}
 
 function replacesDialogMethodsForAnotherComponent() {
   const dialog = document.createElement('dialog');
-  const showModal = vi.fn();
-  const close = vi.fn();
+  const showModal = vi.fn(openTestDialog);
+  const close = vi.fn(closeTestDialog);
   const methods = { showModal, close };
   Object.assign(dialog, methods);
   dialog.showModal();
-  dialog.close();
   expect(showModal).toHaveBeenCalledOnce();
+  expect(dialog.open).toBe(true);
+  dialog.close();
   expect(close).toHaveBeenCalledOnce();
+  expect(dialog.open).toBe(false);
 }
 it('lets another component replace dialog methods on its own element',
   replacesDialogMethodsForAnotherComponent);

@@ -15,9 +15,9 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
-  models <-->|checks saved grants, tool rules, calls and memory passes| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves changes, spending and reads new activity and grant facts| store["libs/event-store<br/>event log"]
+  models -->|saves changes and spending, reads new activity and grant facts| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -32,6 +32,7 @@ flowchart LR
   Ordinary calls still use the existing gateway setup.
 - Signs short passes for memory calls through the gateway.
   A thread can read the person's own facts, its assistant's notes and that assistant's group facts.
+  It can save facts only in the requester’s own memory, with a separate write grant.
   These calls need saved grants, current permissions and an explicitly recorded private turn.
 - Choose an AI model for each task from a fixed routing table.
 - Keep model prices and estimate each request's cost before sending it.

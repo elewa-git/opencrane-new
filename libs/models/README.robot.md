@@ -835,10 +835,10 @@ scope's operation grants separately at both gateway and backend admission.
 Remember remains unadvertised and refused, including private calls with plausible
 shared source references. Native turns still receive no memory tools.
 
-This is the first recall-only slice of the row-3 remainder. PR #292's command path
-was unmerged when work began. Governed remember and server-recorded shared-only
-execution remain separate work. A caller's `shared_only` claim is still refused;
-this slice does not establish isolation of shared execution inputs.
+The earlier recall-only work was built before the personal command path merged.
+Personal remember now uses that path, as described below. Server-recorded shared-only
+execution and shared agent writes remain separate work. A caller's `shared_only` claim
+is still refused; shared execution input isolation is not established.
 
 Review follow-ups now cover fractional-second expiry, independent discovery
 version/name headers, and the issuer's two-second cap and shorter caller deadline.
@@ -927,3 +927,18 @@ price-table fields. It sends no provider request.
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
+
+## Personal remember admission
+
+The signed capability can name `remember`. Its scope stays the requester's person scope.
+Group and assistant-notes writes return `agent_person_scope_only` even when grants and
+shared recalled references are valid. Both requester and assistant need recorded `memory_write` grants and current OpenFGA rights;
+a read grant cannot supply write permission. Ask and Block policies refuse the write.
+Discovery omits remember unless its reviewed zero-cost policy is Allow. Recall-only
+installations keep working without a remember policy.
+
+`memoryRights` returns a final check over the original access snapshot and live turn.
+The server calls it before the conditional append, with the capability's original deadline.
+It watches small access streams and checks later turn activity separately. It does not add
+conversation or memory-content streams to the access snapshot. The server's signed recalled
+references and command checks are described in `apps/server/README.robot.md`.
