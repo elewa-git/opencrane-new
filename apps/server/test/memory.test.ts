@@ -226,8 +226,16 @@ async function invalidPreviewDependency(reason: string) {
   try {
     if (reason === 'expired') {
       clock.mockReturnValue(Date.parse(saved.expiresAt) + 1);
-    } else {
+    } else if (reason === 'destroyed') {
       keys.delete(saved.ancestorIdentity);
+    } else {
+      const keyId = keys.provision(saved.ancestorIdentity);
+      const keyPath = `${directory}/${keyId.slice('key:'.length)}`;
+      if (reason === 'missing') {
+        await rm(keyPath);
+      } else {
+        await writeFile(keyPath, 'damaged');
+      }
     }
     const response = await get(previewUrl, 'preview');
     expect(response.statusCode).toBe(200);
@@ -242,8 +250,44 @@ async function invalidPreviewDependency(reason: string) {
   }
 }
 
-it.each(['expired', 'destroyed'])(
+it.each(['expired', 'destroyed', 'missing', 'damaged'])(
   'omits a pinned fact after its previously live dependency becomes %s', invalidPreviewDependency);
+
+async function dependencyLostBeforeRelease() {
+  const saved = await savePreviewDependency('release');
+  const original = nats.store.head.bind(nats.store);
+  let scopeReads = 0;
+  let destroyed = false;
+  async function head(subject?: string, deadline?: number) {
+    if (subject === `scope-${previewScopes[0]!.scopeId}`) {
+      scopeReads++;
+      // Destroy the supporting key during the final scope check, after candidate selection.
+      if (scopeReads === 4) {
+        keys.delete(saved.ancestorIdentity);
+        destroyed = true;
+      }
+    }
+    return original(subject, deadline);
+  }
+  const reading = vi.spyOn(nats.store, 'head');
+  reading.mockImplementation(head);
+  try {
+    const response = await get(previewUrl, 'preview');
+    expect(destroyed).toBe(true);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ references: [] });
+    expect(response.body).not.toContain('A pinned dependent fact');
+    expect(response.body).not.toContain(saved.dependentIdentity.memoryId);
+  } finally {
+    reading.mockRestore();
+    keys.delete(saved.ancestorIdentity);
+    keys.delete(saved.dependentIdentity);
+    await runner.rebuild(projection);
+  }
+}
+
+it('omits preview text when a supporting key is destroyed after candidate selection',
+  dependencyLostBeforeRelease);
 
 async function uniformConversationRefusals() {
   await append('conversation-preview-direct', 'conversation.created', {
