@@ -78,13 +78,22 @@ function invitationMetadata(event: EventEnvelope, data: Record<string, unknown>)
     operation, role, recordedAt: event.time,
   };
 }
+function isDestinationRule(event: EventEnvelope) {
+  return ['egress.destination_allowed', 'egress.destination_revoked'].includes(event.type);
+}
+function auditSource(event: EventEnvelope): AuditRecord['source'] {
+  if (event.type === 'decision.recorded') return 'decision';
+  if (isDestinationRule(event)) return 'authoritative';
+  if (/^(effect|gateway|egress)\./u.test(event.type)) return 'gateway';
+  if (event.type.startsWith('agent.')) return 'computer';
+  return 'authoritative';
+}
 function metadata(event: EventEnvelope, d: Record<string, unknown>, position: number): AuditRecord {
   const status = z.enum(['allow', 'ask', 'deny', 'success', 'error', 'unknown', 'not_dispatched']).safeParse(d['outcome']).data;
   const reason = typeof d['reason'] === 'string' ? Object.entries(auditReasons).find(([code]) => code === d['reason'])?.[1] ?? 'Recorded reason withheld' : undefined;
   const cents = amount(d['amountCents'] ?? d['settledCents']);
   return { ...invitationMetadata(event, d), eventId: event.id, type: event.type, position,
-    source: event.type === 'decision.recorded' ? 'decision' : /^(effect|gateway|egress)\./u.test(event.type) ? 'gateway'
-      : event.type.startsWith('agent.') ? 'computer' : 'authoritative',
+    source: auditSource(event),
     status: event.type === 'effect.uncertain' ? 'unknown' : status ?? 'recorded',
     ...(reason ? { reason } : {}), ...(cents !== undefined ? { amountCents: cents } : {}) };
 }
@@ -127,7 +136,7 @@ function isAnchor(event: EventEnvelope, request: string | undefined, permit: str
   if (event.type === 'security.alert_raised') {
     return true;
   }
-  if (event.type === 'decision.recorded') {
+  if (event.type === 'decision.recorded' || isDestinationRule(event)) {
     return true;
   }
   if (event.type === 'gateway.observation_recorded' && !permit) {

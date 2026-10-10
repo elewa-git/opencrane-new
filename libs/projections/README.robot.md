@@ -382,3 +382,14 @@ The marker applies to the silo, including after its default choice moves.
 without changing its revision or verification. The latest drain event across the
 silo determines admission; one connection's projected flag is not the silo mode.
 Rebuild restores these records without admitting turns or touching spending.
+
+## Destination rules
+
+`egressGrantStream` hashes silo/scope/subject separately from host/port.
+`egressPolicy` retains the latest allowed/revoked rule, actor, time, command id, event
+id and global position. `readEgressRule` selects one silo and exact rule.
+`egressRulesAllow` takes current rule states and requires all three exact silo/person/
+assistant rules. It checks policy agreement only, not permission to send traffic.
+`ProjectionRunner.rebuild(egressPolicy)` rebuilds offline with readers/workers stopped.
+No replay reaction, token, worker or socket is started. Command receipt recovery reads
+the event log, so a missing or behind table cannot decide whether a change saved.

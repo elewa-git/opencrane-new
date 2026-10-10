@@ -10,7 +10,11 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
+<<<<<<< HEAD
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership and member access"]
+=======
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member access and destination rules"]
+>>>>>>> 8fb52b62 (🛡️ Save exact destination policies and recover their receipts)
   server -.->|checks access, refusal records, departure details, spending, memory and turn previews| libs["libs/*<br/>shared code"]
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member removal"]
   server -.->|checks access, refusal records, departure details, spending and memory| libs["libs/*<br/>shared code"]
@@ -23,6 +27,8 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+- Let owners and admins save one destination rule and read its original receipt.
 
 - Preview bounded facts for a saved private turn without sending text to a computer.
   Facts with expired or unusable supporting facts are left out.

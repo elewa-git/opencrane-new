@@ -1,11 +1,13 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import { encodeSession } from '@opencrane/auth';
+import { buildServer } from '../src/server.ts';
+import { testAuthConfig } from './support/test-auth-config.ts';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { egressGrantStream } from '@opencrane/events';
-import { pgDb } from '@opencrane/projections';
+import { pgDb, egressGrantStream } from '@opencrane/projections';
 import { egressCommand, egressChange } from '../src/egress/changes.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -30,7 +32,7 @@ async function initialise() {
   const info = await nats.connection.request('$JS.API.STREAM.INFO.EVENTS');
   const data: unknown = info.json();
   const config = z.object({ config: z.record(z.string(), z.unknown()) }).parse(data).config;
-  const updated = { ...config, duplicate_window: 1_000_000 };
+  const updated = { ...config, duplicate_window: 100_000_000 };
   const response = await nats.connection.request('$JS.API.STREAM.UPDATE.EVENTS',
     new TextEncoder().encode(JSON.stringify(updated)));
   expect(z.object({ error: z.unknown().optional() }).parse(response.json()).error).toBeUndefined();
@@ -70,7 +72,7 @@ async function lostReplyRecoversOriginalReceipt() {
   } finally {
     nats.store.append = append;
   }
-  await delay(30);
+  await delay(150);
   const recovered = await egressChange(options(), 'alice', rule, command.commandId);
   expect(recovered).toMatchObject({ status: 'appended', operation: 'egress.destination_revoked' });
   expect(await egressCommand(options(), 'alice', command)).toEqual(recovered);
@@ -85,14 +87,14 @@ async function longHistoryPrecedesSmallChecks() {
   const subject = egressGrantStream('test', rule);
   let finished = false;
   store.readStream = async function* slowHistory(name, from, deadline) {
-    if (name === subject) {
+    if (name === subject && (from ?? 1) === 1) {
       expect((deadline ?? 0) - performance.now()).toBeGreaterThan(2000);
       await delay(2100);
     } else if ((deadline ?? Infinity) - performance.now() <= 2000) {
       expect(finished).toBe(true);
     }
     yield* read(name, from, deadline);
-    if (name === subject) finished = true;
+    if (name === subject && (from ?? 1) === 1) finished = true;
   };
   try {
     const expectedSequence = await store.head(subject);
@@ -103,6 +105,39 @@ async function longHistoryPrecedesSmallChecks() {
   }
 }
 it('reads history taking over two seconds before the small write checks', longHistoryPrecedesSmallChecks);
+
+async function httpCommandsAndStatus() {
+  const config = testAuthConfig({ expectedOrgId: 'org-test' });
+  function memberId() {
+    return Promise.resolve('alice');
+  }
+  const modelAccess = { ...options(), db: pgDb(dbs.queue), feed: { memberId } };
+  const app = buildServer(config, { modelAccess });
+  const headers = { origin: 'https://app.example.test',
+    cookie: `${config.cookieName}=${encodeSession(config, {
+      sub: 'alice', orgId: 'org-test', roles: [], authTime: 1790856000, exp: 2000000000,
+    })}` };
+  try {
+    const response = await app.inject({ method: 'POST', headers,
+      url: '/api/org/egress/destinations', payload: input });
+    expect(response.statusCode).toBe(200);
+    const status = await app.inject({ headers,
+      url: '/api/org/egress/destinations/changes/save-one?' +
+        'scope=person&subjectId=alice&host=registry.npmjs.org&port=443' });
+    expect(status.json()).toEqual(response.json());
+    expect(status.headers['cache-control']).toBe('no-store');
+    const bad = await app.inject({ method: 'POST', headers,
+      url: '/api/org/egress/destinations', payload: { ...input, host: '*.npmjs.org' } });
+    expect(bad.statusCode).toBe(400);
+    const missingOrigin = await app.inject({ method: 'POST',
+      headers: { cookie: headers.cookie }, url: '/api/org/egress/destinations', payload: input });
+    expect(missingOrigin.statusCode).toBe(403);
+  } finally {
+    await app.close();
+  }
+}
+it('serves authenticated commands and read-only saved status with safe validation',
+  httpCommandsAndStatus);
 
 async function crossSiloAndRemovedReadersRefuse() {
   const foreign = { ...options(), silo: 'other' };

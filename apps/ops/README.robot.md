@@ -421,3 +421,10 @@ same Sandbox UID, same PVC UID, a new Pod UID and a saved home file.
 The dispatcher registers `seed-provider-default` for provider verification and model selections. It records the first verified connection once the chat model is enabled, using current Owner/Admin authority. Redelivery retains any recorded default or pause. Restart the dispatcher with the updated subscriptions; provider replay runs no reaction.
 
 New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).
+
+## Destination policy table
+
+The `members` worker also initialises and runs `egressPolicy`. It copies saved
+rules and revocations only; it opens no connection to a destination. Rebuilding this
+projection uses `ProjectionRunner.rebuild(egressPolicy)` offline with readers/workers
+stopped. The replay CLI does not yet select this table.

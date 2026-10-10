@@ -22,7 +22,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals, participants, child chats, delegation and owner appointments| events["libs/events<br/>event and memory checks"]
+  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals, participants, child chats, delegation and owner appointments| events["libs/events<br/>event and memory checks and destination rules"]
   store["libs/event-store<br/>saved event log"] -.->|checks private chat choices, child records and delegated tasks| events
   projections["libs/projections<br/>read tables"] -.->|checks saved task relationships| events
   server["apps/server<br/>back end"] -.->|checks reviewed removals and memory commands and records dispatch, consent, refusals and participant facts| events["libs/events<br/>event and memory checks"]
@@ -35,6 +35,8 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+- Define exact HTTPS destination rules for the silo, a person or an assistant.
 
 - Defines shared child records with a parent message, fixed payer and named people.
 - Defines delegated task relationships and outcomes, including cancellation. Older records

@@ -1,3 +1,4 @@
+import { validEgressRuleEvent } from './egress.ts';
 import { validPreferenceIdentity } from './conversation.ts';
 import { memoryWrittenEventSchema } from './memory.ts';
 import { checkDelegationEvent } from './delegation.ts';
@@ -43,7 +44,8 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     return { success: false, reason: 'unknown_event_type', type: typeField.data.type };
   }
 
-  const envelopeSchema = eventEnvelopeSchema(definition.dataSchema).superRefine(checkDelegationEvent);
+  const envelopeSchema = eventEnvelopeSchema(definition.dataSchema).superRefine(checkDelegationEvent)
+    .refine(validEgressRuleEvent);
   const checkedSchema = definition.stream === 'chat-state'
     ? envelopeSchema.refine(validPreferenceIdentity)
     : envelopeSchema;

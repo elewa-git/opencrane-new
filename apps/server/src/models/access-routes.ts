@@ -1,3 +1,4 @@
+import { writeEgress, readEgressChange } from '../egress/changes.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import type { EventStore } from '@opencrane/event-store';
@@ -30,6 +31,15 @@ export function registerModelAccessRoutes(app: FastifyInstance, config: AuthConf
   app.get('/api/org/models/:modelId/access/candidates', handleCandidates);
   app.post('/api/org/models/:modelId/access', { bodyLimit: 2048 }, handleWrite);
   app.get('/api/org/models/:modelId/access/changes/:commandId', handleChange);
+  app.post('/api/org/egress/destinations', { bodyLimit: 2048 }, handleEgressWrite);
+  app.get('/api/org/egress/destinations/changes/:commandId', handleEgressChange);
+
+  async function handleEgressWrite(request: FastifyRequest, reply: FastifyReply) {
+    return handleRead(request, reply, writeEgress);
+  }
+  async function handleEgressChange(request: FastifyRequest, reply: FastifyReply) {
+    return handleRead(request, reply, readEgressChange);
+  }
 
   async function handleWrite(request: FastifyRequest, reply: FastifyReply) {
     return handleRead(request, reply, writeAccess);
