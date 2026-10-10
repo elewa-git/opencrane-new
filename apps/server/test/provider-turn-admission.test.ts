@@ -191,22 +191,23 @@ async function refusesDrainDuringAdmission() {
   const readStream = nats.store.readStream.bind(nats.store);
   let draining = false;
   let budgetReads = 0;
-  async function* drainDuringPayerRead(subject: string, from?: number, deadline?: number) {
+  async function* drainDuringFinalBudgetRead(subject: string, from?: number, deadline?: number) {
     if (subject === 'budget-test') {
       budgetReads++;
     }
-    // Wait until the payer read; the earlier budget read checks provider mode.
+    // Save draining after admission read the payer and before its final setup check.
     if (subject === 'budget-test' && budgetReads === 2 && !draining) {
       draining = true;
       await setDrain(true);
     }
     yield* readStream(subject, from, deadline);
   }
-  vi.spyOn(nats.store, 'readStream').mockImplementation(drainDuringPayerRead);
+  vi.spyOn(nats.store, 'readStream').mockImplementation(drainDuringFinalBudgetRead);
   await expect(turnCommand(nats.store, context, input)).rejects.toThrow(
     'Provider setup changed; try again');
+  expect(draining).toBe(true);
 }
-it('refuses a drain that starts during the payer check', refusesDrainDuringAdmission);
+it('refuses a drain that starts during the final budget check', refusesDrainDuringAdmission);
 
 async function resumesAfterRecordedCancellation() {
   await setup();

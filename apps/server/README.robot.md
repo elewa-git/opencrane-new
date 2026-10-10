@@ -1537,9 +1537,10 @@ its gateway and provider checks are built.
 The drain GET and POST routes reuse provider session, Origin and error handling.
 Their contract is in [the models details](../../libs/models/README.robot.md#recorded-draining-before-managed-calls).
 Turn admission refuses an active drain before selecting a new turn's path and
-checks it again after the payer read. Replayed starts and final reports keep the
+checks it again before saving the start. Replayed starts and final reports keep the
 saved turn. `test/provider-drain.test.ts` checks receipts, retry, cancellation,
 replay, stale inputs and refused callers using real NATS, PostgreSQL and OpenFGA.
-`test/provider-turn-admission.test.ts` checks admission and the payer-read race.
+`test/provider-turn-admission.test.ts` checks admission and a drain saved during
+the final budget check. This check shares the personal payer's incremental summary.
 The models provider contract test checks repeated gateway calls and settlement
 during drain. Production switch-on is still unavailable.
