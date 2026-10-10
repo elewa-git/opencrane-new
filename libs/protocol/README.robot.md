@@ -133,3 +133,8 @@ The [approval API](../../docs/api/approvals.md) explains tool failure records an
 
 The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
 defines invitation receipts and safe refusal history.
+
+Member access and departure replies use `memberAccessSchema` and `memberDepartureSchema`.
+They keep recorded grant sources separate from checked person/assistant permissions
+and unavailable use readiness. Departure revisions bind the actual checked inputs.
+`permissions.remove` is always false; these reads add no removal command.

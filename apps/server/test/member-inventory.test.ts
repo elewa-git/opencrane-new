@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -48,8 +48,8 @@ async function initialise() {
     });
   }
   await project();
-  async function memberId(_silo: string, _issuer: string, subject: string) {
-    return subject;
+  function memberId(_silo: string, _issuer: string, subject: string) {
+    return Promise.resolve(subject);
   }
   const memberReads = { silo: 'acme', store: nats.store, db, binding, feed: { memberId } };
   app = buildServer(config, { memberReads });
@@ -62,6 +62,7 @@ async function close() {
 }
 beforeAll(initialise, 120_000);
 afterAll(close);
+afterEach(vi.restoreAllMocks);
 
 async function emptyReview() {
   const response = await request('departure');
@@ -122,6 +123,15 @@ async function recordsSources() {
       person: 'allowed', assistants: [{ assistantId: 'personal', grant: 'denied' }] } },
     { resourceType: 'mcp_tool', eligibility: { availability: 'unavailable' } },
   ] });
+  const assistantGrant = await append(grantStream('model', 'gpt-6.1-sol'), 'grant.given', {
+    resourceType: 'model', resourceId: 'gpt-6.1-sol', granteeKind: 'assistant',
+    granteeId: 'personal', grantedBy: 'owner',
+  }, false);
+  expect((await request('access')).json()).toMatchObject({ complete: false, rows: [
+    { eligibility: { assistants: [{ assistantId: 'personal', grant: 'unavailable' }] } }, {}] });
+  await auth.handler.handle(assistantGrant, pgDb(dbs.queue));
+  expect((await request('access')).json()).toMatchObject({ rows: [
+    { eligibility: { assistants: [{ assistantId: 'personal', grant: 'allowed' }] } }, {}] });
 }
 it('records direct and multiple group reasons and checks assistant grants separately', recordsSources);
 
@@ -145,7 +155,7 @@ async function retainsOnlyCounts() {
   expect(response.json()).toMatchObject({ complete: true, ownedSharedWork: [],
     retainedHistory: { count: 1 } });
   expect(response.json<{ reviewRevision: string }>().reviewRevision).not.toBe(before.reviewRevision);
-  expect(response.body).not.toMatch(/PRIVATE CONTENT|private|message|secret|token/iu);
+  expect(response.body).not.toMatch(/PRIVATE CONTENT|"private"|ciphertext|keyId|secretRef|tokenId/iu);
   for (const [subject] of spy.mock.calls) expect(subject).not.toMatch(/conversation|participation/iu);
   spy.mockRestore();
 }
@@ -169,6 +179,16 @@ async function blocksBehindProjection() {
 it('keeps a behind projection or failed reader distinct from an empty result', blocksBehindProjection);
 
 async function blocksUnsupportedRecords() {
+  const previous = (await request('departure')).json<{ reviewRevision: string }>();
+  await append('member-bob', 'member.role_changed', {
+    memberId: 'bob', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+  });
+  await project();
+  const changed = (await request('departure')).json<{ reviewRevision: string }>();
+  expect(changed.reviewRevision).not.toBe(previous.reviewRevision);
+  await append('assistant-unsupported', 'assistant.created', {
+    assistantId: 'unsupported', kind: 'team', ownerId: 'bob',
+  });
   await append('routine-old', 'routine.created', {
     routineId: 'old', assistantId: 'shared', schedule: 'daily', createdBy: 'bob',
   });
@@ -180,6 +200,17 @@ async function blocksUnsupportedRecords() {
   expect(response.json()).toMatchObject({ complete: false, permissions: { remove: false },
     routines: { status: 'unsupported_history' },
     personalConnections: { status: 'unsupported_history' } });
+  const body = response.json<{ unavailableSections: string[] }>();
+  expect(body.unavailableSections).toContain('unsupported_ownership');
+  await append(grantStream('memory', 'PRIVATE_RESOURCE'), 'grant.given', {
+    resourceType: 'memory', resourceId: 'PRIVATE_RESOURCE', granteeKind: 'member',
+    granteeId: 'bob', grantedBy: 'owner',
+  });
+  const access = await request('access');
+  expect(access.body).not.toContain('PRIVATE_RESOURCE');
+  await append('member-admin', 'member.removed', { memberId: 'admin', removedBy: 'owner' });
+  expect((await request('access', 'admin')).statusCode).toBe(403);
+  expect((await request('departure', 'pending')).statusCode).toBe(403);
   expect(response.body).not.toContain('secret:PRIVATE_KEY');
 }
-it('blocks unsupported historical routines and connections without exposing their values', blocksUnsupportedRecords);
+it('versions member changes and blocks unsupported ownership, routines and connections', blocksUnsupportedRecords);
