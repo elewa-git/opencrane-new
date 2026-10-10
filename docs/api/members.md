@@ -99,8 +99,9 @@ check, the server returns the caller's saved receipt if their command is stored,
 Success returns `{ status: appended, memberId, invitationId, sequence, createdAt,
 expiresAt }`. An exact repeat returns that receipt without writing. A 503 or lost
 reply can follow a stored append. `GET /api/invitations/:memberId/changes/:commandId`
-finds its original receipt, or returns 404 `not_found`. This read requires current
-Owner/Admin events and OpenFGA, checks access once and appends nothing. All replies
+finds only the caller's own original receipt, or returns 404 `not_found`. Another
+admin's command also returns 404. This read requires current Owner/Admin events
+and OpenFGA, checks access once and appends nothing. All replies
 use `Cache-Control: no-store`. Invalid bodies return 400, missing sessions 401,
 access refusals 403 and unavailable dependencies 503.
 
@@ -266,3 +267,51 @@ Permission jobs wait for earlier relevant changes on the member and ownership st
 before applying a role or appointment. Different delivery orders give the same state as replay.
 Owner-role values and removal of an Owner remain rejected by both projections.
 Step-down uses the ownership API and requires another currently active owner.
+
+## Invitation command status and refusal history
+
+`GET /api/invitations/:memberId/command-changes/:commandId` reads the creator's original
+invitation command from events. Id bounds, session, exact organisation and
+OpenFGA checks follow the invitation contract above. Reads use `no-store` and
+append nothing. Another creator's command returns 404. A still-active creator
+who lost admin access gets a minimal receipt; removed people get 403.
+
+A saved invitation returns `status: recorded`, `commandId`, `changeId`, `type`,
+`sequence` and `recordedAt`. An Owner/Admin creator also gets `result` with the
+original receipt, email, role, assistant choice, `delivery: link_only` and a link
+at `/join/:memberId/:invitationId`. The link grants no access; the join page is
+not implemented yet. `projection.content` is `current|applying`, while
+`iam: not_required` means creating an invitation grants no access.
+Exact create retries return the original receipt even after acceptance.
+Changed arguments return `command_id_reused` and append nothing.
+
+A matching refusal returns `status: refused`, its event reference, time and safe
+reason. A saved invitation always takes precedence. A missing result returns
+404 with `status: not_found` and `commandId`; an earlier request may still arrive.
+The older invitation status route retains its receipt shape and only returns
+commands created by the same human caller.
+
+Trusted create and acceptance refusals can save `member.command_refused` on
+`memberaudit-<memberId>`. Successful commands save only their business event.
+Records contain safe ids, an operation, a bounded reason and a SHA-256 digest
+(a fixed-length value calculated from the request). The event key includes the
+person, operation, target, reason and UTC day. Concurrent attempts and different
+command ids therefore leave at most one such record per day. Only a SHA-256 digest
+of the first attempt's command id is retained; later ids may have no status result. Status reads
+compare the digest of the supplied id. Raw command ids are excluded from refusal
+data because their allowed characters can still spell a secret or a person's name.
+Refusal history stops at 10,000 events and two seconds.
+
+Eligible refusal replies include `recorded: true|false`. Audit errors preserve
+the original 403 or 409 with `recorded: false`. Invalid sessions, Origin, ids,
+foreign organisations and changed saved-command arguments create no audit record.
+Wrong-account records use a digest of silo, issuer and subject for the daily limit.
+They expose neither that account's email, name nor subject.
+
+`GET /api/org/history` exposes only safe member/invitation ids, operation, role,
+allowlisted reason and event time to an Owner/Admin in the exact organisation.
+Every audit response uses `Cache-Control: no-store`, including refused and
+unavailable responses. Access is checked after the database read, so an admin
+removed during that read receives no history. The existing audit worker and rebuild restore these records without granting
+access or contacting outside services. Invitation lists, intended-person reads,
+invitation read-table rebuilds and acceptance-command status remain follow-up work.

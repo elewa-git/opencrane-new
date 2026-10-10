@@ -7,9 +7,11 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { history } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
-import { members, pgDb, ProjectionRunner } from '@opencrane/projections';
+import type { Query } from '@opencrane/projections';
+import { members, pgDb, ProjectionRunner, auditTrail, rebuildAuditProjection } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+import { refusalDigest } from '../src/members/refusals.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-acme',
   extraIdentities: [{ issuer: 'https://idp.example.test', subject: 'admin' }] });
@@ -40,11 +42,11 @@ afterAll(closeServices);
 function resolveMember(_silo: string, _issuer: string, sub: string) {
   return Promise.resolve(sub);
 }
-function server() {
-  const options = { silo: 'acme', store: nats.store, binding, db: pgDb(dbs.queue), now,
+function server(db: Query = pgDb(dbs.queue)) {
+  const options = { silo: 'acme', store: nats.store, binding, db, now,
     feed: { memberId: resolveMember } };
   const membership = { silo: 'acme', store: nats.store, db: pgDb(dbs.queue), now };
-  return buildServer(config, { invitationEmail: options, membership });
+  return buildServer(config, { invitationEmail: options, membership, audit: options });
 }
 async function append(subject: string, type: string, data: unknown, apply = false) {
   const record = { ...event(randomUUID(), subject, type), silo: 'acme', data };
@@ -193,7 +195,8 @@ async function refusesChangedReplay(field: string, value: unknown) {
   expect((await request('POST', body)).json()).toMatchObject({ reason: 'command_id_reused' });
   expect(await records()).toEqual(before);
 }
-it.each([['role', 'admin'], ['personalAssistant', 'provision'], ['expectedSequence', 1]])(
+it.each([['role', 'admin'], ['personalAssistant', 'provision'], ['expectedSequence', 1],
+  ['email', 'changed@example.test']])(
   'refuses changed %s under the original command id', refusesChangedReplay);
 
 async function reconcilesLostReply() {
@@ -215,6 +218,9 @@ async function reconcilesLostReply() {
   const status = await request('GET');
   expect(status.statusCode).toBe(200);
   expect(status.headers['cache-control']).toBe('no-store');
+  const change = await changeRead();
+  expect(change.json()).toMatchObject({ status: 'recorded', sequence: before[0]!.sequence,
+    recordedAt: before[0]!.event.time, result: status.json<Record<string, unknown>>() });
   expect((await request('POST')).json()).toEqual(status.json());
   expect(writes).not.toHaveBeenCalled();
   expect(await records()).toEqual(before);
@@ -368,6 +374,8 @@ async function acceptsEmailInvitation() {
   const query = 'SELECT issuer, sub FROM member_identities WHERE silo = $1 AND member_id = $2';
   const expected = [{ issuer: config.issuerUrl, sub: 'person' }];
   expect((await db.query(query, ['acme', memberId])).rows).toEqual(expected);
+  expect((await request('POST')).json()).toEqual(created.json());
+  expect(await records()).toEqual(after);
   await members.drop(db);
   await members.create(db);
   for (const row of after) await members.apply(db, row.event, row.sequence);
@@ -407,7 +415,7 @@ async function racesDifferentCommands() {
   expect(statuses).toEqual([200, 409]);
   for (const response of responses) {
     if (response.statusCode === 409) {
-      expect(response.json()).toEqual({ status: 'refused', reason: 'concurrent_change' });
+      expect(response.json()).toMatchObject({ status: 'refused', reason: 'concurrent_change' });
     }
   }
   expect(await records()).toHaveLength(1);
@@ -474,7 +482,8 @@ async function checksSequenceBeforeAppend() {
   const response = await request('POST', body);
   expect(response.statusCode).toBe(409);
   expect(response.json()).toMatchObject({ reason: 'concurrent_change' });
-  expect(writes).not.toHaveBeenCalled();
+  expect(writes).toHaveBeenCalledTimes(1);
+  expect(writes.mock.calls[0]?.[0].event).toMatchObject({ type: 'member.command_refused' });
   expect(await records()).toEqual([]);
 }
 it('compares the reviewed position before passing historyChecked to append',
@@ -750,7 +759,7 @@ async function checksProjectedIdentityAgainstEvents(kind: string) {
         WHERE members.status = 'joined' AND member_identities.sub = $1`, ['person']);
     expect(bindings.rows).toEqual([{ member_id: memberId }]);
   } else {
-    expect(response.json()).toEqual({ status: 'refused', reason: 'already_member' });
+    expect(response.json()).toMatchObject({ status: 'refused', reason: 'already_member' });
     expect(await records()).toHaveLength(1);
   }
 }
@@ -836,7 +845,7 @@ async function refusesRenewedInvitation(interval: string) {
   expect(beforeRetry[1]?.event.data).toMatchObject({ invitationId: renewalId,
     role: 'member', personalAssistant: 'none' });
   const oldRetry = await acceptInvitation(payload);
-  expect(oldRetry.json()).toEqual({ status: 'refused', reason: 'unknown_invitation' });
+  expect(oldRetry.json()).toMatchObject({ status: 'refused', reason: 'unknown_invitation' });
   expect(await records()).toEqual(beforeRetry);
   const currentPayload = { ...payload, invitationId: renewalId, commandId: 'accept-renewal' };
   expect((await acceptInvitation(currentPayload)).statusCode).toBe(200);
@@ -851,3 +860,516 @@ async function refusesRenewedInvitation(interval: string) {
 }
 it.each(renewalIntervals)('refuses a superseded Admin invitation renewed %s',
   refusesRenewedInvitation);
+
+async function boundsRefusalsPerDay() {
+  const attempts = [];
+  for (let index = 0; index < 12; index += 1) {
+    const attempt = { ...input, commandId: `refused-command-${index}` };
+    attempts.push(request('POST', attempt, 'member'));
+  }
+  const responses = await Promise.all(attempts);
+  for (const response of responses) {
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({
+      status: 'refused', reason: 'access_refused', recorded: true,
+    });
+  }
+  const subject = `memberaudit-${memberId}`;
+  const firstDay = await history(nats.store, subject, 'acme');
+  expect(firstDay).toHaveLength(1);
+  expect(firstDay[0]?.event).toMatchObject({ type: 'member.command_refused',
+    principal: { kind: 'human', id: 'member' }, data: {
+      memberId, operation: 'invite', reason: 'access_refused',
+    } });
+  expect(JSON.stringify(firstDay)).not.toContain(email);
+  clock = new Date('2026-10-02T12:00:00Z');
+  expect((await request('POST', input, 'member')).statusCode).toBe(403);
+  expect(await history(nats.store, subject, 'acme')).toHaveLength(2);
+  expect(await records()).toEqual([]);
+}
+it('keeps at most one safe refusal per person, target, operation, reason and UTC day',
+  boundsRefusalsPerDay);
+
+function changeRead(sub = 'admin', orgId = 'org-acme', commandId = input.commandId) {
+  const session = { sub, orgId, roles: ['owner'], authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const url = `/api/invitations/${memberId}/command-changes/${commandId}`;
+  const options = { method: 'GET' as const, url, headers };
+  return app.inject(options);
+}
+async function readsOriginalChange() {
+  expect((await changeRead()).statusCode).toBe(404);
+  const created = (await request('POST')).json<{ invitationId: string; sequence: number }>();
+  const response = await changeRead();
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'recorded', commandId: input.commandId,
+    type: 'member.invited', sequence: created.sequence, recordedAt: clock.toISOString(),
+    result: { memberId, invitationId: created.invitationId, email,
+      link: `https://app.example.test/join/${memberId}/${created.invitationId}`,
+      delivery: 'link_only', role: 'member', personalAssistant: 'none' },
+    projection: { content: 'applying', iam: 'not_required' } });
+  expect((await changeRead('owner')).statusCode).toBe(404);
+  expect((await changeRead('admin', 'other-org')).statusCode).toBe(403);
+  const demotion = { memberId: 'admin', previousRole: 'admin', newRole: 'member',
+    changedBy: 'owner' };
+  await append('member-admin', 'member.role_changed', demotion, true);
+  const minimal = (await changeRead()).json<Record<string, unknown>>();
+  expect(minimal).toMatchObject({ status: 'recorded', sequence: created.sequence });
+  expect(minimal).not.toHaveProperty('result');
+  await append('member-admin', 'member.removed', { memberId: 'admin', removedBy: 'owner' }, true);
+  expect((await changeRead()).statusCode).toBe(403);
+  expect(await records()).toHaveLength(1);
+}
+it('reads the original actor and command from events and limits receipts after demotion',
+  readsOriginalChange);
+
+async function keepsRefusalWhenAuditFails() {
+  function unavailableAudit() {
+    const result = { status: 'unavailable' as const,
+      cause: new Error('Private upstream diagnostic') };
+    return Promise.resolve(result);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(unavailableAudit);
+  const response = await request('POST', input, 'member');
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'access_refused', recorded: false });
+  expect(await history(nats.store, `memberaudit-${memberId}`, 'acme')).toEqual([]);
+  expect(await records()).toEqual([]);
+}
+it('returns the real business refusal when its audit append fails', keepsRefusalWhenAuditFails);
+
+async function recordsWrongAccount() {
+  const created = (await request('POST')).json<{ invitationId: string }>();
+  const session = { sub: 'another-account', orgId: 'org-acme', roles: [],
+    email: 'private-address@example.test', emailVerified: true,
+    authTime: clock.getTime() / 1000, exp: 2000000000 };
+  const headers = { origin: 'https://app.example.test',
+    cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const payload = { memberId, invitationId: created.invitationId,
+    commandId: 'wrong-account-join', displayName: 'Private name' };
+  const options = { method: 'POST' as const, url: '/members/join', headers, payload };
+  const response = await app.inject(options);
+  expect(response.statusCode).toBe(409);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'wrong_identity', recorded: true });
+  const refusals = await history(nats.store, `memberaudit-${memberId}`, 'acme');
+  expect(refusals).toHaveLength(1);
+  expect(refusals[0]?.event.data).toMatchObject({ invitationId: created.invitationId,
+    operation: 'join', reason: 'wrong_identity' });
+  const safeRecord = JSON.stringify(refusals);
+  expect(safeRecord).not.toContain('private-address');
+  expect(safeRecord).not.toContain('Private name');
+  expect(safeRecord).not.toContain('another-account');
+  clock = new Date('2026-10-08T12:00:00Z');
+  const expiredResponse = await app.inject(options);
+  expect(expiredResponse.json()).toEqual(response.json());
+  expect(await records()).toHaveLength(1);
+}
+it('records a wrong-account annotation without the other account details or a join',
+  recordsWrongAccount);
+
+function organisationHistory(sub = 'admin', orgId = 'org-acme', url = '/api/org/history') {
+  const session = { sub, orgId, roles: ['owner'], authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const options = { method: 'GET' as const, url, headers };
+  return app.inject(options);
+}
+async function rebuildsSafeInvitationHistory() {
+  const created = (await request('POST')).json<{ invitationId: string }>();
+  await request('POST', input, 'member');
+  const db = pgDb(dbs.queue);
+  const logger = createLogger('invitation-audit-test');
+  const runner = new ProjectionRunner(db, nats.reader, logger);
+  await runner.initialise(auditTrail);
+  await runner.rebuild(auditTrail);
+  const before = await organisationHistory();
+  expect(before.statusCode).toBe(200);
+  const records = before.json<{ rows: { records: unknown[] }[] }>();
+  const summaries: unknown[] = [];
+  for (const row of records.rows) summaries.push(...row.records);
+  expect(summaries).toEqual(expect.arrayContaining([
+    expect.objectContaining({ type: 'member.invited', memberId,
+      invitationId: created.invitationId, role: 'member', recordedAt: clock.toISOString() }),
+    expect.objectContaining({ type: 'member.command_refused', memberId,
+      operation: 'invite', reason: 'Request refused', recordedAt: clock.toISOString() }),
+  ]));
+  expect(before.body).not.toContain(email);
+  expect((await organisationHistory('member')).statusCode).toBe(403);
+  expect((await organisationHistory('admin', 'other-org')).statusCode).toBe(403);
+  await rebuildAuditProjection(db, nats.store, logger, { verify: true });
+  expect((await organisationHistory()).json()).toEqual(before.json());
+}
+it('returns safe invitation and refusal history and rebuilds the same authorised read',
+  rebuildsSafeInvitationHistory);
+
+async function savedInvitationWinsOverRefusal() {
+  await request('POST', input, 'member');
+  const refused = await changeRead('member');
+  expect(refused.json()).toMatchObject({ status: 'refused', reason: 'access_refused' });
+  const promotion = { memberId: 'member', previousRole: 'member', newRole: 'admin',
+    changedBy: 'owner' };
+  await append('member-member', 'member.role_changed', promotion, true);
+  expect((await request('POST', input, 'member')).statusCode).toBe(200);
+  expect((await changeRead('member')).json()).toMatchObject({ status: 'recorded',
+    commandId: input.commandId, type: 'member.invited' });
+  expect(await history(nats.store, `memberaudit-${memberId}`, 'acme')).toHaveLength(1);
+  expect(await records()).toHaveLength(1);
+}
+it('prefers a saved invitation over earlier refusal evidence for the same command',
+  savedInvitationWinsOverRefusal);
+
+async function refusesAnotherCreatorsReceipt() {
+  const created = await request('POST');
+  expect(created.statusCode).toBe(200);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  const legacy = await request('GET', undefined, 'owner');
+  const full = await changeRead('owner');
+  expect(legacy.statusCode).toBe(404);
+  expect(legacy.json()).toEqual({ status: 'not_found' });
+  expect(full.statusCode).toBe(404);
+  expect(full.json()).toEqual({ status: 'not_found', commandId: input.commandId });
+  expect((await request('GET')).json()).toEqual(created.json());
+  expect((await changeRead()).statusCode).toBe(200);
+  expect(appendSpy).not.toHaveBeenCalled();
+}
+it('returns no original command receipt to another current admin on either route',
+  refusesAnotherCreatorsReceipt);
+
+async function refusesNonHumanCreator(kind: 'agent' | 'system') {
+  expect((await request('POST')).statusCode).toBe(200);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* changePrincipal(...args: Parameters<typeof read>) {
+    for await (const row of read(...args)) {
+      if (args[0] === `member-${memberId}`) {
+        const principal = { kind, id: 'admin' };
+        const event = { ...row.event, principal };
+        yield { ...row, event };
+      } else {
+        yield row;
+      }
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(changePrincipal);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  expect((await request('GET')).statusCode).toBe(404);
+  expect((await changeRead()).statusCode).toBe(404);
+  expect(appendSpy).not.toHaveBeenCalled();
+}
+it.each(['agent', 'system'] as const)(
+  'refuses a saved invitation with a %s principal even when its id matches',
+  refusesNonHumanCreator);
+
+async function prepareAuditProjection() {
+  const db = pgDb(dbs.queue);
+  const logger = createLogger('invitation-audit-test');
+  const runner = new ProjectionRunner(db, nats.reader, logger);
+  await runner.initialise(auditTrail);
+  await runner.rebuild(auditTrail);
+  return runner;
+}
+
+async function neverCachesInvitationAudit() {
+  expect((await request('POST')).statusCode).toBe(200);
+  expect((await request('POST', input, 'member')).statusCode).toBe(403);
+  await prepareAuditProjection();
+  const response = await organisationHistory();
+  expect(response.statusCode).toBe(200);
+  expect(response.body).toContain('member.invited');
+  expect(response.body).toContain('member.command_refused');
+  expect(response.headers['cache-control']).toBe('no-store');
+}
+it('sets no-store on successful invitation and refusal audit history', neverCachesInvitationAudit);
+
+async function neverCachesAuditError(kind: string, status: number) {
+  await prepareAuditProjection();
+  let response;
+  if (kind === 'no_session') {
+    const options = { method: 'GET' as const, url: '/api/org/history' };
+    response = await app.inject(options);
+  } else if (kind === 'unavailable') {
+    binding.apiUrl = 'http://127.0.0.1:1';
+    response = await organisationHistory();
+  } else if (kind === 'invalid_request') {
+    const session = { sub: 'admin', orgId: 'org-acme', roles: [],
+      authTime: 1790856000, exp: 2000000000 };
+    const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+    const options = { method: 'GET' as const, url: '/api/org/history?before=bad', headers };
+    response = await app.inject(options);
+  } else if (kind === 'foreign') {
+    response = await organisationHistory('admin', 'other-org');
+  } else {
+    response = await organisationHistory('member');
+  }
+  expect(response.statusCode).toBe(status);
+  expect(response.headers['cache-control']).toBe('no-store');
+}
+it.each([
+  ['no_session', 401], ['member', 403], ['foreign', 403],
+  ['unavailable', 503], ['invalid_request', 400],
+])('sets no-store on an audit %s response', neverCachesAuditError);
+
+async function deniesAdminInOpenFga() {
+  // Leave the saved role unchanged to test a disagreement with the permission service.
+  const data = { memberId: 'admin', previousRole: 'admin', newRole: 'member',
+    changedBy: 'owner' };
+  const record = { ...event(randomUUID(), 'member-admin', 'member.role_changed'),
+    silo: 'acme', data };
+  await memberAuthorisation(binding).handler.handle(record, pgDb(dbs.queue));
+}
+
+async function refusesReadWithoutCurrentPermissions(route: string, failure: string,
+  status: number) {
+  expect((await request('POST')).statusCode).toBe(200);
+  await prepareAuditProjection();
+  if (failure === 'denied') {
+    await deniesAdminInOpenFga();
+  } else if (failure === 'unavailable') {
+    binding.apiUrl = 'http://127.0.0.1:1';
+  } else {
+    const change = { memberId: 'admin', previousRole: 'admin', newRole: 'admin',
+      changedBy: 'owner' };
+    await append('member-admin', 'member.role_changed', change);
+    expect((await memberAuthorisation(binding).check('admin', 'admin')).allowed).toBe(true);
+  }
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  let response;
+  if (route === 'audit') {
+    response = await organisationHistory();
+  } else if (route === 'legacy') {
+    response = await request('GET');
+  } else {
+    response = await changeRead();
+  }
+  expect(response.statusCode).toBe(status);
+  expect(response.headers['cache-control']).toBe('no-store');
+  expect(response.body).not.toContain('invitationId');
+  expect(response.body).not.toContain(email);
+  expect(appendSpy).not.toHaveBeenCalled();
+}
+it.each([
+  ['legacy', 'denied', 403], ['legacy', 'unavailable', 503], ['legacy', 'unapplied', 503],
+  ['recovery', 'denied', 403], ['recovery', 'unavailable', 503], ['recovery', 'unapplied', 503],
+  ['audit', 'denied', 403], ['audit', 'unavailable', 503], ['audit', 'unapplied', 503],
+])('refuses %s reads when current OpenFGA access is %s', refusesReadWithoutCurrentPermissions);
+
+async function refusesAuditAuthorityLossDuringRead() {
+  expect((await request('POST')).statusCode).toBe(200);
+  await prepareAuditProjection();
+  const db = pgDb(dbs.queue);
+  let removed = false;
+  async function query<Row extends Record<string, unknown>>(sql: string, parameters?: unknown[]) {
+    const result = await db.query<Row>(sql, parameters);
+    if (sql.startsWith('SELECT * FROM audit_entries') && !removed) {
+      removed = true;
+      const data = { memberId: 'admin', removedBy: 'owner' };
+      await append('member-admin', 'member.removed', data);
+    }
+    return result;
+  }
+  const controlledDb = { query };
+  await app.close();
+  app = server(controlledDb);
+  const response = await organisationHistory();
+  expect(removed).toBe(true);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(response.body).not.toContain('member.invited');
+}
+it('refuses organisation history when the admin is removed during the database read',
+  refusesAuditAuthorityLossDuringRead);
+
+async function readsAuditWithoutWrites() {
+  expect((await request('POST')).statusCode).toBe(200);
+  expect((await request('POST', input, 'member')).statusCode).toBe(403);
+  await prepareAuditProjection();
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  const querySpy = vi.spyOn(dbs.queue, 'query');
+  expect((await organisationHistory()).statusCode).toBe(200);
+  expect((await organisationHistory('member')).statusCode).toBe(403);
+  expect(appendSpy).not.toHaveBeenCalled();
+  for (const call of querySpy.mock.calls) {
+    expect(call[0]).toMatch(/^SELECT /u);
+  }
+  expect(await records()).toHaveLength(1);
+  expect(await history(nats.store, `memberaudit-${memberId}`, 'acme')).toHaveLength(1);
+}
+it('appends nothing and writes no projection during successful or refused audit GETs',
+  readsAuditWithoutWrites);
+
+async function limitsRefusalRecovery(actor: string, kind: 'human' | 'agent' | 'system',
+  operation: 'invite' | 'join') {
+  const data = { memberId, originalCommandDigest: refusalDigest(input.commandId), operation,
+    inputDigest: 'a'.repeat(64), reason: 'access_refused' };
+  const record = { ...event(randomUUID(), `memberaudit-${memberId}`, 'member.command_refused'),
+    silo: 'acme', principal: { kind, id: actor }, data };
+  const command = { event: record, expectedSequence: 0 };
+  expect((await nats.store.append(command)).status).toBe('appended');
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  const response = await changeRead();
+  expect(response.statusCode).toBe(404);
+  expect(response.json()).toEqual({ status: 'not_found', commandId: input.commandId });
+  expect(appendSpy).not.toHaveBeenCalled();
+}
+it.each([
+  ['owner', 'human', 'invite'], ['admin', 'agent', 'invite'],
+  ['admin', 'system', 'invite'], ['admin', 'human', 'join'],
+] as const)('does not recover refusal evidence for %s/%s/%s', limitsRefusalRecovery);
+
+async function excludesInvalidInvitationRequestsFromAudit(body: unknown) {
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  expect((await request('POST', body)).statusCode).toBe(400);
+  expect(appendSpy).not.toHaveBeenCalled();
+  expect(await history(nats.store, `memberaudit-${memberId}`, 'acme')).toEqual([]);
+}
+it.each(invalidBodies)('records no refusal audit for invalid invitation input %#',
+  excludesInvalidInvitationRequestsFromAudit);
+
+async function excludesUntrustedInvitationRequestsFromAudit(orgId: string, origin: string) {
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  expect((await request('POST', input, 'admin', orgId, origin)).statusCode).toBe(403);
+  expect(appendSpy).not.toHaveBeenCalled();
+  expect(await history(nats.store, `memberaudit-${memberId}`, 'acme')).toEqual([]);
+}
+it.each([
+  ['other-org', 'https://app.example.test'],
+  ['org-acme', 'https://evil.example.test'], ['org-acme', 'https://app.example.test/'],
+])('records no refusal audit for an untrusted invitation request (%s, %s)',
+  excludesUntrustedInvitationRequestsFromAudit);
+
+async function excludesInvalidJoinHistoryFromAudit() {
+  const created = (await request('POST')).json<{ invitationId: string }>();
+  const read = nats.store.readStream.bind(nats.store);
+  async function* wrongSubject(...args: Parameters<typeof read>) {
+    for await (const row of read(...args)) {
+      if (args[0] === `member-${memberId}`) {
+        const event = { ...row.event, subject: 'member-another-person' };
+        yield { ...row, event };
+      } else {
+        yield row;
+      }
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(wrongSubject);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  const payload = { memberId, invitationId: created.invitationId,
+    commandId: 'invalid-history-join', displayName: 'Person' };
+  const response = await acceptInvitation(payload);
+  expect(response.statusCode).toBe(409);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'invalid_history' });
+  expect(appendSpy).not.toHaveBeenCalled();
+  expect(await history(nats.store, `memberaudit-${memberId}`, 'acme')).toEqual([]);
+}
+it('records neither a join nor refusal audit for invalid invitation history',
+  excludesInvalidJoinHistoryFromAudit);
+
+function wrongAccountJoin(payload: unknown, sub = 'another-account', orgId = 'org-acme') {
+  const session = { sub, orgId, roles: [], email: 'private-address@example.test',
+    emailVerified: true, authTime: clock.getTime() / 1000, exp: 2000000000 };
+  const headers = { origin: 'https://app.example.test', 'content-type': 'application/json',
+    cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const options = { method: 'POST' as const, url: '/members/join', headers,
+    payload: JSON.stringify(payload) };
+  return app.inject(options);
+}
+
+async function boundsJoinRefusalsPerDay() {
+  const created = (await request('POST')).json<{ invitationId: string }>();
+  const attempts = [];
+  for (let index = 0; index < 12; index += 1) {
+    const payload = { memberId, invitationId: created.invitationId,
+      commandId: `wrong-account-${index}`, displayName: 'Private name' };
+    attempts.push(wrongAccountJoin(payload));
+  }
+  const responses = await Promise.all(attempts);
+  for (const response of responses) {
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ status: 'refused', reason: 'wrong_identity', recorded: true });
+  }
+  const subject = `memberaudit-${memberId}`;
+  const firstDay = await history(nats.store, subject, 'acme');
+  expect(firstDay).toHaveLength(1);
+  expect(firstDay[0]?.event.data).toMatchObject({ operation: 'join', reason: 'wrong_identity' });
+  const payload = { memberId, invitationId: created.invitationId,
+    commandId: 'wrong-account-next-day', displayName: 'Private name' };
+  clock = new Date('2026-10-02T12:00:00Z');
+  expect((await wrongAccountJoin(payload)).json()).toEqual(responses[0]!.json());
+  expect(await history(nats.store, subject, 'acme')).toHaveLength(2);
+  expect((await wrongAccountJoin(payload, 'different-account')).statusCode).toBe(409);
+  expect(await history(nats.store, subject, 'acme')).toHaveLength(3);
+  expect(await records()).toHaveLength(1);
+}
+it('keeps one concurrent join refusal per account and UTC day across different command ids',
+  boundsJoinRefusalsPerDay);
+
+async function excludesForeignJoinFromAudit() {
+  const created = (await request('POST')).json<{ invitationId: string }>();
+  const payload = { memberId, invitationId: created.invitationId,
+    commandId: 'foreign-join', displayName: 'Private name' };
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  expect((await wrongAccountJoin(payload, 'admin', 'other-org')).statusCode).toBe(403);
+  expect(appendSpy).not.toHaveBeenCalled();
+  expect(await history(nats.store, `memberaudit-${memberId}`, 'acme')).toEqual([]);
+}
+it('records no refusal audit for an acceptance from another organisation',
+  excludesForeignJoinFromAudit);
+
+async function rebuildsWrongAccountHistoryWithoutForeignRecords() {
+  const created = (await request('POST')).json<{ invitationId: string }>();
+  const payload = { memberId, invitationId: created.invitationId,
+    commandId: 'wrong-account-rebuild', displayName: 'Private name' };
+  expect((await wrongAccountJoin(payload)).statusCode).toBe(409);
+  const data = { memberId, originalCommandDigest: refusalDigest(input.commandId),
+    operation: 'invite', inputDigest: 'a'.repeat(64), reason: 'access_refused' };
+  const foreign = { ...event('foreign-refusal', `memberaudit-${memberId}`, 'member.command_refused'),
+    silo: 'other-silo', data };
+  await nats.seed([foreign]);
+  await prepareAuditProjection();
+  const before = await organisationHistory();
+  expect(before.statusCode).toBe(200);
+  expect(before.headers['cache-control']).toBe('no-store');
+  expect(before.body).toContain('member.command_refused');
+  expect(before.body).toContain('"operation":"join"');
+  for (const privateValue of [email, 'private-address', 'Private name', 'another-account',
+    'inputDigest', 'foreign-refusal', 'other-silo']) {
+    expect(before.body).not.toContain(privateValue);
+  }
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  const logger = createLogger('invitation-audit-test');
+  await rebuildAuditProjection(pgDb(dbs.queue), nats.reader, logger, { verify: true });
+  const after = await organisationHistory();
+  expect(after.statusCode).toBe(200);
+  expect(after.json()).toEqual(before.json());
+  expect(appendSpy).not.toHaveBeenCalled();
+}
+it('rebuilds safe wrong-account HTTP history and excludes foreign refusal records',
+  rebuildsWrongAccountHistoryWithoutForeignRecords);
+
+async function refusesMalformedRefusalReplay() {
+  expect((await request('POST')).statusCode).toBe(200);
+  await prepareAuditProjection();
+  const before = await organisationHistory();
+  expect(before.statusCode).toBe(200);
+  const malformed = { ...event('malformed-refusal', `memberaudit-${memberId}`,
+    'member.command_refused'), silo: 'acme', data: { memberId, reason: 'Private name' } };
+  await nats.seed([malformed]);
+  const logger = createLogger('invitation-audit-test');
+  await expect(rebuildAuditProjection(pgDb(dbs.queue), nats.reader, logger, { verify: true }))
+    .rejects.toThrow();
+  const after = await organisationHistory();
+  expect(after.statusCode).toBe(200);
+  expect(after.json()).toEqual(before.json());
+  expect(after.body).not.toContain('malformed-refusal');
+  expect(after.body).not.toContain('Private name');
+}
+it('refuses malformed refusal replay and retains the previously authorised HTTP history',
+  refusesMalformedRefusalReplay);
+
+
+async function refusesForeignAuditSession(url: string) {
+  const response = await organisationHistory('admin', 'other-org', url);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(response.headers['cache-control']).toBe('no-store');
+}
+it.each(['/api/org/history', '/api/conversations/private-chat/history'])(
+  'refuses an extra sign-in identity from another organisation on %s', refusesForeignAuditSession,
+);

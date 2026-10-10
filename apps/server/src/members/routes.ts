@@ -59,6 +59,12 @@ export function registerMemberRoutes(app: FastifyInstance, config: AuthConfig, o
       request.log.error({ operation: 'member.joined' }, 'member join unavailable');
       return send(503, { status: 'unavailable' });
     }
+    if (result.status === 'refused' && !['wrong_silo', 'invalid_history',
+      'command_id_reused'].includes(result.reason)) {
+      const recorded = result.recorded ?? false;
+      const response = { ...result, recorded };
+      return send(statusForJoin(result), response);
+    }
     return send(statusForJoin(result), result);
   }
 }

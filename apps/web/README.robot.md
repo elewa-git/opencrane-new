@@ -427,3 +427,8 @@ Send errors have their own text; refresh does not change it. Editing clears it.
 The [screen checks](../../docs/process/p4-4-screens/README.robot.md) record API details,
 captures, intentional design differences, guard removals and remaining live checks.
 The [recipient checks](../../docs/process/p4-4-start-evidence.md) cover the first draft PR.
+
+Dialog methods installed by model-registry tests remain writable, as browser
+methods are. Other component tests can replace methods on their own dialog
+elements even when the Angular runner reuses a test environment. The regression
+in `src/app/models/model-registry.spec.ts` checks both `showModal` and `close`.

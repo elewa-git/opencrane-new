@@ -1162,3 +1162,18 @@ it.each(['create', 'key', 'models', 'quote'] as const)(
       await settle(fixture);
     }
   });
+
+
+function replacesDialogMethodsForAnotherComponent() {
+  const dialog = document.createElement('dialog');
+  const showModal = vi.fn();
+  const close = vi.fn();
+  const methods = { showModal, close };
+  Object.assign(dialog, methods);
+  dialog.showModal();
+  dialog.close();
+  expect(showModal).toHaveBeenCalledOnce();
+  expect(close).toHaveBeenCalledOnce();
+}
+it('lets another component replace dialog methods on its own element',
+  replacesDialogMethodsForAnotherComponent);

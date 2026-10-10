@@ -1,3 +1,4 @@
+import { recordMemberRefusal, refusalDigest } from './refusals.ts';
 import { randomUUID } from 'node:crypto';
 import { readActiveIdentity } from './admission.ts';
 import { z } from 'zod';
@@ -16,7 +17,7 @@ export const joinInputSchema = z.object({
 type JoinInput = z.infer<typeof joinInputSchema>;
 export type JoinResult =
   | { status: 'joined' | 'already_joined'; memberId: string; sequence: number }
-  | { status: 'refused'; reason: 'no_session' | 'wrong_silo' | 'wrong_identity'
+  | { status: 'refused'; recorded?: boolean; reason: 'no_session' | 'wrong_silo' | 'wrong_identity'
       | 'unknown_invitation' | 'expired_invitation' | 'unbound_invitation'
       | 'invitation_not_pending' | 'command_id_reused' | 'concurrent_change'
       | 'inviter_authority_ended' | 'invalid_request' | 'wrong_origin'
@@ -147,11 +148,13 @@ export async function joinMember(
     const subject = `member-${input.memberId}`;
     const events = await history(store, subject);
     const refused = validateHistory(events, input, context);
-    if (refused) return refused;
+    if (refused) return recordJoinRefusal(store, input, context, refused, now());
     const previous = retry(events, input, context);
-    if (previous) return previous;
+    if (previous) return recordJoinRefusal(store, input, context, previous, now());
     const confirmed = await confirmInvitation(store, events, input, context, now, db);
-    if ('status' in confirmed) return confirmed;
+    if ('status' in confirmed) {
+      return recordJoinRefusal(store, input, context, confirmed, now());
+    }
     const invitation = confirmed.invitation;
     const id = randomUUID();
     const condition = joinCondition(events, confirmed);
@@ -335,4 +338,17 @@ async function changedEmailInvitation(store: JoinStore, input: JoinInput,
   const invitation = pending(events, input, context, now);
   if ('status' in invitation) return invitation;
   return undefined;
+}
+
+async function recordJoinRefusal(store: JoinStore, input: JoinInput, context: JoinContext,
+  result: JoinResult, time: Date): Promise<JoinResult> {
+  if (result.status !== 'refused' || ['wrong_silo', 'invalid_history',
+    'command_id_reused'].includes(result.reason)) {
+    return result;
+  }
+  // Hide the account details and save refusal evidence only before any join append.
+  const actor = refusalDigest([context.silo, context.issuer, context.sub]);
+  const recorded = await recordMemberRefusal(store, context.silo,
+    actor, 'join', input, result.reason, time);
+  return { ...result, recorded };
 }

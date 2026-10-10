@@ -10,9 +10,9 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat, role and participation checks"]
-  server -.->|checks access and passes for organisation, memory and chat| libs["libs/*<br/>shared code"]
-  server -->|records changes, memory facts, model grants, roles, participants, chats, computers and provider choices| nats["NATS<br/>event log"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats and group participation"]
+  server -.->|checks organisation, access, refusal records, spending and memory| libs["libs/*<br/>shared code"]
+  server -->|records changes, roles, participants, chats and provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chat rows, closes, joins, facts, models and computers| postgres
@@ -115,7 +115,10 @@ use it to refuse calls if the tool changes to Ask during the turn.
    The server checks it and records them as the owner.
 3. **An admin prepares an invitation.** The server checks the email input. The person
    is confirmed when they accept; the server does not look them up in Zitadel.
-   An admin can save or renew an email invitation and recover its saved result.
+   An admin can save or renew an email invitation and recover their own saved result.
+   Another admin cannot read that command receipt. Refusal records keep only a
+   hash of the command id, a fixed-length value used to find a saved result. Organisation history checks
+   current access and tells browsers and HTTP caches not to save its replies.
    The server finds matching emails in its member table and checks their events.
    Acceptance finds account records in the member table and checks their events.
    It reads newer events too, so delayed background work cannot hide an active account.

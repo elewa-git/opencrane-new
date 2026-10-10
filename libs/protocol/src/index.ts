@@ -77,7 +77,7 @@ export { approvalReviewSchema, approvalCardsSchema, type ApprovalCard } from './
 export { memberPageQuerySchema, memberHeaderSchema, memberDirectoryRowSchema,
   memberDetailSchema, memberDirectorySchema } from './members.ts';
 export { invitationEmailInputSchema, invitationEmailSchema } from './members.ts';
-export { invitationCommandSchema, invitationStatusParamsSchema } from './members.ts';
+export { invitationCommandSchema, invitationStatusParamsSchema, invitationChangeSchema } from './members.ts';
 export {
   modelAccessCommandSchema,
   modelAccessReceiptSchema,

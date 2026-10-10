@@ -13,11 +13,17 @@ export interface AuditOptions {
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
 }
 export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, options?: AuditOptions) {
+  // Require this organisation even when development sign-in allows named outsiders.
+  const organisationConfig = { ...config, extraIdentities: [] };
   for (const url of ['/api/org/history', '/api/conversations/:conversationId/history']) app.get(url, async (request, reply) => {
+    reply.header('cache-control', 'no-store');
     const session = sessionFor(request, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
-    if (!isOrganisationSession(config, session) || options.silo !== options.binding.silo) return reply.code(403).send({ status: 'refused' });
+    if (!isOrganisationSession(organisationConfig, session)
+      || options.silo !== options.binding.silo) {
+      return reply.code(403).send({ status: 'refused' });
+    }
     try {
       const filters = auditFilterSchema.parse(request.query);
       const { conversationId } = z.object({ conversationId: z.string().regex(/^[\w-]{1,200}$/u).optional() }).parse(request.params);

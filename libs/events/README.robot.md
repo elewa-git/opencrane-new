@@ -156,3 +156,13 @@ records.
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
+
+The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
+describes safe invitation refusal events and their daily limit.
+
+`member.command_refused` stores `originalCommandDigest`, a lower-case 64-hex
+SHA-256 digest. It rejects `originalCommandId` and all undeclared fields. The
+server hashes the caller's id before recording a refusal and before status lookup.
+An id's allowed characters alone cannot exclude a secret or a person's name.
+`test/security-rules.test.ts` and the server's refusal tests cover this boundary.
+The registry-wide security rule already permits digest fields; no name exception is needed.

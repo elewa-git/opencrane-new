@@ -500,3 +500,32 @@ describe('audit contracts reject secret canaries', () => {
     }
   }
 });
+
+
+describe('invitation refusal command references', () => {
+  const type = 'member.command_refused';
+
+  function refusesRawCommandId(originalCommandId: string) {
+    const fields = rejectedFields(type, { originalCommandId });
+    expect(fields).toEqual(['originalCommandId']);
+  }
+
+  it.each(['sk_live_private_secret_canary', 'Alice_Smith', 'private@example.test'])(
+    'rejects the raw command reference %s', refusesRawCommandId,
+  );
+
+  function acceptsCommandDigest() {
+    const originalCommandDigest = 'a'.repeat(64);
+    expect(rejectedFields(type, { originalCommandDigest })).toEqual([]);
+  }
+  it('accepts a SHA-256 command reference', acceptsCommandDigest);
+
+  function refusesInvalidCommandDigest(originalCommandDigest: string) {
+    const fields = rejectedFields(type, { originalCommandDigest });
+    expect(fields).toEqual(['originalCommandDigest']);
+  }
+  it.each(['sk_live_private_secret_canary', 'private@example.test',
+    'A'.repeat(64), 'a'.repeat(63), 'a'.repeat(65)])(
+    'rejects an invalid command digest %s', refusesInvalidCommandDigest,
+  );
+});

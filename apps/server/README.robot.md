@@ -1382,3 +1382,31 @@ IAM as current while that appointment is still waiting to be applied.
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
+
+The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
+records saved invitation results and safe refusal history.
+
+Invitation status routes require the original human caller. The legacy route keeps
+its receipt shape and returns 404 for another admin's command. Audit routes set
+`Cache-Control: no-store` before handling success, refusal and errors.
+
+`test/invitations.test.ts` covers permission denial and outages, unapplied access
+changes, removal during an audit read, reads without writes, refusal recovery
+limits, daily join refusal limits and safe HTTP history after replay.
+`test/member-refusals.test.ts` checks refusal fields, invalid history, the
+10,000-record limit and real NATS read deadlines. Set `PG_TEST_URL` to a
+PostgreSQL service that allows disposable databases for the route tests.
+
+Refusal status reads compare a SHA-256 digest of the requested command id with
+`originalCommandDigest`. Refusal events never store the raw id. Invitation events
+and status replies retain their existing command ids. The event security checks
+reject raw command-reference fields without adding a field-name exception.
+
+Audit routes call `isOrganisationSession` with `extraIdentities: []`. Both history
+routes require the configured organisation even when development sign-in allows
+a named outsider. The source guard continues to cover `audit/routes.ts`.
+
+Ownership refusal tests allow exactly one `member.command_refused` audit event.
+They still require unchanged member and ownership stream positions, unchanged
+effective roles and an unchanged membership outcome after projection. The pending
+Owner-role invitation remains invited; the active owner remains an owner.

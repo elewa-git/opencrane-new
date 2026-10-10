@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { getEventDefinition, legacyMemberRole, memberInvitedDataSchema } from '@opencrane/events';
+import { getEventDefinition, legacyMemberRole, memberInvitedDataSchema,
+  memberCommandRefusedSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { Binding } from '@opencrane/authz';
-import { activeMember, authorityFence, isAuthorityChanged, readActiveMember } from '@opencrane/models';
-import { invitationCommandSchema } from '@opencrane/protocol';
+import { activeMember, authorityFence, isAuthorityChanged, readActiveMember,
+  currentMembership } from '@opencrane/models';
+import { invitationCommandSchema, invitationChangeSchema } from '@opencrane/protocol';
+import { refusalDigest, refusalHistory } from './refusals.ts';
 import type { Query } from '@opencrane/projections';
 
 type Input = z.infer<typeof invitationCommandSchema>;
@@ -39,8 +42,11 @@ function previous(rows: StoredEvent[], input: Input, actor: string) {
   if (!row) {
     return undefined;
   }
+  if (row.event.type !== 'member.invited') {
+    throw new InvitationConflict('command_id_reused');
+  }
   const data = memberInvitedDataSchema.parse(row.event.data);
-  if (row.event.type !== 'member.invited' || row.event.principal?.kind !== 'human'
+  if (row.event.principal?.kind !== 'human'
     || row.event.principal.id !== actor || data.email !== input.email
     || data.role !== input.role || data.personalAssistant !== input.personalAssistant
     || (rows[index - 1]?.sequence ?? 0) !== input.expectedSequence) {
@@ -162,11 +168,11 @@ export async function invitationCommand(store: EventStore, binding: Binding,
   const subject = `member-${input.memberId}`;
   const deadline = performance.now() + 10_000;
   const rows = await invitationHistory(store, subject, binding.silo, deadline);
-  checkHistory(rows, input);
   const saved = previous(rows, input, actor);
   if (saved) {
     return saved;
   }
+  checkHistory(rows, input);
   if ((rows.at(-1)?.sequence ?? 0) !== input.expectedSequence) {
     throw new InvitationConflict('concurrent_change');
   }
@@ -214,11 +220,59 @@ export async function invitationStatus(store: EventStore, binding: Binding,
   const deadline = performance.now() + 10_000;
   const rows = await invitationHistory(store, `member-${memberId}`, binding.silo, deadline);
   function matches(row: StoredEvent) {
-    return row.event.type === 'member.invited' && row.event.commandId === commandId;
+    return row.event.type === 'member.invited' && row.event.commandId === commandId
+      && row.event.principal?.kind === 'human' && row.event.principal.id === actor;
   }
   const row = rows.find(matches);
   if (!row) {
     return { status: 'not_found' as const };
   }
   return receipt(row);
+}
+
+export async function invitationChange(store: EventStore, binding: Binding,
+  actor: string, memberId: string, commandId: string, db: Query, origin: string) {
+  const deadline = performance.now() + 10_000;
+  const rows = await invitationHistory(store, `member-${memberId}`, binding.silo, deadline);
+  function matches(row: StoredEvent) {
+    return row.event.type === 'member.invited' && row.event.commandId === commandId
+      && row.event.principal?.kind === 'human' && row.event.principal.id === actor;
+  }
+  const saved = rows.find(matches);
+  const membership = await currentMembership(store, binding.silo, actor);
+  const admin = ['owner', 'admin'].includes(membership.role);
+  const requiredRole = admin ? 'admin' : 'member';
+  await readActiveMember(store, binding, actor, requiredRole);
+  // Prefer a saved invitation over refusal evidence from an earlier attempt.
+  if (saved) {
+    const data = memberInvitedDataSchema.parse(saved.event.data);
+    const checkpoint = await db.query<{ sequence: string }>(
+      'SELECT sequence FROM projection_checkpoints WHERE name = $1', ['members']);
+    const content = Number(checkpoint.rows[0]?.sequence ?? 0) >= saved.sequence
+      ? 'current' : 'applying';
+    const result = {
+      ...receipt(saved), email: data.email, role: data.role,
+      personalAssistant: data.personalAssistant ?? 'provision', delivery: 'link_only',
+      link: `${origin}/join/${memberId}/${data.invitationId}`,
+    };
+    const change = { status: 'recorded', commandId,
+      changeId: saved.event.id, type: saved.event.type, sequence: saved.sequence,
+      recordedAt: saved.event.time, projection: { content, iam: 'not_required' },
+      result: admin ? result : undefined };
+    return invitationChangeSchema.parse(change);
+  }
+  const refusals = await refusalHistory(store, binding.silo, memberId, deadline);
+  const commandDigest = refusalDigest(commandId);
+  for (const row of refusals) {
+    const data = memberCommandRefusedSchema.parse(row.event.data);
+    if (data.originalCommandDigest === commandDigest && data.operation === 'invite'
+      && row.event.principal?.kind === 'human' && row.event.principal.id === actor) {
+      const change = { status: 'refused', commandId,
+        changeId: row.event.id, type: row.event.type, sequence: row.sequence,
+        recordedAt: row.event.time, reason: data.reason };
+      return invitationChangeSchema.parse(change);
+    }
+  }
+  const missing = { status: 'not_found', commandId };
+  return invitationChangeSchema.parse(missing);
 }

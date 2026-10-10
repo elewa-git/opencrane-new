@@ -22,7 +22,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation and participant facts| events["libs/events<br/>event and memory text checks"]
+  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals and participant facts| events["libs/events<br/>event and memory text checks"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices| events
@@ -33,7 +33,7 @@ flowchart LR
 
 ## What it is responsible for
 
-- Defines tool dispatch records, unsupported consent refusals and requester retry events.
+- Defines tool dispatch records, unsupported consent refusals, requester retries and safe invitation refusal records.
 
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.
@@ -52,6 +52,8 @@ The computer and server share its check for call ids and tool names.
 Tool access decisions can carry a call id. The shared text check refuses hidden
 control characters before saving the id.
 It also records when part of a private reply was lost before the server could save it.
+Refusal records keep a hash of the caller's command id, so that id cannot appear
+as private text in the record. A hash is a fixed-length value calculated from the id.
 Invitation and join events can record whether a personal assistant was requested.
 Older events without that choice still parse. Email-only join events also record
 the account issuer and subject. Older joins without those fields remain valid.

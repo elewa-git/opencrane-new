@@ -27,7 +27,8 @@ function auditAllowListIncludesOwnership(): void {
   for (const event of eventRegistry) {
     const previouslyAllowed = previousAllowList.test(event.type);
     const ownershipEvidence = ownershipTypes.includes(event.type);
-    const expected = previouslyAllowed || ownershipEvidence;
+    const invitationEvidence = ['member.invited', 'member.command_refused'].includes(event.type);
+    const expected = previouslyAllowed || ownershipEvidence || invitationEvidence;
     expect(isAuditEventType(event.type), event.type).toBe(expected);
   }
 }

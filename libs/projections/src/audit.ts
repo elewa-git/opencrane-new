@@ -35,6 +35,8 @@ const auditTypes = new Set([
   // These exact types are the safe computer and membership summaries.
   'agent.command_ran',
   'agent.file_changed',
+  'member.invited',
+  'member.command_refused',
   'member.joined',
   'member.role_changed',
   'member.removed',
@@ -65,11 +67,22 @@ interface Entry extends Record<string, unknown> {
   event_id: string; position: string | number; request_id: string | null; permit_id: string | null; approval_id: string | null;
   conversation_id: string | null; turn_id: string | null; requester_id: string | null; metadata: unknown;
 }
+function invitationMetadata(event: EventEnvelope, data: Record<string, unknown>) {
+  if (!['member.invited', 'member.command_refused'].includes(event.type)) {
+    return {};
+  }
+  const operation = z.enum(['invite', 'join']).safeParse(data['operation']).data;
+  const role = z.enum(['owner', 'admin', 'member']).safeParse(data['role']).data;
+  return {
+    memberId: safeId(data['memberId']), invitationId: safeId(data['invitationId']),
+    operation, role, recordedAt: event.time,
+  };
+}
 function metadata(event: EventEnvelope, d: Record<string, unknown>, position: number): AuditRecord {
   const status = z.enum(['allow', 'ask', 'deny', 'success', 'error', 'unknown', 'not_dispatched']).safeParse(d['outcome']).data;
   const reason = typeof d['reason'] === 'string' ? Object.entries(auditReasons).find(([code]) => code === d['reason'])?.[1] ?? 'Recorded reason withheld' : undefined;
   const cents = amount(d['amountCents'] ?? d['settledCents']);
-  return { eventId: event.id, type: event.type, position,
+  return { ...invitationMetadata(event, d), eventId: event.id, type: event.type, position,
     source: event.type === 'decision.recorded' ? 'decision' : /^(effect|gateway|egress)\./u.test(event.type) ? 'gateway'
       : event.type.startsWith('agent.') ? 'computer' : 'authoritative',
     status: event.type === 'effect.uncertain' ? 'unknown' : status ?? 'recorded',

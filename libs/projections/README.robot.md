@@ -317,3 +317,6 @@ Member/Admin changes on an Owner keep its role and record a receipt. See the
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
+
+The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
+describes how invitation refusal records are rebuilt without granting access.
