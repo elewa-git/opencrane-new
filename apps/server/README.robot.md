@@ -1528,6 +1528,13 @@ Remember requires this proof, non-empty same-scope `dependsOn`, and empty `sourc
 The command checks current key status, expiry and all historical dependencies before using text.
 The exposed remember tool is refused and omitted from discovery because a selective proof
 cannot establish every reference loaded into a turn. Internal command recovery remains tested.
+`test/memory-recall-proof.test.ts` checks each refusal reason separately, including a
+valid selective proof's complete-evidence refusal. The MCP tests also check proof
+validation independently of the generic HTTP 403 response. A separate endpoint test
+checks that a valid selective proof makes no append. Removing the HMAC comparison must
+fail the signature test even while the complete-evidence refusal remains. Proof errors
+stay internal; the endpoint response does not include them. The MCP fixture renews
+its two-minute turn token before each test so slow runs do not use expired credentials.
 An agent cannot claim a human statement. This proof checks references, not whether the
 model's wording follows logically from them.
 

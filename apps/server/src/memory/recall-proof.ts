@@ -43,30 +43,48 @@ export function recallProofBytes(secret: string, context: MemoryContext, limit: 
 export function checkRecallProof(secret: string, context: MemoryContext, proof: string,
   dependencies: { scopeId: string; memoryId: string; revision: number }[]) {
   const [encoded, signed, extra] = proof.split('.');
-  if (!encoded || !signed || extra !== undefined || dependencies.length === 0) {
-    throw new MemoryRefused();
+  if (!encoded || !signed || extra !== undefined) {
+    throw new MemoryRefused('Recall proof structure invalid');
+  }
+  if (dependencies.length === 0) {
+    throw new MemoryRefused('Recall proof dependencies missing');
   }
   const expected = signature(secret, encoded);
   const supplied = Buffer.from(signed, 'base64url');
-  if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
-    throw new MemoryRefused();
+  if (expected.length !== supplied.length) {
+    throw new MemoryRefused('Recall proof signature length invalid');
+  }
+  if (!timingSafeEqual(expected, supplied)) {
+    throw new MemoryRefused('Recall proof signature invalid');
   }
   const bytes = Buffer.from(encoded, 'base64url');
   // Bound decoded input before parsing, including signed payloads with excess whitespace.
   if (bytes.length > 7500) {
-    throw new MemoryRefused();
+    throw new MemoryRefused('Recall proof byte limit exceeded');
   }
-  const payload: unknown = JSON.parse(bytes.toString());
-  const [binding, references] = proofSchema.parse(payload);
+  let payload: unknown;
+  try {
+    payload = JSON.parse(bytes.toString());
+  } catch {
+    throw new MemoryRefused('Recall proof JSON invalid');
+  }
+  const parsed = proofSchema.safeParse(payload);
+  if (!parsed.success) {
+    throw new MemoryRefused('Recall proof payload invalid');
+  }
+  const [binding, references] = parsed.data;
   if (binding !== threadBinding(context)) {
-    throw new MemoryRefused();
+    throw new MemoryRefused('Recall proof thread mismatch');
   }
   for (const dependency of dependencies) {
     function matches(saved: z.infer<typeof referenceSchema>) {
       return saved[0] === dependency.memoryId && saved[1] === dependency.revision;
     }
-    if (dependency.scopeId !== context.scopes[0] || !references.some(matches)) {
-      throw new MemoryRefused();
+    if (dependency.scopeId !== context.scopes[0]) {
+      throw new MemoryRefused('Recall proof dependency scope mismatch');
+    }
+    if (!references.some(matches)) {
+      throw new MemoryRefused('Recall proof dependency not returned');
     }
   }
   // Refuse writes until trusted records cover every memory reference loaded into the turn.
