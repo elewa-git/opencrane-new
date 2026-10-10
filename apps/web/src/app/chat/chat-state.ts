@@ -285,6 +285,8 @@ function finishedToolDetail(status: 'completed' | 'failed' | 'finished'): string
 
 function updateTurnText(turn: Turn, row: ChatRow, parts: Map<string, string>): void {
   if (!['agent.message_delta', 'agent.message_completed'].includes(row.type)) return;
+  // Keep the text at the saved stop request, even when the bridge later reports more output.
+  if (turn.stopRequested) return;
   const messageId = row.data.messageId ?? row.id;
   let text = row.data.text ?? '';
   if (row.type === 'agent.message_delta') {
