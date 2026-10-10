@@ -364,3 +364,33 @@ async function settlesLateUsageWithoutRestart() {
 }
 it('settles dispatched usage once after switch-on and keeps later settlement, release and expiry working',
   settlesLateUsageWithoutRestart);
+
+async function keepsCallsAndSettlementDuringDrain() {
+  const setup = await fixture();
+  try {
+    expect((await setup.call()).status).toBe(200);
+    await setup.settled();
+    await setup.append('provider-primary', 'provider.created', {
+      providerId: 'primary', provider: 'openai', name: 'Primary', revision: 1, changedBy: 'alice',
+    });
+    await setup.append('provider-primary', 'provider.managed_calls_drain_set', {
+      providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+      expectedDrainSequence: 0, draining: true,
+    });
+    expect((await setup.call()).status).toBe(200);
+    await setup.settled();
+    expect(setup.received()).toBe(2);
+    expect(setup.actor.state.reservations).toHaveLength(2);
+    for (const reservation of setup.actor.state.reservations) {
+      expect(reservation.settledCents).toBeGreaterThan(0);
+      expect(reservation.call).not.toHaveProperty('providerId');
+      expect(reservation.call).toMatchObject({
+        model: 'gpt-6-luna', payingGroupId: 'personal-default', priceTableId,
+      });
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('keeps multiple calls in a running legacy turn and settles their original charges during drain',
+  keepsCallsAndSettlementDuringDrain);

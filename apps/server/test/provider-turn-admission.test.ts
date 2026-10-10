@@ -163,3 +163,50 @@ async function refusesModeChangeDuringAdmission() {
 }
 it('refuses a legacy start when switch-on arrives during the final budget check',
   refusesModeChangeDuringAdmission);
+
+async function setDrain(draining: boolean) {
+  const data = { ...switchData, draining, expectedDrainSequence: 0 };
+  await save('provider-primary', 'provider.managed_calls_drain_set', data);
+}
+async function refusesNewTurnsDuringDrain() {
+  await setup();
+  await setDrain(true);
+  await expect(turnCommand(nats.store, context, input)).rejects.toThrow(
+    'Model work is draining; try again after the provider change');
+}
+it('refuses new turns while the recorded drain is active', refusesNewTurnsDuringDrain);
+
+async function retainsRunningTurnDuringDrain() {
+  await setup();
+  const admitted = await turnCommand(nats.store, context, input);
+  await setDrain(true);
+  expect(await turnCommand(nats.store, context, input)).toEqual(admitted);
+  await turnCommand(nats.store, context, { ...input, status: 'completed' });
+}
+it('lets running legacy turns keep their saved path and close during a drain',
+  retainsRunningTurnDuringDrain);
+
+async function refusesDrainDuringAdmission() {
+  await setup();
+  const readStream = nats.store.readStream.bind(nats.store);
+  let draining = false;
+  async function* drainDuringPayerRead(subject: string, from?: number, deadline?: number) {
+    if (subject === 'budget-test' && !draining) {
+      draining = true;
+      await setDrain(true);
+    }
+    yield* readStream(subject, from, deadline);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(drainDuringPayerRead);
+  await expect(turnCommand(nats.store, context, input)).rejects.toThrow(
+    'Provider setup changed; try again');
+}
+it('refuses a drain that starts during the payer check', refusesDrainDuringAdmission);
+
+async function resumesAfterRecordedCancellation() {
+  await setup();
+  await setDrain(true);
+  await setDrain(false);
+  expect(await turnCommand(nats.store, context, input)).not.toHaveProperty('providerId');
+}
+it('admits legacy work after a recorded cancellation', resumesAfterRecordedCancellation);
