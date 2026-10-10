@@ -38,6 +38,7 @@ async function append(subject: string, type: string, data: unknown, apply = true
   const principalValue = { kind: 'human' as const, id: principal };
   const record = { ...event(id, subject, type), silo, data, commandId: id,
     principal: principalValue };
+  if (type === 'computer.turn_started') record.source = 'opencrane-server';
   const command = { event: record, expectedSequence: await nats.store.head(subject),
     historyChecked: true as const };
   expect((await nats.store.append(command)).status).toBe('appended');
@@ -129,15 +130,16 @@ function scopeForPreview(kind: MemoryIdentity['scopeKind'], owner: string) {
 async function previewGrant(resourceType: string, resourceId: string, revoke = false) {
   for (const [granteeKind, granteeId] of [['member', 'preview'],
     ['assistant', 'preview-assistant']]) {
+    const fields = { resourceType, resourceId, granteeKind, granteeId };
+    let actor = { grantedBy: 'owner' } as { grantedBy?: string; revokedBy?: string };
+    if (revoke) actor = { revokedBy: 'owner' };
     await append(grantStream(resourceType, resourceId), revoke ? 'grant.revoked' : 'grant.given',
-      { resourceType, resourceId, granteeKind, granteeId, grantedBy: 'owner' });
+      { ...fields, ...actor });
   }
 }
-const previewRevisions = new Map<string, number>();
 async function previewFact(id: string, text: string, category = 0, apply = true) {
   const scope = previewScopes[category === 0 ? 0 : category - 1]!;
-  const revision = (previewRevisions.get(id) ?? 0) + 1;
-  previewRevisions.set(id, revision);
+  const revision = 1;
   const identity = { silo: 'acme', ...scope, memoryId: id, revision };
   keys.provision(identity);
   const encrypted = keys.encrypt(identity, text);
@@ -174,17 +176,40 @@ async function previewSetup() {
     toolName: 'recall', toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'owner' });
   await previewGrant('mcp_server', 'memory');
   for (const scope of previewScopes) await previewGrant('memory_read', scope.scopeId);
-  await runner.run(projection);
+  for (const target of [projection, groups, computers]) await runner.run(target);
 }
 it('previews empty private memory without dispatch or another owner reading it',
   async function emptyPreview() {
     await previewSetup();
+    const position = await nats.store.head();
     const response = await get(previewUrl, 'preview');
     expect(response.statusCode).toBe(200);
+    expect(await nats.store.head()).toBe(position);
     expect(response.json()).toMatchObject({ status: 'preview', dispatch: 'disabled',
       references: [], hasOmissions: false, limits: { bytes: 16384, references: 32 } });
     expect(response.headers['cache-control']).toBe('no-store');
     expect((await get(previewUrl, 'admin')).statusCode).toBe(404);
+    expect((await get('/api/memory/turns/preview-chat/missing', 'preview')).statusCode).toBe(404);
+  });
+it('keeps the preview available when another turn starts during the read',
+  async function unrelatedTurnStart() {
+    const original = nats.store.head.bind(nats.store);
+    let started = false;
+    async function head(subject?: string, deadline?: number) {
+      if (subject === `scope-${previewScopes[0]!.scopeId}` && !started) {
+        started = true;
+        await append('conversation-preview-chat', 'agent.turn_started', {
+          assistantId: 'preview-assistant', conversationId: 'preview-chat', turnId: 'another-turn' });
+      }
+      return original(subject, deadline);
+    }
+    const reading = vi.spyOn(nats.store, 'head').mockImplementation(head);
+    try {
+      expect((await get(previewUrl, 'preview')).statusCode).toBe(200);
+      expect(started).toBe(true);
+    } finally {
+      reading.mockRestore();
+    }
   });
 it('uses category then bytewise id order, includes unpinned preferences once and omits denied scopes',
   async function orderedPreview() {
@@ -206,10 +231,12 @@ it('uses category then bytewise id order, includes unpinned preferences once and
     expect(denied.json()).not.toHaveProperty('omittedCount');
     await previewGrant('memory_read', previewScopes[1]!.scopeId);
   });
-it.each(['"'.repeat(4096), '界'.repeat(1365)])(
-  'counts JSON escaping and UTF-8 bytes, stops at the first overflow and never backfills: %s',
-  async function byteCap(text) {
-    for (let index = 0; index < 4; index++) await previewFact(`B${index}`, text);
+it.each([['JSON', '"'.repeat(4096)], ['UTF-8', '界'.repeat(1365)]])(
+  'counts %s bytes, stops at the first overflow and never backfills',
+  async function byteCap(_label, text) {
+    let prefix = 'B';
+    if (_label === 'UTF-8') prefix = 'C';
+    for (let index = 0; index < 4; index++) await previewFact(`${prefix}${index}`, text);
     const response = await get(previewUrl, 'preview');
     expect(response.statusCode).toBe(200);
     const body = response.json<{ block: string; references: { memoryId: string }[];
@@ -217,8 +244,35 @@ it.each(['"'.repeat(4096), '界'.repeat(1365)])(
     expect(Buffer.byteLength(body.block)).toBe(body.bytes);
     expect(body.bytes).toBeLessThanOrEqual(16384);
     expect(body.hasOmissions).toBe(true);
-    expect(body.references.at(-1)?.memoryId).toBe(text.startsWith('"') ? 'B0' : 'B2');
+    expect(body.references.at(-1)?.memoryId).toBe(text.startsWith('"') ? 'B0' : 'C2');
+    for (let index = 0; index < 4; index++) {
+      const identity = { silo: 'acme', ...previewScopes[0]!,
+        memoryId: `${prefix}${index}`, revision: 1 };
+      keys.delete(identity);
+    }
+    await runner.rebuild(projection);
   });
+it('admits an exact 16 KiB block and refuses the next byte', async function exactLimit() {
+  for (let index = 0; index < 3; index++) await previewFact(`E${index}`, 'x'.repeat(4096));
+  await previewFact('E3', 'x'.repeat(3005));
+  const exact = await get(previewUrl, 'preview');
+  expect(exact.statusCode).toBe(200);
+  expect(exact.json()).toMatchObject({ bytes: 16384, hasOmissions: true });
+  const scope = previewScopes[0]!;
+  const boundaryIdentity = { silo: 'acme', ...scope, memoryId: 'E3', revision: 1 };
+  keys.delete(boundaryIdentity);
+  await runner.rebuild(projection);
+  await previewFact('E4', 'x'.repeat(3006));
+  const overflow = await get(previewUrl, 'preview');
+  const body = overflow.json<{ references: { memoryId: string }[] }>();
+  expect(overflow.statusCode).toBe(200);
+  expect(body.references.at(-1)?.memoryId).toBe('E2');
+  for (let index = 0; index < 5; index++) {
+    const identity = { silo: 'acme', ...scope, memoryId: `E${index}`, revision: 1 };
+    keys.delete(identity);
+  }
+  await runner.rebuild(projection);
+});
 it('admits at most 32 references and does not report hidden totals', async function references() {
   for (let index = 0; index < 33; index++) await previewFact(`00_${String(index).padStart(2, '0')}`, 'x');
   const response = await get(previewUrl, 'preview');
@@ -228,14 +282,19 @@ it('admits at most 32 references and does not report hidden totals', async funct
 });
 it('refuses an inactive assistant, IAM failure and memory projection lag', async function failures() {
   await append('assistant-preview-assistant', 'assistant.settings_changed',
-    { assistantId: 'preview-assistant', active: false });
+    { assistantId: 'preview-assistant', active: false, changedBy: 'owner',
+      changedFields: ['active'] });
   expect((await get(previewUrl, 'preview')).statusCode).toBe(503);
   await append('assistant-preview-assistant', 'assistant.settings_changed',
-    { assistantId: 'preview-assistant', active: true });
-  const query = vi.spyOn(memory.db, 'query');
-  query.mockRejectedValueOnce(new Error('IAM projection unavailable'));
-  expect((await get(previewUrl, 'preview')).statusCode).toBe(503);
-  query.mockRestore();
+    { assistantId: 'preview-assistant', active: true, changedBy: 'owner',
+      changedFields: ['active'] });
+  const apiUrl = memory.binding.apiUrl;
+  memory.binding.apiUrl = 'http://127.0.0.1:1';
+  try {
+    expect((await get(previewUrl, 'preview')).statusCode).toBe(503);
+  } finally {
+    memory.binding.apiUrl = apiUrl;
+  }
   await previewGrant('memory_read', previewScopes[0]!.scopeId, false);
   await previewFact('lagging', 'Not projected yet', 0, false);
   expect((await get(previewUrl, 'preview')).statusCode).toBe(503);
@@ -244,6 +303,9 @@ it('reads long chat history before the two-second authority check', async functi
   const original = nats.store.readStream.bind(nats.store);
   let delayed = false;
   async function* slow(subject: string, from?: number, deadline?: number) {
+    if (subject === 'conversation-preview-chat' && from === 1) {
+      expect(deadline! - performance.now()).toBeGreaterThan(2000);
+    }
     if (subject === 'conversation-preview-chat' && !delayed) {
       delayed = true;
       await new Promise(function wait(resolve) { setTimeout(resolve, 2100); });
@@ -252,11 +314,12 @@ it('reads long chat history before the two-second authority check', async functi
   }
   const read = vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
   try {
-    // Leave memory denied so the deliberately lagging scope from the previous test is not queried.
-    await previewGrant('memory_read', previewScopes[0]!.scopeId, true);
+    // Omit denied scopes without reading the lagging memory table.
+    for (const scope of previewScopes) await previewGrant('memory_read', scope.scopeId, true);
     const response = await get(previewUrl, 'preview');
     expect(delayed).toBe(true);
     expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ references: [], hasOmissions: false });
   } finally {
     read.mockRestore();
     await runner.run(projection);
