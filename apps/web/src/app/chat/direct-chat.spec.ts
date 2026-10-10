@@ -1118,6 +1118,31 @@ async function keepsSeparateDrafts(): Promise<void> {
 
 it('keeps separate drafts for a conversation and a new recipient', keepsSeparateDrafts);
 
+async function keepsDraftsWithTheirGroupConversation(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openExisting(fixture);
+  typeDraft(fixture, 'Private direct note');
+  const groupRow = Array.from(root(fixture).querySelectorAll<HTMLButtonElement>('.conversation-row'))
+    .find((row) => row.textContent?.includes('Chris Njeri'));
+  groupRow?.click();
+  await settle(fixture);
+  expect(messageField(fixture).value).toBe('');
+  typeDraft(fixture, 'Group-only note');
+  await openExisting(fixture);
+  expect(messageField(fixture).value).toBe('Private direct note');
+  const reopenedGroup = Array.from(
+    root(fixture).querySelectorAll<HTMLButtonElement>('.conversation-row'),
+  ).find((row) => row.textContent?.includes('Chris Njeri'));
+  reopenedGroup?.click();
+  await settle(fixture);
+  expect(messageField(fixture).value).toBe('Group-only note');
+  fixture.destroy();
+}
+
+it('keeps each draft with its direct or group conversation', keepsDraftsWithTheirGroupConversation);
+
 async function refreshesCurrentSearch(): Promise<void> {
   const api = createFetchFixture();
   const fixture = await mount(api);
