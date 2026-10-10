@@ -22,10 +22,17 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
+<<<<<<< HEAD
   server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals, participants, child chats and delegation| events["libs/events<br/>event and memory checks"]
   store["libs/event-store<br/>saved event log"] -.->|checks private chat choices, child records and delegated tasks| events
   projections["libs/projections<br/>read tables"] -.->|checks saved task relationships| events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices| events
+=======
+  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals and participant facts| events["libs/events<br/>event and memory text checks"]
+  store["libs/event-store<br/>saved event log"] -.-> events
+  projections["libs/projections<br/>read tables"] -.-> events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads owner, assistant and provider choices| events
+>>>>>>> 910e7f39 (🛡️ Confirm owner appointments on member streams)
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turn and spending data| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> zod["Zod<br/>data checks"]
@@ -38,7 +45,7 @@ flowchart LR
   remain readable. These records grant no permission to run a task.
 
 - Defines tool dispatch records, unsupported consent refusals, requester retries and safe invitation refusal records.
-
+- Defines owner appointment requests and confirmations on member records.
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.
 - Define the wrapper every event shares (its id, its type, what it is about,

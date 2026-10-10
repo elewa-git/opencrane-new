@@ -4,17 +4,17 @@ import { expect, it } from 'vitest';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { currentMembership, seedOwnership } from '@opencrane/models';
+import { currentMembership, seedOwnership, history } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { members, pgDb, ProjectionRunner, readEvents } from '@opencrane/projections';
 
 async function call(child: ChildProcess, operation: string, input?: unknown) {
   const reply = once(child, 'message');
   child.send({ operation, input });
-  const [result] = await reply;
-  return result as { result?: { status: string }; error?: string };
+  const result: unknown = (await reply)[0];
+  return result;
 }
-async function coordinates(order: 'removal_first' | 'confirmation_first') {
+async function coordinates(order: 'removal_first' | 'confirmation_first' | 'role_first' | 'role_last') {
   const nats = await natsFixture();
   const fga = await openfga();
   const dbs = await databases();
@@ -26,7 +26,8 @@ async function coordinates(order: 'removal_first' | 'confirmation_first') {
   const children: ChildProcess[] = [];
   async function start() {
     const env = { ...process.env, ...nats.env(), TEST_BINDING: JSON.stringify(binding),
-      TEST_DATABASE: String(dbs.queue.options.connectionString) };
+      TEST_DATABASE: String(dbs.queue.options.connectionString),
+      TEST_DISPATCHER: JSON.stringify(nats.env('dispatcher')) };
     const child = fork(new URL('./support/ownership-process.ts', import.meta.url), [], { env });
     children.push(child);
     await once(child, 'message');
@@ -62,30 +63,40 @@ async function coordinates(order: 'removal_first' | 'confirmation_first') {
     expect(await call(second, 'prepare_removal', removed)).toEqual({ result: 'prepared' });
     const appointment = { action: 'transfer', successorId: 'bob', commandId: 'appoint-bob',
       expectedSequence: await nats.store.head('ownership-test') };
-    expect((await call(first, 'command', appointment)).result?.status).toBe('appended');
+    expect(await call(first, 'command', appointment)).toMatchObject({ result: { status: 'appended' } });
     expect((await currentMembership(nats.store, 'test', 'bob')).role).toBe('member');
     await project();
     expect((await auth.check('bob', 'owner')).allowed).toBe(false);
     const stepDown = { action: 'step_down', commandId: 'down-alice',
       expectedSequence: await nats.store.head('ownership-test') };
     expect(await call(first, 'command', stepDown)).toEqual({ error: 'last_owner' });
-    const rows = await Array.fromAsync(nats.reader.readStream('ownership-test'));
+    const rows = await history(nats.reader, 'ownership-test', 'test');
     const request = rows.at(-1)!.event;
     first.kill('SIGKILL');
     await once(first, 'exit');
     first = await start();
+    const roleData = { memberId: 'bob', previousRole: 'member', newRole: 'admin', changedBy: 'alice' };
+    if (order === 'role_first') {
+      await append('member-bob', 'member.role_changed', roleData);
+    }
     if (order === 'removal_first') {
-      expect((await call(second, 'remove')).result?.status).toBe('appended');
+      expect(await call(second, 'remove')).toMatchObject({ result: { status: 'appended' } });
       await call(first, 'confirm', request);
       expect(await call(first, 'command', stepDown)).toEqual({ error: 'last_owner' });
     } else {
       expect(await call(first, 'lost_confirmation', request)).toEqual({ result: 'confirmed' });
-      expect((await call(second, 'remove')).result?.status).toBe('conflict');
+      expect(await call(second, 'remove')).toMatchObject({ result: { status: 'conflict' } });
+      if (order === 'role_last') {
+        const role = await append('member-bob', 'member.role_changed', roleData);
+        await auth.handler.handle(role, db);
+      }
       await project();
-      expect((await call(first, 'command', stepDown)).result?.status).toBe('appended');
+      expect((await auth.check('bob', 'owner')).allowed).toBe(true);
+      expect(await call(first, 'command', stepDown)).toMatchObject({ result: { status: 'appended' } });
+      expect(await call(second, 'remove')).toMatchObject({ result: { status: 'conflict' } });
     }
     await call(first, 'confirm', request);
-    const memberRows = await Array.fromAsync(nats.reader.readStream('member-bob'));
+    const memberRows = await history(nats.reader, 'member-bob', 'test');
     function isConfirmation(row: (typeof memberRows)[number]) {
       return row.event.type === 'member.ownership_confirmed';
     }
@@ -105,5 +116,5 @@ async function coordinates(order: 'removal_first' | 'confirmation_first') {
     await nats.close();
   }
 }
-it.each(['removal_first', 'confirmation_first'] as const)(
+it.each(['removal_first', 'confirmation_first', 'role_first', 'role_last'] as const)(
   'two server processes coordinate appointment, removal and step-down: %s', coordinates, 120_000);

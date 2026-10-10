@@ -334,3 +334,13 @@ function matchesGrantKind(fields: Record<string, unknown>, grantees: Set<string>
   }
   return false;
 }
+
+export async function ownershipWriteAccess(store: EventStore, positions: ReadonlyMap<string, number>) {
+  const fresh = await authorityFence(store, performance.now(), [...positions.keys()]);
+  for (const [subject, position] of positions) {
+    if (await store.head(subject, fresh.deadline) !== position) {
+      throw new Error('Authority changed');
+    }
+  }
+  return fresh;
+}

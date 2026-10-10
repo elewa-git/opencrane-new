@@ -204,6 +204,11 @@ function createMemberAuthorisation(binding: Binding,
       await client.write([receipt], []);
       return;
     }
+    if (event.type === 'ownership.transferred'
+      && ownershipTransferredSchema.parse(event.data).awaitingConfirmation) {
+      await client.write([receipt], []);
+      return;
+    }
     const memberId = field(event.data, 'memberId');
     const user = objectId('person', binding.silo, memberId);
     const current = await client.read({ user, object });
@@ -293,8 +298,8 @@ function createMemberAuthorisation(binding: Binding,
       logger.info(fields, 'Skipped an old event because a later permission change was already applied');
       return;
     }
-    if (store && (event.type === 'member.role_changed'
-      || event.type === 'ownership.transferred')) {
+    const roleTypes = ['member.role_changed', 'ownership.transferred', 'member.ownership_confirmed'];
+    if (store && roleTypes.includes(event.type)) {
       await requireEarlierRoleChanges(store, event, applied);
     }
     if (event.type.startsWith('ownership.')) {
@@ -322,7 +327,8 @@ function createMemberAuthorisation(binding: Binding,
     }
     const user = objectId("person", binding.silo, memberId);
     const current = await client.read({ user, object });
-    const noEffect = await refuseMemberOwnerEdit(event, current);
+    const confirmation = event.type === 'member.ownership_confirmed';
+    const noEffect = !confirmation && await refuseMemberOwnerEdit(event, current);
     if (noEffect) {
       await client.write([receipt], []);
       return;
@@ -330,7 +336,7 @@ function createMemberAuthorisation(binding: Binding,
     function isMember(tuple: Tuple): boolean {
       return tuple.relation === 'member';
     }
-    if (event.type === "member.role_changed" && !current.some(isMember)) {
+    if ((event.type === "member.role_changed" || confirmation) && !current.some(isMember)) {
       throw new Error("Role change requires an existing member");
     }
     let desired: Tuple[] = [];

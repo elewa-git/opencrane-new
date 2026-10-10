@@ -123,11 +123,15 @@ the personal default.
 | `member.role_changed` | non-owner role command | members | OpenFGA role tuples |
 | `member.removed` | non-owner removal command | members | OpenFGA delete; emit `connection.revoked` for each connection; suspend the person's computer; audit |
 | `ownership.seeded` | fenced installation migration or bootstrap reaction | current owner set | OpenFGA seed receipt after existing owner tuples converge |
-| `ownership.transferred` | Owner command | successor role and owner set; payload-free change evidence | OpenFGA owner tuple and atomic receipt; previous owner remains |
+| `ownership.transferred` | Owner command | request only when `awaitingConfirmation: true`; older events add the owner | confirm active successor on their member stream; OpenFGA request receipt |
+| `member.ownership_confirmed` | appointment reaction | successor role and owner set | OpenFGA owner tuple and receipt |
 | `ownership.stepped_down` | current Owner command | actor becomes Admin; owner set retains at least one owner | OpenFGA delete owner role, retain member/add Admin and atomic receipt |
 | `team.created` / `team.member_added` / `team.member_removed` | Owner/Admin command, or supplied identity-provider membership | flat group names, membership and grant-source views | OpenFGA `team#member` tuples and atomic receipts |
 
-Ownership edits use only `ownership-<silo>`. Migration seeds the current active
+Ownership commands save requests on `ownership-<silo>`. New appointments count only
+after `member.ownership_confirmed` is saved on the successor’s member stream.
+Removal and role edits use that same stream, so their conditional appends settle
+the order without a database lock. Pending appointments grant no authority. Migration seeds the current active
 owners from legacy member events once; the seed append also conditionally checks
 the captured global sequence. New writes cannot use a stale seed. Fresh claims
 seed through the durable `seed-ownership` reaction. No owner edit is enabled until
@@ -545,8 +549,9 @@ events. Desktop admission additionally requires an explicit member
 | Handler | Subscribed events |
 | --- | --- |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
-| `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |
-| `update-openfga` | `provider.created`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
+| `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |
+| `update-openfga` | `provider.created`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
+| `confirm-ownership` | `ownership.transferred` |
 | `seed-ownership` | `silo.owner_bootstrapped` |
 | `seed-provider-default` | `provider.verification_recorded`, `provider.models_selected` |
 | `seed-model-grants` | `member.joined`, `silo.owner_bootstrapped`, `assistant.created` |

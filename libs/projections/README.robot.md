@@ -326,6 +326,8 @@ File list reads accept an inclusive join position and query only records at or a
 Member/Admin changes on an Owner keep its role and record a receipt. See the
 [role contract](../../docs/api/members.md#change-a-member-or-admin-role).
 
+New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).
+
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.

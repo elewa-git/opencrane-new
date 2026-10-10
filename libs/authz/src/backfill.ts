@@ -11,6 +11,9 @@ function value(event: EventEnvelope, name: string): unknown {
 }
 
 function sameTarget(previous: EventEnvelope, later: EventEnvelope): boolean {
+  if (previous.type === 'member.ownership_confirmed' && later.type === 'member.role_changed') {
+    return false;
+  }
   if (previous.type.startsWith('grant.')) {
     return value(previous, 'granteeId') === value(later, 'granteeId') &&
       (value(previous, 'granteeKind') === value(later, 'granteeKind') ||
@@ -46,7 +49,7 @@ async function appliedRemoval(store: Pick<EventStore, 'readStream'>, silo: strin
       throw new Error('Authorisation member history silo mismatch');
     }
     if (['member.joined', 'silo.owner_bootstrapped', 'member.role_changed',
-      'member.removed'].includes(row.event.type)) {
+      'member.removed', 'member.ownership_confirmed'].includes(row.event.type)) {
       latest = row.event;
     }
   }
@@ -54,7 +57,8 @@ async function appliedRemoval(store: Pick<EventStore, 'readStream'>, silo: strin
 }
 
 function changesMemberRole(event: EventEnvelope): boolean {
-  return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed'].includes(event.type);
+  return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed',
+    'member.ownership_confirmed'].includes(event.type);
 }
 
 async function savedSequence(store: Pick<EventStore, 'readStream'>,
@@ -110,6 +114,8 @@ async function laterOwnershipApplied(store: Pick<EventStore, 'readStream'>,
     if (row.sequence <= sequence) {
       continue;
     }
+    if (row.event.type === 'ownership.transferred'
+      && ownershipTransferredSchema.parse(row.event.data).awaitingConfirmation) continue;
     let affectsMember = value(row.event, 'memberId') === memberId;
     if (row.event.type === 'ownership.seeded' && typeof memberId === 'string') {
       const seed = ownershipSeededSchema.parse(row.event.data);

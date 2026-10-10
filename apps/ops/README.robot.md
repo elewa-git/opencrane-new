@@ -419,3 +419,5 @@ local registry. It proves that v1.0.4 resumes from the updated template, with th
 same Sandbox UID, same PVC UID, a new Pod UID and a saved home file.
 
 The dispatcher registers `seed-provider-default` for provider verification and model selections. It records the first verified connection once the chat model is enabled, using current Owner/Admin authority. Redelivery retains any recorded default or pause. Restart the dispatcher with the updated subscriptions; provider replay runs no reaction.
+
+New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).

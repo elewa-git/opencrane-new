@@ -10,9 +10,15 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
+<<<<<<< HEAD
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes and spending| models["libs/models<br/>AI rules and child joins"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
+=======
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes and spending| models["libs/models<br/>AI access and spending"]
+  ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
+  computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
+>>>>>>> 910e7f39 (🛡️ Confirm owner appointments on member streams)
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
@@ -26,7 +32,7 @@ flowchart LR
 
 - Records verified tool dispatch outcomes and link attempts of the same call.
   Allows one unchanged retry after a recorded failure before dispatch.
-
+- Counts new owners only after their member record confirms the appointment.
 - Records provider choices and pauses for assistants and the silo default.
   An administrator can choose any eligible provider. The first verified provider
   supplies the automatic default when nobody has chosen one. Each reply confirms

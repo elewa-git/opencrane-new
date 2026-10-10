@@ -1,4 +1,4 @@
-import { budgets, ownershipSeedHandler, settlementHandler, modelGrantHandler,
+import { budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
   providerDefaultHandler, initialiseBudgetProjection } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
@@ -107,6 +107,7 @@ try {
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),
       issuer: required('TOKEN_ISSUER') });
     const available = [authorisation.handler, ownershipSeedHandler(commands.store),
+      ownershipConfirmationHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
       ...lifecycleHandlers(commands.store)];
     const decisionUrl = process.env['MODEL_DECISION_URL'];

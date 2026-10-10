@@ -929,6 +929,8 @@ price-table fields. It sends no provider request.
 
 `currentMembership` accepts a separate history deadline for reads before a write access check.
 
+New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).
+
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.

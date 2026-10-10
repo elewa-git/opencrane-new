@@ -3,8 +3,7 @@ import { legacyMemberRole } from '@opencrane/events';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { authorityFence, currentMembership, history, ownershipSubject,
-  ownershipState } from '@opencrane/models';
+import { ownershipWriteAccess, currentMembership, history, ownershipSubject } from '@opencrane/models';
 
 const identifier = z.string().regex(/^[\w-]{1,200}$/u);
 const common = { commandId: identifier, expectedSequence: z.int().nonnegative().safe() };
@@ -16,15 +15,15 @@ type Command = z.infer<typeof commandSchema>;
 export class OwnershipRefused extends Error {}
 export class OwnershipConflict extends Error {}
 
-type FreshAuthority = Awaited<ReturnType<typeof authorityFence>>;
+type FreshAuthority = Awaited<ReturnType<typeof ownershipWriteAccess>>;
 export async function ownershipAccess(store: EventStore, binding: Binding, memberId: string,
-  fresh: FreshAuthority) {
+  fresh?: FreshAuthority) {
   const membership = await readableMembership(store, binding, memberId, fresh);
   await checkReceipts(binding, memberId, membership.facts, 'admin');
   return membership;
 }
 export async function ownershipStatusAccess(store: EventStore, binding: Binding, memberId: string,
-  fresh: FreshAuthority) {
+  fresh?: FreshAuthority) {
   const membership = await readableMembership(store, binding, memberId, fresh);
   // Skip step-down events when checking saved permissions, so either side can
   // still read status after a step-down. Adding an owner still needs OpenFGA's
@@ -34,8 +33,9 @@ export async function ownershipStatusAccess(store: EventStore, binding: Binding,
   return membership;
 }
 async function readableMembership(store: EventStore, binding: Binding, memberId: string,
-  fresh: FreshAuthority) {
-  const membership = await currentMembership(store, binding.silo, memberId, fresh);
+  fresh?: FreshAuthority) {
+  const membership = await currentMembership(store, binding.silo, memberId, fresh,
+    fresh?.deadline ?? performance.now() + 10_000);
   if (!['owner', 'admin'].includes(membership.role)) {
     throw new OwnershipRefused('owner_or_admin_required');
   }
@@ -68,7 +68,7 @@ function commandType(input: Command) {
 }
 function payload(input: Command, actorId: string) {
   if (input.action === 'transfer') {
-    return { memberId: input.successorId, transferredBy: actorId };
+    return { memberId: input.successorId, transferredBy: actorId, awaitingConfirmation: true as const };
   }
   return { memberId: actorId };
 }
@@ -95,20 +95,19 @@ function previous(rows: StoredEvent[], input: Command, actorId: string) {
   return ownershipReceipt(row);
 }
 
-/** All owner edits use this conditional stream append; stepping down always becomes Admin. */
+/** Save ownership requests; stepping down always makes the caller an Admin. */
 export async function ownershipCommand(store: EventStore, binding: Binding,
   actorId: string, raw: unknown) {
   const input = commandSchema.parse(raw);
   const subject = ownershipSubject(binding.silo);
-  const fresh = await authorityFence(store, performance.now(), [subject, `member-${actorId}`]);
-  const membership = await ownershipAccess(store, binding, actorId, fresh);
+  const membership = await ownershipAccess(store, binding, actorId);
+  const positions = membership.positions;
   const rows = membership.ownership;
   if (!rows.length) {
     throw new Error('Ownership migration required');
   }
   const retried = previous(rows, input, actorId);
   if (retried) {
-    await fresh();
     return retried;
   }
   if (!membership.owners.has(actorId)) {
@@ -118,7 +117,9 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
     throw new OwnershipConflict('concurrent_change');
   }
   if (input.action === 'transfer') {
-    const successor = await currentMembership(store, binding.silo, input.successorId, fresh);
+    const successor = await currentMembership(store, binding.silo, input.successorId,
+      undefined, performance.now() + 10_000);
+    includePositions(positions, successor.positions);
     if (!successor.role) {
       throw new OwnershipRefused('active_successor_required');
     }
@@ -128,7 +129,7 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
     }
   } else {
     const anotherActiveOwner = await hasAnotherActiveOwner(
-      store, binding.silo, actorId, membership.owners, fresh);
+      store, binding.silo, actorId, membership.owners, positions);
     if (!anotherActiveOwner) throw new OwnershipConflict('last_owner');
   }
   const event = {
@@ -137,18 +138,19 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
     time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
     principal: { kind: 'human' as const, id: actorId },
   };
-  // Recheck the successor's membership before appending the ownership change.
-  // This catches a removal that happened after the earlier membership read.
+  // Read histories first, then check only the streams that decide access.
+  const fresh = await ownershipWriteAccess(store, positions);
   await fresh();
-  const result = await store.append({ event, expectedSequence: input.expectedSequence });
+  const command = { event, expectedSequence: input.expectedSequence,
+    deadline: fresh.deadline, historyChecked: true as const };
+  const result = await store.append(command);
   if (result.status === 'unavailable') {
     throw new Error('Ownership append unavailable', { cause: result.cause });
   }
   if (result.status === 'rejected') {
     throw new Error('Ownership append rejected');
   }
-  const updated = await history(store, subject, binding.silo, performance.now() + 2000);
-  ownershipState(updated);
+  const updated = await history(store, subject, binding.silo, performance.now() + 10_000);
   const receipt = previous(updated, input, actorId);
   if (receipt) {
     return receipt;
@@ -157,11 +159,12 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
 }
 
 async function hasAnotherActiveOwner(store: EventStore, silo: string, actorId: string,
-  owners: Set<string>, fresh: FreshAuthority) {
+  owners: Set<string>, positions: Map<string, number>) {
   for (const ownerId of owners) {
     if (ownerId === actorId) continue;
-    fresh.include(`member-${ownerId}`);
-    const rows = await history(store, `member-${ownerId}`, silo, fresh.deadline);
+    const subject = `member-${ownerId}`;
+    const rows = await history(store, subject, silo, performance.now() + 10_000);
+    if (!positions.has(subject)) positions.set(subject, rows.at(-1)?.sequence ?? 0);
     let active = false;
     for (const row of rows) {
       const role = legacyMemberRole(row.event);
@@ -170,4 +173,10 @@ async function hasAnotherActiveOwner(store: EventStore, silo: string, actorId: s
     if (active) return true;
   }
   return false;
+}
+
+function includePositions(positions: Map<string, number>, additional: ReadonlyMap<string, number>) {
+  for (const [subject, position] of additional) {
+    if (!positions.has(subject)) positions.set(subject, position);
+  }
 }

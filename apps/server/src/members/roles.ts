@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { memberRoleChangedDataSchema, ownershipTransferredSchema } from '@opencrane/events';
+import { memberRoleChangedDataSchema, ownershipTransferredSchema,
+  ownershipConfirmedSchema } from '@opencrane/events';
 import { memberAuthorisation } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
 import { activeMember, authorityFence, currentMembership, history, ownershipState,
@@ -112,16 +113,26 @@ export async function roleStatus(options: GroupOptions, actor: string, memberId:
   function beforeChange(change: StoredEvent) {
     return change.sequence < changeSequence;
   }
+  const target = await currentMembership(store, silo, memberId,
+    undefined, performance.now() + 10_000);
   const earlier = ownership.filter(beforeChange);
-  const ownersAtChange = ownershipState(earlier);
-  const currentOwners = ownershipState(ownership);
+  const earlierConfirmations = target.confirmations.filter(beforeChange);
+  const ownersAtChange = ownershipState(earlier, earlierConfirmations);
+  const currentOwners = target.owners;
   const effect = ownersAtChange.has(memberId) || currentOwners.has(memberId)
     ? 'none_target_became_owner' : 'role_changed';
   function targetsMember(change: StoredEvent) {
     return change.event.type === 'ownership.transferred'
       && ownershipTransferredSchema.parse(change.event.data).memberId === memberId;
   }
-  const appointment = ownership.findLast(targetsMember);
+  let appointment = ownership.findLast(targetsMember);
+  if (appointment && ownershipTransferredSchema.parse(appointment.event.data).awaitingConfirmation) {
+    const requestId = appointment.event.id;
+    function confirmsRequest(change: StoredEvent) {
+      return ownershipConfirmedSchema.parse(change.event.data).appointmentId === requestId;
+    }
+    appointment = target.confirmations.find(confirmsRequest);
+  }
   const projection = await projectionProgress(options, row, appointment);
   return { ...receipt(row), effect, projection };
 }

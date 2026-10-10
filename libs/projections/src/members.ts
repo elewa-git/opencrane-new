@@ -1,6 +1,6 @@
 import {
   legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
-  ownershipSteppedDownSchema,
+  ownershipSteppedDownSchema, ownershipConfirmedSchema,
   memberInvitedDataSchema,
   siloOwnerBootstrappedDataSchema,
   memberJoinedDataSchema,
@@ -47,7 +47,7 @@ async function applyMember(
   event: EventEnvelope,
   position: number,
 ): Promise<void> {
-  if (event.type.startsWith('ownership.')) {
+  if (event.type.startsWith('ownership.') || event.type === 'member.ownership_confirmed') {
     await applyOwnership(tables, db, event, position);
     return;
   }
@@ -210,9 +210,8 @@ export const replayMembers = memberProjection(
 
 async function applyOwnership(tables: MemberTables, db: Query,
   event: EventEnvelope, position: number) {
-  if (event.subject !== `ownership-${event.silo}`) {
-    throw new Error('Ownership subject mismatch');
-  }
+  const confirmation = event.type === 'member.ownership_confirmed';
+  requireOwnershipSubject(event, confirmation);
   const current = await db.query<{ owners: string[] }>(
     `SELECT owners FROM ${tables.ownership} WHERE silo = $1`, [event.silo]);
   let owners = current.rows[0]?.owners;
@@ -227,8 +226,12 @@ async function applyOwnership(tables: MemberTables, db: Query,
     }
     const memberId = field(event.data, 'memberId');
     let role: string;
-    if (event.type === 'ownership.transferred') {
+    if (confirmation) {
+      await confirmProjectedOwner(tables, db, event, memberId, owners);
+      role = 'owner';
+    } else if (event.type === 'ownership.transferred') {
       const transfer = ownershipTransferredSchema.parse(event.data);
+      if (transfer.awaitingConfirmation) return;
       if (!owners.includes(transfer.transferredBy)) {
         throw new Error('Owner required');
       }
@@ -276,4 +279,21 @@ async function refuseOwnerEdit(tables: MemberTables, db: Query,
     throw new Error('Owner changes require the ownership stream');
   }
   return false;
+}
+
+function requireOwnershipSubject(event: EventEnvelope, confirmation: boolean) {
+  if (!confirmation && event.subject !== `ownership-${event.silo}`) {
+    throw new Error('Ownership subject mismatch');
+  }
+}
+
+async function confirmProjectedOwner(tables: MemberTables, db: Query,
+  event: EventEnvelope, memberId: string, owners: string[]) {
+  ownershipConfirmedSchema.parse(event.data);
+  if (event.subject !== `member-${memberId}`) throw new Error('Member subject mismatch');
+  const member = await db.query<{ status: string }>(
+    `SELECT status FROM ${tables.members} WHERE silo = $1 AND member_id = $2`,
+    [event.silo, memberId]);
+  if (member.rows[0]?.status !== 'joined') throw new Error('Active successor required');
+  if (!owners.includes(memberId)) owners.push(memberId);
 }

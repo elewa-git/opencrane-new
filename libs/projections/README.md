@@ -24,7 +24,11 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills tables, including configured memory| projections["libs/projections<br/>read tables and child joins"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
+<<<<<<< HEAD
   projections -->|saves chat activity, closing details and private choices| pg
+=======
+  projections -->|writes tables, confirmed owners and accounts| pg
+>>>>>>> 910e7f39 (🛡️ Confirm owner appointments on member streams)
   store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
@@ -37,6 +41,7 @@ flowchart LR
   tables starts no tasks and changes no permissions or spending.
 - Copies recorded tool dispatch evidence into conversation feeds without calling a tool.
 - Rebuilds saved provider choices alongside provider records without calling a provider.
+- Adds a new owner to the member tables only after confirmation is saved.
 - Turn ordered events into tables that the server can read.
 - Bind member accounts from bound invitations or accepted email invitations.
 - Keep old conversation participant records separate from new participant changes.

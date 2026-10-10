@@ -14,14 +14,14 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.-> authz
   ops["apps/ops<br/>background workers"] -.-> authz
   authz -->|checks access and roles| fga["OpenFGA<br/>permissions service"]
-  authz -->|reads saved roles and ownership| store["libs/event-store<br/>saved events"]
+  authz -->|reads roles and owner confirmations| store["libs/event-store<br/>saved events"]
   authz -.-> handlers["libs/handlers<br/>background jobs"]
 ```
 
 ## What it is responsible for
 
 - Give named child participants access and keep the creator permission separate.
-
+- Grants ownership only after the member record confirms the appointment.
 - Turn membership, ownership, conversation, group and access-grant events into permission records.
 - Answer whether a person, assistant or group may use a resource.
 - Refuse access when OpenFGA cannot give a reliable answer.

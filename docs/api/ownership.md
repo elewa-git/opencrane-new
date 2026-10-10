@@ -8,7 +8,7 @@ Responses use `no-store`. No UI is included; the screens follow foundation #130.
 | Method and route | Input | Result |
 | --- | --- | --- |
 | `GET /api/ownership` | None | `{ status: "current", owners, sequence, viewer, ready }` |
-| `POST /api/ownership` | `{ action: "transfer", commandId, expectedSequence, successorId }` | Durable receipt; successor becomes an Owner and previous Owner remains |
+| `POST /api/ownership` | `{ action: "transfer", commandId, expectedSequence, successorId }` | Durable request receipt; successor becomes an Owner after confirmation |
 | `POST /api/ownership` | `{ action: "step_down", commandId, expectedSequence }` | Durable receipt; caller becomes an Admin, with another Owner remaining |
 | `GET /api/ownership/changes/:commandId` | Original command id | Original receipt and `projection: { content, iam }` |
 
@@ -79,15 +79,24 @@ and owner removal on a member stream are rejected by both projections. A valid
 Member/Admin role change that reaches a current Owner has no effect and records
 its receipt. The [member role route](members.md#change-a-member-or-admin-role)
 refuses Owner targets before append. Step-down requires another owner whose
-member events still show active membership. Appointment and future removal still
-need coordination to close the gap between their final access checks and appends.
+member events still show active membership. New appointments carry
+`awaitingConfirmation: true`. The `confirm-ownership` reaction saves
+`member.ownership_confirmed` with the request event id as `appointmentId`.
+A removed successor receives no confirmation. An old removal append cannot pass
+its member-stream condition after confirmation. Pending requests grant no owner rights.
+Both projection statuses stay `applying` until the confirmation has been applied.
 
 Replay members to rebuild roles, identities, owner sets and feed deltas; replay
 OpenFGA to rebuild the same tuples and receipts. Ownership reactions do not run
-on replay. Authority reads use exact member and ownership subjects within the
-shared two-second fence. Gateway decisions include relevant ownership receipts;
+on replay. Commands read history before their two-second access check, then check
+only member and ownership stream positions. Ordinary reads check access once. Gateway decisions include relevant ownership receipts;
 Owner/Admin commands use the ownership-derived role and refuse missing IAM receipts.
 
 [Source evidence and remaining qualification](../process/p4-2-backend-evidence.md)
 record the tested seams and live results. Ownership desktop/390px screens remain
 NOT RUN for this backend change.
+
+Existing installations need a stopped-service `upgrade-handlers` run to register
+`confirm-ownership` and the new permission subscription, followed by member and
+OpenFGA rebuilds. Older appointments without `awaitingConfirmation` keep their
+recorded effect. Rebuilds run no confirmation reactions.
