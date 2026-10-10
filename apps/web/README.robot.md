@@ -78,8 +78,11 @@ Group rows from the same conversation list open in this transcript. They use the
 rows. Each group message names its stored author id, using a colleague display name when
 the current colleague read knows it. A successful append is labelled Saved; the screen
 does not claim delivery. Group messages are plain text, including literal `@agent`, and
-the group transcript has no assistant controls. Access refusal clears the group history,
-draft, names, pending send and cursor. Old HTTP replies are ignored after access loss.
+the group transcript has no assistant controls. Direct and group drafts stay with the
+conversation where they were typed. A 403 reply to a message clears the transcript,
+drafts, people and pending messages. On a phone, the screen closes the conversation menu
+and focuses the unavailable notice. A missing or removed conversation link shows the
+unavailable state. Late replies cannot restore cleared content.
 
 The recipient picker shows up to three chips. When more people are selected, Review all
 opens a full-screen native dialog with every recipient. The dialog starts focus on its
