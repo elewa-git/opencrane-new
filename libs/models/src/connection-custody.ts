@@ -124,7 +124,12 @@ class ConnectionCustody {
       if (!secret.success) {
         return { status: 'conflict' };
       }
-      const identity = this.verify(secret.data, checked, recorded, material);
+      // Require evidence from the create reply. Copied Secret fields cannot prove its UID.
+      const original = recorded ?? expected;
+      if (!original) {
+        return { status: 'conflict' };
+      }
+      const identity = this.verify(secret.data, checked, original, material);
       if (identity && expected && !sameIdentity(identity, expected)) {
         return { status: 'conflict' };
       }
@@ -165,6 +170,9 @@ class ConnectionCustody {
       if (recorded) {
         return this.recover(checked, recorded, material);
       }
+      if (!await this.journal.claimCreate(nameFor(checked))) {
+        return this.recoverCreate(checked, material);
+      }
       const response = await this.request('POST', undefined, body);
       if (response.ok) {
         const secret = secretSchema.safeParse(await readResponse(response));
@@ -190,28 +198,52 @@ class ConnectionCustody {
     if (!expected) {
       return { status: 'conflict' };
     }
-    const observed = await this.recover(input, expected);
-    if (observed.status !== 'recovered') {
-      return observed;
-    }
-    const preconditions = { uid: expected.uid, resourceVersion: expected.resourceVersion };
     try {
+      const checked = checkedStage(input);
+      const pending = await this.journal.deletion(nameFor(checked));
+      if (pending) {
+        const recorded = await this.journal.identity(nameFor(checked));
+        const prepared = await this.journal.prepared(recordFor(checked), false);
+        if (!prepared || !recorded || !sameIdentity(recorded, expected)
+            || !sameIdentity(pending, expected)) {
+          return { status: 'conflict' };
+        }
+        // Check removal without adopting a changed version or sending another DELETE.
+        return await this.confirmRemoval(expected.reference);
+      }
+      const observed = await this.recover(checked, expected);
+      if (observed.status !== 'recovered') {
+        return observed;
+      }
+      if (!await this.journal.markDeletion(expected)) {
+        return { status: 'conflict' };
+      }
+      const preconditions = { uid: expected.uid, resourceVersion: expected.resourceVersion };
       const response = await this.request('DELETE', expected.reference, { preconditions });
       if (response.ok) {
-        return { status: 'deleted' };
+        return await this.confirmRemoval(expected.reference);
       }
       if (response.status === 404) {
         return { status: 'not_found' };
       }
       if (response.status === 409) {
         // Observe the conflict and stop. Never retry deletion with the new identity.
-        await this.recover(input, expected);
+        await this.recover(checked, expected);
         return { status: 'conflict' };
       }
       return { status: 'unknown' };
     } catch {
       return { status: 'unknown' };
     }
+  }
+  private async confirmRemoval(reference: string): Promise<Result> {
+    const response = await this.request('GET', reference);
+    // Confirm absence. A successful DELETE can leave the credential readable behind a finaliser.
+    await response.body?.cancel();
+    if (response.status === 404) {
+      return { status: 'deleted' };
+    }
+    return { status: 'unknown' };
   }
   private async recoverCreate(input: ConnectionStage, material: string): Promise<Result> {
     const recovered = await this.recover(input, undefined, material);

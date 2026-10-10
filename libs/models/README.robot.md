@@ -1175,8 +1175,19 @@ expected sequence, deadline and material. Retain older
 key ids while their generations exist. Results contain only status and exact identity.
 `connection-stage-journal.ts` reuses exclusive 0600 provider-file writes, then flushes files
 and their directory. It stores the operation id, reference, expected sequence, deadline and first UID and version.
-It stores no material or verifier and cannot activate a connection. Deletion checks stored
-contents and sends both UID/version preconditions. Conflicts and unknown outcomes retain
+A separate create claim is flushed before POST. Only its first writer sends the create.
+If the reply is lost before the UID/version is saved, recovery returns `conflict` unless
+an exact identity from an independent create reply is supplied. Matching bindings,
+material and HMAC alone never establish the original UID. A retry never sends another
+create, even when the original object has disappeared.
+
+The journal stores no material or verifier and cannot activate a connection. Deletion
+checks stored contents and sends both UID/version preconditions. It saves the exact
+identity for the deletion check before DELETE. `deleted` requires a later GET returning
+404. A finaliser can leave the token readable after a successful DELETE; that returns
+`unknown`. After restart, a pending deletion only checks absence. It never repeats DELETE
+or adopts the version changed by a finaliser. A failed request also leaves deletion
+unresolved; a later absence check can finish it. Conflicts and unknown outcomes retain
 material. A 404 never proves failed activation. The later orphan reconciler must prevent
 late appends before cleanup. No routes, event writes or material releases are registered.
 

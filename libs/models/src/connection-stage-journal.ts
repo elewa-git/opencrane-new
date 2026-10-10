@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { z } from 'zod';
 import { providerSecrets } from './provider-secrets.ts';
@@ -41,11 +41,18 @@ export function connectionStageJournal(directory: string) {
     if (create) {
       await publish(path, expected);
     }
-    return await files.read(path) === expected;
-  }
-  async function identity(name: string): Promise<Identity | undefined> {
     try {
-      const raw: unknown = JSON.parse(await files.read(reference('identity', name)));
+      return await files.read(path) === expected;
+    } catch (error) {
+      if (missingFile.safeParse(error).success) {
+        return false;
+      }
+      throw error;
+    }
+  }
+  async function readIdentity(kind: string, name: string): Promise<Identity | undefined> {
+    try {
+      const raw: unknown = JSON.parse(await files.read(reference(kind, name)));
       const checked = identitySchema.safeParse(raw);
       if (!checked.success) {
         throw new Error('Connection recovery record invalid');
@@ -58,12 +65,32 @@ export function connectionStageJournal(directory: string) {
       throw new Error('Connection recovery record unavailable', { cause: error });
     }
   }
-  async function pin(observed: Identity) {
-    const path = reference('identity', observed.reference);
+  async function saveIdentity(kind: string, observed: Identity) {
+    const path = reference(kind, observed.reference);
     const expected = JSON.stringify(observed);
     // Publish once and compare privately, including when another worker got the reply first.
     await publish(path, expected);
     return await files.read(path) === expected;
   }
-  return { prepared, identity, pin };
+  async function identity(name: string) {
+    return readIdentity('identity', name);
+  }
+  async function pin(observed: Identity) {
+    return saveIdentity('identity', observed);
+  }
+  async function claimCreate(name: string) {
+    const path = reference('create', name);
+    const attemptId = randomUUID();
+    // Claim the create before sending it. A lost reply must never cause a second create.
+    await publish(path, attemptId);
+    return await files.read(path) === attemptId;
+  }
+  async function deletion(name: string) {
+    return readIdentity('deletion', name);
+  }
+  async function markDeletion(observed: Identity) {
+    // Keep the exact identity across restart while Kubernetes waits for finalisers.
+    return saveIdentity('deletion', observed);
+  }
+  return { prepared, identity, pin, claimCreate, deletion, markDeletion };
 }
