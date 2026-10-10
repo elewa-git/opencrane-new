@@ -5,3 +5,7 @@ the models process. A refused unsent call releases its hold at zero cents, and
 late usage settles once at its original price. New holds remain refused.
 
 Spending-limit edits can retry after switch-on using the revision shown to the admin, even if an earlier access check expired or a new spending hold was refused. Existing holds do not need to be released first.
+
+Starting a personal turn reads each new budget row once. The payer and provider
+switch-on check share the same small summary, so growing spending history does
+not add a second read of new rows.

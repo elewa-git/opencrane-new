@@ -142,23 +142,24 @@ async function refusesModeChangeDuringAdmission() {
   const readStream = nats.store.readStream.bind(nats.store);
   let switched = false;
   let budgetReads = 0;
-  async function* switchDuringPayerRead(subject: string, from?: number, deadline?: number) {
+  async function* switchDuringFinalBudgetRead(subject: string, from?: number, deadline?: number) {
     if (subject === 'budget-test') {
       budgetReads++;
     }
-    // Wait until the payer read; the earlier budget read checks provider mode.
+    // Save switch-on after admission read the payer and before its final mode check.
     if (subject === 'budget-test' && budgetReads === 2 && !switched) {
       switched = true;
       await switchOn();
     }
     yield* readStream(subject, from, deadline);
   }
-  vi.spyOn(nats.store, 'readStream').mockImplementation(switchDuringPayerRead);
+  vi.spyOn(nats.store, 'readStream').mockImplementation(switchDuringFinalBudgetRead);
   await expect(turnCommand(nats.store, context, input)).rejects.toThrow(
     'Provider setup changed; try again');
+  expect(switched).toBe(true);
   const rows = [];
   for await (const row of readStream('computer-assistant')) rows.push(row);
   expect(rows).toHaveLength(1);
 }
-it('refuses a legacy start when switch-on arrives during the payer read',
+it('refuses a legacy start when switch-on arrives during the final budget check',
   refusesModeChangeDuringAdmission);

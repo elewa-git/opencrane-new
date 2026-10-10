@@ -84,7 +84,7 @@ flowchart LR
   then checks access, so a longer read does not use up the write access time limit.
   Resolving a hold also reads its history first and rechecks access before saving.
 - Starts personal turns using the latest default paying group. It keeps a small
-  summary and reads only new spending events after the first use.
+  summary with the provider switch-on state and reads each new spending event once.
 - Records tool starts and finishes as events and returns them in the conversation feed.
 - Tells a computer whether it supports approval messages and when a waiting
   approval has been decided or ended. A changed tool policy also ends a waiting approval.

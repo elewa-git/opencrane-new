@@ -974,7 +974,11 @@ join for other chats. Authority still uses the current join. Neither helper read
 `memoryReferences(rows, silo, scopeId, custody)` checks metadata and key status without reading fact text. It keeps the first metadata for an equal revision, as the projection does. It walks historical dependencies, refuses cycles and keeps legacy corrections or tombstones unusable. Missing or damaged custody raises an error. Private turn previews omit references that cannot be checked.
 ## Turn admission after the recorded switch-on event
 `provider-turn-routing` keeps the current binding for each dependant and task,
-while `provider-call-mode` reads the silo's switch-on marker from `budget-<silo>`.
+while `provider-call-mode` keeps the silo's switch-on marker and latest personal
+paying group from `budget-<silo>`. Admission uses both facts from the same
+incremental read. Its final mode check reads only later budget rows, so an ordinary
+personal start reads each new budget row once. It never reads the whole budget
+stream or uses a wildcard for budget facts.
 The routing summary reads new provider events before new-turn admission;
 it does not retain the full history. Turn admission reads it before the short
 payer check. An own binding, including a pause, takes precedence over the default.

@@ -8,7 +8,7 @@ import { authorityFence, groupMembership, PayingGroupRefused, MemberAccessRefuse
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
-  type StoredEvent, type SummaryKind } from '@opencrane/event-store';
+  type StoredEvent } from '@opencrane/event-store';
 import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
 import { agentSessionData, ReportRejected } from './reports.ts';
@@ -25,9 +25,6 @@ const assistantDetails = z.object({
 });
 const sessionDetails = z.object({
   createdBy: z.string(), payingGroupId: z.string().optional(),
-});
-const budgetDetails = z.object({
-  scope: z.string(), defaultPayingGroupId: z.string().optional(),
 });
 
 type TurnBinding = z.infer<typeof binding>;
@@ -221,7 +218,8 @@ async function assistantDetailsFor(store: EventStore, context: TurnContext) {
 }
 
 async function payingGroup(store: EventStore, context: TurnContext,
-  conversation: ChatFacts, requesterId: string, details: z.infer<typeof assistantDetails>) {
+  conversation: ChatFacts, requesterId: string, details: z.infer<typeof assistantDetails>,
+  defaultPayingGroupId: string | undefined) {
   if (details.kind === 'team') {
     if (!context.binding) throw new ReportRejected('IAM binding required for a new team turn');
     const group = sessionPayer(conversation, requesterId, details.payingGroupId);
@@ -238,8 +236,10 @@ async function payingGroup(store: EventStore, context: TurnContext,
     }
     return { payer: group, fresh };
   }
-  const payer = await personalPayer(store, context.silo, performance.now() + 10_000);
-  return { payer, fresh: undefined };
+  if (!defaultPayingGroupId) {
+    throw new ReportRejected('Paying group unavailable; configure the installation default');
+  }
+  return { payer: defaultPayingGroupId, fresh: undefined };
 }
 function sessionPayer(conversation: ChatFacts, requesterId: string,
   assistantPayer: string | undefined) {
@@ -251,29 +251,6 @@ function sessionPayer(conversation: ChatFacts, requesterId: string,
     throw new ReportRejected('Paying group does not match the assistant');
   }
   return group;
-}
-type BudgetPayer = { defaultPayingGroupId?: string };
-function emptyBudgetPayer(): BudgetPayer {
-  return {};
-}
-function addBudgetPayer(summary: BudgetPayer, row: StoredEvent) {
-  if (row.event.type !== 'budget.ceiling_set') return;
-  const details = budgetDetails.parse(row.event.data);
-  if (details.scope === 'global' && details.defaultPayingGroupId) {
-    summary.defaultPayingGroupId = details.defaultPayingGroupId;
-  }
-}
-const budgetPayer: SummaryKind<BudgetPayer> = {
-  name: 'budget-payer', keep: 4, empty: emptyBudgetPayer, add: addBudgetPayer,
-};
-function takeBudgetPayer(summary: BudgetPayer) {
-  return summary.defaultPayingGroupId;
-}
-async function personalPayer(store: EventStore, silo: string, deadline: number) {
-  const payer = await readStreamSummary(
-    store, silo, `budget-${silo}`, budgetPayer, deadline, takeBudgetPayer);
-  if (payer) return payer;
-  throw new ReportRejected('Paying group unavailable; configure the installation default');
 }
 function requireThreadOwner(facts: ComputerFacts, input: TurnBinding) {
   if (input.threadId === undefined) return;
@@ -319,7 +296,8 @@ async function admitTurn(store: EventStore, context: TurnContext, conversation: 
   const admission = await providerTurnAdmission(store, context.silo,
     context.assistantId, performance.now() + 10_000);
   applyProviderChoice(data, admission);
-  const payer = await payingGroup(store, context, conversation, data.requesterId, details);
+  const payer = await payingGroup(store, context, conversation, data.requesterId, details,
+    admission.defaultPayingGroupId);
   const deadline = payer.fresh?.deadline ?? performance.now() + 2000;
   async function confirmAdmission() {
     const enabled = await managedProviderCallsEnabled(store, context.silo, deadline);

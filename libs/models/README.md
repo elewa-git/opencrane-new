@@ -20,7 +20,7 @@ flowchart LR
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves holds and settlements, reads activity, grants and spending mode| store["libs/event-store<br/>event log"]
+  models -->|saves holds and settlements, reads activity, grants, payer and switch-on| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -47,6 +47,7 @@ flowchart LR
   silo default for each new turn. A running turn keeps its original choice. An assistant's
   own pause stops new model work. No command switches this on yet, so existing installs
   keep their current path.
+  Reads the personal paying group and switch-on state together, once per new spending event.
 - Choose an AI model from a fixed task table before switch-on.
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.

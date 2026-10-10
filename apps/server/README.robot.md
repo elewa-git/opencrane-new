@@ -1521,6 +1521,9 @@ keep their original provider, binding position and model on replay and closure.
 The bridge signs and returns that recorded model through its existing path.
 Provider history is read with its own ten-second deadline before payer access is
 checked. The final check refuses a mode change before saving a legacy start.
+The personal payer and switch-on state come from one incremental budget summary.
+The final mode check reuses it and reads only later rows. The existing 500-event
+personal-payer test still requires at most two new rows after two budget changes.
 There is no switch-on route in this slice. Safe migration must first stop new legacy
 admissions and drain running legacy turns. Managed dispatch remains refused until
 its gateway and provider checks are built.
