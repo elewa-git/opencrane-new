@@ -1228,6 +1228,14 @@ Human group events are now valid stored records. Chat reads, lists and
 subscriptions check saved participation and the caller’s latest join position.
 Creation and participant commands for that mode are not exposed yet.
 
+Provider binding POSTs use the existing organisation, exact Origin and current Owner/Admin checks with a 4,096-byte limit. GET reads checked event histories, reports real default counts and marks routine history as absent or unsupported. Reader failure or changing history returns 503. See [the provider API](../../docs/api/providers.md).
+
+Concurrent binding and configuration requests with the same command id return
+one saved receipt and one 409 response. Both must finish their final access checks
+before the test lets either append. `changes/:commandId` returns the saved operation
+and its original event id. Configuration replies also read the saved event before
+reporting success, so a binding cannot be mistaken for a saved model change.
+
 ## Conversation participation reads
 
 Chat, approvals, files and desktop checks share the current audience and latest join
@@ -1244,6 +1252,12 @@ File reads and desktop checks read the projected close together with the convers
 worker's position. They confirm a projected close against NATS, or read every later
 conversation record when no close is projected. A buffered report cannot hide a close.
 If that backlog cannot be checked before the read deadline, access is unavailable.
+The closure summary retains only a closed flag and the last checked position for up to
+256 conversations. Checks resume after that position or the worker's newer position,
+so a delayed worker does not make every lease reread the same chat activity. The shared
+summary reader gives catch-up its own ten-second deadline; a caller still refuses access
+when its original deadline expires. Restart readers after event-store restoration and
+stop them before replacing the conversation tables, as with retained participation facts.
 Approval decisions read history and the encrypted review before the two-second write
 check. They carry the checked approval sequence and conversation position forward,
 then check only later conversation changes and the current tool policy before append.
@@ -1251,6 +1265,10 @@ The approval append also uses the remaining write deadline. File commands load t
 The offline upgrade must finish with old workers stopped before readers restart.
 No participant mutation endpoint is available. Real-service regression tests cover
 removal, blocked delivery, re-joins, other access readers and 100,000 messages.
+Conversation lists reuse checked member facts within the request and pass the checked
+creation event to private-session checks. Each permission reply is followed by member and
+participation position reads. A changed position reloads those facts before returning
+content, so an old OpenFGA answer cannot hide a newly saved removal.
 Fresh-install browser qualification remains NOT RUN.
 
 Personal agent sessions retain screenshot capture for current participants who have a

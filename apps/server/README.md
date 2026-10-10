@@ -56,7 +56,8 @@ flowchart LR
   Pass its model to the turn-token issuer.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
   Checks saved participation changes before returning private content.
-  Checks closing events even while read tables are catching up.
+  Checks closing events even while read tables are catching up. Keeps the last
+  checked position, so later checks read only new events.
   Gives late participants only files and screenshots saved since their latest join.
 - Offers a personal assistant only reviewed, free tools that both the person and assistant can use.
 - Returns spending records to current owners and admins. It reads the records first,
