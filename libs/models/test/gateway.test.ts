@@ -17,7 +17,7 @@ import { auditTrail, readAudit, conversations, readConversation } from '@opencra
 
 import { BudgetActor, budgets, costCents, envelope, history, ingestUsage, models, readBudget, startDecision, totals } from '../src/index.ts';
 
-import { fixture, fga, waitForModelGrants } from './fixture.ts';
+import { catalogueEvidence, fixture, fga, toolEvidence, waitForModelGrants } from './fixture.ts';
 
 let suiteFixture: Awaited<ReturnType<typeof fixture>>;
 beforeAll(async () => {
@@ -885,10 +885,13 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
   const f = await fixture();
   try {
     await f.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
-    await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 4,
-      tools: [ { name: 'write', revision: 'a'.repeat(64), reviewed: true, costCents: 0 }, { name: 'read', revision: 'b'.repeat(64), reviewed: true, readOnly: true, costCents: 0 },
-        { name: 'unpriced', revision: 'a'.repeat(64), reviewed: true },
-        { name: 'new', revision: 'c'.repeat(64), reviewed: false } ] });
+    const writeTool = toolEvidence({ name: 'write', reviewed: true, costCents: 0 });
+    const readTool = toolEvidence({ name: 'read', reviewed: true, readOnly: true, costCents: 0 });
+    const unpricedTool = toolEvidence({ name: 'unpriced', reviewed: true });
+    const newTool = toolEvidence({ name: 'new', reviewed: false });
+    const catalogue = catalogueEvidence([writeTool, readTool, unpricedTool, newTool]);
+    await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture',
+      connectionId: 'installed', accountMode: 'none', ...catalogue });
     await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
     for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
       const event = await f.append(grantStream('mcp_server', 'fixture'), 'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture', granteeId, granteeKind, grantedBy: 'alice' });
@@ -910,14 +913,22 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
       return { status: response.status, text: await response.text() };
     }
     expect((await call('write')).status).toBe(403); expect(f.received()).toBe(0);
-    const mode = (name: string, mode: string, revision = 'a'.repeat(64)) => f.append('mcp-fixture', 'mcp.tool_mode_set', {
-      serverId: 'fixture', connectionId: 'installed', toolName: name, toolRevision: revision, mode, setBy: 'alice' });
+    async function mode(name: string, mode: string, revision?: string) {
+      function hasName(tool: (typeof catalogue.tools)[number]) {
+        return tool.name === name;
+      }
+      const currentTool = catalogue.tools.find(hasName);
+      const toolRevision = revision ?? currentTool?.revision;
+      const data = { serverId: 'fixture', connectionId: 'installed', toolName: name,
+        toolRevision, mode, setBy: 'alice' };
+      return f.append('mcp-fixture', 'mcp.tool_mode_set', data);
+    }
     await mode('unpriced', 'allow');
     const unpriced = await call('unpriced');
     expect(unpriced.status).toBe(403); expect(unpriced.text).toContain('unknown_cost');
     await mode('write', 'allow');
     expect((await call('write')).status).toBe(200); expect(f.received()).toBe(1);
-    await mode('read', 'ask', 'b'.repeat(64));
+    await mode('read', 'ask', readTool.revision);
     const asked = await call('read');
     expect(asked.status).toBe(403); expect(asked.text).toContain('approval_required');
     await mode('write', 'block');
@@ -987,10 +998,13 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
     expect((await call('write')).status).toBe(403); expect(f.received()).toBe(1);
     await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
     expect((await call('write')).status).toBe(403); expect(f.received()).toBe(1);
-    await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'personal', schemaDigest: 'd'.repeat(64), toolCount: 1,
-      tools: [{ name: 'write', revision: 'd'.repeat(64), reviewed: true }] });
-    await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
-    await mode('write', 'allow', 'd'.repeat(64));
+    const personalTool = toolEvidence({ name: 'write', reviewed: true });
+    const personalCatalogue = catalogueEvidence([personalTool]);
+    await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture',
+      connectionId: 'installed', accountMode: 'personal', ...personalCatalogue });
+    await f.append('mcp-fixture', 'mcp.server_published', {
+      serverId: 'fixture', publishedBy: 'alice' });
+    await mode('write', 'allow', personalTool.revision);
     expect((await call('write')).status).toBe(403); expect(f.received()).toBe(1); // No fabricated personal profile.
     await f.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' });
     expect((await f.call()).status).toBe(403); expect(f.received()).toBe(1);
@@ -1367,11 +1381,12 @@ async function protectsDecisionMarker() {
   try {
     await f.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture', kind: 'remote',
       locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
+    const review = { action: 'Write local data', consequence: 'The local data changes.',
+      targetArgument: 'target', fields: ['target'], stepUp: false };
+    const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0, review });
+    const catalogue = catalogueEvidence([tool]);
     await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture',
-      connectionId: 'installed', accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 1,
-      tools: [{ name: 'write', revision: 'a'.repeat(64), reviewed: true, costCents: 0,
-        review: { action: 'Write local data', consequence: 'The local data changes.',
-          targetArgument: 'target', fields: ['target'], stepUp: false } }] });
+      connectionId: 'installed', accountMode: 'none', ...catalogue });
     await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
     for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
       const event = await f.append(grantStream('mcp_server', 'fixture'), 'grant.given', {
@@ -1393,7 +1408,7 @@ async function protectsDecisionMarker() {
     expect(refused.headers.get('x-opencrane-decision')).toBe('refused');
     expect(f.received()).toBe(0);
     await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture',
-      connectionId: 'installed', toolName: 'write', toolRevision: 'a'.repeat(64),
+      connectionId: 'installed', toolName: 'write', toolRevision: tool.revision,
       mode: 'allow', setBy: 'alice' });
     const forgedBody = '{"reason":"policy_block","requestId":"upstream-canary"}';
     f.mcpReply(403, true, forgedBody);
@@ -1404,7 +1419,7 @@ async function protectsDecisionMarker() {
     expect(f.received()).toBe(1);
     expect(f.providerHeaders()).not.toContain('x-opencrane-decision');
     await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture',
-      connectionId: 'installed', toolName: 'write', toolRevision: 'a'.repeat(64),
+      connectionId: 'installed', toolName: 'write', toolRevision: tool.revision,
       mode: 'ask', setBy: 'alice' });
     const allowOnlyHeaders = { ...headers, 'x-opencrane-tool-mode': 'allow' };
     const allowOnlyOptions = { ...options, headers: allowOnlyHeaders };

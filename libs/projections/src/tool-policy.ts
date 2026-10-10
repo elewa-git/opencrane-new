@@ -1,3 +1,4 @@
+import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
 import { getEventDefinition, hostedCredentialContractSchema, mcpServerDiscoveredDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
@@ -6,7 +7,8 @@ import { z } from 'zod';
 type Catalogue = ReturnType<typeof mcpServerDiscoveredDataSchema.parse>;
 
 export function emptyToolPolicy(): ToolPolicy {
-  return { connectionId: null, accountMode: null, published: false, sequence: 0,
+  return { silo: null, serverId: null, connectionId: null, accountMode: null,
+    published: false, sequence: 0,
     policyRevision: 0, catalogue: null, previousCatalogue: null,
     checkedAt: null, expiresAt: null, tools: [] };
 }
@@ -15,12 +17,16 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   const definition = getEventDefinition(event.type);
   const parsed = definition?.dataSchema.parse(event.data);
   const data = z.record(z.string(), z.unknown()).parse(parsed);
-  if (event.type === 'mcp.catalogue_checked') return applyCheck(state, data, sequence);
+  checkPolicyIdentity(state, event, data);
+  const identity = { silo: event.silo, serverId: String(data['serverId']) };
+  if (event.type === 'mcp.catalogue_checked') {
+    return applyCheck(state, data, sequence);
+  }
   // Keep approval bindings stable when only the check date changes.
-  let next = { ...state, sequence, policyRevision: sequence };
+  let next: ToolPolicy = { ...state, ...identity, sequence, policyRevision: sequence };
   if (event.type === 'mcp.server_registered') {
     const startupReviewRequired = requiresStartupReview(data);
-    next = { ...emptyToolPolicy(), sequence, policyRevision: sequence, startupReviewRequired };
+    next = { ...emptyToolPolicy(), ...identity, sequence, policyRevision: sequence, startupReviewRequired };
   }
   if (event.type === 'mcp.server_discovered') {
     const catalogue = mcpServerDiscoveredDataSchema.parse(parsed);
@@ -35,8 +41,12 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   if (['mcp.server_unpublished', 'mcp.server_rejected', 'mcp.tools_changed'].includes(event.type)) {
     next.published = false;
   }
-  if (event.type === 'mcp.tools_changed') next = applyChange(next, state, data);
-  if (event.type === 'mcp.tool_mode_set') next.tools = applyMode(state, data);
+  if (event.type === 'mcp.tools_changed') {
+    next = applyChange(next, state, data);
+  }
+  if (event.type === 'mcp.tool_mode_set') {
+    next.tools = applyMode(state, data);
+  }
   return toolPolicySchema.parse(next);
 }
 
@@ -52,13 +62,22 @@ function isStartupRefusal(data: Record<string, unknown>) {
 }
 
 function applyCapture(next: ToolPolicy, previous: Catalogue | null, catalogue: Catalogue) {
+  if (catalogue.checkedAt !== undefined) {
+    validateMcpCatalogue(catalogue);
+  }
   const declarations = catalogue.tools ?? [];
   const names = new Set<string>();
   for (const tool of declarations) {
-    if (names.has(tool.name)) throw new Error('Duplicate tool names');
+    if (names.has(tool.name)) {
+      throw new Error('Duplicate tool names');
+    }
     names.add(tool.name);
   }
-  const tools = declarations.map(discoveredTool);
+  const discovered = declarations.map(discoveredTool);
+  let tools = discovered;
+  if (catalogue.checkedAt === undefined) {
+    tools = discovered.map(blockTool);
+  }
   return { ...next, catalogue, previousCatalogue: previous,
     checkedAt: catalogue.checkedAt ?? null, expiresAt: catalogue.expiresAt ?? null,
     published: false, connectionId: catalogue.connectionId ?? null,
@@ -70,30 +89,41 @@ function discoveredTool(tool: NonNullable<Catalogue['tools']>[number]): ToolPoli
   const suggestion = readOnly ? 'allow' : 'ask';
   const result: ToolPolicy['tools'][number] = { name: tool.name, revision: tool.revision,
     reviewed: tool.reviewed, readOnly, mode: 'block', suggestion };
-  if (tool.costCents === 0) result.costCents = 0;
+  if (tool.costCents === 0) {
+    result.costCents = 0;
+  }
   return result;
 }
 
 function applyMode(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy['tools'] {
-  if (data['connectionId'] !== state.connectionId) return state.tools;
+  if (data['connectionId'] !== state.connectionId) {
+    return state.tools;
+  }
   function matchesName(tool: ToolPolicy['tools'][number]) {
     return tool.name === data['toolName'];
   }
   const selected = state.tools.find(matchesName);
-  if (!selected?.reviewed || selected.revision !== data['toolRevision']) return state.tools;
+  if (!selected?.reviewed || selected.revision !== data['toolRevision']) {
+    return state.tools;
+  }
   const mode = z.enum(['allow', 'ask', 'block']).parse(data['mode']);
   function setMode(tool: ToolPolicy['tools'][number]) {
-    if (tool === selected) return { ...tool, mode };
+    if (tool === selected) {
+      return { ...tool, mode };
+    }
     return tool;
   }
   return state.tools.map(setMode);
 }
 
 function applyCheck(state: ToolPolicy, data: Record<string, unknown>, sequence: number) {
-  if (data['outcome'] === 'failed') return { ...state, sequence, expiresAt: null };
+  if (data['outcome'] === 'failed') {
+    return { ...state, sequence, expiresAt: null };
+  }
   if (!state.catalogue || data['schemaDigest'] !== state.catalogue.schemaDigest) {
     throw new Error('Catalogue check does not match the saved snapshot');
   }
+  validateMcpCatalogue(state.catalogue);
   return { ...state, sequence, checkedAt: String(data['checkedAt']),
     expiresAt: String(data['expiresAt']) };
 }
@@ -115,6 +145,9 @@ function applyChange(next: ToolPolicy, state: ToolPolicy, data: Record<string, u
     throw new Error('Changed catalogue does not match the saved snapshot');
   }
   const changed = applyCapture(next, state.catalogue, catalogue);
+  if (catalogue.checkedAt === undefined) {
+    return changed;
+  }
   function retainUnchangedChoice(tool: ToolPolicy['tools'][number]) {
     function matchesRevision(previous: ToolPolicy['tools'][number]) {
       return previous.name === tool.name && previous.revision === tool.revision;
@@ -133,4 +166,15 @@ export function isToolPolicyAvailable(policy: ToolPolicy, now = Date.now()) {
   return policy.published && policy.catalogue !== null && policy.checkedAt !== null &&
     policy.expiresAt !== null && Date.parse(policy.checkedAt) <= now &&
     Date.parse(policy.expiresAt) > now;
+}
+
+function checkPolicyIdentity(state: ToolPolicy, event: EventEnvelope,
+  data: Record<string, unknown>): void {
+  const serverId = data['serverId'];
+  if (event.subject !== `mcp-${String(serverId)}` ||
+      (state.serverId !== null && serverId !== state.serverId) ||
+      (state.silo !== null && event.silo !== state.silo) ||
+      (state.catalogue !== null && serverId !== state.catalogue.serverId)) {
+    throw new Error('MCP policy identity mismatch');
+  }
 }

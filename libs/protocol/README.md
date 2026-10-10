@@ -18,7 +18,7 @@ flowchart LR
 ```
 
 Tool rule messages include saved tool lists and their check and expiry dates.
-They also carry the rule revision used by waiting approvals.
+They also identify the server and silo, and carry the rule revision used by waiting approvals.
 
 ## What it is responsible for
 

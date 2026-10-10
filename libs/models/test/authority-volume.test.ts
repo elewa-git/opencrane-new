@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { grantStream } from '@opencrane/authz';
 import { currentAuthority } from '../src/index.ts';
-import { fixture } from './fixture.ts';
+import { catalogueEvidence, fixture, toolEvidence } from './fixture.ts';
 
 function unrelated(index: number): EventEnvelope {
   const id = `unrelated-${index}`;
@@ -26,11 +26,15 @@ it('keeps decisions below the egress and ext_authz bounds with 100,000 unrelated
       // Equal local history in each run; background replay is outside admission timing.
       await f.stopDispatch(); await f.runtime.stop();
       await f.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
-      await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 1,
-        tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true, costCents: 0 }] });
-      await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
-      await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture', connectionId: 'installed', toolName: 'read',
-        toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'alice' });
+      const tool = toolEvidence({ name: 'read', reviewed: true, readOnly: true, costCents: 0 });
+      const catalogue = catalogueEvidence([tool]);
+      await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture',
+        connectionId: 'installed', accountMode: 'none', ...catalogue });
+      await f.append('mcp-fixture', 'mcp.server_published', {
+        serverId: 'fixture', publishedBy: 'alice' });
+      await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture',
+        connectionId: 'installed', toolName: 'read', toolRevision: tool.revision,
+        mode: 'allow', setBy: 'alice' });
       for (const [resourceType, resourceId] of [['mcp_server', 'fixture'], ['destination', 'docs']] as const) {
         for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']] as const) {
           const event = await f.append(grantStream(resourceType, resourceId), 'grant.given', { resourceType, resourceId, granteeId, granteeKind, grantedBy: 'alice' });

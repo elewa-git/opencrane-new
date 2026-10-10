@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { Ajv } from 'ajv';
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { losslessJson } from '@opencrane/models';
+import { losslessJson } from '@opencrane/events/lossless-json';
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { version } from './remote.ts';
 
 const text = z.string().min(1).max(200);
@@ -149,19 +150,4 @@ function headerAnnotationRejection(node: Record<string, unknown>, headers: Set<s
 function boundedInventory<T>(inventory: T): T {
   if (Buffer.byteLength(JSON.stringify(inventory)) > 900 * 1024) throw new Error('inventory_limit');
   return inventory;
-}
-
-
-function catalogueDigest(tools: { name: string; revision: string }[]) {
-  const revisions = tools.map(toolRevision);
-  revisions.sort(compareNames);
-  return losslessJson(JSON.stringify(revisions)).digest;
-}
-function toolRevision(tool: { name: string; revision: string }) {
-  return { name: tool.name, revision: tool.revision };
-}
-function compareNames(first: { name: string }, second: { name: string }) {
-  if (first.name < second.name) return -1;
-  if (first.name > second.name) return 1;
-  return 0;
 }

@@ -42,6 +42,7 @@ export type IntegrationRow = z.infer<typeof integrationRowSchema>;
 export type IntegrationsResponse = z.infer<typeof integrationsResponseSchema>;
 
 export const toolPolicySchema = z.object({
+  silo: z.string().nullable().default(null), serverId: z.string().nullable().default(null),
   connectionId: z.string().nullable(), accountMode: z.enum(['none', 'personal', 'company']).nullable(),
   startupReviewRequired: z.boolean().optional(), published: z.boolean(),
   sequence: z.int().nonnegative(),

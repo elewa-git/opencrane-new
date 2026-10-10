@@ -549,7 +549,7 @@ it('refuses legacy catalogue evidence at the real gateway', refusesLegacyCatalog
 async function refusesForgedEvidence(attack: 'revision' | 'server') {
   const setup = await fixture();
   try {
-    const base = await prepareCapturedCall(setup, 'ask', attack === 'server' ? 2000 : 300_000);
+    const base = await prepareCapturedCall(setup, 'ask', attack === 'server' ? 10_000 : 300_000);
     const headers = { ...base, 'x-opencrane-tool-mode': 'ask' };
     const request = { method: 'POST', headers, body: JSON.stringify(capture.body) };
     const url = `http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`;
@@ -581,10 +581,15 @@ async function refusesForgedEvidence(attack: 'revision' | 'server') {
       const invalidHistory = [forged, publication];
       await setup.nats.seed(invalidHistory);
     } else {
-      await pause(2100);
+      const originalExpiry = Date.parse(String(catalogue['expiresAt']));
+      const remainingMs = Math.max(0, originalExpiry - Date.now() + 1);
+      await pause(remainingMs);
       const data = { serverId: 'another-server', outcome: 'unchanged',
         schemaDigest: catalogueDigest, checkedAt, expiresAt };
-      const forged = envelope('test', 'mcp-fixture', 'mcp.catalogue_checked', data);
+      const validCheck = { ...data, serverId: 'fixture' };
+      const checked = envelope('test', 'mcp-fixture', 'mcp.catalogue_checked', validCheck);
+      // Seed a bad saved record to prove reads refuse it as well as new appends.
+      const forged = { ...checked, data };
       const invalidHistory = [forged];
       await setup.nats.seed(invalidHistory);
     }

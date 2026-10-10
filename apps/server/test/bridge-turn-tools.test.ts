@@ -1,3 +1,5 @@
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -19,7 +21,10 @@ vi.mock('@opencrane/authz', async importOriginal => {
   return { ...original, memberAuthorisation: () => ({ use }) };
 });
 
-const definition = JSON.stringify({ name: 'read', inputSchema: { type: 'object' } });
+const parsedDefinition = losslessJson('{"name":"read","inputSchema":{"type":"object"}}');
+const definition = parsedDefinition.canonical;
+const revision = parsedDefinition.digest;
+const schemaDigest = catalogueDigest([{ name: 'read', revision }]);
 
 function storedEvent(sequence: number, event: EventEnvelope): StoredEvent {
   return { sequence, event };
@@ -35,9 +40,9 @@ function serverEvents(modeValue: 'allow' | 'ask' = 'allow') {
   const discovery = envelope('test', 'mcp-fixture', 'mcp.server_discovered', {
     checkedAt, expiresAt,
     serverId: 'fixture', connectionId: 'connection', accountMode: 'none',
-    schemaDigest: 'a'.repeat(64), toolCount: 1,
+    schemaDigest, toolCount: 1,
     discoverResult: 'PRIVATE_DISCOVERY_RESULT',
-    tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true, costCents: 0,
+    tools: [{ name: 'read', revision, reviewed: true, costCents: 0,
       definition, review: { action: 'PRIVATE_REVIEW_TEXT', consequence: 'Private detail',
         targetArgument: 'id', fields: ['id'] } }],
   });
@@ -46,7 +51,7 @@ function serverEvents(modeValue: 'allow' | 'ask' = 'allow') {
   });
   const mode = envelope('test', 'mcp-fixture', 'mcp.tool_mode_set', {
     serverId: 'fixture', connectionId: 'connection', toolName: 'read',
-    toolRevision: 'a'.repeat(64), mode: modeValue, setBy: 'person',
+    toolRevision: revision, mode: modeValue, setBy: 'person',
   });
   return [registration, discovery, publication, mode].map((event, index) =>
     storedEvent(index + 1, event));

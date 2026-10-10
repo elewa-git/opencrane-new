@@ -28,7 +28,7 @@ function integrationRow(
 }
 
 function policy(published: boolean): ToolPolicy {
-  return { connectionId: null, accountMode: null, published, sequence: 1,
+  return { silo: null, serverId: null, connectionId: null, accountMode: null, published, sequence: 1,
     policyRevision: 0, catalogue: null, previousCatalogue: null, checkedAt: null, expiresAt: null, tools: [] };
 }
 

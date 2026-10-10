@@ -233,7 +233,6 @@ configuration and a fresh silo installation remain unqualified.
 `chat-state-<memberId>` maps to `ev.chat-state.<memberId>`, including category reads.
 Preference parsing binds the human principal to that member id. Access checks remain the caller's job.
 
-## Conditional provider drain writes
 
 `expectedGlobalSequence` is allowed only for `ownership.seeded` and
 `provider.managed_calls_drain_set`. A drain command captures the global position
@@ -262,3 +261,10 @@ An unrelated entity with the same id can advance that position, but cannot suppl
 activity or access facts. The activity reader filters these rows before making a decision.
 Model decisions use this path for both their initial history and later changes.
 They do not start another participation-stream read.
+
+Dated MCP snapshots are checked with `validateMcpCatalogue` before append. The saved
+accepted tool count must match the complete tool list. Each definition supplies its own
+name, annotations and SHA-256 revision. The catalogue digest is calculated from these
+checked names and revisions. A nested changed catalogue must also match its event's
+server id and new digest. Old undated records still parse; policy reads keep them blocked.
+The event parser requires the exact `mcp-<serverId>` subject for all MCP records.

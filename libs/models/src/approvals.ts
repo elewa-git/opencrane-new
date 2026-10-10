@@ -7,7 +7,7 @@ import { readEvents } from '@opencrane/projections';
 import { approvalReviewSchema, type ApprovalCard } from '@opencrane/protocol';
 import { envelope, history } from './actor.ts';
 import { readToolPolicy } from './tool-policy.ts';
-import type { JsonValue } from './lossless-json.ts';
+import type { JsonValue } from '@opencrane/events/lossless-json';
 import type { mcpPolicy } from './mcp.ts';
 
 export interface ReviewKeys {

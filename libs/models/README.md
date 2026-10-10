@@ -23,7 +23,7 @@ flowchart LR
   models -->|saves spending changes and reads activity, grants, closing records and spending stops| store["libs/event-store<br/>event log"]
 ```
 
-Tool calls need a fresh saved tool list. An unchanged check keeps a waiting approval valid.
+Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
 A change to the tools or their rules ends that approval.
 
 ## What it is responsible for

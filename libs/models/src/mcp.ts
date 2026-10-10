@@ -5,7 +5,7 @@ import { isToolCallText } from '@opencrane/events/tool-call';
 import { mcpServerDiscoveredDataSchema, memoryTextSchema,
   memoryWrittenDataSchema } from '@opencrane/events';
 import { history } from './actor.ts';
-import { losslessJson, type JsonValue } from './lossless-json.ts';
+import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { readToolPolicy } from './tool-policy.ts';
 
 const version = '2026-07-28';

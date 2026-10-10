@@ -1,3 +1,6 @@
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { losslessJson } from '@opencrane/events/lossless-json';
+import type { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -306,4 +309,19 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
       await runtime.stop(); await Promise.all(observations); await nats.close(); await dbs.close(); await rm(directory, { recursive: true, force: true });
     },
   };
+}
+
+type CatalogueTool = NonNullable<ReturnType<typeof mcpServerDiscoveredDataSchema.parse>['tools']>[number];
+
+export function toolEvidence(tool: Omit<CatalogueTool, 'revision' | 'definition'>): CatalogueTool {
+  const annotations = { readOnlyHint: tool.readOnly === true,
+    destructiveHint: tool.destructive === true };
+  const definition = { name: tool.name, inputSchema: { type: 'object' }, annotations };
+  const encoded = JSON.stringify(definition);
+  const parsed = losslessJson(encoded);
+  return { ...tool, definition: parsed.canonical, revision: parsed.digest };
+}
+
+export function catalogueEvidence(tools: CatalogueTool[]) {
+  return { tools, toolCount: tools.length, schemaDigest: catalogueDigest(tools) };
 }

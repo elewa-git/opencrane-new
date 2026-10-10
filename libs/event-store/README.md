@@ -25,7 +25,7 @@ flowchart LR
   models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes and migration positions| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams and finds numbered events| nats["NATS JetStream<br/>event service"]
-  store -.->|checks private chat choices| events["libs/events<br/>event definitions"]
+  store -.->|checks chat choices and tool hashes| events["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for
@@ -56,6 +56,9 @@ New closing events and participant changes use the participation stream. This ke
 access checks separate from messages. Older callers can still save closing events
 on the conversation stream, and replay reads both forms. Model decisions read both
 closing formats through their existing conversation activity read.
+
+Tool catalogue writes check the tool hashes against the saved definitions and require
+the same server id in the event and its subject.
 New group chats are limited to 97 people so their permission update fits in one write.
 
 Private chat choices use a separate stream for each person. They require that person's human identity.

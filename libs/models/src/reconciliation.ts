@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { effectResolvedDataSchema, effectObservedDataSchema, effectUncertainDataSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { envelope, history } from './actor.ts';
-import { losslessJson, type JsonValue } from './lossless-json.ts';
+import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { authorityFence } from './authority.ts';
 import { applyBudget, emptyBudget, type BudgetState } from './state.ts';
 

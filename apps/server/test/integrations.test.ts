@@ -1,3 +1,5 @@
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { installWorker } from '../src/integrations/install-worker.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
 import { budgets, BudgetActor, readBudget, startDecision, settlementHandler, history, priceTableId } from '@opencrane/models';
@@ -504,18 +506,26 @@ it('restricts the model and spending read to projected owners and admins', async
 });
 
 it('saves a reviewed connection revision policy through one conditional event and replays it', async () => {
-  await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDigest: 'a'.repeat(64),
-    connectionId: 'installed-odoo', accountMode: 'none', tools: [
-      { name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true, costCents: 0 },
-      { name: 'write', revision: 'b'.repeat(64), reviewed: true, readOnly: false, costCents: 0 },
-    ] });
+  const readDefinition = losslessJson(
+    '{"name":"read","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}');
+  const writeDefinition = losslessJson('{"name":"write","inputSchema":{"type":"object"}}');
+  const tools = [
+    { name: 'read', revision: readDefinition.digest, definition: readDefinition.canonical,
+      reviewed: true, readOnly: true, costCents: 0 },
+    { name: 'write', revision: writeDefinition.digest, definition: writeDefinition.canonical,
+      reviewed: true, readOnly: false, costCents: 0 },
+  ];
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+  await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDigest: catalogueDigest(tools),
+    checkedAt, expiresAt, connectionId: 'installed-odoo', accountMode: 'none', tools });
   await runner.run(mcpCatalogue);
   const url = '/api/org/integrations/odoo/tools';
   const read = await app.inject({ url, headers: headers('oidc-alice') });
   expect(read.statusCode).toBe(200);
   const state = read.json<{ sequence: number; tools: { name: string; mode: string; suggestion: string }[] }>();
   expect(state.tools).toMatchObject([{ name: 'read', mode: 'block', suggestion: 'allow' }, { name: 'write', mode: 'block', suggestion: 'ask' }]);
-  const payload = { commandId: 'policy-write', expectedSequence: state.sequence, connectionId: 'installed-odoo', toolName: 'write', toolRevision: 'b'.repeat(64), mode: 'allow' };
+  const payload = { commandId: 'policy-write', expectedSequence: state.sequence, connectionId: 'installed-odoo', toolName: 'write', toolRevision: writeDefinition.digest, mode: 'allow' };
   for (const sub of ['oidc-bob', 'oidc-mallory']) expect((await app.inject({ method: 'POST', url,
     headers: { ...headers(sub), origin: new URL(config.redirectUri).origin }, payload })).statusCode).toBe(403);
   const save = () => app.inject({ method: 'POST', url, headers: { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin }, payload });

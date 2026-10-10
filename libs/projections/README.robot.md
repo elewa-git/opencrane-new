@@ -432,8 +432,17 @@ A published server without a fresh check is shown as unavailable.
 Catalogue checks leave `policyRevision` stable; policy changes advance it.
 The latest `sequence` still advances for writes.
 Expiry uses the shortest discovery/page TTL, capped at 300,000 ms. Zero expires immediately.
-Undated legacy records remain unavailable until a new successful check supplies dates.
+Undated legacy records have no reviewed tools. A check cannot renew a list without
+complete saved definitions and matching hashes; it needs a complete new discovery.
 Descriptions, schemas and examples remain untrusted text, including in saved snapshots.
 
 This is #48 PR 1. Watch scheduling, final dispatch permits, configuration acknowledgement
 and the comparison screens belong to later rows of the accepted design.
+
+Policy replay recalculates hashes from saved tool definitions before keeping any review
+choice or renewing a check. It checks the tool count, distinct names, names inside definitions
+and copied annotation flags too. `silo` and `serverId` are taken from saved event identity;
+each following event must match both and its exact subject. `policyRevision` comes from
+stored event positions. A matching catalogue check advances only `sequence` and dates.
+`test/mcp-snapshot-security.test.ts` checks forged revisions, incomplete definitions,
+wrong-server and wrong-silo renewal, changed tools and mismatched change records.

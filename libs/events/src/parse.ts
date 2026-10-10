@@ -44,6 +44,7 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     return { success: false, reason: 'unknown_event_type', type: typeField.data.type };
   }
 
+<<<<<<< HEAD
   let envelopeSchema = eventEnvelopeSchema(definition.dataSchema)
     .superRefine(checkDelegationEvent).refine(validEgressRuleEvent);
   if (definition.type === 'memory.maintenance_bound') {
@@ -51,7 +52,17 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   }
   const checkedSchema = definition.stream === 'chat-state'
     ? envelopeSchema.refine(validPreferenceIdentity)
+=======
+  const envelopeSchema = eventEnvelopeSchema(definition.dataSchema)
+    .superRefine(checkDelegationEvent)
+    .refine(validEgressRuleEvent);
+  const mcpSchema = definition.stream === 'mcp'
+    ? envelopeSchema.refine(validMcpIdentity)
+>>>>>>> 669023fc (🔒 Check saved tool hashes and bind catalogue renewals to their server)
     : envelopeSchema;
+  const checkedSchema = definition.stream === 'chat-state'
+    ? mcpSchema.refine(validPreferenceIdentity)
+    : mcpSchema;
   const schema = definition.type === 'memory.written' ? memoryWrittenEventSchema : checkedSchema;
   const result = schema.safeParse(input);
   if (!result.success) {
@@ -69,6 +80,7 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   return { success: true, event };
 }
 
+<<<<<<< HEAD
 function validMaintenanceBinding(event: EventEnvelope) {
   const fields = z.object({ scopeId: z.string(), scopeKind: z.string(), ownerId: z.string(),
     memberId: z.string() }).parse(event.data);
@@ -78,4 +90,12 @@ function validMaintenanceBinding(event: EventEnvelope) {
   return event.subject === `scope-${fields.scopeId}` && event.source === 'opencrane-server' &&
     event.principal?.kind === 'human' && event.principal.id === fields.memberId &&
     typeof event.commandId === 'string';
+=======
+function validMcpIdentity(event: EventEnvelope): boolean {
+  if (typeof event.data !== 'object' || event.data === null) {
+    return false;
+  }
+  const serverId: unknown = Reflect.get(event.data, 'serverId');
+  return typeof serverId === 'string' && event.subject === `mcp-${serverId}`;
+>>>>>>> 669023fc (🔒 Check saved tool hashes and bind catalogue renewals to their server)
 }

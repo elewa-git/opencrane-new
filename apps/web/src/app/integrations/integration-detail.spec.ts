@@ -31,7 +31,7 @@ function listResponse(integration: IntegrationRow): IntegrationsResponse {
 
 function policy(published: boolean): ToolPolicy {
   return {
-    connectionId: 'validation-connection', accountMode: null, published, sequence: 1,
+    silo: null, serverId: null, connectionId: 'validation-connection', accountMode: null, published, sequence: 1,
     policyRevision: 0, catalogue: null, previousCatalogue: null, checkedAt: null, expiresAt: null,
     tools: [
       { name: 'read_order', revision: 'r1', reviewed: true, readOnly: true,
