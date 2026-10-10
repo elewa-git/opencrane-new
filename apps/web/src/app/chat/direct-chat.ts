@@ -19,7 +19,7 @@ import {
   appendDirectMessage, directColleagueById, directConversationById, directConversationTitle,
   directConversations, directInitials,
   directMessageText, formatDirectTime, otherParticipant, scrollDirectTranscript,
-  directAuthorName, directIsOwnMessage, directRecipientName,
+  directAuthorName, directIsOwnMessage, directRecipientName, groupAuthorName,
 } from './direct-chat-display';
 import {
   fetchChatContext, fetchDirectConversations, fetchDirectHistory, searchColleagues,
@@ -212,14 +212,21 @@ export class DirectChat implements OnInit, OnDestroy {
   protected async selectConversation(conversationId: string): Promise<void> {
     if (this.composerBusy()) return;
     const conversation = directConversationById(this.conversations(), conversationId);
-    if (!conversation || conversation.mode !== 'direct') return;
-    const otherId = otherParticipant(conversation.participantIds, this.currentMemberId);
-    if (!otherId) return;
-    const candidate = directColleagueById(this.knownColleagues(), otherId);
-    const selectedColleague = candidate ?? { memberId: otherId, displayName: null };
+    if (!conversation) return;
+    let selectedColleague: Colleague | undefined;
+    if (conversation.mode === 'direct') {
+      const otherId = otherParticipant(conversation.participantIds, this.currentMemberId);
+      if (!otherId) return;
+      const candidate = directColleagueById(this.knownColleagues(), otherId);
+      selectedColleague = candidate ?? { memberId: otherId, displayName: null };
+    } else if (conversation.mode !== 'group') {
+      return;
+    }
     const changed = this.selectedConversationId() !== conversationId;
     if (changed) this.rememberDraft();
     this.colleague.set(selectedColleague);
+    this.selectedPeople.set([]);
+    this.groupSnapshot.set(undefined);
     this.navigationOpen.set(false);
     if (changed) {
       this.clearConversationView();
@@ -259,6 +266,26 @@ export class DirectChat implements OnInit, OnDestroy {
   protected recipientLimitExceeded(): boolean {
     if (this.groupSnapshot()) return this.selectedPeople().length > 97;
     return this.selectedPeople().length > 96;
+  }
+
+  protected selectedConversation(): ChatConversation | undefined {
+    return directConversationById(this.conversations(), this.selectedConversationId());
+  }
+
+  protected isGroupConversation(): boolean {
+    return this.selectedConversation()?.mode === 'group';
+  }
+
+  protected selectedConversationTitle(): string {
+    const conversation = this.selectedConversation();
+    if (conversation) {
+      return this.conversationTitle(conversation, this.currentMemberId, this.knownColleagues());
+    }
+    return this.recipientDisplayName(this.colleague());
+  }
+
+  protected groupAuthor(row: ChatRow): string {
+    return groupAuthorName(row, this.currentMemberId, this.knownColleagues());
   }
 
   protected transcriptScrolled(): void {
@@ -512,7 +539,10 @@ export class DirectChat implements OnInit, OnDestroy {
     this.scrollToNewest = this.followNewest;
     this.clearVisibleReceipt();
     if (row.data.type === 'message.posted' && !directIsOwnMessage(row.data, this.currentMemberId)) {
-      this.statusText.set(`New message from ${directRecipientName(this.colleague())}`);
+      const authorName = this.isGroupConversation()
+        ? groupAuthorName(row.data, this.currentMemberId, this.knownColleagues())
+        : directRecipientName(this.colleague());
+      this.statusText.set(`New message from ${authorName}`);
     }
   }
 

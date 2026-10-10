@@ -173,6 +173,13 @@ function createFetchFixture() {
     sockets,
     sentSocketMessages,
     closedSockets,
+    addGroupConversation() {
+      savedConversations.push({ conversationId: 'group-chat', createdBy: 'alice',
+        createdAt: '2026-10-06T09:00:00Z', mode: 'group',
+        participantIds: ['alice', 'bob', 'carol'] });
+      savedMessages.set('group-chat', [eventRow(1, 'bob', 'Hello everyone'),
+        eventRow(2, 'carol', '@agent is just text')]);
+    },
     socketFactory,
     failNextMessageReply() { messageFailure = 'lost'; },
     holdNextMessageReply(resolve: () => void) { notifyMessageStarted = resolve; },
@@ -1029,13 +1036,45 @@ async function announcesMessageReceipts(): Promise<void> {
   api.override(failHistory);
   enterMessage(fixture, 'Confirmed message');
   await settle(fixture);
-  expect(root(fixture).textContent).toContain('Message recorded.');
-  expect(root(fixture).querySelector('[role="status"]')?.textContent).toContain('Message recorded.');
+  expect(root(fixture).textContent).toContain('Saved.');
+  expect(root(fixture).querySelector('[role="status"]')?.textContent).toContain('Saved.');
   expect(messageField(fixture).value).toBe('');
   fixture.destroy();
 }
 
 it('announces received messages and preserves the recorded receipt when history fails', announcesMessageReceipts);
+
+async function opensGroupTranscriptWithRecordedAuthors(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  const groupRow = Array.from(root(fixture).querySelectorAll<HTMLButtonElement>('.conversation-row'))
+    .find((row) => row.textContent?.includes('Chris Njeri'));
+  expect(groupRow).toBeDefined();
+  groupRow?.click();
+  await settle(fixture);
+  const screen = root(fixture);
+  expect(screen.textContent).toContain('Hello everyone');
+  expect(screen.textContent).toContain('Chris Njeri');
+  expect(screen.textContent).toContain('@agent is just text');
+  expect(screen.querySelector('[aria-label="Stop"]')).toBeNull();
+  expect(screen.textContent).not.toContain('Delivered');
+  enterMessage(fixture, '@agent stays text');
+  messageField(fixture).dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'Enter', bubbles: true,
+  }));
+  await settle(fixture);
+  const groupSends = api.requests.filter((request) => request.method === 'POST'
+    && request.url.endsWith('/messages'));
+  expect(groupSends).toHaveLength(1);
+  expect(typeof groupSends[0]?.body?.['id']).toBe('string');
+  expect(groupSends[0]?.body?.['text']).toBe('@agent stays text');
+  expect(root(fixture).textContent).toContain('Saved');
+  fixture.destroy();
+}
+
+it('opens group history with each stored human author and no assistant controls',
+  opensGroupTranscriptWithRecordedAuthors);
 
 async function followsNewestMessages(): Promise<void> {
   const api = createFetchFixture();

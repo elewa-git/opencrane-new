@@ -277,7 +277,7 @@ export class DirectChatSending {
     this.pending.set(undefined);
     this.failure.set('');
     this.recordedMessage.set(pending.commandId);
-    this.screen.status.set('Message recorded.');
+    this.screen.status.set('Saved.');
     await this.screen.confirmed(pending.conversationId);
   }
 

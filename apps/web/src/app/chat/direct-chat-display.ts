@@ -54,6 +54,18 @@ export function directRecipientName(
   return colleague.displayName?.trim() || colleague.memberId;
 }
 
+export function groupAuthorName(
+  row: ChatRow, memberId: string,
+  colleagues: { memberId: string; displayName: string | null }[],
+): string {
+  if (row.type !== 'message.posted') return '';
+  if (row.data['authorId'] === memberId) return 'You';
+  const authorId = row.data['authorId'];
+  if (typeof authorId !== 'string') return 'Unknown person';
+  const author = directColleagueById(colleagues, authorId);
+  return author?.displayName?.trim() || authorId;
+}
+
 export function formatDirectTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
