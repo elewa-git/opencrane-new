@@ -173,6 +173,17 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const address = stub.address(); if (!address || typeof address === 'string') throw new Error('No stub');
   const keyFile = real ? resolve(process.env['MODELS_REAL_KEY_FILE'] ?? '.keys/.openai-key') : `${directory}/stub-key`;
   if (!real) await writeFile(keyFile, 'stub-only-placeholder');
+  function closeUpstream() {
+    stub.closeAllConnections();
+    const closed = once(stub, 'close');
+    stub.close();
+    return closed;
+  }
+  const upstreamPort = address.port;
+  async function resumeUpstream() {
+    stub.listen(upstreamPort, '127.0.0.1');
+    await once(stub, 'listening');
+  }
   let options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`, keyFile,
     port: await freePort(), readinessPort: await freePort(), decisionUrl: decision.url, issuer,
@@ -206,7 +217,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   };
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { tokens, keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
+  return { tokens, keys, stopDispatch, closeUpstream, resumeUpstream,
+    upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,

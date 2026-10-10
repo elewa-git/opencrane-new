@@ -152,3 +152,7 @@ records separately. Each record needs a model exactly when it names a provider.
 Closure tests also check each incomplete provider pair. Storage validation refuses
 bad provider ids and fractional or unsafe binding positions on turn and reservation
 records.
+
+## Recorded tool failures and approval actions
+
+The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.

@@ -23,7 +23,10 @@ async function recordsToolReportsOnce() {
       callId: 'functions.write:0', serverId: 'fixture', toolName: 'write' };
     const finished = { ...started, sequence: 2, type: 'agent.tool_call_finished',
       status: 'completed', durationMs: 75 };
-    for (const report of [started, finished]) {
+    const consent = { sequence: 3, conversationId: 'chat', turnId: 'message',
+      assistantId: 'assistant', type: 'agent.native_consent_refused', nativeRequestId: '17',
+      serverName: 'oc_0123456789', serverId: 'fixture', reason: 'unsupported_native_consent' };
+    for (const report of [started, finished, consent]) {
       await expect(recordReport(nats.store, keys, context, report)).resolves.toBe('recorded');
       await expect(recordReport(nats.store, keys, context, report)).resolves.toBe('duplicate');
     }
@@ -36,8 +39,10 @@ async function recordsToolReportsOnce() {
         serverId: 'fixture', toolName: 'write' },
       { conversationId: 'chat', turnId: 'message', callId: 'functions.write:0',
         serverId: 'fixture', toolName: 'write', status: 'completed', durationMs: 75 },
+      { conversationId: 'chat', turnId: 'message', nativeRequestId: '17',
+        serverName: 'oc_0123456789', serverId: 'fixture', reason: 'unsupported_native_consent' },
     ]);
-    const next = { ...finished, sequence: 3 };
+    const next = { ...finished, sequence: 4 };
     const invalidReports = [
       { ...next, arguments: { private: 'text' } }, { ...next, result: 'private' },
       { ...next, error: 'private' }, { ...next, callId: 'bad\nid' },
@@ -52,7 +57,7 @@ async function recordsToolReportsOnce() {
     for (const report of invalidReports) {
       await expect(recordReport(nats.store, keys, context, report)).rejects.toThrow();
     }
-    expect(await nats.store.head()).toBe(4);
+    expect(await nats.store.head()).toBe(5);
   } finally {
     await nats.close();
     await rm(directory, { recursive: true, force: true });

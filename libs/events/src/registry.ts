@@ -239,7 +239,23 @@ export const eventRegistry: readonly EventDefinition[] = [
     { conversationId: 'conv_1', closedBy: 'mem_1' },
   ),
 
+  event('agent.native_consent_refused', 'conversation',
+    'The bridge refused an unsupported native consent request without granting permission.',
+    data.agentNativeConsentRefusedDataSchema, {
+      conversationId: 'conv_1', turnId: 'turn_1', nativeRequestId: '17',
+      serverName: 'oc_0123456789', serverId: 'mcp_1', reason: 'unsupported_native_consent',
+    }),
+
   // Tools, approvals and effects
+  event('tool.dispatch_recorded', 'decision', 'The gateway recorded a tool dispatch outcome.',
+    data.toolDispatchRecordedDataSchema, {
+      conversationId: 'conv_1', turnId: 'turn_1', callId: 'call_1',
+      serverId: 'mcp_1', toolName: 'write', requestId: '00000000-0000-4000-8000-000000000001',
+      logicalRequestId: DIGEST_EXAMPLE, startedAt: '2026-10-09T00:00:00.000Z',
+      durationMs: 75, outcome: 'not_dispatched', evidence: 'connection_refused',
+    }),
+  event('approval.retry_requested', 'approval', 'The requester authorised the unchanged request again.',
+    data.approvalExpiredDataSchema, { approvalId: 'appr_1' }),
   event(
     'tool.approval_requested',
     'approval',

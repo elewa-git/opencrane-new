@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { toolObservation, toolObservationSchema, recordToolObservation } from './tool-dispatch.ts';
 import { providerGatewayRoutes } from './provider-gateway.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, open, readFile, writeFile } from 'node:fs/promises';
@@ -67,7 +68,8 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
               'default(request.headers.join()["x-opencrane-tool-mode"], "")',
             'x-opencrane-approval-id':
               'default(request.headers.join()["x-opencrane-approval-id"], "")' },
-          includeResponseHeaders: responseHeaders } },
+          includeResponseHeaders: responseHeaders,
+          metadata: { toolRequestId: 'response.headers["x-request-id"]' } } },
         failureMode: { denyWithStatus: 503 } },
       transformations: { request: { replace: `{${upstreamHeaders.join(', ')}}` } },
     }, backends: [{ host: route.upstream, policies: {
@@ -92,7 +94,8 @@ function gatewayConfig(
       inputTokens: 'llm.inputTokens', outputTokens: 'llm.outputTokens',
       cachedInputTokens: 'has(llm.cachedInputTokens) ? llm.cachedInputTokens : uint(0)',
       cacheWriteTokens: 'has(llm.cacheCreationInputTokens) ? llm.cacheCreationInputTokens : uint(0)',
-      decisionRequestId: 'response.headers["x-request-id"]' } } },
+      decisionRequestId: 'response.headers["x-request-id"]',
+      toolRequestId: 'extauthz.toolRequestId' } } },
     routes: [...providerRoutes, ...configuredMcpRoutes, {
       name: 'models', gateways: 'default',
       matches: [{ path: { exact: '/v1/responses' }, method: 'POST' }],
@@ -110,6 +113,7 @@ function gatewayConfig(
   };
 }
 const observation = z.union([
+  toolObservationSchema,
   z.object({ id: z.uuid(), uncertainReason: z.enum(['missing_usage', 'transport_failure']) }).strict(),
   z.object({ id: z.uuid(), outcome: z.enum(['error', 'unknown']), reason: z.enum(['jwt_failed', 'dispatch_denied', 'observation_missing']) }).strict(),
   z.object({ id: z.uuid(), inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative(),
@@ -123,7 +127,9 @@ export interface UsageCursor {
 async function recordUsageLine(actor: BudgetActor, line: string) {
   const parsed: unknown = JSON.parse(line);
   const value = observation.parse(parsed);
-  if ('reason' in value) {
+  if ('toolOutcome' in value) {
+    await recordToolObservation(actor, value);
+  } else if ('reason' in value) {
     const subject = `gateway-${value.id}`;
     const rows = await history(actor.store, subject, actor.silo);
     const eventId = `${value.id}:gateway`;
@@ -179,6 +185,8 @@ export async function ingestUsage(actor: BudgetActor, file: string,
 }
 
 export function gatewayUsage(line: string) {
+  const tool = toolObservation(line);
+  if (tool) return tool;
   const status = logNumber(line, 'http\\.status');
   // Provider attempts already record dispatch and result on their own stream.
   // They have no native usage reservation, so the ordinary refusal fallback would invent rows.

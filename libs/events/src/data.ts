@@ -341,6 +341,20 @@ const toolCallFields = {
   serverId: z.string().regex(/^[\w-]{1,200}$/u),
   toolName: z.string().refine(isToolCallText),
 };
+export const agentNativeConsentRefusedDataSchema = z.object({
+  conversationId: toolCallFields.conversationId, turnId: toolCallFields.turnId,
+  nativeRequestId: z.string().refine(isToolCallText),
+  serverName: z.string().refine(isToolCallText), serverId: toolCallFields.serverId.optional(),
+  reason: z.literal('unsupported_native_consent'),
+}).strict();
+
+export const toolDispatchRecordedDataSchema = z.object({
+  ...toolCallFields, requestId: z.uuid(), logicalRequestId: digestSchema,
+  approvalId: id.optional(), startedAt: z.iso.datetime(), durationMs: z.int().nonnegative(),
+  outcome: z.enum(['not_dispatched', 'responded', 'outcome_unknown']),
+  evidence: z.enum(['connection_refused', 'response_received', 'transport_uncertain']),
+}).strict();
+
 export const agentToolCallStartedDataSchema = z.object(toolCallFields).strict();
 export const agentToolCallFinishedDataSchema = z.object({
   ...toolCallFields,
@@ -370,6 +384,7 @@ export const toolApprovalRequestedDataSchema = z.object({
   connectionId: id, profile: id, policySequence: z.int().nonnegative(),
   digestVersion: z.literal('lossless-json-v1'), argumentsDigest: digestSchema,
   expiresAt: z.iso.datetime(), stepUp: z.boolean(),
+  missingFields: z.array(z.string().regex(/^[a-zA-Z][\w-]{0,63}$/u)).max(20).optional(),
   ciphertext: ciphertextSchema.max(32768), keyId: keyIdSchema, reviewDigest: digestSchema,
 }).strict();
 
@@ -604,6 +619,7 @@ export const computerTurnClosedDataSchema = computerTurnClosedFieldsSchema
 // Admission is separate from the later observed outcome. Unverified callers have no asserted identity.
 export const decisionRecordedDataSchema = z.object({
   callId: z.string().refine(isToolCallText).optional(),
+  logicalRequestId: digestSchema.optional(), serverId: id.optional(), toolName: id.optional(),
   requestId: id, requesterId: id.optional(), assistantId: id.optional(),
   conversationId: id.optional(), turnId: id.optional(), permitId: id.optional(),
   route: z.enum(['model', 'mcp', 'egress']), outcome: z.enum(['allow', 'ask', 'deny']),

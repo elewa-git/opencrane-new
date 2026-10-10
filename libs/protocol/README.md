@@ -10,13 +10,15 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, group picker and participants, invitations, uploads and model access"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, groups, approvals, dispatch records and settings messages"]
   server["apps/server<br/>back end"] -.-> protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
 ```
 
 ## What it is responsible for
+
+- Checks linked dispatch records, native consent refusals and separate approval actions.
 
 - Define the messages exchanged over the live browser connection.
 - Define the data returned for chat, computers, integrations, budgets, held spend and the history of changes.

@@ -1,4 +1,5 @@
 import { conversationCreatedDataSchema, conversationEventId, decisionRecordedDataSchema,
+  toolDispatchRecordedDataSchema,
   getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { ProjectionRunner, type EventSource, type Projection } from './runner.ts';
 import type { Logger } from '@opencrane/observability';
@@ -114,6 +115,10 @@ function conversationFeedEntry(event: EventEnvelope) {
       return { conversationId, data: { turnId: decision.turnId, reason: decision.reason } };
     }
     return;
+  }
+  if (event.type === 'tool.dispatch_recorded') {
+    const data = toolDispatchRecordedDataSchema.parse(event.data);
+    return { conversationId: data.conversationId, data };
   }
   const stream = getEventDefinition(event.type)?.stream;
   if (stream !== 'conversation' && stream !== 'participation') return;

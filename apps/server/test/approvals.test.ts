@@ -5,9 +5,9 @@ import { extname, resolve } from 'node:path';
 import { z } from 'zod';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
-import { approvalCardsSchema } from '@opencrane/protocol';
-import { auditTrail, readAudit, conversations } from '@opencrane/projections';
-import { history, readApproval, decideApproval } from '@opencrane/models';
+import { approvalCardsSchema, chatFeedSchema } from '@opencrane/protocol';
+import { auditTrail, readAudit, conversations, readConversation } from '@opencrane/projections';
+import { history, readApproval, decideApproval, ingestUsage } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
@@ -594,3 +594,132 @@ async function refusesApprovalChangeDuringFinalCheck(type: string) {
 it.each(['message.posted', 'conversation.closed'])(
   'refuses an approval when %s arrives during its final access check',
   refusesApprovalChangeDuringFinalCheck, 40_000);
+
+async function deniesIncompleteReview() {
+  const setup = await approvalFixture();
+  try {
+    const argumentsText = '{"note":"hello","amount":100}';
+    expect((await setup.call(argumentsText)).status).toBe(403);
+    const { cards } = await setup.read();
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ state: 'requested', missingFields: ['order'],
+      canApprove: false, canDeny: true, canDecide: false });
+    expect((await setup.decide()).statusCode).toBe(409);
+    expect((await setup.call(argumentsText)).status).toBe(403);
+    expect((await setup.decide('rejected')).statusCode).toBe(200);
+    expect((await setup.read()).cards[0]?.state).toBe('denied');
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('records missing review fields, blocks approval and still permits requester denial',
+  deniesIncompleteReview, 40_000);
+
+async function retriesOnlyVerifiedNonDispatch() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    await setup.decide();
+    await setup.closeUpstream();
+    expect((await setup.call()).status).toBe(503);
+    await setup.restart();
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    const { cards } = await setup.read();
+    expect(cards[0]).toMatchObject({ state: 'outcome_unknown', canRetry: true });
+    const retries = await Promise.all([setup.decide('retry'), setup.decide('retry')]);
+    function statusCode(response: typeof retries[number]) {
+      return response.statusCode;
+    }
+    const statuses = retries.map(statusCode);
+    statuses.sort();
+    expect(statuses).toEqual([200, 409]);
+    await setup.resumeUpstream();
+    const retriedBody = setup.body().replace('approval-call', 'approval-retry');
+    expect((await setup.call(undefined, {}, retriedBody)).status).toBe(200);
+    expect((await setup.call()).status).toBe(403);
+    expect(setup.received()).toBe(1);
+    await setup.restart();
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    await setup.runner.run(conversations);
+    const feed = await readConversation(setup.db, 'test', 'conversation');
+    function isAttempt(row: typeof feed.rows[number]) {
+      return row.type === 'tool.dispatch_recorded';
+    }
+    const attempts = feed.rows.filter(isAttempt);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]?.data).toMatchObject({ outcome: 'not_dispatched',
+      evidence: 'connection_refused', callId: 'approval-call' });
+    const firstAttempt = z.object({ logicalRequestId: z.string() }).parse(attempts[0]?.data);
+    expect(attempts[1]?.data).toMatchObject({ outcome: 'responded', evidence: 'response_received',
+      callId: 'approval-retry',
+      logicalRequestId: firstAttempt.logicalRequestId });
+    for (const attempt of attempts) {
+      expect(Date.parse(attempt.time)).not.toBeNaN();
+      expect(attempt.data).not.toHaveProperty('arguments');
+    }
+    chatFeedSchema.parse({ ...feed, computerState: 'ready' });
+  } finally {
+    await setup.close();
+  }
+}
+it('permits one unchanged retry only after the gateway proves no dispatch',
+  retriesOnlyVerifiedNonDispatch, 40_000);
+
+async function refusesRetryWithoutProof(status: number) {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    await setup.decide();
+    setup.mcpReply(status, false, '{"error":"Connection refused (os error 111)"}');
+    await setup.call();
+    await setup.restart();
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    expect((await setup.read()).cards[0]).toMatchObject({
+      state: 'outcome_unknown', canRetry: false,
+    });
+    expect((await setup.decide('retry')).statusCode).toBe(409);
+    expect(setup.received()).toBe(1);
+  } finally {
+    await setup.close();
+  }
+}
+it.each([503, 504])('does not grant a retry for upstream %s or error text',
+  refusesRetryWithoutProof, 40_000);
+
+async function refusesRetryAfterBindingEnds(change: string) {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    await setup.decide();
+    await setup.closeUpstream();
+    await setup.call();
+    await setup.restart();
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    const { cards } = await setup.read();
+    expect(cards[0]?.canRetry).toBe(true);
+    if (change === 'expiry') {
+      const now = new Date(cards[0]!.expiresAt);
+      await readApproval(setup.nats.store, 'test', cards[0]!.approvalId, { now });
+    } else if (change === 'turn') {
+      await setup.append('conversation-conversation', 'agent.turn_stop_requested', {
+        conversationId: 'conversation', turnId: 'turn', requestedBy: 'alice',
+      });
+    } else {
+      await setup.append(grantStream('mcp_server', 'fixture'), 'grant.revoked', {
+        resourceType: 'mcp_server', resourceId: 'fixture', granteeKind: 'member',
+        granteeId: 'alice', revokedBy: 'owner',
+      });
+    }
+    const refused = await setup.decide('retry');
+    let expectedStatus = 409;
+    if (change === 'grant') expectedStatus = 503;
+    expect(refused.statusCode).toBe(expectedStatus);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(['expiry', 'turn', 'grant'])('refuses a verified retry after %s changes',
+  refusesRetryAfterBindingEnds, 40_000);

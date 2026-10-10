@@ -249,6 +249,9 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `agent.reasoning_summarised` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.tool_call_started` | bridge (reported) | call id, server id and tool name; no arguments | conversation feed; browser (WebSocket) |
+| `agent.native_consent_refused` | bridge (reported) | native request id, named server, bound turn and explicit unsupported refusal; no consent text | conversation feed; browser (WebSocket); grants no permission |
+| `tool.dispatch_recorded` | gateway log ingest | linked request id, call, server, UTC times, duration and dispatch evidence; no arguments | conversation feed; browser (WebSocket) |
+| `approval.retry_requested` | requester command | unchanged approval after verified non-dispatch | approval read state; one replacement permit |
 | `agent.tool_call_finished` | bridge (reported) | call id, server id, tool name, completed/failed status and optional duration; no result or error text | conversation feed; browser (WebSocket) |
 | `file.uploaded` | upload or explicit screenshot command after a clean scan and promotion | conversation files, conversations | deliver bytes over the bridge; wake a suspended computer |
 | `file.rejected` | upload or screenshot command after an infected verdict | conversations | refuse the upload clearly; no bytes stored |

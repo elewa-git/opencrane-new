@@ -1,0 +1,2 @@
+- Record linked tool dispatch attempts and unsupported native consent refusals in conversation feeds.
+- Show missing approval details, allow requester denial, and permit one unchanged retry after verified non-dispatch.

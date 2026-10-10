@@ -207,6 +207,11 @@ function requireMcpThread(call: ReturnType<typeof parseMcpCall>['call'], thread:
   }
 }
 
+function linkApprovalAttempt(tool: { logicalRequestId: string }, approvalId: string | undefined) {
+  // Keep retries linked when Codex assigns a new call id.
+  if (approvalId) tool.logicalRequestId = approvalId;
+}
+
 export async function startDecision(
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string;
     memory?: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'memoryContext'> },
@@ -221,11 +226,12 @@ export async function startDecision(
     const requestId = randomUUID(), route = req.url?.startsWith('/authorize/mcp/') ? 'mcp' : 'model';
     let contextDigest = createHash('sha256').update('unverified').digest('hex');
     let callId: string | undefined;
+    let toolFacts: { logicalRequestId: string; serverId: string; toolName: string } | undefined;
     let correlation: { conversationId: string; turnId: string } | undefined;
     const audit = async (outcome: 'allow' | 'ask' | 'deny', reason: string, permitId?: string, approvalId?: string) => {
       auditAttempted = true;
       const event = envelope(actor.silo, `decision-${requestId}`, 'decision.recorded', {
-        requestId, route, outcome, reason, contextDigest, ...correlation,
+        requestId, route, outcome, reason, contextDigest, ...correlation, ...toolFacts,
         ...(callId ? { callId } : {}),
         ...(auditedContext ? { requesterId: auditedContext.requesterId, assistantId: auditedContext.assistantId } : {}),
         ...(permitId ? { permitId } : {}),
@@ -299,6 +305,10 @@ export async function startDecision(
         fresh.include(`mcp-${match[1]!}`);
         const policy = await mcpPolicy(
           actor.store, actor.silo, match[1]!, match[2]!, parsed, req.headers, fresh.deadline);
+        const logicalRequestId = digestContext([actor.silo, turnToken.conversation,
+          turnToken.turn, turnToken.thread, callId, match[1], match[2],
+          policy.name, policy.args.canonical, policy.revision]);
+        toolFacts = { logicalRequestId, serverId: match[1]!, toolName: policy.name };
         needsApproval = policy.outcome === 'ask';
         const call = await context(actor, binding, computer, turnToken, checked.sequence,
           'mcp_server', match[1]!, fresh, conversation, turn);
@@ -312,6 +322,7 @@ export async function startDecision(
         };
         const { outcome, reason, approvalId } = await approvalDecision(actor.store, actor.silo,
           approvalBinding, policy, keys, actor.now, fresh, requestId, conversation);
+        linkApprovalAttempt(toolFacts, approvalId);
         await audit(outcome, reason, approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
         await fresh();
         res.setHeader('x-request-id', requestId);

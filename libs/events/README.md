@@ -22,7 +22,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks memory commands and invitation accounts| events["libs/events<br/>event, memory text, metadata and participant checks"]
+  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation and participant facts| events["libs/events<br/>event and memory text checks"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices| events
@@ -32,6 +32,8 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+- Defines tool dispatch records, unsupported consent refusals and requester retry events.
 
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.

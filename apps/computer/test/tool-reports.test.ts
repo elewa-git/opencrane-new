@@ -52,7 +52,12 @@ async function fixture(executionMode = 'memory_free') {
     return loaded.reports.filter(isToolReport);
   }
   function close() { finish(); rmSync(directory, { recursive: true, force: true }); }
-  return { notify, finish, reload, close, reports, transport };
+  function reloadAll() {
+    const loaded = reportJournal(driver);
+    loaded.load();
+    return loaded.reports;
+  }
+  return { notify, finish, reload, reloadAll, close, reports, transport, runner };
 }
 function isToolReport(report: BridgeReport) {
   return report.type === 'agent.tool_call_started' || report.type === 'agent.tool_call_finished';
@@ -151,3 +156,25 @@ async function ignoresToolNotificationsAfterTurnCompletion() {
 }
 it('ignores tool starts and finishes received after the turn completes',
   ignoresToolNotificationsAfterTurnCompletion);
+
+async function reportsUnsupportedConsent() {
+  const setup = await fixture();
+  try {
+    const request = { id: 17, method: 'mcpServer/elicitation/request', params: {
+      threadId: 'thread', turnId: 'codex-turn', serverName: 'oc_0123456789',
+      mode: 'form', message: 'Private consent text', requestedSchema: { secret: 'private' },
+    } };
+    setup.runner.complete(request);
+    expect(setup.reports.at(-1)).toMatchObject({
+      type: 'agent.native_consent_refused', nativeRequestId: '17',
+      serverName: 'oc_0123456789', serverId: 'fixture', reason: 'unsupported_native_consent',
+    });
+    expect(JSON.stringify(setup.reports)).not.toContain('Private consent text');
+    expect(JSON.stringify(setup.reports)).not.toContain('requestedSchema');
+    const saved = setup.reloadAll();
+    expect(saved.at(-1)).toEqual(setup.reports.at(-1));
+  } finally {
+    setup.close();
+  }
+}
+it('reports unsupported native consent without saving its private request', reportsUnsupportedConsent);

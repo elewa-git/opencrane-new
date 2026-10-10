@@ -923,3 +923,6 @@ again. It checks one saved settlement and unchanged provider, model, payer and
 price-table fields. It sends no provider request.
 
 `currentMembership` accepts a separate history deadline for reads before a write access check.
+## Recorded tool failures and approval actions
+
+The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.

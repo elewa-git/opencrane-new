@@ -15,12 +15,15 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
-  models <-->|checks calls and passes for personal, assistant and group facts| gateway["agentgateway<br/>AI gateway and reply checks"]
-  gateway -->|new usage lines| models
-  models -->|saves changes, reads new activity and grant facts| store["libs/event-store<br/>event log"]
+  models <-->|checks saved grants, tool rules, calls and memory passes| gateway["agentgateway<br/>AI gateway and reply checks"]
+  gateway -->|usage and tool dispatch records| models
+  models -->|saves changes, spending and reads new activity and grant facts| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
+
+- Records verified tool dispatch outcomes and link attempts of the same call.
+  Allows one unchanged retry after a recorded failure before dispatch.
 
 - Records provider choices and pauses for assistants and the silo default.
   An administrator can choose any eligible provider. The first verified provider
