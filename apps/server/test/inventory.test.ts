@@ -121,3 +121,19 @@ it.each(['', 'Region\r\nInjected: value', 'Region\n', 'Region\t', 'Region\u0000'
     expect(JSON.stringify(discovered)).not.toContain('Injected');
   },
 );
+
+
+it('dates evidence using the earliest page expiry and the five-minute maximum', async () => {
+  let calls = 0;
+  async function call(method: string) {
+    calls += 1;
+    if (method === 'server/discover') return JSON.stringify({ ...discovery, ttlMs: 600_000 });
+    if (calls === 2) return JSON.stringify({ ...metadata, ttlMs: 400_000,
+      tools: [validTool], nextCursor: 'next' });
+    return JSON.stringify({ ...metadata, ttlMs: 10, tools: [] });
+  }
+  const result = await discoverInventory(call);
+  const evidence = result as unknown as { checkedAt: string; expiresAt: string };
+  expect(Date.parse(evidence.checkedAt)).toBeGreaterThan(0);
+  expect(Date.parse(evidence.expiresAt) - Date.parse(evidence.checkedAt)).toBeLessThanOrEqual(10);
+});
