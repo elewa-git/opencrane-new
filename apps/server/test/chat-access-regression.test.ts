@@ -1837,9 +1837,8 @@ async function refusesRemovedAuthorAtParticipationCheck() {
     const activeResponse = await context.app.inject(activeSend);
     expect(activeResponse.statusCode, activeResponse.body).toBe(200);
     expect(accessChecks).toHaveBeenCalledExactlyOnceWith(context.options, request);
-    const activeCheck: unknown = accessChecks.mock.results[0]!.value;
-    const activeContext = await activeCheck as { mode?: string };
-    expect(activeContext.mode).toBe('group');
+    await expect(accessChecks.mock.results[0]!.value)
+      .resolves.toHaveProperty('mode', 'group');
     const expectedAccessPosition = await participantPosition(context);
     const remove = { id: 'remove-author', action: 'remove', participantId: 'bob',
       expectedAccessPosition };
