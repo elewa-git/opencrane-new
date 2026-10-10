@@ -13,6 +13,7 @@ const alice = { memberId: 'alice', displayName: 'Alex Kim' };
 const colleagues = [
   { memberId: 'bob', displayName: 'Grace Achieng' },
   { memberId: 'carol', displayName: 'Chris Njeri' },
+  { memberId: 'peter', displayName: 'Peter Otieno' },
 ];
 
 function conversation(conversationId: string, colleagueId: string) {
@@ -78,6 +79,9 @@ function createFetchFixture() {
       eventRow(2, 'alice', 'Yes, I will confirm by noon.')]],
   ]);
   let messageFailure: 'none' | 'lost' = 'none';
+  let participantCreator = 'alice';
+  let participantCanManage = true;
+  let participantCanLeave = false;
   let notifyMessageStarted: (() => void) | undefined;
   let releaseHeldMessage: (() => void) | undefined;
   async function fixtureFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -92,6 +96,16 @@ function createFetchFixture() {
     if (overridden) return overridden;
     if (url.pathname === '/api/chat') return reply({ ...alice, assistantId: 'assistant-not-used' });
     if (url.pathname === '/api/chat/groups') return reply({ rows: [], next: null });
+    if (url.pathname.endsWith('/participants') && request.method === 'GET') {
+      return reply({ rows: [{ memberId: 'alice', displayName: 'Alex Kim' },
+        { memberId: 'bob', displayName: 'Grace Achieng' },
+        { memberId: 'carol', displayName: 'Chris Njeri' },
+        { memberId: 'stale', displayName: null }], joinPosition: 1, accessPosition: 4,
+      canManage: participantCanManage, canLeave: participantCanLeave });
+    }
+    if (url.pathname.endsWith('/participants') && request.method === 'POST') {
+      return reply({ status: 'appended', sequence: 5 });
+    }
     if (url.pathname === '/api/chat/colleagues') {
       const query = url.searchParams.get('q')?.toLowerCase() ?? '';
       function matchesQuery(person: (typeof colleagues)[number]): boolean {
@@ -179,6 +193,15 @@ function createFetchFixture() {
         participantIds: ['alice', 'bob', 'carol'] });
       savedMessages.set('group-chat', [eventRow(1, 'bob', 'Hello everyone'),
         eventRow(2, 'carol', '@agent is just text')]);
+    },
+    addGroupConversationForParticipant() {
+      participantCreator = 'bob';
+      participantCanManage = false;
+      participantCanLeave = true;
+      savedConversations.push({ conversationId: 'group-chat', createdBy: participantCreator,
+        createdAt: '2026-10-06T09:00:00Z', mode: 'group',
+        participantIds: ['alice', 'bob', 'carol'] });
+      savedMessages.set('group-chat', [eventRow(1, 'bob', 'Hello everyone')]);
     },
     socketFactory,
     failNextMessageReply() { messageFailure = 'lost'; },
@@ -1165,6 +1188,157 @@ async function opensGroupTranscriptWithRecordedAuthors(): Promise<void> {
 
 it('opens group history with each stored human author and no assistant controls',
   opensGroupTranscriptWithRecordedAuthors);
+
+async function openParticipantScreen(fixture: ComponentFixture<DirectChat>): Promise<void> {
+  const groupRow = Array.from(root(fixture).querySelectorAll<HTMLButtonElement>('.conversation-row'))
+    .find((row) => row.textContent?.includes('Chris Njeri'));
+  if (!groupRow) throw new Error('Expected a group conversation row');
+  groupRow.click();
+  await settle(fixture);
+  buttonNamed(fixture, 'Participants').click();
+  await settle(fixture);
+}
+
+async function opensParticipantPickerWithCreatorLockedAndStalePeopleVisible(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  const screen = root(fixture);
+  expect(screen.textContent).toContain('Creator · cannot leave');
+  expect(screen.textContent).toContain('Removed from company');
+  expect(screen.textContent).toContain('Peter Otieno');
+  const creator = Array.from(screen.querySelectorAll('.participant-list li'))
+    .find((row) => row.textContent?.includes('Alex Kim'));
+  expect(creator?.querySelector('button')).toBeNull();
+  expect(screen.querySelector('.participant-leave')).toBeNull();
+  const opener = buttonNamed(fixture, 'Participants');
+  const heading = root(fixture).querySelector('#participantHeading');
+  await vi.waitFor(headingHasFocus.bind(null, heading));
+  buttonNamed(fixture, '‹ Back to conversation').click();
+  await settle(fixture);
+  await vi.waitFor(openerHasFocus.bind(null, opener));
+  fixture.destroy();
+}
+
+it('locks the creator and keeps a stale participant visible',
+  opensParticipantPickerWithCreatorLockedAndStalePeopleVisible);
+
+function headingHasFocus(heading: Element | null): void {
+  expect(document.activeElement).toBe(heading);
+}
+
+function openerHasFocus(opener: HTMLButtonElement): void {
+  expect(document.activeElement).toBe(opener);
+}
+
+async function purgesViewAfterOwnLeave(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversationForParticipant();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  buttonNamed(fixture, 'Leave conversation').click();
+  await settle(fixture);
+  expect(root(fixture).querySelector('h1')?.textContent).toContain('Unavailable');
+  expect(root(fixture).textContent).not.toContain('Hello everyone');
+  expect(root(fixture).textContent).not.toContain('Grace Achieng');
+  expect(root(fixture).querySelector('oc-chat-composer')).toBeNull();
+  expect(api.requests.some((request) => request.method === 'POST'
+    && request.body?.['action'] === 'leave')).toBe(true);
+  fixture.destroy();
+}
+
+it('purges the transcript and draft after a participant leaves', purgesViewAfterOwnLeave);
+
+async function showsApplyingParticipantStatus(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  let statusReads = 0;
+  function participantStillApplying(request: RequestRecord): Response | undefined {
+    if (request.url.includes('/changes/')) {
+      statusReads += 1;
+      const commandId = request.url.split('/').at(-1);
+      return reply({ status: 'appended', conversationId: 'group-chat', commandId,
+        type: 'participant.removed', sequence: 5,
+        projection: { content: 'current', iam: statusReads === 1 ? 'applying' : 'current' } });
+    }
+    return undefined;
+  }
+  api.override(participantStillApplying);
+  const grace = Array.from(root(fixture).querySelectorAll('.participant-list li'))
+    .find((row) => row.textContent?.includes('Grace Achieng'));
+  grace?.querySelector<HTMLButtonElement>('button')?.click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('Change is applying.');
+  expect(buttonNamed(fixture, 'Check status').disabled).toBe(false);
+  buttonNamed(fixture, 'Check status').click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('Participant change confirmed.');
+  fixture.destroy();
+}
+
+it('shows an applying participant change separately from an unknown reply',
+  showsApplyingParticipantStatus);
+
+async function showsColleagueWhoWentStaleAsRemoved(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  function refuseStaleAdd(request: RequestRecord): Response | undefined {
+    if (request.url.endsWith('/participants') && request.method === 'POST') {
+      return reply({ status: 'refused' }, 403);
+    }
+    return undefined;
+  }
+  api.override(refuseStaleAdd);
+  const add = Array.from(root(fixture).querySelectorAll('.eligible-list li'))
+    .find((row) => row.textContent?.includes('Peter Otieno'));
+  add?.querySelector<HTMLButtonElement>('button')?.click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('Peter Otieno is removed');
+  expect(root(fixture).querySelector('h1')?.textContent).not.toContain('Unavailable');
+  fixture.destroy();
+}
+
+it('shows a colleague who went stale as removed without clearing the viewer',
+  showsColleagueWhoWentStaleAsRemoved);
+
+async function checksLostParticipantReplyWithoutResending(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  function loseParticipantReply(request: RequestRecord): Response | undefined {
+    if (request.url.endsWith('/participants') && request.method === 'POST') {
+      throw new TypeError('Reply lost after append');
+    }
+    if (request.url.includes('/changes/')) return reply({ status: 'not_found' }, 404);
+    return undefined;
+  }
+  api.override(loseParticipantReply);
+  const grace = Array.from(root(fixture).querySelectorAll('.participant-list li'))
+    .find((row) => row.textContent?.includes('Grace Achieng'));
+  const remove = grace?.querySelector<HTMLButtonElement>('button');
+  remove?.click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('The reply was lost');
+  buttonNamed(fixture, 'Check status').click();
+  await settle(fixture);
+  const posts = api.requests.filter((request) => request.url.endsWith('/participants')
+    && request.method === 'POST');
+  const statusReads = api.requests.filter((request) => request.url.includes('/changes/'));
+  expect(posts).toHaveLength(1);
+  expect(statusReads).toHaveLength(1);
+  expect(statusReads[0]?.url).toContain(posts[0]?.body?.['id']);
+  expect(root(fixture).textContent).toContain('result is still unknown');
+  fixture.destroy();
+}
+
+it('checks a lost participant reply by its original command id without resending',
+  checksLostParticipantReplyWithoutResending);
 
 async function followsNewestMessages(): Promise<void> {
   const api = createFetchFixture();

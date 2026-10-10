@@ -52,14 +52,97 @@
         <span class="header-status">Group</span>
       } @else if (colleague()) { <span class="header-status">Direct · 2 people</span> }
       @if (pageState() === 'ready') {
-        <button class="refresh-button" type="button" [attr.aria-disabled]="composerBusy() || refreshing()"
-          (click)="refresh()">Refresh</button>
+        @if (selectedConversation()?.mode === 'group') {
+          <button #participantOpener class="participant-open" type="button"
+            (click)="openParticipants()">Participants</button>
+        }
+        @if (participantManager.state() === 'closed') {
+          <button class="refresh-button" type="button"
+            [attr.aria-disabled]="composerBusy() || refreshing()" (click)="refresh()">Refresh</button>
+        }
       }
     </header>
 
     <span class="sr-only" role="status" aria-live="polite">{{ statusText() }}</span>
     <section #transcript class="transcript" (scroll)="transcriptScrolled()" aria-label="Direct conversation" [attr.aria-busy]="pageState() === 'loading'">
       <div class="transcript-inner">
+        @if (participantManager.state() !== 'closed') {
+          <section class="participant-panel" aria-labelledby="participantHeading"
+            (keydown.escape)="closeParticipants()">
+            <button class="participant-back" type="button" (click)="closeParticipants()">
+              ‹ Back to conversation
+            </button>
+            <h2 #participantHeading tabindex="-1" id="participantHeading">Participants</h2>
+            <p class="participant-help">Only the creator manages participants. New people see
+              messages from when they are added.</p>
+            @if (participantManager.notice()) {
+              <p class="participant-notice" role="status">{{ participantManager.notice() }}</p>
+            }
+            @if (participantManager.stale(); as stale) {
+              <div class="stale-participant" role="status">
+                <strong>{{ stale.displayName || stale.memberId }} is removed</strong>
+                <span>The colleague is no longer in the company. The stale choice was removed.</span>
+              </div>
+            }
+            @if (participantManager.state() === 'loading') {
+              <p role="status">Loading participants…</p>
+            } @else if (participantManager.state() === 'failed') {
+              <button class="button secondary participant-action" type="button"
+                (click)="participantManager.open()">Try again</button>
+            } @else {
+              <ul class="participant-list">
+                @for (person of participantManager.rows(); track person.memberId) {
+                  <li>
+                    <span>{{ person.displayName || person.memberId }}
+                      @if (person.memberId === selectedConversation()?.createdBy) {
+                        <small>Creator · cannot leave</small>
+                      } @else if (!person.displayName) { <small>Removed from company</small> }
+                    </span>
+                    @if (participantManager.canManage()
+                        && person.memberId !== selectedConversation()?.createdBy) {
+                      <button class="participant-action" type="button"
+                        [disabled]="participantManager.state() !== 'ready'"
+                        (click)="participantManager.remove(person.memberId)">Remove</button>
+                    }
+                  </li>
+                }
+              </ul>
+              @if (participantManager.canManage()) {
+                <label class="participant-search">Add a colleague
+                  <input type="search" [value]="participantManager.query()"
+                    (input)="editParticipantQuery($event)" placeholder="Search colleagues">
+                </label>
+                <ul class="participant-list eligible-list">
+                  @for (person of participantManager.eligible(); track person.memberId) {
+                    <li><span>{{ person.displayName || person.memberId }}</span>
+                      <button class="participant-action" type="button"
+                        [disabled]="participantManager.state() !== 'ready'"
+                        (click)="participantManager.add(person.memberId)">Add</button>
+                    </li>
+                  } @empty {
+                    <li class="participant-empty">No other eligible colleagues</li>
+                  }
+                </ul>
+              } @else if (participantManager.canLeave()) {
+                <button class="participant-leave" type="button"
+                  [disabled]="participantManager.state() !== 'ready'"
+                  (click)="participantManager.leave()">Leave conversation</button>
+              }
+              @if (participantManager.state() === 'unknown'
+                  || participantManager.state() === 'applying') {
+                <div class="participant-status">
+                  <p>{{ participantManager.state() === 'applying'
+                    ? 'Change is applying.' : 'The result is unknown.' }}</p>
+                  <button class="participant-action" type="button"
+                    [disabled]="participantManager.checking()"
+                    (click)="participantManager.checkStatus()">
+                    {{ participantManager.checking() ? 'Checking status…' : 'Check status' }}
+                  </button>
+                </div>
+              }
+            }
+          </section>
+        } @else {
         @if (pageError() && pageState() === 'ready') {
           <div class="refresh-error"><span>{{ pageError() }} Previously loaded conversations are kept.</span>
             <button class="button secondary" type="button" [attr.aria-disabled]="refreshing()"
@@ -134,10 +217,12 @@
           }
           }
         }
+        }
       </div>
     </section>
 
-    @if (pageState() === 'ready' && (colleague() || selectedConversation()?.mode === 'group'
+    @if (pageState() === 'ready' && participantManager.state() === 'closed'
+      && (colleague() || selectedConversation()?.mode === 'group'
       || selectedPeople().length > 1
       || groupSnapshot() || pending())) {
       <footer class="composer-dock">

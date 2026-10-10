@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>chat, saved drafts, reviewed approvals and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>chat, participant changes, saved drafts and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
@@ -32,6 +32,10 @@ flowchart LR
 - Shows group conversations with each message's saved author and resumes live updates
   from the last message shown. Each draft stays with its conversation. A saved message
   means the server recorded it; it does not say that anyone received it.
+- Lets a group creator add or remove participants and lets other people leave. It locks
+  the creator in place, marks a colleague who left the company as removed, and checks an
+  uncertain change by reading its original status. Losing access clears the conversation.
+  Phones show the participant list with a Back button; the view honours reduced motion.
 - Shows every selected recipient in a full-screen review. Groups larger than three need
   that review before the first message can be sent. Message recovery stays on screen while
   the first send is unresolved.
@@ -73,7 +77,14 @@ flowchart LR
    again. Each draft stays with its conversation. Group transcripts show the saved author
    on each message and continue from the last message shown. A saved message means the
    server recorded it; it does not claim that anyone received it. The server records human
-   messages and starts no assistant, computer, memory or model work.
+    messages and starts no assistant, computer, memory or model work.
+   Group participants can be reviewed in the conversation. Only its creator manages
+   other people; everyone else can leave. A lost reply keeps its original change id,
+   and access loss clears protected chat details and late replies.
+   Group participants can be reviewed in the conversation. Only its creator can change
+   other people; the creator stays in the chat and everyone else can leave. If a reply is
+   lost, the website checks the same change reference without sending it again. Losing
+   access clears names, messages and drafts, including replies that arrive later.
 5. **An admin adds a tool server.** MCP (Model Context Protocol) lets an assistant use tools from another server. The website accepts a remote HTTPS address and shows the discovery result. When tools are ready, the admin can continue to set each tool to Allow automatically, Ask or Block. If a save reply is lost, the website checks the saved modes before offering another action. It never sends the save again.
 6. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. Connection, access grants and publishing wait for their server support.
 7. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.

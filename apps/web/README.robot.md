@@ -453,6 +453,17 @@ person has scrolled up. One live status line announces received messages and rec
 sends. A visible recorded notice stays until the transcript contains that message.
 Send errors have their own text; refresh does not change it. Editing clears it.
 
+The Participants button reads `/api/conversations/:id/participants` before showing names
+or actions. The creator cannot be removed or leave; only that creator can add or remove
+other people, and every other participant can leave. The list uses current conversation
+participants, not a group-membership label. A missing colleague name is shown as removed
+from the company. Each change posts once with the access position from that read. A lost
+reply keeps its command id and offers a GET to the existing change route; it never sends
+the command again. Applying, unknown and confirmed results have separate messages. A
+refused participants read clears messages, names, drafts, participants and pending sends
+and focuses the unavailable heading. Replies from an older conversation or an earlier
+access period cannot restore that content.
+
 The [screen checks](../../docs/process/p4-4-screens/README.robot.md) record API details,
 captures, intentional design differences, guard removals and remaining live checks.
 The [recipient checks](../../docs/process/p4-4-start-evidence.md) cover the first draft PR.
@@ -491,3 +502,5 @@ captures show the detail and invalid form at desktop and phone widths:
 
 The [group recipient captures](../../docs/process/p4-5-pr5/receipt.md) show this picker
 at desktop and phone sizes with fixture replies.
+The [participant screen checks](../../docs/process/p4-5-pr7/receipt.md) show the
+participant and unavailable states at desktop and phone sizes with fixture replies.

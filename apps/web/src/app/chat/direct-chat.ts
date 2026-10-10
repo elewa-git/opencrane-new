@@ -1,3 +1,5 @@
+// Keep the chat read and send flow together. Participant commands live in their own file.
+/* eslint max-lines: ["error", { max: 600, skipBlankLines: true, skipComments: true }] */
 import {
   ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, effect, inject,
   signal, viewChild, type OnDestroy, type OnInit,
@@ -9,6 +11,7 @@ import { SharedState } from '../shared-state/shared-state';
 import { PaperSurface } from '../ui/paper';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { DirectChatSending } from './direct-chat-sending';
+import { DirectChatParticipants } from './direct-chat-participants';
 import { RecipientPicker, type Colleague, type ReviewedSnapshot } from './recipient-picker';
 import { WebSocketService } from '../core/websocket.service';
 import { ChatComposer } from './composer';
@@ -32,7 +35,6 @@ import {
 
 type PageState = 'loading' | 'ready' | 'failed' | 'not_found' | 'access_changed';
 type ReadState = 'idle' | 'loading' | 'ready' | 'failed';
-
 
 @Component({
   selector: 'oc-direct-chat',
@@ -74,6 +76,10 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly pageError = signal('');
   private readonly lifetime = new AbortController();
   private readonly sending = new DirectChatSending(this.sendScreen());
+  protected readonly participantManager = new DirectChatParticipants(
+    this.selectedConversationId.bind(this), this.colleagues.bind(this),
+    this.canReadPage.bind(this), this.refreshParticipantColleagues.bind(this),
+    this.clearAfterAccessChange.bind(this));
   protected readonly sendState = this.sending.state;
   protected readonly statusChecking = this.sending.checking;
   protected readonly composerBusy = this.sending.busy;
@@ -97,12 +103,17 @@ export class DirectChat implements OnInit, OnDestroy {
   private focusComposerAfterRead = false;
   private readonly composerElement = viewChild<ElementRef<HTMLElement>>('composer');
   private readonly accessHeading = viewChild<ElementRef<HTMLElement>>('accessHeading');
+  private readonly participantHeading = viewChild<ElementRef<HTMLElement>>('participantHeading');
+  private readonly participantOpener = viewChild<ElementRef<HTMLButtonElement>>(
+    'participantOpener');
   private focusAccessHeading = false;
   private refreshHadFocus = false;
   private readonly drafts = new Map<string, string>();
   private scrollToNewest = false;
   private followNewest = true;
   private readonly transcript = viewChild<ElementRef<HTMLElement>>('transcript');
+  private focusParticipants = false;
+  private returnParticipantFocus = false;
 
   constructor() {
     afterEveryRender(this.afterRender.bind(this));
@@ -118,6 +129,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.searchRequest?.abort();
     this.historyRequest?.abort();
     this.listRequest?.abort();
+    this.participantManager.reset();
     this.subscription.unsubscribe();
     this.socket.disconnect();
   }
@@ -195,6 +207,27 @@ export class DirectChat implements OnInit, OnDestroy {
   protected async refresh(): Promise<void> {
     if (this.refreshing() || this.composerBusy()) return;
     await this.load();
+  }
+
+  protected async openParticipants(): Promise<void> {
+    if (!this.selectedConversationId() || this.selectedConversation()?.mode !== 'group') return;
+    this.returnParticipantFocus = false;
+    this.focusComposerAfterRead = false;
+    this.focusParticipants = true;
+    await this.participantManager.open();
+    this.focusParticipants = false;
+    requestAnimationFrame(this.focusParticipantTitle.bind(this));
+  }
+
+  protected closeParticipants(): void {
+    if (this.participantManager.state() === 'applying') return;
+    this.participantManager.close();
+    this.returnParticipantFocus = true;
+  }
+
+  protected editParticipantQuery(event: Event): void {
+    const input = event.target;
+    if (input instanceof HTMLInputElement) this.participantManager.query.set(input.value);
   }
 
   protected selectColleague(value: Colleague): void {
@@ -319,6 +352,10 @@ export class DirectChat implements OnInit, OnDestroy {
     if (result.kind === 'access_changed') this.clearAfterAccessChange();
   }
 
+  private async refreshParticipantColleagues(): Promise<void> {
+    await this.loadColleagues(this.colleagueQuery());
+  }
+
   private async loadHistory(conversationId: string): Promise<void> {
     this.historyRequest?.abort();
     const request = new AbortController();
@@ -364,10 +401,11 @@ export class DirectChat implements OnInit, OnDestroy {
 
   private clearConversationView(): void {
     this.historyRequest?.abort();
+    this.participantManager.reset();
     this.historyState.set('idle');
-    this.messages.set([]);
     this.position = 0;
     this.generation = 0;
+    this.messages.set([]);
     this.socketConversationId = '';
     this.socket.disconnect();
     this.followNewest = true;
@@ -413,6 +451,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.searchRequest?.abort();
     this.historyRequest?.abort();
     this.listRequest?.abort();
+    this.participantManager.reset();
     this.navigationOpen.set(false);
     this.socketConversationId = '';
     this.socket.disconnect();
@@ -421,13 +460,21 @@ export class DirectChat implements OnInit, OnDestroy {
     this.refreshing.set(false);
     this.listState.set('idle');
     this.historyState.set('idle');
+    this.position = 0;
+    this.generation = 0;
+    this.currentMemberId = '';
     this.knownColleagues.set([]);
     this.drafts.clear();
     this.colleagues.set([]);
+    this.colleagueQuery.set('');
     this.conversations.set([]);
     this.colleague.set(undefined);
+    this.selectedPeople.set([]);
+    this.groupSnapshot.set(undefined);
+    this.audienceReviewed.set(false);
     this.messages.set([]);
     this.selectedConversationId.set('');
+    updateDirectConversationAddress('');
     this.draft.set('');
     this.pageError.set('');
     this.statusText.set('Your access changed. Protected conversation details were cleared.');
@@ -533,6 +580,23 @@ export class DirectChat implements OnInit, OnDestroy {
       requestAnimationFrame(this.focusAccessTitle.bind(this));
       return;
     }
+    if (this.focusParticipants) {
+      this.focusParticipants = false;
+      requestAnimationFrame(this.focusParticipantTitle.bind(this));
+      return;
+    }
+    if (this.returnParticipantFocus) {
+      this.returnParticipantFocus = false;
+      requestAnimationFrame(this.restoreParticipantOpener.bind(this));
+    }
+  }
+
+  private focusParticipantTitle(): void {
+    this.participantHeading()?.nativeElement.focus();
+  }
+
+  private restoreParticipantOpener(): void {
+    this.participantOpener()?.nativeElement.focus();
   }
 
   private focusAccessTitle(): void {
