@@ -58,6 +58,58 @@ async function removalJustBeforeAppend() {
 it('refuses confirmation when removal arrives after the final check and before append',
   removalJustBeforeAppend);
 
+async function ownershipChangeBeforeFinalCheck() {
+  const context = await fixture();
+  const store = context.nats.store;
+  const originalHead = store.head.bind(store);
+  const originalAppend = store.append.bind(store);
+  const memberRows = await history(store, 'member-bob', 'test');
+  const ownershipRows = await history(store, 'ownership-test', 'test');
+  const change = { ...event('change-before-final-check', 'ownership-test',
+    'ownership.transferred'),
+    data: { memberId: 'charlie', transferredBy: 'alice', awaitingConfirmation: true } };
+  let ownershipChanged = false;
+  async function changeAfterInitialPositionRead(...args: Parameters<typeof originalHead>) {
+    const position = await originalHead(...args);
+    if (args[0] === 'ownership-test' && !ownershipChanged) {
+      // Return the saved position to let the initial comparison pass. Only the
+      // final freshness check can see the appointment appended after this read.
+      const command = { event: change, expectedSequence: position };
+      const result = await originalAppend(command);
+      expect(result.status).toBe('appended');
+      ownershipChanged = true;
+    }
+    return position;
+  }
+  const reader = vi.spyOn(store, 'head').mockImplementation(changeAfterInitialPositionRead);
+  const writer = vi.spyOn(store, 'append');
+  try {
+    await expect(context.handler.handle(context.request, context.noSql))
+      .rejects.toThrow('Authority changed');
+    expect(ownershipChanged).toBe(true);
+    expect(writer).not.toHaveBeenCalled();
+    const savedMemberRows = await history(store, 'member-bob', 'test');
+    const savedOwnershipRows = await history(store, 'ownership-test', 'test');
+    expect(savedMemberRows).toEqual(memberRows);
+    const expectedOwnershipEvents = [];
+    for (const row of ownershipRows) {
+      expectedOwnershipEvents.push(row.event);
+    }
+    expectedOwnershipEvents.push(change);
+    const savedOwnershipEvents = [];
+    for (const row of savedOwnershipRows) {
+      savedOwnershipEvents.push(row.event);
+    }
+    expect(savedOwnershipEvents).toEqual(expectedOwnershipEvents);
+  } finally {
+    reader.mockRestore();
+    writer.mockRestore();
+    await context.nats.close();
+  }
+}
+it('refuses confirmation before append when ownership changes after the initial position check',
+  ownershipChangeBeforeFinalCheck);
+
 async function invalidRequest(kind: 'absent' | 'successor' | 'owner') {
   const context = await fixture();
   const request = { ...context.request };
