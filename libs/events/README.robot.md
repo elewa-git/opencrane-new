@@ -171,3 +171,13 @@ The registry-wide security rule already permits digest fields; no name exception
 Strict schemas require conversation/member/join ids and an archive boolean or positive safe
 read position plus event id. Parsing requires the matching human principal and command id.
 These events have no reactions and do not grant access. Commands and screens come later.
+
+## Shared child records
+
+`conversation.created` also accepts strict `contextKind: shared_child` with explicit
+`mode: agent_session`, fixed `payingGroupId`, `origin` and 1–97 `initialJoins` including
+`createdBy`. Each initial join keeps the person's original parent join id/position.
+The origin binds parent/source/intent/request/first-input ids and source/intent positions.
+Parent joins precede the source; intent follows it. Private legacy parsing is unchanged.
+Child participant changes carry `contextKind: shared_child` and `reviewPosition`;
+additions require `joinKind: explicit_child`. They grant no parent rights. No emitter exists.

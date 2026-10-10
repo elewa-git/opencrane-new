@@ -1,6 +1,5 @@
 import { expect, it } from 'vitest';
 import { conversationCreatedDataSchema, parseEventByType } from '../src/index.ts';
-import { event } from '@opencrane/event-store/testing';
 
 const origin = { parentConversationId: 'parent', sourceMessageId: 'source', sourcePosition: 3,
   intentEventId: 'intent', intentPosition: 4, requestId: 'request', firstInputId: 'input' };
@@ -20,6 +19,8 @@ it('keeps legacy private parsing and accepts recorded shared-child origins and p
   parsesDistinctSessions);
 
 const invalidChildren = [
+  { ...child, contextKind: 'private text' },
+  { ...child, origin: { ...origin, sourceMessageId: 'private text' } },
   { ...child, mode: 'group' }, { ...child, participantIds: ['alice', 'bob'] },
   { ...child, payingGroupId: undefined }, { ...child, origin: { ...origin, sourcePosition: -1 } },
   { ...child, origin: { ...origin, parentConversationId: 'child' } },
@@ -35,11 +36,14 @@ function refusesChild(data: unknown) {
 it.each(invalidChildren)('refuses malformed origins and mixed child modes %#', refusesChild);
 
 function parsesExplicitJoin() {
-  const saved = event('invite', 'participation-child', 'participant.added');
+  const saved = { id: 'invite', subject: 'participation-child', type: 'participant.added',
+    source: 'server', silo: 'test', time: '2026-10-10T12:00:00Z' };
   const data = { conversationId: 'child', participantId: 'carol', addedBy: 'alice',
     contextKind: 'shared_child', joinKind: 'explicit_child', reviewPosition: 8 };
-  expect(parseEventByType({ ...saved, data }).success).toBe(true);
+  const joined = { ...saved, data };
+  expect(parseEventByType(joined).success).toBe(true);
   const mixed = { ...data, parentJoinEventId: 'parent-created' };
-  expect(parseEventByType({ ...saved, data: mixed }).success).toBe(false);
+  const invalid = { ...saved, data: mixed };
+  expect(parseEventByType(invalid).success).toBe(false);
 }
 it('records an explicit child-only join without inherited parent rights', parsesExplicitJoin);

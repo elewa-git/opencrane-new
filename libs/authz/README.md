@@ -10,7 +10,7 @@ This is a shared library used by the back end, the models process and the backgr
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.-> authz["libs/authz<br/>permission checks"]
+  server["apps/server<br/>back end"] -.-> authz["libs/authz<br/>permissions and child joins"]
   models["libs/models<br/>AI access and spending"] -.-> authz
   ops["apps/ops<br/>background workers"] -.-> authz
   authz -->|checks access and roles| fga["OpenFGA<br/>permissions service"]
@@ -19,6 +19,8 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+- Give named child participants access and keep the creator permission separate.
 
 - Turn membership, ownership, conversation, group and access-grant events into permission records.
 - Answer whether a person, assistant or group may use a resource.

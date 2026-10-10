@@ -1,4 +1,5 @@
-import { conversationCreatedDataSchema, conversationEventId, decisionRecordedDataSchema,
+import { conversationParticipantIds, conversationCreatedDataSchema, conversationEventId,
+  decisionRecordedDataSchema,
   toolDispatchRecordedDataSchema,
   getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { ProjectionRunner, type EventSource, type Projection } from './runner.ts';
@@ -230,8 +231,7 @@ async function foldConversation(db: Query, event: EventEnvelope,
     const values = [event.silo, conversationId, created.mode, created.createdBy,
       groupId ?? null, snapshot ?? null, false, position, position];
     await db.query('INSERT INTO conversations VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', values);
-    let participantIds = [created.createdBy];
-    if (created.mode !== 'agent_session') participantIds = created.participantIds;
+    const participantIds = conversationParticipantIds(created);
     for (const participantId of participantIds) {
       await startParticipant(db, event, conversationId, participantId, position);
     }

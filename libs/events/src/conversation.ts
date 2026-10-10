@@ -38,6 +38,45 @@ function fitsDefaultTupleWrite(data: { participantIds: string[] }) {
 export const groupConversationCommandSchema = groupConversationSchema.refine(fitsDefaultTupleWrite,
   'Group conversations allow at most 97 people including the creator');
 
+const parentJoin = z.strictObject({
+  participantId: chatIdSchema, parentJoinEventId: chatIdSchema,
+  parentJoinPosition: z.int().positive(),
+});
+const childOrigin = z.strictObject({
+  parentConversationId: conversationId, sourceMessageId: chatIdSchema,
+  sourcePosition: z.int().positive(), intentEventId: chatIdSchema,
+  intentPosition: z.int().positive(), requestId: chatIdSchema, firstInputId: chatIdSchema,
+});
+const childData = z.strictObject({
+  conversationId, mode: z.literal('agent_session'), contextKind: z.literal('shared_child'),
+  assistantId: chatIdSchema, payingGroupId: chatIdSchema, createdBy: chatIdSchema,
+  origin: childOrigin, initialJoins: z.array(parentJoin).min(1).max(97),
+});
+function hasValidChildReferences(data: z.infer<typeof childData>) {
+  const people = new Set<string>();
+  for (const join of data.initialJoins) {
+    if (people.has(join.participantId) || join.parentJoinPosition > data.origin.sourcePosition) {
+      return false;
+    }
+    people.add(join.participantId);
+  }
+  return people.has(data.createdBy)
+    && data.origin.parentConversationId !== data.conversationId
+    && data.origin.intentPosition > data.origin.sourcePosition;
+}
+export const sharedChildConversationSchema = childData.refine(hasValidChildReferences,
+  'Require distinct people including the creator and ordered parent references');
+
+export const childParticipantAddedSchema = z.strictObject({
+  conversationId, participantId: chatIdSchema, addedBy: chatIdSchema,
+  contextKind: z.literal('shared_child'), joinKind: z.literal('explicit_child'),
+  reviewPosition: z.int().positive(),
+});
+export const childParticipantRemovedSchema = z.strictObject({
+  conversationId, participantId: chatIdSchema, removedBy: chatIdSchema,
+  contextKind: z.literal('shared_child'), reviewPosition: z.int().positive(),
+});
+
 /** Match the recorded id exactly. Accept old participant subjects only when reading history. */
 export function conversationEventId(event: EventEnvelope): string {
   if (typeof event.data !== 'object' || event.data === null || !event.silo) {

@@ -142,7 +142,7 @@ export const eventRegistry: readonly EventDefinition[] = [
   event(
     'conversation.created',
     'conversation',
-    'A new conversation was started.',
+    'A private, human or shared child conversation was started.',
     data.conversationCreatedDataSchema,
     { conversationId: 'conv_1', assistantId: 'asst_1', createdBy: 'mem_1', mode: 'agent_session' },
   ),

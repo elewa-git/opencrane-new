@@ -22,6 +22,8 @@ flowchart LR
 
 ## What it is responsible for
 
+- Read recorded child participants without reading the whole conversation.
+
 - Returns missing approval details and accepts requester retries after verified non-dispatch.
 
 - Lets owners and admins save provider choices and pauses, count affected assistants

@@ -330,3 +330,9 @@ Old join choices remain private and never apply to a new join. Preferences bypas
 The offline conversations rebuild replaces this table too. Tests check identical choices,
 unchanged feed rows and no event append during replay. Activity and first-close evidence
 remain for the next part of the accepted lifecycle design; no public commands ship here.
+
+## Shared child records
+
+Shared-child creation starts each named person's interval. Origin and original
+parent joins stay in `conversation_feed.data`; interval event ids link back to those records.
+Explicit child joins and removals use the existing interval rules and offline rebuild.

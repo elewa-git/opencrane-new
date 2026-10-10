@@ -22,8 +22,8 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals, participants and chat choices| events["libs/events<br/>event and memory checks"]
-  store["libs/event-store<br/>saved event log"] -.->|checks private chat choices| events
+  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals, participants and child chats| events["libs/events<br/>event and memory checks"]
+  store["libs/event-store<br/>saved event log"] -.->|checks private chat choices and child records| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turn and spending data| events
@@ -32,6 +32,8 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+- Define shared child records with a parent message, fixed payer and named people.
 
 - Defines tool dispatch records, unsupported consent refusals, requester retries and safe invitation refusal records.
 
