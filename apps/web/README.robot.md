@@ -321,8 +321,8 @@ be checked. A denied workspace session also clears every memory value and cancel
 pending reads. A changed requester causes scope discovery to run again. The detail view
 uses the shared modal overlay, returns focus to its fact row and shows the scope audience,
 kind, revision, saved date and pin state. A rejected search is reported beside the search
-field. A stale page cursor is discarded and the first page is read again. This screen has
-no memory write actions.
+field. A stale page cursor is discarded and the first page is read again. A requester
+change clears all store form state as well as read state before new scopes load.
 
 Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
 `/ws/conversations/:id/view`, through the existing frontend `/ws` proxy.
@@ -432,3 +432,30 @@ Dialog methods installed by model-registry tests remain writable, as browser
 methods are. Other component tests can replace methods on their own dialog
 elements even when the Angular runner reuses a test environment. The regression
 in `src/app/models/model-registry.spec.ts` checks both `showModal` and `close`.
+
+## Memory store and receipts
+
+The Memory panel posts facts to `/api/memory/:scopeId/facts`. It counts UTF-8 bytes
+and applies the server's text rules before enabling Store. Preference is available
+only in person memory. Trusted source references come only from an authorised fact
+detail read; the server checks them again. A saved receipt follows an accepted event.
+`memory_busy` waits for `Retry-After` before offering the same command again. If the
+reply may have been lost, Check status only reads
+`/api/memory/:scopeId/changes/:commandId`; it never sends the fact again. Drafts and
+command references stay in page memory. An unknown result keeps its command id and
+status check when Cancel is pressed. A 401, 403 or refused 404 clears the draft, source,
+receipt and pending command before the response body is read. A requester or scope change
+also clears them, and late replies or delayed retries from the old request are ignored.
+Invalid text shows the matching byte or character explanation beside the field and sets
+`aria-invalid`. Cancel while editing makes no request. Undo and Edit actions remain
+unavailable.
+
+`memory-panel.spec.ts` covers cancellation, UTF-8 byte limits, scope-limited
+preferences, saved and failed receipts, busy retries and status checks that never
+resend, access refusal, pending requester changes and validation feedback. Browser
+captures show the detail and invalid form at desktop and phone widths:
+[detail](../../docs/process/p4-12-memory/captures/MEM-03-1280.png),
+[phone form](../../docs/process/p4-12-memory/captures/MEM-30-390.png),
+[validation](../../docs/process/p4-12-memory/captures/MEM-31-1280.png),
+[saved receipt](../../docs/process/p4-12-memory/captures/MEM-32-1280.png), and
+[unknown receipt](../../docs/process/p4-12-memory/captures/MEM-30-1280-unknown.png).

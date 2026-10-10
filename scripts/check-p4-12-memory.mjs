@@ -60,6 +60,18 @@ async function openMemoryDetail(page, width) {
   }).waitFor();
 }
 
+async function openInvalidStoreForm(page) {
+  const detail = page.getByRole('dialog', { name: 'Fact details' });
+  await detail.getByRole('button', { name: 'Remember a fact' }).click();
+  const form = page.getByRole('dialog', { name: 'Remember a fact' });
+  await form.waitFor();
+  const field = form.locator('textarea');
+  await field.fill('é'.repeat(2049));
+  await page.getByText('Facts must be 1 to 4,096 UTF-8 bytes.').waitFor();
+  assert.equal(await field.getAttribute('aria-invalid'), 'true',
+    'Invalid text must be announced beside the field');
+}
+
 async function capture(browser, width, motion) {
   const height = width === 1280 ? 900 : 844;
   const page = await browser.newPage({ viewport: { width, height }, reducedMotion: motion });
@@ -75,10 +87,23 @@ async function capture(browser, width, motion) {
     const motionName = motion === 'reduce' ? '-RM' : '';
     const filename = `MEM-03-${width}${motionName}.png`;
     await page.screenshot({ path: `${output}/${filename}`, fullPage: true });
-    return { filename, commands: fixture.commands.length };
+    const captures = [filename];
+    if (motion === 'no-preference') {
+      await openInvalidStoreForm(page);
+      assert(await page.evaluate(pageHasNoOverflow),
+        `The invalid store form must fit at ${width}px`);
+      const formFilename = `MEM-31-${width}.png`;
+      await page.screenshot({ path: `${output}/${formFilename}`, fullPage: true });
+      captures.push(formFilename);
+    }
+    return { captures, commands: fixture.commands.length };
   } finally {
     await page.close();
   }
+}
+
+function captureFiles(result) {
+  return result.captures;
 }
 
 const browser = await chromium.launch();
@@ -96,8 +121,9 @@ try {
     result: 'PASS', widths: [1280, 390], reducedMotion: true,
     checks: ['Detail audience and fact metadata are visible.',
       'The detail uses its own modal and fits both viewports.',
-      'Opening memory detail sends no chat command.'],
-    captures: captures.map(captureResult => captureResult.filename),
+      'The invalid form shows the UTF-8 byte explanation and aria-invalid at both widths.',
+      'Memory reads and form opening send no chat command.'],
+    captures: captures.flatMap(captureFiles),
   }, null, 2)}\n`);
   console.log(`PASS Memory detail captures: ${captures.length}`);
 } finally {
