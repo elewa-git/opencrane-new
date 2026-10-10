@@ -595,7 +595,7 @@ function revocationTests() {
 }
 describe('real revocations during an access check still close the viewer', revocationTests);
 
-async function closesRemovedMemberBeforeSlowDesktopRead() {
+async function closesRemovedMemberBeforeSlowDesktopRead(laterInvitation: boolean) {
   const readable = new PassThrough();
   function openStreamingDesktop() {
     const writable = new PassThrough();
@@ -654,7 +654,15 @@ async function closesRemovedMemberBeforeSlowDesktopRead() {
     await desktopReadStarted.promise;
     const revokedAt = performance.now();
     await remove();
-    await observed.closed;
+    if (laterInvitation) {
+      const invited = eventInjection('member-alice', 'member.invited', {
+        memberId: 'alice', invitationId: 'later-invite', email: 'a@example.test',
+        role: 'member', invitedBy: 'owner',
+      });
+      await appendInjection(current, invited);
+    }
+    await delay(2000);
+    expect(observed.result(), 'Removal must close the viewer within two seconds').toBeDefined();
     const remaining = Math.max(0, revokedAt + 1700 - performance.now());
     await delay(remaining);
     // Keep sending frames so the test proves the server stops desktop bytes after removal.
@@ -665,8 +673,10 @@ async function closesRemovedMemberBeforeSlowDesktopRead() {
     releaseDesktopRead.resolve();
   }
 }
-it('closes a removed member within 2,000 ms despite a slow desktop read and stops bytes by 1,500 ms',
-  closesRemovedMemberBeforeSlowDesktopRead, 30_000);
+it.each([false, true])(
+  'stops desktop bytes and closes within two seconds with a hung read (later invitation: %s)',
+  closesRemovedMemberBeforeSlowDesktopRead, 30_000,
+);
 
 async function confirmsChatActivity() {
   const injection = conversationEvent('agent.turn_completed');
@@ -743,3 +753,32 @@ async function keepsActiveSiloMembershipRefusalMessage() {
 }
 it('keeps the exact refusal message for a removed silo member',
   keepsActiveSiloMembershipRefusalMessage, 30_000);
+
+async function refusesRemovedMemberTickets() {
+  const current = await createFixture();
+  await grantDirectly(current);
+  const admitted = await admit(current);
+  await appendInjection(current, revocation('member.removed'));
+  const invited = eventInjection('member-alice', 'member.invited', {
+    memberId: 'alice', invitationId: 'later-invite', email: 'a@example.test',
+    role: 'member', invitedBy: 'owner',
+  });
+  await appendInjection(current, invited);
+  const response = await admission(current);
+  expect(response.statusCode).toBe(403);
+  const viewer = connect(admitted);
+  const rejected = Promise.withResolvers<number>();
+  function refuseUpgrade(_request: unknown, upgrade: IncomingMessage) {
+    rejected.resolve(upgrade.statusCode ?? 0);
+    upgrade.resume();
+    viewer.terminate();
+  }
+  function acceptUpgrade() {
+    rejected.resolve(101);
+  }
+  viewer.once('unexpected-response', refuseUpgrade);
+  viewer.once('open', acceptUpgrade);
+  expect(await rejected.promise).toBe(403);
+}
+it('refuses new tickets and old ticket upgrades after removal followed by an invitation',
+  refusesRemovedMemberTickets, 30_000);
