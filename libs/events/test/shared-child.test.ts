@@ -35,6 +35,15 @@ function refusesChild(data: unknown) {
 }
 it.each(invalidChildren)('refuses malformed origins and mixed child modes %#', refusesChild);
 
+function refusesParentJoinAtSourcePosition() {
+  const equalPosition = {
+    ...child,
+    initialJoins: [{ ...initialJoins[0], parentJoinPosition: origin.sourcePosition }],
+  };
+  expect(conversationCreatedDataSchema.safeParse(equalPosition).success).toBe(false);
+}
+it('refuses a parent join at the source message position', refusesParentJoinAtSourcePosition);
+
 function parsesExplicitJoin() {
   const saved = { id: 'invite', subject: 'participation-child', type: 'participant.added',
     source: 'server', silo: 'test', time: '2026-10-10T12:00:00Z' };

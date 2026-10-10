@@ -31,8 +31,8 @@ async function replaysChildParticipation() {
     const creationData = {
       conversationId: 'child', mode: 'agent_session', contextKind: 'shared_child',
       createdBy: 'alice', assistantId: 'assistant', payingGroupId: 'team',
-      origin: { parentConversationId: 'parent', sourceMessageId: 'source', sourcePosition: 1,
-        intentEventId: 'intent', intentPosition: 2, requestId: 'request', firstInputId: 'input' },
+      origin: { parentConversationId: 'parent', sourceMessageId: 'source', sourcePosition: 2,
+        intentEventId: 'intent', intentPosition: 3, requestId: 'request', firstInputId: 'input' },
       initialJoins: [
         { participantId: 'alice', parentJoinEventId: 'parent-created', parentJoinPosition: 1 },
         { participantId: 'bob', parentJoinEventId: 'parent-created', parentJoinPosition: 1 },
