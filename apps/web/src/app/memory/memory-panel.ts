@@ -1,15 +1,17 @@
 import { ChangeDetectionStrategy, Component, input, signal,
   type OnDestroy, type OnInit, type SimpleChanges } from '@angular/core';
 import { Overlay } from '../ui/overlay';
-import { canReadScope, hasRefusedMemoryControl, isDetail, isObject, isPage, isScopes,
-  type Detail, type Fact,
+import { canReadScope, hasRefusedMemoryControl, isObject, isPage, isScopes,
+  type Fact,
   type PageFact, type Scope, type Source } from './memory-panel-data';
-type DetailRead = { kind: 'ok'; detail: Exclude<Detail, { status: 'unavailable' }> } |
-  { kind: 'access' } | { kind: 'missing' } | { kind: 'unavailable' };
-type JsonRead = { kind: 'ok'; body: unknown } | { kind: 'access' } |
-  { kind: 'invalid' } | { kind: 'conflict' } | { kind: 'missing' } | { kind: 'unavailable' };
+import { detailResult, detailUrl, isCurrentDetailRead, isCurrentListRead,
+  isCurrentScopeRead, readJson, scopeHasId }
+  from './memory-panel-reads';
+import { readStoreReply } from './memory-panel-store-reply';
 type ScreenState = 'loading' | 'ready' | 'unavailable' | 'access';
 type StoreState = 'editing' | 'saving' | 'saved' | 'failed' | 'busy' | 'unknown';
+type StoreCommand = { generation: number; scopeId: string; commandId: string;
+  payload: Record<string, unknown> };
 
 @Component({
   selector: 'oc-memory-panel',
@@ -49,6 +51,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
   protected detailOpener: HTMLElement | undefined;
   private scopeController: AbortController | undefined;
   private scopeRequestId = 0;
+  private storeCommand: StoreCommand | undefined;
 
   ngOnInit(): void { void this.loadScopes(); }
 
@@ -68,9 +71,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.cursor.set(null);
     this.nextCursor.set(null);
     this.detailState.set('');
-    this.storeOpen.set(false);
-    this.storeText.set('');
-    this.storeSource.set(undefined);
+    this.clearStoreState();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -125,6 +126,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
   protected async chooseScope(scopeId: string): Promise<void> {
     if (!scopeId || scopeId === this.selectedScope()) return;
     this.generation += 1;
+    this.clearStoreState();
     this.listController?.abort();
     this.detailController?.abort();
     this.selectedFact.set(undefined);
@@ -197,6 +199,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
   }
 
   protected openStore(event?: Event): void {
+    this.clearStoreState();
     if (event?.currentTarget instanceof HTMLElement) {
       this.storeOpener = event.currentTarget;
     }
@@ -209,11 +212,12 @@ export class MemoryPanel implements OnInit, OnDestroy {
   }
 
   protected cancelStore(): void {
-    if (this.storeState() === 'saving') return;
+    if (this.storeState() === 'saving' || this.storeState() === 'unknown') return;
     this.storeOpen.set(false);
     this.storeText.set('');
     this.storeSource.set(undefined);
     this.storeCommandId.set('');
+    this.storeCommand = undefined;
   }
 
   protected storeOverlayClosed(): void {
@@ -241,6 +245,11 @@ export class MemoryPanel implements OnInit, OnDestroy {
 
   protected storeBytes(): number {
     return new TextEncoder().encode(this.storeText()).byteLength;
+  }
+
+  protected storeInputError(): string {
+    if (!this.storeText()) return '';
+    return this.storeValidation();
   }
 
   protected storeValidation(): string {
@@ -274,14 +283,17 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.storeState.set('saving');
     this.storeError.set('');
     const payload = this.storePayload(commandId);
+    const command: StoreCommand = { generation: this.generation,
+      scopeId: this.selectedScope(), commandId, payload };
+    this.storeCommand = command;
     try {
-      const response = await fetch(`/api/memory/${encodeURIComponent(this.selectedScope())}/facts`, {
+      const response = await fetch(`/api/memory/${encodeURIComponent(command.scopeId)}/facts`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         credentials: 'same-origin', cache: 'no-store', body: JSON.stringify(payload),
       });
-      await this.readStoreReply(response);
+      await this.applyStoreReply(response, command);
     } catch {
-      this.storeState.set('unknown');
+      if (this.isCurrentStoreCommand(command)) this.storeState.set('unknown');
     }
   }
 
@@ -292,61 +304,76 @@ export class MemoryPanel implements OnInit, OnDestroy {
       expiresAt: null, sources, dependsOn: [] };
   }
 
-  private async readStoreReply(response: Response): Promise<void> {
-    if (response.status === 200) {
-      const body: unknown = await response.json();
-      this.storeState.set(isObject(body) && body['outcome'] === 'saved' ? 'saved' : 'unknown');
+  private async applyStoreReply(response: Response, command: StoreCommand): Promise<void> {
+    if (!this.isCurrentStoreCommand(command)) return;
+    const reply = await readStoreReply(response);
+    if (!this.isCurrentStoreCommand(command)) return;
+    if (reply.kind === 'access') {
+      this.revoke();
       return;
     }
-    if (response.status === 422 || response.status === 409 || response.status === 404) {
+    if (reply.kind === 'saved') {
+      this.storeState.set('saved');
+      return;
+    }
+    if (reply.kind === 'failed') {
       this.storeState.set('failed');
       this.storeError.set('Nothing was saved. Check the fact and try again.');
+      this.storeCommand = undefined;
       return;
     }
-    if (response.status === 503) {
-      const body: unknown = await response.json();
-      if (isObject(body) && body['reason'] === 'memory_busy') {
-        const seconds = Number(response.headers.get('retry-after'));
-        this.storeRetryAfter.set(Number.isFinite(seconds) && seconds > 0 ? seconds : 1);
-        this.storeState.set('busy');
-        return;
-      }
+    if (reply.kind === 'busy') {
+      this.storeRetryAfter.set(reply.retryAfter);
+      this.storeState.set('busy');
+      return;
     }
     this.storeState.set('unknown');
   }
 
   protected async retryBusy(): Promise<void> {
-    if (this.storeState() !== 'busy') return;
+    const command = this.storeCommand;
+    if (this.storeState() !== 'busy' || !command || !this.isCurrentStoreCommand(command)) return;
     this.storeState.set('saving');
     await new Promise<void>(waitForRetry.bind(null, this.storeRetryAfter()));
-    await this.sendSameCommand();
+    if (!this.isCurrentStoreCommand(command)) return;
+    await this.sendSameCommand(command);
   }
 
-  private async sendSameCommand(): Promise<void> {
+  private async sendSameCommand(command: StoreCommand): Promise<void> {
     this.storeState.set('saving');
     try {
-      const response = await fetch(`/api/memory/${encodeURIComponent(this.selectedScope())}/facts`, {
+      const response = await fetch(`/api/memory/${encodeURIComponent(command.scopeId)}/facts`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         credentials: 'same-origin', cache: 'no-store',
-        body: JSON.stringify(this.storePayload(this.storeCommandId())),
+        body: JSON.stringify(command.payload),
       });
-      await this.readStoreReply(response);
+      await this.applyStoreReply(response, command);
     } catch {
-      this.storeState.set('unknown');
+      if (this.isCurrentStoreCommand(command)) this.storeState.set('unknown');
     }
   }
 
   protected async checkStoreStatus(): Promise<void> {
-    if (this.storeState() !== 'unknown') return;
+    const command = this.storeCommand;
+    if (this.storeState() !== 'unknown' || !command || !this.isCurrentStoreCommand(command)) return;
     try {
-      const response = await fetch(`/api/memory/${encodeURIComponent(this.selectedScope())}` +
-        `/changes/${encodeURIComponent(this.storeCommandId())}`, {
+      const response = await fetch(`/api/memory/${encodeURIComponent(command.scopeId)}` +
+        `/changes/${encodeURIComponent(command.commandId)}`, {
         credentials: 'same-origin', cache: 'no-store',
       });
+      if (!this.isCurrentStoreCommand(command)) return;
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        this.revoke();
+        return;
+      }
       if (!response.ok) return;
       const body: unknown = await response.json();
+      if (!this.isCurrentStoreCommand(command)) return;
       if (isObject(body) && body['outcome'] === 'saved') this.storeState.set('saved');
-      else if (isObject(body) && body['outcome'] === 'failed') this.storeState.set('failed');
+      else if (isObject(body) && body['outcome'] === 'failed') {
+        this.storeState.set('failed');
+        this.storeCommand = undefined;
+      }
     } catch {
       // Keep an unknown outcome unknown when the status read itself has no reply.
     }
@@ -371,6 +398,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
   private async loadScopes(): Promise<void> {
     this.scopeController?.abort();
     this.generation += 1;
+    this.clearStoreState();
     this.listController?.abort();
     this.detailController?.abort();
     this.selectedScope.set('');
@@ -463,61 +491,28 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.cursor.set(null);
     this.nextCursor.set(null);
     this.detailState.set('');
+    this.clearStoreState();
     this.listState.set('empty');
     this.state.set('access');
   }
-}
 
-async function readJson(url: string, signal: AbortSignal): Promise<JsonRead> {
-  try {
-    const response = await fetch(url, {
-      signal, headers: { accept: 'application/json' },
-    });
-    if (response.status === 401 || response.status === 403 || response.status === 404) {
-      return { kind: 'access' };
-    }
-    if (response.status === 409) return { kind: 'conflict' };
-    if (response.status === 422) return { kind: 'invalid' };
-    if (!response.ok) return { kind: 'unavailable' };
-    const body: unknown = await response.json();
-    return { kind: 'ok', body };
-  } catch {
-    return { kind: 'unavailable' };
+  private clearStoreState(): void {
+    this.storeOpen.set(false);
+    this.storeText.set('');
+    this.storeKind.set('fact');
+    this.storeState.set('editing');
+    this.storeError.set('');
+    this.storeCommandId.set('');
+    this.storeRetryAfter.set(1);
+    this.storeSource.set(undefined);
+    this.storeCommand = undefined;
+    this.storeOpener = undefined;
   }
-}
 
-function detailResult(reply: JsonRead): DetailRead {
-  if (reply.kind === 'access') return { kind: 'access' };
-  if (reply.kind !== 'ok' || !isDetail(reply.body)) {
-    return { kind: 'unavailable' };
+  private isCurrentStoreCommand(command: StoreCommand): boolean {
+    return this.storeCommand === command && command.generation === this.generation &&
+      command.scopeId === this.selectedScope();
   }
-  if ('status' in reply.body) return { kind: 'missing' };
-  return { kind: 'ok', detail: reply.body };
-}
-
-function detailUrl(scopeId: string, memoryId: string): string {
-  return `/api/memory/${encodeURIComponent(scopeId)}/facts/` +
-    encodeURIComponent(memoryId);
-}
-
-function isCurrentListRead(controller: AbortController, startedGeneration: number,
-  currentGeneration: number, startedRequestId: number, currentRequestId: number): boolean {
-  return !controller.signal.aborted && startedGeneration === currentGeneration &&
-    startedRequestId === currentRequestId;
-}
-
-function isCurrentDetailRead(controller: AbortController, startedGeneration: number,
-  currentGeneration: number): boolean {
-  return !controller.signal.aborted && startedGeneration === currentGeneration;
-}
-
-function isCurrentScopeRead(controller: AbortController, startedRequestId: number,
-  currentRequestId: number): boolean {
-  return !controller.signal.aborted && startedRequestId === currentRequestId;
-}
-
-function scopeHasId(scopeId: string, scope: Scope): boolean {
-  return scope.scopeId === scopeId;
 }
 
 function waitForRetry(seconds: number, resolve: () => void): void {

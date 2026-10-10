@@ -109,7 +109,8 @@
         @if (storeState() === 'editing' || storeState() === 'failed') {
           <label class="fact-entry">Fact
             <textarea rows="5" [value]="storeText()" (input)="storeTextChanged($event)"
-              aria-describedby="store-count store-error"></textarea>
+              aria-describedby="store-count store-error"
+              [attr.aria-invalid]="storeInputError() ? 'true' : null"></textarea>
           </label>
           <p id="store-count" class="store-count">{{ storeBytes() }} / 4,096 bytes</p>
           <label class="store-kind">Kind
@@ -120,7 +121,8 @@
             </select>
           </label>
           <p class="source-readonly"><strong>Source</strong><br />{{ storeSourceLabel() }}</p>
-          <p id="store-error" class="store-error" role="alert">{{ storeError() }}</p>
+          <p id="store-error" class="store-error" role="alert">
+            {{ storeInputError() || storeError() }}</p>
           <div class="store-buttons">
             <button class="store-submit" type="button" [disabled]="!!storeValidation()"
               (click)="saveFact()">Store in this scope</button>

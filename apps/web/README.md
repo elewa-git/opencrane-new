@@ -16,7 +16,7 @@ flowchart LR
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
   web -->|opens| people["People pages<br/>members, groups and owners"]
-  web -->|reads and stores| memory["Memory panel<br/>scopes, facts, sources and receipts"]
+  web -->|reads and stores| memory["Memory panel<br/>scopes, facts, sources and safe receipts"]
 ```
 
 ## What it is responsible for
@@ -79,7 +79,10 @@ flowchart LR
 13. **An Owner transfers ownership.** The website reviews the proposed successor and asks the server to record the transfer. It shows success only after the server confirms it. A lost reply keeps its command reference and offers a read-only status check.
 14. **A person reads memory.** The workspace session panel lists permitted scopes and facts,
     searches and pages through them, and checks each source separately. Scope changes and
-    access loss discard old replies. Memory is not saved in browser storage.
+    access loss discard old replies. A refused write clears the draft and its command too.
+    Changing requester clears the form and ignores replies from the old requester. An
+    unknown write keeps its original command available for a read-only status check.
+    Memory is not saved in browser storage.
 
 ## How to run or test it
 

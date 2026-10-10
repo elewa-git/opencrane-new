@@ -417,19 +417,35 @@ it('clears every store field and pending command when the write is refused', asy
 });
 
 it('clears the store draft and command when the requester changes', async () => {
-  stubReplies(response(200, { scopes: [personalScope()] }),
-    response(200, { scopeId: 'scope', facts: [], returnedCount: 0, nextCursor: null }),
-    response(200, { scopes: [] }));
+  let finishWrite: ((result: Response) => void) | undefined;
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = requestUrl(input);
+    if (url.endsWith('/scopes')) {
+      const scopes = vi.mocked(fetch).mock.calls.length === 1
+        ? [personalScope()] : [];
+      return Promise.resolve(response(200, { scopes }));
+    }
+    if (init?.method === 'POST') {
+      return new Promise<Response>((resolve) => { finishWrite = resolve; });
+    }
+    return Promise.resolve(response(200, { scopeId: 'scope', facts: [], returnedCount: 0,
+      nextCursor: null }));
+  }));
   const fixture = await loadPanel();
   fixture.componentInstance['openStore']();
   fixture.componentInstance['storeText'].set('Another person’s draft');
-  fixture.componentInstance['storeCommandId'].set('mem_pending');
   fixture.componentInstance['storeSource'].set({
     conversationId: 'private-chat', messageId: 'private-message',
   });
+  const pendingWrite = fixture.componentInstance['saveFact']();
+  expect(finishWrite).toBeDefined();
+  fixture.componentRef.setInput('requesterId', 'first-member');
+  fixture.detectChanges();
   fixture.componentRef.setInput('requesterId', 'another-member');
   fixture.detectChanges();
   await fixture.whenStable();
+  finishWrite?.(response(200, { outcome: 'saved' }));
+  await pendingWrite;
   expect(fixture.componentInstance['storeOpen']()).toBe(false);
   expect(fixture.componentInstance['storeText']()).toBe('');
   expect(fixture.componentInstance['storeCommandId']()).toBe('');
