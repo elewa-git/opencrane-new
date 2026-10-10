@@ -1243,26 +1243,36 @@ it('refuses an expired dependency at the command boundary', async function expir
   await setup.runner.run(projection);
 });
 
+async function preparationTurn(body: Awaited<ReturnType<typeof recalledRemember>>) {
+  const turn = 'preparation-turn';
+  const thread = 'preparation-thread';
+  await setup.append('conversation-conversation', 'agent.turn_started', {
+    assistantId: 'assistant', conversationId: 'conversation', turnId: turn });
+  await setup.append('computer-assistant', 'computer.turn_started', {
+    assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+    turnId: turn, threadId: thread, requesterId: 'alice', task: 'chat_turn',
+    payingGroupId: 'personal-default', executionMode: 'restricted' });
+  const { recallProof } = await import('../src/memory/recall-proof.ts');
+  const context = decodeJwt(await signedRemember(body));
+  const changedContext = { ...context, turn, thread };
+  const proofContext = changedContext as import('@opencrane/models').MemoryContext;
+  const dependencies = body.params.arguments.dependsOn;
+  const proof = recallProof(testAuthConfig().cookieSecret, proofContext, dependencies);
+  const argumentsValue = { ...body.params.arguments, recallProof: proof };
+  const changedMetadata = { ...metadata, threadId: thread };
+  const changedBody = { ...body, params: { ...body.params,
+    arguments: argumentsValue, _meta: changedMetadata } };
+  return { body: changedBody, overrides: { turn, thread } };
+}
+
 async function refusesPreparedWrite(change: 'dependency' | 'turn') {
   let body = await recalledRemember(`prepared-${change}`);
   let overrides = {};
   const selectedTurn = change === 'turn' ? 'preparation-turn' : 'turn';
   if (change === 'turn') {
-    await setup.append('conversation-conversation', 'agent.turn_started', {
-      assistantId: 'assistant', conversationId: 'conversation', turnId: selectedTurn });
-    await setup.append('computer-assistant', 'computer.turn_started', {
-      assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
-      turnId: selectedTurn, threadId: 'preparation-thread', requesterId: 'alice', task: 'chat_turn',
-      payingGroupId: 'personal-default', executionMode: 'restricted' });
-    const { recallProof } = await import('../src/memory/recall-proof.ts');
-    const context = decodeJwt(await signedRemember(body));
-    const changedContext = { ...context, turn: selectedTurn, thread: 'preparation-thread' };
-    const proofContext = changedContext as import('@opencrane/models').MemoryContext;
-    const proof = recallProof(testAuthConfig().cookieSecret, proofContext, body.params.arguments.dependsOn);
-    const argumentsValue = { ...body.params.arguments, recallProof: proof };
-    const changedMetadata = { ...metadata, threadId: 'preparation-thread' };
-    body = { ...body, params: { ...body.params, arguments: argumentsValue, _meta: changedMetadata } };
-    overrides = { turn: selectedTurn, thread: 'preparation-thread' };
+    const selected = await preparationTurn(body);
+    body = selected.body;
+    overrides = selected.overrides;
   }
   const dependency = body.params.arguments.dependsOn[0]!;
   const dependencyIdentity = { silo: 'test', ...dependency,

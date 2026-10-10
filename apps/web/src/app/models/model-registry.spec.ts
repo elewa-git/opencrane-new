@@ -6,12 +6,12 @@ import type { ProviderRow } from './provider-api';
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
   configurable: true,
   writable: true,
-  value: function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); },
+  value: openTestDialog,
 });
 Object.defineProperty(HTMLDialogElement.prototype, 'close', {
   configurable: true,
   writable: true,
-  value: function close(this: HTMLDialogElement): void { this.removeAttribute('open'); },
+  value: closeTestDialog,
 });
 
 const taskRouting = { chat_turn: { model: 'gpt-6.1-sol', reason: 'Chat' } };
