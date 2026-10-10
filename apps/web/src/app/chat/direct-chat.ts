@@ -57,6 +57,7 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly colleagues = signal<Colleague[]>([]);
   protected readonly colleague = signal<Colleague | undefined>(undefined);
   protected readonly selectedPeople = signal<Colleague[]>([]);
+  protected readonly audienceReviewed = signal(false);
   protected readonly groupSnapshot = signal<ReviewedSnapshot | undefined>(undefined);
   protected readonly conversations = signal<ChatConversation[]>([]);
   protected readonly selectedConversationId = signal('');
@@ -241,6 +242,7 @@ export class DirectChat implements OnInit, OnDestroy {
     const recipientSend = {
       busy: this.composerBusy(), ready: this.pageState() === 'ready',
       recipient: this.colleague(), people: this.selectedPeople(),
+      audienceReviewed: this.audienceReviewed(),
       snapshot: this.groupSnapshot(), memberId: this.currentMemberId,
       conversationId, isExisting: Boolean(this.selectedConversationId()), text,
     };
@@ -251,15 +253,12 @@ export class DirectChat implements OnInit, OnDestroy {
     this.selectedPeople.set(selection.people);
     this.groupSnapshot.set(selection.snapshot);
     this.colleague.set(undefined);
+    this.audienceReviewed.set(false);
   }
 
   protected recipientLimitExceeded(): boolean {
     if (this.groupSnapshot()) return this.selectedPeople().length > 97;
     return this.selectedPeople().length > 96;
-  }
-
-  protected useSelection(value: Colleague): void {
-    this.selectColleague(value);
   }
 
   protected transcriptScrolled(): void {

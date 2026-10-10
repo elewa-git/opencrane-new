@@ -442,6 +442,89 @@ it('creates two direct chats in one visit with a fresh command for each message'
 
 it('creates group mode for several people only after the first message', createsGroupFromPeople);
 
+async function requiresReviewBeforeSendingToMoreThanThreePeople(): Promise<void> {
+  const api = createFetchFixture();
+  const audience = [
+    { memberId: 'bob', displayName: 'Grace Achieng' },
+    { memberId: 'carol', displayName: 'Chris Njeri' },
+    { memberId: 'dina', displayName: 'Dina Kamau' },
+    { memberId: 'eric', displayName: 'Eric Maina' },
+  ];
+  api.override(function listFourColleagues(request: RequestRecord) {
+    if (request.url.startsWith('/api/chat/colleagues')) {
+      return reply({ rows: audience, next: null });
+    }
+    return undefined;
+  });
+  const fixture = await mount(api);
+  const rootElement = root(fixture);
+  const options = rootElement.querySelectorAll<HTMLButtonElement>('.colleague-option');
+  for (const option of options) option.click();
+  fixture.detectChanges();
+  typeDraft(fixture, 'Hello all four people');
+  enterMessage(fixture, 'Hello all four people');
+  expect(rootElement.querySelector('.review-needed')?.textContent)
+    .toContain('Review everyone who will receive this message before sending.');
+  expect(api.requests.some(isCreatePost)).toBe(false);
+
+  const dialog = rootElement.querySelector<HTMLDialogElement>('.audience-review');
+  if (!dialog) throw new Error('Expected the audience review dialog');
+  Object.defineProperty(dialog, 'showModal', {
+    configurable: true,
+    value: function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); },
+  });
+  Object.defineProperty(dialog, 'close', {
+    configurable: true,
+    value: function close(this: HTMLDialogElement): void { this.removeAttribute('open'); },
+  });
+  rootElement.querySelector<HTMLButtonElement>('.review-audience')?.click();
+  rootElement.querySelector<HTMLButtonElement>('.audience-back')?.click();
+  enterMessage(fixture, 'Hello all four people');
+  await vi.waitFor(() => expect(api.requests.some(isCreatePost)).toBe(true));
+  fixture.destroy();
+}
+
+it('requires a full audience review before sending to more than three people',
+  requiresReviewBeforeSendingToMoreThanThreePeople);
+
+async function keepsPendingGroupRecoveryVisible(): Promise<void> {
+  const api = createFetchFixture();
+  api.override(function groupSnapshotAndLostReply(request: RequestRecord) {
+    if (request.url.startsWith('/api/chat/groups?')) {
+      return reply({ rows: [{ groupId: 'sales', name: 'Sales team' }], next: null });
+    }
+    if (request.url.endsWith('/api/chat/groups/sales')) {
+      return reply({ groupId: 'sales', name: 'Sales team', position: 41,
+        members: [{ memberId: 'bob', displayName: 'Grace Achieng' },
+          { memberId: 'carol', displayName: 'Chris Njeri' }] });
+    }
+    if (request.method === 'POST' && request.url.endsWith('/messages')) {
+      return reply({ status: 'unavailable' }, 503);
+    }
+    return undefined;
+  });
+  const fixture = await mount(api);
+  const rootElement = root(fixture);
+  const groupSelect = rootElement.querySelector<HTMLSelectElement>('#own-group');
+  if (!groupSelect) throw new Error('Expected the group selector');
+  groupSelect.value = 'sales';
+  groupSelect.dispatchEvent(new Event('change', { bubbles: true }));
+  await waitForText(fixture, 'Sales team (2 people, as of now)');
+  enterMessage(fixture, 'Please keep this message');
+  await waitForText(fixture, "couldn't tell whether the message was recorded");
+  const changeGroup = rootElement.querySelector<HTMLButtonElement>('.snapshot-title');
+  expect(changeGroup?.disabled).toBe(true);
+  changeGroup?.click();
+  fixture.detectChanges();
+  expect(rootElement.querySelector('.composer-dock')).not.toBeNull();
+  expect(buttonNamed(fixture, 'Check status').disabled).toBe(false);
+  expect(rootElement.textContent).toContain('Sales team (2 people, as of now)');
+  fixture.destroy();
+}
+
+it('keeps a lost group message recoverable while its reviewed recipients are locked',
+  keepsPendingGroupRecoveryVisible);
+
 async function createsGroupFromPeople(): Promise<void> {
   const api = createFetchFixture();
   const fixture = await mount(api);

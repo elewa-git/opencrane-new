@@ -15,7 +15,8 @@
     @if (snapshot(); as reviewed) {
       <p class="snapshot-note">Group snapshot: later membership changes don’t change this
         conversation’s participants.</p>
-      <button class="snapshot-title" type="button" (click)="clearGroup()">
+      <button class="snapshot-title" type="button" [disabled]="disabled()"
+        (click)="clearGroup()">
         {{ reviewed.name }} ({{ reviewed.members.length }} people, as of now) · Change</button>
     } @else {
       <label class="sr-only" for="colleague-search">Search colleagues</label>
@@ -30,6 +31,12 @@
             <option [value]="group.groupId">{{ group.name }}</option>
           }
         </select>
+        @if (nextGroupPage()) {
+          <button class="load-groups" type="button" [disabled]="loadingMoreGroups()"
+            (click)="loadMoreGroups()">
+            {{ loadingMoreGroups() ? 'Loading more groups…' : 'Load more groups' }}
+          </button>
+        }
       }
     }
     @if (!snapshot()) {
@@ -66,10 +73,32 @@
             }
           </span>
         }
-        @if (people().length > 3) {
-          <span class="more-chip">+ {{ people().length - 3 }} more</span>
-        }
       </div>
+      @if (people().length > 3) {
+        <button #audienceReviewButton class="review-audience" type="button"
+          (click)="openAudienceReview()">
+          Review all {{ people().length }} people
+        </button>
+        @if (requireAudienceReview()) {
+          <p class="review-needed" role="status">
+            Review everyone who will receive this message before sending.
+          </p>
+        }
+        <dialog #audienceDialog class="audience-review" aria-labelledby="audience-title">
+          <header>
+            <h2 id="audience-title" tabindex="-1">Review everyone who will receive this message</h2>
+            <p>{{ people().length }} people</p>
+          </header>
+          <ul aria-label="Message recipients">
+            @for (colleague of people(); track colleague.memberId) {
+              <li>{{ displayName(colleague) }}</li>
+            }
+          </ul>
+          <button class="audience-back" type="button" (click)="closeAudienceReview()">
+            Back to recipients
+          </button>
+        </dialog>
+      }
       @if (snapshot() ? people().length > 97 : people().length > 96) {
         <p class="selection-error" role="alert">
           A conversation can have no more than 97 people, including you.</p>

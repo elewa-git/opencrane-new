@@ -25,11 +25,15 @@ function rootElement(fixture: ComponentFixture<RecipientPicker>): HTMLElement {
   return root;
 }
 
-async function createPicker(): Promise<ComponentFixture<RecipientPicker>> {
+async function createPicker(
+  groupPages: Record<string, { rows: { groupId: string; name: string }[]; next: string | null }>
+    = { first: { rows: [{ groupId: 'sales', name: 'Sales team' }], next: null } },
+): Promise<ComponentFixture<RecipientPicker>> {
   vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
-    const response = requestUrl(input).endsWith('/sales')
+    const url = new URL(requestUrl(input), location.origin);
+    const response = url.pathname.endsWith('/sales')
       ? groupSnapshot()
-      : { rows: [{ groupId: 'sales', name: 'Sales team' }], next: null };
+      : groupPages[url.searchParams.get('after') ?? 'first'];
     return Promise.resolve(new Response(JSON.stringify(response)));
   }));
   await TestBed.configureTestingModule({ imports: [RecipientPicker] }).compileComponents();
@@ -110,6 +114,58 @@ it('shows the saved member count and review position for a group snapshot', asyn
   expect(component.snapshot()?.position).toBe(41);
   expect(root.querySelectorAll('.person-chip button').length).toBe(0);
 });
+
+it('shows every selected person in a keyboard accessible audience review', async () => {
+  const fixture = await createPicker();
+  const root = rootElement(fixture);
+  fixture.componentInstance.people.set(people);
+  fixture.detectChanges();
+  const opener = root.querySelector<HTMLButtonElement>('.review-audience');
+  const dialog = root.querySelector<HTMLDialogElement>('.audience-review');
+  if (!opener || !dialog) throw new Error('Audience review controls are missing');
+  Object.defineProperty(dialog, 'showModal', {
+    configurable: true,
+    value: function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); },
+  });
+  Object.defineProperty(dialog, 'close', {
+    configurable: true,
+    value: function close(this: HTMLDialogElement): void { this.removeAttribute('open'); },
+  });
+  opener.focus();
+  opener.click();
+  fixture.detectChanges();
+  expect(dialog.open).toBe(true);
+  expect(document.activeElement).toBe(dialog.querySelector('h2'));
+  expect(dialog.textContent).toContain('A very long colleague name that must wrap on a phone');
+  const back = dialog.querySelector<HTMLButtonElement>('.audience-back');
+  back?.click();
+  expect(dialog.open).toBe(false);
+  expect(document.activeElement).toBe(opener);
+});
+
+it('loads another group page using the returned cursor', async () => {
+  const firstPage = Array.from({ length: 50 }, makeGroup);
+  const fixture = await createPicker({
+    first: { rows: firstPage, next: 'group-049' },
+    'group-049': { rows: [{ groupId: 'group-050', name: 'Group 51' }], next: null },
+  });
+  const root = rootElement(fixture);
+  await vi.waitFor(() => expect(root.querySelector('.load-groups')).not.toBeNull());
+  const loadMore = root.querySelector<HTMLButtonElement>('.load-groups');
+  if (!loadMore) throw new Error('Load more groups button is missing');
+  loadMore.click();
+  await fixture.whenStable();
+  fixture.detectChanges();
+  expect(root.querySelector('#own-group option[value="group-050"]')?.textContent)
+    .toBe('Group 51');
+  expect(root.querySelector('.load-groups')).toBeNull();
+  const requests = vi.mocked(fetch).mock.calls;
+  expect(requests.some(([input]) => requestUrl(input).includes('after=group-049'))).toBe(true);
+});
+
+function makeGroup(_value: unknown, index: number): { groupId: string; name: string } {
+  return { groupId: `group-${String(index).padStart(3, '0')}`, name: `Group ${index + 1}` };
+}
 
 it('shows an error when a manual audience would exceed the conversation limit', async () => {
   const fixture = await createPicker();

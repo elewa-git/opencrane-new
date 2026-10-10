@@ -77,7 +77,10 @@
           <oc-recipient-picker [colleagues]="colleagues()" [query]="colleagueQuery()"
             [searchState]="colleagueState()"
             [selected]="colleague()" [draft]="!selectedConversationId()"
-            [disabled]="composerBusy()" (queryEdited)="colleagueQueryChanged($event)"
+            [disabled]="composerBusy()"
+            [requireAudienceReview]="selectedPeople().length > 3 && !audienceReviewed()"
+            (audienceReviewOpened)="audienceReviewed.set(true)"
+            (queryEdited)="colleagueQueryChanged($event)"
             (recipientSelected)="selectColleague($event)"
             (recipientChanged)="clearColleague()"
             (selectionChanged)="selectionChanged($event)" />
@@ -114,7 +117,7 @@
     </section>
 
     @if (pageState() === 'ready' && (colleague() || selectedPeople().length > 1
-      || groupSnapshot())) {
+      || groupSnapshot() || pending())) {
       <footer class="composer-dock">
         <div class="send-feedback">
           @if (sendState() === 'applying') {

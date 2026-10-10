@@ -23,16 +23,24 @@ export class RecipientPicker {
   readonly selected = input<Colleague | undefined>();
   readonly draft = input(false);
   readonly disabled = input(false);
+  readonly requireAudienceReview = input(false);
   readonly people = signal<Colleague[]>([]);
   readonly groups = signal<OwnGroup[]>([]);
+  readonly nextGroupPage = signal<string | null>(null);
+  readonly loadingMoreGroups = signal(false);
   readonly snapshot = signal<ReviewedSnapshot | undefined>(undefined);
   readonly selectionError = signal('');
   readonly queryEdited = output<string>();
   readonly recipientSelected = output<Colleague>();
   readonly recipientChanged = output<void>();
   readonly selectionChanged = output<{ people: Colleague[]; snapshot?: ReviewedSnapshot }>();
+  readonly audienceReviewOpened = output<void>();
   private readonly searchField = viewChild<ElementRef<HTMLInputElement>>('searchField');
   private readonly groupSelector = viewChild<ElementRef<HTMLSelectElement>>('groupSelector');
+  private readonly audienceDialog = viewChild<ElementRef<HTMLDialogElement>>('audienceDialog');
+  private readonly audienceReviewButton = viewChild<ElementRef<HTMLButtonElement>>(
+    'audienceReviewButton',
+  );
   private focusSearch = false;
   private focusGroupChoice = false;
 
@@ -42,13 +50,30 @@ export class RecipientPicker {
   }
 
   async loadGroups(): Promise<void> {
+    await this.loadGroupPage();
+  }
+
+  protected async loadMoreGroups(): Promise<void> {
+    if (this.loadingMoreGroups() || !this.nextGroupPage()) return;
+    this.loadingMoreGroups.set(true);
     try {
-      const response = await fetch('/api/chat/groups?limit=50', {
+      await this.loadGroupPage(this.nextGroupPage() ?? undefined);
+    } finally {
+      this.loadingMoreGroups.set(false);
+    }
+  }
+
+  private async loadGroupPage(after?: string): Promise<void> {
+    try {
+      const parameters = new URLSearchParams({ limit: '50' });
+      if (after) parameters.set('after', after);
+      const response = await fetch(`/api/chat/groups?${parameters.toString()}`, {
         headers: { accept: 'application/json' },
       });
       if (!response.ok) throw new Error('Group list unavailable');
       const parsed = chatGroupsSchema.parse(await response.json());
-      this.groups.set(parsed.rows);
+      this.groups.update(appendGroups.bind(null, parsed.rows));
+      this.nextGroupPage.set(parsed.next);
     } catch {
       this.selectionError.set('Your groups could not be loaded. People can still be selected.');
     }
@@ -108,6 +133,7 @@ export class RecipientPicker {
   }
 
   protected clearGroup(): void {
+    if (this.disabled()) return;
     this.snapshot.set(undefined);
     this.people.set([]);
     this.focusGroupChoice = true;
@@ -125,6 +151,7 @@ export class RecipientPicker {
   }
 
   protected change(): void {
+    if (this.disabled()) return;
     this.people.set([]);
     this.snapshot.set(undefined);
     this.recipientChanged.emit();
@@ -137,6 +164,20 @@ export class RecipientPicker {
 
   protected visiblePeople(): Colleague[] {
     return this.people().slice(0, 3);
+  }
+
+  protected openAudienceReview(): void {
+    const dialog = this.audienceDialog()?.nativeElement;
+    if (!dialog) return;
+    dialog.showModal();
+    this.focusAudienceTitle();
+    this.audienceReviewOpened.emit();
+  }
+
+  protected closeAudienceReview(): void {
+    const dialog = this.audienceDialog()?.nativeElement;
+    if (dialog?.open) dialog.close();
+    this.audienceReviewButton()?.nativeElement.focus();
   }
 
   private emitSelection(): void {
@@ -172,6 +213,10 @@ export class RecipientPicker {
   private focusGroupSelector(): void {
     this.groupSelector()?.nativeElement.focus();
   }
+
+  private focusAudienceTitle(): void {
+    this.audienceDialog()?.nativeElement.querySelector('h2')?.focus();
+  }
 }
 
 function isSameMember(memberId: string, colleague: Colleague): boolean {
@@ -192,4 +237,8 @@ function keepDifferentMember(memberId: string, colleague: Colleague): boolean {
 
 function findGroup(groupId: string, group: OwnGroup): boolean {
   return group.groupId === groupId;
+}
+
+function appendGroups(newGroups: OwnGroup[], existingGroups: OwnGroup[]): OwnGroup[] {
+  return [...existingGroups, ...newGroups];
 }

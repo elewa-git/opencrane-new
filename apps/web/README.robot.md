@@ -74,9 +74,13 @@ and transcript, then focuses the access message. The screen subscribes to the
 conversation feed after loading history and resumes from its event position after
 the existing WebSocket service reconnects. Repeated positions are ignored.
 
-The recipient picker shows up to three chips and a count for the remaining people.
-The chips wrap at phone width, and each remove button has a 44px target. A group
-snapshot cannot be edited in place; choosing it again reads a fresh snapshot. A blank
+The recipient picker shows up to three chips. When more people are selected, Review all
+opens a full-screen native dialog with every recipient. The dialog starts focus on its
+heading. Back to recipients closes it and returns focus to its opener. The chips wrap at
+phone width, and each remove button has a 44px target. Group choices load in pages of 50
+using the server's `next` cursor. A selection of more than three people cannot be sent
+until the full audience has been opened for review. A group snapshot cannot be edited in
+place; choosing it again reads a fresh snapshot. A blank
 search says when no people match, and group-list failure leaves colleague selection
 available. Choose an assistant opens the existing private-session picker. If people
 are already selected, the picker refuses that choice and keeps the draft.

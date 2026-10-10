@@ -35,6 +35,7 @@ type RecipientSend = {
   ready: boolean;
   recipient: Colleague | undefined;
   people: Colleague[];
+  audienceReviewed: boolean;
   snapshot: ReviewedSnapshot | undefined;
   memberId: string;
   conversationId: string;
@@ -186,6 +187,10 @@ export class DirectChatSending {
 
   async sendToRecipients(input: RecipientSend): Promise<void> {
     if (input.busy || !input.ready || !input.text.trim()) return;
+    if (requiresAudienceReview(input)) {
+      this.screen.status.set('Review everyone who will receive this message before sending.');
+      return;
+    }
     if (!input.recipient && input.people.length === 0) return;
     if (input.isExisting) {
       if (input.recipient) {
@@ -383,6 +388,10 @@ export class DirectChatSending {
   }
 
 
+}
+
+function requiresAudienceReview(input: RecipientSend): boolean {
+  return !input.isExisting && input.people.length > 3 && !input.audienceReviewed;
 }
 
 function uniqueMemberIds(memberId: string, people: Colleague[]): string[] {

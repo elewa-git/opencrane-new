@@ -29,6 +29,9 @@ flowchart LR
   Direct chats send human text and never start assistant work.
 - Lets someone choose several colleagues for a group chat, or review the current members
   of one of their groups. Human chats never start assistant work.
+- Shows every selected recipient in a full-screen review. Groups larger than three need
+  that review before the first message can be sent. Message recovery stays on screen while
+  the first send is unresolved.
 - Shows live tool updates, reviewed approvals and sanitised tool details. It also
   shows uploaded files and the assistant's desktop.
 - Gives admins pages for People & groups at `/org/people`,
