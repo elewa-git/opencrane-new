@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
 import { sendFile } from '../files/delivery.ts';
-import { fileCommand } from '../files/commands.ts';
+import { ownConversation, fileCommand } from '../files/commands.ts';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, type RawData } from 'ws';
@@ -73,32 +73,40 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
       acknowledgement.refused = error.message;
     }
     if (status === 'started' && binding) {
-      try {
-        const privateHistory = await privateContextFor(options, report, binding);
-        if (!tokens) throw new Error('Turn issuer unavailable');
-        const fresh = await requireTurnMember(
-          options.store, options.silo, binding.requesterId);
-        const credentials = computerCredentials(options.store, tokens, options.silo);
-        const turn = { ...binding, assistantId: input.assistantId,
-          model: binding.model ?? modelForTask(binding.task) };
-        const grant = await credentials.turn(turn);
-        await fresh();
-        acknowledgement.model = turn.model;
-        acknowledgement.token = grant.value;
-        acknowledgement.expiresAt = grant.expiresAt;
-        if (privateHistory !== undefined) acknowledgement.context = privateHistory;
-      } catch (error) {
-        if (error instanceof TurnAdmissionRejected) {
-          acknowledgement.refused = error.message;
-        } else {
-          if (!(error instanceof PrivateContextUnavailable)) throw error;
-          await turnCommand(options.store, context, { ...report, status: 'failed' });
-          acknowledgement.refused = 'Private context unavailable';
-        }
-      }
+      await releaseTurnCredentials(options, context, tokens, report, binding, acknowledgement);
     }
   }
   if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(acknowledgement));
+}
+
+async function releaseTurnCredentials(options: BridgeOptions,
+  context: Parameters<typeof turnCommand>[1],
+  tokens: Tokens | undefined, report: z.infer<typeof reportDetails>,
+  binding: NonNullable<Awaited<ReturnType<typeof turnCommand>>>,
+  acknowledgement: { token?: string; expiresAt?: number; model?: string;
+    refused?: string; context?: unknown }) {
+  try {
+    const privateHistory = await privateContextFor(options, report, binding);
+    if (!tokens) throw new Error('Turn issuer unavailable');
+    const fresh = await requireTurnMember(options.store, options.silo, binding.requesterId);
+    const credentials = computerCredentials(options.store, tokens, options.silo);
+    const turn = { ...binding, assistantId: context.assistantId,
+      model: binding.model ?? modelForTask(binding.task) };
+    const grant = await credentials.turn(turn);
+    await fresh();
+    acknowledgement.model = turn.model;
+    acknowledgement.token = grant.value;
+    acknowledgement.expiresAt = grant.expiresAt;
+    if (privateHistory !== undefined) acknowledgement.context = privateHistory;
+  } catch (error) {
+    if (error instanceof TurnAdmissionRejected) {
+      acknowledgement.refused = error.message;
+      return;
+    }
+    if (!(error instanceof PrivateContextUnavailable)) throw error;
+    await turnCommand(options.store, context, { ...report, status: 'failed' });
+    acknowledgement.refused = 'Private context unavailable';
+  }
 }
 
 class PrivateContextUnavailable extends Error {}
@@ -142,6 +150,7 @@ async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: W
   if (bytes.length !== file.size || digest !== file.sha256) {
     throw new Error('Stored file digest mismatch');
   }
+  await ownConversation(options.store, options.silo, file.conversationId, file.uploadedBy, true);
   const outcome = await sendFile(socket, file, bytes);
   const data = { conversationId: file.conversationId, fileId: file.fileId,
     computerId: input.computerId, sha256: file.sha256, outcome };
