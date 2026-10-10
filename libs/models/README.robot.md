@@ -1104,3 +1104,36 @@ Logs: `/tmp/p4-22-pr4d-restack-tests.log`,
 NOT RUN: full root suite, another full root lint on this restacked branch,
 paid calls, independent review and fresh-install migration qualification.
 The base branch's full lint passed before the restack.
+
+## Checks after the settlement correction
+
+Date: 10 October 2026. Source: `ed645fb6cd922f5421b4a0a279f02fa9d8b31bb7`.
+Replayed only this branch's seven commits from `c38546b3` onto `00da8fde`
+from `work/p4-22-pr4c`. The rebase finished. Compared the old and new commit
+ranges: the drain code is unchanged. Conflict resolutions keep main's approval
+notes, the parent's settlement tests and this branch's drain tests.
+
+The actor and its tests match the fixed parent. Both authority files match main
+and are unchanged. Holds saved before switch-on can settle, release or expire on
+the same actor. Draining still records no budget event and leaves running calls
+on their original path.
+
+Environment: Linux, Node 22.23.3, local worktree; disposable NATS and OpenFGA,
+PostgreSQL at `127.0.0.1:55432` and a recording gateway. This is not a fresh install.
+Tests set the documented test-only `PG_TEST_URL`, use `nice -n 10` and one worker.
+The event catalogue check passes with 104 types.
+PASS: one six-file batch passed all 69 tests. It ran all three changed test files,
+both unchanged authority files and `libs/event-store/test/history-checked.test.ts`.
+The 100,000-event authority guard and the switch-on settlement races passed.
+PASS: root typecheck.
+PASS: full root lint, Knip and changelog checks. Lint reports 15 existing warnings
+and no errors. No production code changed after these checks.
+
+Logs: `/tmp/p4-22-pr4d-settlement-restack-tests.log`,
+`/tmp/p4-22-pr4d-settlement-restack-lint.log`,
+`/tmp/p4-22-pr4d-settlement-restack-typecheck.log` and
+`/tmp/p4-22-pr4d-settlement-restack-events.log`.
+
+NOT RUN: full root suite, paid calls, fresh-install managed-provider qualification
+and another independent review. The switch-on command and managed gateway remain
+unfinished.
