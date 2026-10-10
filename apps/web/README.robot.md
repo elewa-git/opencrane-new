@@ -81,8 +81,9 @@ does not claim delivery. Group messages are plain text, including literal `@agen
 the group transcript has no assistant controls. Direct and group drafts stay with the
 conversation where they were typed. A 403 reply to a message clears the transcript,
 drafts, people and pending messages. On a phone, the screen closes the conversation menu
-and focuses the unavailable notice. A missing or removed conversation link shows the
-unavailable state. Late replies cannot restore cleared content.
+and focuses the unavailable notice. A missing or removed conversation link says the
+chat was not found and leaves the authorised chat list available. Selecting a listed chat
+opens it from that state. Late replies cannot restore cleared content.
 
 The recipient picker shows up to three chips. When more people are selected, Review all
 opens a full-screen native dialog with every recipient. The dialog starts focus on its

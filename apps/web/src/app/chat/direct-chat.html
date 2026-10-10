@@ -38,7 +38,7 @@
         [disabled]="composerBusy()" (click)="openNavigation()">☰</button>
       <a class="back-link" href="/workspace" aria-label="Back to workspace">‹</a>
       <h1 tabindex="-1" #accessHeading>
-        @if (pageState() === 'access_changed') { Unavailable }
+        @if (pageState() === 'access_changed' || pageState() === 'not_found') { Unavailable }
         @else if (selectedConversationId()) { {{ selectedConversationTitle() }} }
         @else { New conversation }
       </h1>
@@ -70,6 +70,9 @@
           <oc-shared-state kind="access_changed" message="You no longer have access"
             detail="Transcript, drafts and names were cleared. Late results will not appear."
             [showAction]="false" />
+        } @else if (pageState() === 'not_found') {
+          <oc-shared-state kind="failed" message="Conversation not found or unavailable"
+            detail="Choose a conversation from the list to continue." [showAction]="false" />
         } @else if (pageState() === 'failed') {
           <oc-shared-state kind="failed" message="Direct conversations are unavailable right now"
             detail="Reading again is safe." [showAction]="false" />

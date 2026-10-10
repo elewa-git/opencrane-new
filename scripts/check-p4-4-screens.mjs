@@ -8,9 +8,11 @@ const output = resolve('docs/process/p4-4-screens');
 const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://p4-4-screens.opencrane.test';
 const widths = [1280, 390, 320];
+const missingLinkOnly = process.argv.includes('--missing-link-only');
 const frames = [
   'THR-05', 'THR-10', 'THR-11', 'THR-16', 'directory', 'no-match',
   'directory-loading', 'first-load-failed', 'refresh-failed', 'sending', 'send-failed',
+  'missing-link',
   'lost-create', 'access-applying', 'missing-message', 'missing-create', 'literal-agent',
   'long-chat', 'waiting-access',
   'permissions-ready',
@@ -199,8 +201,24 @@ async function openPage(browser, width, reducedMotion, requestedState) {
   await page.emulateMedia({ reducedMotion: reducedMotion ? 'reduce' : 'no-preference' });
   await page.route('**/*', serveAssets);
   await page.routeWebSocket('**/ws', attachConversationFeed);
-  const response = await page.goto(`${origin}/workspace/direct`);
+  const address = requestedState === 'missing-link'
+    ? `${origin}/workspace/direct?conversation=removed-group`
+    : `${origin}/workspace/direct`;
+  const response = await page.goto(address);
   assert.equal(response?.status(), 200, 'the direct chat route should load');
+  if (requestedState === 'missing-link') {
+    await page.getByText('Conversation not found or unavailable').waitFor();
+    if (width <= 700) {
+      await page.getByRole('button', { name: 'Open direct conversations' }).click();
+    }
+    await page.getByRole('button', { name: 'Grace Achieng', exact: true }).waitFor();
+    assert.equal(await page.locator('.conversation-row:visible').count(), 1,
+      'the available conversation can be opened from the missing-link state');
+    if (width <= 700) {
+      await page.getByRole('button', { name: 'Close navigation' }).click();
+    }
+    return page;
+  }
   if (requestedState === 'first-load-failed') {
     await page.getByRole('button', { name: 'Try again' }).waitFor();
     return page;
@@ -264,6 +282,10 @@ async function captureState(browser, frame, width, reducedMotion) {
     }
   }
   const page = await openPage(browser, width, reducedMotion, frame);
+  if (frame === 'missing-link') {
+    assert.equal(await page.getByText('You no longer have access').count(), 0,
+      'a missing link must not look like revoked access');
+  }
   if (frame === 'THR-11') {
     loseNextMessageReply = true;
     await page.getByRole('textbox', { name: 'Message' }).fill('Also, can you share the PDF?');
@@ -388,9 +410,11 @@ async function main() {
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   try {
-    for (const width of widths) {
+    const captureWidths = widths;
+    const captureFrames = missingLinkOnly ? ['missing-link'] : frames;
+    for (const width of captureWidths) {
       for (const reducedMotion of [false, true]) {
-        for (const frame of frames) {
+        for (const frame of captureFrames) {
           await captureState(browser, frame, width, reducedMotion);
         }
       }
@@ -400,14 +424,16 @@ async function main() {
   }
   assert.equal(requestCounts.turns, 0, 'direct messages must not request turns');
   assert.equal(requestCounts.models, 0, 'direct messages must not request models');
-  const receipt = {
-    date: new Date().toISOString(),
-    result: 'PASS',
-    note: 'Sample browser data only; this does not qualify a fresh installation.',
-    captures,
-    requestCounts,
-  };
-  await writeFile(resolve(output, 'visual.json'), `${JSON.stringify(receipt, null, 2)}\n`);
+  if (!missingLinkOnly) {
+    const receipt = {
+      date: new Date().toISOString(),
+      result: 'PASS',
+      note: 'Sample browser data only; this does not qualify a fresh installation.',
+      captures,
+      requestCounts,
+    };
+    await writeFile(resolve(output, 'visual.json'), `${JSON.stringify(receipt, null, 2)}\n`);
+  }
   process.stdout.write(`PASS ${captures.length} screenshots; no turn or model requests\n`);
 }
 

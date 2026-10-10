@@ -26,7 +26,7 @@ import {
   type DirectFailure,
 } from './direct-chat-api';
 
-type PageState = 'loading' | 'ready' | 'failed' | 'access_changed';
+type PageState = 'loading' | 'ready' | 'failed' | 'not_found' | 'access_changed';
 type ReadState = 'idle' | 'loading' | 'ready' | 'failed';
 
 
@@ -149,8 +149,10 @@ export class DirectChat implements OnInit, OnDestroy {
     if (requestedId) {
       const requestedConversation = directConversationById(this.conversations(), requestedId);
       if (!requestedConversation) {
-        this.pageState.set('failed');
-        this.pageError.set('Direct conversations are unavailable right now.');
+        this.pageState.set('not_found');
+        this.selectedConversationId.set('');
+        updateDirectConversationAddress('');
+        this.pageError.set('That conversation was not found or is unavailable.');
         this.statusText.set(this.pageError());
         return;
       }
@@ -239,6 +241,7 @@ export class DirectChat implements OnInit, OnDestroy {
       this.clearConversationView();
     }
     this.selectedConversationId.set(conversationId);
+    this.pageState.set('ready');
     if (changed) this.restoreDraft();
     updateDirectConversationAddress(conversationId);
     this.pageError.set('');

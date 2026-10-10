@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-10T05:21:53.851Z",
+  "date": "2026-10-10T09:07:35.881Z",
   "result": "PASS",
   "note": "Sample browser data only; this does not qualify a fresh installation.",
   "captures": [
@@ -68,6 +68,12 @@
       "width": 1280,
       "reducedMotion": false,
       "file": "send-failed-1280-normal.png"
+    },
+    {
+      "frame": "missing-link",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "missing-link-1280-normal.png"
     },
     {
       "frame": "lost-create",
@@ -184,6 +190,12 @@
       "file": "send-failed-1280-reduced.png"
     },
     {
+      "frame": "missing-link",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "missing-link-1280-reduced.png"
+    },
+    {
       "frame": "lost-create",
       "width": 1280,
       "reducedMotion": true,
@@ -296,6 +308,12 @@
       "width": 390,
       "reducedMotion": false,
       "file": "send-failed-390-normal.png"
+    },
+    {
+      "frame": "missing-link",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "missing-link-390-normal.png"
     },
     {
       "frame": "lost-create",
@@ -412,6 +430,12 @@
       "file": "send-failed-390-reduced.png"
     },
     {
+      "frame": "missing-link",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "missing-link-390-reduced.png"
+    },
+    {
       "frame": "lost-create",
       "width": 390,
       "reducedMotion": true,
@@ -526,6 +550,12 @@
       "file": "send-failed-320-normal.png"
     },
     {
+      "frame": "missing-link",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "missing-link-320-normal.png"
+    },
+    {
       "frame": "lost-create",
       "width": 320,
       "reducedMotion": false,
@@ -638,6 +668,12 @@
       "width": 320,
       "reducedMotion": true,
       "file": "send-failed-320-reduced.png"
+    },
+    {
+      "frame": "missing-link",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "missing-link-320-reduced.png"
     },
     {
       "frame": "lost-create",

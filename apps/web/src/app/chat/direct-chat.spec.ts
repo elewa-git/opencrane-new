@@ -1008,10 +1008,22 @@ it('keeps first-load retry focus and avoids false empty-list messages', keepsFir
 async function showsUnavailableForMissingRequestedConversation(): Promise<void> {
   const api = createFetchFixture();
   const fixture = await mountWithoutReady(api, 'removed-group');
-  await waitForText(fixture, 'Direct conversations are unavailable right now');
-  expect(root(fixture).querySelector('h1')?.textContent).toContain('New conversation');
+  await waitForText(fixture, 'Conversation not found or unavailable');
+  expect(root(fixture).querySelector('h1')?.textContent).toContain('Unavailable');
+  expect(root(fixture).textContent).not.toContain('You no longer have access');
+  expect(root(fixture).textContent).not.toContain('Loading direct conversations');
+  const availableConversation = root(fixture).querySelector<HTMLButtonElement>(
+    '.rail .conversation-row',
+  );
+  expect(availableConversation?.textContent).toContain('Grace Achieng');
+  expect(availableConversation).not.toBeNull();
   expect(root(fixture).querySelector('textarea')).toBeNull();
   expect(api.sockets).toHaveLength(0);
+
+  availableConversation?.click();
+  await waitForText(fixture, 'Is the Tuesday slot still open?');
+  expect(root(fixture).textContent).not.toContain('Conversation not found or unavailable');
+  expect(root(fixture).querySelector('textarea')).not.toBeNull();
   fixture.destroy();
 }
 
