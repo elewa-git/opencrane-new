@@ -1460,3 +1460,10 @@ passed 271 tests twice with `PG_TEST_URL` set. After the lint corrections, the f
 changed memory files passed 99 tests twice. Web tests passed 589 tests, and the existing
 chat fixture produced 24 captures. The receipt records source checks, initial failures
 and the remaining live qualification. No full root suite ran.
+
+## Shared child records
+
+The participation reader recognises shared-child initial joins and returns a separate
+`historyPosition` from child creation. `joinPosition` and `joinEventId` remain authority facts.
+Effective inherited access and public child commands are later work. No child emitter exists.
+`test/shared-child.test.ts` checks real NATS/PostgreSQL/OpenFGA replay and delayed creation.

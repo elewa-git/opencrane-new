@@ -1,5 +1,6 @@
 import { optionalProviderTurnBindingSchema } from './turn-binding.ts';
-import { groupConversationSchema } from './conversation.ts';
+import { groupConversationSchema, sharedChildConversationSchema,
+  childParticipantAddedSchema, childParticipantRemovedSchema } from './conversation.ts';
 import { isToolCallText } from './tool-call.ts';
 // Data schemas for every event type in the registry except the four
 // examples in examples.ts. Each is built from what docs/architecture/events.md
@@ -271,6 +272,7 @@ export function hasDirectParticipants(data: { createdBy: string; participantIds:
 // Missing mode belongs only to legacy assistant sessions. New human records are explicit.
 export const conversationCreatedDataSchema = z.union([
   groupConversationSchema,
+  sharedChildConversationSchema,
   z.object({
     conversationId: id, assistantId: id, createdBy: id,
     mode: z.literal('agent_session').default('agent_session'), payingGroupId: id.optional(),
@@ -281,13 +283,27 @@ export const conversationCreatedDataSchema = z.union([
   }).strict().refine(hasDirectParticipants, 'Direct conversations require two distinct people'),
 ]);
 
-export const participantAddedDataSchema = z
-  .object({ conversationId: id, participantId: id, addedBy: id })
-  .strict();
+type ConversationCreation = z.infer<typeof conversationCreatedDataSchema>;
+export function conversationParticipantIds(created: ConversationCreation): string[] {
+  if ('contextKind' in created) {
+    function participantId(join: { participantId: string }) {
+      return join.participantId;
+    }
+    return created.initialJoins.map(participantId);
+  }
+  if (created.mode === 'agent_session') return [created.createdBy];
+  return created.participantIds;
+}
 
-export const participantRemovedDataSchema = z
-  .object({ conversationId: id, participantId: id, removedBy: id })
-  .strict();
+export const participantAddedDataSchema = z.union([
+  z.object({ conversationId: id, participantId: id, addedBy: id }).strict(),
+  childParticipantAddedSchema,
+]);
+
+export const participantRemovedDataSchema = z.union([
+  z.object({ conversationId: id, participantId: id, removedBy: id }).strict(),
+  childParticipantRemovedSchema,
+]);
 
 export const agentTurnStartedDataSchema = z
   .object({ conversationId: id, turnId: id, assistantId: id, threadId: id.optional(),

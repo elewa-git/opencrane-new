@@ -352,7 +352,9 @@ const RISKY_FIELD_NAME = new RegExp(
 // The risky-looking names that are approved: encrypted text and its key id, a
 // secret reference, and a message's id. Any `...Digest` is approved too (a
 // hash of a value, not the value). Matching is exact, so `Ciphertext` is not.
-const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'secretRef', 'messageId', 'tokenId', 'commandId', 'inputTokens', 'outputTokens', 'cachedInputTokens', 'cacheWriteTokens']);
+// Allow child context's fixed label and source message id; child tests check their shapes.
+const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'secretRef', 'messageId', 'tokenId', 'commandId', 'inputTokens', 'outputTokens', 'cachedInputTokens', 'cacheWriteTokens',
+  'contextKind', 'sourceMessageId']);
 
 // Declared field names, at any depth, that are risky and not approved. This is a
 // net for accidents, not proof: a field with an innocent name still passes by

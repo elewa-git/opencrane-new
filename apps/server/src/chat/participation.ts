@@ -1,4 +1,5 @@
-import { conversationCreatedDataSchema, conversationEventId } from '@opencrane/events';
+import { conversationParticipation, conversationHistoryPosition } from '@opencrane/models';
+import { conversationEventId } from '@opencrane/events';
 import { readStreamSummary, WrongSiloError, type EventStore, type StoredEvent, type SummaryKind }
   from '@opencrane/event-store';
 import type { Query } from '@opencrane/projections';
@@ -112,11 +113,7 @@ export async function participation(store: Pick<EventStore, 'readStream'>,
   silo: string, conversationId: string, memberId: string,
   legacy: StoredEvent[] | Changes = [], deadline = performance.now() + 2000) {
   const creation = await participationCreation(store, silo, conversationId, deadline);
-  const created = conversationCreatedDataSchema.parse(creation.event.data);
-  const joins = new Map<string, StoredEvent>();
-  let initial = [created.createdBy];
-  if (created.mode !== 'agent_session') initial = created.participantIds;
-  for (const participantId of initial) joins.set(participantId, creation);
+  const { created, joins } = conversationParticipation(creation);
   const changes = legacyChanges(legacy, silo, conversationId);
   const current = await participationChanges(store, silo, conversationId, deadline);
   const legacyPosition = applyChanges(joins, changes, conversationId);
@@ -129,7 +126,8 @@ export async function participation(store: Pick<EventStore, 'readStream'>,
     if (currentJoin.event.id !== creation.event.id) authorityRows.push(currentJoin);
   }
   return { created, creation, participantIds: [...joins.keys()], joinPosition: join.sequence,
-    joinEventId: join.event.id, accessPosition, authorityRows };
+    joinEventId: join.event.id, historyPosition: conversationHistoryPosition(creation, join),
+    accessPosition, authorityRows };
 }
 
 function applyChanges(joins: Map<string, StoredEvent>, changes: Changes,

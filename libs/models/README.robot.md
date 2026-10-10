@@ -942,3 +942,9 @@ The server calls it before the conditional append, with the capability's origina
 It watches small access streams and checks later turn activity separately. It does not add
 conversation or memory-content streams to the access snapshot. The server's signed recalled
 references and command checks are described in `apps/server/README.robot.md`.
+
+## Shared child records
+
+`conversationParticipation` builds initial joins from a parsed creation record.
+`conversationHistoryPosition` returns child creation for shared history and the current
+join for other chats. Authority still uses the current join. Neither helper reads history.

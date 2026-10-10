@@ -178,3 +178,9 @@ worker retries the job; exhausted retries use its existing dead-letter repair pr
 Rebuilds apply events in saved order and need no such wait. `test/role-order.test.ts`
 covers both saved orders and both delivery orders, retries, repeated delivery and full
 tuple/receipt comparison against replay.
+
+## Shared child records
+
+Shared-child creation writes explicit person participants, creator, silo and receipt
+in the existing atomic write. It adds no parent, group or resource relationships.
+Delayed creation uses the existing per-person removal guard; replay gives identical tuples.

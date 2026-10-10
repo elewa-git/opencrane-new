@@ -3,7 +3,8 @@ import { createLogger } from '@opencrane/observability';
 import { supersededEvent, removedParticipant, ownerAtTransfer,
   memberEventBeforeOwnershipSeed, requireEarlierRoleChanges } from './backfill.ts';
 import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
-  ownershipSteppedDownSchema, conversationCreatedDataSchema, conversationEventId,
+  ownershipSteppedDownSchema, conversationParticipantIds, conversationCreatedDataSchema,
+  conversationEventId,
   grantRevokedDataSchema, handlerSubscriptions, parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { registerHandler } from "@opencrane/handlers";
 import { objectId, TupleClient, type Binding, type Tuple } from "./client.ts";
@@ -80,9 +81,8 @@ function createMemberAuthorisation(binding: Binding,
     let creatorId: string | undefined;
     if (event.type === 'conversation.created') {
       const created = conversationCreatedDataSchema.parse(event.data);
-      participantIds = [created.createdBy];
-      if (created.mode !== 'agent_session') participantIds = created.participantIds;
-      if (created.mode === 'group') creatorId = created.createdBy;
+      participantIds = conversationParticipantIds(created);
+      if (created.mode === 'group' || 'contextKind' in created) creatorId = created.createdBy;
     } else {
       participantIds = [field(event.data, 'participantId')];
     }

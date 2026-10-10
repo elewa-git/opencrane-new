@@ -34,3 +34,5 @@ export { providerBindingCommand, providerDependencies, providerDefaultHandler } 
 
 export { parseMemoryRequest } from './mcp.ts';
 export { MemoryPersonScopeOnly, memoryRights, verifyMemoryContext, type MemoryContext } from './memory-context.ts';
+
+export { conversationParticipation, conversationHistoryPosition } from './conversation.ts';

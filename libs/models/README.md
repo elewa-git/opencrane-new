@@ -10,7 +10,7 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes and spending| models["libs/models<br/>AI access and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes and spending| models["libs/models<br/>AI rules and child joins"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
@@ -21,6 +21,8 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+- Build recorded child participation and keep its history start separate from each join.
 
 - Records verified tool dispatch outcomes and link attempts of the same call.
   Allows one unchanged retry after a recorded failure before dispatch.
