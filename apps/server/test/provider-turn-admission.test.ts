@@ -210,3 +210,14 @@ async function resumesAfterRecordedCancellation() {
   expect(await turnCommand(nats.store, context, input)).not.toHaveProperty('providerId');
 }
 it('admits legacy work after a recorded cancellation', resumesAfterRecordedCancellation);
+
+async function switchOnEndsDrain() {
+  await setup();
+  const bindingSequence = await choice('assistant');
+  await setDrain(true);
+  await switchOn();
+  expect(await turnCommand(nats.store, context, input)).toMatchObject({
+    providerId: 'primary', bindingSequence, model: 'gpt-6-luna',
+  });
+}
+it('ends draining when the recorded switch-on event is replayed', switchOnEndsDrain);

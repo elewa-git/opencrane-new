@@ -1,14 +1,14 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { pgDb, providers, ProjectionRunner, rebuildProviderProjection } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import type { EventEnvelope } from '@opencrane/events';
 import { providerSecretRef } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+afterEach(vi.restoreAllMocks);
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -79,8 +79,10 @@ afterAll(close);
 function request(method: 'GET' | 'POST', providerId = 'primary', payload?: unknown,
   sub = 'owner', origin = 'https://app.example.test', orgId = 'org-acme', suffix = 'drain') {
   const session = { sub, orgId, roles: ['owner'], authTime: 1, exp: 2000000000 };
-  const headers = { origin, 'content-type': 'application/json', cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  const options = { method, url: `/api/org/providers/${providerId}/${suffix}`, headers, ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }) };
+  const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
+  const headers = { origin, 'content-type': 'application/json', cookie };
+  const options = { method, url: `/api/org/providers/${providerId}/${suffix}`, headers,
+    ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }) };
   return app.inject(options);
 }
 async function input(action = 'start', overrides: Record<string, unknown> = {}) {
@@ -102,6 +104,7 @@ async function recordsAndRecovers() {
   const position = await nats.store.head();
   expect((await request('GET')).json()).toMatchObject({ draining: true, enabled: false });
   expect((await request('POST', 'primary', command)).json()).toEqual(saved.json());
+  expect((await request('POST', 'primary', command, 'admin')).statusCode).toBe(409);
   const status = await request('GET', 'primary', undefined, 'owner',
     'https://app.example.test', 'org-acme', `changes/${command.commandId}`);
   expect(status.statusCode).toBe(200);
@@ -135,7 +138,7 @@ async function refuses(overrides: Record<string, unknown>, code: number) {
 }
 it.each([
   [{ expectedRevision: 2 }, 409], [{ expectedProviderSequence: 0 }, 409],
-  [{ expectedDrainSequence: 0 }, 409], [{ action: 'cancel' }, 409],
+  [{ expectedDrainSequence: 999999 }, 409], [{ action: 'cancel' }, 409],
   [{ action: 'enable' }, 400], [{ silo: 'foreign' }, 400],
 ] as const)('refuses a stale or invalid drain change %j', refuses);
 
@@ -153,6 +156,45 @@ it.each([
   ['owner', 'https://app.example.test', 'org-acme', 'unapplied'],
   ['owner', 'https://app.example.test', 'org-acme', 'foreign'],
 ])('checks current authority, Origin and the connection receipt', denied);
+
+async function recoversLostAppendReply() {
+  const command = await input();
+  const before = await nats.store.head();
+  const appendOriginal = nats.store.append.bind(nats.store);
+  async function loseReply(request: Parameters<typeof appendOriginal>[0]): Promise<never> {
+    await appendOriginal(request);
+    throw new Error('Test lost append reply');
+  }
+  const fault = vi.spyOn(nats.store, 'append');
+  fault.mockImplementationOnce(loseReply);
+  expect((await request('POST', 'primary', command)).statusCode).toBe(503);
+  expect(await nats.store.head()).toBe(before + 1);
+  expect((await request('POST', 'primary', command)).statusCode).toBe(200);
+  expect(await nats.store.head()).toBe(before + 1);
+  const cancel = await input('cancel');
+  expect((await request('POST', 'primary', cancel)).statusCode).toBe(200);
+}
+it('recovers a saved drain after the append reply is lost without another append',
+  recoversLostAppendReply);
+
+async function concurrentStarts() {
+  const primary = await input();
+  const secondary = { ...primary, commandId: `drain-${++counter}` };
+  const before = await nats.store.head();
+  const responses = await Promise.all([
+    request('POST', 'primary', primary), request('POST', 'secondary', secondary),
+  ]);
+  function status(response: (typeof responses)[number]) {
+    return response.statusCode;
+  }
+  const statuses = responses.map(status);
+  statuses.sort();
+  expect(statuses).toEqual([200, 409]);
+  expect(await nats.store.head()).toBe(before + 1);
+  const cancel = await input('cancel');
+  expect((await request('POST', 'primary', cancel)).statusCode).toBe(200);
+}
+it('orders concurrent drain starts across different provider connections', concurrentStarts);
 
 async function refusesSilentRollback() {
   const data = { providerId: 'primary', revision: 3, changedBy: 'owner',
