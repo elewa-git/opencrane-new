@@ -5,7 +5,9 @@ import { BudgetActor, budgetSummary, envelope, history, priceTableId } from '../
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let actor: BudgetActor;
 let clock: Date;
-function now() { return clock; }
+function now() {
+  return clock;
+}
 function call(turnId: string, payingGroupId = 'group', assistantId = 'assistant') {
   return {
     model: 'gpt-6-luna', priceTableId, computerId: 'computer', assistantId,
@@ -19,7 +21,9 @@ async function initialise() {
   actor = new BudgetActor(nats.store, 'test', now);
   await actor.start(100, 100, 'group');
 }
-async function close() { await nats.close(); }
+async function close() {
+  await nats.close();
+}
 beforeEach(initialise);
 afterEach(close);
 const scopes = ['global', 'paying_group', 'assistant', 'daily'] as const;
@@ -54,27 +58,19 @@ async function stopsOnlyAffectedScope(scope: Scope) {
     scope: scope === 'daily' ? 'global' : scope,
     kind: scope === 'daily' ? 'daily' : 'monthly', ceilingCents: 10,
     settledCents: 0, reservedCents: 5, attemptedBoundCents: 6,
-    periodStart: '2026-10-01T00:00:00.000Z', resetAt: '2026-11-01T00:00:00.000Z',
+    periodStart: scope === 'daily' ? '2026-10-10T00:00:00.000Z' : '2026-10-01T00:00:00.000Z',
+    resetAt: scope === 'daily' ? '2026-10-11T00:00:00.000Z' : '2026-11-01T00:00:00.000Z',
   } ] } ] });
 }
-// Daily reasons reset at midnight, rather than at the start of the month.
-async function isolates(scope: Scope) {
-  if (scope !== 'daily') return stopsOnlyAffectedScope(scope);
-  await limit(scope, 10);
-  await actor.reserve(call('old'), 5);
-  await expect(actor.reserve(call('refused'), 6)).rejects.toThrow('spending cap');
-  await expect(actor.reserve(call('small', 'other-group', 'other-assistant'), 1))
-    .rejects.toThrow('spending cap');
-  expect(budgetSummary(actor.state, clock)).toMatchObject({ stops: [ { reasons: [ {
-    kind: 'daily', periodStart: '2026-10-10T00:00:00.000Z',
-    resetAt: '2026-10-11T00:00:00.000Z',
-  } ] } ] });
-}
-it.each(scopes)('keeps a refused %s limit stopped and isolates other scopes', isolates);
+it.each(scopes)('keeps a refused %s limit stopped and isolates other scopes',
+  stopsOnlyAffectedScope);
 
-async function stopsAtConfiguration(ceilingCents: number) {
+async function stopsAtConfiguration(configuration: (typeof loweredCeilings)[number]) {
+  const { ceilingCents, existing } = configuration;
   await actor.reserve(call('old'), 5);
-  await limit('paying_group', 50);
+  if (existing) {
+    await limit('paying_group', 50);
+  }
   const before = await nats.store.head('budget-test');
   await limit('paying_group', ceilingCents);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
@@ -85,7 +81,11 @@ async function stopsAtConfiguration(ceilingCents: number) {
   await expect(actor.reserve(call('new'), 1)).resolves.toBeTypeOf('string');
 }
 async function fresh() {}
-it.each([0, 5])('stops at a lowered ceiling of %s with one configuration append',
+const loweredCeilings = [
+  { ceilingCents: 0, existing: false }, { ceilingCents: 5, existing: false },
+  { ceilingCents: 0, existing: true }, { ceilingCents: 5, existing: true },
+];
+it.each(loweredCeilings)('stops at $ceilingCents (existing: $existing) with one append',
   stopsAtConfiguration);
 
 async function recoversOnlyNewWork(scope: Scope) {
@@ -122,12 +122,19 @@ async function recordsAllReasons() {
   await limit('paying_group', 10);
   await limit('assistant', 10);
   await expect(actor.reserve(call('refused'), 11)).rejects.toThrow('spending cap');
-  expect(budgetSummary(actor.state, clock)).toMatchObject({ stops: [ {
-    reasons: [ { scope: 'global', kind: 'monthly' }, { scope: 'global', kind: 'daily' },
-      { scope: 'paying_group' }, { scope: 'assistant' } ],
-  } ] });
+  const summary = budgetSummary(actor.state, clock);
+  const reasons = summary.stops[0]?.reasons;
+  expect(reasons).toHaveLength(4);
+  expect(reasons).toEqual(expect.arrayContaining([
+    expect.objectContaining({ scope: 'global', kind: 'monthly' }),
+    expect.objectContaining({ scope: 'global', kind: 'daily' }),
+    expect.objectContaining({ scope: 'paying_group' }),
+    expect.objectContaining({ scope: 'assistant' }),
+  ]));
   const rows = await history(nats.store, 'budget-test', 'test');
-  function exhausted(row: (typeof rows)[number]) { return row.event.type === 'budget.exhausted'; }
+  function exhausted(row: (typeof rows)[number]) {
+    return row.event.type === 'budget.exhausted';
+  }
   expect(rows.filter(exhausted)).toHaveLength(1);
 }
 it('records every binding reason in one exhaustion event', recordsAllReasons);
@@ -146,3 +153,48 @@ async function replaysLegacyStop() {
   await expect(actor.reserve(call('new'), 1)).resolves.toBeTypeOf('string');
 }
 it('replays old scope-only exhaustion without losing its stopped work', replaysLegacyStop);
+
+async function settlementDoesNotResume() {
+  await actor.reserve(call('old'), 5);
+  await limit('paying_group', 10);
+  await expect(actor.reserve(call('refused'), 6)).rejects.toThrow('spending cap');
+  await actor.releaseUndispatched(actor.state.reservations[0]!.id);
+  await expect(actor.reserve(call('new'), 1)).rejects.toThrow('spending cap');
+  await actor.configure({ scope: 'global', ceilingCents: 200, setBy: 'alice' });
+  await expect(actor.reserve(call('new'), 1)).rejects.toThrow('spending cap');
+}
+it('keeps a group stop after settlement frees money and the global ceiling changes',
+  settlementDoesNotResume);
+
+async function dailyEditDoesNotResumeMonthly() {
+  await limit('global', 10);
+  await expect(actor.reserve(call('refused'), 11)).rejects.toThrow('spending cap');
+  await actor.configure({ scope: 'global', ceilingCents: 10, dailyCeilingCents: 200,
+    defaultPayingGroupId: 'other', setBy: 'alice' });
+  await expect(actor.reserve(call('new'), 1)).rejects.toThrow('spending cap');
+  await limit('global', 100);
+  await expect(actor.reserve(call('new'), 1)).resolves.toBeTypeOf('string');
+}
+it('keeps a monthly stop when only the daily ceiling and default payer change',
+  dailyEditDoesNotResumeMonthly);
+
+async function loweredAboveUsage() {
+  await actor.reserve(call('old'), 5);
+  await limit('global', 6);
+  await expect(actor.reserve(call('old'), 1)).resolves.toBeTypeOf('string');
+  await expect(actor.reserve(call('refused'), 1)).rejects.toThrow('spending cap');
+}
+it('lets a lowered ceiling above usage fill exactly before an over-cap attempt stops it',
+  loweredAboveUsage);
+
+async function keepsOmittedDailyLimit() {
+  const old = envelope('legacy', 'budget-legacy', 'budget.ceiling_set', {
+    scope: 'global', ceilingCents: 100, setBy: 'alice', defaultPayingGroupId: 'group',
+  });
+  await nats.seed([old]);
+  const legacy = new BudgetActor(nats.store, 'legacy', now);
+  await legacy.start();
+  await expect(legacy.reserve(call('new'), 1)).rejects.toThrow('spending cap');
+  expect(budgetSummary(legacy.state, clock)).toMatchObject({ dailyCeilingCents: 0 });
+}
+it('keeps the zero daily limit when older initial settings omit it', keepsOmittedDailyLimit);

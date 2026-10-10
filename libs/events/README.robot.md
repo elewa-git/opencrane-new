@@ -259,3 +259,9 @@ The cap exports as integer cents with a minimum of zero and accepts only 100.
 Only a server event with a matching human principal, scope subject and command id
 is accepted. Person scope requires its own member. The record contains no fact
 text and grants no spending authority. Run and dirty-scope contracts remain deferred.
+
+## Budget stop
+
+`budget.exhausted` keeps legacy scope-only replay and adds typed integer-cent
+reasons. The [catalogue](../../docs/architecture/events.md) owns the contract;
+the [accepted design](../../docs/specs/phase-3/p3-14-p3-15-budget-stop.md) records later work.

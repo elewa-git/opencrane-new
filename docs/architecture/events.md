@@ -419,8 +419,8 @@ are ignored: agentgateway 1.5 drops leading fractional zeros, so ambiguous or
 malformed values determine neither budget periods nor ordering. Reservation event
 time owns attribution, and stream sequence owns causal order.
 The budget projection can be rebuilt with reactions disabled. Cap refusals append
-`budget.exhausted` once per unchanged configuration and scope per UTC day, including across
-actor recovery. P3-1 records every admission separately as `decision.recorded`.
+`budget.exhausted` with every binding reason in one record. Active scope stops
+remain in force across actor recovery until their relevant ceiling or UTC period changes. P3-1 records every admission separately as `decision.recorded`.
 Legacy model refusals used `security.alert_raised` with an optional `decision` record:
 verified requester/assistant ids when available and a context digest, never tokens.
 
@@ -448,8 +448,19 @@ The elected actor records rollover on its existing timer and fences old leaders
 on acquisition. Reads and reservations derive periods from UTC timestamps, so
 reset is exact even while the timer is catching up. Unknown reservations count
 against every applicable current ceiling until settled. `budget.exhausted`
-names the refused scope and is deduplicated per unchanged configuration/scope/day.
-Hard-stop cascades and manual uncertainty resolution belong to P3-14/P3-15.
+accepts old scope-only records for replay. New records hold all binding reasons:
+scope/id, daily/monthly kind, reason, UTC period start/reset, integer ceiling,
+settled/held/attempted cents and the relevant configuration event id. Optional
+`work` names the refused conversation and turn. The source event id/position
+identifies the stop. Legacy global stops cover both periods conservatively.
+
+The TypeScript budget fold keeps scope stops and known stopped work. A zero or
+binding lowered ceiling derives its prohibition immediately from the one
+`budget.ceiling_set` append. A changed relevant ceiling or UTC reset permits new
+checked work; settlement and unrelated edits clear no stop. Previously stopped
+work stays stopped. Reservation and open-hold checks enforce this state. The
+shared final dispatch gate, work admission bindings and cancellation follow in
+later PRs; this change enables no new dispatch path.
 
 `mcp.server_discovered.tools[].costCents` may be explicitly zero for a reviewed
 non-metered tool such as the Odoo fixture. An allowed tool with absent cost is

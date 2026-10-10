@@ -1078,6 +1078,26 @@ async function refusesResolutionWithoutOpenFgaAdminPermission() {
 it('refuses a resolution when the saved admin role has no OpenFGA admin permission',
   refusesResolutionWithoutOpenFgaAdminPermission);
 
+async function readsConfiguredBudgetStop() {
+  const url = '/api/org/models';
+  const payload = { commandId: 'zero-budget', expectedSequence: actor.state.sequence,
+    scope: 'global', ceilingCents: 0 };
+  const requestHeaders = { ...headers('oidc-alice'),
+    origin: new URL(config.redirectUri).origin };
+  const before = await nats.store.head();
+  const response = await app.inject({ method: 'POST', url, headers: requestHeaders, payload });
+  expect(response.statusCode).toBe(200);
+  expect(await nats.store.head('budget-test')).toBe(before + 1);
+  await runner.rebuild(budgets);
+  const read = await app.inject({ url, headers: headers('oidc-amina') });
+  expect(read.json()).toMatchObject({ budget: { stops: [ { reasons: [ {
+    scope: 'global', kind: 'monthly', reason: 'zero_ceiling', ceilingCents: 0,
+  } ] } ] } });
+  expect((await app.inject({ url, headers: headers('oidc-bob') })).statusCode).toBe(403);
+  expect(await readBudget(pgDb(dbs.queue), 'test')).toEqual(actor.state);
+}
+it('returns saved zero-ceiling stops to admins after budget replay', readsConfiguredBudgetStop);
+
 async function refusesRemovedComputerAdministrator() {
   const request = { url: '/api/org/computers', headers: headers('oidc-amina') };
   expect((await app.inject(request)).statusCode).toBe(200);

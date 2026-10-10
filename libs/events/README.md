@@ -26,7 +26,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turn and spending data| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turns, spending limits, stop reasons and UTC resets| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> zod["Zod<br/>data checks"]
 ```
@@ -51,6 +51,8 @@ accepted cost cap of exactly 100 integer cents. This record starts no work and s
 - Define records for pausing new model turns, cancelling that pause and switching on managed calls.
   Keep switch-on in the silo’s spending stream.
   Stop new holds while allowing existing holds to settle or be released.
+- Define spending stop reasons with their limit and UTC reset time.
+  Keep older records with only a spending scope readable.
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.
 - Define the wrapper every event shares (its id, its type, what it is about,

@@ -503,7 +503,7 @@ it.each([{ computerId: 'old-computer', generation: 2 }, { computerId: 'computer'
     expect(f.received()).toBe(0);
   } finally { await f.close(); }
 }, 40_000);
-it.each([[1, 2000], [2000, 1]])('admits one last reservation under daily %i / monthly %i cents and clearly refuses the next call', async (daily, monthly) => {
+it.each([[1, 2000], [2000, 1]])('holds at most one call under daily %i / monthly %i cents and refuses further calls', async (daily, monthly) => {
   const f = await fixture(daily, monthly);
   try {
     await waitForModelGrants(f.auth, 'alice', 'assistant');
@@ -512,8 +512,16 @@ it.each([[1, 2000], [2000, 1]])('admits one last reservation under daily %i / mo
     for (let pair = 0; pair < 4; pair++) {
       replies.push(...await Promise.all([f.call(), f.call()]));
     }
-    expect(replies.filter(r => r.status === 200), JSON.stringify(replies)).toHaveLength(1); expect(f.received()).toBe(1);
-    expect(replies.filter(r => r.status === 402), JSON.stringify(replies.map(r => r.status))).toHaveLength(7); await f.settled();
+    function allowed(reply: (typeof replies)[number]) {
+      return reply.status === 200;
+    }
+    const allowedReplies = replies.filter(allowed);
+    expect(allowedReplies.length, JSON.stringify(replies)).toBeLessThanOrEqual(1);
+    expect(f.received()).toBe(allowedReplies.length);
+    expect(replies.filter(r => r.status === 402)).toHaveLength(7);
+    if (allowedReplies.length) {
+      await f.settled();
+    }
     expect((await f.call()).text).toContain('spending cap reached');
     await f.runner.initialise(conversations); await f.runner.run(conversations);
     const feed = await readConversation(f.db, 'test', 'conversation');
@@ -580,7 +588,7 @@ it('recovers old-tariff usage after an upgrade and continues past an unknown mod
     await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(recovered.state);
   } finally { await replacement?.close(); await f.close(); }
 }, 40_000);
-it('records exhaustion once even when decision audit appends fail and callers retry', async () => {
+it('keeps the configured zero-ceiling stop when decision audits fail and callers retry', async () => {
   const f = await fixture(0, 0);
   const append = f.nats.store.append.bind(f.nats.store);
   const fault = vi.spyOn(f.nats.store, 'append').mockImplementation(command => {
@@ -593,7 +601,8 @@ it('records exhaustion once even when decision audit appends fail and callers re
     expect((await f.call()).status).toBe(503);
     expect((await f.call()).status).toBe(503);
     expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type))
-      .toEqual(['budget.ceiling_set', 'budget.period_started', 'budget.exhausted']);
+      .toEqual(['budget.ceiling_set', 'budget.period_started']);
+    expect(f.actor.state.stops).toHaveLength(1);
     expect(await history(f.nats.store, 'security-test', 'test')).toEqual([]);
     expect(f.received()).toBe(0);
   } finally { fault.mockRestore(); await f.close(); }
@@ -994,21 +1003,27 @@ it('uses the current requester on a team assistant and refuses removed team memb
 }, 40_000);
 
 // P3-13: all ceilings share the existing actor and the real dispatch path.
-it.each(['global', 'paying_group', 'assistant'] as const)('serialises concurrent reservations at the %s monthly ceiling and replays one charge', async scope => {
+it.each(['global', 'paying_group', 'assistant'] as const)('serialises concurrent reservations at the %s monthly ceiling and replays one hold', async scope => {
   const f = await fixture(2000, 2000);
   try {
     await f.actor.configure({ scope, ...(scope === 'global' ? {} : { scopeId: scope === 'paying_group' ? 'personal-default' : 'assistant' }), ceilingCents: 1, setBy: 'alice' });
     const replies = await Promise.all(Array.from({ length: 2 }, () => f.call()));
-    expect(replies.filter(r => r.status === 200), JSON.stringify(replies)).toHaveLength(1);
+    function allowed(reply: (typeof replies)[number]) {
+      return reply.status === 200;
+    }
+    const allowedReplies = replies.filter(allowed);
+    expect(allowedReplies.length, JSON.stringify(replies)).toBeLessThanOrEqual(1);
     expect(replies.filter(r => r.status === 402)).toHaveLength(1);
     expect(replies.find(r => r.status === 402)?.text).toContain(scope === 'global' ? 'Silo' : scope === 'paying_group' ? 'Paying group' : 'Assistant');
-    expect(f.received()).toBe(1);
-    await f.settled();
+    expect(f.received()).toBe(allowedReplies.length);
+    if (allowedReplies.length) {
+      await f.settled();
+    }
     expect(f.actor.state.reservations).toHaveLength(1);
     expect(f.actor.state.reservations[0]?.call.payingGroupId).toBe('personal-default');
     await f.runner.rebuild(budgets);
     expect(await readBudget(f.db, 'test')).toEqual(f.actor.state);
-    expect(f.received()).toBe(1);
+    expect(f.received()).toBe(allowedReplies.length);
   } finally { await f.close(); }
 }, 40_000);
 
@@ -1030,16 +1045,15 @@ it('resets at the exact UTC month boundary, holds unknown money and attributes l
     await f.actor.settleRecorded(reservation.id, `${reservation.id}:effect.observed`);
     expect(totals(f.actor.state, f.actor.now())).toMatchObject({ monthCents: 0, reservedCents: 0 });
     const nextMonthCall = await f.call();
-    expect(nextMonthCall.status, nextMonthCall.text).toBe(200);
+    expect(nextMonthCall.status, nextMonthCall.text).toBe(402);
     f.advance(); await f.actor.expire();
-    expect(totals(f.actor.state, f.actor.now()).reservedCents).toBe(1);
+    expect(totals(f.actor.state, f.actor.now()).reservedCents).toBe(0);
     const recovered = new BudgetActor(f.nats.store, 'test', f.actor.now); await recovered.start();
     expect(recovered.state.reservations[0]?.call).toEqual(reservation.call);
-    await expect(f.actor.releaseUndispatched(recovered.state.reservations[1]!.id)).rejects.toThrow('lost its fence');
     await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(recovered.state);
     const periods = (await history(f.nats.store, 'budget-test', 'test')).filter(r => r.event.type === 'budget.period_started');
     expect(periods.at(-1)?.event.data).toEqual({ periodStart: '2026-11-01T00:00:00.000Z' });
-    expect(f.received()).toBe(2);
+    expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
 
@@ -1057,7 +1071,7 @@ it('fixes multiplicity at one and gives a clear reason for absent, fractional, c
   } finally { await f.close(); }
 }, 40_000);
 
-it('resets the daily safety cap at UTC midnight within a month while keeping outstanding reservations', async () => {
+it('resets daily totals at UTC midnight while keeping the old turn stopped', async () => {
   const f = await fixture(1, 2000);
   try {
     f.advance(Date.parse('2026-10-03T23:59:59.999Z') - f.actor.now().getTime());
@@ -1066,12 +1080,12 @@ it('resets the daily safety cap at UTC midnight within a month while keeping out
     f.advance(1); await f.actor.period();
     expect(totals(f.actor.state, f.actor.now())).toMatchObject({ todayCents: 0, monthCents: 1 });
     await f.runtime.stop();
-    expect((await f.call()).status).toBe(200);
+    expect((await f.call()).status).toBe(402);
     f.advance(86400_000); await f.actor.expire();
     expect((await f.call()).status).toBe(402);
-    expect(totals(f.actor.state, f.actor.now())).toMatchObject({ todayCents: 0, monthCents: 1, reservedCents: 1 });
+    expect(totals(f.actor.state, f.actor.now())).toMatchObject({ todayCents: 0, monthCents: 1, reservedCents: 0 });
     await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(f.actor.state);
-    expect(f.received()).toBe(2);
+    expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
 

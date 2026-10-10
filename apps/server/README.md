@@ -11,8 +11,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership, member access and destination rules"]
-  server -.->|checks startup, access, departures, spending, memory setup, tool reviews and turn previews| libs["libs/*<br/>shared code"]
-  server -->|records changes, memory facts and choices, grants, roles, participants, computers, provider choices, drains and tool catalogues| nats["NATS<br/>event log"]
+  server -.->|checks startup, access, departures, spending stops, memory setup, tool reviews and turn previews| libs["libs/*<br/>shared code"]
+  server -->|records changes, memory facts and choices, grants, roles, participants, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chats, closing records, joins, facts, models and tools| postgres
@@ -133,9 +133,13 @@ not yet proven on a live computer; private chat memory stays off until it is.
 The reviewed tool list includes each tool's Allow mode. The computer and gateway
 use it to refuse calls if the tool changes to Ask during the turn.
 
-An owner or admin can stop new model turns before a provider change.
-Running turns keep their original path. Starting or cancelling this drain saves an event.
-Switching on calls through managed providers is still unavailable.
+An owner or admin can pause new model turns before a provider change. Running
+turns keep their original path. Starting or cancelling the pause saves an event.
+Owner and admin spending reads include saved budget stop reasons and UTC resets.
+A zero limit, or a limit lowered to the money already spent or held, stops affected
+model reservations as soon as the change is saved. Applying stops to every running
+computer and tool call is still planned. Switching on managed provider calls remains
+unavailable.
 
 ## Processes it handles
 
