@@ -146,8 +146,9 @@ recorded actor/target/time and both projection statuses, without a second ledger
 `member.command_refused` uses `memberaudit-<memberId>`, never the membership stream.
 It stores a SHA-256 digest of the original command id, safe member and invitation
 ids, an operation, an input digest and a bounded reason. It never stores the raw
-original command id, which may contain private details despite its id format. Its command id includes the person, operation, target, reason and
-UTC day. It grants no access and has no membership or OpenFGA subscription. Refused owner
+original command id, which may contain private details despite its id format.
+Its command id includes the person, operation, target, reason and UTC day.
+It grants no access and has no membership or OpenFGA subscription. Refused owner
 invitations leave membership and ownership streams unchanged; their separate
 audit event still advances the position of the whole event log.
 The audit worker reads the whole log and includes it in organisation history.
