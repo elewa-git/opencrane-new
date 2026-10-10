@@ -1163,17 +1163,26 @@ it.each(['create', 'key', 'models', 'quote'] as const)(
     }
   });
 
+function openTestDialog(this: HTMLDialogElement): void {
+  this.setAttribute('open', '');
+}
+
+function closeTestDialog(this: HTMLDialogElement): void {
+  this.removeAttribute('open');
+}
 
 function replacesDialogMethodsForAnotherComponent() {
   const dialog = document.createElement('dialog');
-  const showModal = vi.fn();
-  const close = vi.fn();
+  const showModal = vi.fn(openTestDialog);
+  const close = vi.fn(closeTestDialog);
   const methods = { showModal, close };
   Object.assign(dialog, methods);
   dialog.showModal();
-  dialog.close();
   expect(showModal).toHaveBeenCalledOnce();
+  expect(dialog.open).toBe(true);
+  dialog.close();
   expect(close).toHaveBeenCalledOnce();
+  expect(dialog.open).toBe(false);
 }
 it('lets another component replace dialog methods on its own element',
   replacesDialogMethodsForAnotherComponent);
