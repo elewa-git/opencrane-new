@@ -191,8 +191,13 @@ function createFetchFixture() {
   };
 }
 
-async function mountWithoutReady(api = createFetchFixture()): Promise<ComponentFixture<DirectChat>> {
-  history.replaceState({}, '', '/workspace/direct');
+async function mountWithoutReady(
+  api = createFetchFixture(), requestedId = '',
+): Promise<ComponentFixture<DirectChat>> {
+  const address = requestedId
+    ? `/workspace/direct?conversation=${encodeURIComponent(requestedId)}`
+    : '/workspace/direct';
+  history.replaceState({}, '', address);
   TestBed.configureTestingModule({ imports: [DirectChat], providers: [
     { provide: SOCKET_FACTORY, useValue: api.socketFactory },
     { provide: RANDOM_SOURCE, useValue: fixedRandom },
@@ -999,6 +1004,19 @@ async function keepsFirstRetryFocus(): Promise<void> {
 }
 
 it('keeps first-load retry focus and avoids false empty-list messages', keepsFirstRetryFocus);
+
+async function showsUnavailableForMissingRequestedConversation(): Promise<void> {
+  const api = createFetchFixture();
+  const fixture = await mountWithoutReady(api, 'removed-group');
+  await waitForText(fixture, 'Direct conversations are unavailable right now');
+  expect(root(fixture).querySelector('h1')?.textContent).toContain('New conversation');
+  expect(root(fixture).querySelector('textarea')).toBeNull();
+  expect(api.sockets).toHaveLength(0);
+  fixture.destroy();
+}
+
+it('shows an unavailable state for a missing requested conversation',
+  showsUnavailableForMissingRequestedConversation);
 
 async function clearsAfterRealRefusal(): Promise<void> {
   const api = createFetchFixture();
