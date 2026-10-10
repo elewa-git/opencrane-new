@@ -30,7 +30,9 @@ async function setup() {
   nats = await natsFixture();
   keys = conversationKeys(`${dirname(nats.env().NATS_CA_FILE)}/keys`);
   keys.provision('test', 'chat');
-  await nats.seed([
+  const joined = fixtureEvent('joined', 'member-alice', 'member.joined');
+  joined.data = { ...joined.data, memberId: 'alice' };
+  await nats.seed([joined,
     event('created', 'conversation.created', {
       conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
     }),

@@ -515,7 +515,7 @@ function revocation(type: string) {
     details['participantId'] = 'alice';
   }
   let subject = 'conversation-chat';
-  if (type === 'participant.removed') {
+  if (type === 'participant.removed' || type === 'conversation.closed') {
     subject = 'participation-chat';
   }
   return eventInjection(subject, type, details);
@@ -713,7 +713,7 @@ async function checksUnprojectedActivityOnce() {
     store: current.nats.store, db: current.db, silo: 'test', binding: current.binding,
   };
   await viewAccess(options, 'alice', 'chat');
-  expect(conversationRows).toBeGreaterThanOrEqual(100);
+  expect(conversationRows).toBe(1);
   for (let attempt = 0; attempt < 3; attempt++) {
     conversationRows = 0;
     await viewAccess(options, 'alice', 'chat');
@@ -723,7 +723,7 @@ async function checksUnprojectedActivityOnce() {
   await appendInjection(current, conversationEvent('agent.turn_completed'));
   await expect(viewAccess(options, 'alice', 'chat')).rejects.toThrow('Access changed');
 }
-it('checks older unprojected chat activity once and still finds a later close',
+it('skips unprojected chat activity and still finds a later close',
   checksUnprojectedActivityOnce, 30_000);
 
 async function keepsExactChangedMessage() {

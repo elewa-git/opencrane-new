@@ -66,6 +66,11 @@ it.each(process.env['BRIDGE_SUSPEND_K3D'] === '1' ? ['local', 'k3d'] : ['local']
     channel = bridgeChannel(server, driver);
     await new BudgetActor(nats.store, 'test').start(2000, 20000, 'personal-default');
     await nats.store.append({ expectedSequence: 0, event: envelope('test', 'assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' }) });
+    const joined = envelope('test', 'member-alice', 'member.joined', {
+      memberId: 'alice', role: 'member', email: 'alice@example.test',
+      displayName: 'Alice', invitationId: 'invite-alice',
+    });
+    await nats.seed([joined]);
     sequence = 6;
     await append('computer.resumed', { generation: 1, tokenId: 'token:second' });
     const replacement = await append('computer.ready', { generation: 1, podUid: 'second' });

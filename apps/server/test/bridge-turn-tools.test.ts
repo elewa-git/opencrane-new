@@ -71,6 +71,11 @@ function bridgeFixture(options: {
     ['conversation-chat', conversationEvents(options.memoryFree)],
     ['mcp-fixture', serverEvents(options.ask ? 'ask' : 'allow')],
   ]);
+  const joined = envelope('test', 'member-person', 'member.joined', {
+    memberId: 'person', role: 'member', email: 'person@example.test',
+    displayName: 'Person', invitationId: 'invite-person',
+  });
+  rowsBySubject.set('member-person', [storedEvent(1, joined)]);
   const reads: string[] = [];
   const store = {
     async *readStream(subject: string) {
@@ -133,7 +138,7 @@ function bridgeFixture(options: {
     return processConversation(watchOptions, {} as never, conversation, assistant,
       new Set(), openLink);
   }
-  return { process, sent, reads, rows, link, sentTurns, watchOptions };
+  return { process, sent, reads, rows, link, sentTurns, watchOptions, rowsBySubject };
 }
 
 it('sends a waiting turn without tools when OpenFGA cannot check a grant', async () => {
@@ -267,3 +272,21 @@ async function checksComputerSupport(supported: boolean) {
 }
 it.each([false, true])('offers Ask only to a computer advertising support: %s',
   checksComputerSupport);
+
+async function refusesQueuedTurnAndToolsAfterRemoval() {
+  const fixture = bridgeFixture({ binding: true });
+  use.mockResolvedValue(true);
+  const removed = envelope('test', 'member-person', 'member.removed', {
+    memberId: 'person', removedBy: 'owner',
+  });
+  const invited = envelope('test', 'member-person', 'member.invited', {
+    memberId: 'person', role: 'member', email: 'person@example.test',
+    invitedBy: 'owner', invitationId: 'next-invite',
+  });
+  const membership = fixture.rowsBySubject.get('member-person')!;
+  membership.push(storedEvent(2, removed), storedEvent(3, invited));
+  await expect(fixture.process()).rejects.toThrow('Active silo membership required');
+  expect(fixture.sent).toEqual([]);
+}
+it('refuses a queued turn and its tool list after removal and a later invitation',
+  refusesQueuedTurnAndToolsAfterRemoval);
