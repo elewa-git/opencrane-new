@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { history } from '@opencrane/models';
+import { activeMember, authorityFence, history } from '@opencrane/models';
 import { pgDb, readEvents } from '@opencrane/projections';
 import { roleCommand } from '../src/members/roles.ts';
 import { turnCommand } from '../src/chat/turns.ts';
@@ -71,6 +71,26 @@ async function fixture() {
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 type Operation = 'role' | 'turn';
+
+async function membershipKeepsCallerDeadline() {
+  const context = await fixture();
+  const store = context.nats.store;
+  try {
+    const subjects = ['member-charlie', 'ownership-test'];
+    const fresh = await authorityFence(store, performance.now(), subjects);
+    const reads = vi.spyOn(store, 'readStream');
+    const authority = { requiredRole: 'admin' as const, fresh };
+    await activeMember(store, context.binding, 'charlie', authority);
+    expect(reads).toHaveBeenCalled();
+    for (const read of reads.mock.calls) {
+      expect(read[2]).toBe(fresh.deadline);
+    }
+  } finally {
+    await context.close();
+  }
+}
+it('membership reads keep the caller’s unexpired write deadline', membershipKeepsCallerDeadline);
+
 async function runOperation(context: Fixture, operation: Operation) {
   if (operation === 'role') {
     const input = { commandId: 'change-david', newRole: 'admin',
