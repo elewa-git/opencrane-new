@@ -88,7 +88,8 @@ function prepare() {
       { computerId: 'computer', generation: 1 }),
     firstStart: row('computer-assistant', 'computer.turn_started', {
       requesterId: 'alice', conversationId: 'conversation', threadId: 'thread',
-      executionMode: 'restricted' }), firstClose: undefined }, confirm };
+      executionMode: 'restricted' }), firstClose: undefined },
+    managedCallsEnabled: false, confirm };
   const fresh = Object.assign(confirmAccess, { head: 10, deadline: performance.now() + 2000,
     include: vi.fn() });
   vi.mocked(authorityFence).mockResolvedValue(fresh);
