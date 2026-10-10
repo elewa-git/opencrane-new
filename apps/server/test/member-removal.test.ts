@@ -1,3 +1,5 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { encodeSession } from '@opencrane/auth';
@@ -11,6 +13,7 @@ import { computers, conversations, members, pgDb, ProjectionRunner,
   readEvents } from '@opencrane/projections';
 import { memberDepartureSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
+import { conversationKeys } from '../src/chat/keys.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
@@ -22,6 +25,7 @@ let app: ReturnType<typeof buildServer>;
 let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
 let counter = 0;
+let keyDirectory: string;
 async function append(subject: string, type: string, data: unknown) {
   const record = { ...event(`removal-${++counter}`, subject, type), data };
   const command = { event: record, expectedSequence: await nats.store.head(subject) };
@@ -62,6 +66,7 @@ async function join(memberId: string) {
   await project();
 }
 async function initialise() {
+  keyDirectory = await mkdtemp(`${tmpdir()}/removal-keys-`);
   nats = await natsFixture();
   fga = await openfga();
   dbs = await databases();
@@ -87,6 +92,7 @@ async function close() {
   await dbs?.close();
   await fga?.close();
   await nats?.close();
+  if (keyDirectory) await rm(keyDirectory, { recursive: true, force: true });
 }
 beforeAll(initialise, 120_000);
 afterAll(close);
@@ -241,3 +247,73 @@ async function changesInventoryBeforeAppend() {
 }
 it('refuses inventory changes after the final access check and before append',
   changesInventoryBeforeAppend);
+
+async function removesDuringOtherMembersPosts() {
+  const memberId = 'busy-removal';
+  await join(memberId);
+  await join('posting-member');
+  const input = await review(memberId);
+  const keys = conversationKeys(keyDirectory);
+  keys.provision('test', 'busy-chat');
+  const save = nats.store.append.bind(nats.store);
+  const readHead = nats.store.head.bind(nats.store);
+  let posts = 0;
+  async function postMessage() {
+    const encrypted = keys.encrypt('test', 'busy-chat', 'Another member keeps posting');
+    const data = { conversationId: 'busy-chat', authorId: 'posting-member',
+      authorKind: 'human', contentType: 'text', ...encrypted };
+    const record = { ...event(`busy-post-${++posts}`, 'conversation-busy-chat',
+      'message.posted'), principal: { kind: 'human' as const, id: 'posting-member' }, data };
+    const command = { event: record, expectedSequence: await readHead(record.subject) };
+    expect((await save(command)).status).toBe('appended');
+  }
+  async function postDuringChecks(subject?: string, deadline?: number) {
+    const position = await readHead(subject, deadline);
+    if (subject === 'team-*' || subject === `member-${memberId}`) await postMessage();
+    return position;
+  }
+  async function postBeforeAppend(command: Parameters<typeof save>[0]) {
+    if (eventTypeSchema.parse(command.event).type === 'member.removed') await postMessage();
+    return save(command);
+  }
+  vi.spyOn(nats.store, 'head').mockImplementation(postDuringChecks);
+  vi.spyOn(nats.store, 'append').mockImplementation(postBeforeAppend);
+  const response = await request(memberId, 'remove', input);
+  expect(response.statusCode, response.body).toBe(200);
+  expect(response.json()).toMatchObject({ access: 'revoked', reviewRevision: input.reviewRevision });
+  expect(posts).toBeGreaterThan(2);
+  const rows = await history(nats.reader, `member-${memberId}`, 'test');
+  expect(rows.at(-1)?.event.type).toBe('member.removed');
+  expect((await currentMembership(nats.reader, 'test', memberId)).role).toBe('');
+  const messages = await history(nats.reader, 'conversation-busy-chat', 'test');
+  expect(messages).toHaveLength(posts);
+}
+it('removes a member while another member keeps posting during the checks and append',
+  removesDuringOtherMembersPosts);
+
+async function refusesTargetChangeBeforeAppend() {
+  const memberId = 'target-changed-at-append';
+  await join(memberId);
+  const input = await review(memberId);
+  const save = nats.store.append.bind(nats.store);
+  async function changeTarget(command: Parameters<typeof save>[0]) {
+    if (eventTypeSchema.parse(command.event).type === 'member.removed') {
+      const data = { memberId, previousRole: 'member', newRole: 'admin', changedBy: 'owner' };
+      const record = { ...event('late-target-role', `member-${memberId}`,
+        'member.role_changed'), data };
+      const change = { event: record, expectedSequence: input.expectedSequence };
+      expect((await save(change)).status).toBe('appended');
+    }
+    return save(command);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeTarget);
+  const response = await request(memberId, 'remove', input);
+  expect(response.statusCode, response.body).toBe(409);
+  expect(response.json()).toMatchObject({ reason: 'concurrent_change' });
+  const rows = await history(nats.reader, `member-${memberId}`, 'test');
+  expect(rows).toHaveLength(2);
+  expect(rows.at(-1)?.event.type).toBe('member.role_changed');
+  expect((await currentMembership(nats.reader, 'test', memberId)).role).toBe('admin');
+}
+it('refuses removal when the target stream changes after the final check',
+  refusesTargetChangeBeforeAppend);
