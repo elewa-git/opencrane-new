@@ -1034,6 +1034,17 @@ async function focusesUnavailableNoticeAfterPhoneMenuRevocation(): Promise<void>
   const api = createFetchFixture();
   const fixture = await mount(api);
   await openExisting(fixture);
+  const dialog = root(fixture).querySelector<HTMLDialogElement>('oc-navigation-menu dialog');
+  if (!dialog) throw new Error('Expected the phone navigation dialog');
+  const navigationDialog = dialog;
+  function showNavigation(): void {
+    navigationDialog.setAttribute('open', '');
+  }
+  function closeNavigation(): void {
+    navigationDialog.removeAttribute('open');
+  }
+  Object.defineProperty(dialog, 'showModal', { configurable: true, value: showNavigation });
+  Object.defineProperty(dialog, 'close', { configurable: true, value: closeNavigation });
   const opener = root(fixture).querySelector<HTMLButtonElement>('.navigation-toggle');
   opener?.click();
   await settle(fixture);
