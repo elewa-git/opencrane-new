@@ -57,7 +57,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
   const rights = await check(deadline);
   return { ...rights, confirm: check };
 
-  async function check(checkDeadline: number) {
+  async function check(checkDeadline = deadline) {
     const fresh = await authorityFence(store, performance.now(), [], checkDeadline);
     fresh.include('mcp-memory');
     if (!await memoryPolicy(store, binding.silo, parsed, checkDeadline)) {

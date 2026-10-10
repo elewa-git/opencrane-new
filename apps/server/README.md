@@ -22,6 +22,8 @@ flowchart LR
 
 ## What it is responsible for
 
+- Preview bounded facts for a saved private turn without sending text to a computer.
+  Facts with expired or unusable supporting facts are left out.
 - Read recorded child participants without reading the whole conversation.
 
 - Returns missing approval details and accepts requester retries after verified non-dispatch.
