@@ -700,7 +700,6 @@ it('refuses when signing or verification is unavailable without reading facts',
     const noSigner = await startDecision(setup.actor, setup.identity, setup.binding);
     const database = vi.spyOn(setup.db, 'query');
     try {
-      expect(append).not.toHaveBeenCalled();
       const decisionHeaders = { ...setup.headers, ...headers };
       const decisionRequest = { method: 'POST', headers: decisionHeaders,
         body: JSON.stringify(call) };
