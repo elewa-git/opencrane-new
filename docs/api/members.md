@@ -326,8 +326,10 @@ return 409. An owner must step down first.
 One conditional append saves `member.removed` on the target member's stream.
 That stream also records ownership confirmation, so competing requests cannot
 save at the same reviewed member position. The server compares the reviewed
-inventory revision and rechecks its category positions before saving. Other
-members' chat messages do not block the append. The inventory check and append
+inventory revision and rechecks its category positions and the target's retained
+computer and history positions before saving. Other members' chat messages and
+chat table updates do not block the append. Pending history events for the target
+still refuse removal. The inventory check and append
 are separate operations; the target member position is checked atomically.
 History and inventory reads finish before the two-second access check begins.
 

@@ -30,7 +30,7 @@ flowchart LR
 
 - Returns missing approval details and accepts requester retries after verified non-dispatch.
 - Lets admins review a departure, remove access and recover the saved removal receipt.
-  Other members can keep posting messages while removal is being saved.
+  Other members can keep posting messages and updating chat tables during removal.
 - Records owner appointments as requests. Counts a successor only after confirmation.
 - Lets owners and admins save provider choices and pauses, count affected assistants
   and recover saved results. Conflicting requests cannot report an unsaved change
@@ -66,7 +66,7 @@ flowchart LR
 - Returns member headers to members and the email directory to current owners and admins.
 - Explains recorded access and reviews departure effects without private content.
   Reports incomplete reviews while access changes are being applied, and returns only
-  counts and dates for private history. Removal is not available yet.
+  counts and dates for private history. A complete review lets admins remove access.
 - Keeps checking member access while a live connection is open.
 - Records changes as events and reads the current state from PostgreSQL.
 - Keep the original provider choice when repeating or closing a recorded turn.
