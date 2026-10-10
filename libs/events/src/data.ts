@@ -565,10 +565,12 @@ const legacyBudgetExhaustedSchema = z.discriminatedUnion('scope', [
   z.object({ scope: z.literal('paying_group'), scopeId: id }).strict(),
   z.object({ scope: z.literal('assistant'), scopeId: id }).strict(),
 ]);
+const budgetStoppedWorkSchema = z.object({ conversationId: id, turnId: id }).strict();
 export const budgetExhaustedDataSchema = z.union([
   legacyBudgetExhaustedSchema,
   z.object({ reasons: z.array(budgetStopReasonSchema).min(1).max(4),
-    work: z.object({ conversationId: id, turnId: id }).strict().optional() }).strict(),
+    work: budgetStoppedWorkSchema.optional() }).strict(),
+  z.object({ stopId: id, work: budgetStoppedWorkSchema }).strict(),
 ]);
 
 // --- Company brain -------------------------------------------------------

@@ -1213,6 +1213,7 @@ is retained. No dependency was added. [The accepted design](../../docs/specs/pha
 owns the plan. Tests use synthetic material and a local HTTP fixture. Live Kubernetes,
 custody-only namespace permissions, encryption at rest, backups, restore, power-loss and
 fresh-install journeys remain NOT RUN. Deployment wiring belongs to later work.
+
 ## Budget stop state (P3-14 PR 1, part of #55)
 
 The actor and projection share one fold. `limits` keep relevant configuration
@@ -1226,6 +1227,13 @@ nothing. Only a changed relevant ceiling or its UTC reset permits new work.
 Old stopped turns stay refused after replay. Legacy global exhaustion covers
 both daily and monthly limits because old records cannot distinguish them.
 
+`reserve` saves a newly refused conversation/turn under an existing stop with one
+`budget.exhausted` append carrying `{ stopId, work }`. It uses the current expected
+sequence and rechecks access before writing. It adds no history reads and creates
+no new scope stop. Repeated refusals of a saved identity append nothing. The fold
+requires that stop id to exist, keeps the first reference and restores it on replay.
+`budgetStopId` returns that reference for saved work or the active stop for new work.
+
 `reserve` and `requireOpenReservation` check stops in the actor queue. Admin
 summaries include saved stops and known turns. Rebuild projections on upgrade.
 PR 2 owns the shared dispatch gate and admitted work without reservations.
@@ -1233,4 +1241,8 @@ Tools, cancellation, queued messages and participant notices follow later.
 No dispatch path is enabled; existing expiry/provider ordering limits remain.
 
 `test/budget-stop.test.ts` proves isolation, lowered/zero ceilings, relevant
-recovery, unchanged edits, settlement, rollover and replay with real NATS.
+recovery, unchanged edits, settlement, rollover and replay with real NATS. It also
+checks refusal persistence without reads, access rechecks, stale-writer conflicts,
+both configuration/reservation orderings and the first assistant ceiling boundary.
+`libs/events/test/budget-refusal.test.ts` checks the strict stop-reference shape.
+`apps/server/test/integrations.test.ts` checks its PostgreSQL rebuild and admin read.

@@ -53,6 +53,7 @@ accepted cost cap of exactly 100 integer cents. This record starts no work and s
   Stop new holds while allowing existing holds to settle or be released.
 - Define spending stop reasons with their limit and UTC reset time.
   Keep older records with only a spending scope readable.
+  Link each later refused turn to the saved stop that blocked it.
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.
 - Define the wrapper every event shares (its id, its type, what it is about,

@@ -5,7 +5,7 @@ import { budgetCeilingSetDataSchema, effectResolvedDataSchema, effectUncertainDa
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { registerHandler } from '@opencrane/handlers';
-import { applyBudget, costCents, data, emptyBudget, models, budgetProhibits,
+import { applyBudget, costCents, data, emptyBudget, models, budgetStopId,
   exceededReasons, type BudgetState, type ModelCall } from './state.ts';
 
 type ModelUsage = {
@@ -158,7 +158,11 @@ export class BudgetActor {
       z.int().positive().parse(amountCents);
       if (!models.some(row => row.id === call.model && row.priceTableId === call.priceTableId && !row.retired)) throw new Error('Unknown model tariff');
       if (!call.payingGroupId) throw new Error('Paying group unavailable');
-      this.requireBudget(call);
+      const stopId = budgetStopId(this.state, call, this.now());
+      if (stopId !== undefined) {
+        await this.recordRefusedWork(call, stopId, fresh);
+        this.requireBudget(call);
+      }
       const reasons = exceededReasons(this.state, call, this.now(), amountCents);
       if (reasons.length) {
         const work = { conversationId: call.conversationId, turnId: call.turnId };
@@ -174,8 +178,21 @@ export class BudgetActor {
       return id;
     });
   }
+  private async recordRefusedWork(call: ModelCall, stopId: string, fresh?: () => Promise<void>) {
+    function matchesWork(work: BudgetState['stoppedWork'][number]) {
+      return work.conversationId === call.conversationId && work.turnId === call.turnId;
+    }
+    if (this.state.stoppedWork.some(matchesWork)) {
+      return;
+    }
+    const work = { conversationId: call.conversationId, turnId: call.turnId };
+    const refusal = { stopId, work };
+    // Save the refused turn before replying so a later limit change cannot reopen it.
+    await fresh?.();
+    await this.append('budget.exhausted', refusal);
+  }
   private requireBudget(call: ModelCall) {
-    if (budgetProhibits(this.state, call, this.now())) {
+    if (budgetStopId(this.state, call, this.now()) !== undefined) {
       throw new BudgetRefused('Silo, Paying group or Assistant spending cap reached; ' +
         'ask an Owner or Admin or wait for the next UTC budget period');
     }

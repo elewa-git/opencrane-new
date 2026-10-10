@@ -280,6 +280,17 @@ function applyStopConfiguration(state: BudgetState, event: EventEnvelope) {
 }
 function applyExhaustion(state: BudgetState, event: EventEnvelope) {
   const payload = budgetExhaustedDataSchema.parse(event.data);
+  if ('stopId' in payload) {
+    const stopId = payload.stopId;
+    function matchesStop(stop: BudgetState['stops'][number]) {
+      return stop.id === stopId;
+    }
+    if (!state.stops.some(matchesStop)) {
+      throw new Error('Unknown budget stop');
+    }
+    stopWork(state, payload.work, stopId);
+    return;
+  }
   let reasons: StopReason[];
   if ('reasons' in payload) {
     reasons = payload.reasons;
@@ -302,16 +313,16 @@ function applyExhaustion(state: BudgetState, event: EventEnvelope) {
     stopWork(state, payload.work, event.id);
   }
 }
-export function budgetProhibits(state: BudgetState, call: ModelCall, now: Date): boolean {
+export function budgetStopId(state: BudgetState, call: ModelCall, now: Date): string | undefined {
   for (const work of state.stoppedWork) {
     if (work.conversationId === call.conversationId && work.turnId === call.turnId) {
-      return true;
+      return work.stopId;
     }
   }
   // Keep zero ceilings binding after their first period resets.
   for (const limit of state.limits) {
     if (matchesScope(limit, call) && limit.ceilingCents === 0) {
-      return true;
+      return limit.configurationId;
     }
   }
   for (const stop of state.stops) {
@@ -321,12 +332,12 @@ export function budgetProhibits(state: BudgetState, call: ModelCall, now: Date):
       }
       for (const limit of state.limits) {
         if (sameLimit(limit, reason) && limit.configurationId === reason.configurationId) {
-          return true;
+          return stop.id;
         }
       }
     }
   }
-  return false;
+  return undefined;
 }
 export function exceededReasons(state: BudgetState, call: ModelCall, now: Date,
   attemptedBoundCents: number): StopReason[] {

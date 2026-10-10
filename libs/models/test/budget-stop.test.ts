@@ -210,9 +210,8 @@ async function savesExistingStopRefusal(zeroCeiling: boolean) {
   if (!zeroCeiling) {
     await expect(actor.reserve(call('exhausts'), 6)).rejects.toThrow('spending cap');
   }
-  clock = new Date('2026-11-01T00:00:00Z');
-  if (!zeroCeiling) {
-    clock = new Date('2026-10-10T12:00:00Z');
+  if (zeroCeiling) {
+    clock = new Date('2026-11-01T00:00:00Z');
   }
   const stop = actor.state.stops[0]!;
   const before = await nats.store.head('budget-test');
@@ -253,8 +252,8 @@ it.each([false, true])(
 async function rechecksAccessBeforeSavingRefusal(existingStop: boolean) {
   await limit('paying_group', existingStop ? 0 : 1);
   const before = await nats.store.head('budget-test');
-  async function revoked() {
-    throw new Error('Access revoked');
+  function revoked() {
+    return Promise.reject(new Error('Access revoked'));
   }
   await expect(actor.reserve(call('revoked'), 2, revoked)).rejects.toThrow('Access revoked');
   expect(await nats.store.head('budget-test')).toBe(before);
@@ -343,3 +342,15 @@ async function stopsAtFirstAssistantCeiling(ceilingCents: number) {
 }
 it.each([0, 5])('stops at the first assistant ceiling of %s cents with one append',
   stopsAtFirstAssistantCeiling);
+
+async function rejectsUnknownStopDuringReplay() {
+  const payload = { stopId: 'missing-stop',
+    work: { conversationId: 'conversation', turnId: 'refused' } };
+  const refusal = envelope('test', 'budget-test', 'budget.exhausted', payload);
+  await nats.seed([refusal]);
+  const recovered = new BudgetActor(nats.store, 'test', now);
+  await expect(recovered.start()).rejects.toThrow('Unknown budget stop');
+  expect(recovered.state.stoppedWork).toEqual([]);
+}
+it('refuses replay when a refused turn names a stop that was never saved',
+  rejectsUnknownStopDuringReplay);

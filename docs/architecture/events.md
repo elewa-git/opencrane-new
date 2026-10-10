@@ -451,7 +451,12 @@ against every applicable current ceiling until settled. `budget.exhausted`
 accepts old scope-only records for replay. New records hold all binding reasons:
 scope/id, daily/monthly kind, reason, UTC period start/reset, integer ceiling,
 settled/held/attempted cents and the relevant configuration event id. Optional
-`work` names the refused conversation and turn. The source event id/position
+`work` names the refused conversation and turn. A refusal under an existing stop
+instead saves `{ stopId, work }` in one conditional append on the same budget stream.
+It names the stop already hit and saves the refused identity before returning.
+It creates no new stop and reads no history. Repeated refusals of saved identities
+append nothing. Replay requires the referenced stop to appear earlier in the stream.
+The source event id/position
 identifies the stop. Legacy global stops cover both periods conservatively.
 
 The TypeScript budget fold keeps scope stops and known stopped work. A zero or

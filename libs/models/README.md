@@ -60,9 +60,10 @@ flowchart LR
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
   Keep the revision shown to admins valid after switch-on when no spending change
   was saved, so they can retry a refused edit without releasing a hold first.
-  Save a stop when a limit is exhausted. A changed limit or new budget period
-  allows new work, while previously stopped work stays stopped. Applying stops to
-  every tool and running computer is still planned.
+- Keep a saved stop when a spending limit is exhausted. A changed limit or new
+  budget period can allow new work, while previously stopped work stays stopped.
+  Save each refused turn before replying, including turns refused by an existing
+  stop. Applying the stop to every tool and running computer is still planned.
 - Hold money before an AI call and settle the charge when usage is reported.
   Keep the budget state in memory after replay, so saving each change does not
   read all the old spending events again.
