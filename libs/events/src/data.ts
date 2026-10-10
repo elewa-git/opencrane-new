@@ -2,6 +2,7 @@ import { optionalProviderTurnBindingSchema } from './turn-binding.ts';
 import { groupConversationSchema, sharedChildConversationSchema,
   childParticipantAddedSchema, childParticipantRemovedSchema } from './conversation.ts';
 import { isToolCallText } from './tool-call.ts';
+import { nativeDelegationBindingSchema, hasDistinctDelegationChild } from './delegation.ts';
 // Data schemas for every event type in the registry except the four
 // examples in examples.ts. Each is built from what docs/architecture/events.md
 // and plan.md say the event means: which ids it needs, who did it, and what a
@@ -589,13 +590,7 @@ export const routineDueDataSchema = z
   .object({ routineId: id, firedAt: z.iso.datetime({ offset: true }) })
   .strict();
 
-export const delegationStartedDataSchema = z
-  .object({ delegationId: id, parentComputerId: id, childComputerId: id, rootBudgetId: id })
-  .strict();
-
-export const delegationCompletedDataSchema = z
-  .object({ delegationId: id, outcome: z.enum(['success', 'failure']) })
-  .strict();
+export { delegationStartedDataSchema, delegationCompletedDataSchema } from './delegation.ts';
 
 // --- Security --------------------------------------------------------------
 
@@ -618,8 +613,14 @@ const computerTurnStartedFieldsSchema = optionalProviderTurnBindingSchema.safeEx
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
   model: id.optional(),
 });
-export const computerTurnStartedDataSchema = computerTurnStartedFieldsSchema
+const chatTurnStarted = computerTurnStartedFieldsSchema
   .refine(hasProviderTurnModel, 'Provider turns require a model');
+const nativeTurnStarted = optionalProviderTurnBindingSchema.safeExtend({
+  ...nativeDelegationBindingSchema.shape, task: z.literal('native_descendant'),
+  executionMode: z.enum(['restricted', 'memory_free']).optional(), model: id.optional(),
+}).refine(hasProviderTurnModel, 'Provider turns require a model')
+  .refine(hasDistinctDelegationChild, 'A child cannot be its own parent or root');
+export const computerTurnStartedDataSchema = z.union([chatTurnStarted, nativeTurnStarted]);
 
 function hasProviderTurnModel(data: { providerId?: string | undefined; model?: string | undefined }) {
   return (data.providerId === undefined) === (data.model === undefined);
@@ -629,8 +630,12 @@ const computerTurnClosedFieldsSchema = optionalProviderTurnBindingSchema.safeExt
   ...computerTurnStartedFieldsSchema.shape,
   threadId: id.optional(), status: z.enum(['completed', 'failed']),
 });
-export const computerTurnClosedDataSchema = computerTurnClosedFieldsSchema
+const chatTurnClosed = computerTurnClosedFieldsSchema
   .refine(hasProviderTurnModel, 'Provider turns require a model');
+const nativeTurnClosed = nativeTurnStarted.safeExtend({
+  status: z.enum(['completed', 'failed', 'cancelled']),
+});
+export const computerTurnClosedDataSchema = z.union([chatTurnClosed, nativeTurnClosed]);
 
 // Admission is separate from the later observed outcome. Unverified callers have no asserted identity.
 export const decisionRecordedDataSchema = z.object({

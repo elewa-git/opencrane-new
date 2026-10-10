@@ -62,6 +62,7 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
       threadId: string; task: string; model: string;
       providerId?: string | undefined; bindingSequence?: number | undefined;
     }) {
+      if (input.task === 'native_descendant') throw new Error('Native delegation is disabled');
       const computer = await active(input.assistantId);
       if (!tokens.turn) throw new Error('Turn issuer unavailable');
       await checkRecordedProviderChoice(store, silo, input);

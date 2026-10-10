@@ -33,7 +33,8 @@ flowchart LR
 ## What it is responsible for
 
 - Rebuild child participants and their recorded parent references from saved events.
-
+- Keeps delegated task relationships and outcomes in read tables. Rebuilding these
+  tables starts no tasks and changes no permissions or spending.
 - Copies recorded tool dispatch evidence into conversation feeds without calling a tool.
 - Rebuilds saved provider choices alongside provider records without calling a provider.
 - Turn ordered events into tables that the server can read.

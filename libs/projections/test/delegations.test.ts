@@ -34,7 +34,7 @@ async function rebuildsTasksWithoutEffects() {
     const parsed = schemaExample(definition?.example);
     const child = { ...parsed, delegationId: 'child', turnId: 'child-turn',
       threadId: 'child-thread', parentDelegationId: undefined };
-    const native = { ...child, task: 'native_descendant' };
+    const native: Record<string, unknown> = { ...child, task: 'native_descendant' };
     delete native['version'];
     delete native['computerAdmission'];
     const admission = await append('computer.turn_started', 'computer-assistant', native);
@@ -43,7 +43,13 @@ async function rebuildsTasksWithoutEffects() {
     const grandchild = { ...start, delegationId: 'grandchild', turnId: 'grandchild-turn',
       threadId: 'grandchild-thread', parentDelegationId: 'child', parentTurnId: 'child-turn',
       parentThreadId: 'child-thread' };
-    await append('delegation.started', 'delegation-grandchild', grandchild);
+    const grandchildNative: Record<string, unknown> = { ...grandchild, task: 'native_descendant' };
+    delete grandchildNative['version'];
+    delete grandchildNative['computerAdmission'];
+    const grandchildAdmission = await append('computer.turn_started',
+      'computer-assistant', grandchildNative);
+    const grandchildStart = { ...grandchild, computerAdmission: grandchildAdmission };
+    await append('delegation.started', 'delegation-grandchild', grandchildStart);
     const closed = { ...native, status: 'cancelled' };
     const terminalEvidence = await append('computer.turn_closed', 'computer-assistant', closed);
     const outcome = { version: 1, delegationId: 'child', outcome: 'cancelled',
@@ -76,11 +82,12 @@ async function rebuildsTasksWithoutEffects() {
     const original = await rows();
     expect(original.tasks).toHaveLength(3);
     expect(original.tasks[0]).toMatchObject({ root_id: 'root', parent_delegation_id: null,
-      outcome: outcome, start_position: '2', outcome_position: '5' });
+      outcome: outcome, start_position: '2', outcome_position: '6' });
     expect(original.tasks[1]).toMatchObject({ root_id: 'root', parent_delegation_id: 'child' });
     expect(original.tasks[2]).toMatchObject({ root_id: null, start: legacy });
-    expect(original.turns).toHaveLength(1);
+    expect(original.turns).toHaveLength(2);
     expect(original.turns[0]).toMatchObject({ root_id: 'root', status: 'cancelled' });
+    expect(original.turns[1]).toMatchObject({ root_id: 'root', status: null });
     await runner.rebuild(delegations);
     await runner.rebuild(budgets);
     await runner.run(delegations);

@@ -67,3 +67,4 @@ export { toolDispatchRecordedDataSchema, agentNativeConsentRefusedDataSchema } f
 export { grantGivenDataSchema, teamCreatedDataSchema } from './data.ts';
 export { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
   from './conversation.ts';
+export { delegationStartedDataSchema, delegationCompletedDataSchema } from './delegation.ts';

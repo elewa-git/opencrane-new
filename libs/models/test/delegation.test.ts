@@ -15,10 +15,16 @@ async function keepsDelegationDisabled() {
     const definition = getEventDefinition('delegation.started');
     const value: unknown = definition?.example;
     if (typeof value !== 'object' || value === null) throw new Error('Missing modern example');
-    const native: Record<string, unknown> = { ...value, task: 'native_descendant' };
+    const native: Record<string, unknown> = { ...value, task: 'native_descendant',
+      conversationId: 'conversation', payingGroupId: 'personal-default' };
     delete native['version'];
     delete native['computerAdmission'];
-    await context.append('computer-assistant', 'computer.turn_started', native);
+    const nativeStart = { id: 'native-start', commandId: 'native-start',
+      type: 'computer.turn_started', subject: 'computer-assistant', data: native,
+      silo: 'test', source: 'opencrane-server', time: '2026-10-10T10:00:00Z',
+      principal: { kind: 'system' as const, id: 'opencrane-server' }, correlation: {} };
+    const records = [nativeStart];
+    await context.nats.seed(records);
     const nativeClaims = { ...childClaims, task: 'native_descendant' };
     const nativeToken = await context.sign(nativeClaims, 'decision-service');
     const nativeHeaders = { 'x-turn-token': nativeToken, 'session-id': 'child-thread' };

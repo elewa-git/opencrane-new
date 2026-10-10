@@ -6,7 +6,7 @@ const binding = {
   assistantId: 'assistant', computerId: 'computer', generation: 1,
   conversationId: 'chat', requesterId: 'alice', payingGroupId: 'sales',
   parentTurnId: 'root-turn', parentThreadId: 'root-thread', turnId: 'child-turn',
-  threadId: 'child-thread', spawnItemId: 'spawn', contentClass: 'private',
+  threadId: 'child-thread', spawnItemId: 'spawn', dataClass: 'private',
   scopes: { models: ['gpt-6-luna'], tools: [], resources: [], operations: [],
     destinations: [], connectionIds: [], profileIds: [] },
 };
@@ -62,5 +62,8 @@ function readsNativeComputerRecords() {
   expect(schema('computer.turn_closed').safeParse(closed).success).toBe(true);
   const mixed = { ...native, task: 'chat_turn' };
   expect(schema('computer.turn_started').safeParse(mixed).success).toBe(false);
+  const forged = { ...envelope('computer.turn_started', native), subject: 'computer-assistant',
+    source: 'computer' };
+  expect(parseEventByType(forged).success).toBe(false);
 }
 it('keeps native computer records separate from chat starts', readsNativeComputerRecords);

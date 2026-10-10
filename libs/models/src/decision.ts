@@ -150,6 +150,7 @@ function activeTurn(turnToken: z.infer<typeof legacyTurnSchema>,
 }
 
 function requireTurnDelegation(turnToken: z.infer<typeof legacyTurnSchema>) {
+  if (turnToken.task === 'native_descendant') throw new Error('Native delegation is disabled');
   if (turnToken.delegation[0] !== turnToken.requester) throw new Error('Delegation refused');
 }
 

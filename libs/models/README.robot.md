@@ -4,6 +4,11 @@ For people, read [README.md](README.md) first.
 
 ## Budget writes
 
+Native descendant model admission is explicitly disabled in `requireTurnDelegation`.
+No root allowance or child reservation path is introduced by the delegation contracts.
+`test/delegation.test.ts` checks legacy and native refusals through the real gateway,
+with zero upstream calls and zero reservations.
+
 BudgetActor replays every budget event before writing. Its appends opt into the
 event store's `historyChecked` mode, using the last applied sequence. Ordinary
 commands use fresh UUIDs. Configure checks its caller's command id against the

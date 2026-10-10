@@ -217,7 +217,7 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 | `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
-| `computer.turn_started` / `computer.turn_closed` | server turn command | admission and idle-suspend fence on the computer stream | started binds the requested message, thread and `executionMode`, with optional provider/model identity; closed is permanent |
+| `computer.turn_started` / `computer.turn_closed` | server turn command | chat admission and idle-suspend checks; native computer-root read indexes | chat starts bind the message, thread and `executionMode`, with optional provider/model identity; native starts bind root and ancestry without granting authority; closed is permanent |
 | `computer.suspended` / `computer.resumed` | server (intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
@@ -483,7 +483,25 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | --- | --- | --- | --- |
 | `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` | person | routines | schedule the next firing |
 | `routine.due` | scheduler | routines (last firing) | emit `message.posted` to the routine's assistant; one firing only |
-| `delegation.started` / `delegation.completed` | parent or child computer | delegations | deliver the child's result to the parent |
+| `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; native execution remains disabled |
+
+Delegation version 1 names one root, computer generation, requester and payer. It
+records parent/child turns and threads, the native spawn item, content class,
+narrowed model/tool/resource/operation/destination scopes and connection/profile
+references. `computerAdmission` identifies the computer start event and global position.
+Outcomes are `completed`, `failed` or `cancelled`, with terminal evidence and an optional
+saved result reference. The first outcome stays fixed on replay, including after late success.
+Version-1 delegation envelopes require the server system principal/source and matching subject.
+Exact legacy computer-pair and success/failure records remain readable and grant no authority.
+Mixed formats refuse. These schemas do not prove ancestry or grant execution access.
+
+Computer start/close records have a separate `task: native_descendant` format with
+the same root and ancestry fields. Native closure also accepts cancellation.
+The delegation projection indexes these records by silo, assistant, generation and root.
+The auth computer summary ignores them, token issuance refuses them, and model admission
+refuses them before any hold. Budget replay keeps its existing cents; delegation events
+allocate no allowance and reserve or spend nothing. See the
+[accepted delegation design](../specs/phase-4/p4-11-delegation.md).
 
 ### Security
 

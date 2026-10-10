@@ -22,9 +22,9 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals, participants and child chats| events["libs/events<br/>event and memory checks"]
-  store["libs/event-store<br/>saved event log"] -.->|checks private chat choices and child records| events
-  projections["libs/projections<br/>read tables"] -.-> events
+  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals, participants, child chats and delegation| events["libs/events<br/>event and memory checks"]
+  store["libs/event-store<br/>saved event log"] -.->|checks private chat choices, child records and delegated tasks| events
+  projections["libs/projections<br/>read tables"] -.->|checks saved task relationships| events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turn and spending data| events
   computer["apps/computer<br/>report text check"] -.-> events
@@ -33,7 +33,9 @@ flowchart LR
 
 ## What it is responsible for
 
-- Define shared child records with a parent message, fixed payer and named people.
+- Defines shared child records with a parent message, fixed payer and named people.
+- Defines delegated task relationships and outcomes, including cancellation. Older records
+  remain readable. These records grant no permission to run a task.
 
 - Defines tool dispatch records, unsupported consent refusals, requester retries and safe invitation refusal records.
 
