@@ -115,6 +115,196 @@ async function close() {
 beforeAll(prepare, 120_000);
 afterAll(close);
 
+function scopedRequester(team: boolean, kind: MemoryIdentity['scopeKind']) {
+  if (team && kind !== 'person') {
+    return { granteeKind: 'team', granteeId: 'sales' };
+  }
+  return { granteeKind: 'member', granteeId: 'alice' };
+}
+
+async function seedScopedFacts(target: typeof setup, team: boolean) {
+  const custody = memoryKeys(dirname(target.options.configFile));
+  function decryptScoped(identity: MemoryIdentity,
+    encrypted: { ciphertext: string; keyId: string }) {
+    return custody.decrypt(identity, encrypted);
+  }
+  const scopedProjection = memoryProjection({ decrypt: decryptScoped });
+  await target.runner.initialise(scopedProjection);
+  const scopes: Pick<MemoryIdentity, 'scopeKind' | 'ownerId'>[] = [
+    { scopeKind: 'person' as const, ownerId: 'alice' },
+    { scopeKind: 'assistant_notes' as const, ownerId: 'assistant' },
+  ];
+  if (team) {
+    const groupScope = { scopeKind: 'group' as const, ownerId: 'sales' };
+    scopes.push(groupScope);
+  }
+  for (const scope of scopes) {
+    const selectedId = memoryScopeId('test', scope.scopeKind, scope.ownerId);
+    const identity = { silo: 'test', ...scope, scopeId: selectedId,
+      memoryId: scope.scopeKind, revision: 1 };
+    custody.provision(identity);
+    const encrypted = custody.encrypt(identity, `Only ${scope.scopeKind} facts`);
+    const fact = { schemaVersion: 1, ...scope, scopeId: selectedId,
+      memoryId: scope.scopeKind, revision: 1, kind: 'fact', pinned: false,
+      expiresAt: null, sources: [], dependsOn: [], ...encrypted };
+    await target.append(`scope-${selectedId}`, 'memory.written', fact);
+    const requester = scopedRequester(team, scope.scopeKind);
+    await allowScopedRead(target, selectedId, requester);
+  }
+  await target.runner.run(scopedProjection);
+  return scopes;
+}
+
+async function allowScopedRead(target: typeof setup, selectedId: string,
+  requester = { granteeKind: 'member', granteeId: 'alice' }) {
+  const grantees = [requester, { granteeKind: 'assistant', granteeId: 'assistant' }];
+  for (const grantee of grantees) {
+    const fields = { resourceType: 'memory_read', resourceId: selectedId,
+      ...grantee, grantedBy: 'alice' };
+    const grant = await target.append(grantStream('memory_read', selectedId),
+      'grant.given', fields);
+    await target.auth.handler.handle(grant, target.db);
+  }
+}
+
+async function scopedRecall(team: boolean) {
+  const target = await fixture(2000, 20000, false, 'gpt-6-luna', team, 'manual',
+    'sales', 'restricted');
+  let backend: typeof app | undefined;
+  try {
+    await target.stopDispatch();
+    await target.runtime.stop();
+    await govern(target);
+    const scopes = await seedScopedFacts(target, team);
+    const memory = { silo: 'test', store: target.nats.store, db: target.db,
+      binding: target.binding, feed: { memberId }, identity: target.identity };
+    backend = buildServer(testAuthConfig(), { memory });
+    let issued = '';
+    function captureScoped(request: import('fastify').FastifyRequest,
+      _reply: import('fastify').FastifyReply, done: () => void) {
+      issued = String(request.headers['x-memory-context'] ?? '');
+      done();
+    }
+    backend.addHook('preHandler', captureScoped);
+    const address = await backend.listen({ host: '127.0.0.1', port: 0 });
+    const upstream = new URL(address).host;
+    target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream });
+    await target.restart();
+    await refuseUnboundScopes(target, backend);
+    for (const scope of scopes) {
+      const selectedId = memoryScopeId('test', scope.scopeKind, scope.ownerId);
+      const argumentsValue = { scopeId: selectedId, query: '' };
+      const body = { ...call, params: { ...call.params, arguments: argumentsValue } };
+      const response = await target.call(headers, body, route);
+      expect(response.status, `${scope.scopeKind}: ${response.text}`).toBe(200);
+      const result: unknown = JSON.parse(response.text);
+      const expectedFact = { memoryId: scope.scopeKind, text: `Only ${scope.scopeKind} facts` };
+      const expectedPage = { returnedCount: 1, facts: [expectedFact] };
+      const expectedReply = { result: { structuredContent: expectedPage } };
+      expect(result).toMatchObject(expectedReply);
+      const expectedContext = { scopes: [selectedId], contentAccess: 'private' };
+      expect(decodeJwt(issued)).toMatchObject(expectedContext);
+      await refuseInactiveAssistant(target, backend, body, selectedId);
+      await refuseScopedRemember(target, backend, body, issued);
+      if (team) {
+        const removedFields = { teamId: 'sales', memberId: 'alice', removedBy: 'alice' };
+        const removed = await target.append('team-sales', 'team.member_removed', removedFields);
+        await assertScopedRefused(target, backend, body, selectedId);
+        await target.auth.handler.handle(removed, target.db);
+        const addedFields = { teamId: 'sales', memberId: 'alice', addedBy: 'alice' };
+        await target.append('team-sales', 'team.member_added', addedFields);
+      }
+      const requester = scopedRequester(team, scope.scopeKind);
+      const revokedFields = { resourceType: 'memory_read', resourceId: selectedId,
+        ...requester, revokedBy: 'alice' };
+      const revoked = await target.append(grantStream('memory_read', selectedId),
+        'grant.revoked', revokedFields);
+      const scopeClaims = { scopes: [selectedId] };
+      const revokedToken = await signedRecall(target, scopeClaims, body);
+      const direct = { method: 'POST' as const, url: route,
+        headers: { ...headers, 'x-memory-context': revokedToken }, payload: body };
+      expect((await backend.inject(direct)).statusCode).toBe(403);
+      expect((await target.call(headers, body, route)).status).toBe(403);
+      await target.auth.handler.handle(revoked, target.db);
+      if (scope.scopeKind === 'person') {
+        const discoveryBody = { jsonrpc: '2.0', id: 1, method: 'tools/list',
+          params: { _meta: metadata } };
+        const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
+        const discovery = await target.call(discoveryHeaders, discoveryBody, route);
+        expect(discovery.status, discovery.text).toBe(200);
+        expect(discovery.text).not.toMatch(/remember|correct|forget/u);
+      }
+    }
+  } finally {
+    await backend?.close();
+    await target.close();
+  }
+}
+it.each([false, true])('recalls only the selected scope with live grants (team=%s)',
+  scopedRecall, 120_000);
+
+async function refuseInactiveAssistant(target: typeof setup, backend: typeof app,
+  body: typeof call, selectedId: string) {
+  const fields = { assistantId: 'assistant', changedBy: 'alice', changedFields: ['active'] };
+  await target.append('assistant-assistant', 'assistant.settings_changed',
+    { ...fields, active: false });
+  try {
+    await assertScopedRefused(target, backend, body, selectedId);
+  } finally {
+    await target.append('assistant-assistant', 'assistant.settings_changed',
+      { ...fields, active: true });
+  }
+}
+
+async function refuseScopedRemember(target: typeof setup, backend: typeof app,
+  recall: typeof call, token: string) {
+  const argumentsValue = { commandId: 'write', scopeId: recall.params.arguments.scopeId,
+    text: 'Private input', kind: 'fact', pinned: false, expiresAt: null,
+    sources: [{ conversationId: 'conversation', messageId: 'plausible' }], dependsOn: [] };
+  const body = { ...recall, params: { ...recall.params, name: 'remember',
+    arguments: argumentsValue } };
+  const writeHeaders = { ...headers, 'mcp-name': 'remember', 'x-memory-context': token };
+  const subject = `scope-${argumentsValue.scopeId}`;
+  const before = await target.nats.store.head(subject);
+  const request = { method: 'POST' as const, url: route, headers: writeHeaders, payload: body };
+  expect((await backend.inject(request)).statusCode).toBe(403);
+  expect((await target.call(writeHeaders, body, route)).status).toBe(403);
+  expect(await target.nats.store.head(subject)).toBe(before);
+}
+
+async function refuseUnboundScopes(target: typeof setup, backend: typeof app) {
+  const group = { teamId: 'other', name: 'Other', createdBy: 'alice' };
+  await target.append('team-other', 'team.created', group);
+  const membership = { teamId: 'other', memberId: 'alice', addedBy: 'alice' };
+  await target.append('team-other', 'team.member_added', membership);
+  const assistant = { assistantId: 'other', kind: 'personal', ownerId: 'alice' };
+  await target.append('assistant-other', 'assistant.created', assistant);
+  const unboundScopes = [memoryScopeId('test', 'group', 'other'),
+    memoryScopeId('test', 'assistant_notes', 'other')];
+  for (const selectedId of unboundScopes) {
+    await allowScopedRead(target, selectedId);
+    const argumentsValue = { scopeId: selectedId, query: '' };
+    const body = { ...call, params: { ...call.params, arguments: argumentsValue } };
+    await assertScopedRefused(target, backend, body, selectedId);
+  }
+}
+
+async function assertScopedRefused(target: typeof setup, backend: typeof app,
+  body: typeof call, selectedId: string) {
+  const scopeClaims = { scopes: [selectedId] };
+  const token = await signedRecall(target, scopeClaims, body);
+  const database = vi.spyOn(target.db, 'query');
+  try {
+    const direct = { method: 'POST' as const, url: route,
+      headers: { ...headers, 'x-memory-context': token }, payload: body };
+    expect((await backend.inject(direct)).statusCode).toBe(403);
+    expect((await target.call(headers, body, route)).status).toBe(403);
+    expect(database).not.toHaveBeenCalled();
+  } finally {
+    database.mockRestore();
+  }
+}
+
 async function grantMemory(target: typeof setup, kind: string, granteeId: string,
   recorded = true) {
   const subject = grantStream('memory_read', scopeId);

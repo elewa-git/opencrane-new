@@ -2,6 +2,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { decodeJwt } from 'jose';
 import { afterEach, expect, it } from 'vitest';
 import { computerTokenAudience, tokenIssuer, turnTokenAudience } from '../src/index.ts';
 
@@ -75,3 +76,23 @@ async function signsProviderChoice() {
   await expect(issuer.turn(invalid)).rejects.toThrow();
 }
 it('signs a complete provider choice and refuses incomplete or invalid choices', signsProviderChoice);
+
+it('caps memory passes at two seconds and keeps a shorter caller deadline',
+  async function memoryDeadlines() {
+    directory = await mkdtemp(join(tmpdir(), 'memory-token-'));
+    const options = { namedCurve: 'P-256',
+      privateKeyEncoding: { type: 'pkcs8' as const, format: 'pem' as const },
+      publicKeyEncoding: { type: 'spki' as const, format: 'pem' as const } };
+    const key = generateKeyPairSync('ec', options);
+    const path = join(directory, 'signing.pem');
+    await writeFile(path, key.privateKey, { mode: 0o600 });
+    const issuerOptions = { privateKeyPath: path, issuer: 'https://memory-token.invalid/' };
+    const issuer = await tokenIssuer(issuerOptions);
+    const payload = { requester: 'alice' };
+    const longToken = await issuer.memoryContext(payload, Date.now() + 60_000);
+    const longClaims = decodeJwt(longToken);
+    expect(Number(longClaims.exp) - Number(longClaims.iat)).toBe(2);
+    const deadline = Date.now() + 500;
+    const shortToken = await issuer.memoryContext(payload, deadline);
+    expect(decodeJwt(shortToken).exp).toBe(deadline / 1000);
+  });

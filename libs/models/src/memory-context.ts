@@ -3,11 +3,13 @@ import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { grantStream, type Binding } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
+import { assistantCreatedDataSchema, type MemoryIdentity } from '@opencrane/events';
 import { authorityFence, currentAuthority } from './authority.ts';
 import { decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall, parseMemoryRequest } from './mcp.ts';
 import { closesDecisionTurn } from './approvals.ts';
 import { data } from './state.ts';
+import { groupMembership } from './paying-group.ts';
 import type { IncomingHttpHeaders } from 'node:http';
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
@@ -47,29 +49,75 @@ export async function memoryRights(store: EventStore, binding: Binding,
   const fresh = await authorityFence(store, performance.now(), [], deadline);
   fresh.include('mcp-memory');
   await memoryPolicy(store, binding.silo, parsed, deadline);
-  const scope = { scopeId: memoryScopeId(binding.silo, 'person', claims.requester),
-    scopeKind: 'person' as const, ownerId: claims.requester };
-  if (parsed.input && parsed.input.scopeId !== scope.scopeId) {
-    throw new Error('Memory scope refused');
-  }
-  await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scope.scopeId, fresh);
+  const selected = await selectedMemoryScope(store, binding, claims, parsed, fresh);
+  const scope = selected.scope;
   await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
-  const contextDigest = await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'memory_read', scope.scopeId, fresh, activity.conversation);
-  await currentAuthority(store, binding, claims.requester, claims.assistant,
+  let contextDigest = await currentAuthority(store, binding, claims.requester, claims.assistant,
     claims.conversation, 'mcp_server', 'memory', fresh, activity.conversation);
+  // Keep discovery free of fact access. Each recall checks its selected scope separately.
+  if (parsed.input) {
+    await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scope.scopeId,
+      fresh, selected.requesterGroup);
+    contextDigest = await currentAuthority(store, binding, claims.requester, claims.assistant,
+      claims.conversation, 'memory_read', scope.scopeId, fresh, activity.conversation);
+  }
   await activity.confirm(deadline, false);
   await fresh();
   return { scope, contextDigest, contextPosition: fresh.head };
 }
 
+async function selectedMemoryScope(store: EventStore, binding: Binding, claims: ThreadIdentity,
+  parsed: ReturnType<typeof parseMemoryRequest>,
+  fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  const subject = `assistant-${claims.assistant}`;
+  fresh.include(subject);
+  let assistant: z.infer<typeof assistantCreatedDataSchema> | undefined;
+  for await (const row of store.readStream(subject, 1, fresh.deadline)) {
+    if (row.sequence > fresh.head) {
+      break;
+    }
+    if (row.event.silo === binding.silo && row.event.type === 'assistant.created') {
+      assistant = assistantCreatedDataSchema.parse(row.event.data);
+      break;
+    }
+  }
+  if (!assistant || assistant.assistantId !== claims.assistant) {
+    throw new Error('Memory assistant refused');
+  }
+  const candidates: Pick<MemoryIdentity, 'scopeKind' | 'ownerId'>[] = [
+    { scopeKind: 'person', ownerId: claims.requester },
+    { scopeKind: 'assistant_notes', ownerId: claims.assistant },
+  ];
+  let requesterGroup: string | undefined;
+  if (assistant.kind === 'team') {
+    requesterGroup = assistant.ownerId;
+    fresh.include(`team-${assistant.ownerId}`);
+    await groupMembership(store, binding.silo, claims.requester, assistant.ownerId,
+      binding, fresh.deadline);
+    const groupScope = { scopeKind: 'group' as const, ownerId: assistant.ownerId };
+    candidates.push(groupScope);
+  } else if (assistant.ownerId !== claims.requester) {
+    throw new Error('Memory assistant audience refused');
+  }
+  // Derive choices from the bound assistant. Other memberships cannot add scopes.
+  for (const candidate of candidates) {
+    const scopeId = memoryScopeId(binding.silo, candidate.scopeKind, candidate.ownerId);
+    if (!parsed.input || parsed.input.scopeId === scopeId) {
+      const scope = { ...candidate, scopeId };
+      return { scope, requesterGroup };
+    }
+  }
+  throw new Error('Memory scope refused');
+}
+
 async function requireRecordedGrants(store: EventStore, silo: string,
   claims: ThreadIdentity, resourceType: string, resourceId: string,
-  fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  fresh: Awaited<ReturnType<typeof authorityFence>>, requesterGroup?: string) {
   const subject = grantStream(resourceType, resourceId);
   fresh.include(subject);
   let memberAllowed = false;
   let assistantAllowed = false;
+  let groupAllowed = false;
   // Require saved grants too. Leftover permissions cannot select memory on their own.
   for await (const row of store.readStream(subject, 1, fresh.deadline)) {
     if (row.sequence > fresh.head) {
@@ -84,16 +132,28 @@ async function requireRecordedGrants(store: EventStore, silo: string,
     const kind = fields['granteeKind'];
     // Apply old revocations without a kind to both identities, as OpenFGA does.
     const legacyRevocation = !allowed && kind === undefined;
-    if (fields['granteeId'] === claims.requester && (kind === 'member' || legacyRevocation)) {
+    if (matchesGrantee(fields, claims.requester, 'member', legacyRevocation)) {
       memberAllowed = allowed;
     }
-    if (fields['granteeId'] === claims.assistant && (kind === 'assistant' || legacyRevocation)) {
+    if (matchesGrantee(fields, claims.assistant, 'assistant', legacyRevocation)) {
       assistantAllowed = allowed;
     }
+    // Accept the owner's group only after checking this requester's current membership.
+    if (matchesGrantee(fields, requesterGroup, 'team', legacyRevocation)) {
+      groupAllowed = allowed;
+    }
   }
-  if (!memberAllowed || !assistantAllowed) {
+  if ((!memberAllowed && !groupAllowed) || !assistantAllowed) {
     throw new Error('Recorded memory grant refused');
   }
+}
+
+function matchesGrantee(fields: Record<string, unknown>, id: string | undefined,
+  kind: string, legacyRevocation: boolean) {
+  if (!id || fields['granteeId'] !== id) {
+    return false;
+  }
+  return fields['granteeKind'] === kind || legacyRevocation;
 }
 
 function isResourceGrant(event: StoredEvent['event'], fields: Record<string, unknown>,
