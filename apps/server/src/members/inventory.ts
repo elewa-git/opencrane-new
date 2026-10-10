@@ -39,6 +39,7 @@ async function recordedInputs(options: GroupOptions, deadline: number) {
 function groupFacts(rows: StoredEvent[], memberId: string) {
   const names = new Map<string, string>();
   const memberships = new Map<string, StoredEvent>();
+  const removals = new Map<string, StoredEvent>();
   for (const row of rows) {
     if (row.event.type === 'team.created') {
       const group = teamCreatedDataSchema.parse(row.event.data);
@@ -46,11 +47,25 @@ function groupFacts(rows: StoredEvent[], memberId: string) {
     } else if (row.event.type.startsWith('team.member_')) {
       const fields = z.object({ teamId: z.string(), memberId: z.string() }).parse(row.event.data);
       if (fields.memberId !== memberId) continue;
-      if (row.event.type === 'team.member_added') memberships.set(fields.teamId, row);
-      else memberships.delete(fields.teamId);
+      if (row.event.type === 'team.member_added') {
+        memberships.set(fields.teamId, row);
+        removals.delete(fields.teamId);
+      } else {
+        memberships.delete(fields.teamId);
+        removals.set(fields.teamId, row);
+      }
     }
   }
-  return { names, memberships };
+  return { names, memberships, removals };
+}
+
+async function checkGroupRemovals(options: GroupOptions, groups: ReturnType<typeof groupFacts>,
+  unavailable: Set<string>, deadline: number) {
+  const auth = memberAuthorisation(options.binding);
+  for (const removal of groups.removals.values()) {
+    if (performance.now() >= deadline) throw new Error('Inventory deadline exceeded');
+    if (!await auth.applied(removal.event.id)) unavailable.add('group_membership');
+  }
 }
 
 function latestGrants(rows: StoredEvent[]) {
@@ -189,6 +204,7 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   for (const position of Object.values(inputs.positions)) head = Math.max(head, position);
   const unavailable = new Set<string>();
   const groups = groupFacts(inputs.rows, memberId);
+  await checkGroupRemovals(options, groups, unavailable, deadline);
   for (const groupId of groups.memberships.keys()) {
     if (!groups.names.has(groupId)) unavailable.add('unsupported_ownership');
   }
