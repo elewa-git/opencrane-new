@@ -3,7 +3,7 @@ import {
   signal, viewChild, type OnDestroy, type OnInit,
 } from '@angular/core';
 import {
-  chatMessageSchema, chatRowSchema, type ChatConversation, type ChatRow,
+  type ChatConversation, type ChatRow,
 } from '@opencrane/protocol';
 import { SharedState } from '../shared-state/shared-state';
 import { PaperSurface } from '../ui/paper';
@@ -18,15 +18,19 @@ import {
 import {
   appendDirectMessage, directColleagueById, directConversationById, directConversationTitle,
   directConversations, directInitials,
-  directMessageText, formatDirectTime, otherParticipant, scrollDirectTranscript,
-  directAuthorName, directIsOwnMessage, directRecipientName,
+  directConversationHeaderTitle, directConversationMode, directDraftKey, directMessageText,
+  formatDirectTime,
+  exceedsDirectRecipientLimit, focusDirectComposer, hasDirectMessage,
+  isDirectTranscriptNearNewest, mergeDirectColleagues,
+  otherParticipant, readDirectUpdate, scrollDirectTranscript,
+  directAuthorName, directIsOwnMessage, directRecipientName, groupAuthorName,
 } from './direct-chat-display';
 import {
   fetchChatContext, fetchDirectConversations, fetchDirectHistory, searchColleagues,
   type DirectFailure,
 } from './direct-chat-api';
 
-type PageState = 'loading' | 'ready' | 'failed' | 'access_changed';
+type PageState = 'loading' | 'ready' | 'failed' | 'not_found' | 'access_changed';
 type ReadState = 'idle' | 'loading' | 'ready' | 'failed';
 
 
@@ -43,9 +47,12 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly directTime = formatDirectTime;
   protected readonly directAvatar = directInitials;
   protected readonly conversationTitle = directConversationTitle;
+  protected readonly headerTitle = directConversationHeaderTitle;
+  protected readonly groupAuthor = groupAuthorName;
   protected readonly ownMessage = directIsOwnMessage;
   protected readonly messageAuthor = directAuthorName;
   protected readonly recipientDisplayName = directRecipientName;
+  protected readonly exceedsDirectRecipientLimit = exceedsDirectRecipientLimit;
   protected readonly pageState = signal<PageState>('loading');
   protected readonly refreshing = signal(false);
   protected readonly colleagueState = signal<ReadState>('loading');
@@ -147,6 +154,15 @@ export class DirectChat implements OnInit, OnDestroy {
     this.pageError.set('');
     const requestedId = requestedDirectConversationId();
     if (requestedId) {
+      const requestedConversation = directConversationById(this.conversations(), requestedId);
+      if (!requestedConversation) {
+        this.pageState.set('not_found');
+        this.selectedConversationId.set('');
+        updateDirectConversationAddress('');
+        this.pageError.set('That conversation was not found or is unavailable.');
+        this.statusText.set(this.pageError());
+        return;
+      }
       await this.selectConversation(requestedId);
     } else {
       this.announceRead('Direct conversations loaded.');
@@ -212,19 +228,25 @@ export class DirectChat implements OnInit, OnDestroy {
   protected async selectConversation(conversationId: string): Promise<void> {
     if (this.composerBusy()) return;
     const conversation = directConversationById(this.conversations(), conversationId);
-    if (!conversation || conversation.mode !== 'direct') return;
-    const otherId = otherParticipant(conversation.participantIds, this.currentMemberId);
-    if (!otherId) return;
-    const candidate = directColleagueById(this.knownColleagues(), otherId);
-    const selectedColleague = candidate ?? { memberId: otherId, displayName: null };
+    if (!conversation || (conversation.mode !== 'direct' && conversation.mode !== 'group')) return;
+    let selectedColleague: Colleague | undefined;
+    if (conversation.mode === 'direct') {
+      const otherId = otherParticipant(conversation.participantIds, this.currentMemberId);
+      if (!otherId) return;
+      const candidate = directColleagueById(this.knownColleagues(), otherId);
+      selectedColleague = candidate ?? { memberId: otherId, displayName: null };
+    }
     const changed = this.selectedConversationId() !== conversationId;
     if (changed) this.rememberDraft();
     this.colleague.set(selectedColleague);
+    this.selectedPeople.set([]);
+    this.groupSnapshot.set(undefined);
     this.navigationOpen.set(false);
     if (changed) {
       this.clearConversationView();
     }
     this.selectedConversationId.set(conversationId);
+    this.pageState.set('ready');
     if (changed) this.restoreDraft();
     updateDirectConversationAddress(conversationId);
     this.pageError.set('');
@@ -239,12 +261,14 @@ export class DirectChat implements OnInit, OnDestroy {
 
   protected async submitMessage(text: string): Promise<void> {
     const conversationId = this.selectedConversationId() || newDirectCommandId('direct');
+    const existingMode = directConversationMode(this.selectedConversation());
     const recipientSend = {
       busy: this.composerBusy(), ready: this.pageState() === 'ready',
       recipient: this.colleague(), people: this.selectedPeople(),
       audienceReviewed: this.audienceReviewed(),
       snapshot: this.groupSnapshot(), memberId: this.currentMemberId,
-      conversationId, isExisting: Boolean(this.selectedConversationId()), text,
+      conversationId, isExisting: Boolean(this.selectedConversationId()),
+      ...(existingMode ? { existingMode } : {}), text,
     };
     await this.sending.sendToRecipients(recipientSend);
   }
@@ -256,35 +280,22 @@ export class DirectChat implements OnInit, OnDestroy {
     this.audienceReviewed.set(false);
   }
 
-  protected recipientLimitExceeded(): boolean {
-    if (this.groupSnapshot()) return this.selectedPeople().length > 97;
-    return this.selectedPeople().length > 96;
+  protected selectedConversation(): ChatConversation | undefined {
+    return directConversationById(this.conversations(), this.selectedConversationId());
   }
 
   protected transcriptScrolled(): void {
     const transcript = this.transcript()?.nativeElement;
     if (!transcript) return;
-    const remaining = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight;
-    this.followNewest = remaining < 80;
+    this.followNewest = isDirectTranscriptNearNewest(transcript);
   }
 
   protected focusComposer(): void {
-    const host = this.composerElement()?.nativeElement;
-    if (!host) return;
-    const field = host.querySelector('textarea');
-    if (field instanceof HTMLTextAreaElement) field.focus();
+    focusDirectComposer(this.composerElement()?.nativeElement);
   }
 
   protected protectPendingNavigation(event: MouseEvent): void {
     if (this.composerBusy()) event.preventDefault();
-  }
-
-  protected openNavigation(): void {
-    this.navigationOpen.set(true);
-  }
-
-  protected navigationClosed(): void {
-    this.navigationOpen.set(false);
   }
 
   private async loadColleagues(query: string): Promise<void> {
@@ -297,7 +308,10 @@ export class DirectChat implements OnInit, OnDestroy {
     if (request.signal.aborted || this.searchRequest !== request || !this.canReadPage()) return;
     if (result.kind === 'ok') {
       this.colleagues.set(result.value.rows);
-      this.rememberColleagues(result.value.rows);
+      const knownColleagues = mergeDirectColleagues(
+        this.knownColleagues(), result.value.rows,
+      );
+      this.knownColleagues.set(knownColleagues);
       this.colleagueState.set('ready');
       return;
     }
@@ -305,26 +319,21 @@ export class DirectChat implements OnInit, OnDestroy {
     if (result.kind === 'access_changed') this.clearAfterAccessChange();
   }
 
-  private rememberColleagues(rows: Colleague[]): void {
-    const known = new Map<string, Colleague>();
-    for (const colleague of this.knownColleagues()) known.set(colleague.memberId, colleague);
-    for (const colleague of rows) known.set(colleague.memberId, colleague);
-    this.knownColleagues.set(Array.from(known.values()));
-  }
-
   private async loadHistory(conversationId: string): Promise<void> {
     this.historyRequest?.abort();
     const request = new AbortController();
     this.historyRequest = request;
     this.historyState.set('loading');
-    this.announceRead('Loading messages…');
+    if (!this.recordedMessage()) this.announceRead('Loading messages…');
     const result = await fetchDirectHistory(conversationId, request.signal);
     if (request.signal.aborted || !this.canReadPage()
       || conversationId !== this.selectedConversationId()) return;
     if (result.kind !== 'ok') {
       this.historyState.set('failed');
       if (result.kind === 'access_changed') this.clearAfterAccessChange();
-      else this.announceRead('Messages could not be loaded. Try Refresh.');
+      else if (!this.recordedMessage()) {
+        this.announceRead('Messages could not be loaded. Try Refresh.');
+      }
       return;
     }
     this.applyHistory(conversationId, result.value);
@@ -338,7 +347,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.generation = feed.generation;
     this.historyState.set('ready');
     this.scrollToNewest = this.followNewest;
-    this.clearVisibleReceipt();
+    if (hasDirectMessage(this.messages(), this.recordedMessage())) this.recordedMessage.set('');
     // Read the saved history before subscribing so reconnect can resume from its position.
     if (this.socketConversationId !== conversationId) {
       this.socketConversationId = conversationId;
@@ -404,6 +413,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.searchRequest?.abort();
     this.historyRequest?.abort();
     this.listRequest?.abort();
+    this.navigationOpen.set(false);
     this.socketConversationId = '';
     this.socket.disconnect();
     this.pageState.set('access_changed');
@@ -425,25 +435,17 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   private draftKey(): string {
-    const conversationId = this.selectedConversationId();
-    if (conversationId) return `conversation:${conversationId}`;
-    return `recipient:${this.colleague()?.memberId ?? ''}`;
+    return directDraftKey(this.selectedConversationId(), this.colleague()?.memberId);
   }
 
   private rememberDraft(): void {
-    if (this.colleague()) this.drafts.set(this.draftKey(), this.draft());
+    if (!this.colleague() && this.selectedConversation()?.mode !== 'group') return;
+    this.drafts.set(this.draftKey(), this.draft());
   }
 
   private restoreDraft(): void {
     this.draft.set(this.drafts.get(this.draftKey()) ?? '');
     this.failure.set('');
-  }
-
-  private clearVisibleReceipt(): void {
-    const commandId = this.recordedMessage();
-    for (const row of this.messages()) {
-      if (row.id === commandId) this.recordedMessage.set('');
-    }
   }
 
   private async loadConversationRows(): Promise<void> {
@@ -480,39 +482,31 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   private receive(raw: unknown): void {
-    const parsed = chatMessageSchema.safeParse(raw);
-    if (!parsed.success) return;
-    const message = parsed.data;
-    if (message.conversationId !== this.selectedConversationId()) return;
-    if (message.type === 'refused') {
+    const update = readDirectUpdate(raw, this.selectedConversationId(), this.generation,
+      this.position);
+    if (update.kind === 'ignore') return;
+    if (update.kind === 'access_changed') {
       this.clearAfterAccessChange();
       return;
     }
-    if (message.type === 'resync') {
-      void this.loadHistory(message.conversationId);
+    if (update.kind === 'reload') {
+      void this.loadHistory(this.selectedConversationId());
       return;
     }
-    if (message.generation !== this.generation) {
-      void this.loadHistory(message.conversationId);
-      return;
-    }
-    if (message.type !== 'event' || !message.row) return;
-    const row = chatRowSchema.safeParse(message.row);
-    if (!row.success) {
+    if (update.kind === 'invalid') {
       this.statusText.set('A conversation update could not be read. Refresh to try again.');
       return;
     }
-    if (row.data.position <= this.position) return;
-    if (row.data.position !== this.position + 1) {
-      void this.loadHistory(message.conversationId);
-      return;
-    }
-    this.messages.set(appendDirectMessage(this.messages(), row.data));
-    this.position = row.data.position;
+    this.messages.set(appendDirectMessage(this.messages(), update.row));
+    this.position = update.row.position;
     this.scrollToNewest = this.followNewest;
-    this.clearVisibleReceipt();
-    if (row.data.type === 'message.posted' && !directIsOwnMessage(row.data, this.currentMemberId)) {
-      this.statusText.set(`New message from ${directRecipientName(this.colleague())}`);
+    if (hasDirectMessage(this.messages(), this.recordedMessage())) this.recordedMessage.set('');
+    if (update.row.type === 'message.posted'
+      && !directIsOwnMessage(update.row, this.currentMemberId)) {
+      const authorName = this.selectedConversation()?.mode === 'group'
+        ? groupAuthorName(update.row, this.currentMemberId, this.knownColleagues())
+        : directRecipientName(this.colleague());
+      this.statusText.set(`New message from ${authorName}`);
     }
   }
 

@@ -66,7 +66,7 @@ No full root suite or owner stack is used. The machine-readable capture list is
 | Focused web specs | PASS | All 39 focused specs and all 457 Angular specs pass with the guards restored. |
 | Server permission specs | PASS | Both temporary access and removed-member specs passed. Removing the temporary-state, participant and membership guards made the corresponding specs fail. |
 | Guard removal | PASS | 46 guard checks caused assertion failures, including real AI paths, temporary access, focus, font loading, draft ownership, scroll-up behaviour, 320 px clipping and link height. See [guards.json](guards.json). Guards were restored. |
-| Visual browser check | PASS | 114 captures: 19 states at 1280/390/320 px and both motion settings. Control edges, sideways scroll, 44 px phone targets and the bottom of a 40-message transcript are checked. Zero turn and model requests. |
+| Visual browser check | PASS | 120 captures: 20 states at 1280/390/320 px and both motion settings. The missing-link state keeps the list visible on desktop and reachable from the phone menu. Control edges, sideways scroll, 44 px phone targets and the bottom of a 40-message transcript are checked. Zero turn and model requests. |
 | Lint, typecheck, production build, event catalogue | PASS | Full lint and typecheck, production build and event catalogue passed. CSS warning budgets and the noVNC CommonJS warning remain below their error limits. |
 | Chat server tests | PASS | Eight files, 79 tests, one worker, with the throwaway PostgreSQL database. |
 | Root web tests | PASS | 12 browser/state/theme tests across three files. |

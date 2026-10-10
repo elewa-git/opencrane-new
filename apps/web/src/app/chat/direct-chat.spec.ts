@@ -173,6 +173,13 @@ function createFetchFixture() {
     sockets,
     sentSocketMessages,
     closedSockets,
+    addGroupConversation() {
+      savedConversations.push({ conversationId: 'group-chat', createdBy: 'alice',
+        createdAt: '2026-10-06T09:00:00Z', mode: 'group',
+        participantIds: ['alice', 'bob', 'carol'] });
+      savedMessages.set('group-chat', [eventRow(1, 'bob', 'Hello everyone'),
+        eventRow(2, 'carol', '@agent is just text')]);
+    },
     socketFactory,
     failNextMessageReply() { messageFailure = 'lost'; },
     holdNextMessageReply(resolve: () => void) { notifyMessageStarted = resolve; },
@@ -184,8 +191,13 @@ function createFetchFixture() {
   };
 }
 
-async function mountWithoutReady(api = createFetchFixture()): Promise<ComponentFixture<DirectChat>> {
-  history.replaceState({}, '', '/workspace/direct');
+async function mountWithoutReady(
+  api = createFetchFixture(), requestedId = '',
+): Promise<ComponentFixture<DirectChat>> {
+  const address = requestedId
+    ? `/workspace/direct?conversation=${encodeURIComponent(requestedId)}`
+    : '/workspace/direct';
+  history.replaceState({}, '', address);
   TestBed.configureTestingModule({ imports: [DirectChat], providers: [
     { provide: SOCKET_FACTORY, useValue: api.socketFactory },
     { provide: RANDOM_SOURCE, useValue: fixedRandom },
@@ -844,8 +856,34 @@ async function keepsRefusedDraft(status: number): Promise<void> {
     fixture.destroy();
   }
 
-it.each([400, 403, 409])('keeps typed text after a %i send and keeps its failure through refresh',
+it.each([400, 409])('keeps typed text after a %i send and keeps its failure through refresh',
   keepsRefusedDraft);
+
+async function purgesProtectedContentAfterRefusedGroupSend(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  const groupRow = Array.from(root(fixture).querySelectorAll<HTMLButtonElement>('.conversation-row'))
+    .find((row) => row.textContent?.includes('Chris Njeri'));
+  groupRow?.click();
+  await settle(fixture);
+  typeDraft(fixture, 'Protected group draft');
+  function refusePost(request: RequestRecord): Response | undefined {
+    if (request.method === 'POST') return reply({ status: 'refused' }, 403);
+    return undefined;
+  }
+  api.override(refusePost);
+  enterMessage(fixture, 'Protected group draft');
+  await settle(fixture);
+  expect(root(fixture).querySelector('h1')?.textContent).toContain('Unavailable');
+  expect(root(fixture).textContent).not.toContain('Hello everyone');
+  expect(root(fixture).textContent).not.toContain('Chris Njeri');
+  expect(root(fixture).querySelector('oc-chat-composer')).toBeNull();
+  fixture.destroy();
+}
+
+it('purges protected content after a refused group message post',
+  purgesProtectedContentAfterRefusedGroupSend);
 
 async function retainsConversationNames(): Promise<void> {
   const fixture = await mount();
@@ -967,6 +1005,31 @@ async function keepsFirstRetryFocus(): Promise<void> {
 
 it('keeps first-load retry focus and avoids false empty-list messages', keepsFirstRetryFocus);
 
+async function showsUnavailableForMissingRequestedConversation(): Promise<void> {
+  const api = createFetchFixture();
+  const fixture = await mountWithoutReady(api, 'removed-group');
+  await waitForText(fixture, 'Conversation not found or unavailable');
+  expect(root(fixture).querySelector('h1')?.textContent).toContain('Unavailable');
+  expect(root(fixture).textContent).not.toContain('You no longer have access');
+  expect(root(fixture).textContent).not.toContain('Loading direct conversations');
+  const availableConversation = root(fixture).querySelector<HTMLButtonElement>(
+    '.rail .conversation-row',
+  );
+  expect(availableConversation?.textContent).toContain('Grace Achieng');
+  expect(availableConversation).not.toBeNull();
+  expect(root(fixture).querySelector('textarea')).toBeNull();
+  expect(api.sockets).toHaveLength(0);
+
+  availableConversation?.click();
+  await waitForText(fixture, 'Is the Tuesday slot still open?');
+  expect(root(fixture).textContent).not.toContain('Conversation not found or unavailable');
+  expect(root(fixture).querySelector('textarea')).not.toBeNull();
+  fixture.destroy();
+}
+
+it('shows an unavailable state for a missing requested conversation',
+  showsUnavailableForMissingRequestedConversation);
+
 async function clearsAfterRealRefusal(): Promise<void> {
   const api = createFetchFixture();
   const fixture = await mount(api);
@@ -996,6 +1059,40 @@ async function clearsAfterRealRefusal(): Promise<void> {
 }
 
 it('clears protected data and ignores a held refresh after real access loss', clearsAfterRealRefusal);
+
+async function focusesUnavailableNoticeAfterPhoneMenuRevocation(): Promise<void> {
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  await openExisting(fixture);
+  const dialog = root(fixture).querySelector<HTMLDialogElement>('oc-navigation-menu dialog');
+  if (!dialog) throw new Error('Expected the phone navigation dialog');
+  const navigationDialog = dialog;
+  function showNavigation(): void {
+    navigationDialog.setAttribute('open', '');
+  }
+  function closeNavigation(): void {
+    navigationDialog.removeAttribute('open');
+  }
+  Object.defineProperty(dialog, 'showModal', { configurable: true, value: showNavigation });
+  Object.defineProperty(dialog, 'close', { configurable: true, value: closeNavigation });
+  const opener = root(fixture).querySelector<HTMLButtonElement>('.navigation-toggle');
+  opener?.click();
+  await settle(fixture);
+  expect(root(fixture).querySelector('oc-navigation-menu dialog')?.hasAttribute('open')).toBe(true);
+  const socket = api.sockets.at(-1);
+  const refused = { version: 1, topic: 'conversation', type: 'refused',
+    conversationId: 'existing', position: 2, generation: 1 };
+  socket?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(refused) }));
+  await settle(fixture);
+  await settleAnimationFrames();
+  const unavailableHeading = root(fixture).querySelector('h1');
+  expect(root(fixture).querySelector('oc-navigation-menu dialog')?.hasAttribute('open')).toBe(false);
+  expect(document.activeElement).toBe(unavailableHeading);
+  fixture.destroy();
+}
+
+it('focuses the unavailable notice after phone-menu revocation',
+  focusesUnavailableNoticeAfterPhoneMenuRevocation);
 
 async function restoresSearchFocus(): Promise<void> {
   const fixture = await mount();
@@ -1029,13 +1126,45 @@ async function announcesMessageReceipts(): Promise<void> {
   api.override(failHistory);
   enterMessage(fixture, 'Confirmed message');
   await settle(fixture);
-  expect(root(fixture).textContent).toContain('Message recorded.');
-  expect(root(fixture).querySelector('[role="status"]')?.textContent).toContain('Message recorded.');
+  expect(root(fixture).textContent).toContain('Saved.');
+  expect(root(fixture).querySelector('[role="status"]')?.textContent).toContain('Saved.');
   expect(messageField(fixture).value).toBe('');
   fixture.destroy();
 }
 
 it('announces received messages and preserves the recorded receipt when history fails', announcesMessageReceipts);
+
+async function opensGroupTranscriptWithRecordedAuthors(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  const groupRow = Array.from(root(fixture).querySelectorAll<HTMLButtonElement>('.conversation-row'))
+    .find((row) => row.textContent?.includes('Chris Njeri'));
+  expect(groupRow).toBeDefined();
+  groupRow?.click();
+  await settle(fixture);
+  const screen = root(fixture);
+  expect(screen.textContent).toContain('Hello everyone');
+  expect(screen.textContent).toContain('Chris Njeri');
+  expect(screen.textContent).toContain('@agent is just text');
+  expect(screen.querySelector('[aria-label="Stop"]')).toBeNull();
+  expect(screen.textContent).not.toContain('Delivered');
+  enterMessage(fixture, '@agent stays text');
+  messageField(fixture).dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'Enter', bubbles: true,
+  }));
+  await settle(fixture);
+  const groupSends = api.requests.filter((request) => request.method === 'POST'
+    && request.url.endsWith('/messages'));
+  expect(groupSends).toHaveLength(1);
+  expect(typeof groupSends[0]?.body?.['id']).toBe('string');
+  expect(groupSends[0]?.body?.['text']).toBe('@agent stays text');
+  expect(root(fixture).textContent).toContain('Saved');
+  fixture.destroy();
+}
+
+it('opens group history with each stored human author and no assistant controls',
+  opensGroupTranscriptWithRecordedAuthors);
 
 async function followsNewestMessages(): Promise<void> {
   const api = createFetchFixture();
@@ -1078,6 +1207,31 @@ async function keepsSeparateDrafts(): Promise<void> {
 }
 
 it('keeps separate drafts for a conversation and a new recipient', keepsSeparateDrafts);
+
+async function keepsDraftsWithTheirGroupConversation(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openExisting(fixture);
+  typeDraft(fixture, 'Private direct note');
+  const groupRow = Array.from(root(fixture).querySelectorAll<HTMLButtonElement>('.conversation-row'))
+    .find((row) => row.textContent?.includes('Chris Njeri'));
+  groupRow?.click();
+  await settle(fixture);
+  expect(messageField(fixture).value).toBe('');
+  typeDraft(fixture, 'Group-only note');
+  await openExisting(fixture);
+  expect(messageField(fixture).value).toBe('Private direct note');
+  const reopenedGroup = Array.from(
+    root(fixture).querySelectorAll<HTMLButtonElement>('.conversation-row'),
+  ).find((row) => row.textContent?.includes('Chris Njeri'));
+  reopenedGroup?.click();
+  await settle(fixture);
+  expect(messageField(fixture).value).toBe('Group-only note');
+  fixture.destroy();
+}
+
+it('keeps each draft with its direct or group conversation', keepsDraftsWithTheirGroupConversation);
 
 async function refreshesCurrentSearch(): Promise<void> {
   const api = createFetchFixture();

@@ -73,6 +73,17 @@ causes an automatic resend. A 401 or refused history read clears names, the draf
 and transcript, then focuses the access message. The screen subscribes to the
 conversation feed after loading history and resumes from its event position after
 the existing WebSocket service reconnects. Repeated positions are ignored.
+Group rows from the same conversation list open in this transcript. They use the same
+100-row history paging, last-position socket resume and send-status checks as direct
+rows. Each group message names its stored author id, using a colleague display name when
+the current colleague read knows it. A successful append is labelled Saved; the screen
+does not claim delivery. Group messages are plain text, including literal `@agent`, and
+the group transcript has no assistant controls. Direct and group drafts stay with the
+conversation where they were typed. A 403 reply to a message clears the transcript,
+drafts, people and pending messages. On a phone, the screen closes the conversation menu
+and focuses the unavailable notice. A missing or removed conversation link says the
+chat was not found and leaves the authorised chat list available. Selecting a listed chat
+opens it from that state. Late replies cannot restore cleared content.
 
 The recipient picker shows up to three chips. When more people are selected, Review all
 opens a full-screen native dialog with every recipient. The dialog starts focus on its

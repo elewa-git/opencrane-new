@@ -40,6 +40,7 @@ type RecipientSend = {
   memberId: string;
   conversationId: string;
   isExisting: boolean;
+  existingMode?: 'direct' | 'group';
   text: string;
 };
 
@@ -191,13 +192,25 @@ export class DirectChatSending {
       this.screen.status.set('Review everyone who will receive this message before sending.');
       return;
     }
-    if (!input.recipient && input.people.length === 0) return;
     if (input.isExisting) {
-      if (input.recipient) {
-        await this.postMessage(input.conversationId, input.text, input.recipient.memberId);
-      }
+      await this.sendToExistingConversation(input);
       return;
     }
+    if (!input.recipient && input.people.length === 0) return;
+    await this.createConversationForRecipients(input);
+  }
+
+  private async sendToExistingConversation(input: RecipientSend): Promise<void> {
+    if (input.recipient) {
+      await this.postMessage(input.conversationId, input.text, input.recipient.memberId);
+      return;
+    }
+    if (input.existingMode === 'group') {
+      await this.postMessage(input.conversationId, input.text, '');
+    }
+  }
+
+  private async createConversationForRecipients(input: RecipientSend): Promise<void> {
     const participantIds = uniqueMemberIds(input.memberId, input.people);
     if (participantIds.length > 97) return;
     if (input.snapshot || input.people.length > 1) {
@@ -277,7 +290,7 @@ export class DirectChatSending {
     this.pending.set(undefined);
     this.failure.set('');
     this.recordedMessage.set(pending.commandId);
-    this.screen.status.set('Message recorded.');
+    this.screen.status.set('Saved.');
     await this.screen.confirmed(pending.conversationId);
   }
 
