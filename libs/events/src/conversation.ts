@@ -55,7 +55,7 @@ const childData = z.strictObject({
 function hasValidChildReferences(data: z.infer<typeof childData>) {
   const people = new Set<string>();
   for (const join of data.initialJoins) {
-    if (people.has(join.participantId) || join.parentJoinPosition > data.origin.sourcePosition) {
+    if (people.has(join.participantId) || join.parentJoinPosition >= data.origin.sourcePosition) {
       return false;
     }
     people.add(join.participantId);
