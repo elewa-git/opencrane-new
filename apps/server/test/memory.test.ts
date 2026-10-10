@@ -2637,3 +2637,65 @@ async function invalidBindingEvent() {
     status: 'rejected', reason: 'invalid_event' });
   expect(await nats.store.head()).toBe(position);
 }
+it('refuses binding events that claim another member or another scope', invalidBindingEvent);
+async function lineageFact(memoryId: string, dependsOn: { scopeId: string;
+  memoryId: string; revision: number }[]) {
+  const record = await write('bob', 'person', memoryId);
+  const saved = memoryWrittenEventSchema.parse(record);
+  const data = { ...saved.data, dependsOn };
+  await append(saved.subject, 'memory.written', data);
+  return { scopeId: data.scopeId, memoryId, revision: 1 };
+}
+it.each(['destroyed', 'missing'] as const)(
+  'checks a %s ancestor before accepting a derived fact', async function ancestor(kind) {
+    const root = await lineageFact(`root-${kind}`, []);
+    const child = await lineageFact(`child-${kind}`, [root]);
+    const leaf = await lineageFact(`leaf-${kind}`, [child]);
+    const identity = { silo: 'acme', scopeKind: 'person' as const, ownerId: 'bob', ...root };
+    if (kind === 'destroyed') keys.delete(identity);
+    else {
+      const keyId = keys.provision(identity);
+      await rm(`${directory}/${keyId.slice(4)}`);
+    }
+    const before = await nats.store.head(`scope-${root.scopeId}`);
+    const response = await remember('bob', 'person', `derived-${kind}`, 'bob',
+      { dependsOn: [leaf] });
+    const expectedStatus = kind === 'destroyed' ? 409 : 503;
+    expect(response.statusCode).toBe(expectedStatus);
+    expect(await nats.store.head(`scope-${root.scopeId}`)).toBe(before);
+  });
+it('keeps an earlier dependency after a later write omits it', async function history() {
+  const root = await lineageFact('historical-root', []);
+  const child = await lineageFact('historical-child', [root]);
+  await lineageFact('historical-child', []);
+  keys.delete({ silo: 'acme', scopeKind: 'person', ownerId: 'bob', ...root });
+  const response = await remember('bob', 'person', 'historical-copy', 'bob', { dependsOn: [child] });
+  expect(response.statusCode).toBe(409);
+});
+it('returns safe status for an erased consumed command without decrypting it', async function erased() {
+  const saved = await remember('bob', 'person', 'erased-command');
+  const receipt = z.object({ memoryId: z.string() }).parse(saved.json());
+  const scopeId = memoryScopeId('acme', 'person', 'bob');
+  keys.delete({ silo: 'acme', scopeId, scopeKind: 'person', ownerId: 'bob',
+    memoryId: receipt.memoryId, revision: 1 });
+  await runner.run(projection);
+  const status = await get(`${path('bob')}/changes/erased-command`);
+  expect(status.json()).toMatchObject({ outcome: 'saved', contentStatus: 'erased' });
+  const changed = await remember('bob', 'person', 'erased-command', 'bob', { text: 'New text' });
+  expect(changed.json()).toEqual(status.json());
+});
+it('refuses a superseded input and keeps its consumed command', async function superseded() {
+  const saved = await remember('bob', 'person', 'superseded-command');
+  const receipt = z.object({ memoryId: z.string() }).parse(saved.json());
+  const scopeId = memoryScopeId('acme', 'person', 'bob');
+  const identity = { silo: 'acme', scopeId, scopeKind: 'person' as const, ownerId: 'bob',
+    memoryId: receipt.memoryId, revision: 1 };
+  const encrypted = keys.encrypt(identity, 'Superseded text stays private');
+  await append(`scope-${scopeId}`, 'memory.corrected', { scopeId,
+    memoryId: receipt.memoryId, ...encrypted });
+  const dependency = { scopeId, memoryId: receipt.memoryId, revision: 1 };
+  const copy = await remember('bob', 'person', 'superseded-copy', 'bob', { dependsOn: [dependency] });
+  expect(copy.statusCode).toBe(409);
+  const repeat = await remember('bob', 'person', 'superseded-command');
+  expect(repeat.json()).toMatchObject({ outcome: 'saved', contentStatus: 'superseded' });
+});

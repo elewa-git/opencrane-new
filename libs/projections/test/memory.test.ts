@@ -349,7 +349,10 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
         await runner.run(projection);
         const after = await state();
         expect(after.facts).toEqual(before.facts);
-        expect(after.dependencies).toEqual(before.dependencies);
+        expect(after.dependencies).toEqual(expect.arrayContaining(before.dependencies));
+        expect(after.dependencies).toContainEqual(expect.objectContaining({
+          memory_id: 'first', revision: '1', dependency_id: 'parent',
+        }));
       }
       expect(await runner.checkpoint(projection)).toBe(3);
       expect((await state()).changes).toHaveLength(3);

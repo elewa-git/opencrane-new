@@ -955,6 +955,14 @@ it('remembers a recalled personal fact once through the gateway with an agent pr
     expect(setup.actor.state.reservations).toHaveLength(reservationsBefore);
   });
 
+it('refuses a selective proof without complete evidence of loaded memory', async function incomplete() {
+  const body = await recalledRemember('incomplete-evidence');
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  const response = await backendRemember(body);
+  expect(response.statusCode).toBe(403);
+  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+});
+
 const invalidLineage = ['forged', 'same-length-forgery', 'extra-segment', 'missing', 'unrecalled',
   'revision', 'scope', 'human-source'];
 async function refusesLineage(change: string) {
