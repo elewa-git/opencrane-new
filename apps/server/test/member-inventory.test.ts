@@ -9,6 +9,8 @@ import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
+const unavailablePermission = { status: 'unavailable' as const, allowed: false as const,
+  error: new Error('IAM unavailable') };
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let dbs: Awaited<ReturnType<typeof databases>>;
@@ -84,9 +86,7 @@ async function refusesReaders() {
     expect((await request(section, 'bob')).statusCode).toBe(403);
     expect((await request(section, 'owner', 'foreign')).statusCode).toBe(403);
     const spy = vi.spyOn(auth, 'check');
-    const failure = { status: 'unavailable' as const, allowed: false as const,
-      error: new Error('IAM unavailable') };
-    spy.mockResolvedValueOnce(failure);
+    spy.mockResolvedValueOnce(unavailablePermission);
     expect((await request(section)).statusCode).toBe(503);
     spy.mockRestore();
   }
@@ -132,6 +132,11 @@ async function recordsSources() {
   await auth.handler.handle(assistantGrant, pgDb(dbs.queue));
   expect((await request('access')).json()).toMatchObject({ rows: [
     { eligibility: { assistants: [{ assistantId: 'personal', grant: 'allowed' }] } }, {}] });
+  await project();
+  const permission = vi.spyOn(auth, 'use');
+  permission.mockResolvedValueOnce(unavailablePermission);
+  expect((await request('departure')).json()).toMatchObject({ complete: false });
+  permission.mockRestore();
 }
 it('records direct and multiple group reasons and checks assistant grants separately', recordsSources);
 

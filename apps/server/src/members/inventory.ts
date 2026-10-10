@@ -63,7 +63,7 @@ function currentGrants(rows: StoredEvent[]) {
       else grants.delete(key);
     }
   }
-  return Array.from(grants.values());
+  return grants;
 }
 
 async function checkedPermission(options: GroupOptions, row: StoredEvent,
@@ -77,7 +77,8 @@ async function checkedPermission(options: GroupOptions, row: StoredEvent,
 }
 
 async function resourceRow(options: GroupOptions, memberId: string, record: StoredEvent,
-  assistants: Assistant[], inputs: StoredEvent[]): Promise<MemberAccessRow> {
+  assistants: Assistant[], grants: Map<string, StoredEvent>,
+  deadline: number): Promise<MemberAccessRow> {
   const grant = grantGivenDataSchema.parse(record.event.data);
   const auth = memberAuthorisation(options.binding);
   const person = await checkedPermission(options, record,
@@ -87,12 +88,11 @@ async function resourceRow(options: GroupOptions, memberId: string, record: Stor
   };
   for (const assistant of assistants) {
     let status: MemberAccessRow['eligibility']['person'] = 'denied';
-    for (const saved of currentGrants(inputs)) {
-      const candidate = grantGivenDataSchema.parse(saved.event.data);
-      if (candidate.granteeKind !== 'assistant' || candidate.granteeId !== assistant.assistantId ||
-          candidate.resourceType !== grant.resourceType || candidate.resourceId !== grant.resourceId) {
-        continue;
-      }
+    if (performance.now() >= deadline) throw new Error('Inventory deadline exceeded');
+    const key = JSON.stringify([grant.resourceType, grant.resourceId, 'assistant',
+      assistant.assistantId]);
+    const saved = grants.get(key);
+    if (saved) {
       status = await checkedPermission(options, saved,
         auth.use('assistant', assistant.assistantId, grant.resourceType, grant.resourceId));
     }
@@ -103,10 +103,13 @@ async function resourceRow(options: GroupOptions, memberId: string, record: Stor
 }
 
 async function accessRows(options: GroupOptions, memberId: string, inputs: StoredEvent[],
-  assistants: Assistant[], groups: ReturnType<typeof groupFacts>, unavailable: Set<string>) {
+  assistants: Assistant[], groups: ReturnType<typeof groupFacts>, unavailable: Set<string>,
+  deadline: number) {
   const auth = memberAuthorisation(options.binding);
   const rows = new Map<string, MemberAccessRow>();
-  for (const record of currentGrants(inputs)) {
+  const grants = currentGrants(inputs);
+  for (const record of grants.values()) {
+    if (performance.now() >= deadline) throw new Error('Inventory deadline exceeded');
     const grant = grantGivenDataSchema.parse(record.event.data);
     const direct = grant.granteeKind === 'member' && grant.granteeId === memberId;
     const membership = groups.memberships.get(grant.granteeId);
@@ -126,7 +129,7 @@ async function accessRows(options: GroupOptions, memberId: string, inputs: Store
     const key = JSON.stringify([grant.resourceType, grant.resourceId]);
     let row = rows.get(key);
     if (!row) {
-      row = await resourceRow(options, memberId, record, assistants, inputs);
+      row = await resourceRow(options, memberId, record, assistants, grants, deadline);
       rows.set(key, row);
     }
     const source: MemberAccessRow['sources'][number] = {
@@ -141,18 +144,19 @@ async function accessRows(options: GroupOptions, memberId: string, inputs: Store
     row.sources.push(source);
     if (!await auth.applied(record.event.id)) unavailable.add('grants');
   }
-  await addSharedAssistants(options, memberId, inputs, groups, rows);
+  await addSharedAssistants(options, memberId, inputs, groups, rows, deadline);
   return Array.from(rows.values());
 }
 
 async function addSharedAssistants(options: GroupOptions, memberId: string, inputs: StoredEvent[],
-  groups: ReturnType<typeof groupFacts>, rows: Map<string, MemberAccessRow>) {
+  groups: ReturnType<typeof groupFacts>, rows: Map<string, MemberAccessRow>, deadline: number) {
   const auth = memberAuthorisation(options.binding);
   for (const record of inputs) {
     if (record.event.type !== 'assistant.created') continue;
     const assistant = assistantCreatedDataSchema.parse(record.event.data);
     const membership = groups.memberships.get(assistant.ownerId);
     if (assistant.kind !== 'team' || !membership) continue;
+    if (performance.now() >= deadline) throw new Error('Inventory deadline exceeded');
     const person = await checkedPermission(options, record, auth.actsFor(memberId, assistant.assistantId));
     const source = { kind: 'group' as const, groupId: assistant.ownerId,
       groupName: groups.names.get(assistant.ownerId), eventId: record.event.id,
@@ -185,7 +189,8 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
       assistants.push(assistant);
     }
   }
-  const rows = await accessRows(options, memberId, inputs.rows, assistants, groups, unavailable);
+  const rows = await accessRows(options, memberId, inputs.rows, assistants, groups, unavailable, deadline);
+  recordUnavailablePermissions(rows, unavailable);
   const personalConnections = versionAbsence(inputs.rows, 'connection', unavailable);
   const routines = versionAbsence(inputs.rows, 'routine', unavailable);
   const content = await retainedContent(options, memberId, head);
@@ -198,6 +203,15 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   return { rows, complete: unavailable.size === 0, unavailableSections: Array.from(unavailable),
     reviewRevision: hash.digest('hex'), ownedSharedWork: [], personalConnections, routines,
     personalComputer: content.computers, retainedHistory: content.history };
+}
+
+function recordUnavailablePermissions(rows: MemberAccessRow[], unavailable: Set<string>) {
+  for (const row of rows) {
+    if (row.eligibility.person === 'unavailable') unavailable.add('permissions');
+    for (const assistant of row.eligibility.assistants) {
+      if (assistant.grant === 'unavailable') unavailable.add('permissions');
+    }
+  }
 }
 
 function versionAbsence(rows: StoredEvent[], category: string, unavailable: Set<string>) {

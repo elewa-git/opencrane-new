@@ -1413,15 +1413,10 @@ Owner-role invitation remains invited; the active owner remains an owner.
 
 ## Member access and departure reads
 
-`GET /api/members/:memberId/access` explains recorded direct and group grants.
-`GET /api/members/:memberId/departure` returns the dependency review and its revision.
-Both require current Owner/Admin events and OpenFGA, with no write freshness check.
-Reads stop after ten seconds or 10,000 inventory records. Failed reads return 503.
-The revision includes grant, group, assistant, routine and connection positions,
-member and ownership positions, computer records and retained history totals.
-Only counts and dates come from the conversation tables. Private content is excluded.
-Unsupported ownership or historical routines/connections make the review incomplete.
-Behind read tables also make it incomplete. Removal remains disabled in every reply.
-Tool, publication and connection readiness remain unavailable; grants are checked separately.
-`test/member-inventory.test.ts` uses real NATS, PostgreSQL and OpenFGA.
-Fresh-install qualification is NOT RUN.
+The Owner/Admin GETs `/api/members/:memberId/access` and `/api/members/:memberId/departure`
+check events and OpenFGA once. They stop after ten seconds or 10,000 inventory records.
+Checked event positions, computer rows and history totals form the review revision.
+Behind tables and unsupported ownership, routines or connections block completion.
+Failed reads return 503. Only counts and dates leave conversation tables.
+Tool, publication and connection readiness stay unavailable. Removal stays disabled.
+`test/member-inventory.test.ts` uses real services. Fresh-install qualification: NOT RUN.
