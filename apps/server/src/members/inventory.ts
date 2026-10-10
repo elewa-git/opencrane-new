@@ -12,6 +12,10 @@ const publicResources = new Set(['model', 'mcp_server', 'mcp_tool', 'shared_desk
 const checkpointQuery = `SELECT name, sequence FROM projection_checkpoints
   WHERE name IN ('computers', 'conversations') ORDER BY name`;
 type Assistant = ReturnType<typeof assistantCreatedDataSchema.parse>;
+type GrantFact = {
+  record: StoredEvent;
+  grant: { resourceType: string; resourceId: string; granteeId: string; granteeKind: string };
+};
 
 async function recordedInputs(options: GroupOptions, deadline: number) {
   const rows: StoredEvent[] = [];
@@ -49,8 +53,8 @@ function groupFacts(rows: StoredEvent[], memberId: string) {
   return { names, memberships };
 }
 
-function currentGrants(rows: StoredEvent[]) {
-  const grants = new Map<string, StoredEvent>();
+function latestGrants(rows: StoredEvent[]) {
+  const grants = new Map<string, GrantFact>();
   for (const row of rows) {
     if (!row.event.type.startsWith('grant.')) continue;
     let fields;
@@ -59,11 +63,25 @@ function currentGrants(rows: StoredEvent[]) {
     const kinds = fields.granteeKind ? [fields.granteeKind] : ['member', 'team', 'assistant'];
     for (const kind of kinds) {
       const key = JSON.stringify([fields.resourceType, fields.resourceId, kind, fields.granteeId]);
-      if (row.event.type === 'grant.given') grants.set(key, row);
-      else grants.delete(key);
+      // Keep removals until their receipts confirm that OpenFGA has applied them.
+      const grant = { ...fields, granteeKind: kind };
+      const fact = { record: row, grant };
+      grants.set(key, fact);
     }
   }
   return grants;
+}
+
+async function includeRecordedGrant(options: GroupOptions, fact: GrantFact,
+  unavailable: Set<string>) {
+  const auth = memberAuthorisation(options.binding);
+  if (!await auth.applied(fact.record.event.id)) unavailable.add('grants');
+  if (fact.record.event.type === 'grant.revoked') return false;
+  if (!publicResources.has(fact.grant.resourceType)) {
+    unavailable.add('unsupported_grants');
+    return false;
+  }
+  return true;
 }
 
 async function checkedPermission(options: GroupOptions, row: StoredEvent,
@@ -77,7 +95,7 @@ async function checkedPermission(options: GroupOptions, row: StoredEvent,
 }
 
 async function resourceRow(options: GroupOptions, memberId: string, record: StoredEvent,
-  assistants: Assistant[], grants: Map<string, StoredEvent>,
+  assistants: Assistant[], grants: Map<string, GrantFact>,
   deadline: number): Promise<MemberAccessRow> {
   const grant = grantGivenDataSchema.parse(record.event.data);
   const auth = memberAuthorisation(options.binding);
@@ -93,7 +111,7 @@ async function resourceRow(options: GroupOptions, memberId: string, record: Stor
       assistant.assistantId]);
     const saved = grants.get(key);
     if (saved) {
-      status = await checkedPermission(options, saved,
+      status = await checkedPermission(options, saved.record,
         auth.use('assistant', assistant.assistantId, grant.resourceType, grant.resourceId));
     }
     eligibility.assistants.push({ assistantId: assistant.assistantId, grant: status });
@@ -107,10 +125,11 @@ async function accessRows(options: GroupOptions, memberId: string, inputs: Store
   deadline: number) {
   const auth = memberAuthorisation(options.binding);
   const rows = new Map<string, MemberAccessRow>();
-  const grants = currentGrants(inputs);
-  for (const record of grants.values()) {
+  const grants = latestGrants(inputs);
+  for (const fact of grants.values()) {
     if (performance.now() >= deadline) throw new Error('Inventory deadline exceeded');
-    const grant = grantGivenDataSchema.parse(record.event.data);
+    const record = fact.record;
+    const grant = fact.grant;
     const direct = grant.granteeKind === 'member' && grant.granteeId === memberId;
     const membership = groups.memberships.get(grant.granteeId);
     const grouped = grant.granteeKind === 'team' && membership !== undefined;
@@ -118,10 +137,7 @@ async function accessRows(options: GroupOptions, memberId: string, inputs: Store
       return grant.granteeKind === 'assistant' && grant.granteeId === assistant.assistantId;
     }
     if (!direct && !grouped && !assistants.some(grantsRelevantAssistant)) continue;
-    if (!publicResources.has(grant.resourceType)) {
-      unavailable.add('unsupported_grants');
-      continue;
-    }
+    if (!await includeRecordedGrant(options, fact, unavailable)) continue;
     if (grouped && membership) {
       const team = await checkedPermission(options, membership, auth.team(memberId, grant.granteeId));
       if (team !== 'allowed') unavailable.add('group_membership');
@@ -142,7 +158,6 @@ async function accessRows(options: GroupOptions, memberId: string, inputs: Store
       source.groupName = groups.names.get(grant.granteeId);
     }
     row.sources.push(source);
-    if (!await auth.applied(record.event.id)) unavailable.add('grants');
   }
   await addSharedAssistants(options, memberId, inputs, groups, rows, deadline);
   return Array.from(rows.values());

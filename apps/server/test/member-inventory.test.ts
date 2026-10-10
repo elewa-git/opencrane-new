@@ -5,6 +5,7 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { conversations, members, computers, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { memberAccessSchema, memberDepartureSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -34,6 +35,13 @@ function request(section: string, sub = 'owner', orgId = 'org-acme', memberId = 
   const session = { sub, orgId, roles: ['owner'], authTime: 1790856000, exp: 2000000000 };
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
   return app.inject({ method: 'GET', url: `/api/members/${memberId}/${section}`, headers });
+}
+async function readInventory(section: string, memberId: string) {
+  const response = await request(section, 'owner', 'org-acme', memberId);
+  expect(response.statusCode).toBe(200);
+  const body: unknown = response.json();
+  if (section === 'departure') return memberDepartureSchema.parse(body);
+  return memberAccessSchema.parse(body);
 }
 async function initialise() {
   nats = await natsFixture();
@@ -104,8 +112,8 @@ async function waitsForGrantRevocation() {
     granteeId: memberId, grantedBy: 'owner',
   });
   await project();
-  expect((await request('departure', 'owner', 'org-acme', memberId)).json())
-    .toMatchObject({ complete: true, accessLost: [{ resourceId }] });
+  const initial = await readInventory('departure', memberId);
+  expect(initial).toMatchObject({ complete: true, accessLost: [{ resourceId }] });
 
   const revocation = await append(grantStream('model', resourceId), 'grant.revoked', {
     resourceType: 'model', resourceId, granteeKind: 'member',
@@ -115,20 +123,18 @@ async function waitsForGrantRevocation() {
   expect(await auth.use('person', memberId, 'model', resourceId))
     .toMatchObject({ allowed: true });
   for (const section of ['access', 'departure']) {
-    const response = await request(section, 'owner', 'org-acme', memberId);
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ complete: false });
-    expect(response.json<{ unavailableSections: string[] }>().unavailableSections)
-      .toContain('grants');
+    const body = await readInventory(section, memberId);
+    expect(body.complete).toBe(false);
+    expect(body.unavailableSections).toContain('grants');
   }
 
   await auth.handler.handle(revocation, pgDb(dbs.queue));
   expect(await auth.use('person', memberId, 'model', resourceId))
     .toMatchObject({ allowed: false });
-  expect((await request('access', 'owner', 'org-acme', memberId)).json())
-    .toMatchObject({ complete: true, unavailableSections: [], rows: [] });
-  expect((await request('departure', 'owner', 'org-acme', memberId)).json())
-    .toMatchObject({ complete: true, unavailableSections: [], accessLost: [] });
+  const access = await readInventory('access', memberId);
+  expect(access).toMatchObject({ complete: true, unavailableSections: [], rows: [] });
+  const departure = await readInventory('departure', memberId);
+  expect(departure).toMatchObject({ complete: true, unavailableSections: [], accessLost: [] });
 }
 it('keeps both inventories incomplete until a grant revocation is applied', waitsForGrantRevocation);
 
