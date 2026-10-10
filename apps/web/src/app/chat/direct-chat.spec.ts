@@ -4,6 +4,7 @@ import { By } from '@angular/platform-browser';
 import { ChatComposer } from './composer';
 import { DirectChat } from './direct-chat';
 import { RANDOM_SOURCE, SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
+import { WebSocketService } from '../core/websocket.service';
 
 type ReplyOverride = (request: RequestRecord) => Response | Promise<Response> | undefined;
 
@@ -1083,6 +1084,43 @@ async function clearsAfterRealRefusal(): Promise<void> {
 
 it('clears protected data and ignores a held refresh after real access loss', clearsAfterRealRefusal);
 
+async function purgesSocketHistoryAndIgnoresLatePrivateEvents(): Promise<void> {
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  await openExisting(fixture);
+  const socket = api.sockets.at(-1);
+  if (!socket?.onmessage) throw new Error('Expected a conversation socket handler');
+  const receive = socket.onmessage;
+  const privateEvent = {
+    version: 1, topic: 'conversation', type: 'event', conversationId: 'existing',
+    position: 3, generation: 1, row: eventRow(3, 'bob', 'Private socket text'),
+  };
+  receive(new MessageEvent('message', { data: JSON.stringify(privateEvent) }));
+  await waitForText(fixture, 'Private socket text');
+
+  const refused = { version: 1, topic: 'conversation', type: 'refused',
+    conversationId: 'existing', position: 3, generation: 1 };
+  receive(new MessageEvent('message', { data: JSON.stringify(refused) }));
+  await settle(fixture);
+  const socketService = fixture.debugElement.injector.get(WebSocketService);
+  expect(root(fixture).textContent).toContain('You no longer have access');
+  expect(socketService.messages()).toEqual([]);
+  expect(socketService.lastMessage()).toBeUndefined();
+
+  const lateEvent = {
+    ...privateEvent, position: 4, row: eventRow(4, 'bob', 'Late private socket text'),
+  };
+  receive(new MessageEvent('message', { data: JSON.stringify(lateEvent) }));
+  fixture.detectChanges();
+  expect(root(fixture).textContent).not.toContain('Late private socket text');
+  expect(socketService.messages()).toEqual([]);
+  expect(socketService.lastMessage()).toBeUndefined();
+  fixture.destroy();
+}
+
+it('purges socket history and ignores private events after access loss',
+  purgesSocketHistoryAndIgnoresLatePrivateEvents);
+
 async function focusesUnavailableNoticeAfterPhoneMenuRevocation(): Promise<void> {
   const api = createFetchFixture();
   const fixture = await mount(api);
@@ -1339,6 +1377,38 @@ async function checksLostParticipantReplyWithoutResending(): Promise<void> {
 
 it('checks a lost participant reply by its original command id without resending',
   checksLostParticipantReplyWithoutResending);
+
+async function updatesParticipantRowsFromLiveRemoval(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  const socket = api.sockets.at(-1);
+  if (!socket?.onmessage) throw new Error('Expected a conversation socket handler');
+  const participantReadsBefore = api.requests.filter((request) =>
+    request.url.endsWith('/participants') && request.method === 'GET').length;
+  const removedRow = {
+    id: 'participant-removed-5', position: 2, type: 'participant.removed',
+    time: '2026-10-06T09:01:00Z',
+    data: { conversationId: 'group-chat', participantId: 'bob', removedBy: 'alice' },
+  };
+  const removal = {
+    version: 1, topic: 'conversation', type: 'event', conversationId: 'group-chat',
+    position: 2, generation: 1, row: removedRow,
+  };
+  socket.onmessage(new MessageEvent('message', { data: JSON.stringify(removal) }));
+  await settle(fixture);
+
+  const participantRows = Array.from(root(fixture).querySelectorAll('.participant-list li'));
+  expect(participantRows.some((row) => row.textContent?.includes('Grace Achieng'))).toBe(false);
+  const participantReadsAfter = api.requests.filter((request) =>
+    request.url.endsWith('/participants') && request.method === 'GET').length;
+  expect(participantReadsAfter).toBe(participantReadsBefore);
+  fixture.destroy();
+}
+
+it('updates participant rows from a live removal without reloading',
+  updatesParticipantRowsFromLiveRemoval);
 
 async function followsNewestMessages(): Promise<void> {
   const api = createFetchFixture();
