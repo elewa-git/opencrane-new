@@ -1060,3 +1060,11 @@ append when draining began. It must also check reservations and migration choice
 The switch-on command, managed gateway startup, fallback-key refusal and recorded
 switch-off are not built here. Retirement remains unavailable. Fresh-install
 migration and managed dispatch are NOT RUN; this is source preparation only.
+
+Source receipt, 10 October 2026: `fe7bf89d3113cdac4f446f8c6aa9bf7d9634c085`.
+Linux worktree after `npm ci`; disposable NATS, PostgreSQL and OpenFGA;
+pinned gateway with a recording upstream. This is not a fresh customer install.
+PASS: all three changed test files, twice, 42 tests each; `PG_TEST_URL` set.
+PASS: full lint, root typecheck, Knip, event catalogue and changelog checks.
+Logs: `/tmp/p4-22-pr4d-final-pass-{1,2}.log` and `/tmp/p4-22-pr4d-*.log`.
+NOT RUN: full root suite, fresh-install journey, paid calls and independent review.
