@@ -357,7 +357,7 @@ it('refuses invalid audiences, altered commands, mode edits, closed sends and st
     });
     expect(outsider.statusCode).toBe(403);
     const closedData = { conversationId: 'direct', closedBy: 'alice' };
-    await fixture.append('conversation-direct', 'conversation.closed', closedData, false);
+    await fixture.append('participation-direct', 'conversation.closed', closedData, false);
     const closed = await fixture.app.inject({
       method: 'POST', url: '/api/conversations/direct/messages', headers: fixture.headers(),
       payload: { id: 'after-close', text: 'Must refuse' },
@@ -658,7 +658,7 @@ it('keeps a closed direct chat readable', async () => {
   const fixture = await directFixture();
   try {
     await fixture.create();
-    await fixture.append('conversation-direct', 'conversation.closed', {
+    await fixture.append('participation-direct', 'conversation.closed', {
       conversationId: 'direct', closedBy: 'alice',
     }, false);
     await fixture.runner.run(conversations);

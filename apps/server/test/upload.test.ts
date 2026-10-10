@@ -112,8 +112,8 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
         await nats.seed(historicalEvents);
         await auth.handler.handle(joined, db);
       }
-      if (conversationId === 'closed') await nats.store.append({ expectedSequence: (await history(nats.store, created.subject, 'test')).at(-1)!.sequence,
-        event: envelope('test', created.subject, 'conversation.closed', { conversationId, closedBy: 'alice' }) });
+      if (conversationId === 'closed') await nats.store.append({ expectedSequence: 0,
+        event: envelope('test', `participation-${conversationId}`, 'conversation.closed', { conversationId, closedBy: 'alice' }) });
     }
     for (const projection of [members, conversations, files]) { await runner.initialise(projection); await runner.run(projection); }
     for (const conversationId of ['other', 'direct', 'closed']) {

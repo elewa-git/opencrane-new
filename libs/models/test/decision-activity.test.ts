@@ -79,7 +79,7 @@ async function honoursCapturedPositionAndConfirmsLaterChanges() {
       const position = await head(...args);
       if (args[0] === undefined && !inserted) {
         inserted = true;
-        const closed = activityEvent('closed', 'conversation-chat', 'conversation.closed');
+        const closed = activityEvent('closed', 'participation-chat', 'conversation.closed');
         await nats.seed([closed]);
       }
       return position;

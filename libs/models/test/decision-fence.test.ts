@@ -160,7 +160,7 @@ const revoked: Injection[] = [
   { label: 'the requester is removed from the conversation',
     subject: 'conversation-conversation', type: 'participant.removed',
     data: { conversationId: 'conversation', participantId: 'alice', removedBy: 'bob' } },
-  { label: 'the conversation is closed', subject: 'conversation-conversation',
+  { label: 'the conversation is closed', subject: 'participation-conversation',
     type: 'conversation.closed', data: { conversationId: 'conversation', closedBy: 'alice' } },
   { label: 'the member is removed', subject: 'member-alice', type: 'member.removed',
     data: { memberId: 'alice', removedBy: 'bob' } },

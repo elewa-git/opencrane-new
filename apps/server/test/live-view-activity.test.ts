@@ -103,7 +103,7 @@ function conversationEvent(type: string, turnId = 'turn-1') {
     overrides['participantId'] = 'bob';
   }
   let subject = 'conversation-chat';
-  if (type.startsWith('participant.')) {
+  if (type.startsWith('participant.') || type === 'conversation.closed') {
     subject = 'participation-chat';
   }
   return eventInjection(subject, type, overrides);

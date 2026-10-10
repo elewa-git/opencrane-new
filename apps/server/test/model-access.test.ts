@@ -1084,3 +1084,32 @@ it('a delayed read finishes with the authority checked at the start',
 function resolveMemberId(_silo: string, _issuer: string, subject: string) {
   return Promise.resolve(subject.replace('idp-', ''));
 }
+
+async function refusesAllModelAccessRoutesAfterRemoval() {
+  const base = '/api/org/models/gpt-6.1-sol/access';
+  expect((await request(base, 'idp-admin')).statusCode).toBe(200);
+  const removed = { ...event('access-removed-admin', 'member-admin', 'member.removed'),
+    silo: 'acme', data: { memberId: 'admin', removedBy: 'owner' } };
+  const invited = { ...event('access-invited-again', 'member-admin', 'member.invited'),
+    silo: 'acme', data: { memberId: 'admin', role: 'admin', email: 'admin@example.test',
+      invitedBy: 'owner', invitationId: 'next-admin-invite' } };
+  await nats.seed([removed, invited]);
+  expect(await auth.check('admin', 'admin')).toMatchObject({ allowed: true });
+  const urls = [base, `${base}/candidates`, `${base}/changes/removed-grant`];
+  for (const url of urls) {
+    const response = await request(url, 'idp-admin');
+    expect(response.statusCode, `${url}: ${response.body}`).toBe(403);
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const session = { sub: 'idp-admin', orgId: 'org-acme', roles: [], authTime: now, exp: now + 60 };
+  const headers = { origin: 'https://app.example.test',
+    cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const before = await nats.store.head(grantStream('model', 'gpt-6.1-sol'));
+  const payload = { commandId: 'removed-grant', action: 'grant', expectedSequence: before,
+    granteeKind: 'member', granteeId: 'bob' };
+  const response = await app.inject({ method: 'POST', url: base, headers, payload });
+  expect(response.statusCode, response.body).toBe(403);
+  expect(await nats.store.head(grantStream('model', 'gpt-6.1-sol'))).toBe(before);
+}
+it('refuses all four model access routes after removal and invitation with old SQL and IAM',
+  refusesAllModelAccessRoutesAfterRemoval);

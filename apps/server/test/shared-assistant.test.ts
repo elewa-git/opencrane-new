@@ -1180,3 +1180,39 @@ async function restoreAliceMembership() {
     email: 'alice@example.test', displayName: 'Alice',
   });
 }
+
+async function refusesAllAssistantRoutesAfterRemoval() {
+  const test = await privateServerFixture('removed-assistant-routes');
+  try {
+    const assistantId = test.context.assistantId;
+    const routes = [
+      '/api/assistants',
+      `/api/assistants/${assistantId}`,
+      `/api/assistants/${assistantId}/changes/create-shared`,
+    ];
+    expect((await request('GET', routes[0]!, undefined, 'alice')).statusCode).toBe(200);
+    await append('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+    });
+    await append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' }, false);
+    await append('member-alice', 'member.invited', {
+      memberId: 'alice', role: 'admin', invitationId: 'assistant-later-invite',
+      email: 'alice@example.test', invitedBy: 'owner',
+    }, false);
+    expect(await auth.check('alice', 'admin')).toMatchObject({ allowed: true });
+    for (const url of routes) {
+      const response = await request('GET', url, undefined, 'alice');
+      expect(response.statusCode, `${url}: ${response.body}`).toBe(403);
+    }
+    const before = await nats.store.head('assistant-team-removed-write');
+    const payload = { ...creation, commandId: 'removed-create', assistantId: 'team-removed-write' };
+    const response = await request('POST', '/api/assistants', payload, 'alice');
+    expect(response.statusCode, response.body).toBe(403);
+    expect(await nats.store.head('assistant-team-removed-write')).toBe(before);
+  } finally {
+    await test.close();
+    await restoreAliceMembership();
+  }
+}
+it('refuses every assistant administration route after removal with old SQL and IAM',
+  refusesAllAssistantRoutesAfterRemoval);

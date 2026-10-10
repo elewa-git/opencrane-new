@@ -27,8 +27,8 @@ import { viewAccess } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { reviewedRemoval } from './support/reviewed-removal.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
-import { conversationParticipationReader }
-  from '../src/chat/access.ts';
+import { requireLegacyClosesProjected } from '../src/chat/participation.ts';
+import { conversationParticipationReader } from '../src/chat/access.ts';
 import * as chatAccess from '../src/chat/access.ts';
 
 async function countedOpenFga(apiUrl: string) {
@@ -841,7 +841,7 @@ const unchangedAccessEvents = [
     data: { conversationId: 'agent', turnId: 'agent-turn' } },
   { subject: 'conversation-agent', type: 'agent.turn_failed',
     data: { conversationId: 'agent', turnId: 'agent-turn', reason: 'unavailable' } },
-  { subject: 'conversation-agent', type: 'conversation.closed',
+  { subject: 'participation-agent', type: 'conversation.closed',
     data: { conversationId: 'agent', closedBy: 'alice' } },
   { subject: 'conversation-agent', type: 'file.uploaded', data: {
     conversationId: 'agent', fileId: 'file', uploadedBy: 'alice', name: 'notes.txt',
@@ -1464,7 +1464,7 @@ async function refusesCloseBeforeBufferedReport() {
       granteeKind: 'member', grantedBy: 'alice',
     });
     await context.runner.run(conversations);
-    await context.append('conversation-agent', 'conversation.closed', {
+    await context.append('participation-agent', 'conversation.closed', {
       conversationId: 'agent', closedBy: 'alice',
     }, false);
     await context.append('conversation-agent', 'agent.turn_completed', {
@@ -1952,3 +1952,24 @@ async function desktopWithColdFactsAndDelayedProjection() {
 }
 it('admits and renews a desktop with cold facts while projection lags a long chat creation',
   desktopWithColdFactsAndDelayedProjection, 120_000);
+
+async function requiresLegacyClosesBeforeStartup() {
+  const context = await fixture();
+  try {
+    await context.agentSession('legacy-close');
+    const closed = envelope('test', 'conversation-legacy-close', 'conversation.closed', {
+      conversationId: 'legacy-close', closedBy: 'alice',
+    });
+    await context.nats.seed([closed]);
+    await expect(requireLegacyClosesProjected(context.nats.store, context.db))
+      .rejects.toThrow('Conversation worker must catch up before server startup');
+    await context.runner.run(conversations);
+    await expect(requireLegacyClosesProjected(context.nats.store, context.db))
+      .resolves.toBeUndefined();
+    await expect(viewAccess(context.options, 'alice', 'legacy-close')).rejects.toThrow('Access changed');
+  } finally {
+    await context.close();
+  }
+}
+it('requires older closing events to be projected before the server starts',
+  requiresLegacyClosesBeforeStartup, 120_000);
