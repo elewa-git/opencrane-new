@@ -130,13 +130,46 @@ async function closesOnSmallAccessStream() {
       subject: 'conversation-chat' };
     expect(parseEventByType(old).success).toBe(true);
     expect(await nats.store.append({ event: old, expectedSequence: 0 }))
-      .toMatchObject({ status: 'rejected' });
-    await nats.seed([old]);
+      .toMatchObject({ status: 'appended' });
     const rows = await Array.fromAsync(nats.store.readStream('conversation-chat'));
     expect(rows[0]?.event.type).toBe('conversation.closed');
   } finally {
     await nats.close();
   }
 }
-it('writes closes only to the small access stream and keeps old closes readable',
+it('writes current closes to the small access stream and accepts legacy close appends',
   closesOnSmallAccessStream);
+
+async function readsClosingActivityWithoutAnotherStreamRead() {
+  const nats = await natsFixture();
+  try {
+    const created = { ...event('created', 'conversation-chat', 'conversation.created'),
+      data: { conversationId: 'chat', mode: 'agent_session', assistantId: 'assistant',
+        createdBy: 'alice' } };
+    const data = { conversationId: 'chat', closedBy: 'alice' };
+    const closed = { ...event('close', 'participation-chat', 'conversation.closed'), data };
+    const unrelated = { ...event('other', 'member-chat', 'member.removed'),
+      data: { memberId: 'chat', removedBy: 'alice' } };
+    const participant = { ...event('join', 'participation-chat', 'participant.added'),
+      data: { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' } };
+    await nats.seed([created, participant, unrelated, closed]);
+    const ordinaryRows = await Array.fromAsync(nats.store.readStream('conversation-chat'));
+    expect(ordinaryRows).toHaveLength(1);
+    const activity = nats.store.readStream('conversation-chat', 1, Infinity, true);
+    const activityRows = await Array.fromAsync(activity);
+    function eventId(row: typeof activityRows[number]) {
+      return row.event.id;
+    }
+    expect(activityRows.map(eventId)).toEqual(['created', 'close']);
+    const tail = nats.store.readStream('conversation-chat', 2, Infinity, true);
+    const tailRows = await Array.fromAsync(tail);
+    expect(tailRows.map(eventId)).toEqual(['close']);
+    const closePosition = activityRows[1]?.sequence;
+    expect(await nats.store.head('conversation-chat', Infinity, true)).toBe(closePosition);
+    expect(await nats.store.head('conversation-chat')).toBe(ordinaryRows[0]?.sequence);
+  } finally {
+    await nats.close();
+  }
+}
+it('includes current closes in one conversation activity read without unrelated records',
+  readsClosingActivityWithoutAnotherStreamRead);

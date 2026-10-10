@@ -31,12 +31,8 @@ async function readsOnlyNewActivity() {
     const reads = countReads(nats.store);
     await decisionActivity(nats.store, 'test', 'assistant', 'chat', 'turn',
       performance.now() + 2000);
-    function isContentRead(call: typeof reads.calls[number]) {
-      return call.subject !== 'participation-chat';
-    }
-    const contentReads = reads.calls.filter(isContentRead);
-    expectNoWholeReads(contentReads);
-    for (const call of contentReads) {
+    expectNoWholeReads(reads.calls);
+    for (const call of reads.calls) {
       expect(call.fromSequence).toBeGreaterThan(1);
       expect(call.rows).toBe(0);
     }
