@@ -45,6 +45,8 @@ async function fixture() {
   let loseCreate = false;
   let changeOnDelete = false;
   let readsUnavailable = false;
+  let finalise = false;
+  let failRemovalRead = false;
   let unavailable = false;
   let preconditions: unknown;
   async function handle(request: IncomingMessage, response: ServerResponse) {
@@ -67,6 +69,9 @@ async function fixture() {
       const parsed = secretSchema.parse(raw);
       parsed.metadata.uid = 'uid-original';
       parsed.metadata.resourceVersion = '1';
+      if (finalise) {
+        parsed.metadata.finalizers = ['fixture.test/retain'];
+      }
       secret = parsed;
       creates += 1;
       if (loseCreate) {
@@ -91,6 +96,9 @@ async function fixture() {
         return;
       }
       secret = undefined;
+      if (failRemovalRead) {
+        readsUnavailable = true;
+      }
       response.end('{}');
       return;
     }
@@ -122,6 +130,7 @@ async function fixture() {
     loseCreate() { loseCreate = true; }, changeOnDelete() { changeOnDelete = true; },
     fail() { unavailable = true; },
     failReads() { readsUnavailable = true; }, restoreReads() { readsUnavailable = false; },
+    retainWithFinaliser() { finalise = true; }, failRemovalRead() { failRemovalRead = true; },
     finishDeletion() { secret = undefined; } };
 }
 
@@ -210,6 +219,36 @@ async function refusesSecondCreate() {
 }
 it('never creates again when an unrecorded original has disappeared', refusesSecondCreate);
 
+
+async function recoversIndependentIdentity() {
+  const store = await fixture();
+  store.loseCreate();
+  store.failReads();
+  expect(await store.custody.stage(stage, material)).toEqual({ status: 'unknown' });
+  const identity = { reference: store.secret.metadata.name, uid: 'uid-original',
+    resourceVersion: '1' };
+  store.restoreReads();
+  const expectedRecovery = { status: 'recovered', identity };
+  expect(await store.restart().recover(stage, identity)).toEqual(expectedRecovery);
+  expect(await store.restart().recover(stage)).toEqual(expectedRecovery);
+  expect(store.creates).toBe(1);
+}
+it('recovers with an independently supplied exact identity', recoversIndependentIdentity);
+
+const identityFields = ['reference', 'uid', 'resourceVersion'] as const;
+async function refusesExpectedIdentity(field: (typeof identityFields)[number]) {
+  const store = await fixture();
+  const saved = await store.custody.stage(stage, material);
+  if (!saved.identity) {
+    throw new Error('Fixture identity missing');
+  }
+  const changed = { ...saved.identity, [field]: 'changed' };
+  expect(await store.restart().recover(stage, changed)).toEqual({ status: 'conflict' });
+  expect(await store.restart().remove(stage, changed)).toEqual({ status: 'conflict' });
+  expect(store.deletes).toBe(0);
+}
+it.each(identityFields)('refuses a different caller-supplied %s', refusesExpectedIdentity);
+
 const bindings = ['siloId', 'userId', 'serverId', 'connectionId', 'profileId',
   'purpose', 'endpointDigest', 'operationId', 'expectedSequence', 'appendUntil'] as const;
 async function refusesBinding(field: (typeof bindings)[number]) {
@@ -265,9 +304,9 @@ it('requires an exact identity and sends both deletion preconditions', deletesEx
 
 async function retainsFinalisedSecret() {
   const store = await fixture();
+  store.retainWithFinaliser();
   const saved = await store.custody.stage(stage, material);
   expect(saved.status).toBe('staged');
-  store.secret.metadata.finalizers = ['fixture.test/retain'];
   expect(await store.custody.remove(stage, saved.identity)).toEqual({ status: 'unknown' });
   expect(store.secret.data.token).toBe(Buffer.from(material).toString('base64'));
   expect(store.secret.metadata.deletionTimestamp).toBe('2026-10-10T00:00:00Z');
@@ -281,6 +320,42 @@ async function retainsFinalisedSecret() {
   expect(store.deletes).toBe(1);
 }
 it('keeps deletion unresolved until a finalised Secret is absent', retainsFinalisedSecret);
+
+
+async function requiresRemovalRead() {
+  const store = await fixture();
+  const saved = await store.custody.stage(stage, material);
+  store.failRemovalRead();
+  expect(await store.custody.remove(stage, saved.identity)).toEqual({ status: 'unknown' });
+  expect(await store.restart().remove(stage, saved.identity)).toEqual({ status: 'unknown' });
+  expect(store.deletes).toBe(1);
+  store.restoreReads();
+  expect(await store.restart().remove(stage, saved.identity)).toEqual({ status: 'deleted' });
+  expect(store.deletes).toBe(1);
+}
+it('waits for an absence read after DELETE succeeds but the read fails', requiresRemovalRead);
+
+
+async function refusesChangedDeletionIdentity(field: (typeof identityFields)[number]) {
+  const store = await fixture();
+  store.retainWithFinaliser();
+  const saved = await store.custody.stage(stage, material);
+  if (!saved.identity) {
+    throw new Error('Fixture identity missing');
+  }
+  expect(await store.custody.remove(stage, saved.identity)).toEqual({ status: 'unknown' });
+  const changed = { ...saved.identity, [field]: 'changed' };
+  expect(await store.restart().remove(stage, changed)).toEqual({ status: 'conflict' });
+  const changedOperation = { ...stage, operationId: 'operation-other' };
+  expect(await store.restart().remove(changedOperation, saved.identity)).toEqual({
+    status: 'conflict',
+  });
+  expect(store.deletes).toBe(1);
+  expect(store.secret.data.token).toBe(Buffer.from(material).toString('base64'));
+}
+it.each(identityFields)(
+  'refuses a different %s when checking a pending deletion', refusesChangedDeletionIdentity,
+);
 
 async function retainsDeletionRace() {
   const store = await fixture();
@@ -302,3 +377,11 @@ async function sanitisesFailure() {
   expect(store.deletes).toBe(0);
 }
 it('returns safe unknown status on an upstream failure and retains material', sanitisesFailure);
+
+async function refusesMissingPreparation() {
+  const store = await fixture();
+  expect(await store.custody.recover(stage)).toEqual({ status: 'conflict' });
+  expect(store.creates).toBe(0);
+  expect(store.deletes).toBe(0);
+}
+it('refuses recovery without a prepared operation', refusesMissingPreparation);
