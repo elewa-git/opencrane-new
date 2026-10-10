@@ -11,7 +11,8 @@ import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { catalogueEvidence, fixture, toolEvidence } from '@opencrane/models/testing';
-import { envelope, parseMemoryRequest, readToolPolicy, startDecision, verifyMemoryContext } from '@opencrane/models';
+import { envelope, memoryRights, parseMemoryRequest, readToolPolicy, startDecision,
+  verifyMemoryContext } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -543,7 +544,7 @@ it('replaces caller context and returns bounded facts as data through the real g
     await setup.runner.rebuild(projection);
   });
 
-it('discovers recall and remember and binds method headers to stateless requests', async function discovery() {
+it('discovers recall and binds method headers to stateless requests', async function discovery() {
   for (const method of ['server/discover', 'tools/list']) {
     const body = { jsonrpc: '2.0', id: 1, method, params: { _meta: metadata } };
     const requestHeaders = { ...headers, 'mcp-method': method, 'mcp-name': '' };
@@ -551,7 +552,7 @@ it('discovers recall and remember and binds method headers to stateless requests
     expect(response.status, response.text).toBe(200);
     expect(response.text).not.toMatch(/correct|forget/u);
     if (method === 'tools/list') {
-      expect(response.text).toContain('remember');
+      expect(response.text).not.toContain('remember');
     }
     expect((await setup.call(headers, body, route)).status).toBe(403);
   }
@@ -921,7 +922,35 @@ async function backendRemember(body: Awaited<ReturnType<typeof recalledRemember>
   return app.inject(input);
 }
 
-it('remembers a recalled personal fact once through the gateway with an agent principal',
+// Keep command recovery and preparation checks while the exposed write lacks complete evidence.
+async function admittedRemember(body: Awaited<ReturnType<typeof recalledRemember>>, overrides = {}) {
+  let statusCode = 200;
+  let response: unknown;
+  try {
+    const token = await signedRemember(body, overrides);
+    const parsed = parseMemoryRequest(JSON.stringify(body), rememberHeaders);
+    const context = await verifyMemoryContext(token, setup.identity, parsed);
+    const deadline = performance.now() + context.exp * 1000 - Date.now();
+    const rights = await memoryRights(setup.nats.store, setup.binding, context, parsed, deadline);
+    const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
+      binding: setup.binding, feed: { memberId }, keyDirectory: dirname(setup.options.configFile) };
+    const agent = { deadline, conversation: context.conversation, turn: context.turn,
+      requestId: context.requestId, confirm: rights.confirm };
+    const { remember: commandRemember } = await import('../src/memory/commands.ts');
+    const { scopeId: _scope, recallProof: _proof, ...command } = body.params.arguments;
+    const receipt = await commandRemember(memory, 'alice', rights.scope, command, agent);
+    response = { result: { structuredContent: receipt } };
+  } catch {
+    statusCode = 403;
+    response = { status: 'refused' };
+  }
+  function json() {
+    return response;
+  }
+  return { statusCode, body: JSON.stringify(response), json };
+}
+
+it('keeps admitted personal commands separate from human commands',
   async function governedRemember() {
     const reservationsBefore = setup.actor.state.reservations.length;
     const body = await recalledRemember('agent-command');
@@ -932,14 +961,14 @@ it('remembers a recalled personal fact once through the gateway with an agent pr
       binding: setup.binding, feed: { memberId }, keyDirectory: dirname(setup.options.configFile) };
     const { remember } = await import('../src/memory/commands.ts');
     const human = await remember(options, 'alice', scope, humanInput);
-    const first = await setup.call(rememberHeaders, body, route);
-    expect(first.status, first.text).toBe(200);
-    const saved = rememberedSchema.parse(JSON.parse(first.text)).result.structuredContent;
+    const first = await admittedRemember(body);
+    expect(first.statusCode, first.body).toBe(200);
+    const saved = rememberedSchema.parse(first.json()).result.structuredContent;
     expect(saved.outcome).toBe('saved');
     expect(saved.memoryId).not.toBe(human.memoryId);
-    const repeat = await setup.call(rememberHeaders, body, route);
-    expect(repeat.status, repeat.text).toBe(200);
-    expect(JSON.parse(repeat.text)).toEqual(JSON.parse(first.text));
+    const repeat = await admittedRemember(body);
+    expect(repeat.statusCode, repeat.body).toBe(200);
+    expect(repeat.json()).toEqual(first.json());
     const rows = [];
     for await (const row of setup.nats.store.readStream(`scope-${scopeId}`)) {
       if (row.event.id === saved.memoryId) rows.push(row);
@@ -950,18 +979,19 @@ it('remembers a recalled personal fact once through the gateway with an agent pr
       data: { dependsOn: body.params.arguments.dependsOn, sources: [] } });
     const changedArguments = { ...body.params.arguments, text: 'Different fact' };
     const changed = { ...body, params: { ...body.params, arguments: changedArguments } };
-    expect((await setup.call(rememberHeaders, changed, route)).status).toBe(403);
+    expect((await admittedRemember(changed)).statusCode).toBe(403);
     await setup.runner.run(projection);
     expect(setup.actor.state.reservations).toHaveLength(reservationsBefore);
   });
 
-it('refuses a selective proof without complete evidence of loaded memory', async function incomplete() {
+async function incomplete() {
   const body = await recalledRemember('incomplete-evidence');
   const before = await setup.nats.store.head(`scope-${scopeId}`);
   const response = await backendRemember(body);
   expect(response.statusCode).toBe(403);
   expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
-});
+}
+it('refuses a selective proof without complete evidence of loaded memory', incomplete);
 
 const invalidLineage = ['forged', 'same-length-forgery', 'extra-segment', 'missing', 'unrecalled',
   'revision', 'scope', 'human-source'];
@@ -1059,7 +1089,7 @@ async function refusesChangedWrite(change: string) {
   const lock = vi.spyOn(setup.db, 'lock').mockImplementation(changedLock);
   const append = vi.spyOn(setup.nats.store, 'append');
   try {
-    expect((await backendRemember(body)).statusCode).toBe(403);
+    expect((await admittedRemember(body)).statusCode).toBe(403);
     expect(append).not.toHaveBeenCalled();
   } finally {
     append.mockRestore();
@@ -1105,7 +1135,7 @@ it('recovers an agent command after a saved append loses its reply', async funct
   const append = vi.spyOn(setup.nats.store, 'append').mockImplementationOnce(loseReply);
   let responseBody: unknown;
   try {
-    const response = await backendRemember(body);
+    const response = await admittedRemember(body);
     expect(append).toHaveBeenCalledTimes(1);
     expect(response.statusCode, response.body).toBe(200);
     responseBody = response.json();
@@ -1120,7 +1150,7 @@ it('recovers an agent command after a saved append loses its reply', async funct
   await reconcileCommands(options);
   const unknown = rememberedSchema.parse(responseBody).result.structuredContent;
   expect(existsSync(`${options.keyDirectory}/command-${unknown.memoryId}.json`)).toBe(false);
-  const recovered = await backendRemember(body);
+  const recovered = await admittedRemember(body);
   expect(recovered.statusCode, recovered.body).toBe(200);
   expect(rememberedSchema.parse(recovered.json()).result.structuredContent.outcome).toBe('saved');
   await setup.runner.run(projection);
@@ -1394,7 +1424,7 @@ async function refusesPreparedWrite(change: 'dependency' | 'turn') {
   const head = vi.spyOn(setup.nats.store, 'head').mockImplementation(readHead);
   const append = vi.spyOn(setup.nats.store, 'append');
   try {
-    expect((await backendRemember(body, overrides)).statusCode).toBe(403);
+    expect((await admittedRemember(body, overrides)).statusCode).toBe(403);
     expect(prepared).toBe(true);
     for (const [command] of append.mock.calls) {
       expect(z.object({ type: z.string() }).parse(command.event).type).not.toBe('memory.written');
@@ -1435,7 +1465,7 @@ async function recoveryCleanup(stage: 'prepared' | 'unknown' | 'legacy') {
   const append = vi.spyOn(setup.nats.store, 'append').mockResolvedValueOnce(unavailable);
   let response;
   try {
-    response = await backendRemember(body);
+    response = await admittedRemember(body);
     expect(response.statusCode, response.body).toBe(200);
     expect(append).toHaveBeenCalledTimes(1);
   } finally {
