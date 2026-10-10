@@ -191,6 +191,101 @@ it('previews empty private memory without dispatch or another owner reading it',
     expect((await get(previewUrl, 'admin')).statusCode).toBe(404);
     expect((await get('/api/memory/turns/preview-chat/missing', 'preview')).statusCode).toBe(404);
   });
+async function savePreviewDependency(label: string) {
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  const ancestorInput = { text: 'A live supporting fact', expiresAt };
+  const ancestorReply = await remember('preview', 'person', `${label}-ancestor`,
+    'preview', ancestorInput);
+  expect(ancestorReply.statusCode).toBe(200);
+  const ancestor = ancestorReply.json<{ memoryId: string; revision: number }>();
+  const scope = previewScopes[0]!;
+  const dependency = { scopeId: scope.scopeId, memoryId: ancestor.memoryId,
+    revision: ancestor.revision };
+  const dependentInput = { text: 'A pinned dependent fact', pinned: true,
+    dependsOn: [dependency] };
+  const dependentReply = await remember('preview', 'person', `${label}-dependent`,
+    'preview', dependentInput);
+  expect(dependentReply.statusCode).toBe(200);
+  const dependent = dependentReply.json<{ memoryId: string; revision: number }>();
+  await runner.run(projection);
+  const live = await get(previewUrl, 'preview');
+  expect(live.statusCode).toBe(200);
+  expect(live.json()).toMatchObject({ references: [{ scopeId: scope.scopeId,
+    memoryId: dependent.memoryId, revision: dependent.revision }] });
+  expect(live.body).toContain('A pinned dependent fact');
+  const ancestorIdentity = { silo: 'acme', ...scope, memoryId: ancestor.memoryId,
+    revision: ancestor.revision };
+  const dependentIdentity = { silo: 'acme', ...scope, memoryId: dependent.memoryId,
+    revision: dependent.revision };
+  return { expiresAt, ancestorIdentity, dependentIdentity };
+}
+
+async function invalidPreviewDependency(reason: string) {
+  const saved = await savePreviewDependency(reason);
+  const clock = vi.spyOn(Date, 'now');
+  try {
+    if (reason === 'expired') {
+      clock.mockReturnValue(Date.parse(saved.expiresAt) + 1);
+    } else {
+      keys.delete(saved.ancestorIdentity);
+    }
+    const response = await get(previewUrl, 'preview');
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ references: [] });
+    expect(response.body).not.toContain('A pinned dependent fact');
+    expect(response.body).not.toContain(saved.dependentIdentity.memoryId);
+  } finally {
+    clock.mockRestore();
+    keys.delete(saved.ancestorIdentity);
+    keys.delete(saved.dependentIdentity);
+    await runner.rebuild(projection);
+  }
+}
+
+it.each(['expired', 'destroyed'])(
+  'omits a pinned fact after its previously live dependency becomes %s', invalidPreviewDependency);
+
+async function uniformConversationRefusals() {
+  await append('conversation-preview-direct', 'conversation.created', {
+    conversationId: 'preview-direct', mode: 'direct', createdBy: 'preview',
+    participantIds: ['preview', 'bob'] });
+  await append('conversation-preview-foreign', 'conversation.created', {
+    conversationId: 'preview-foreign', mode: 'agent_session', createdBy: 'bob',
+    assistantId: 'personal' });
+  const foreign = await get('/api/memory/turns/preview-foreign/anything', 'preview');
+  expect(foreign.statusCode).toBe(404);
+  expect(foreign.json()).toEqual({ status: 'refused' });
+  for (const conversation of ['preview-absent', 'preview-direct']) {
+    const response = await get(`/api/memory/turns/${conversation}/anything`, 'preview');
+    expect(response.statusCode).toBe(foreign.statusCode);
+    expect(response.body).toBe(foreign.body);
+    expect(response.headers['cache-control']).toBe('no-store');
+  }
+}
+
+it('returns the same refusal for absent, foreign private and unsuitable conversations',
+  uniformConversationRefusals);
+
+async function unavailableConversationHistory() {
+  const original = nats.store.readStream.bind(nats.store);
+  async function* unavailable(subject: string, from?: number, deadline?: number) {
+    if (subject === 'conversation-preview-chat') {
+      throw new Error('Event store unavailable');
+    }
+    yield* original(subject, from, deadline);
+  }
+  const reading = vi.spyOn(nats.store, 'readStream').mockImplementation(unavailable);
+  try {
+    const response = await get(previewUrl, 'preview');
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable', reason: 'memory_unavailable' });
+  } finally {
+    reading.mockRestore();
+  }
+}
+
+it('keeps a conversation history service failure unavailable', unavailableConversationHistory);
+
 it('keeps the preview available when another turn starts during the read',
   async function unrelatedTurnStart() {
     const original = nats.store.head.bind(nats.store);
