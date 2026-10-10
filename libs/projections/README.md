@@ -24,7 +24,7 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills tables, including configured memory| projections["libs/projections<br/>read tables and child joins"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
-  projections -->|writes tables, roles, accounts and private chat choices| pg
+  projections -->|saves chat activity, closing details and private choices| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
@@ -72,6 +72,9 @@ and workers stopped. The worker names the replay command when an upgrade needs i
 The conversation worker also saves each person's archive and read choices. Choices belong to
 one period of participation; joining again starts fresh. Rebuild restores them without
 adding them to the shared conversation feed or running background actions.
+It keeps the last visible message's position and the first close's event, person and time.
+Closing a chat keeps that message position. Later reports and repeated closes cannot replace
+these details. The reports remain in the feed so their saved evidence is available.
 
 ## Processes it handles
 
@@ -98,6 +101,9 @@ records its position and continues with later events.
 5. **An operator rebuilds a table.** They run `npm run replay -- members`. The
    command reads the whole event log again, builds fresh tables on the side and
    swaps them in. It does not run reactions or make outside calls.
+6. **A conversation closes.** The worker saves who closed it and when. Late reports
+   still enter the feed, but leave its latest visible activity and first close unchanged.
+   An offline conversation rebuild restores the same details from the saved events.
 
 ## How to run or test it
 

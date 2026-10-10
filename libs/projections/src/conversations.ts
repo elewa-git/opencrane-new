@@ -12,6 +12,7 @@ export const conversations: Projection = {
   name: 'conversations',
   async create(db) {
     await requireLegacyReplay(db);
+    await requireActivityReplay(db);
     await createConversationTables(db);
     await refuseMissingParticipation(db);
   },
@@ -37,6 +38,20 @@ export const conversations: Projection = {
     await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
   },
 };
+
+async function requireActivityReplay(db: Query): Promise<void> {
+  const result = await db.query<{ name: string | null }>(
+    "SELECT to_regclass('conversations')::text AS name");
+  const table = result.rows[0];
+  if (!table?.name) return;
+  const columns = await db.query<{ attname: string }>(`SELECT attname FROM pg_attribute
+    WHERE attrelid = 'conversations'::regclass AND NOT attisdropped
+      AND attname IN ('closed_event_id', 'closed_position', 'closed_by', 'closed_at')`);
+  if (columns.rows.length !== 4) {
+    throw new Error('Conversation tables need rebuilding. Stop conversation readers and workers, '
+      + 'then run npm run replay -- conversations --confirm-conversations-stopped');
+  }
+}
 
 async function requireLegacyReplay(db: Query) {
   const result = await db.query<{ feed: string | null; legacy: string | null }>(
@@ -207,6 +222,7 @@ async function createParticipationTables(db: Query) {
     silo TEXT NOT NULL, conversation_id TEXT NOT NULL, mode TEXT NOT NULL,
     created_by TEXT NOT NULL, group_id TEXT, group_snapshot_position BIGINT,
     closed BOOLEAN NOT NULL, position BIGINT NOT NULL, latest_activity BIGINT NOT NULL,
+    closed_event_id TEXT, closed_position BIGINT, closed_by TEXT, closed_at TEXT,
     PRIMARY KEY (silo, conversation_id))`);
   await db.query(`CREATE TABLE IF NOT EXISTS conversation_participants (
     silo TEXT NOT NULL, conversation_id TEXT NOT NULL, participant_id TEXT NOT NULL,
@@ -230,15 +246,18 @@ async function foldConversation(db: Query, event: EventEnvelope,
     }
     const values = [event.silo, conversationId, created.mode, created.createdBy,
       groupId ?? null, snapshot ?? null, false, position, position];
-    await db.query('INSERT INTO conversations VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', values);
+    await db.query(`INSERT INTO conversations
+      (silo, conversation_id, mode, created_by, group_id, group_snapshot_position,
+        closed, position, latest_activity) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, values);
     const participantIds = conversationParticipantIds(created);
     for (const participantId of participantIds) {
       await startParticipant(db, event, conversationId, participantId, position);
     }
     return;
   }
-  const state = await db.query<{ closed: boolean }>(
-    'SELECT closed FROM conversations WHERE silo = $1 AND conversation_id = $2',
+  const state = await db.query<ConversationActivity>(
+    `SELECT closed, latest_activity, closed_event_id, closed_position, closed_by, closed_at
+      FROM conversations WHERE silo = $1 AND conversation_id = $2`,
     [event.silo, conversationId]);
   const conversation = state.rows[0];
   // Refuse participant events without creation in this silo, including foreign ids.
@@ -247,10 +266,41 @@ async function foldConversation(db: Query, event: EventEnvelope,
     await foldParticipant(db, event, conversationId, position);
   }
   if (!conversation) return;
-  let closed = conversation.closed;
-  if (event.type === 'conversation.closed') closed = true;
-  await db.query(`UPDATE conversations SET closed = $3, position = $4, latest_activity = $4
-    WHERE silo = $1 AND conversation_id = $2`, [event.silo, conversationId, closed, position]);
+  foldActivity(conversation, event, position);
+  const values = [event.silo, conversationId, conversation.closed, position,
+    conversation.latest_activity, conversation.closed_event_id, conversation.closed_position,
+    conversation.closed_by, conversation.closed_at];
+  await db.query(`UPDATE conversations SET closed = $3, position = $4, latest_activity = $5,
+      closed_event_id = $6, closed_position = $7, closed_by = $8, closed_at = $9
+    WHERE silo = $1 AND conversation_id = $2`, values);
+}
+
+type ConversationActivity = {
+  closed: boolean;
+  latest_activity: string;
+  closed_event_id: string | null;
+  closed_position: string | null;
+  closed_by: string | null;
+  closed_at: string | null;
+};
+
+function foldActivity(state: ConversationActivity, event: EventEnvelope, position: number): void {
+  // Keep the first close and the last visible message even when reports arrive later.
+  if (state.closed) return;
+  if (event.type === 'message.posted' || event.type === 'agent.message_completed') {
+    state.latest_activity = String(position);
+  }
+  if (event.type !== 'conversation.closed') return;
+  if (typeof event.data !== 'object' || event.data === null) {
+    throw new Error('Invalid conversation close');
+  }
+  const closedBy: unknown = Reflect.get(event.data, 'closedBy');
+  if (typeof closedBy !== 'string') throw new Error('Invalid closing person');
+  state.closed = true;
+  state.closed_event_id = event.id;
+  state.closed_position = String(position);
+  state.closed_by = closedBy;
+  state.closed_at = event.time;
 }
 
 async function startParticipant(db: Query, event: EventEnvelope,
