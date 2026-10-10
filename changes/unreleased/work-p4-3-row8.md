@@ -7,3 +7,5 @@ need a stopped-service handler upgrade and member and permission rebuilds.
 Role changes and team turns now check only the member records that decide their
 access. A former successor’s ordinary role change no longer interrupts another
 person’s request. Membership history is read before the two-second write check.
+Requests that have already started their write check keep its original deadline
+when reading membership. Slow identity lookup cannot extend assistant creation.

@@ -940,6 +940,8 @@ later ordinary role changes cannot remove ownership.
 `activeMember` can reuse a membership read completed before the write check. It
 compares both saved stream positions before checking current permissions and
 applied receipts. A position change or an expired two-second window refuses the write.
+When a caller has already started its write check, membership reads use that same
+deadline. They never start a new ten-second history window.
 
 ## Recorded tool failures and approval actions
 

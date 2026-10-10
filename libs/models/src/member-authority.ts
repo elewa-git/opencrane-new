@@ -15,8 +15,10 @@ export async function activeMember(
     membership?: Awaited<ReturnType<typeof currentMembership>>;
   },
 ) {
+  // Keep an existing write deadline when the caller has already started its access check.
+  const historyDeadline = options.fresh?.deadline ?? performance.now() + 10_000;
   const membership = options.membership ?? await currentMembership(
-    store, binding.silo, memberId, undefined, performance.now() + 10_000);
+    store, binding.silo, memberId, options.fresh, historyDeadline);
   const subjects = [...membership.positions.keys()];
   const fresh = options.fresh ?? await authorityFence(store, performance.now(), subjects);
   for (const [subject, position] of membership.positions) {

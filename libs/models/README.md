@@ -61,6 +61,7 @@ flowchart LR
   grant no call authority either.
 - Check member or admin access for reads using saved membership and current permissions.
   Let one request reuse checks for the same saved access event.
+  Keep membership checks for writes within the caller’s original deadline.
 - Check that an invitation's sender still has authority before it is accepted.
 - Keep chat, computer and model grant facts in memory and read new events before each call.
   Keep only the latest grant facts for each person, assistant or group.

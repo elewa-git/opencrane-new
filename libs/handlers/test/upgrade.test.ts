@@ -37,8 +37,9 @@ function upgradeTests() {
       id INTEGER PRIMARY KEY, silo TEXT, manifest TEXT, sequence BIGINT)`);
     await current.db.query("INSERT INTO handler_dispatcher VALUES (1, 'test', $1, 4)",
       [oldManifest]);
-    const names: HandlerName[] = ["update-openfga", "seed-ownership", "seed-model-grants",
-      "seed-provider-default", "create-assistant", "claim-computer", "settle-budget"];
+    const names: HandlerName[] = ["update-openfga", "seed-ownership", "confirm-ownership",
+      "seed-model-grants", "seed-provider-default", "create-assistant", "claim-computer",
+      "settle-budget"];
     function testHandler(name: HandlerName) {
       async function apply(event: Parameters<typeof effect>[0], tx: Parameters<typeof effect>[1]) {
         await effect(event, tx, name);
