@@ -123,13 +123,8 @@ picker replies. `chatListSchema` accepts human group rows with their explicit
 participants and optional recorded group association. See the
 [group API](../../docs/api/group-chats.md) for the server checks and limits.
 
-`chatParticipantCommandSchema` and `chatParticipantsSchema` define the strict
-[group participant request and list](../../docs/api/direct-chats.md#group-participants).
-The server tests check both the input rules and the list reply with real services.
-
-## Recorded tool failures and approval actions
-
-The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
-
-The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
-defines invitation receipts and safe refusal history.
+`memberAccessSchema` and `memberDepartureSchema` check recorded access and versioned
+departure reviews. They keep recorded grant sources separate from checked
+person/assistant permissions and unavailable use readiness. Departure revisions bind
+the actual checked inputs. Missing permission evidence makes the review incomplete.
+`permissions.remove` is always false; these reads add no removal command.

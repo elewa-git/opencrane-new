@@ -64,3 +64,4 @@ export { conversationEventId, chatIdSchema, groupConversationCommandSchema } fro
 export { providerTurnBindingSchema, optionalProviderTurnBindingSchema } from './turn-binding.ts';
 
 export { toolDispatchRecordedDataSchema, agentNativeConsentRefusedDataSchema } from './data.ts';
+export { grantGivenDataSchema, teamCreatedDataSchema } from './data.ts';

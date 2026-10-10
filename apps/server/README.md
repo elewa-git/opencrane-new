@@ -10,8 +10,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats and group participation"]
-  server -.->|checks organisation, access, refusal records, spending and memory| libs["libs/*<br/>shared code"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member access"]
+  server -.->|checks access, refusal records, departure details, spending and memory| libs["libs/*<br/>shared code"]
   server -->|records changes, roles, participants, chats and provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -54,7 +54,10 @@ flowchart LR
   Reports a competing appointment as applying until its permissions have been updated.
 - Records and renews email invitations for owners and admins. Reads saved command results.
 - Returns member headers to members and the email directory to current owners and admins.
-  Keeps checking their access while a live member connection is open.
+- Explains recorded access and reviews departure effects without private content.
+  Reports incomplete reviews while access changes are being applied, and returns only
+  counts and dates for private history. Removal is not available yet.
+- Keeps checking member access while a live connection is open.
 - Records changes as events and reads the current state from PostgreSQL.
 - Keep the original provider choice when repeating or closing a recorded turn.
   Pass its model to the turn-token issuer and the computer that runs the turn.
