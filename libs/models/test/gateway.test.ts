@@ -601,8 +601,10 @@ it('keeps the configured zero-ceiling stop when decision audits fail and callers
     expect((await f.call()).status).toBe(503);
     expect((await f.call()).status).toBe(503);
     expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type))
-      .toEqual(['budget.ceiling_set', 'budget.period_started']);
+      .toEqual(['budget.ceiling_set', 'budget.period_started', 'budget.exhausted']);
     expect(f.actor.state.stops).toHaveLength(1);
+    expect(f.actor.state.stoppedWork).toEqual([{ conversationId: 'conversation',
+      turnId: 'turn', stopId: f.actor.state.stops[0]!.id }]);
     expect(await history(f.nats.store, 'security-test', 'test')).toEqual([]);
     expect(f.received()).toBe(0);
   } finally { fault.mockRestore(); await f.close(); }
