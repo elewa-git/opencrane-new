@@ -213,5 +213,6 @@ The switch-on command is not built yet. It must drain running legacy turns befor
 saving this event; schema validation alone cannot prove that condition.
 
 Saving switch-on advances the spending stream. A budget writer using the old
-position cannot save another hold. Safe activation must replace that writer after
-reading the marker. This event has no production command yet.
+position cannot save another hold. The actor can read past this marker to settle
+or release holds saved before it, without a restart. It still stops when another
+budget writer has saved a change. This event has no production command yet.

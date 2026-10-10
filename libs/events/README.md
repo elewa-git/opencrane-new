@@ -48,6 +48,7 @@ flowchart LR
 
 - Define the record that says managed provider calls were switched on.
   Keep that record in the silo’s spending stream.
+  Stop new holds while allowing existing holds to settle or be released.
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.
 - Define the wrapper every event shares (its id, its type, what it is about,

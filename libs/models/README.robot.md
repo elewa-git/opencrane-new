@@ -998,5 +998,12 @@ short access check, then read only new activity before reserving and returning a
 permit. A provider-bound pass must match its recorded turn and still refuses on
 the deployment-key route before holding money. Switching on advances the budget
 stream, so an old budget writer cannot append a reservation across that change.
+If only switch-on records followed its last position, the actor moves past them
+and retries a settlement or another budget change once. It refuses new holds,
+including after replay, without stopping releases, expiry or later settlements.
+Any change from another budget writer still stops the old actor. It reads only
+events after its saved position when checking an append conflict.
+Retrying a spending-limit change checks the caller's access again within its
+original deadline. A refused change does not stop settlement of existing holds.
 A decision audit uses a fresh command id and `historyChecked: true` against zero.
 No earlier event can share that new command id.

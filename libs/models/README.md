@@ -19,11 +19,7 @@ flowchart LR
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-<<<<<<< HEAD
-  models -->|saves changes and spending, reads new activity and grant facts| store["libs/event-store<br/>event log"]
-=======
-  models -->|saves changes, reads activity, grants and spending mode| store["libs/event-store<br/>event log"]
->>>>>>> d8dccd76 (🔒 Check provider mode through the exact silo spending stream)
+  models -->|saves holds and settlements, reads activity, grants and spending mode| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -62,6 +58,8 @@ flowchart LR
 - List spending from the saved budget and call records, without reading chat history.
   Keep calls with an unknown outcome in the list alongside settled calls.
 - Release an expired hold at zero cents when it was never allowed or sent.
+- Stop new holds after provider switch-on while settling or releasing existing holds.
+  Keep those holds moving without restarting the models process.
 - Read each new usage line once and leave old lines alone while idle. Retry a line
   if its event could not be saved.
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.

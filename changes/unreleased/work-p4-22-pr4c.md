@@ -1,1 +1,5 @@
 New turns can use an assistant's saved provider choice or the silo default after switch-on is recorded. Paused or missing choices refuse new work. Running turns keep their original model and provider. Old passes are refused before holding money after switch-on. Existing installations keep their current path because the safe switch-on command and managed gateway are not built yet. Model decisions read switch-on from the silo's exact spending stream, without scanning unrelated providers.
+
+Holds saved before switch-on still settle, release or expire without restarting
+the models process. A refused unsent call releases its hold at zero cents, and
+late usage settles once at its original price. New holds remain refused.
