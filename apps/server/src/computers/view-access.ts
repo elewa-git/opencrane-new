@@ -1,3 +1,4 @@
+import { isComputerLifecycle } from '@opencrane/auth';
 import { z } from 'zod';
 import type { Query } from '@opencrane/projections';
 import {
@@ -223,9 +224,13 @@ async function conversationDesktop(options: ViewAccessOptions, memberId: string,
   return computer;
 }
 
+function isLifecycleRow(row: StoredEvent) {
+  return isComputerLifecycle(row.event.type);
+}
+
 async function currentComputer({ store, silo, deadline }: ViewAccessOptions, assistantId: string) {
   const lifecycle = await history(store, `computer-${assistantId}`, silo, deadline);
-  const latest = lifecycle.findLast(r => !r.event.type.startsWith('computer.turn_'))?.event;
+  const latest = lifecycle.findLast(isLifecycleRow)?.event;
   if (latest?.type !== 'computer.ready') throw new Error('Computer unavailable');
   const computer = ready.parse(latest.data);
   const claimed = ready.parse(lifecycle.findLast(r => r.event.type === 'computer.claimed')?.event.data);
@@ -281,7 +286,7 @@ async function confirmTeamAuthority(options: ViewAccessOptions, memberId: string
   }
 }
 
-async function desktopAccess(options: ViewAccessOptions, memberId: string,
+export async function desktopAccess(options: ViewAccessOptions, memberId: string,
   conversationId: string, computerId: string) {
   const { store, silo } = options;
   const resource = grantStream('shared_desktop', computerId);

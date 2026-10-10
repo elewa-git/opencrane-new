@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const auditReasons = {
+  requester_requested: 'Requester asked for control',
   access_refused: 'Request refused', wrong_identity: 'Invitation is for another account',
   inviter_authority_ended: 'The inviter is no longer an owner or admin',
   identity_mismatch: 'The invitation does not match the intended person',
@@ -26,6 +27,10 @@ export const auditReasons = {
 
 const id = z.string().regex(/^[\w:.-]{1,300}$/u);
 export const auditRecordSchema = z.object({
+  computerId: id.optional(), generation: z.int().positive().optional(),
+  takeoverId: id.optional(), leaseId: id.optional(),
+  affectedTurnCount: z.int().nonnegative().optional(),
+  requesterEventId: id.optional(),
   memberId: id.optional(), invitationId: id.optional(),
   operation: z.enum(['invite', 'join']).optional(),
   role: z.enum(['owner', 'admin', 'member']).optional(),

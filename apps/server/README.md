@@ -12,7 +12,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership, member access and destination rules"]
   server -.->|checks startup, access, departures, spending stops, memory setup, tool reviews and turn previews| libs["libs/*<br/>shared code"]
-  server -->|records changes, memory facts and choices, grants, roles, participants, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -->|records changes, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chats, closing records, joins, facts, models and tools| postgres
@@ -34,6 +34,10 @@ flowchart LR
   its status. Nightly execution remains disabled.
 - Preview bounded facts for a saved private turn without sending text to a computer.
   Facts with expired or unusable supporting facts are left out.
+
+- Record internal control intent for the current requester. Refuse new work while it is pending.
+  Keep independently authorised viewing and explicit approval denial available.
+
 - Read recorded child participants without reading the whole conversation.
 
 - Returns missing approval details and accepts requester retries after verified non-dispatch.

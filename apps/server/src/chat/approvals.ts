@@ -3,7 +3,8 @@ import { createHash, createHmac } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
-import { approvalCards, readApproval, decideApproval, currentAuthority } from '@opencrane/models';
+import { approvalCards, readApproval, decideApproval, currentAuthority, decisionActivity }
+  from '@opencrane/models';
 import { chatAccess, writeChatAccess, isChatRefused, conversationParticipation, ChatAccessApplying } from './access.ts';
 import { sessionFor } from '../members/routes.ts';
 import type { ChatOptions } from './routes.ts';
@@ -67,6 +68,11 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
   approvalReviewSchema.parse(JSON.parse(text));
   const reviewDigest = createHash('sha256').update(text).digest('hex');
   if (reviewDigest !== request.reviewDigest) throw new Error('Review unavailable');
+  const activity = await decisionActivity(options.store, options.silo, request.assistantId,
+    conversationId, request.turnId, performance.now() + 10_000);
+  if (input.decision !== 'rejected' && activity.computer.control) {
+    return reply.code(409).send({ status: 'conflict' });
+  }
   const accessRequest = { memberId, conversationId, relation: 'post' as const };
   const fresh = await writeChatAccess(options, accessRequest);
   const access = await conversationParticipation(options, memberId, conversationId,
@@ -74,12 +80,17 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
   if (requestPosition < access.joinPosition) {
     return reply.code(403).send({ status: 'refused' });
   }
-  fresh.include(`computer-${request.assistantId}`);
+  async function confirm() {
+    await fresh();
+    if (input.decision !== 'rejected') await activity.confirm(fresh.deadline, true);
+  }
+  const deadline = { deadline: fresh.deadline };
+  const checkedAuthority = Object.assign(confirm, deadline);
   await currentAuthority(options.store, options.binding, memberId, request.assistantId,
     conversationId, 'mcp_server', request.serverId, fresh, access.authorityRows);
   const recent = isRecentStepUp(session, input.approvalId);
   const result = await decideApproval(options.store, options.silo, input.approvalId,
-    memberId, input.decision, recent, fresh, checked);
+    memberId, input.decision, recent, checkedAuthority, checked);
   const statusCode = approvalDecisionStatus(result.status);
   return reply.code(statusCode).send({ status: result.status });
 }

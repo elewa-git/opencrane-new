@@ -17,7 +17,8 @@ const grant = state.extend({ generation: z.int().positive().optional(), tokenId:
 export function computerCredentials(store: Pick<EventStore, 'readStream'>, tokens: Verifier, silo: string) {
   async function active(assistantId: string, deadline = Infinity) {
     function take(summary: ComputerSummary) {
-      return { lifecycle: summary.lifecycle, claim: summary.claim, grant: summary.grant };
+      return { control: summary.control, lifecycle: summary.lifecycle,
+        claim: summary.claim, grant: summary.grant };
     }
     let facts: ReturnType<typeof take>;
     try {
@@ -29,6 +30,7 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
       }
       throw error;
     }
+    if (facts.control) throw new Error('Computer control is pending');
     const latest = facts.lifecycle;
     if (latest?.event.type !== 'computer.ready') throw new Error('Computer is not ready');
     const claim = state.parse(facts.claim?.event.data);

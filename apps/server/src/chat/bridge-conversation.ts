@@ -1,4 +1,5 @@
 import { chatMembership } from './participation.ts';
+import { isComputerLifecycle, readComputerControl } from '@opencrane/auth';
 import type { Client } from 'minio/dist/esm/minio.mjs';
 import { fileDeliveredDataSchema, fileUploadedDataSchema,
   mcpServerDiscoveredDataSchema } from '@opencrane/events';
@@ -124,7 +125,7 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
   const closed = new Set<string>();
   const started = new Set<string>();
   for (const row of lifecycle) {
-    if (!row.event.type.startsWith('computer.turn_')) current = row.event;
+    if (isComputerLifecycle(row.event.type)) current = row.event;
     if (row.event.silo !== silo) continue;
     if (row.event.type === 'computer.turn_closed') {
       closed.add(turnIdData.parse(row.event.data).turnId);
@@ -166,6 +167,8 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   if (current.type !== 'computer.ready' || refused.has(computer.computerId)) {
     return { pending: true, retry: true };
   }
+  const control = await readComputerControl(options.store, options.silo, conversation.assistantId);
+  if (control) return { pending: true, retry: true };
   const link = await connection(computer.computerId, conversation.assistantId);
   await deliverUploads(options.objects, link, uploads);
   if (message) {
@@ -206,6 +209,8 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   }
   const active = await chatMembership(options.store, options.silo, turn.requesterId);
   if (!active) throw new TurnAdmissionRejected('Active silo membership required');
+  const control = await readComputerControl(options.store, options.silo, conversation.assistantId);
+  if (control) return;
   link.socket.send(JSON.stringify(turn));
 }
 

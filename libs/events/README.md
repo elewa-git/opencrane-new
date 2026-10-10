@@ -26,7 +26,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turns, spending limits, stop reasons and UTC resets| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks control, turns, spending limits, stop reasons and UTC resets| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> zod["Zod<br/>data checks"]
 ```
@@ -37,8 +37,9 @@ flowchart LR
   Refuse reserved internal names, including `home.arpa` and names beneath it.
 
 - Defines hosted startup credential requirements and review references without secret values.
-Nightly memory setup records the consenting member, assistant, paying group and
-accepted cost cap of exactly 100 integer cents. This record starts no work and spends no money.
+- Records nightly memory setup with the consenting member, assistant, paying group
+  and accepted cap of 100 euro cents. This record starts no work and spends no money.
+- Define computer-wide control intent with the reviewed requester and affected turn ids.
 
 - Defines shared child records with a parent message, fixed payer and named people.
 - Defines delegated task relationships and outcomes, including cancellation. Older records

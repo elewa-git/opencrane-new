@@ -212,3 +212,14 @@ provider configuration revision. Legacy turns remain valid without these claims.
 fractional binding positions and positions above the safe integer limit at signing.
 These tests call the signer directly, so a recorded-turn comparison cannot hide a
 missing input check.
+
+## Computer control summary
+
+`ComputerSummary.control` is separate from `lifecycle`, `claim` and `grant`.
+`takeover.requested` records requested phase, command id, position, requester,
+computer/generation/Pod, lease reference, affected turns and requested time.
+`readComputerControl` returns a copy after catching up with saved events. It is
+an internal reader; callers must check access before exposing any private fields.
+Generation replacement preserves control until a later checked recovery contract.
+Old `takeover.started` and `takeover.ended` shapes become unverified control and
+refuse work passes. Neither shape restores work or grants a writer.

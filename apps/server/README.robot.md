@@ -1711,3 +1711,24 @@ external ports. Fresh-install qualification and independent review: NOT RUN.
 Owner/Admin budget reads and commands include saved stop reasons and known turns.
 Rebuild budget projections on upgrade. The integration test checks PostgreSQL
 replay and member refusal; dispatch and cancellation follow later.
+
+## Internal control intent
+
+`src/computers/takeover.ts` checks the latest accepted human request, its reviewed
+id, the current generation and Pod, membership, participation, assistant rights
+and applied desktop grants. `requestControl` records one `takeover.requested` with
+one conditional append to the computer stream. A racing turn or intent cannot
+both use the same checked position. Retries check current access and the original
+request fields. Conflicting command ids return no saved success.
+
+Chat history loads before the short write check. Later human messages and closure
+are checked with a bounded tail read. Only small access streams enter that check.
+Turn admission, message delivery, credential issuance and decisions refuse pending
+control. Reports and explicit approval denial remain available. Viewer transport
+and its access leases are unchanged.
+
+This is the first split of P3-17 row 1. HTTP request/status routes, chat/realtime
+control status, remaining transition schemas and strict modern started/ended data
+are deferred. There is no route that can trigger intent, pause reaction, local gate,
+writer or input path. Supervisor proof, dispatch ordering and recovery remain later
+work. The accepted [design](../../docs/specs/phase-3/p3-17-take-control.md) owns that scope.

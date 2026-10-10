@@ -5,6 +5,7 @@ import { z } from 'zod';
 type Message = { authorId: unknown; executionMode: unknown };
 type ComputerReports = { lastSequence: number; positions: Map<number, number> };
 type ChatSummary = {
+  latestHuman?: { id: string; authorId: unknown } | undefined;
   created: Record<string, unknown> | undefined;
   conversationClosed: boolean;
   messages: Map<string, Message>;
@@ -13,6 +14,7 @@ type ChatSummary = {
   reportCount: number;
 };
 export type ChatFacts = {
+  latestHuman?: { id: string; authorId: unknown } | undefined;
   created: Record<string, unknown> | undefined;
   message: Message | undefined;
   closed: boolean;
@@ -44,8 +46,16 @@ function addChat(summary: ChatSummary, row: StoredEvent) {
     const message = { authorId: data['authorId'], executionMode: data['executionMode'] };
     summary.messages.set(event.id, message);
   }
+  addRequester(summary, row, data);
   if (closedTurnId !== undefined) summary.closedTurnIds.add(closedTurnId);
   if (event.report) addReport(summary, event.report, row.sequence);
+}
+function addRequester(summary: ChatSummary, row: StoredEvent,
+  data: Record<string, unknown> | undefined) {
+  if (row.event.type === 'message.posted' && data?.['authorKind'] === 'human') {
+    summary.latestHuman = { id: row.event.id, authorId: data['authorId'] };
+  }
+  if (row.event.type === 'conversation.closed') summary.conversationClosed = true;
 }
 function addReport(summary: ChatSummary, report: NonNullable<StoredEvent['event']['report']>,
   position: number) {
@@ -81,6 +91,8 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
       created: summary.created === undefined ? undefined : { ...summary.created },
       message: message === undefined ? undefined : { ...message },
       closed: summary.conversationClosed || summary.closedTurnIds.has(turnId),
+      latestHuman: summary.latestHuman,
+      conversationClosed: summary.conversationClosed,
       lastReportSequence: reports?.lastSequence ?? 0,
       reportPosition, sequence,
     };

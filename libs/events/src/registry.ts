@@ -1,4 +1,6 @@
 import { egressEvents } from './egress.ts';
+
+import { takeoverEvents } from './takeover.ts';
 import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
   from './conversation.ts';
 import { memoryWrittenExample, memoryMaintenanceBoundDataSchema } from './memory.ts';
@@ -49,6 +51,7 @@ export const eventRegistry: readonly EventDefinition[] = [
   ...egressEvents,
 
   ...bridgeEvents,
+  ...takeoverEvents,
   // Assistants and computers
   event(
     'assistant.created',

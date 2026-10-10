@@ -9,7 +9,9 @@ import { viewAccess } from '../src/computers/view-access.ts';
 import { viewFixture } from './support/view-fixture.ts';
 
 let fixture: Awaited<ReturnType<typeof viewFixture>>;
-async function noDesktop() { throw new Error('No writer is available'); }
+function noDesktop(): Promise<never> {
+  return Promise.reject(new Error('No writer is available'));
+}
 async function cleanup() {
   vi.restoreAllMocks();
   await fixture?.close();
@@ -19,7 +21,7 @@ async function setup() {
   fixture = await viewFixture(noDesktop);
   await fixture.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-    ciphertext: 'text', keyId: 'key:test', contentType: 'text',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
   });
   await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
     resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
@@ -61,8 +63,9 @@ async function keepsIntentAndReplay() {
   const audit = await readAudit(fixture.db, 'test');
   expect(audit.rows[0]?.records[0]).toMatchObject({
     computerId: 'desktop', generation: 1, takeoverId: 'control-one',
-    affectedTurnCount: 0, recordedAt: expect.any(String),
+    affectedTurnCount: 0,
   });
+  expect(typeof audit.rows[0]?.records[0]?.recordedAt).toBe('string');
   await fixture.runner.rebuild(auditTrail);
   expect(await readAudit(fixture.db, 'test')).toEqual(audit);
 }
@@ -75,7 +78,7 @@ async function racesIntent(other: 'intent' | 'turn') {
   }, true);
   const message = await fixture.append('conversation-other', 'message.posted', {
     conversationId: 'other', authorId: 'alice', authorKind: 'human',
-    ciphertext: 'text', keyId: 'key:test', contentType: 'text',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
   });
   const append = options.store.append.bind(options.store);
   const both = Promise.withResolvers<void>();

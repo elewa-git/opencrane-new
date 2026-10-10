@@ -83,7 +83,7 @@ function prepare() {
         { resourceType, resourceId, granteeKind, granteeId, grantedBy: 'alice' }));
     }
   }
-  activity = { conversation: [], computer: { sequence: 1,
+  activity = { conversation: [], computer: { sequence: 1, control: undefined,
     lifecycle: row('computer-assistant', 'computer.ready',
       { computerId: 'computer', generation: 1 }),
     firstStart: row('computer-assistant', 'computer.turn_started', {
@@ -174,3 +174,10 @@ async function closed() {
     .rejects.toThrow('Memory turn ended');
 }
 it('refuses a closed conversation with a live computer turn', closed);
+
+async function refusesMemoryDuringControl() {
+  activity.computer.control = { phase: 'unverified', position: 2 };
+  await expect(memoryRights(nats.store, binding, claims, parsed, performance.now() + 2000))
+    .rejects.toThrow('Computer control is pending');
+}
+it('refuses memory calls while the computer has pending control', refusesMemoryDuringControl);

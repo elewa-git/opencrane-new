@@ -13,7 +13,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approvals, child joins, owner appointments, provider choices and spending stops| models["libs/models<br/>AI rules, provider choice and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
@@ -29,6 +29,8 @@ flowchart LR
   operation, contents, unique identity (UID) and version before recovery or deletion.
   Keep private repair records so a restart cannot accept a replacement Secret.
   Confirm that the Secret is absent before reporting deletion.
+
+- Refuse model, tool and memory calls while computer control is pending.
 
 - Build recorded child participation and keep its history start separate from each join.
 - Recheck saved grants and permissions for a private turn memory preview without reading chat history again.

@@ -1,8 +1,27 @@
 import { z } from 'zod';
-import { computerTurnStartedDataSchema as startDetails,
+import { takeoverRequestedDataSchema, computerTurnStartedDataSchema as startDetails,
   computerTurnClosedDataSchema as closeDetails } from '@opencrane/events';
-import type { StoredEvent, SummaryKind } from '@opencrane/event-store';
+import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
+  from '@opencrane/event-store';
 
+const lifecycleTypes = new Set([
+  'computer.claimed', 'computer.ready', 'computer.suspended', 'computer.resumed',
+  'computer.lost', 'computer.retired',
+]);
+export function isComputerLifecycle(type: string) {
+  return lifecycleTypes.has(type);
+}
+export type ComputerControl = (z.infer<typeof takeoverRequestedDataSchema> & {
+  phase: 'requested'; position: number; commandId: string; requestedAt: string;
+}) | { phase: 'unverified'; position: number };
+export async function readComputerControl(store: Pick<EventStore, 'readStream'>,
+  silo: string, assistantId: string, deadline = performance.now() + 10_000) {
+  function take(summary: ComputerSummary) {
+    return structuredClone(summary.control);
+  }
+  return readStreamSummary(store, silo, `computer-${assistantId}`,
+    computerSummary, deadline, take);
+}
 type ExecutionMode = 'restricted' | 'memory_free';
 export type TurnSummary = {
   hasStart: boolean;
@@ -17,6 +36,7 @@ export type ThreadSummary = {
   restrictedTurnIds: Set<string>;
 };
 export type ComputerSummary = {
+  control?: ComputerControl;
   lifecycle: StoredEvent | undefined;
   claim: StoredEvent | undefined;
   grant: StoredEvent | undefined;
@@ -43,7 +63,16 @@ function addComputer(summary: ComputerSummary, row: StoredEvent) {
     addClose(summary, row, details);
     return;
   }
-  if (!type.startsWith('computer.turn_')) summary.lifecycle = row;
+  if (type === 'takeover.requested') {
+    const details = takeoverRequestedDataSchema.parse(row.event.data);
+    summary.control = { ...details, phase: 'requested', position: row.sequence,
+      commandId: z.string().parse(row.event.commandId), requestedAt: row.event.time };
+  }
+  // Keep old records paused. They contain no checked proof of writer closure.
+  if (type === 'takeover.started' || type === 'takeover.ended') {
+    summary.control = { phase: 'unverified', position: row.sequence };
+  }
+  if (isComputerLifecycle(type)) summary.lifecycle = row;
   if (type === 'computer.claimed') summary.claim = row;
   if (type === 'computer.claimed' || type === 'computer.resumed') summary.grant = row;
 }

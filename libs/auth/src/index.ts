@@ -33,3 +33,6 @@ export { computerCredentials } from './credentials.ts';
 
 export { computerSummary, type ComputerSummary, type TurnSummary,
   type ThreadSummary } from './computer-summary.ts';
+
+export { readComputerControl, isComputerLifecycle, type ComputerControl }
+  from './computer-summary.ts';

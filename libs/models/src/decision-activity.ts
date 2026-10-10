@@ -28,7 +28,8 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
   function takeComputer(summary: ComputerSummary, sequence: number) {
     const turn = summary.turns.get(turnId);
     const firstClose = turn?.firstClose;
-    return { sequence, lifecycle: summary.lifecycle, firstStart: turn?.firstStart,
+    return { sequence, control: structuredClone(summary.control), lifecycle: summary.lifecycle,
+      firstStart: turn?.firstStart,
       firstClose: firstClose === undefined ? undefined : { ...firstClose } };
   }
   const conversationRead = readStreamSummary(store, silo, conversationSubject,

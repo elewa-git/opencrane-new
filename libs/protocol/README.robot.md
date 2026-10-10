@@ -138,3 +138,9 @@ or a saved startup refusal. Startup policies remain unpublished while their runt
 is unavailable. Existing per-call policies, including memory registrations without
 a startup contract, keep their existing publication checks. The field grants no
 access by itself.
+
+## Control history
+
+Audit records may include computer id, generation, takeover/lease references,
+reviewed requester event and affected-turn count. These are references, never
+bearer credentials. Private affected-turn lists are not part of organisation history.
