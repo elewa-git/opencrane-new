@@ -3,7 +3,8 @@ import { legacyMemberRole } from '@opencrane/events';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { ownershipWriteAccess, currentMembership, history, ownershipSubject } from '@opencrane/models';
+import { ownershipWriteAccess, currentMembership, currentOwnershipMembership,
+  history, ownershipSubject } from '@opencrane/models';
 
 const identifier = z.string().regex(/^[\w-]{1,200}$/u);
 const common = { commandId: identifier, expectedSequence: z.int().nonnegative().safe() };
@@ -100,7 +101,9 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
   actorId: string, raw: unknown) {
   const input = commandSchema.parse(raw);
   const subject = ownershipSubject(binding.silo);
-  const membership = await ownershipAccess(store, binding, actorId);
+  const access = await ownershipAccess(store, binding, actorId);
+  const membership = await currentOwnershipMembership(store, binding.silo, actorId,
+    performance.now() + 10_000, access);
   const positions = membership.positions;
   const rows = membership.ownership;
   if (!rows.length) {

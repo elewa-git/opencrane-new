@@ -4,7 +4,8 @@ import { ownershipConfirmedSchema, ownershipTransferredSchema } from '@opencrane
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
-import { currentMembership, history, ownershipSubject } from '@opencrane/models';
+import { currentMembership, currentOwnershipMembership, history,
+  ownershipSubject } from '@opencrane/models';
 import type { GroupOptions } from './group-routes.ts';
 import { sessionFor } from './routes.ts';
 import { ownershipAccess, ownershipStatusAccess, ownershipCommand, ownershipReceipt,
@@ -57,7 +58,9 @@ async function read(options: GroupOptions, actorId: string, commandId?: string) 
   if (commandId) {
     result = await readChange(options, commandId, deadline);
   } else {
-    const ownerIds = [...membership.owners];
+    const ownership = await currentOwnershipMembership(
+      options.store, options.silo, actorId, deadline, membership);
+    const ownerIds = [...ownership.owners];
     ownerIds.sort();
     const owners = [];
     for (const memberId of ownerIds) {
@@ -66,9 +69,9 @@ async function read(options: GroupOptions, actorId: string, commandId?: string) 
       const fields = z.object({ displayName: z.string() }).parse(joined?.event.data);
       owners.push({ memberId, displayName: fields.displayName, role: 'owner' as const });
     }
-    result = { status: 'current', owners, sequence: membership.ownership.at(-1)?.sequence ?? 0,
+    result = { status: 'current', owners, sequence: ownership.ownership.at(-1)?.sequence ?? 0,
       viewer: { memberId: actorId, role: membership.role },
-      ready: membership.ownership.length > 0 };
+      ready: ownership.ownership.length > 0 };
   }
   return result;
 }

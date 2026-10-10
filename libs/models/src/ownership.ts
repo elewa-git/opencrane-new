@@ -168,7 +168,7 @@ function roleWithOwnership(state: StoredEvent | undefined, changes: StoredEvent[
   }
   return memberRole ?? '';
 }
-/** Read ownership requests and member confirmations to check the current role. */
+/** Check one member without reading other members’ appointment histories. */
 export async function currentMembership(store: Pick<EventStore, 'readStream'>,
   silo: string, memberId: string,
   fresh?: { include: (...subjects: string[]) => void; deadline: number },
@@ -177,29 +177,11 @@ export async function currentMembership(store: Pick<EventStore, 'readStream'>,
   fresh?.include(`member-${memberId}`, subject);
   const membership = await history(store, `member-${memberId}`, silo, deadline);
   const ownership = await history(store, subject, silo, deadline);
-  const confirmations: StoredEvent[] = [];
+  const confirmations = membership.filter(isConfirmation);
   const positions = new Map<string, number>();
   positions.set(`member-${memberId}`, membership.at(-1)?.sequence ?? 0);
   positions.set(subject, ownership.at(-1)?.sequence ?? 0);
-  async function readConfirmations() {
-    for (const row of ownership) {
-      if (row.event.type !== 'ownership.transferred') continue;
-      const transfer = ownershipTransferredSchema.parse(row.event.data);
-      if (!transfer.awaitingConfirmation) continue;
-      const memberSubject = `member-${transfer.memberId}`;
-      fresh?.include(memberSubject);
-      const rows = memberSubject === `member-${memberId}`
-        ? membership : await history(store, memberSubject, silo, deadline);
-      positions.set(memberSubject, rows.at(-1)?.sequence ?? 0);
-      for (const candidate of rows) {
-        if (candidate.event.type !== 'member.ownership_confirmed') continue;
-        const confirmed = ownershipConfirmedSchema.parse(candidate.event.data);
-        if (confirmed.appointmentId === row.event.id) confirmations.push(candidate);
-      }
-    }
-  }
-  await readConfirmations();
-  const owners = ownershipState(ownership, confirmations);
+  const owners = memberOwnership(ownership, confirmations, memberId);
   const memberFacts = membership.filter(isMemberState);
   function concernsMember(row: StoredEvent) {
     return relevantOwnership(row, memberId);
@@ -212,7 +194,71 @@ export async function currentMembership(store: Pick<EventStore, 'readStream'>,
   const ownershipFacts = ownership.filter(grantsOwnership);
   const role = roleWithOwnership(memberFacts.at(-1), ownershipFacts, owners, memberId);
   const facts = [...memberFacts, ...ownershipFacts];
-  return { role, facts, owners, ownership, confirmations, positions };
+  return { role, facts, ownership, confirmations, positions };
+}
+
+function isConfirmation(row: StoredEvent) {
+  return row.event.type === 'member.ownership_confirmed';
+}
+
+function memberOwnership(rows: StoredEvent[], confirmations: StoredEvent[], memberId: string) {
+  function concernsMember(row: StoredEvent) {
+    return relevantOwnership(row, memberId);
+  }
+  const relevant = rows.filter(concernsMember);
+  const ordered = [...relevant, ...confirmations];
+  function byPosition(left: StoredEvent, right: StoredEvent) {
+    return left.sequence - right.sequence;
+  }
+  ordered.sort(byPosition);
+  const owners = new Set<string>();
+  const pending = new Map<string, string>();
+  for (const row of ordered) {
+    const event = row.event;
+    if (event.type === 'ownership.seeded') {
+      const seed = ownershipSeededSchema.parse(event.data);
+      if (seed.ownerIds.includes(memberId)) owners.add(memberId);
+    } else if (event.type === 'ownership.transferred') {
+      const transfer = ownershipTransferredSchema.parse(event.data);
+      recordAppointment(transfer, event.id, owners, pending);
+    } else if (event.type === 'member.ownership_confirmed') {
+      confirmOwner(event, pending, owners);
+    } else if (event.type === 'ownership.stepped_down') {
+      owners.delete(memberId);
+    }
+  }
+  return owners;
+}
+
+/** Read the complete owner set only for operations that need every owner. */
+export async function currentOwnershipMembership(store: Pick<EventStore, 'readStream'>,
+  silo: string, memberId: string, deadline = performance.now() + 10_000,
+  checkedMembership?: Awaited<ReturnType<typeof currentMembership>>) {
+  const membership = checkedMembership ?? await currentMembership(
+    store, silo, memberId, undefined, deadline);
+  const confirmations = [...membership.confirmations];
+  const appointmentIds = new Set<string>();
+  for (const row of membership.ownership) {
+    if (row.event.type === 'ownership.transferred') appointmentIds.add(row.event.id);
+  }
+  function confirmsSavedRequest(row: StoredEvent) {
+    if (!isConfirmation(row)) return false;
+    const confirmed = ownershipConfirmedSchema.parse(row.event.data);
+    return appointmentIds.has(confirmed.appointmentId);
+  }
+  const readMembers = new Set([memberId]);
+  for (const row of membership.ownership) {
+    if (row.event.type !== 'ownership.transferred') continue;
+    const transfer = ownershipTransferredSchema.parse(row.event.data);
+    if (!transfer.awaitingConfirmation || readMembers.has(transfer.memberId)) continue;
+    readMembers.add(transfer.memberId);
+    const rows = await history(store, `member-${transfer.memberId}`, silo, deadline);
+    const saved = rows.filter(confirmsSavedRequest);
+    confirmations.push(...saved);
+  }
+  const owners = ownershipState(membership.ownership, confirmations);
+  // Keep historical successors out of access checks. Their later roles do not remove owners.
+  return { ...membership, owners, confirmations };
 }
 
 /** Fresh installation claim seeds ownership through a durable, independently retried reaction. */

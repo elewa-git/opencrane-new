@@ -3,7 +3,7 @@ import { computerSummary, type ComputerSummary, type TurnSummary,
 import type { Binding } from '@opencrane/authz';
 import { optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
 import { authorityFence, groupMembership, PayingGroupRefused, MemberAccessRefused,
-  activeMember } from '@opencrane/models';
+  activeMember, currentMembership } from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
@@ -225,8 +225,10 @@ async function payingGroup(store: EventStore, context: TurnContext,
     const group = sessionPayer(conversation, requesterId, details.payingGroupId);
     const subjects = [`member-${requesterId}`, `assistant-${context.assistantId}`,
       `team-${group}`, `team-${details.ownerId}`];
+    const membership = await currentMembership(store, context.silo, requesterId,
+      undefined, performance.now() + 10_000);
     const fresh = await authorityFence(store, performance.now(), subjects);
-    const memberAuthority = { requiredRole: 'member' as const, fresh };
+    const memberAuthority = { requiredRole: 'member' as const, fresh, membership };
     await activeMember(store, context.binding, requesterId, memberAuthority);
     for (const groupId of new Set([group, details.ownerId])) {
       await groupMembership(store, context.silo, requesterId,

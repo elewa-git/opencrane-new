@@ -931,6 +931,16 @@ price-table fields. It sends no provider request.
 
 New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).
 
+`currentMembership` reads only the named member and ownership streams. It returns
+that member’s role and the events needed to check their access. Pending appointments
+need the matching confirmation in that member’s stream. `currentOwnershipMembership`
+reads each other successor once to calculate the complete owner set. It keeps
+historical successors out of the positions used for write access checks. Their
+later ordinary role changes cannot remove ownership.
+`activeMember` can reuse a membership read completed before the write check. It
+compares both saved stream positions before checking current permissions and
+applied receipts. A position change or an expired two-second window refuses the write.
+
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.

@@ -4,7 +4,8 @@ import { expect, it } from 'vitest';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { currentMembership, seedOwnership, history } from '@opencrane/models';
+import { currentMembership, currentOwnershipMembership,
+  seedOwnership, history } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { members, pgDb, ProjectionRunner, readEvents } from '@opencrane/projections';
 
@@ -103,7 +104,8 @@ async function coordinates(order: 'removal_first' | 'confirmation_first' | 'role
     expect(memberRows.filter(isConfirmation)).toHaveLength(order === 'removal_first' ? 0 : 1);
     await project();
     const expectedOwners = order === 'removal_first' ? ['alice'] : ['bob'];
-    expect([...(await currentMembership(nats.store, 'test', 'alice')).owners]).toEqual(expectedOwners);
+    const ownership = await currentOwnershipMembership(nats.store, 'test', 'alice');
+    expect([...ownership.owners]).toEqual(expectedOwners);
     const before = await db.query('SELECT * FROM members ORDER BY member_id');
     await runner.rebuild(members);
     expect((await db.query('SELECT * FROM members ORDER BY member_id')).rows).toEqual(before.rows);

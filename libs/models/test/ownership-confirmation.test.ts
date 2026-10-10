@@ -8,24 +8,25 @@ async function fixture() {
   async function append(subject: string, type: string, data: unknown) {
     const record = { ...event(`confirmation-${++count}`, subject, type), data };
     const expectedSequence = await nats.store.head(subject);
-    expect((await nats.store.append({ event: record, expectedSequence })).status).toBe('appended');
+    const command = { event: record, expectedSequence };
+    expect((await nats.store.append(command)).status).toBe('appended');
     return record;
   }
   for (const [memberId, role] of [['alice', 'owner'], ['bob', 'member'], ['charlie', 'member']]) {
-    await append(`member-${memberId}`, 'member.joined', {
-      memberId, role, displayName: memberId, email: `${memberId}@example.test`,
-    });
+    const data = { memberId, role, displayName: memberId,
+      email: `${memberId}@example.test` };
+    await append(`member-${memberId}`, 'member.joined', data);
   }
-  await append('ownership-test', 'ownership.seeded', { ownerIds: ['alice'] });
-  const request = await append('ownership-test', 'ownership.transferred', {
-    memberId: 'bob', transferredBy: 'alice', awaitingConfirmation: true,
-  });
+  const seed = { ownerIds: ['alice'] };
+  await append('ownership-test', 'ownership.seeded', seed);
+  const appointment = { memberId: 'bob', transferredBy: 'alice', awaitingConfirmation: true };
+  const request = await append('ownership-test', 'ownership.transferred', appointment);
   const noSql = { query: unusedQuery };
   function unusedQuery(): Promise<never> {
     throw new Error('Confirmation must not use SQL');
   }
   const handler = ownershipConfirmationHandler(nats.store);
-  return { nats, request, append, handler, noSql };
+  return { nats, request, handler, noSql };
 }
 
 async function removalJustBeforeAppend() {
@@ -37,7 +38,8 @@ async function removalJustBeforeAppend() {
     const removal = { ...event('remove-before-confirm', 'member-bob', 'member.removed'),
       data: { memberId: 'bob', removedBy: 'alice' } };
     const expectedSequence = await context.nats.store.head('member-bob');
-    expect((await original({ event: removal, expectedSequence })).status).toBe('appended');
+    const removalCommand = { event: removal, expectedSequence };
+    expect((await original(removalCommand)).status).toBe('appended');
     return original(command);
   }
   const spy = vi.spyOn(context.nats.store, 'append').mockImplementationOnce(removeBeforeConfirmation);

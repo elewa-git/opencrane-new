@@ -9,10 +9,23 @@ export class MemberAccessRefused extends Error {}
 /** Deny access until the access system has applied ownership, role changes and removals. */
 export async function activeMember(
   store: EventStore, binding: Binding, memberId: string,
-  options: { requiredRole: 'member' | 'admin'; fresh?: Awaited<ReturnType<typeof authorityFence>> },
+  options: {
+    requiredRole: 'member' | 'admin';
+    fresh?: Awaited<ReturnType<typeof authorityFence>>;
+    membership?: Awaited<ReturnType<typeof currentMembership>>;
+  },
 ) {
-  const fresh = options.fresh ?? await authorityFence(store, performance.now());
-  await requireMember(store, binding, memberId, options.requiredRole === 'admin', fresh);
+  const membership = options.membership ?? await currentMembership(
+    store, binding.silo, memberId, undefined, performance.now() + 10_000);
+  const subjects = [...membership.positions.keys()];
+  const fresh = options.fresh ?? await authorityFence(store, performance.now(), subjects);
+  for (const [subject, position] of membership.positions) {
+    fresh.include(subject);
+    if (await store.head(subject, fresh.deadline) !== position) {
+      throw new Error('Authority changed');
+    }
+  }
+  await requireMember(binding, memberId, options.requiredRole === 'admin', membership);
   await fresh();
 }
 
@@ -20,15 +33,16 @@ export async function readActiveMember(store: EventStore, binding: Binding, memb
   requiredRole: 'member' | 'admin' = 'member',
   applied?: (eventId: string) => Promise<boolean>,
 ) {
-  await requireMember(store, binding, memberId, requiredRole === 'admin', undefined, applied);
+  const membership = await currentMembership(store, binding.silo, memberId,
+    undefined, performance.now() + 10_000);
+  await requireMember(binding, memberId, requiredRole === 'admin', membership, applied);
 }
 
 async function requireMember(
-  store: EventStore, binding: Binding, memberId: string, admin: boolean,
-  fresh?: Awaited<ReturnType<typeof authorityFence>>,
+  binding: Binding, memberId: string, admin: boolean,
+  membership: Awaited<ReturnType<typeof currentMembership>>,
   applied?: (eventId: string) => Promise<boolean>,
 ) {
-  const membership = await currentMembership(store, binding.silo, memberId, fresh);
   if (!membership.role) {
     throw new MemberAccessRefused('Active silo membership required');
   }

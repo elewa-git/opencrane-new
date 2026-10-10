@@ -25,40 +25,36 @@ async function fixture() {
   for (const [memberId, role] of [
     ['alice', 'owner'], ['bob', 'member'], ['charlie', 'member'], ['david', 'member'],
   ]) {
-    await append(`member-${memberId}`, 'member.joined', {
-      memberId, role, displayName: memberId, email: `${memberId}@example.test`,
-    });
+    const data = { memberId, role, displayName: memberId,
+      email: `${memberId}@example.test` };
+    await append(`member-${memberId}`, 'member.joined', data);
   }
-  await append('ownership-test', 'ownership.seeded', { ownerIds: ['alice'] });
+  const seed = { ownerIds: ['alice'] };
+  await append('ownership-test', 'ownership.seeded', seed);
   for (const memberId of ['bob', 'charlie']) {
-    const request = await append('ownership-test', 'ownership.transferred', {
-      memberId, transferredBy: 'alice', awaitingConfirmation: true,
-    });
-    await append(`member-${memberId}`, 'member.ownership_confirmed', {
-      memberId, appointmentId: request.id,
-    });
-    await append('ownership-test', 'ownership.stepped_down', { memberId });
+    const appointment = { memberId, transferredBy: 'alice', awaitingConfirmation: true };
+    const request = await append('ownership-test', 'ownership.transferred', appointment);
+    const confirmation = { memberId, appointmentId: request.id };
+    await append(`member-${memberId}`, 'member.ownership_confirmed', confirmation);
+    const stepDown = { memberId };
+    await append('ownership-test', 'ownership.stepped_down', stepDown);
   }
-  await append('team-group', 'team.created', {
-    teamId: 'group', name: 'Group', createdBy: 'alice',
-  });
-  await append('team-group', 'team.member_added', {
-    teamId: 'group', memberId: 'charlie', addedBy: 'alice',
-  });
-  await append('assistant-assistant', 'assistant.created', {
-    assistantId: 'assistant', ownerId: 'group', kind: 'team', payingGroupId: 'group',
-  });
-  await append('conversation-chat', 'conversation.created', {
-    conversationId: 'chat', createdBy: 'charlie', mode: 'agent_session',
-    assistantId: 'assistant', payingGroupId: 'group',
-  });
-  await append('conversation-chat', 'message.posted', {
-    conversationId: 'chat', authorId: 'charlie', authorKind: 'human', contentType: 'text',
-    ciphertext: Buffer.from('Encrypted fixture message').toString('base64'), keyId: 'key:test',
-  });
-  await append('computer-assistant', 'computer.ready', {
-    assistantId: 'assistant', computerId: 'computer', generation: 1,
-  });
+  const group = { teamId: 'group', name: 'Group', createdBy: 'alice' };
+  await append('team-group', 'team.created', group);
+  const groupMember = { teamId: 'group', memberId: 'charlie', addedBy: 'alice' };
+  await append('team-group', 'team.member_added', groupMember);
+  const assistant = { assistantId: 'assistant', ownerId: 'group', kind: 'team',
+    payingGroupId: 'group' };
+  await append('assistant-assistant', 'assistant.created', assistant);
+  const conversation = { conversationId: 'chat', createdBy: 'charlie', mode: 'agent_session',
+    assistantId: 'assistant', payingGroupId: 'group' };
+  await append('conversation-chat', 'conversation.created', conversation);
+  const message = { conversationId: 'chat', authorId: 'charlie', authorKind: 'human',
+    contentType: 'text', ciphertext: Buffer.from('Encrypted fixture message').toString('base64'),
+    keyId: 'key:test' };
+  await append('conversation-chat', 'message.posted', message);
+  const computer = { assistantId: 'assistant', computerId: 'computer', generation: 1 };
+  await append('computer-assistant', 'computer.ready', computer);
   for await (const row of readEvents(nats.reader, 1, await nats.reader.head())) {
     if (auth.handler.eventTypes.includes(row.event.type)) {
       await auth.handler.handle(row.event, db);
@@ -88,12 +84,12 @@ async function runOperation(context: Fixture, operation: Operation) {
       .toMatchObject({ status: 'recorded' });
     return;
   }
-  const turnContext = { silo: 'test', store: context.nats.store,
+  const turnContext = { silo: 'test',
     binding: context.binding, assistantId: 'assistant', computerId: 'computer' };
-  const input = { conversationId: 'chat', turnId: 'access-15', threadId: 'thread',
-    status: 'started' as const, executionMode: 'restricted' as const };
   const messages = await history(context.nats.store, 'conversation-chat', 'test');
-  input.turnId = messages.at(-1)!.event.id;
+  const turnId = messages.at(-1)!.event.id;
+  const input = { conversationId: 'chat', turnId, threadId: 'thread',
+    status: 'started' as const, executionMode: 'restricted' as const };
   expect(await turnCommand(context.nats.store, turnContext, input))
     .toMatchObject({ requesterId: 'charlie', payingGroupId: 'group' });
 }
@@ -105,9 +101,9 @@ async function unrelatedFormerSuccessor(operation: Operation) {
   async function changeFormerSuccessor(subject?: string, deadline?: number) {
     if (subject === 'member-charlie' && !changed) {
       changed = true;
-      await context.append('member-bob', 'member.role_changed', {
-        memberId: 'bob', previousRole: 'admin', newRole: 'member', changedBy: 'alice',
-      });
+      const data = { memberId: 'bob', previousRole: 'admin', newRole: 'member',
+        changedBy: 'alice' };
+      await context.append('member-bob', 'member.role_changed', data);
     }
     return originalHead(subject, deadline);
   }

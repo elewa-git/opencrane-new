@@ -23,7 +23,7 @@ export { readEffect, listEffects, resolveEffect, resolutionCommandSchema } from 
 
 export { ownershipConfirmationHandler } from './ownership-confirmation.ts';
 export { seedOwnership, ownershipSeedHandler,
-  ownershipSubject, ownershipState, currentMembership } from './ownership.ts';
+  ownershipSubject, ownershipState, currentMembership, currentOwnershipMembership } from './ownership.ts';
 export { providerCommand, providerCommandSchema, providerAuthority, providerReceipt,
   ProviderRefused, ProviderUnpriced, ProviderConflict, providerSecretRef, providerHistory,
   providerPermission } from './providers.ts';

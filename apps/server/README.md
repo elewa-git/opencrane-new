@@ -12,7 +12,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member access"]
   server -.->|checks access, refusal records, departure details, spending and memory| libs["libs/*<br/>shared code"]
-  server -->|records changes, roles, participants, chats and provider choices| nats["NATS<br/>event log"]
+  server -->|records changes, memory facts, model grants, roles, participants, chats, computers and provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chat rows, closes, joins, facts, models and computers| postgres
@@ -54,6 +54,7 @@ flowchart LR
   the inviter is still an owner or admin. Records whether a personal assistant was requested.
 - Checks an invitation email and explains that the person is confirmed when they accept.
 - Changes Member and Admin roles after checking current access. Owners use the ownership route.
+  Role changes and team turns read membership history before the short write check.
   Reports a competing appointment as applying until its permissions have been updated.
 - Records and renews email invitations for owners and admins. Reads saved command results.
 - Returns member headers to members and the email directory to current owners and admins.

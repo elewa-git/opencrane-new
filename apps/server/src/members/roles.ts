@@ -4,7 +4,8 @@ import { memberRoleChangedDataSchema, ownershipTransferredSchema,
   ownershipConfirmedSchema } from '@opencrane/events';
 import { memberAuthorisation } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
-import { activeMember, authorityFence, currentMembership, history, ownershipState,
+import { activeMember, authorityFence, currentMembership, currentOwnershipMembership,
+  history, ownershipState,
   readActiveMember, MemberAccessRefused } from '@opencrane/models';
 import type { GroupOptions } from './group-routes.ts';
 
@@ -56,9 +57,10 @@ export async function roleCommand(options: GroupOptions, actor: string, memberId
   if (!target.role) throw new RoleConflict('active_target_required');
   if (target.role === input.newRole) throw new RoleConflict('role_unchanged');
   // Finish history reads before starting the short write access check.
+  const membership = await currentMembership(store, silo, actor, undefined, deadline);
   const subjects = [`member-${actor}`, subject, `ownership-${silo}`];
   const fresh = await authorityFence(store, performance.now(), subjects);
-  const authority = { requiredRole: 'admin' as const, fresh };
+  const authority = { requiredRole: 'admin' as const, fresh, membership };
   await activeMember(store, binding, actor, authority);
   const targetPosition = await store.head(subject, fresh.deadline);
   const ownershipPosition = await store.head(`ownership-${silo}`, fresh.deadline);
@@ -113,8 +115,7 @@ export async function roleStatus(options: GroupOptions, actor: string, memberId:
   function beforeChange(change: StoredEvent) {
     return change.sequence < changeSequence;
   }
-  const target = await currentMembership(store, silo, memberId,
-    undefined, performance.now() + 10_000);
+  const target = await currentOwnershipMembership(store, silo, memberId);
   const earlier = ownership.filter(beforeChange);
   const earlierConfirmations = target.confirmations.filter(beforeChange);
   const ownersAtChange = ownershipState(earlier, earlierConfirmations);
