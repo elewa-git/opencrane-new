@@ -18,16 +18,27 @@ function check(value: string, selected = context, dependencies = [dependency]) {
     checkRecallProof(secret, selected, value, dependencies);
   };
 }
+function completeEvidence() {
+  expect(check(proof)).toThrow('Complete memory evidence unavailable');
+}
+it('refuses a valid selective proof without complete memory evidence', completeEvidence);
+
 function hmac() {
-  expect(check(proof)).not.toThrow();
   const [encoded, signed] = proof.split('.');
   const wrong = Buffer.from(signed!, 'base64url');
   wrong[0] = wrong[0]! ^ 1;
   const forged = `${encoded!}.${wrong.toString('base64url')}`;
   expect(Buffer.from(forged.split('.')[1]!, 'base64url')).toHaveLength(32);
-  expect(check(forged)).toThrow();
+  expect(check(forged)).toThrow('Recall proof signature invalid');
 }
-it('accepts a valid proof but refuses a wrong HMAC with the same decoded length', hmac);
+it('refuses a wrong HMAC with the same decoded length', hmac);
+
+function signatureLength() {
+  const [encoded] = proof.split('.');
+  const signed = Buffer.alloc(31).toString('base64url');
+  expect(check(`${encoded!}.${signed}`)).toThrow('Recall proof signature length invalid');
+}
+it('refuses a signature with the wrong decoded length', signatureLength);
 
 const bindings = [
   { silo: 'other' }, { requester: 'bob' }, { assistant: 'other' }, { computer: 'other' },
@@ -36,38 +47,51 @@ const bindings = [
 ];
 function refusesBinding(changed: object) {
   const selected = Object.assign({}, context, changed);
-  expect(check(proof, selected)).toThrow();
+  expect(check(proof, selected)).toThrow('Recall proof thread mismatch');
 }
 it.each(bindings)('binds recalled references independently to %j', refusesBinding);
 
 function refusesPlaceholder(reason: string) {
   const unavailable = { ...fact, reason };
   const excludedProof = recallProof(secret, context, [unavailable]);
-  expect(check(excludedProof)).toThrow();
+  expect(check(excludedProof)).toThrow('Recall proof dependency not returned');
 }
 it.each(['page_limit', 'destroyed', 'quarantined'])('excludes %s references', refusesPlaceholder);
 
 function structure() {
-  expect(check(`${proof}.extra`)).toThrow();
-  expect(check(proof, context, [])).toThrow();
+  expect(check(`${proof}.extra`)).toThrow('Recall proof structure invalid');
+  expect(check(proof, context, [])).toThrow('Recall proof dependencies missing');
+  expect(check('.signature')).toThrow('Recall proof structure invalid');
+  expect(check('payload.')).toThrow('Recall proof structure invalid');
 }
 it('refuses extra proof segments and empty lineage', structure);
 const dependencies = [
-  { ...dependency, scopeId: 'c'.repeat(64) }, { ...dependency, revision: 2 },
-  { ...dependency, memoryId: 'unreturned' },
+  { selected: { ...dependency, scopeId: 'c'.repeat(64) },
+    reason: 'Recall proof dependency scope mismatch' },
+  { selected: { ...dependency, revision: 2 }, reason: 'Recall proof dependency not returned' },
+  { selected: { ...dependency, memoryId: 'unreturned' },
+    reason: 'Recall proof dependency not returned' },
 ];
-function refusesDependency(selected: typeof dependency) {
-  expect(check(proof, context, [selected])).toThrow();
+function refusesDependency(testCase: typeof dependencies[number]) {
+  expect(check(proof, context, [testCase.selected])).toThrow(testCase.reason);
 }
 it.each(dependencies)('checks dependency scope, id and revision independently: %j',
   refusesDependency);
 
-function signPayload(payload: unknown) {
-  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+function signText(payload: string) {
+  const encoded = Buffer.from(payload).toString('base64url');
   const hash = createHmac('sha256', secret);
   hash.update(`memory-recall:${encoded}`);
   return `${encoded}.${hash.digest('base64url')}`;
 }
+function signPayload(payload: unknown) {
+  return signText(JSON.stringify(payload));
+}
+function invalidJson() {
+  expect(check(signText('{'))).toThrow('Recall proof JSON invalid');
+}
+it('refuses signed invalid JSON', invalidJson);
+
 const binding = JSON.stringify([context.silo, context.requester, context.assistant,
   context.computer, context.generation, context.conversation, context.turn,
   context.thread, context.contentAccess, context.scopes]);
@@ -79,7 +103,7 @@ const invalidPayloads = [
   [binding, [['fact', 1]], 'extra'],
 ];
 function refusesPayload(payload: unknown) {
-  expect(check(signPayload(payload))).toThrow();
+  expect(check(signPayload(payload))).toThrow('Recall proof payload invalid');
 }
 const payloadCases = invalidPayloads.map(wrapPayload);
 it.each(payloadCases)('refuses a signed payload outside its bounds: %j',
@@ -91,10 +115,7 @@ function wrapPayload(payload: unknown) {
 function decodedBounds() {
   const payload = JSON.stringify([binding, [['fact', 1]]]);
   const padded = payload + ' '.repeat(8192);
-  const encoded = Buffer.from(padded).toString('base64url');
-  const hash = createHmac('sha256', secret);
-  hash.update(`memory-recall:${encoded}`);
-  const oversized = `${encoded}.${hash.digest('base64url')}`;
-  expect(check(oversized)).toThrow();
+  const oversized = signText(padded);
+  expect(check(oversized)).toThrow('Recall proof byte limit exceeded');
 }
 it('bounds decoded proof bytes even with valid JSON and bindings', decodedBounds);

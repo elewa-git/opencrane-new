@@ -14,6 +14,7 @@ import { catalogueEvidence, fixture, toolEvidence } from '@opencrane/models/test
 import { envelope, memoryRights, parseMemoryRequest, readToolPolicy, startDecision,
   verifyMemoryContext } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
+import { checkRecallProof } from '../src/memory/recall-proof.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -991,15 +992,28 @@ it('keeps admitted personal commands separate from human commands',
 async function incomplete() {
   const body = await recalledRemember('incomplete-evidence');
   const before = await setup.nats.store.head(`scope-${scopeId}`);
-  const response = await backendRemember(body);
-  expect(response.statusCode).toBe(403);
-  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+  const append = vi.spyOn(setup.nats.store, 'append');
+  try {
+    const response = await backendRemember(body);
+    expect(response.statusCode).toBe(403);
+    expect(append).not.toHaveBeenCalled();
+    expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+  } finally {
+    append.mockRestore();
+  }
 }
 it('refuses a selective proof without complete evidence of loaded memory', incomplete);
 
-const invalidLineage = ['forged', 'same-length-forgery', 'extra-segment', 'missing', 'unrecalled',
-  'revision', 'scope', 'human-source'];
-async function refusesLineage(change: string) {
+const invalidLineage = [
+  ['forged', 'Recall proof signature length invalid'],
+  ['same-length-forgery', 'Recall proof signature invalid'],
+  ['extra-segment', 'Recall proof structure invalid'],
+  ['missing', 'Recall proof dependencies missing'],
+  ['unrecalled', 'Recall proof dependency not returned'],
+  ['revision', 'Recall proof dependency not returned'],
+  ['scope', 'Recall proof dependency scope mismatch'],
+];
+async function refusesLineage(change: string, reason: string) {
   const body = await recalledRemember(`invalid-${change}`);
   const argumentsValue = { ...body.params.arguments };
   if (change === 'forged') argumentsValue.recallProof += 'x';
@@ -1021,12 +1035,17 @@ async function refusesLineage(change: string) {
   if (change === 'revision') {
     argumentsValue.dependsOn = [{ ...argumentsValue.dependsOn[0]!, revision: 2 }];
   }
-  if (change === 'human-source') {
-    const source = { memberId: 'alice', commandId: argumentsValue.commandId };
-    const humanSources = { sources: [source] };
-    Object.assign(argumentsValue, humanSources);
-  }
   const changed = { ...body, params: { ...body.params, arguments: argumentsValue } };
+  const token = await signedRemember(changed);
+  const parsed = parseMemoryRequest(JSON.stringify(changed), rememberHeaders);
+  const context = await verifyMemoryContext(token, setup.identity, parsed);
+  const config = testAuthConfig();
+  function validateReferences() {
+    checkRecallProof(config.cookieSecret, context, argumentsValue.recallProof,
+      argumentsValue.dependsOn);
+  }
+  // Check the reason separately because the endpoint returns the same refusal for every proof.
+  expect(validateReferences).toThrow(reason);
   const before = await setup.nats.store.head(`scope-${scopeId}`);
   const append = vi.spyOn(setup.nats.store, 'append');
   try {
@@ -1038,6 +1057,21 @@ async function refusesLineage(change: string) {
   }
 }
 it.each(invalidLineage)('requires signed recalled references before a write: %s', refusesLineage);
+
+async function refusesHumanSource() {
+  const body = await recalledRemember('invalid-human-source');
+  const source = { memberId: 'alice', commandId: body.params.arguments.commandId };
+  const argumentsValue = { ...body.params.arguments, sources: [source] };
+  const changed = { ...body, params: { ...body.params, arguments: argumentsValue } };
+  const append = vi.spyOn(setup.nats.store, 'append');
+  try {
+    expect((await backendRemember(changed)).statusCode).toBe(403);
+    expect(append).not.toHaveBeenCalled();
+  } finally {
+    append.mockRestore();
+  }
+}
+it('refuses an agent claim of a human source before a write', refusesHumanSource);
 
 async function refusesWriteGrant(granteeKind: string) {
   const body = await recalledRemember(`revoked-write-${granteeKind}`);
