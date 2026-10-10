@@ -190,8 +190,13 @@ async function refusesDrainDuringAdmission() {
   await setup();
   const readStream = nats.store.readStream.bind(nats.store);
   let draining = false;
+  let budgetReads = 0;
   async function* drainDuringPayerRead(subject: string, from?: number, deadline?: number) {
-    if (subject === 'budget-test' && !draining) {
+    if (subject === 'budget-test') {
+      budgetReads++;
+    }
+    // Wait until the payer read; the earlier budget read checks provider mode.
+    if (subject === 'budget-test' && budgetReads === 2 && !draining) {
       draining = true;
       await setDrain(true);
     }
