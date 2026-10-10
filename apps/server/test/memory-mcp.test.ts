@@ -42,6 +42,14 @@ const call = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
 const headers = { 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call',
   'mcp-name': 'recall', 'x-memory-context': 'forged-caller-context' };
 const projection = memoryProjection({ decrypt });
+
+async function renewTurnToken() {
+  // Renew the two-minute token so slow runs can still test whether the turn is live.
+  const claims = decodeJwt(setup.headers['x-turn-token']);
+  const token = await setup.sign(claims, 'decision-service');
+  setup.headers['x-turn-token'] = token;
+}
+beforeEach(renewTurnToken);
 function decrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
   return keys.decrypt(identity, encrypted);
 }
@@ -1061,7 +1069,9 @@ it.each(invalidLineage)('requires signed recalled references before a write: %s'
 async function refusesHumanSource() {
   const body = await recalledRemember('invalid-human-source');
   const source = { memberId: 'alice', commandId: body.params.arguments.commandId };
-  const argumentsValue = { ...body.params.arguments, sources: [source] };
+  const argumentsValue = { ...body.params.arguments };
+  const humanSources = { sources: [source] };
+  Object.assign(argumentsValue, humanSources);
   const changed = { ...body, params: { ...body.params, arguments: argumentsValue } };
   const append = vi.spyOn(setup.nats.store, 'append');
   try {
