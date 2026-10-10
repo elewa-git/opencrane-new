@@ -89,7 +89,8 @@ bounded waits while keeping the original message and command ids.
 Unknown, foreign and nonparticipant conversation reads share the 403 refusal.
 Unsupported mode edits, assistant binding, participant changes and Stop commands
 cannot mutate a direct conversation. Closed conversations remain readable while
-current membership permits it. Group chat and lifecycle commands belong to
-P4-5/P4-6; existing assistant sessions keep their creation/send behaviour.
+current membership permits it. [Human group chats](group-chats.md) now share the
+message routes. Lifecycle commands remain separate work; existing assistant sessions
+keep their creation/send behaviour.
 
 Source and qualification evidence: [P4-4 backend receipt](../process/p4-4-backend-evidence.md).

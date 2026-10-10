@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, members, invitations, uploads, computers and model access changes"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat and group picker, members, invitations, uploads and model access"]
   server["apps/server<br/>back end"] -.-> protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -26,6 +26,7 @@ flowchart LR
 - Provide the same schemas and types to browser and Node.js code.
 - Check invitation email requests, create and renew commands, and status parameters.
   Keep member headers separate from the admin directory.
+- Check own-group picker pages, reviewed member snapshots and human group chat rows.
 - Check flat group rows and create or remove commands for the People & groups screen.
 
 ## Processes it handles

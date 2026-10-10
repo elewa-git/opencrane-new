@@ -55,16 +55,20 @@ function eventType(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
   return row.event.type;
 }
 
-it('refuses bridge reports and lifecycle admission for a human conversation', async () => {
+it.each(['direct', 'group'])(
+  'refuses bridge reports and lifecycle admission for a %s conversation', async (mode) => {
   const nats = await natsFixture();
   const directory = await mkdtemp(`${tmpdir()}/direct-bridge-`);
   try {
     const keys = conversationKeys(directory);
     keys.provision('test', 'direct');
     const person = { silo: 'test', memberId: 'alice' };
-    await chatCommand(nats.store, keys, person, {
-      id: 'created', conversationId: 'direct', mode: 'direct', colleagueId: 'bob',
-    });
+    const direct = { id: 'created', conversationId: 'direct', mode: 'direct', colleagueId: 'bob' };
+    const group = { id: 'created', conversationId: 'direct', mode: 'group',
+      participantIds: ['alice', 'bob'] };
+    let creation: typeof direct | typeof group = direct;
+    if (mode === 'group') creation = group;
+    await chatCommand(nats.store, keys, person, creation);
     await chatCommand(nats.store, keys, person, {
       id: 'message', conversationId: 'direct', text: 'Hello @agent',
     });

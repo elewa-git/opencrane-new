@@ -1268,7 +1268,7 @@ removal, blocked delivery, re-joins, other access readers and 100,000 messages.
 Conversation lists reuse checked member facts within the request and pass the checked
 creation event to private-session checks. Each permission reply is followed by member and
 participation position reads. A changed position reloads those facts before returning
-content, so an old IAM answer cannot hide a newly saved removal.
+content, so an old OpenFGA answer cannot hide a newly saved removal.
 Fresh-install browser qualification remains NOT RUN.
 
 Personal agent sessions retain screenshot capture for current participants who have a
@@ -1307,3 +1307,18 @@ connection and the signer. The start acknowledgement contains a signed pass with
 the saved provider, binding position and model. Reconnecting and repeating the
 report after another binding is saved returns the same choice. The test verifies
 the signature and claims; it makes no paid call.
+
+## Human group creation and sends
+
+Members can review their own groups and create a chat with a fixed audience,
+even without a personal assistant. The [group API](../../docs/api/group-chats.md)
+owns the request shapes, limits, retry rules and refusal responses. Group sends
+use the existing message route. Commands load an incremental history summary
+before the two-second access check and point-read saved replies.
+`test/direct-chat-http.test.ts` uses real NATS, PostgreSQL and OpenFGA for group
+picker access, changed snapshots, lost replies and zero assistant activity.
+It checks the same generic refusal for unknown, foreign and removed participant ids.
+Separate cases check changed audiences, changed positions, departed members without
+a group association, and group changes before and during the write check. Each
+refusal leaves the conversation stream empty.
+No participant mutation endpoint is available. Fresh-install qualification remains NOT RUN.

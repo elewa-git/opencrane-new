@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { conversationCreatedDataSchema, hasDirectParticipants } from '@opencrane/events';
+import { chatIdSchema, conversationCreatedDataSchema, hasDirectParticipants } from '@opencrane/events';
 export const computerStateSchema = z.enum(['ready', 'starting', 'recovering', 'not_applicable']);
 export type ComputerState = z.infer<typeof computerStateSchema>;
 export const chatSubscribeSchema = z.object({ type: z.literal('subscribe'), topic: z.literal('conversation'),
-  conversationId: z.string().regex(/^[\w-]{1,200}$/u), since: z.int().nonnegative(), generation: z.int().nonnegative().optional() }).strict();
+  conversationId: chatIdSchema, since: z.int().nonnegative(), generation: z.int().nonnegative().optional() }).strict();
 function validateCreationRow(row: { type: string; data: unknown }, context: z.RefinementCtx) {
   if (row.type !== 'conversation.created') return;
   const parsed = conversationCreatedDataSchema.safeParse(row.data);
@@ -92,10 +92,22 @@ export const chatListSchema = z.object({ rows: z.array(z.union([
     ...conversationDisplay, mode: z.literal('direct'),
     participantIds: z.array(z.string()).length(2),
   }).strict().refine(hasDirectParticipants),
+  z.object({
+    ...conversationDisplay, mode: z.literal('group'), participantIds: z.array(z.string()),
+    groupId: z.string().optional(), groupSnapshotPosition: z.int().nonnegative().optional(),
+  }).strict(),
 ])) });
 export const chatColleaguesSchema = z.object({
   rows: z.array(z.object({ memberId: z.string(), displayName: z.string().nullable() }).strict()),
   next: z.string().nullable(),
+}).strict();
+export const chatGroupsSchema = z.object({
+  rows: z.array(z.object({ groupId: z.string(), name: z.string() }).strict()),
+  next: z.string().nullable(),
+}).strict();
+export const chatGroupSnapshotSchema = z.object({
+  groupId: z.string(), name: z.string(), position: z.int().nonnegative(),
+  members: chatColleaguesSchema.shape.rows,
 }).strict();
 export const chatChangeSchema = z.object({
   status: z.literal('appended'), conversationId: z.string(), commandId: z.string(),

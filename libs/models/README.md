@@ -10,14 +10,14 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider changes and spending| models["libs/models<br/>AI access and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes and spending| models["libs/models<br/>AI access and spending"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|checks saved grants, tool rules, calls and memory passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|new usage lines| models
-  models -->|saves spending and reads later activity and grant facts| store["libs/event-store<br/>event log"]
+  models -->|saves changes, reads new activity and grant facts| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -80,9 +80,6 @@ a waiting computer expire after 15 minutes, even while the chat turn stays open.
 1. **A person sends a chat message.** The server and the computer pick the model for the task. The computer sends the AI call to agentgateway. agentgateway asks the models process, which checks the passes, permissions and budget and holds the money. If the call is allowed, agentgateway sends it to the AI provider.
 2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the full amount stays held for review. A later report of an unknown result restores money released before an allowed call was sent.
 3. **An admin or owner changes access or spending.** The change is saved as an [event](../../GLOSSARY.md#event): the server saves tool rules and grants, and the models process saves spending limits. Background workers then update OpenFGA and the spending tables.
-
-Old computer-loss events leave newer reservations alone. Initial model grants
-check that a person is still a member and keep later revocations.
 
 ## How to run or test it
 

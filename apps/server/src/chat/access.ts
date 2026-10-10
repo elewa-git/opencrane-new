@@ -99,7 +99,6 @@ export async function writeChatAccess(options: ChatOptions, request: AccessReque
     options.store, performance.now(), subjects, request.deadline);
   await activeChatMember(options, request.memberId, fresh);
   const context = await conversationAccess(options, request, fresh.deadline);
-  if (context.mode === 'group') throw new ChatRefused('Group commands unavailable');
   await fresh();
   return Object.assign(fresh, context);
 }
@@ -139,7 +138,7 @@ export function conversationParticipation(options: ParticipationOptions,
   return read(conversationId, deadline, relation, allowApplying);
 }
 
-// Reuse membership facts within one request, and check their position again after IAM replies.
+// Reuse membership facts within one request, then check their position after OpenFGA replies.
 function currentChatMemberReader(options: ParticipationOptions, memberId: string) {
   let checkedPosition: number | undefined;
   let membershipRead: Promise<boolean> | undefined;
@@ -170,7 +169,7 @@ export function conversationParticipationReader(options: ParticipationOptions, m
     const permission = await auth.conversation(memberId, conversationId, relation);
     if (permission.status === 'unavailable') throw new Error('IAM unavailable');
     await requireMember(deadline);
-    // Check saved changes after IAM answers so an old permission cannot restore a removed person.
+    // Check saved changes after OpenFGA replies so an old permission cannot hide a removal.
     const latestPosition = await options.store.head(subject, deadline);
     if (latestPosition !== position) {
       current = await participation(options.store, options.silo, conversationId,

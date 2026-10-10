@@ -166,7 +166,7 @@ async function refusesRemovalAfterPermission(testCase: (typeof removalsAfterPerm
       if (subject === testCase.subject) {
         positionReads++;
         if (positionReads === 2) {
-          // Save the removal after IAM answers, without updating its old permission.
+          // Save the removal after OpenFGA replies, without updating its old permission.
           await context.append(testCase.subject, testCase.type, testCase.data, false);
         }
       }
@@ -1281,8 +1281,8 @@ async function lateParticipantHistory() {
     expect(list.body).toContain('visible-first-message');
     expect(list.body).not.toMatch(/Secret original title|hidden-person/);
     const posting = { method: 'POST' as const, url: '/api/conversations/group/messages',
-      headers: context.headers('bob'), payload: { id: 'group-post', text: 'Not available yet' } };
-    expect((await context.app.inject(posting)).statusCode).toBe(403);
+      headers: context.headers('bob'), payload: { id: 'group-post', text: 'Hello from the new interval' } };
+    expect((await context.app.inject(posting)).statusCode).toBe(200);
   } finally {
     await context.close();
   }

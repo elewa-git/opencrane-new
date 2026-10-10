@@ -117,3 +117,8 @@ Candidate reads require a kind and use an optional id cursor and a limit from 1 
 Model grant writes use `modelAccessCommandSchema` and return
 `modelAccessReceiptSchema`. The [HTTP contract](../../apps/server/README.robot.md#model-grant-changes)
 defines permission checks, conflicts and recovery.
+
+`chatGroupsSchema` and `chatGroupSnapshotSchema` check the member-facing group
+picker replies. `chatListSchema` accepts human group rows with their explicit
+participants and optional recorded group association. See the
+[group API](../../docs/api/group-chats.md) for the server checks and limits.

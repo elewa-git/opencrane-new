@@ -1,5 +1,5 @@
 import { conversationCreatedDataSchema, conversationEventId } from '@opencrane/events';
-import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
+import { readStreamSummary, WrongSiloError, type EventStore, type StoredEvent, type SummaryKind }
   from '@opencrane/event-store';
 import type { Query } from '@opencrane/projections';
 import { z } from 'zod';
@@ -244,8 +244,16 @@ function membershipActive(membership: Membership) {
 const membershipKind: SummaryKind<Membership> = {
   name: 'chat-membership', keep: 256, empty: emptyMembership, add: addMembership,
 };
-export function chatMembership(store: Pick<EventStore, 'readStream'>, silo: string,
+export async function chatMembership(store: Pick<EventStore, 'readStream'>, silo: string,
   memberId: string, deadline = performance.now() + 2000) {
-  return readStreamSummary(store, silo, `member-${memberId}`, membershipKind,
-    deadline, membershipActive);
+  try {
+    return await readStreamSummary(store, silo, `member-${memberId}`, membershipKind,
+      deadline, membershipActive);
+  } catch (error) {
+    // Refuse foreign ids without revealing whether another silo has recorded them.
+    if (error instanceof WrongSiloError) {
+      throw new ParticipationRefused('Active silo membership required', { cause: error });
+    }
+    throw error;
+  }
 }
