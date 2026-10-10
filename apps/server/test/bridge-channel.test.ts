@@ -96,6 +96,11 @@ it('recovers the server connector from the NATS report sequence without gaps or 
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/bridge-restart-`), server = createServer();
   const keys = conversationKeys(`${directory}/keys`); keys.provision('test', 'conversation');
   const options = { silo: 'test', store: nats.store, keys }, context = { silo: 'test', memberId: 'alice' };
+  const joined = envelope('test', 'member-alice', 'member.joined', {
+    memberId: 'alice', email: 'alice@example.test', displayName: 'Alice',
+    role: 'member', invitationId: 'invite-alice',
+  });
+  await nats.seed([joined]);
   await chatCommand(nats.store, keys, context, { id: 'create', conversationId: 'conversation', assistantId: 'assistant' });
   await chatCommand(nats.store, keys, context, { id: 'message', conversationId: 'conversation', text: 'Hello' });
   const channel = bridgeChannel(server, { rpc: () => Promise.resolve({ thread: { id: 'thread' } }), grant: () => Promise.resolve(),
