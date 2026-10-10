@@ -116,10 +116,12 @@ it('shows requester fields in order and posts one named decision', async () => {
   fixture.destroy();
 });
 
-it('shows that only the requester can decide without decision buttons', async () => {
+it('shows the WRK-12 waiting card without decision buttons', async () => {
   const fixture = await mount(() => Promise.resolve(response([card('requested', false)])));
   const root = rootOf(fixture);
   expect(root.textContent).toContain('Only the requester can decide.');
+  expect(root.querySelector('.approval-ledger')?.textContent).toContain('Draft order SO-1042');
+  expect(root.textContent).toContain('Changes the draft note immediately.');
   expect(root.querySelector('[aria-label^="Approve:"]')).toBeNull();
   expect(root.querySelector('[aria-label^="Deny:"]')).toBeNull();
   fixture.destroy();
@@ -803,6 +805,31 @@ it('keeps a folded card read-only after remount and hides sign-in for a non-requ
   expect(secondRoot.querySelector('a.sign-in')).toBeNull();
   expect(secondRoot.querySelector('[aria-label^="Approve:"]')).toBeNull();
   secondFixture.destroy();
+});
+
+it('keeps a non-requester pending drawer read-only', async () => {
+  vi.useFakeTimers();
+  let current = card();
+  let readCount = 0;
+  const fixture = await mount(() => {
+    readCount += 1;
+    if (readCount === 2) current = card('requested', false, approvalId, 'another-member');
+    return Promise.resolve(response([current]));
+  });
+  const root = rootOf(fixture);
+  root.querySelector<HTMLButtonElement>('.details')!.click();
+  fixture.detectChanges();
+  expect(root.querySelector('dialog[open]')).not.toBeNull();
+  await vi.advanceTimersByTimeAsync(3000);
+  fixture.detectChanges();
+
+  const drawer = root.querySelector('dialog[open]');
+  expect(drawer).not.toBeNull();
+  expect(drawer?.querySelector('.drawer-actions')).toBeNull();
+  expect(drawer?.querySelector('oc-approval-decision-status')).toBeNull();
+  expect(drawer?.querySelector('.approve')).toBeNull();
+  expect(drawer?.querySelector('a.sign-in')).toBeNull();
+  fixture.destroy();
 });
 
 it('emits waitingOnViewer when a decision opens and when the card folds', async () => {

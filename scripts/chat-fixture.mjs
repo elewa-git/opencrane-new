@@ -38,10 +38,14 @@ export async function chatFixture(page, scenario = 'live') {
     lost.time = '2026-10-02T10:03:00Z';
     failed.time = '2026-10-02T10:03:00Z';
   } else if (!['draft', 'empty-selected', 'attach', 'no-agent', 'queued', 'private-team-draft'].includes(scenario)) {
-    const human = add('message.posted', { text: scenario === 'long-title' ? 'M'.repeat(500) : 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.', authorId: 'me' });
+    const humanText = messageTextForScenario(scenario);
+    const human = add('message.posted', { text: humanText,
+      authorId: scenario === 'approval-context' ? 'another-member' : 'me' });
     add('agent.turn_started', { turnId: human.id });
     if (scenario === 'stop-not-confirmed') {
       add('agent.message_delta', { turnId: human.id, messageId: 'reply', text: 'Still working.' });
+    } else if (scenario === 'approval-context') {
+      addApprovalContextRows(add, human.id);
     } else if (scenario === 'governed-tool-running') {
       addGovernedToolStart(add, human.id);
     } else if (scenario === 'governed-tool-long-name') {
@@ -97,7 +101,13 @@ export async function chatFixture(page, scenario = 'live') {
     if (url.pathname.endsWith('/approvals')) return fulfil({ cards: [], csrf: 'fixture' });
     if (url.pathname === '/api/chat' && offline && scenario === 'rail-offline') return route.abort('connectionfailed');
     if (url.pathname === '/api/chat' && scenario === 'rail-loading') return;
-    if (url.pathname === '/api/chat') return fulfil({ memberId: 'me', displayName: 'Taylor Reed', assistantId: scenario === 'no-agent' ? null : 'assistant', memoryAdmission: { state: 'disabled', failing: ['The private memory checks have not all passed.'] } });
+    if (url.pathname === '/api/chat') return fulfil({
+      memberId: scenario === 'approval-context' ? 'another-member' : 'me',
+      displayName: 'Taylor Reed',
+      assistantId: scenario === 'no-agent' ? null : 'assistant',
+      memoryAdmission: { state: 'disabled',
+        failing: ['The private memory checks have not all passed.'] },
+    });
     if (url.pathname.endsWith('/messages') && scenario.startsWith('read-')) {
       const status = Number(scenario.slice('read-'.length));
       return route.fulfill({ status, contentType: 'application/json', body: '{}' });
@@ -157,6 +167,7 @@ export async function chatFixture(page, scenario = 'live') {
     add,
     closeSocket,
     conflictNextStop: () => { stopConflict = true; },
+    memberId: scenario === 'approval-context' ? 'another-member' : 'me',
     online: () => { offline = false; },
     rows: () => rows,
   };
@@ -165,6 +176,32 @@ export async function chatFixture(page, scenario = 'live') {
 function addGovernedToolStart(addRow, turnId) {
   return addRow('agent.tool_call_started', { turnId, callId: 'tool-call-1',
     serverId: 'fixture-erp', toolName: 'read_order' });
+}
+
+function messageTextForScenario(scenario) {
+  if (scenario === 'long-title') return 'M'.repeat(500);
+  if (scenario === 'approval-context') {
+    return 'Read draft order SO-1042, then change its note to “Deliver after 10:00 on Tuesday”.';
+  }
+  return 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.';
+}
+
+function addApprovalContextRows(addRow, turnId) {
+  addGovernedToolStart(addRow, turnId);
+  addRow('agent.tool_call_finished', {
+    turnId,
+    callId: 'tool-call-1',
+    serverId: 'fixture-erp',
+    toolName: 'read_order',
+    status: 'completed',
+    durationMs: 240,
+  });
+  addRow('agent.message_delta', {
+    turnId,
+    messageId: 'reply',
+    text: 'Draft order SO-1042 has 12 cartons of printer paper. The current note is empty. '
+      + 'Changing it needs your approval.',
+  });
 }
 
 function fixtureComputerState(scenario) {

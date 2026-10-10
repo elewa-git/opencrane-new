@@ -1,5 +1,5 @@
 import { setTimeout as pause } from 'node:timers/promises';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { conversations, readConversation } from '@opencrane/projections';
@@ -465,3 +465,43 @@ async function bindsHeldApproval(change: string) {
 }
 it.each(['same', 'wrong-id', 'bytes', 'allow', 'timeout', 'decision-race'])(
   'uses only this held approval through the real gateway: %s', bindsHeldApproval, 40_000);
+
+it('keeps requester identity and the stored review digest when reading an approval', async () => {
+  const setup = await fixture();
+  try {
+    const headers = await prepareCapturedCall(setup, 'ask');
+    const url = `${setup.options.decisionUrl}/authorize/mcp/fixture/installed`;
+    const asked = await fetch(url, { method: 'POST', headers, body: JSON.stringify(capture.body) });
+    const approval = z.object({ approvalId: z.string() }).parse(await asked.json());
+
+    const cardsForRequester = await approvalCards(setup.nats.store, 'test', 'conversation',
+      'alice', setup.keys);
+    expect(cardsForRequester).toMatchObject([{ requesterId: 'alice', state: 'requested',
+      canDecide: true }]);
+
+    const cardsForAnotherMember = await approvalCards(setup.nats.store, 'test', 'conversation',
+      'bob', setup.keys);
+    expect(cardsForAnotherMember).toMatchObject([{ requesterId: 'alice', state: 'requested',
+      canDecide: false }]);
+
+    const changedReview = vi.spyOn(setup.keys, 'decrypt')
+      .mockReturnValue('{"action":"Changed after storage"}');
+    try {
+      await expect(approvalCards(setup.nats.store, 'test', 'conversation', 'alice', setup.keys))
+        .rejects.toThrow('Review digest mismatch');
+    } finally {
+      changedReview.mockRestore();
+    }
+
+    const current = await readApproval(setup.nats.store, 'test', approval.approvalId);
+    async function currentAuthority() {}
+    await expect(decideApproval(setup.nats.store, 'test', approval.approvalId,
+      'bob', 'approved', true, currentAuthority, current)).rejects.toThrow('Requester only');
+    await expect(decideApproval(setup.nats.store, 'test', 'f'.repeat(64),
+      'alice', 'approved', true, currentAuthority, current)).rejects.toThrow('Requester only');
+    expect(await history(setup.nats.store, `approval-${approval.approvalId}`, 'test'))
+      .toHaveLength(1);
+  } finally {
+    await setup.close();
+  }
+}, 40_000);

@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>chat, saved drafts, missing-link recovery and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>chat, saved drafts, reviewed approvals and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
@@ -64,7 +64,8 @@ flowchart LR
    arrives, it says “Stop not confirmed” and keeps the reply active so Stop can be tried again.
    Team turns are private by default. A memory-free choice applies to one turn and
    explains that it uses the shared disk. Recovery pauses sending and explains why.
-   A reply whose output was lost stays incomplete.
+   A reply whose output was lost stays incomplete. Approval cards show the reviewed
+   change to every participant, while only the requester can approve or deny it.
 4. **Colleagues start a human chat.** One person searches joined colleagues and chooses
    one for a direct chat, or adds several people for a group. They can also review the
    current members of one of their groups. The server creates the conversation only when
