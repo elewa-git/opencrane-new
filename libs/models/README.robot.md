@@ -1074,3 +1074,33 @@ This keeps switch-on on the budget stream from racing the drain append. Other ne
 events cause a conflict and require a new status read. Draining remains on provider
 streams, so already running legacy calls can still hold and settle money. Switch-on
 on the spending stream always ends draining.
+
+## Restack checks after the exact-stream correction
+
+Date: 10 October 2026. Source: `1db16002b7c711172d6eeec5420985845e88bad0`.
+Replayed only the four original drain commits onto `47cd8db0` from
+`work/p4-22-pr4c`. The rebase finished. Kept both the mode and drain tests,
+alongside the merged role, group-participant and memory documentation.
+Environment: Linux, Node 22, local worktree, disposable NATS and OpenFGA,
+PostgreSQL test server at `127.0.0.1:55432`, and a recording gateway.
+This is not a fresh customer install.
+
+PASS: all three changed test files and both unchanged authority files. Also ran
+`libs/event-store/test/history-checked.test.ts`. The first six-file batch had
+65 passes and one payer-race fixture failure. Updated its trigger to wait for
+the payer read after the mode read; all 13 tests in that file then passed.
+All 66 distinct tests passed across these runs. The authority guards passed once.
+The new race test saves switch-on immediately before the drain append, gets a
+conflict and checks that only the switch-on event was saved. Running legacy calls
+still settle their original charges during drain.
+
+PASS: changed-file ESLint, root typecheck, event catalogue (101 types), Knip,
+changelog, dependency direction, Markdown and offline links. Tests set
+`PG_TEST_URL`; tests and source checks use `nice -n 10`.
+Logs: `/tmp/p4-22-pr4d-restack-tests.log`,
+`/tmp/p4-22-pr4d-restack-admission.log`,
+`/tmp/p4-22-pr4d-restack-lint.log` and
+`/tmp/p4-22-pr4d-restack-typecheck.log`.
+NOT RUN: full root suite, another full root lint on this restacked branch,
+paid calls, independent review and fresh-install migration qualification.
+The base branch's full lint passed before the restack.
