@@ -1193,7 +1193,7 @@ async function confirmAgent() {}
 it.each(['group', 'assistant_notes'] as const)(
   'refuses agent %s writes with valid same-scope recall proof and write grants', refusesSharedScope);
 
-it('refuses another person scope at the command boundary', async function otherPerson() {
+async function otherPerson() {
   const body = await recalledRemember('other-person-command');
   const { remember: commandRemember } = await import('../src/memory/commands.ts');
   const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
@@ -1210,9 +1210,10 @@ it('refuses another person scope at the command boundary', async function otherP
   } finally {
     append.mockRestore();
   }
-});
+}
+it('refuses another person scope at the command boundary', otherPerson);
 
-it('refuses an expired dependency at the command boundary', async function expiredDependency() {
+async function expiredDependency() {
   const body = await recalledRemember('expired-command-dependency');
   const expires = Date.now() + 60_000;
   const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
@@ -1241,7 +1242,8 @@ it('refuses an expired dependency at the command boundary', async function expir
     clock.mockRestore();
   }
   await setup.runner.run(projection);
-});
+}
+it('refuses an expired dependency at the command boundary', expiredDependency);
 
 async function preparationTurn(body: Awaited<ReturnType<typeof recalledRemember>>) {
   const turn = 'preparation-turn';
@@ -1320,9 +1322,10 @@ async function refusesPreparedWrite(change: 'dependency' | 'turn') {
     if (change === 'dependency') await setup.runner.rebuild(projection);
   }
 }
-it('rechecks dependencies after preparing the new revision key', async function dependencyRace() {
+async function dependencyRace() {
   await refusesPreparedWrite('dependency');
-});
+}
+it('rechecks dependencies after preparing the new revision key', dependencyRace);
 
 async function recoveryCleanup(stage: 'prepared' | 'unknown' | 'legacy') {
   const body = await recalledRemember(`agent-recovery-${stage}`);
@@ -1381,9 +1384,10 @@ async function recoveryCleanup(stage: 'prepared' | 'unknown' | 'legacy') {
 it.each(['prepared', 'unknown', 'legacy'] as const)(
   'cleans recovery records only after a definite failure: %s', recoveryCleanup);
 
-it('refuses a turn closed during write preparation', async function closedDuringWrite() {
+async function closedDuringWrite() {
   await refusesPreparedWrite('turn');
-});
+}
+it('refuses a turn closed during write preparation', closedDuringWrite);
 
 it('rechecks stale grants at the backend and refuses an ended turn upstream', async function stale() {
   expect((await setup.call(headers, call, route)).status).toBe(200);

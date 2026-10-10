@@ -18,7 +18,7 @@ function check(value: string, selected = context, dependencies = [dependency]) {
     checkRecallProof(secret, selected, value, dependencies);
   };
 }
-it('accepts a valid proof but refuses a wrong HMAC with the same decoded length', function hmac() {
+function hmac() {
   expect(check(proof)).not.toThrow();
   const [encoded, signed] = proof.split('.');
   const wrong = Buffer.from(signed!, 'base64url');
@@ -26,7 +26,8 @@ it('accepts a valid proof but refuses a wrong HMAC with the same decoded length'
   const forged = `${encoded!}.${wrong.toString('base64url')}`;
   expect(Buffer.from(forged.split('.')[1]!, 'base64url')).toHaveLength(32);
   expect(check(forged)).toThrow();
-});
+}
+it('accepts a valid proof but refuses a wrong HMAC with the same decoded length', hmac);
 
 const bindings = [
   { silo: 'other' }, { requester: 'bob' }, { assistant: 'other' }, { computer: 'other' },
@@ -46,10 +47,11 @@ function refusesPlaceholder(reason: string) {
 }
 it.each(['page_limit', 'destroyed', 'quarantined'])('excludes %s references', refusesPlaceholder);
 
-it('refuses extra proof segments and empty lineage', function structure() {
+function structure() {
   expect(check(`${proof}.extra`)).toThrow();
   expect(check(proof, context, [])).toThrow();
-});
+}
+it('refuses extra proof segments and empty lineage', structure);
 const dependencies = [
   { ...dependency, scopeId: 'c'.repeat(64) }, { ...dependency, revision: 2 },
   { ...dependency, memoryId: 'unreturned' },
@@ -86,7 +88,7 @@ function wrapPayload(payload: unknown) {
   return [payload];
 }
 
-it('bounds decoded proof bytes even with valid JSON and bindings', function decodedBounds() {
+function decodedBounds() {
   const payload = JSON.stringify([binding, [['fact', 1]]]);
   const padded = payload + ' '.repeat(8192);
   const encoded = Buffer.from(padded).toString('base64url');
@@ -94,4 +96,5 @@ it('bounds decoded proof bytes even with valid JSON and bindings', function deco
   hash.update(`memory-recall:${encoded}`);
   const oversized = `${encoded}.${hash.digest('base64url')}`;
   expect(check(oversized)).toThrow();
-});
+}
+it('bounds decoded proof bytes even with valid JSON and bindings', decodedBounds);

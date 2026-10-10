@@ -83,19 +83,24 @@ function prepare() {
 }
 beforeEach(prepare);
 
-it('accepts matching saved access records', async function allowed() {
+async function allowed() {
   await expect(memoryRights(store, binding, claims, parsed, performance.now() + 2000))
     .resolves.toMatchObject({ scope: { scopeId, ownerId: 'alice' } });
-});
+}
+it('accepts matching saved access records', allowed);
 const assistantChanges = [
   { field: 'silo', value: 'other' }, { field: 'assistantId', value: 'other' },
   { field: 'ownerId', value: 'bob' }, { field: 'sequence', value: 11 },
 ];
 async function refusesAssistant({ field, value }: { field: string; value: unknown }) {
   const saved = rows[0]!;
-  if (field === 'silo') saved.event.silo = String(value);
-  else if (field === 'sequence') saved.sequence = Number(value);
-  else saved.event.data = { ...data(saved.event), [field]: value };
+  if (field === 'silo') {
+    saved.event.silo = String(value);
+  } else if (field === 'sequence') {
+    saved.sequence = Number(value);
+  } else {
+    saved.event.data = { ...data(saved.event), [field]: value };
+  }
   await expect(memoryRights(store, binding, claims, parsed, performance.now() + 2000))
     .rejects.toThrow();
 }
@@ -104,9 +109,13 @@ it.each(assistantChanges)('checks the assistant record independently: $field', r
 const grantChanges = ['silo', 'resourceType', 'resourceId', 'sequence'];
 async function refusesGrant(field: string) {
   const saved = rows[3]!;
-  if (field === 'silo') saved.event.silo = 'other';
-  else if (field === 'sequence') saved.sequence = 11;
-  else saved.event.data = { ...data(saved.event), [field]: 'other' };
+  if (field === 'silo') {
+    saved.event.silo = 'other';
+  } else if (field === 'sequence') {
+    saved.sequence = 11;
+  } else {
+    saved.event.data = { ...data(saved.event), [field]: 'other' };
+  }
   await expect(memoryRights(store, binding, claims, parsed, performance.now() + 2000))
     .rejects.toThrow('Recorded memory grant refused');
 }
@@ -120,7 +129,7 @@ async function refusesStart(field: string) {
     .rejects.toThrow('Memory turn refused');
 }
 it.each(startChanges)('checks the recorded turn independently: %s', refusesStart);
-it('refuses assistant notes independently of proof and command checks', async function sharedWrite() {
+async function sharedWrite() {
   const selectedId = memoryScopeId('test', 'assistant_notes', 'assistant');
   for (const granteeKind of ['member', 'assistant']) {
     const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
@@ -135,10 +144,12 @@ it('refuses assistant notes independently of proof and command checks', async fu
   const write = parseMemoryRequest(JSON.stringify(request), writeHeaders);
   await expect(memoryRights(store, binding, claims, write, performance.now() + 2000))
     .rejects.toThrow('agent_person_scope_only');
-});
+}
+it('refuses assistant notes independently of proof and command checks', sharedWrite);
 
-it('refuses a closed conversation with a live computer turn', async function closed() {
+async function closed() {
   activity.conversation.push(row('conversation-conversation', 'conversation.closed', {}));
   await expect(memoryRights(store, binding, claims, parsed, performance.now() + 2000))
     .rejects.toThrow('Memory turn ended');
-});
+}
+it('refuses a closed conversation with a live computer turn', closed);
