@@ -431,6 +431,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.searchRequest?.abort();
     this.historyRequest?.abort();
     this.listRequest?.abort();
+    this.navigationOpen.set(false);
     this.socketConversationId = '';
     this.socket.disconnect();
     this.pageState.set('access_changed');
