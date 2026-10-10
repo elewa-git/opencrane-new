@@ -40,8 +40,10 @@ function isFocusedControl(activeElement: Element | null, control: HTMLElement): 
   return control === activeElement;
 }
 
-export function trapDirectDialogFocus(panel: HTMLElement, event: KeyboardEvent): void {
-  if (event.key !== 'Tab') return;
+export function trapDirectDialogFocus(
+  panel: HTMLElement, event: KeyboardEvent, enabled: boolean,
+): void {
+  if (!enabled || event.key !== 'Tab') return;
   const controls = panel.querySelectorAll<HTMLElement>(
     'a[href], button:not([disabled]), input:not([disabled]), [tabindex="0"]',
   );

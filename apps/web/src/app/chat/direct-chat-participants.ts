@@ -136,6 +136,8 @@ export class DirectChatParticipants {
     const participantId = row.data['participantId'];
     if (typeof participantId !== 'string') return;
 
+    // Stop an older participant read from undoing a change that just arrived live.
+    this.request?.abort();
     const participants = this.rows();
     if (row.type === 'participant.removed') {
       this.rows.set(participants.filter(isNotParticipant.bind(null, participantId)));
@@ -147,6 +149,29 @@ export class DirectChatParticipants {
       memberId: participantId,
       displayName: colleague?.displayName ?? null,
     }]);
+  }
+
+  async refreshCurrent(): Promise<void> {
+    const conversationId = this.conversationId();
+    if (!conversationId || this.state() === 'closed' || !this.readAllowed()) return;
+    this.request?.abort();
+    const request = new AbortController();
+    this.request = request;
+    const result = await fetchParticipants(conversationId, request.signal);
+    if (request.signal.aborted || conversationId !== this.conversationId()
+      || !this.readAllowed()) return;
+    if (result.kind === 'access_changed') {
+      this.accessChanged();
+      return;
+    }
+    if (result.kind !== 'ok') {
+      this.notice.set('Participants could not be refreshed. Try again.');
+      return;
+    }
+    this.rows.set(result.value.rows);
+    this.accessPosition.set(result.value.accessPosition);
+    this.canManage.set(result.value.canManage);
+    this.canLeave.set(result.value.canLeave);
   }
 
   async checkStatus(): Promise<void> {

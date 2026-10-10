@@ -81,7 +81,9 @@ flowchart LR
    be reviewed in the conversation, and their list updates as people join or leave. Only its
    creator manages other people; the creator stays in the chat and everyone else can leave.
    Colleague search includes later result pages. A lost reply keeps its original change id,
-   and access loss clears protected chat details and late replies.
+   and workspace links stay on the page until that change's status can be checked. When the
+   live connection needs to catch up, the website reloads the current participants from the
+   server. Access loss clears protected chat details and late replies.
 5. **An admin adds a tool server.** MCP (Model Context Protocol) lets an assistant use tools from another server. The website accepts a remote HTTPS address and shows the discovery result. When tools are ready, the admin can continue to set each tool to Allow automatically, Ask or Block. If a save reply is lost, the website checks the saved modes before offering another action. It never sends the save again.
 6. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. Connection, access grants and publishing wait for their server support.
 7. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.

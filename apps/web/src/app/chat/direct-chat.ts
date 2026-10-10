@@ -100,13 +100,13 @@ export class DirectChat implements OnInit, OnDestroy {
   protected currentMemberId = '';
   private position = 0;
   private generation = 0;
+  private participantRevision = 0;
   private socketConversationId = '';
   private hasLoadedData = false;
   private focusComposerAfterRead = false;
   private readonly composerElement = viewChild<ElementRef<HTMLElement>>('composer');
   private readonly accessHeading = viewChild<ElementRef<HTMLElement>>('accessHeading');
   private readonly participantHeading = viewChild<ElementRef<HTMLElement>>('participantHeading');
-  private readonly participantPanel = viewChild<ElementRef<HTMLElement>>('participantPanel');
   private readonly participantOpener = viewChild<ElementRef<HTMLButtonElement>>(
     'participantOpener');
   private focusAccessHeading = false;
@@ -237,12 +237,7 @@ export class DirectChat implements OnInit, OnDestroy {
     return window.innerWidth <= 700;
   }
 
-  protected trapParticipantFocus(event: KeyboardEvent): void {
-    if (!this.phoneParticipantPicker() || event.key !== 'Tab') return;
-    const panel = this.participantPanel()?.nativeElement;
-    if (!panel) return;
-    trapDirectDialogFocus(panel, event);
-  }
+  protected readonly trapParticipantFocus = trapDirectDialogFocus;
 
   protected selectColleague(value: Colleague): void {
     if (this.composerBusy() || this.participantChangeUnsettled()) return;
@@ -395,6 +390,19 @@ export class DirectChat implements OnInit, OnDestroy {
     this.announceRead('Messages loaded.');
   }
 
+  private async recoverAfterSocketResync(): Promise<void> {
+    const conversationId = this.selectedConversationId();
+    if (!conversationId) return;
+    await this.loadHistory(conversationId);
+    if (conversationId !== this.selectedConversationId()
+      || this.historyState() !== 'ready' || !this.canReadPage()) return;
+    const refreshes = [
+      this.loadConversationRows(),
+      this.participantManager.refreshCurrent(),
+    ];
+    await Promise.all(refreshes);
+  }
+
   private applyHistory(conversationId: string,
     feed: Extract<Awaited<ReturnType<typeof fetchDirectHistory>>, { kind: 'ok' }>['value']): void {
     this.messages.set(feed.rows);
@@ -509,6 +517,7 @@ export class DirectChat implements OnInit, OnDestroy {
     }
 
     this.participantManager.applyEvent(row);
+    this.participantRevision += 1;
     const updatedConversations = directConversationsAfterParticipantEvent(
       this.conversations(), this.selectedConversationId(), row);
     this.conversations.set(updatedConversations);
@@ -530,11 +539,13 @@ export class DirectChat implements OnInit, OnDestroy {
 
   private async loadConversationRows(): Promise<void> {
     if (!this.canReadPage()) return;
+    const participantRevision = this.participantRevision;
     this.listRequest?.abort();
     const request = new AbortController();
     this.listRequest = request;
     const result = await fetchDirectConversations(request.signal);
-    if (request.signal.aborted || !this.canReadPage()) return;
+    if (request.signal.aborted || !this.canReadPage()
+      || participantRevision !== this.participantRevision) return;
     if (result.kind !== 'ok') {
       this.handleReadFailure(result.kind);
       return;
@@ -571,7 +582,7 @@ export class DirectChat implements OnInit, OnDestroy {
       return;
     }
     if (update.kind === 'reload') {
-      void this.loadHistory(this.selectedConversationId());
+      void this.recoverAfterSocketResync();
       return;
     }
     if (update.kind === 'invalid') {

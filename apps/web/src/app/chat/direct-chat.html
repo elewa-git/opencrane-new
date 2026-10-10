@@ -1,8 +1,12 @@
 <div class="workspace direct-workspace">
   <aside class="rail" aria-label="Workspace navigation">
-    <a class="brand" href="/workspace"><strong>Open<span>Crane</span></strong></a>
+    <a class="brand" href="/workspace"
+      [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+      (click)="protectPendingNavigation($event)"><strong>Open<span>Crane</span></strong></a>
     <nav class="rail-content" aria-label="Workspace">
-      <a class="rail-action" href="/workspace">Ask your assistant</a>
+      <a class="rail-action" href="/workspace"
+        [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+        (click)="protectPendingNavigation($event)">Ask your assistant</a>
       <h2>People</h2>
       <a class="rail-action active" href="/workspace/direct"
         [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
@@ -29,7 +33,9 @@
         }
       }
     </nav>
-    <footer class="rail-footer"><a href="/org/people">People &amp; groups</a></footer>
+    <footer class="rail-footer"><a href="/org/people"
+      [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+      (click)="protectPendingNavigation($event)">People &amp; groups</a></footer>
   </aside>
 
   <main class="main" ocPaperSurface="main">
@@ -37,7 +43,9 @@
       <button #navigationOpener class="navigation-toggle" type="button"
         aria-label="Open direct conversations" [attr.aria-expanded]="navigationOpen()"
         [disabled]="composerBusy()" (click)="navigationOpen.set(true)">☰</button>
-      <a class="back-link" href="/workspace" aria-label="Back to workspace">‹</a>
+      <a class="back-link" href="/workspace" aria-label="Back to workspace"
+        [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+        (click)="protectPendingNavigation($event)">‹</a>
       <h1 tabindex="-1" #accessHeading>
         @if (pageState() === 'access_changed' || pageState() === 'not_found') { Unavailable }
         @else if (selectedConversationId()) {
@@ -71,7 +79,7 @@
           <section #participantPanel class="participant-panel" role="dialog"
             aria-labelledby="participantHeading"
             [attr.aria-modal]="phoneParticipantPicker() ? 'true' : null"
-            (keydown)="trapParticipantFocus($event)"
+            (keydown)="trapParticipantFocus(participantPanel, $event, phoneParticipantPicker())"
             (keydown.escape)="closeParticipants()">
             <button class="participant-back" type="button" (click)="closeParticipants()">
               ‹ Back to conversation
@@ -283,7 +291,8 @@
 </div>
 <oc-navigation-menu [open]="navigationOpen()" label="Direct conversations"
   [returnFocusTo]="navigationOpener" (closed)="navigationOpen.set(false)">
-  <a href="/workspace">Ask your assistant</a>
+  <a href="/workspace" [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+    (click)="protectPendingNavigation($event)">Ask your assistant</a>
   <a href="/workspace/direct"
     [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
         (click)="protectPendingNavigation($event)">New direct chat</a>

@@ -505,9 +505,13 @@ at desktop and phone sizes with fixture replies.
 The [participant screen checks](../../docs/process/p4-5-pr7/receipt.md) show the
 participant and unavailable states at desktop and phone sizes with fixture replies.
 Participant events update the open list and the conversation's participant names as
-they arrive. The add search uses the server's matching-colleague results and follows its
-next-page cursor. An uncertain participant command stays with its conversation, so
-another chat cannot replace it. The phone picker is a modal dialog with trapped keyboard
-focus; Back returns focus to its opener. Access loss clears the shared socket message
-cache along with the page's drafts, names, participant rows and transcript. The socket
-service ignores handlers left over from the closed connection.
+they arrive. After a socket resync, the screen reads the current conversation list and
+replaces the open participant rows with the server's current list. A participant event
+cancels an older participant read so its reply cannot undo the live change. The add search
+uses the server's matching-colleague results and follows its next-page cursor. An uncertain
+participant command stays with its conversation, so another chat cannot replace it. Links
+to another workspace page also stay on the screen until the command status can be checked.
+The phone picker is a modal dialog with trapped keyboard focus; Back returns focus to its
+opener. Access loss clears the shared socket message cache along with the page's drafts,
+names, participant rows and transcript. The socket service ignores handlers left over from
+the closed connection.
