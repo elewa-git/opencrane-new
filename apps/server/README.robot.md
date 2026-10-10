@@ -1522,7 +1522,6 @@ Effective inherited access and public child commands are later work. No child em
 
 ## Immediate access invalidation
 
-
 Desktop, queued computer work and personal turn checks use `chatMembership`.
 It starts inactive, activates only on join or owner bootstrap, and ends membership
 on removal. An invitation or role change after removal does not activate it.

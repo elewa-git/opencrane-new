@@ -200,3 +200,87 @@ fix task. Fresh-install removal, real desktop canvas timing on a newly installed
 silo, live identity/provider checks and the combined departure/cleanup journey
 remain NOT RUN. Local captures are browser fixture checks, not fresh-install
 qualification. The full root suite is NOT RUN, as requested. #85 stays open.
+
+## Rebase repair after the merge train
+
+The repair rebased only this branch's 19 commits onto `origin/main` at
+`93f2f3de` and confirmed that the rebase finished. Test changes were committed
+in `e5dd8e89` before the production repair in `093f4a5d`.
+
+The earlier rebase combined the bridge changes with #305, which sends the
+computer the model saved for its turn, and dropped the check before file
+transmission. The existing queued-file test reproduced the leak: 19 bytes arrived after removal and a later
+invitation. The repair restores `ownConversation` before `sendFile`. The file
+receipt still checks access separately. The existing helper extraction keeps
+the original turn context, membership checks and main's admitted model.
+
+The participant tests from #303 still used the earlier closing history. A new
+close now belongs to the participation stream. Older closes must be projected
+before starting new writers, and startup checks that requirement. The updated
+fixture tests both cases. It keeps the HTTP 409 assertion for new edits after
+closure and the successful saved retry. The case for older closes also checks that
+the upgrade requirement has been met.
+
+The slow closing-history test used to delay a scan of conversation messages.
+The repair delays the indexed older-close lookup instead, which is the read
+production now uses. The delay remains 2,200 ms. The test still requires a
+successful edit after that slow read, and refusal if the target leaves during
+admission. No access, money or memory check or failing assertion was relaxed.
+
+The train also reported a 1,502-event timing failure, a timeout while preparing
+101 grants, and an applying projection in the following test. Final repeat
+results are recorded below. These tests retain their original time and
+projection requirements.
+
+The first Vitest repeat passed all 24 files: 545 tests passed and two optional
+cases were skipped. Its temporary shell wrapper then failed with exit 127.
+The reporter flag had been added while the shell was still reading that script,
+so it tried to execute that flag as a separate command after Vitest passed.
+This was a local runner mistake, not a test failure. The second repeat used the
+corrected command. An earlier three-file exploratory run was stopped and is
+not counted as a passing repeat.
+
+Both root Vitest repeats passed all 24 changed files, including every file
+named by the train. Each had 545 passing tests and two skipped optional cases:
+paid OpenAI calls and the approval browser journey. The second runner exited
+successfully. Both runs set
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and used
+`nice -n 10 npx vitest run ... --maxWorkers=1`. Each process used one worker;
+the second repeat began while the first was still running.
+
+The second repeat measured the 1,502-event case at 128 ms for history, 47 ms
+for the list and 601 ms for socket readiness. The 101-grant test took 22.3
+seconds, below its unchanged 30-second timeout. The next projection test
+reached `current`. None of those three train failures recurred in either
+complete-file repeat. Load is a likely explanation for the timing and timeout
+failures, but their cause was not independently established. A timed-out test
+can continue writing to this shared fixture while the following test runs.
+That can leave its projection behind. No production or fixture change was
+made for these three failures, and their assertions remain unchanged.
+
+Main advanced with #316 and #317 while the tests ran. A final rebase onto
+`490da26a` replayed this branch's 21 commits and finished. The browser dialog
+fixture conflict keeps main's named helper and this branch's writable methods.
+A comparison with the tested source confirmed that apps/server, apps/computer,
+apps/ops, libs, package.json, package-lock.json, vitest.config.ts and
+tsconfig.base.json were unchanged. The root repeats therefore cover the final
+server and library source. Browser checks include navigation, model registry,
+recipient picker and direct/group transcripts on the final main base.
+
+| Final check | Result |
+| --- | --- |
+| Root changed files and train files, twice | PASS: 24 files, 545 tests passed and two optional cases skipped in each Vitest run. The first wrapper error is recorded above. |
+| Final browser files, twice | PASS: 118 tests across four files in each run, with `PG_TEST_URL` set and `nice -n 10`. |
+| Full lint on the final source | PASS: 15 existing warnings and no errors. Includes dependencies, Knip, Markdown, links, fixtures and changelog. |
+| Typecheck on the final source | PASS: all workspaces, including browser application, spec and fixture checks. |
+| Event catalogue | PASS: 103 event types agree. |
+| Standalone Knip and changelog lint | PASS. |
+
+The earlier browser repeats also passed 63 tests across the two PR files each.
+After the browser-only main merges, navigation and model-registry tests were
+repeated twice alongside recipient-picker and direct-chat tests. The complete
+root suite was not started locally.
+
+The full root suite, paid model calls, fresh-install removal and desktop
+qualification, and the second independent review remain NOT RUN. This repair
+makes no fresh-install capability claim.
