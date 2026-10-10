@@ -267,9 +267,10 @@ Permission jobs wait for earlier relevant changes on the member and ownership st
 before applying a role or appointment. Different delivery orders give the same state as replay.
 Owner-role values and removal of an Owner remain rejected by both projections.
 Step-down uses the ownership API and requires another currently active owner.
+
 ## Invitation command status and refusal history
 
-`GET /api/members/:memberId/changes/:commandId` reads the creator's original
+`GET /api/invitations/:memberId/command-changes/:commandId` reads the creator's original
 invitation command from events. Id bounds, session, exact organisation and
 OpenFGA checks follow the invitation contract above. Reads use `no-store` and
 append nothing. Another creator's command returns 404. A still-active creator

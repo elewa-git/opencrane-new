@@ -893,7 +893,7 @@ it('keeps at most one safe refusal per person, target, operation, reason and UTC
 function changeRead(sub = 'admin', orgId = 'org-acme', commandId = input.commandId) {
   const session = { sub, orgId, roles: ['owner'], authTime: 1790856000, exp: 2000000000 };
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  const url = `/api/members/${memberId}/changes/${commandId}`;
+  const url = `/api/invitations/${memberId}/command-changes/${commandId}`;
   const options = { method: 'GET' as const, url, headers };
   return app.inject(options);
 }

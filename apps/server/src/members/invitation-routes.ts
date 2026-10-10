@@ -13,7 +13,8 @@ export function registerInvitations(app: FastifyInstance, config: AuthConfig,
   const now = options?.now ?? currentTime;
   app.post('/api/invitations', routeOptions, handler);
   app.get('/api/invitations/:memberId/changes/:commandId', handler);
-  app.get('/api/members/:memberId/changes/:commandId', handler);
+  // Keep invitation details separate because member changes serves role receipts.
+  app.get('/api/invitations/:memberId/command-changes/:commandId', handler);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     const session = sessionFor(request, config, now());
@@ -42,7 +43,8 @@ export function registerInvitations(app: FastifyInstance, config: AuthConfig,
         const parsedParams = invitationStatusParamsSchema.safeParse(request.params);
         if (!parsedParams.success) return invalidBody(parsedParams.error, request, reply);
         const params = parsedParams.data;
-        const full = request.routeOptions.url === '/api/members/:memberId/changes/:commandId';
+        const full = request.routeOptions.url
+          === '/api/invitations/:memberId/command-changes/:commandId';
         result = await readInvitationStatus(options, actor, params, config.redirectUri, full);
       }
       if (reply.sent) return reply;
