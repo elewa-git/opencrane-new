@@ -1,23 +1,15 @@
 import { ChangeDetectionStrategy, Component, input, signal,
   type OnDestroy, type OnInit, type SimpleChanges } from '@angular/core';
 import { Overlay } from '../ui/overlay';
-
-type Scope = { scopeId: string; scopeKind: 'person' | 'group' | 'assistant_notes';
-  ownerId: string; audience: { kind: string; ownerId: string }; canRead: boolean };
-type Fact = { memoryId: string; revision: number; text: string; kind: 'fact' | 'preference';
-  pinned: boolean; expiresAt: string | null; savedAt: string };
-type PageFact = Fact | { memoryId: string; revision: number; reason: 'page_limit' };
-type Source = { status: 'available' | 'refused' | 'unavailable'; label?: string;
-  reference?: { conversationId: string; messageId: string } };
-type Page = { scopeId: string; facts: PageFact[]; returnedCount: number;
-  nextCursor: string | null };
-type Detail = { status: 'unavailable'; scopeId: string; memoryId: string; revision: number | null;
-  reason: string } | { scopeId: string; fact: Fact; sources: Source[] };
+import { canReadScope, hasRefusedMemoryControl, isDetail, isObject, isPage, isScopes,
+  type Detail, type Fact,
+  type PageFact, type Scope, type Source } from './memory-panel-data';
 type DetailRead = { kind: 'ok'; detail: Exclude<Detail, { status: 'unavailable' }> } |
   { kind: 'access' } | { kind: 'missing' } | { kind: 'unavailable' };
 type JsonRead = { kind: 'ok'; body: unknown } | { kind: 'access' } |
   { kind: 'invalid' } | { kind: 'conflict' } | { kind: 'missing' } | { kind: 'unavailable' };
 type ScreenState = 'loading' | 'ready' | 'unavailable' | 'access';
+type StoreState = 'editing' | 'saving' | 'saved' | 'failed' | 'busy' | 'unknown';
 
 @Component({
   selector: 'oc-memory-panel',
@@ -43,6 +35,15 @@ export class MemoryPanel implements OnInit, OnDestroy {
   protected readonly cursor = signal<string | null>(null);
   protected readonly nextCursor = signal<string | null>(null);
   protected readonly detailState = signal<'ready' | 'unavailable' | 'missing' | ''>('');
+  protected readonly storeOpen = signal(false);
+  protected readonly storeText = signal('');
+  protected readonly storeKind = signal<'fact' | 'preference'>('fact');
+  protected readonly storeState = signal<StoreState>('editing');
+  protected readonly storeError = signal('');
+  protected readonly storeCommandId = signal('');
+  protected readonly storeRetryAfter = signal(1);
+  protected readonly storeSource = signal<Source['reference'] | undefined>(undefined);
+  protected storeOpener: HTMLElement | undefined;
   private generation = 0;
   private listRequestId = 0;
   protected detailOpener: HTMLElement | undefined;
@@ -67,6 +68,9 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.cursor.set(null);
     this.nextCursor.set(null);
     this.detailState.set('');
+    this.storeOpen.set(false);
+    this.storeText.set('');
+    this.storeSource.set(undefined);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -190,6 +194,169 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.detailController?.abort();
     this.selectedFact.set(undefined);
     this.detailState.set('');
+  }
+
+  protected openStore(event?: Event): void {
+    if (event?.currentTarget instanceof HTMLElement) {
+      this.storeOpener = event.currentTarget;
+    }
+    this.storeOpen.set(true);
+    this.storeState.set('editing');
+    this.storeError.set('');
+    this.storeText.set('');
+    this.storeKind.set('fact');
+    this.storeSource.set(firstTrustedSource(this.sources()));
+  }
+
+  protected cancelStore(): void {
+    if (this.storeState() === 'saving') return;
+    this.storeOpen.set(false);
+    this.storeText.set('');
+    this.storeSource.set(undefined);
+    this.storeCommandId.set('');
+  }
+
+  protected storeOverlayClosed(): void {
+    this.cancelStore();
+    this.storeOpener = undefined;
+  }
+
+  protected retryFailedFact(): void {
+    this.storeState.set('editing');
+    this.storeError.set('');
+  }
+
+  protected storeTextChanged(event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLTextAreaElement)) return;
+    this.storeText.set(target.value);
+    this.storeError.set('');
+  }
+
+  protected storeKindChanged(event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) return;
+    this.storeKind.set(target.value === 'preference' ? 'preference' : 'fact');
+  }
+
+  protected storeBytes(): number {
+    return new TextEncoder().encode(this.storeText()).byteLength;
+  }
+
+  protected storeValidation(): string {
+    const text = this.storeText();
+    const bytes = this.storeBytes();
+    if (bytes < 1 || bytes > 4096) return 'Facts must be 1 to 4,096 UTF-8 bytes.';
+    if (hasRefusedMemoryControl(text) || new TextDecoder('utf-8', { ignoreBOM: true })
+      .decode(new TextEncoder().encode(text)) !== text) {
+      return 'Remove unsupported control characters and try again.';
+    }
+    if (this.storeKind() === 'preference' && this.currentScopeKind() !== 'person') {
+      return 'Preferences can only be saved in your memory.';
+    }
+    return '';
+  }
+
+  protected currentScopeKind(): Scope['scopeKind'] | undefined {
+    const selected = this.selectedScope();
+    const scope = this.scopes().find(scopeHasId.bind(null, selected));
+    return scope?.scopeKind;
+  }
+
+  protected async saveFact(): Promise<void> {
+    const validation = this.storeValidation();
+    if (validation) {
+      this.storeError.set(validation);
+      return;
+    }
+    const commandId = `mem_${crypto.randomUUID()}`;
+    this.storeCommandId.set(commandId);
+    this.storeState.set('saving');
+    this.storeError.set('');
+    const payload = this.storePayload(commandId);
+    try {
+      const response = await fetch(`/api/memory/${encodeURIComponent(this.selectedScope())}/facts`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        credentials: 'same-origin', cache: 'no-store', body: JSON.stringify(payload),
+      });
+      await this.readStoreReply(response);
+    } catch {
+      this.storeState.set('unknown');
+    }
+  }
+
+  private storePayload(commandId: string): Record<string, unknown> {
+    const source = this.storeSource();
+    const sources = source ? [source] : [];
+    return { commandId, text: this.storeText(), kind: this.storeKind(), pinned: false,
+      expiresAt: null, sources, dependsOn: [] };
+  }
+
+  private async readStoreReply(response: Response): Promise<void> {
+    if (response.status === 200) {
+      const body: unknown = await response.json();
+      this.storeState.set(isObject(body) && body['outcome'] === 'saved' ? 'saved' : 'unknown');
+      return;
+    }
+    if (response.status === 422 || response.status === 409 || response.status === 404) {
+      this.storeState.set('failed');
+      this.storeError.set('Nothing was saved. Check the fact and try again.');
+      return;
+    }
+    if (response.status === 503) {
+      const body: unknown = await response.json();
+      if (isObject(body) && body['reason'] === 'memory_busy') {
+        const seconds = Number(response.headers.get('retry-after'));
+        this.storeRetryAfter.set(Number.isFinite(seconds) && seconds > 0 ? seconds : 1);
+        this.storeState.set('busy');
+        return;
+      }
+    }
+    this.storeState.set('unknown');
+  }
+
+  protected async retryBusy(): Promise<void> {
+    if (this.storeState() !== 'busy') return;
+    this.storeState.set('saving');
+    await new Promise<void>(waitForRetry.bind(null, this.storeRetryAfter()));
+    await this.sendSameCommand();
+  }
+
+  private async sendSameCommand(): Promise<void> {
+    this.storeState.set('saving');
+    try {
+      const response = await fetch(`/api/memory/${encodeURIComponent(this.selectedScope())}/facts`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        credentials: 'same-origin', cache: 'no-store',
+        body: JSON.stringify(this.storePayload(this.storeCommandId())),
+      });
+      await this.readStoreReply(response);
+    } catch {
+      this.storeState.set('unknown');
+    }
+  }
+
+  protected async checkStoreStatus(): Promise<void> {
+    if (this.storeState() !== 'unknown') return;
+    try {
+      const response = await fetch(`/api/memory/${encodeURIComponent(this.selectedScope())}` +
+        `/changes/${encodeURIComponent(this.storeCommandId())}`, {
+        credentials: 'same-origin', cache: 'no-store',
+      });
+      if (!response.ok) return;
+      const body: unknown = await response.json();
+      if (isObject(body) && body['outcome'] === 'saved') this.storeState.set('saved');
+      else if (isObject(body) && body['outcome'] === 'failed') this.storeState.set('failed');
+    } catch {
+      // Keep an unknown outcome unknown when the status read itself has no reply.
+    }
+  }
+
+  protected storeSourceLabel(): string {
+    const selected = this.storeSource();
+    if (!selected) return 'Your statement';
+    const source = this.sources().find(sourceMatchesReference.bind(null, selected));
+    return source?.label || 'Available source';
   }
 
   protected detailOverlayClosed(): void {
@@ -349,6 +516,27 @@ function isCurrentScopeRead(controller: AbortController, startedRequestId: numbe
   return !controller.signal.aborted && startedRequestId === currentRequestId;
 }
 
+function scopeHasId(scopeId: string, scope: Scope): boolean {
+  return scope.scopeId === scopeId;
+}
+
+function waitForRetry(seconds: number, resolve: () => void): void {
+  window.setTimeout(resolve, seconds * 1000);
+}
+
+function firstTrustedSource(sources: Source[]): Source['reference'] | undefined {
+  for (const source of sources) {
+    if (source.status === 'available' && source.reference) return source.reference;
+  }
+  return undefined;
+}
+
+function sourceMatchesReference(reference: NonNullable<Source['reference']>, source: Source) {
+  return source.status === 'available' &&
+    source.reference?.conversationId === reference.conversationId &&
+    source.reference.messageId === reference.messageId;
+}
+
 function scopeUrl(groupId: string | undefined, assistantId: string | undefined): string {
   const params = new URLSearchParams();
   if (groupId) params.set('groupId', groupId);
@@ -356,57 +544,4 @@ function scopeUrl(groupId: string | undefined, assistantId: string | undefined):
   const query = params.toString();
   if (!query) return '/api/memory/scopes';
   return `/api/memory/scopes?${query}`;
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isScopes(value: unknown): value is { scopes: Scope[] } {
-  return isObject(value) && Array.isArray(value['scopes']) && value['scopes'].every(isScope);
-}
-
-function isScope(value: unknown): value is Scope {
-  if (!isObject(value)) return false;
-  const audience = value['audience'];
-  return typeof value['scopeId'] === 'string' &&
-    ['person', 'group', 'assistant_notes'].includes(String(value['scopeKind'])) &&
-    typeof value['ownerId'] === 'string' && typeof value['canRead'] === 'boolean' &&
-    isObject(audience) &&
-    typeof audience['kind'] === 'string' && typeof audience['ownerId'] === 'string';
-}
-
-function canReadScope(scope: Scope): boolean { return scope.canRead; }
-
-function isFact(value: unknown): value is Fact {
-  return isObject(value) && typeof value['memoryId'] === 'string' &&
-    typeof value['text'] === 'string' && typeof value['revision'] === 'number' &&
-    (value['kind'] === 'fact' || value['kind'] === 'preference') &&
-    typeof value['pinned'] === 'boolean' &&
-    (typeof value['expiresAt'] === 'string' || value['expiresAt'] === null) &&
-    typeof value['savedAt'] === 'string';
-}
-
-function isPage(value: unknown): value is Page {
-  return isObject(value) && Array.isArray(value['facts']) && value['facts'].every(isPageFact) &&
-    typeof value['returnedCount'] === 'number' &&
-    (typeof value['nextCursor'] === 'string' || value['nextCursor'] === null);
-}
-
-function isPageFact(value: unknown): value is PageFact {
-  if (isFact(value)) return true;
-  return isObject(value) && typeof value['memoryId'] === 'string' &&
-    typeof value['revision'] === 'number' && value['reason'] === 'page_limit';
-}
-
-function isDetail(value: unknown): value is Detail {
-  if (!isObject(value)) return false;
-  if (value['status'] === 'unavailable') return true;
-  return typeof value['scopeId'] === 'string' && isFact(value['fact']) &&
-    Array.isArray(value['sources']) && value['sources'].every(isSource);
-}
-
-function isSource(value: unknown): value is Source {
-  return isObject(value) &&
-    ['available', 'refused', 'unavailable'].includes(String(value['status']));
 }

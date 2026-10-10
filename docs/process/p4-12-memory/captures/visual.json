@@ -8,12 +8,22 @@
   "checks": [
     "Detail audience and fact metadata are visible.",
     "The detail uses its own modal and fits both viewports.",
-    "Opening memory detail sends no chat command."
+    "The form validates UTF-8 bytes and fits both viewports.",
+    "Saved and unknown receipts fit both viewports.",
+    "Opening memory and storing a fact send no chat command."
   ],
   "captures": [
     "MEM-03-1280.png",
     "MEM-03-1280-RM.png",
+    "MEM-30-1280.png",
+    "MEM-31-1280.png",
+    "MEM-32-1280.png",
+    "MEM-30-1280-unknown.png",
     "MEM-03-390.png",
-    "MEM-03-390-RM.png"
+    "MEM-03-390-RM.png",
+    "MEM-30-390.png",
+    "MEM-31-390.png",
+    "MEM-32-390.png",
+    "MEM-30-390-unknown.png"
   ]
 }

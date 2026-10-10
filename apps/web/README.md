@@ -16,7 +16,7 @@ flowchart LR
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
   web -->|opens| people["People pages<br/>members, groups and owners"]
-  web -->|reads| memory["Memory panel<br/>scopes, facts and sources"]
+  web -->|reads and stores| memory["Memory panel<br/>scopes, facts, sources and receipts"]
 ```
 
 ## What it is responsible for
@@ -38,7 +38,7 @@ flowchart LR
   membership does not grant desktop access.
 - Clears private information when the server refuses access.
 - Lets a signed-in person open Memory in the workspace session panel to read permitted
-  scopes, search facts and inspect source status.
+  scopes, search facts, inspect source status and store a fact with a checked receipt.
 - Adapts the workspace and menus for phones and desktop screens.
 - Supports keyboard use in menus, dialogs and the chat workspace.
 - Not built yet: the organisation overview and Routines pages.

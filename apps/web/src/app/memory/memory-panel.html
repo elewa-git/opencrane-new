@@ -7,6 +7,8 @@
   } @else if (state() === 'unavailable') {
     <div role="status"><h2>Memory is unavailable</h2><p>Try again later.</p></div>
   } @else {
+    <div class="memory-actions"><button class="store-open" type="button" (click)="openStore($event)">
+      Remember a fact</button></div>
     <nav class="scopes" aria-label="Memory scope" (keydown)="scopeKeydown($event)">
       @for (scope of scopes(); track scope.scopeId) {
         <button type="button" [class.selected]="selectedScope() === scope.scopeId"
@@ -91,6 +93,60 @@
             } @else { <p>Source could not be checked</p> }
           }
           @if (!sources().length) { <p>No source was recorded.</p> }
+          <button class="store-open" type="button" (click)="openStore($event)">Remember a fact</button>
+        }
+      </dialog>
+    }
+    @if (storeOpen()) {
+      <dialog class="store" [ocOverlay]="storeOpen()" #storeOverlay="ocOverlay"
+        [returnFocusTo]="storeOpener"
+        [dismissDisabled]="storeState() === 'saving' || storeState() === 'unknown'"
+        [attr.aria-labelledby]="storeOverlay.titleId"
+        (overlayClosed)="storeOverlayClosed()">
+        <button class="back" type="button" (click)="cancelStore()">‹ Cancel</button>
+        <h2 [id]="storeOverlay.titleId" tabindex="-1">Remember a fact</h2>
+        <p class="audience">{{ selectedScopeAudience() }}</p>
+        @if (storeState() === 'editing' || storeState() === 'failed') {
+          <label class="fact-entry">Fact
+            <textarea rows="5" [value]="storeText()" (input)="storeTextChanged($event)"
+              aria-describedby="store-count store-error"></textarea>
+          </label>
+          <p id="store-count" class="store-count">{{ storeBytes() }} / 4,096 bytes</p>
+          <label class="store-kind">Kind
+            <select [value]="storeKind()" (change)="storeKindChanged($event)">
+              <option value="fact">Fact</option>
+              <option value="preference" [disabled]="currentScopeKind() !== 'person'">
+                Preference</option>
+            </select>
+          </label>
+          <p class="source-readonly"><strong>Source</strong><br />{{ storeSourceLabel() }}</p>
+          <p id="store-error" class="store-error" role="alert">{{ storeError() }}</p>
+          <div class="store-buttons">
+            <button class="store-submit" type="button" [disabled]="!!storeValidation()"
+              (click)="saveFact()">Store in this scope</button>
+            <button type="button" (click)="cancelStore()">Cancel</button>
+          </div>
+        } @else if (storeState() === 'saving') {
+          <p role="status">Saving…</p>
+        } @else if (storeState() === 'saved') {
+          <div class="receipt saved" role="status"><h3>Saved</h3>
+            <p>Saved in {{ selectedScopeAudience() }}.</p></div>
+          <button type="button" class="back" (click)="cancelStore()">Close</button>
+        } @else if (storeState() === 'busy') {
+          <div class="receipt" role="status"><h3>Memory is busy</h3>
+            <p>Nothing was saved. Try again in {{ storeRetryAfter() }} seconds.</p></div>
+          <button type="button" class="store-submit" (click)="retryBusy()">Try again</button>
+          <button type="button" (click)="cancelStore()">Cancel</button>
+        } @else if (storeState() === 'unknown') {
+          <div class="receipt" role="status"><h3>Outcome unknown</h3>
+            <p>Check the saved status for this request. This will not send it again.</p>
+            <code>{{ storeCommandId() }}</code></div>
+          <button type="button" (click)="checkStoreStatus()">Check status</button>
+        } @else {
+          <div class="receipt" role="status"><h3>Nothing was saved</h3>
+            <p>{{ storeError() }}</p></div>
+          <button type="button" (click)="retryFailedFact()">Try again</button>
+          <button type="button" (click)="cancelStore()">Close</button>
         }
       </dialog>
     }

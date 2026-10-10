@@ -432,3 +432,25 @@ Dialog methods installed by model-registry tests remain writable, as browser
 methods are. Other component tests can replace methods on their own dialog
 elements even when the Angular runner reuses a test environment. The regression
 in `src/app/models/model-registry.spec.ts` checks both `showModal` and `close`.
+
+## Memory store and receipts
+
+The Memory panel posts facts to `/api/memory/:scopeId/facts`. It counts UTF-8 bytes
+and applies the server's text rules before enabling Store. Preference is available
+only in person memory. Trusted source references come only from an authorised fact
+detail read; the server checks them again. A saved receipt follows an accepted event.
+`memory_busy` waits for `Retry-After` before offering the same command again. If the
+reply may have been lost, Check status only reads
+`/api/memory/:scopeId/changes/:commandId`; it never sends the fact again. Drafts and
+command references stay in page memory. An unknown result keeps its command id until
+the status read settles. Cancel while editing makes no request. Undo and Edit actions
+remain unavailable.
+
+`memory-panel.spec.ts` covers cancellation, UTF-8 byte limits, scope-limited
+preferences, saved and failed receipts, busy retries and status checks that never
+resend. Browser captures show the form, validation, saved and unknown states at
+desktop and phone widths: [form](../../docs/process/p4-12-memory/captures/MEM-30-1280.png),
+[phone form](../../docs/process/p4-12-memory/captures/MEM-30-390.png),
+[validation](../../docs/process/p4-12-memory/captures/MEM-31-1280.png),
+[saved receipt](../../docs/process/p4-12-memory/captures/MEM-32-1280.png), and
+[unknown receipt](../../docs/process/p4-12-memory/captures/MEM-30-1280-unknown.png).
