@@ -11,7 +11,7 @@ export { initialiseBudgetProjection, rebuildBudgetProjection } from './rebuild.t
 
 export { approvalCards, readApproval, decideApproval } from './approvals.ts';
 export {
-  authorityFence,
+  authorityFence, ownershipWriteAccess,
   conversationAccessFence,
   currentAuthority,
   isAuthorityChanged,
@@ -21,7 +21,9 @@ export { losslessJson } from './lossless-json.ts';
 
 export { readEffect, listEffects, resolveEffect, resolutionCommandSchema } from './reconciliation.ts';
 
-export { seedOwnership, ownershipSeedHandler, ownershipSubject, ownershipState, currentMembership } from './ownership.ts';
+export { ownershipConfirmationHandler } from './ownership-confirmation.ts';
+export { seedOwnership, ownershipSeedHandler,
+  ownershipSubject, ownershipState, currentMembership, currentOwnershipMembership } from './ownership.ts';
 export { providerCommand, providerCommandSchema, providerAuthority, providerReceipt,
   ProviderRefused, ProviderUnpriced, ProviderConflict, providerSecretRef, providerHistory,
   providerPermission } from './providers.ts';

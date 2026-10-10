@@ -1378,9 +1378,25 @@ Owners and admins can change member and admin roles. Each change checks current
 access and records an appointment receipt. An owner stays an owner when another
 person's role changes. An owner can step down only while another active owner remains.
 See the [role contract](../../docs/api/members.md#change-a-member-or-admin-role).
-Role status requires the competing appointment's IAM receipt in either saved order.
+Role status requires the competing appointment's confirmation receipt in either saved order.
 The content checkpoint must also cover both changes. A role receipt alone cannot report
 IAM as current while that appointment is still waiting to be applied.
+
+New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).
+
+Role changes and team turn starts load the caller’s membership history before
+starting the two-second write check. The check compares the member and ownership
+positions from that read, then checks current permissions. Role changes also
+watch the target member; team turns watch their assistant and actual groups.
+Neither operation reads or watches former successors’ member streams.
+
+`test/ownership-access.test.ts` changes a former successor’s ordinary role during
+each operation’s write check. It also makes ownership-history reads take longer
+than two seconds and checks that each operation still saves its event.
+`libs/models/test/ownership-confirmation.test.ts` records removal after the final
+confirmation check but before append. The conditional append refuses confirmation.
+It also refuses absent requests and mismatched successors or appointing owners.
+Fresh-install qualification remains NOT RUN.
 
 ## Recorded tool failures and approval actions
 

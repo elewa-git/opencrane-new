@@ -4,7 +4,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { currentMembership, seedOwnership } from '@opencrane/models';
+import { currentMembership, seedOwnership, ownershipConfirmationHandler } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { auditTrail, connectMemberFeed, members, pgDb, ProjectionRunner,
   readEvents, rebuildMemberProjection } from '@opencrane/projections';
@@ -32,9 +32,15 @@ async function append(subject: string, type: string, data: unknown, silo = 'acme
   return record;
 }
 async function project() {
+  const handler = ownershipConfirmationHandler(nats.store);
+  for await (const row of nats.reader.readStream('ownership-acme')) {
+    if (row.event.type === 'ownership.transferred') {
+      await handler.handle(row.event, pgDb(dbs.queue));
+    }
+  }
   const head = await nats.reader.head();
   for await (const row of readEvents(nats.reader, 1, head)) {
-    if (auth.handler.eventTypes.includes(row.event.type)) {
+    if (row.event.silo === 'acme' && auth.handler.eventTypes.includes(row.event.type)) {
       await auth.handler.handle(row.event, pgDb(dbs.queue));
     }
   }
@@ -485,16 +491,18 @@ async function deniesUnappliedOwnerChange() {
   const before = await nats.store.head();
   const next = { action: 'step_down', commandId: 'pending-down',
     expectedSequence: await nats.store.head('ownership-acme') };
-  expect((await request('POST', next, `idp-${successorId}`)).statusCode).toBe(503);
+  expect((await request('POST', next, `idp-${successorId}`)).statusCode).toBe(403);
   expect(await nats.store.head()).toBe(before);
-  // Apply only our ownership stream: the cross-silo refusal fixture above stays unapplied.
+  const handler = ownershipConfirmationHandler(nats.store);
   for await (const row of nats.store.readStream('ownership-acme')) {
-    await auth.handler.handle(row.event, pgDb(dbs.queue));
+    if (row.event.type === 'ownership.transferred') {
+      await handler.handle(row.event, pgDb(dbs.queue));
+    }
   }
+  expect((await request('POST', next, `idp-${successorId}`)).statusCode).toBe(503);
+  await project();
   expect((await request('POST', next, `idp-${successorId}`)).statusCode).toBe(200);
-  for await (const row of nats.store.readStream('ownership-acme')) {
-    await auth.handler.handle(row.event, pgDb(dbs.queue));
-  }
+  await project();
 }
 it('a new owner cannot exercise ownership authority until IAM has the event receipt',
   deniesUnappliedOwnerChange);

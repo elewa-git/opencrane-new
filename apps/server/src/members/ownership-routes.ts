@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { ownershipConfirmedSchema, ownershipTransferredSchema } from '@opencrane/events';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
-import { authorityFence, history, ownershipSubject } from '@opencrane/models';
+import { currentMembership, currentOwnershipMembership, history,
+  ownershipSubject } from '@opencrane/models';
 import type { GroupOptions } from './group-routes.ts';
 import { sessionFor } from './routes.ts';
 import { ownershipAccess, ownershipStatusAccess, ownershipCommand, ownershipReceipt,
@@ -49,28 +51,28 @@ export function registerOwnershipRoutes(app: FastifyInstance, config: AuthConfig
   }
 }
 async function read(options: GroupOptions, actorId: string, commandId?: string) {
-  const fresh = await authorityFence(options.store, performance.now());
+  const deadline = performance.now() + 10_000;
   const access = commandId === undefined ? ownershipAccess : ownershipStatusAccess;
-  const membership = await access(options.store, options.binding, actorId, fresh);
+  const membership = await access(options.store, options.binding, actorId);
   let result;
   if (commandId) {
-    result = await readChange(options, commandId, fresh.deadline);
+    result = await readChange(options, commandId, deadline);
   } else {
-    const ownerIds = [...membership.owners];
+    const ownership = await currentOwnershipMembership(
+      options.store, options.silo, actorId, deadline, membership);
+    const ownerIds = [...ownership.owners];
     ownerIds.sort();
     const owners = [];
     for (const memberId of ownerIds) {
-      const rows = await history(options.store, `member-${memberId}`, options.silo, fresh.deadline);
-      fresh.include(`member-${memberId}`);
+      const rows = await history(options.store, `member-${memberId}`, options.silo, deadline);
       const joined = rows.findLast(isJoined);
       const fields = z.object({ displayName: z.string() }).parse(joined?.event.data);
       owners.push({ memberId, displayName: fields.displayName, role: 'owner' as const });
     }
-    result = { status: 'current', owners, sequence: membership.ownership.at(-1)?.sequence ?? 0,
+    result = { status: 'current', owners, sequence: ownership.ownership.at(-1)?.sequence ?? 0,
       viewer: { memberId: actorId, role: membership.role },
-      ready: membership.ownership.length > 0 };
+      ready: ownership.ownership.length > 0 };
   }
-  await fresh();
   return result;
 }
 function isJoined(row: StoredEvent) {
@@ -85,11 +87,26 @@ async function readChange(options: GroupOptions, commandId: string, deadline: nu
   if (!row) {
     return { status: 'not_found' };
   }
+  let appliedEvent = row;
+  if (row.event.type === 'ownership.transferred'
+    && ownershipTransferredSchema.parse(row.event.data).awaitingConfirmation) {
+    const transfer = ownershipTransferredSchema.parse(row.event.data);
+    const member = await currentMembership(options.store, options.silo, transfer.memberId,
+      undefined, deadline);
+    function confirmsRequest(candidate: StoredEvent) {
+      return ownershipConfirmedSchema.parse(candidate.event.data).appointmentId === row?.event.id;
+    }
+    const confirmation = member.confirmations.find(confirmsRequest);
+    if (!confirmation) {
+      return { ...ownershipReceipt(row), projection: { content: 'applying', iam: 'applying' } };
+    }
+    appliedEvent = confirmation;
+  }
   const checkpoint = await options.db.query<{ sequence: string }>(
     'SELECT sequence FROM projection_checkpoints WHERE name = $1', ['members']);
   const contentSequence = Number(checkpoint.rows[0]?.sequence ?? 0);
-  const content = contentSequence >= row.sequence ? 'current' : 'applying';
-  const applied = await memberAuthorisation(options.binding).applied(row.event.id);
+  const content = contentSequence >= appliedEvent.sequence ? 'current' : 'applying';
+  const applied = await memberAuthorisation(options.binding).applied(appliedEvent.event.id);
   const iam = applied ? 'current' : 'applying';
   return { ...ownershipReceipt(row), projection: { content, iam } };
 }

@@ -140,6 +140,7 @@ NATS, PostgreSQL and OpenFGA where those services hold the result.
 | create-assistant | silo.owner_bootstrapped | Check membership before creating the owner assistant. | assistant-choice |
 | claim-computer | assistant.created | Check the personal owner is active; keep later computer lifecycle events. | assistant-choice |
 | claim-computer | computer.lost | Claim only if this loss is still the latest lifecycle event. | backfill-lifecycle |
+| confirm-ownership | ownership.transferred | Confirm an active successor once on its member stream. | ownership-coordination |
 | seed-ownership | silo.owner_bootstrapped | Read current members and existing ownership before seeding. | ownership-migration |
 | seed-model-grants | member.joined | Skip removed members; keep later grants and revocations. | grants-backfill |
 | seed-model-grants | silo.owner_bootstrapped | Skip removed owners; keep later grants and revocations. | grants-backfill |
@@ -154,6 +155,7 @@ NATS, PostgreSQL and OpenFGA where those services hold the result.
 | update-openfga | member.role_changed | Keep later applied roles, removals and ownership changes. | projection |
 | update-openfga | member.removed | Keep a later applied rejoin. | projection |
 | update-openfga | ownership.seeded | Keep later ownership changes or applied member removals. | projection |
+| update-openfga | member.ownership_confirmed | Keep later step-downs and removals; override generic role edits. | ownership-coordination |
 | update-openfga | ownership.transferred | Check authority at the saved transfer; keep later changes for its recipient. | projection |
 | update-openfga | ownership.stepped_down | Keep later changes for that owner or an applied member removal. | projection |
 | update-openfga | team.created | Save only a receipt; create no membership. | projection |
@@ -222,3 +224,5 @@ and dispatcher together, then resume. Never run old `participation-<id>` keys be
 new conversation keys. If draining is impossible, rebuild permissions and execution
 state together from the whole ordered event log using the recovery procedure above.
 Never requeue old joins after newer removals. Live upgrade qualification is NOT RUN.
+
+New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).

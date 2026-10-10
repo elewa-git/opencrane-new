@@ -156,7 +156,7 @@ grants while keeping newer applied grants for the same id.
 Member roles saved before ownership was seeded can still be applied. They keep
 any later applied ownership change for that person. An old demotion that happened
 before the seed can remove a stale owner role when the seed did not include that
-person. New owner changes still require the ownership stream.
+person. New owner changes start with a request on the ownership stream.
 
 Saved relationships stay independent of silo membership. A delayed grant, team
 addition, participant addition or personal assistant creation still writes its
@@ -184,3 +184,4 @@ tuple/receipt comparison against replay.
 Shared-child creation writes explicit person participants, creator, silo and receipt
 in the existing atomic write. It adds no parent, group or resource relationships.
 Delayed creation uses the existing per-person removal guard; replay gives identical tuples.
+New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).

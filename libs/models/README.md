@@ -10,8 +10,8 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes and spending| models["libs/models<br/>AI rules and child joins"]
-  ops["apps/ops<br/>background workers"] -.-> models
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, child joins, owner appointments and spending| models["libs/models<br/>AI rules and spending"]
+  ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
@@ -26,7 +26,9 @@ flowchart LR
 
 - Records verified tool dispatch outcomes and link attempts of the same call.
   Allows one unchanged retry after a recorded failure before dispatch.
-
+- Counts new owners only after their member record confirms the appointment.
+  A person’s access check reads their own member record and the ownership record.
+  Ownership commands read other members’ confirmations when they need the full owner list.
 - Records provider choices and pauses for assistants and the silo default.
   An administrator can choose any eligible provider. The first verified provider
   supplies the automatic default when nobody has chosen one. Each reply confirms
@@ -59,6 +61,7 @@ flowchart LR
   grant no call authority either.
 - Check member or admin access for reads using saved membership and current permissions.
   Let one request reuse checks for the same saved access event.
+  Keep membership checks for writes within the caller’s original deadline.
 - Check that an invitation's sender still has authority before it is accepted.
 - Keep chat, computer and model grant facts in memory and read new events before each call.
   Keep only the latest grant facts for each person, assistant or group.

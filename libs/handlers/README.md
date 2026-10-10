@@ -28,7 +28,7 @@ assistants and claims computers.
 ```mermaid
 flowchart LR
   ops["apps/ops<br/>workers"] -->|starts work| handlers["libs/handlers<br/>reaction jobs"]
-  nats["NATS JetStream<br/>event log"] -->|new events and upgrade history| handlers
+  nats["NATS JetStream<br/>event log"] -->|new events, appointments and upgrade history| handlers
   reactions["libs/models and libs/authz<br/>registered reactions"] -.->|registers reactions| handlers
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
   handlers -.-> events["libs/events<br/>reaction list"]
@@ -38,6 +38,7 @@ flowchart LR
 
 ## What it is responsible for
 
+- Queues owner confirmations for the background worker to finish after restart.
 - Read new events and queue the reactions that subscribe to them.
 - Run jobs about the same thing, such as one member, one after another, while
   jobs about different things run side by side.

@@ -93,6 +93,7 @@ export const identityEvents = [
 
 /** Invitations grant no role. Only accepted membership events supply legacy role state. */
 export function legacyMemberRole(event: EventEnvelope): string | undefined {
+  if (event.type === 'member.ownership_confirmed') return 'owner';
   if (event.type === 'member.removed') {
     return '';
   }

@@ -165,6 +165,8 @@ Closure tests also check each incomplete provider pair. Storage validation refus
 bad provider ids and fractional or unsafe binding positions on turn and reservation
 records.
 
+New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).
+
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.

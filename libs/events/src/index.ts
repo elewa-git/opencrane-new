@@ -42,7 +42,7 @@ export { effectResolvedDataSchema, effectUncertainDataSchema } from './data.ts';
 export { legacyMemberRole, siloOwnerBootstrappedDataSchema, memberCommandRefusedSchema } from './identity-events.ts';
 
 export { ownershipSeededSchema, ownershipTransferredSchema,
-  ownershipSteppedDownSchema } from './ownership-events.ts';
+  ownershipConfirmedSchema, ownershipSteppedDownSchema } from './ownership-events.ts';
 export { providerBindingSchema, providerIdSchema, providerModelIdSchema, providerKeySchema,
   providerModelsSchema, providerRequestedSchema,
   providerDispatchedSchema, providerResultSchema } from './provider-events.ts';
