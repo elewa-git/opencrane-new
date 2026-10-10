@@ -32,6 +32,7 @@ flowchart LR
   Ordinary calls still use the existing gateway setup.
 - Signs short passes for memory calls through the gateway.
   A thread can read the person's own facts, its assistant's notes and that assistant's group facts.
+  It can save facts only in the requester’s own memory, with a separate write grant.
   These calls need saved grants, current permissions and an explicitly recorded private turn.
 - Choose an AI model for each task from a fixed routing table.
 - Keep model prices and estimate each request's cost before sending it.

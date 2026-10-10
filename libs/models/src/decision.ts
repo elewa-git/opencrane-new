@@ -10,7 +10,7 @@ import { authorityFence, decisionAuthorityFence, currentAuthority } from './auth
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall } from './mcp.ts';
-import { prepareMemoryContext } from './memory-context.ts';
+import { MemoryPersonScopeOnly, prepareMemoryContext } from './memory-context.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
@@ -21,6 +21,15 @@ import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
 import { BudgetActor, BudgetRefused, envelope, history } from './actor.ts';
 import { requestReservationCents, ModelRequestRefused as RequestRefused, data, models, priceTableId, type ModelCall } from './state.ts';
+
+function decisionError(error: unknown) {
+  if (error instanceof BudgetRefused || error instanceof RequestRefused ||
+      error instanceof MemoryPersonScopeOnly || error instanceof PayingGroupRefused ||
+      error instanceof AuthorityApplying) {
+    return error.message;
+  }
+  return 'Request refused or decision service unavailable';
+}
 
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
@@ -359,7 +368,8 @@ export async function startDecision(
       res.setHeader('x-request-id', requestId);
       res.setHeader('x-opencrane-decision', 'refused');
       res.writeHead(capped ? 402 : 403);
-      res.end(JSON.stringify({ requestId, error: capped || error instanceof RequestRefused || error instanceof PayingGroupRefused || error instanceof AuthorityApplying ? error.message : 'Request refused or decision service unavailable' }));
+      const refusal = { requestId, error: decisionError(error) };
+      res.end(JSON.stringify(refusal));
     });
   });
   server.listen(port, '127.0.0.1'); await once(server, 'listening');

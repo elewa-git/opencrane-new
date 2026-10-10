@@ -23,6 +23,13 @@ const claimsSchema = z.object({ silo: identifier, requester: identifier, assista
   contextPosition: z.int().nonnegative(), exp: z.number(), iat: z.number() });
 export type MemoryContext = z.infer<typeof claimsSchema>;
 
+export class MemoryPersonScopeOnly extends Error {
+  constructor() {
+    super('agent_person_scope_only: Agents can save facts only in the requester’s person scope.');
+  }
+}
+
+
 export async function verifyMemoryContext(token: string,
   identity: { jwks: JSONWebKeySet; issuer: string },
   parsed: ReturnType<typeof parseMemoryRequest>) {
@@ -65,8 +72,10 @@ export async function memoryRights(store: EventStore, binding: Binding,
   if (parsed.input) {
     let resourceType = 'memory_read';
     if (parsed.input.operation === 'remember') {
-      // Refuse private output in shared scopes even when a caller supplies a shared source.
-      if (scope.scopeKind !== 'person') throw new Error('Shared memory write refused');
+      // Limit agent writes to the requester, even when shared sources and grants are valid.
+      if (scope.scopeKind !== 'person' || scope.ownerId !== claims.requester) {
+        throw new MemoryPersonScopeOnly();
+      }
       resourceType = 'memory_write';
     }
     await requireRecordedGrants(store, binding.silo, claims, resourceType, scope.scopeId,

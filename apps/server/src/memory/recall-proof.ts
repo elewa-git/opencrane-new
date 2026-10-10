@@ -52,6 +52,8 @@ export function checkRecallProof(secret: string, context: MemoryContext, proof: 
     throw new MemoryRefused();
   }
   const bytes = Buffer.from(encoded, 'base64url');
+  // Bound decoded input before parsing, including signed payloads with excess whitespace.
+  if (bytes.length > 7500) throw new MemoryRefused();
   const payload: unknown = JSON.parse(bytes.toString());
   const [binding, references] = proofSchema.parse(payload);
   if (binding !== threadBinding(context)) throw new MemoryRefused();

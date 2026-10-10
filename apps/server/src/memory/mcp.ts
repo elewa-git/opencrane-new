@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { memoryRights, parseMemoryRequest, verifyMemoryContext } from '@opencrane/models';
+import { MemoryPersonScopeOnly, memoryRights, parseMemoryRequest, verifyMemoryContext } from '@opencrane/models';
 import type { AuthConfig } from '@opencrane/auth';
 import type { MemoryOptions } from './access.ts';
 import { remember } from './commands.ts';
@@ -85,7 +85,10 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
         result = { content: [], structuredContent: { ...facts, recallProof: proof } };
       }
       return { jsonrpc: '2.0', id: parsed.request.id, result };
-    } catch {
+    } catch (error) {
+      if (error instanceof MemoryPersonScopeOnly) {
+        return reply.code(403).send({ status: 'refused', reason: 'agent_person_scope_only' });
+      }
       return reply.code(403).send({ status: 'refused' });
     }
   }

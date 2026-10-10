@@ -835,10 +835,10 @@ scope's operation grants separately at both gateway and backend admission.
 Remember remains unadvertised and refused, including private calls with plausible
 shared source references. Native turns still receive no memory tools.
 
-This is the first recall-only slice of the row-3 remainder. PR #292's command path
-was unmerged when work began. Governed remember and server-recorded shared-only
-execution remain separate work. A caller's `shared_only` claim is still refused;
-this slice does not establish isolation of shared execution inputs.
+The earlier recall-only work was built before the personal command path merged.
+Personal remember now uses that path, as described below. Server-recorded shared-only
+execution and shared agent writes remain separate work. A caller's `shared_only` claim
+is still refused; shared execution input isolation is not established.
 
 Review follow-ups now cover fractional-second expiry, independent discovery
 version/name headers, and the issuer's two-second cap and shorter caller deadline.
@@ -922,6 +922,7 @@ with a non-zero cost, delivers it twice, restarts the budget actor and delivers 
 again. It checks one saved settlement and unchanged provider, model, payer and
 price-table fields. It sends no provider request.
 
+<<<<<<< HEAD
 `currentMembership` accepts a separate history deadline for reads before a write access check.
 
 ## Recorded tool failures and approval actions
@@ -929,9 +930,13 @@ price-table fields. It sends no provider request.
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
 
 ## Personal remember admission (P4-12 PR 3c, first slice)
+=======
+## Personal remember admission (P4-12 PR 3c)
+>>>>>>> e5f69401 (🔒 Limit governed agent remember to the requester’s own memory)
 
 The signed capability can name `remember`. Its scope stays the requester's person scope.
-Both requester and assistant need recorded `memory_write` grants and current OpenFGA rights;
+Group and assistant-notes writes return `agent_person_scope_only` even when grants and
+shared recalled references are valid. Both requester and assistant need recorded `memory_write` grants and current OpenFGA rights;
 a read grant cannot supply write permission. Ask and Block policies refuse the write.
 Discovery omits remember unless its reviewed zero-cost policy is Allow. Recall-only
 installations keep working without a remember policy.

@@ -3,7 +3,7 @@ import { opendir } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { authorityFence, readActiveMember } from '@opencrane/models';
+import { authorityFence, MemoryPersonScopeOnly, readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryIdentity } from '@opencrane/projections';
 import { memoryTextSchema, memoryWrittenDataSchema, memoryWrittenEventSchema,
   } from '@opencrane/events';
@@ -131,7 +131,9 @@ export async function remember(options: MemoryOptions, requester: string, scope:
   raw: unknown, agent?: AgentWrite) {
   let principalKind: PrincipalKind = 'human';
   if (agent) {
-    if (scope.scopeKind !== 'person') throw new MemoryRefused();
+    if (scope.scopeKind !== 'person' || scope.ownerId !== requester) {
+      throw new MemoryPersonScopeOnly();
+    }
     principalKind = 'agent';
   }
   // Check write permission before inspecting private content or reserving a database client.

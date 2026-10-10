@@ -1427,7 +1427,7 @@ Failed reads return 503. Only counts and dates leave conversation tables.
 Tool, publication and connection readiness stay unavailable. Removal stays disabled.
 `test/member-inventory.test.ts` uses real services. Fresh-install qualification: NOT RUN.
 
-## Governed personal remember (P4-12 PR 3c, first slice)
+## Governed personal remember (P4-12 PR 3c)
 
 `remember` uses the human command path with an agent principal bound to the requester.
 Its command id is separate from human command ids. Retries return the original receipt;
@@ -1444,8 +1444,11 @@ An agent cannot claim a human statement. This proof checks references, not wheth
 model's wording follows logically from them.
 
 The final append rechecks the original capability deadline, live turn and watched grants.
-Shared writes and claimed `shared_only` contexts remain refused. Server-recorded shared-only
-execution, shared-input isolation and shared writes are the next slice. Native turns still
+Every agent write to group or assistant-notes scope returns `agent_person_scope_only`,
+even with valid shared recall references and write grants. The command also refuses
+another person's scope. Claimed `shared_only` contexts remain refused. Server-recorded
+shared-only execution, its input isolation and shared agent writes are deferred to a later PR
+after #94. Native turns still
 receive no memory tools. Fresh-install qualification and backend network isolation are NOT RUN.
 
 Source checks on 10 October 2026: PASS for lint (including Knip), typecheck,
