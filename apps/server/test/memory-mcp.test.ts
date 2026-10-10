@@ -16,6 +16,12 @@ import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projecti
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
+async function cryptoModule() {
+  const actual = await vi.importActual<typeof import('node:crypto')>('node:crypto');
+  return { ...actual, createCipheriv: vi.fn(actual.createCipheriv) };
+}
+vi.mock('node:crypto', cryptoModule);
+
 let setup: Awaited<ReturnType<typeof fixture>>;
 let app: ReturnType<typeof buildServer>;
 let capability = '';
@@ -694,6 +700,7 @@ it('refuses when signing or verification is unavailable without reading facts',
     const noSigner = await startDecision(setup.actor, setup.identity, setup.binding);
     const database = vi.spyOn(setup.db, 'query');
     try {
+      expect(append).not.toHaveBeenCalled();
       const decisionHeaders = { ...setup.headers, ...headers };
       const decisionRequest = { method: 'POST', headers: decisionHeaders,
         body: JSON.stringify(call) };
@@ -1159,6 +1166,7 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
       const refused = await backend.inject(writeRequest);
       expect(refused.statusCode).toBe(403);
       expect(refused.json()).toEqual({ status: 'refused', reason: 'agent_person_scope_only' });
+      expect(append).not.toHaveBeenCalled();
       const decisionHeaders = { ...target.headers, ...rememberHeaders };
       const decisionRequest = { method: 'POST', headers: decisionHeaders,
         body: JSON.stringify(writeBody) };

@@ -51,7 +51,10 @@ async function* readStream(subject: string) {
   }
 }
 const store = { readStream } as EventStore;
-async function confirm() { return false; }
+async function confirm() {
+  return false;
+}
+async function confirmAccess() {}
 function prepare() {
   vi.resetAllMocks();
   rows = [row('assistant-assistant', 'assistant.created', { assistantId: 'assistant',
@@ -70,7 +73,7 @@ function prepare() {
     firstStart: row('computer-assistant', 'computer.turn_started', {
       requesterId: 'alice', conversationId: 'conversation', threadId: 'thread',
       executionMode: 'restricted' }), firstClose: undefined }, confirm };
-  const fresh = Object.assign(confirm, { head: 10, deadline: performance.now() + 2000,
+  const fresh = Object.assign(confirmAccess, { head: 10, deadline: performance.now() + 2000,
     include: vi.fn() });
   vi.mocked(authorityFence).mockResolvedValue(fresh);
   vi.mocked(currentAuthority).mockResolvedValue('test-authority');
