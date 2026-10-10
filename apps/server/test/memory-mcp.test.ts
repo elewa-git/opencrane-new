@@ -37,10 +37,13 @@ async function govern(target: Awaited<ReturnType<typeof fixture>>, recordedGrant
   const tool = { name: 'recall', revision: 'a'.repeat(64), reviewed: true, costCents: 0 };
   await target.append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
     connectionId: 'server', accountMode: 'none', schemaDigest: 'a'.repeat(64),
-    toolCount: 1, tools: [tool] });
+    toolCount: 2, tools: [tool, { ...tool, name: 'remember' }] });
   await target.append('mcp-memory', 'mcp.server_published',
     { serverId: 'memory', publishedBy: 'alice' });
   await mode(target, 'allow');
+  const rememberPolicy = { serverId: 'memory', connectionId: 'server', toolName: 'remember',
+    toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'alice' };
+  await target.append('mcp-memory', 'mcp.tool_mode_set', rememberPolicy);
   for (const granteeKind of ['member', 'assistant']) {
     const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
     const subject = grantStream('mcp_server', 'memory');
@@ -87,7 +90,8 @@ async function prepare() {
   }
   await setup.runner.run(projection);
   const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
-    binding: setup.binding, feed: { memberId }, identity: setup.identity };
+    binding: setup.binding, feed: { memberId }, identity: setup.identity,
+    keyDirectory: dirname(setup.options.configFile) };
   app = buildServer(testAuthConfig(), { memory });
   app.addHook('preHandler', captureContext);
   const address = await app.listen({ host: '127.0.0.1', port: 0 });
@@ -479,13 +483,16 @@ it('replaces caller context and returns bounded facts as data through the real g
     await setup.runner.rebuild(projection);
   });
 
-it('discovers only recall and binds method headers to stateless requests', async function discovery() {
+it('discovers recall and remember and binds method headers to stateless requests', async function discovery() {
   for (const method of ['server/discover', 'tools/list']) {
     const body = { jsonrpc: '2.0', id: 1, method, params: { _meta: metadata } };
     const requestHeaders = { ...headers, 'mcp-method': method, 'mcp-name': '' };
     const response = await setup.call(requestHeaders, body, route);
     expect(response.status, response.text).toBe(200);
-    expect(response.text).not.toMatch(/remember|correct|forget/u);
+    expect(response.text).not.toMatch(/correct|forget/u);
+    if (method === 'tools/list') {
+      expect(response.text).toContain('remember');
+    }
     expect((await setup.call(headers, body, route)).status).toBe(403);
   }
 });
@@ -845,3 +852,139 @@ it('rechecks stale grants at the backend and refuses an ended turn upstream', as
     expect(capability).toBe('');
   } finally { database.mockRestore(); }
 });
+
+const rememberedSchema = z.object({ result: z.object({ structuredContent: z.object({
+  outcome: z.string(), memoryId: z.string(), changeId: z.string().optional() }) }) });
+const recallProofSchema = z.object({ result: z.object({ structuredContent: z.object({
+  recallProof: z.string(), facts: z.array(z.object({ memoryId: z.string(), revision: z.number() }))
+}) }) });
+const rememberHeaders = { ...headers, 'mcp-name': 'remember' };
+
+async function grantWrite(granteeKind: string) {
+  const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+  const fields = { resourceType: 'memory_write', resourceId: scopeId,
+    granteeKind, granteeId, grantedBy: 'alice' };
+  const grant = await setup.append(grantStream('memory_write', scopeId), 'grant.given', fields);
+  await setup.auth.handler.handle(grant, setup.db);
+}
+async function recalledRemember(commandId: string) {
+  await grantWrite('member');
+  await grantWrite('assistant');
+  const response = await setup.call(headers, call, route);
+  expect(response.status, response.text).toBe(200);
+  const page = recallProofSchema.parse(JSON.parse(response.text)).result.structuredContent;
+  const fact = page.facts[0]!;
+  const dependency = { scopeId, memoryId: fact.memoryId, revision: fact.revision };
+  const argumentsValue = { scopeId, commandId, text: 'Derived deliveries fact', kind: 'fact',
+    pinned: false, expiresAt: null, sources: [], dependsOn: [dependency],
+    recallProof: page.recallProof };
+  return { ...call, params: { ...call.params, name: 'remember', arguments: argumentsValue } };
+}
+async function signedRemember(body: Awaited<ReturnType<typeof recalledRemember>>, overrides = {}) {
+  const parsed = parseMemoryRequest(JSON.stringify(body), rememberHeaders);
+  const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
+    computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
+    thread: 'thread', operation: 'remember', scopes: [scopeId], contentAccess: 'private',
+    bodyDigest: parsed.bodyDigest, callId: metadata.callId,
+    requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
+  return setup.tokens.memoryContext({ ...claims, ...overrides }, Date.now() + 2000);
+}
+async function backendRemember(body: Awaited<ReturnType<typeof recalledRemember>>, overrides = {}) {
+  const token = await signedRemember(body, overrides);
+  const requestHeaders = { ...rememberHeaders, 'x-memory-context': token };
+  const input = { method: 'POST' as const, url: route, headers: requestHeaders, payload: body };
+  return app.inject(input);
+}
+
+it('remembers a recalled personal fact once through the gateway with an agent principal',
+  async function governedRemember() {
+    const body = await recalledRemember('agent-command');
+    const humanInput = { ...body.params.arguments, sources: [], dependsOn: [] };
+    const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'alice' };
+    const options = { silo: 'test', store: setup.nats.store, db: setup.db,
+      binding: setup.binding, feed: { memberId }, keyDirectory: dirname(setup.options.configFile) };
+    const { remember } = await import('../src/memory/commands.ts');
+    const human = await remember(options, 'alice', scope, humanInput);
+    const first = await setup.call(rememberHeaders, body, route);
+    expect(first.status, first.text).toBe(200);
+    const saved = rememberedSchema.parse(JSON.parse(first.text)).result.structuredContent;
+    expect(saved.outcome).toBe('saved');
+    expect(saved.memoryId).not.toBe(human.memoryId);
+    const repeat = await setup.call(rememberHeaders, body, route);
+    expect(repeat.status, repeat.text).toBe(200);
+    expect(JSON.parse(repeat.text)).toEqual(JSON.parse(first.text));
+    const rows = [];
+    for await (const row of setup.nats.store.readStream(`scope-${scopeId}`)) {
+      if (row.event.id === saved.memoryId) rows.push(row);
+    }
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.event).toMatchObject({ principal: { kind: 'agent', id: 'alice' },
+      correlation: { conversation: 'conversation', turn: 'turn' },
+      data: { dependsOn: body.params.arguments.dependsOn, sources: [] } });
+    const changedArguments = { ...body.params.arguments, text: 'Different fact' };
+    const changed = { ...body, params: { ...body.params, arguments: changedArguments } };
+    expect((await setup.call(rememberHeaders, changed, route)).status).toBe(403);
+    await setup.runner.run(projection);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  });
+
+const invalidLineage = ['forged', 'missing', 'unrecalled', 'revision', 'human-source'];
+async function refusesLineage(change: string) {
+  const body = await recalledRemember(`invalid-${change}`);
+  const argumentsValue = { ...body.params.arguments };
+  if (change === 'forged') argumentsValue.recallProof += 'x';
+  if (change === 'missing') argumentsValue.dependsOn = [];
+  if (change === 'unrecalled') {
+    argumentsValue.dependsOn = [{ scopeId, memoryId: 'fact_20', revision: 1 }];
+  }
+  if (change === 'revision') {
+    argumentsValue.dependsOn = [{ ...argumentsValue.dependsOn[0]!, revision: 2 }];
+  }
+  if (change === 'human-source') {
+    Object.assign(argumentsValue, { sources: [{ memberId: 'alice', commandId: argumentsValue.commandId }] });
+  }
+  const changed = { ...body, params: { ...body.params, arguments: argumentsValue } };
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  const append = vi.spyOn(setup.nats.store, 'append');
+  try {
+    expect((await backendRemember(changed)).statusCode).toBe(403);
+    expect(append).not.toHaveBeenCalled();
+    expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+  } finally {
+    append.mockRestore();
+  }
+}
+it.each(invalidLineage)('requires signed recalled references before a write: %s', refusesLineage);
+
+async function refusesWriteGrant(granteeKind: string) {
+  const body = await recalledRemember(`revoked-write-${granteeKind}`);
+  const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+  await setup.append(grantStream('memory_write', scopeId), 'grant.revoked', {
+    resourceType: 'memory_write', resourceId: scopeId, granteeKind, granteeId, revokedBy: 'alice' });
+  const append = vi.spyOn(setup.nats.store, 'append');
+  try {
+    expect((await backendRemember(body)).statusCode).toBe(403);
+    expect(append).not.toHaveBeenCalled();
+    expect((await setup.call(rememberHeaders, body, route)).status).toBe(403);
+  } finally {
+    append.mockRestore();
+  }
+}
+it.each(['member', 'assistant'])('requires current write grants for the %s', refusesWriteGrant);
+
+it('keeps personal recall proof out of shared writes and forged shared-only contexts',
+  async function refusesSharedRemember() {
+    const body = await recalledRemember('shared-refusal');
+    const argumentsValue = { ...body.params.arguments,
+      scopeId: memoryScopeId('test', 'assistant_notes', 'assistant') };
+    const changed = { ...body, params: { ...body.params, arguments: argumentsValue } };
+    const append = vi.spyOn(setup.nats.store, 'append');
+    try {
+      const scopes = [argumentsValue.scopeId];
+      expect((await backendRemember(changed, { scopes })).statusCode).toBe(403);
+      expect((await backendRemember(body, { contentAccess: 'shared_only' })).statusCode).toBe(403);
+      expect(append).not.toHaveBeenCalled();
+    } finally {
+      append.mockRestore();
+    }
+  });
