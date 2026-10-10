@@ -10,8 +10,8 @@ import type { MemoryIdentity } from '@opencrane/events';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
-import { fixture } from '@opencrane/models/testing';
-import { envelope, parseMemoryRequest, startDecision, verifyMemoryContext } from '@opencrane/models';
+import { catalogueEvidence, fixture, toolEvidence } from '@opencrane/models/testing';
+import { envelope, parseMemoryRequest, readToolPolicy, startDecision, verifyMemoryContext } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -28,6 +28,9 @@ let capability = '';
 let keys: ReturnType<typeof memoryKeys>;
 const scopeId = memoryScopeId('test', 'person', 'alice');
 const route = '/mcp/memory/server';
+const recallTool = toolEvidence({ name: 'recall', reviewed: true, costCents: 0 });
+const rememberTool = toolEvidence({ name: 'remember', reviewed: true, costCents: 0 });
+const memoryCatalogue = catalogueEvidence([recallTool, rememberTool]);
 const metadata = { threadId: 'thread', callId: 'memory-call',
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
   'io.modelcontextprotocol/clientCapabilities': {} };
@@ -43,15 +46,13 @@ async function govern(target: Awaited<ReturnType<typeof fixture>>, recordedGrant
   await target.append('mcp-memory', 'mcp.server_registered', { serverId: 'memory',
     kind: 'hosted', locator: `registry.example.test/opencrane/server@sha256:${'a'.repeat(64)}`,
     registeredBy: 'alice' });
-  const tool = { name: 'recall', revision: 'a'.repeat(64), reviewed: true, costCents: 0 };
   await target.append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
-    connectionId: 'server', accountMode: 'none', schemaDigest: 'a'.repeat(64),
-    toolCount: 2, tools: [tool, { ...tool, name: 'remember' }] });
+    connectionId: 'server', accountMode: 'none', ...memoryCatalogue });
   await target.append('mcp-memory', 'mcp.server_published',
     { serverId: 'memory', publishedBy: 'alice' });
   await mode(target, 'allow');
   const rememberPolicy = { serverId: 'memory', connectionId: 'server', toolName: 'remember',
-    toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'alice' };
+    toolRevision: rememberTool.revision, mode: 'allow', setBy: 'alice' };
   await target.append('mcp-memory', 'mcp.tool_mode_set', rememberPolicy);
   for (const granteeKind of ['member', 'assistant']) {
     const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
@@ -65,7 +66,7 @@ async function govern(target: Awaited<ReturnType<typeof fixture>>, recordedGrant
 }
 function mode(target: Awaited<ReturnType<typeof fixture>>, value: 'allow' | 'ask' | 'block') {
   return target.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
-    connectionId: 'server', toolName: 'recall', toolRevision: 'a'.repeat(64),
+    connectionId: 'server', toolName: 'recall', toolRevision: recallTool.revision,
     mode: value, setBy: 'alice' });
 }
 async function prepare() {
@@ -133,6 +134,16 @@ async function renewGatewayCredentials() {
   setup.credentialTime(now - issuedAt);
   const renewed = await setup.issue();
   Object.assign(setup.headers, renewed);
+  const policy = await readToolPolicy(setup.nats.store, 'test', 'memory');
+  if (!policy.catalogue) {
+    throw new Error('Missing test memory catalogue');
+  }
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+  const check = { serverId: 'memory', outcome: 'unchanged',
+    schemaDigest: policy.catalogue.schemaDigest, checkedAt, expiresAt };
+  // Keep catalogue expiry from hiding the memory check each test intends to exercise.
+  await setup.append('mcp-memory', 'mcp.catalogue_checked', check);
 }
 beforeAll(prepare, 120_000);
 beforeEach(renewGatewayCredentials);
@@ -1102,7 +1113,7 @@ it('recovers an agent command after a saved append loses its reply', async funct
 async function refusesRememberPolicy(policy: 'ask' | 'block') {
   const body = await recalledRemember(`remember-policy-${policy}`);
   const fields = { serverId: 'memory', connectionId: 'server', toolName: 'remember',
-    toolRevision: 'a'.repeat(64), mode: policy, setBy: 'alice' };
+    toolRevision: rememberTool.revision, mode: policy, setBy: 'alice' };
   await setup.append('mcp-memory', 'mcp.tool_mode_set', fields);
   const append = vi.spyOn(setup.nats.store, 'append');
   try {

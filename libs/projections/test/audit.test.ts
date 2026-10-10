@@ -38,9 +38,14 @@ it('preserves the existing audit allow-list and includes ownership evidence',
 function fixture(type: string, id: string, data: Record<string, unknown> = {}, correlated = true): EventEnvelope {
   const definition = getEventDefinition(type);
   expect(definition, `typed ${type} contract`).toBeDefined();
-  const parsed = parseEventByType({ id, commandId: id, principal: { id: 'fixture', kind: 'system' }, type, source: 'fixture', silo: 'test', subject: `${definition!.stream}-${id.replaceAll('.', '-')}`,
+  const eventData = { ...z.record(z.string(), z.unknown()).parse(definition!.example), ...data };
+  let subject = `${definition!.stream}-${id.replaceAll('.', '-')}`;
+  if (definition!.stream === 'mcp') {
+    subject = `mcp-${String(eventData['serverId'])}`;
+  }
+  const parsed = parseEventByType({ id, commandId: id, principal: { id: 'fixture', kind: 'system' }, type, source: 'fixture', silo: 'test', subject,
     time: '2026-10-03T00:00:00Z', correlation: correlated ? { request: 'request', permit: 'permit', conversation: 'conversation', turn: 'turn' } : {},
-    data: { ...z.record(z.string(), z.unknown()).parse(definition!.example), ...data } });
+    data: eventData });
   if (!parsed.success) throw new Error(`Invalid fixture ${type}: ${parsed.reason}`);
   return parsed.event;
 }
@@ -50,7 +55,8 @@ it('joins forthcoming typed families, withholds private details and keeps absent
   try {
     await runner.initialise(auditTrail);
     const append = async (event: EventEnvelope) => {
-      expect((await nats.store.append({ event, expectedSequence: 0 })).status).toBe('appended');
+      const expectedSequence = await nats.store.head(event.subject);
+      expect((await nats.store.append({ event, expectedSequence })).status).toBe('appended');
     };
     // Deliberately before the decision: joins use ids, never equal/ambiguous gateway times.
     for (const [type, payload] of [

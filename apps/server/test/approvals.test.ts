@@ -11,7 +11,7 @@ import { history, readApproval, decideApproval, ingestUsage } from '@opencrane/m
 import { buildServer } from '../src/server.ts';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
-import { fixture } from '@opencrane/models/testing';
+import { catalogueEvidence, fixture, toolEvidence } from '@opencrane/models/testing';
 async function approvalFixture(stepUp = false) {
   const f = await fixture();
   await f.runner.initialise(conversations);
@@ -23,11 +23,19 @@ async function approvalFixture(stepUp = false) {
     cookie: `${config.cookieName}=${encodeSession(config, { sub, orgId: 'org-test', roles: [], authTime,
       exp: Math.floor(Date.now() / 1000) + 3600, ...(approval ? { stepUpApproval: approval } : {}) })}` });
   await f.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
-  const discover = (stepUp: boolean) => f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 1,
-    tools: [{ name: 'write', revision: 'a'.repeat(64), reviewed: true, costCents: 0, review: { action: 'Update order note', consequence: 'The order note changes immediately.', targetArgument: 'order', fields: ['order', 'note', 'amount'], stepUp } }] });
+  const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0 });
+  function discover(stepUp: boolean) {
+    const review = { action: 'Update order note', consequence: 'The order note changes immediately.',
+      targetArgument: 'order', fields: ['order', 'note', 'amount'], stepUp };
+    const reviewedTool = { ...tool, review };
+    const catalogue = catalogueEvidence([reviewedTool]);
+    const data = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+      ...catalogue };
+    return f.append('mcp-fixture', 'mcp.server_discovered', data);
+  }
   await discover(stepUp);
   await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
-  await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture', connectionId: 'installed', toolName: 'write', toolRevision: 'a'.repeat(64), mode: 'ask', setBy: 'alice' });
+  await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture', connectionId: 'installed', toolName: 'write', toolRevision: tool.revision, mode: 'ask', setBy: 'alice' });
   for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
     const event = await f.append(grantStream('mcp_server', 'fixture'), 'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture', granteeId, granteeKind, grantedBy: 'alice' });
     await f.auth.handler.handle(event, f.db);
@@ -186,8 +194,13 @@ it.each(['rejected', 'expired', 'cancelled', 'changed', 'profile', 'turn_changed
     if (reason === 'cancelled') await f.append('conversation-conversation', 'agent.turn_stop_requested', { conversationId: 'conversation', turnId: 'turn', requestedBy: 'alice' });
     if (reason === 'changed') await f.discover(false);
     if (reason === 'turn_changed') await f.append('conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', turnId: 'another-turn', assistantId: 'assistant' });
-    if (reason === 'profile') await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'personal', schemaDigest: 'b'.repeat(64), toolCount: 1,
-      tools: [{ name: 'write', revision: 'b'.repeat(64), reviewed: true }] });
+    if (reason === 'profile') {
+      const tool = toolEvidence({ name: 'write', reviewed: true });
+      const catalogue = catalogueEvidence([tool]);
+      const data = { serverId: 'fixture', connectionId: 'installed', accountMode: 'personal',
+        ...catalogue };
+      await f.append('mcp-fixture', 'mcp.server_discovered', data);
+    }
     if (reason === 'revoked') await f.append(grantStream('mcp_server', 'fixture'), 'grant.revoked', { resourceType: 'mcp_server', resourceId: 'fixture', granteeId: 'alice', revokedBy: 'alice' });
     const append = f.nats.store.append.bind(f.nats.store);
     const fault = vi.spyOn(f.nats.store, 'append').mockImplementation(async command => {
