@@ -113,3 +113,21 @@ access and approval notes and this PR's personal remember contract.
 Failing-first logs: `/tmp/pr319-credential-red.log` and
 `/tmp/pr319-credential-green.log`. The initial changed-file failure log is
 `/tmp/pr319-rebase-failing.log`.
+
+The final test runs used source `8745e819`. All four changed test files ran twice,
+with `PG_TEST_URL` set and under `nice -n 10`. The three memory files are also the
+complete file list named by the train. They used one worker. The web test ran
+through Angular's test builder with only the changed model-registry file selected.
+
+| Check | Result | Logs |
+| --- | --- | --- |
+| Memory MCP, recall proof and memory rights | PASS: 100 tests twice | `/tmp/pr319-rebase-tests-1.log`, `/tmp/pr319-rebase-tests-2.log` |
+| Changed model-registry tests | PASS: 60 tests twice | `/tmp/pr319-rebase-web-1.log`, `/tmp/pr319-rebase-web-2.log` |
+| Full lint, including Knip and changelog | PASS | `/tmp/pr319-rebase-lint-final.log` |
+| Typecheck, all workspaces | PASS | `/tmp/pr319-rebase-typecheck-final.log` |
+| Event catalogue, 103 types | PASS | `/tmp/pr319-rebase-events.log` |
+| Separate changelog check | PASS | `/tmp/pr319-rebase-changelog.log` |
+
+The memory runs took 138.14 and 146.34 seconds, both longer than the old shared
+credential's lifetime. Neither run skipped tests. Fresh-install journeys and
+the remaining live conditions listed above remain **NOT RUN**.
