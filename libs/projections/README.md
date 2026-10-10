@@ -24,7 +24,7 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills tables, including configured memory| projections["libs/projections<br/>read tables, message lookups and content keys"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
-  projections -->|writes tables, roles and account bindings| pg
+  projections -->|writes tables, roles, accounts and private chat choices| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
@@ -66,6 +66,10 @@ checks saved events and permissions before returning any candidate.
 Conversation tables keep each person's join and removal positions, so replay can
 restore their periods of participation. Conversation tables are rebuilt with readers
 and workers stopped. The worker names the replay command when an upgrade needs it.
+
+The conversation worker also saves each person's archive and read choices. Choices belong to
+one period of participation; joining again starts fresh. Rebuild restores them without
+adding them to the shared conversation feed or running background actions.
 
 ## Processes it handles
 

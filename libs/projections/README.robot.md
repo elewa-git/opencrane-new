@@ -184,7 +184,7 @@ Conversation tool reports are copied as events in order.
 
 `test/conversations.test.ts` uses real PostgreSQL and NATS. Dropping and
 replaying `conversation_feed` returns identical rows. No backfill command is
-added; the operator replay command has no conversations target.
+added; the offline conversations replay command is described below.
 
 ## Memory key custody
 
@@ -293,8 +293,9 @@ need an offline conversations rebuild. Startup refuses saved creations with empt
 metadata or participant tables, or a missing legacy-reference table beside saved
 participant changes, and names the command:
 `npm run replay -- conversations --confirm-conversations-stopped`. Stop readers and
-workers before running it. Replay takes the projection lock, replaces all four tables,
-resets event ids and the checkpoint, increases the generation and replays the log.
+workers before running it. Replay takes the projection lock and replaces the feed, metadata,
+participation, legacy-reference and list-state tables. It resets event ids and the checkpoint,
+increases the generation and replays the log.
 A failure may leave a rebuilt prefix; keep readers stopped and rerun. It runs no
 reactions and does not offer `--verify`. The server filters group history using the caller’s latest join position.
 
@@ -320,3 +321,12 @@ The [approval API](../../docs/api/approvals.md) explains tool failure records an
 
 The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
 describes how invitation refusal records are rebuilt without granting access.
+
+`conversation_list_state` stores JSON choices under silo/member/conversation/join event id.
+Missing choices mean archived false and read position zero. Each choice keeps its event,
+command and global position; read advances keep the checked target id and maximum position.
+The worker checks the join and target row in the same silo, including its exclusive end.
+Old join choices remain private and never apply to a new join. Preferences bypass the feed.
+The offline conversations rebuild replaces this table too. Tests check identical choices,
+unchanged feed rows and no event append during replay. Activity and first-close evidence
+remain for the next part of the accepted lifecycle design; no public commands ship here.

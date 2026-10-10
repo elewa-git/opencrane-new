@@ -166,3 +166,8 @@ server hashes the caller's id before recording a refusal and before status looku
 An id's allowed characters alone cannot exclude a secret or a person's name.
 `test/security-rules.test.ts` and the server's refusal tests cover this boundary.
 The registry-wide security rule already permits digest fields; no name exception is needed.
+
+`conversation.archive_set` and `conversation.read_advanced` use `chat-state-<memberId>`.
+Strict schemas require conversation/member/join ids and an archive boolean or positive safe
+read position plus event id. Parsing requires the matching human principal and command id.
+These events have no reactions and do not grant access. Commands and screens come later.

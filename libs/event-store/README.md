@@ -25,7 +25,7 @@ flowchart LR
   models["libs/models<br/>AI rules and budgets"] -->|saves changes and updates saved facts| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams and finds numbered events| nats["NATS JetStream<br/>event service"]
-  store -.-> events["libs/events<br/>event definitions"]
+  store -.->|checks private chat choices| events["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for
@@ -52,6 +52,8 @@ flowchart LR
 
 Conversation writes check that the saved conversation id matches the subject.
 New group chats are limited to 97 people so their permission update fits in one write.
+
+Private chat choices use a separate stream for each person. They require that person's human identity.
 
 ## Processes it handles
 

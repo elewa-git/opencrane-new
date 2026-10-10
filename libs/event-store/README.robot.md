@@ -29,7 +29,7 @@ Use the role-specific certificate described in [ADR 0005](../../docs/adr/0005-na
 missing file paths fail closed and credentials in URLs are rejected.
 
 Envelope subjects retain the catalogue's `member-alice` format. The adapter
-maps the first hyphen to `ev.member.alice`; ids may contain further hyphens,
+maps the registered stream prefix to `ev.member.alice`; ids may contain further hyphens,
 but no dots, whitespace or NATS wildcards. Event types must use their
 registered stream prefix. Conversation and participant event data must name the same
 conversation as the subject. New group creations allow at most 97 people, including
@@ -227,3 +227,6 @@ nats-server 2.15.0 are Apache-2.0. Licences were checked at introduction.
 See the [event catalogue](../../docs/architecture/events.md) and
 [plan](../../plan.md#event-driven-core). TLS/account isolation passes against real R1 servers. Live R3 elections with this
 configuration and a fresh silo installation remain unqualified.
+
+`chat-state-<memberId>` maps to `ev.chat-state.<memberId>`, including category reads.
+Preference parsing binds the human principal to that member id. Access checks remain the caller's job.

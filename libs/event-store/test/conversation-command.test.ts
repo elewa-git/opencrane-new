@@ -89,3 +89,32 @@ async function refusesWrongConversationIdentity() {
 }
 it('rejects conversation and participation subjects that disagree with the recorded id',
   refusesWrongConversationIdentity);
+
+async function validatesPrivatePreferences() {
+  const nats = await natsFixture();
+  try {
+    const data = { conversationId: 'chat', memberId: 'alice', joinEventId: 'join', archived: true };
+    const preference = { ...event('archive'), subject: 'chat-state-alice', type: 'conversation.archive_set',
+      principal: { kind: 'human' as const, id: 'alice' }, data };
+    const invalidEvents = [
+      { ...preference, subject: 'chat-state-bob' },
+      { ...preference, principal: { kind: 'human' as const, id: 'bob' } },
+      { ...preference, principal: { kind: 'system' as const, id: 'alice' } },
+      { ...preference, data: { ...data, text: 'private' } },
+      { ...preference, silo: '' },
+    ];
+    for (const invalid of invalidEvents) {
+      expect(parseEventByType(invalid).success).toBe(false);
+      expect((await nats.store.append({ event: invalid, expectedSequence: 0 })).status)
+        .toBe('rejected');
+    }
+    expect((await nats.store.append({ event: preference, expectedSequence: 0 })).status)
+      .toBe('appended');
+    const saved = await Array.fromAsync(nats.store.readStream('chat-state-alice'));
+    expect(saved[0]?.event.data).toEqual(data);
+  } finally {
+    await nats.close();
+  }
+}
+it('saves preferences only on the named person’s stream with their human identity',
+  validatesPrivatePreferences);

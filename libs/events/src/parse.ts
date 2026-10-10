@@ -1,3 +1,4 @@
+import { validPreferenceIdentity } from './conversation.ts';
 import { memoryWrittenEventSchema } from './memory.ts';
 // Parses a raw event by binding its `type` field to the registry, so
 // `data` is checked against that type's own schema instead of the generic
@@ -41,9 +42,11 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     return { success: false, reason: 'unknown_event_type', type: typeField.data.type };
   }
 
-  const schema = definition.type === 'memory.written'
-    ? memoryWrittenEventSchema
-    : eventEnvelopeSchema(definition.dataSchema);
+  const envelopeSchema = eventEnvelopeSchema(definition.dataSchema);
+  const checkedSchema = definition.stream === 'chat-state'
+    ? envelopeSchema.refine(validPreferenceIdentity)
+    : envelopeSchema;
+  const schema = definition.type === 'memory.written' ? memoryWrittenEventSchema : checkedSchema;
   const result = schema.safeParse(input);
   if (!result.success) {
     return { success: false, reason: 'invalid_event', error: result.error };

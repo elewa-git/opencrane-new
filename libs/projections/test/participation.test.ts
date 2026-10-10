@@ -71,6 +71,57 @@ async function replaysParticipation() {
       .toEqual(oldReferences.rows);
     expect((await readConversation(storage.db, 'test', 'chat')).rows).toEqual(feed.rows);
     expect((await storage.db.query('SELECT * FROM conversations')).rows).toEqual(metadata.rows);
+    async function preference(type: string, joinEventId: string, fields: object) {
+      const data = { conversationId: 'chat', memberId: 'bob', joinEventId, ...fields };
+      const base = envelope('test', 'conversation-chat', 'conversation.closed',
+        { conversationId: 'chat', closedBy: 'bob' });
+      const event = { ...base, subject: 'chat-state-bob', type, data,
+        principal: { kind: 'human' as const, id: 'bob' } };
+      const expectedSequence = await nats.store.head(event.subject);
+      expect((await nats.store.append({ event, expectedSequence })).status).toBe('appended');
+    }
+    await preference('conversation.archive_set', creation, { archived: true });
+    await runner.run(conversations);
+    const fresh = await storage.db.query(
+      'SELECT * FROM conversation_list_state WHERE join_event_id = $1', [rejoined]);
+    expect(fresh.rows).toEqual([]);
+    await preference('conversation.archive_set', rejoined, { archived: true });
+    await preference('conversation.read_advanced', rejoined,
+      { throughPosition: 5, throughEventId: rejoined });
+    await preference('conversation.archive_set', rejoined, { archived: false });
+    await preference('conversation.read_advanced', creation,
+      { throughPosition: 2, throughEventId: legacy });
+    await preference('conversation.read_advanced', creation,
+      { throughPosition: 1, throughEventId: creation });
+    await runner.run(conversations);
+    async function choices() {
+      return (await storage.db.query(
+        'SELECT * FROM conversation_list_state ORDER BY join_event_id')).rows;
+    }
+    const savedChoices = await choices();
+    expect(savedChoices).toHaveLength(2);
+    const currentChoice = await storage.db.query(
+      'SELECT state FROM conversation_list_state WHERE join_event_id = $1', [rejoined]);
+    expect(currentChoice.rows[0]).toMatchObject({ state: { archived: false,
+      throughPosition: 5, throughEventId: rejoined, archivePosition: 9, readPosition: 8 } });
+    const oldChoice = await storage.db.query(
+      'SELECT state FROM conversation_list_state WHERE join_event_id = $1', [creation]);
+    expect(oldChoice.rows[0]).toMatchObject({ state: { archived: true,
+      throughPosition: 2, throughEventId: legacy } });
+    const head = await nats.store.head();
+    await rebuildConversationsProjection(storage.db, nats.reader, createLogger('preferences'));
+    expect(await choices()).toEqual(savedChoices);
+    expect((await readConversation(storage.db, 'test', 'chat')).rows).toEqual(feed.rows);
+    expect(await nats.store.head()).toBe(head);
+    expect(await runner.checkpoint(conversations)).toBe(head);
+    const base = envelope('test', 'conversation-chat', 'conversation.closed',
+      { conversationId: 'chat', closedBy: 'bob' });
+    const invalidRead = { ...base, subject: 'chat-state-bob', type: 'conversation.read_advanced',
+      data: { conversationId: 'chat', memberId: 'bob', joinEventId: rejoined,
+        throughPosition: 1, throughEventId: creation },
+      principal: { kind: 'human' as const, id: 'bob' } };
+    await expect(conversations.apply(storage.db, invalidRead, head + 1))
+      .rejects.toThrow('Invalid read reference');
     const oldWrite = envelope('test', 'conversation-chat', 'participant.removed', {
       conversationId: 'chat', participantId: 'bob', removedBy: 'alice',
     });

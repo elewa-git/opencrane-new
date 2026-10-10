@@ -34,7 +34,7 @@ export type AppendResult =
 
 /** Events use names like member-alice; NATS changes that to ev.member.alice. */
 export function wireSubject(subject: string): string {
-  const parts = /^([a-z]+)-([^.*>\s]+)$/.exec(subject);
+  const parts = /^(chat-state|[a-z]+)-([^.*>\s]+)$/.exec(subject);
   if (!parts) {
     throw new Error("Invalid entity subject");
   }
@@ -75,7 +75,7 @@ export function validateCommand(
   if (
     !event.commandId ||
     !event.principal ||
-    !/^([a-z]+)-([^.*>\s]+)$/.test(event.subject)
+    !/^(chat-state|[a-z]+)-([^.*>\s]+)$/.test(event.subject)
   ) {
     return undefined;
   }
