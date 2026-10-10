@@ -328,11 +328,30 @@ command and global position; read advances keep the checked target id and maximu
 The worker checks the join and target row in the same silo, including its exclusive end.
 Old join choices remain private and never apply to a new join. Preferences bypass the feed.
 The offline conversations rebuild replaces this table too. Tests check identical choices,
-unchanged feed rows and no event append during replay. Activity and first-close evidence
-remain for the next part of the accepted lifecycle design; no public commands ship here.
+unchanged feed rows and no event append during replay. No public commands ship here.
 
 ## Shared child records
 
 Shared-child creation starts each named person's interval. Origin and original
 parent joins stay in `conversation_feed.data`; interval event ids link back to those records.
 Explicit child joins and removals use the existing interval rules and offline rebuild.
+
+`conversations.latest_activity` stores the global position of creation, the latest
+visible `message.posted` or `agent.message_completed`, or the first close. Later closes
+keep the first close's position. Token deltas, tool reports, turn endings, participation
+and private choices do not advance it. Reports after close still enter `conversation_feed`,
+but cannot advance visible activity.
+`conversations.position` continues to track the latest shared feed event folded into metadata.
+
+The first `conversation.closed` sets `closed_event_id`, `closed_position`, `closed_by`
+and `closed_at` from its event id, global position, data and envelope time. These columns
+are null while open. Later closes never replace them. TypeScript applies both rules;
+SQL only stores the results. Live updates and offline rebuild use the same functions.
+Startup refuses older metadata tables without all four closing columns and names the existing
+offline replay command. Rebuild restores activity and closing details, and increases generation.
+
+`test/conversation-activity.test.ts` uses real NATS and disposable PostgreSQL databases.
+It checks late token/tool/terminal reports, completed messages, repeated closes, old-table
+upgrade refusal and equality of live and rebuilt metadata and feed rows. Run with `PG_TEST_URL`
+set: `nice -n 10 npx vitest run libs/projections/test/conversation-activity.test.ts`.
+Fresh-install lifecycle journeys remain NOT RUN.
