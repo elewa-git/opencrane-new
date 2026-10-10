@@ -1068,3 +1068,9 @@ PASS: all three changed test files, twice, 42 tests each; `PG_TEST_URL` set.
 PASS: full lint, root typecheck, Knip, event catalogue and changelog checks.
 Logs: `/tmp/p4-22-pr4d-final-pass-{1,2}.log` and `/tmp/p4-22-pr4d-*.log`.
 NOT RUN: full root suite, fresh-install journey, paid calls and independent review.
+
+Drain writes also check `expectedGlobalSequence`, captured before reading history.
+This keeps switch-on on the budget stream from racing the drain append. Other new
+events cause a conflict and require a new status read. Draining remains on provider
+streams, so already running legacy calls can still hold and settle money. Switch-on
+on the spending stream always ends draining.

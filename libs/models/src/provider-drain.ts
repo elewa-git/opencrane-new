@@ -7,6 +7,7 @@ import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event
 import { applyProvider, type ProviderState } from '@opencrane/projections';
 import { readActiveMember } from './member-authority.ts';
 import { history } from './actor.ts';
+import { managedProviderCallsEnabled } from './provider-turns.ts';
 import {
   ProviderConflict, ProviderRefused, providerAuthority, providerPermission, providerReceipt,
   reconcileProvider,
@@ -20,11 +21,13 @@ const commandSchema = z.object({
 
 async function readDrain(store: EventStore, silo: string, providerId: string) {
   providerIdSchema.parse(providerId);
-  const rows = await history(store, 'provider-*', silo, performance.now() + 10_000);
+  const deadline = performance.now() + 10_000;
+  const globalSequence = await store.head(undefined, deadline);
+  const enabled = await managedProviderCallsEnabled(store, silo, deadline);
+  const rows = await history(store, 'provider-*', silo, deadline);
   const connection: StoredEvent[] = [];
   let state: ProviderState | undefined;
   let draining = false;
-  let enabled = false;
   let sequence = 0;
   for (const row of rows) {
     const parsed = parseEventByType(row.event);
@@ -32,10 +35,6 @@ async function readDrain(store: EventStore, silo: string, providerId: string) {
       throw new Error('Invalid provider history');
     }
     const event = parsed.event;
-    if (event.type === 'provider.managed_calls_enabled') {
-      enabled = true;
-      draining = false;
-    }
     if (event.type === 'provider.managed_calls_drain_set') {
       const data = providerDrainSchema.parse(event.data);
       draining = data.draining;
@@ -46,7 +45,9 @@ async function readDrain(store: EventStore, silo: string, providerId: string) {
       connection.push(row);
     }
   }
-  return { connection, state, draining, enabled, sequence, position: rows.at(-1)?.sequence ?? 0 };
+  const currentDraining = draining && !enabled;
+  return { connection, state, draining: currentDraining, enabled, sequence,
+    position: rows.at(-1)?.sequence ?? 0, globalSequence };
 }
 
 export async function providerDrainStatus(store: EventStore, binding: Binding,
@@ -96,6 +97,8 @@ export async function providerDrainCommand(store: EventStore, binding: Binding,
   }
   const command = {
     event, expectedSequence: current.position, expectedSubject: 'provider-*',
+    // Refuse switch-on saved on the budget stream before this drain append.
+    expectedGlobalSequence: current.globalSequence,
     historyChecked: true as const, deadline: fresh.deadline,
   };
   await fresh();

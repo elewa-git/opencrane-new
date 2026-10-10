@@ -23,7 +23,7 @@ export interface AppendCommand {
   historyChecked?: true;
   /** Check the whole category, such as member-*, instead of one entity. */
   expectedSubject?: string;
-  /** Use the full saved history only while changing event ownership. */
+  /** Check the whole log position for ownership migration or provider draining. */
   expectedGlobalSequence?: number;
 }
 export type AppendResult =
@@ -160,7 +160,9 @@ function validMigrationFence(command: AppendCommand, event: EventEnvelope) {
   if (sequence === undefined) {
     return true;
   }
-  return event.type === 'ownership.seeded' && Number.isSafeInteger(sequence) && sequence >= 0;
+  const migration = event.type === 'ownership.seeded' ||
+    event.type === 'provider.managed_calls_drain_set';
+  return migration && Number.isSafeInteger(sequence) && sequence >= 0;
 }
 
 export function sameCommand(a: EventEnvelope, b: EventEnvelope): boolean {

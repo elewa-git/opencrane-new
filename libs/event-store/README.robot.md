@@ -230,3 +230,12 @@ configuration and a fresh silo installation remain unqualified.
 
 `chat-state-<memberId>` maps to `ev.chat-state.<memberId>`, including category reads.
 Preference parsing binds the human principal to that member id. Access checks remain the caller's job.
+
+## Conditional provider drain writes
+
+`expectedGlobalSequence` is allowed only for `ownership.seeded` and
+`provider.managed_calls_drain_set`. A drain command captures the global position
+before loading provider configuration and spending mode. Its one append checks
+both that position and the provider-category position. This refuses switch-on on
+the budget stream between the command's last check and its append. Any other new
+event also causes a conflict; the administrator can reload and try again.

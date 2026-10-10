@@ -22,7 +22,7 @@ with `libs/events`.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end"] -->|saves changes within the caller time limit| store["libs/event-store<br/>checked events and memory key references"]
-  models["libs/models<br/>AI rules and budgets"] -->|saves changes and updates saved facts| store
+  models["libs/models<br/>AI rules and budgets"] -->|saves changes and checks migration positions| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams and finds numbered events| nats["NATS JetStream<br/>event service"]
   store -.->|checks private chat choices| events["libs/events<br/>event definitions"]
@@ -33,6 +33,7 @@ flowchart LR
 - Save a valid event only if nothing else has changed the same thing since the
   caller last read it. Otherwise report a conflict, so the caller can reload and
   try again.
+  Check the whole log position for ownership migration and provider drain changes.
 - Require the current memory event version for new writes, while still reading old events.
   Check that its scope id matches its recorded owner, kind and silo before saving it.
   Refuse repeated dependencies and a key reference that belongs to another memory revision.

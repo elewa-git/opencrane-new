@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { parseEventByType } from '@opencrane/events';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -201,7 +202,7 @@ async function refusesSilentRollback() {
   expect((await request('POST', 'primary', start)).statusCode).toBe(200);
   const data = { providerId: 'primary', revision: 3, changedBy: 'owner',
     expectedProviderSequence: await nats.store.head('provider-*') };
-  await append('provider-primary', 'provider.managed_calls_enabled', data);
+  await append('budget-acme', 'provider.managed_calls_enabled', data);
   const command = await input();
   const before = await nats.store.head();
   expect((await request('POST', 'primary', command)).statusCode).toBe(403);
@@ -210,3 +211,32 @@ async function refusesSilentRollback() {
 }
 it('refuses drain commands after switch-on rather than returning to the deployment key',
   refusesSilentRollback);
+
+async function refusesSwitchOnBetweenCheckAndAppend() {
+  await close();
+  await initialise();
+  const command = await input();
+  const before = await nats.store.head();
+  const appendOriginal = nats.store.append.bind(nats.store);
+  let switched = false;
+  async function switchBeforeAppend(change: Parameters<typeof appendOriginal>[0]) {
+    const parsed = parseEventByType(change.event);
+    if (parsed.success && parsed.event.type === 'provider.managed_calls_drain_set' && !switched) {
+      switched = true;
+      const data = { providerId: 'primary', revision: 3, changedBy: 'owner',
+        expectedProviderSequence: await nats.store.head('provider-*') };
+      await append('budget-acme', 'provider.managed_calls_enabled', data);
+    }
+    return appendOriginal(change);
+  }
+  const fault = vi.spyOn(nats.store, 'append').mockImplementation(switchBeforeAppend);
+  try {
+    expect((await request('POST', 'primary', command)).statusCode).toBe(409);
+    expect(await nats.store.head()).toBe(before + 1);
+    expect((await request('GET')).json()).toMatchObject({ enabled: true, draining: false });
+  } finally {
+    fault.mockRestore();
+  }
+}
+it('refuses a drain append when switch-on arrives after its final check',
+  refusesSwitchOnBetweenCheckAndAppend, 60_000);
