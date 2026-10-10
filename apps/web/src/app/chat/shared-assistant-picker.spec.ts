@@ -20,7 +20,10 @@ function closeDialog(this: HTMLDialogElement): void {
   this.dispatchEvent(new Event('close'));
 }
 
-Object.assign(HTMLDialogElement.prototype, { showModal, close: closeDialog });
+Object.defineProperties(HTMLDialogElement.prototype, {
+  showModal: { configurable: true, writable: true, value: showModal },
+  close: { configurable: true, writable: true, value: closeDialog },
+});
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

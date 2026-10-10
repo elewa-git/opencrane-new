@@ -591,8 +591,8 @@ it('uploads with progress, retries the same bytes and key, and replays attached 
   expect(root.querySelector('.transcript .file-card')?.textContent).toContain('project.pdf');
   const drawer = root.querySelector('oc-hinge-drawer dialog');
   if (!drawer) throw new Error('Missing panel drawer');
-  const dialogMethods = { showModal: openPanelDialog, close: closePanelDialog };
-  Object.assign(drawer, dialogMethods);
+  Object.defineProperty(drawer, 'showModal', { configurable: true, value: openPanelDialog });
+  Object.defineProperty(drawer, 'close', { configurable: true, value: closePanelDialog });
   root.querySelector<HTMLButtonElement>('#panel-toggle')!.click();
   await fixture.whenStable();
   expect(root.querySelector('.panel-section')?.textContent).toContain('Attached by you');

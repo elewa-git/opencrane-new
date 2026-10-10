@@ -4,6 +4,13 @@ import { LIVE_VIEWER, LiveView } from './live-view';
 import type { RawChannel } from '@novnc/novnc/lib/rfb.js';
 
 afterEach(function restoreGlobals() { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+function installDialogMethods(value: Element | null): void {
+  if (!(value instanceof HTMLDialogElement)) throw new Error('Missing live-view dialog');
+  Object.defineProperty(value, 'showModal', { configurable: true, value: vi.fn() });
+  Object.defineProperty(value, 'close', { configurable: true, value: vi.fn() });
+}
+
 it('keeps the initial disconnected status paused with only its state label', () => {
   const fixture = TestBed.createComponent(LiveView);
   fixture.componentRef.setInput('conversationId', 'chat');
@@ -24,7 +31,7 @@ it('clears the desktop and explains a refused view without offering control', as
   const element: unknown = fixture.nativeElement;
   if (!(element instanceof HTMLElement)) throw new Error('Missing viewer');
   // jsdom has no dialog methods; Chromium checks focus and Escape handling.
-  Object.assign(element.querySelector('dialog')!, { showModal: vi.fn(), close: vi.fn() });
+  installDialogMethods(element.querySelector('dialog'));
   element.querySelector<HTMLButtonElement>('button')!.click();
   await fixture.whenStable();
   expect(element.textContent).toContain('Unavailable');
@@ -46,7 +53,7 @@ it('cancels an old conversation view when the session panel switches conversatio
   const element: unknown = fixture.nativeElement;
   if (!(element instanceof HTMLElement)) throw new Error('Missing viewer');
   // jsdom has no dialog methods; Chromium checks focus and Escape handling.
-  Object.assign(element.querySelector('dialog')!, { showModal: vi.fn(), close: vi.fn() });
+  installDialogMethods(element.querySelector('dialog'));
   element.querySelector<HTMLButtonElement>('button')!.click();
   await fixture.whenStable();
   expect(element.textContent).toContain('Connecting');
@@ -114,7 +121,7 @@ async function watchFakeView(status: number) {
   await fixture.whenStable();
   const element: unknown = fixture.nativeElement;
   if (!(element instanceof HTMLElement)) throw new Error('Missing viewer');
-  Object.assign(element.querySelector('dialog')!, { showModal: vi.fn(), close: vi.fn() });
+  installDialogMethods(element.querySelector('dialog'));
   element.querySelector<HTMLButtonElement>('button')!.click();
   await fixture.whenStable();
   return { fixture, element, request };

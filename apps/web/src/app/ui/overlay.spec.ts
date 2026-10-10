@@ -13,12 +13,16 @@ function closeDialog(this: HTMLDialogElement): void {
   this.dispatchEvent(new Event('close'));
 }
 
+function installDialogMethods(dialog: HTMLDialogElement): void {
+  Object.defineProperty(dialog, 'showModal', { configurable: true, value: showModal });
+  Object.defineProperty(dialog, 'close', { configurable: true, value: closeDialog });
+}
+
 function mockDialog(root: HTMLElement): HTMLDialogElement {
   const dialog = root.querySelector('dialog');
   if (!dialog) throw new Error('Missing dialog');
   // jsdom has no modal dialogs. Chromium checks focus, blocked background input and Tab.
-  const methods = { showModal, close: closeDialog };
-  Object.assign(dialog, methods);
+  installDialogMethods(dialog);
   return dialog;
 }
 
@@ -100,8 +104,7 @@ async function checkNestedDismissal(): Promise<void> {
   const fixture = TestBed.createComponent(NestedViewerHost);
   await fixture.whenStable();
   const root = rootElement(fixture.nativeElement);
-  const methods = { showModal, close: closeDialog };
-  for (const dialog of root.querySelectorAll('dialog')) Object.assign(dialog, methods);
+  for (const dialog of root.querySelectorAll('dialog')) installDialogMethods(dialog);
   fixture.componentInstance.open = true;
   fixture.changeDetectorRef.markForCheck();
   await fixture.whenStable();

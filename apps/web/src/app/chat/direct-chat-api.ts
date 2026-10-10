@@ -79,7 +79,9 @@ function lastHistoryPosition(rows: ChatRow[], since: number): number {
 }
 
 export async function createDirectChat(
-  body: { id: string; conversationId: string; mode: 'direct'; colleagueId: string },
+  body: { id: string; conversationId: string; mode: 'direct'; colleagueId: string }
+    | { id: string; conversationId: string; mode: 'group'; participantIds: string[];
+      groupId?: string; groupSnapshotPosition?: number },
   signal: AbortSignal,
 ) {
   return write('/api/conversations', body, signal, appendReceiptSchema);

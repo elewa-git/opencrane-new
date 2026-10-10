@@ -22,7 +22,7 @@
               [class.selected]="selectedConversationId() === conversation.conversationId"
               [attr.aria-current]="selectedConversationId() === conversation.conversationId ? 'page' : null"
               (click)="selectConversation(conversation.conversationId)">
-              {{ titleForConversation(conversation) }}
+              {{ conversationTitle(conversation, currentMemberId, knownColleagues()) }}
             </button>
           }
         }
@@ -39,10 +39,14 @@
       <a class="back-link" href="/workspace" aria-label="Back to workspace">‹</a>
       <h1 tabindex="-1" #accessHeading>
         @if (pageState() === 'access_changed') { Unavailable }
-        @else if (selectedConversationId()) { {{ recipientName() }} }
+        @else if (selectedConversationId()) { {{ recipientDisplayName(colleague()) }} }
         @else { New conversation }
       </h1>
-      @if (colleague()) { <span class="header-status">Direct · 2 people</span> }
+      @if (groupSnapshot(); as snapshot) {
+        <span class="header-status">Group · {{ snapshot.members.length }} people</span>
+      } @else if (selectedPeople().length > 1) {
+        <span class="header-status">Group · {{ selectedPeople().length + 1 }} people</span>
+      } @else if (colleague()) { <span class="header-status">Direct · 2 people</span> }
       @if (pageState() === 'ready') {
         <button class="refresh-button" type="button" [attr.aria-disabled]="composerBusy() || refreshing()"
           (click)="refresh()">Refresh</button>
@@ -73,9 +77,13 @@
           <oc-recipient-picker [colleagues]="colleagues()" [query]="colleagueQuery()"
             [searchState]="colleagueState()"
             [selected]="colleague()" [draft]="!selectedConversationId()"
-            [disabled]="composerBusy()" (queryEdited)="colleagueQueryChanged($event)"
+            [disabled]="composerBusy()"
+            [requireAudienceReview]="selectedPeople().length > 3 && !audienceReviewed()"
+            (audienceReviewOpened)="audienceReviewed.set(true)"
+            (queryEdited)="colleagueQueryChanged($event)"
             (recipientSelected)="selectColleague($event)"
-            (recipientChanged)="clearColleague()" />
+            (recipientChanged)="clearColleague()"
+            (selectionChanged)="selectionChanged($event)" />
           @if (colleague()) {
           @if (historyState() === 'loading') {
             <p class="empty-transcript">Loading messages…</p>
@@ -86,16 +94,17 @@
           }
           @for (row of messages(); track row.id) {
             @if (row.type === 'message.posted' && directDisplayText(row).length > 0) {
-              <article class="message" [class.own]="isOwnMessage(row)">
-                @if (!isOwnMessage(row)) {
-                  <span class="avatar" aria-hidden="true">{{ directAvatar(recipientName()) }}</span>
+              <article class="message" [class.own]="ownMessage(row, currentMemberId)">
+                @if (!ownMessage(row, currentMemberId)) {
+                  <span class="avatar" aria-hidden="true">{{ directAvatar(recipientDisplayName(colleague())) }}</span>
                 }
                 <div class="message-content">
-                  @if (!isOwnMessage(row)) {
-                    <header><strong>{{ authorName(row) }}</strong><time>{{ directTime(row.time) }}</time></header>
+                  @if (!ownMessage(row, currentMemberId)) {
+                    <header><strong>{{ messageAuthor(row, currentMemberId,
+                      recipientDisplayName(colleague())) }}</strong><time>{{ directTime(row.time) }}</time></header>
                   }
                   <p>{{ directDisplayText(row) }}</p>
-                  @if (isOwnMessage(row)) {
+                  @if (ownMessage(row, currentMemberId)) {
                     <span class="message-receipt">{{ directTime(row.time) }}</span>
                   }
                 </div>
@@ -107,7 +116,8 @@
       </div>
     </section>
 
-    @if (pageState() === 'ready' && colleague()) {
+    @if (pageState() === 'ready' && (colleague() || selectedPeople().length > 1
+      || groupSnapshot() || pending())) {
       <footer class="composer-dock">
         <div class="send-feedback">
           @if (sendState() === 'applying') {
@@ -136,7 +146,7 @@
         </div>
         <div #composer class="composer-wrap">
           <oc-chat-composer [directMode]="true" [draft]="draft()"
-            [placeholder]="'Message'" [busy]="composerBusy()"
+            [placeholder]="'Message'" [busy]="composerBusy() || recipientLimitExceeded()"
             (draftChange)="changeDraft($event)" (submitted)="submitMessage($event)" />
         </div>
       </footer>
@@ -155,7 +165,7 @@
               [attr.title]="composerBusy() ? 'Wait until this message is confirmed.' : null"
         [class.selected]="selectedConversationId() === conversation.conversationId"
         (click)="selectConversation(conversation.conversationId)">
-        {{ titleForConversation(conversation) }}
+        {{ conversationTitle(conversation, currentMemberId, knownColleagues()) }}
       </button>
     }
   }

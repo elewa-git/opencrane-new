@@ -11,8 +11,8 @@ function rootOf<T>(fixture: ComponentFixture<T>): HTMLElement {
 function installDialogMethods<T>(fixture: ComponentFixture<T>): void {
   const dialog = rootOf(fixture).querySelector('dialog');
   if (!dialog) throw new Error('Missing dialog');
-  dialog.showModal = vi.fn();
-  dialog.close = vi.fn();
+  Object.defineProperty(dialog, 'showModal', { configurable: true, value: vi.fn() });
+  Object.defineProperty(dialog, 'close', { configurable: true, value: vi.fn() });
 }
 
 function rejectedCapture(status: number): Response {

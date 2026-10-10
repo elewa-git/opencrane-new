@@ -9,7 +9,7 @@ import { SharedState } from '../shared-state/shared-state';
 import { PaperSurface } from '../ui/paper';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { DirectChatSending } from './direct-chat-sending';
-import { RecipientPicker, type Colleague } from './recipient-picker';
+import { RecipientPicker, type Colleague, type ReviewedSnapshot } from './recipient-picker';
 import { WebSocketService } from '../core/websocket.service';
 import { ChatComposer } from './composer';
 import {
@@ -19,6 +19,7 @@ import {
   appendDirectMessage, directColleagueById, directConversationById, directConversationTitle,
   directConversations, directInitials,
   directMessageText, formatDirectTime, otherParticipant, scrollDirectTranscript,
+  directAuthorName, directIsOwnMessage, directRecipientName,
 } from './direct-chat-display';
 import {
   fetchChatContext, fetchDirectConversations, fetchDirectHistory, searchColleagues,
@@ -41,6 +42,10 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly directDisplayText = directMessageText;
   protected readonly directTime = formatDirectTime;
   protected readonly directAvatar = directInitials;
+  protected readonly conversationTitle = directConversationTitle;
+  protected readonly ownMessage = directIsOwnMessage;
+  protected readonly messageAuthor = directAuthorName;
+  protected readonly recipientDisplayName = directRecipientName;
   protected readonly pageState = signal<PageState>('loading');
   protected readonly refreshing = signal(false);
   protected readonly colleagueState = signal<ReadState>('loading');
@@ -51,6 +56,9 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly colleagueQuery = signal('');
   protected readonly colleagues = signal<Colleague[]>([]);
   protected readonly colleague = signal<Colleague | undefined>(undefined);
+  protected readonly selectedPeople = signal<Colleague[]>([]);
+  protected readonly audienceReviewed = signal(false);
+  protected readonly groupSnapshot = signal<ReviewedSnapshot | undefined>(undefined);
   protected readonly conversations = signal<ChatConversation[]>([]);
   protected readonly selectedConversationId = signal('');
   protected readonly messages = signal<ChatRow[]>([]);
@@ -64,13 +72,17 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly composerBusy = this.sending.busy;
   protected readonly pending = this.sending.pending;
   protected readonly failure = this.sending.failure;
+  protected readonly checkStatus = this.sending.checkStatus.bind(this.sending);
+  protected readonly retryPending = this.sending.retryPending.bind(this.sending);
+  protected readonly unknownMessage = this.sending.unknownMessage.bind(this.sending);
+  protected readonly applyingMessage = this.sending.applyingMessage.bind(this.sending);
   protected readonly recordedMessage = this.sending.recordedMessage;
   private readonly socket = inject(WebSocketService);
   private readonly subscription = this.socket.received.subscribe(this.receive.bind(this));
   private searchRequest: AbortController | undefined;
   private historyRequest: AbortController | undefined;
   private listRequest: AbortController | undefined;
-  private currentMemberId = '';
+  protected currentMemberId = '';
   private position = 0;
   private generation = 0;
   private socketConversationId = '';
@@ -174,6 +186,8 @@ export class DirectChat implements OnInit, OnDestroy {
     this.rememberDraft();
     this.clearConversationView();
     this.colleague.set(value);
+    this.selectedPeople.set([value]);
+    this.groupSnapshot.set(undefined);
     this.selectedConversationId.set('');
     updateDirectConversationAddress('');
     this.statusText.set('');
@@ -187,6 +201,8 @@ export class DirectChat implements OnInit, OnDestroy {
     this.rememberDraft();
     this.clearConversationView();
     this.colleague.set(undefined);
+    this.selectedPeople.set([]);
+    this.groupSnapshot.set(undefined);
     this.draft.set('');
     this.failure.set('');
     this.selectedConversationId.set('');
@@ -222,50 +238,27 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   protected async submitMessage(text: string): Promise<void> {
-    if (this.composerBusy() || this.pageState() !== 'ready') return;
-    const recipient = this.colleague();
-    if (!recipient || !text.trim()) return;
     const conversationId = this.selectedConversationId() || newDirectCommandId('direct');
-    if (this.selectedConversationId()) {
-      await this.sending.postMessage(conversationId, text, recipient.memberId);
-      return;
-    }
-    await this.sending.createConversation(conversationId, recipient.memberId, text);
+    const recipientSend = {
+      busy: this.composerBusy(), ready: this.pageState() === 'ready',
+      recipient: this.colleague(), people: this.selectedPeople(),
+      audienceReviewed: this.audienceReviewed(),
+      snapshot: this.groupSnapshot(), memberId: this.currentMemberId,
+      conversationId, isExisting: Boolean(this.selectedConversationId()), text,
+    };
+    await this.sending.sendToRecipients(recipientSend);
   }
 
-  protected async checkStatus(): Promise<void> {
-    await this.sending.checkStatus();
+  protected selectionChanged(selection: { people: Colleague[]; snapshot?: ReviewedSnapshot }): void {
+    this.selectedPeople.set(selection.people);
+    this.groupSnapshot.set(selection.snapshot);
+    this.colleague.set(undefined);
+    this.audienceReviewed.set(false);
   }
 
-  protected async retryPending(): Promise<void> {
-    await this.sending.retryPending();
-  }
-
-  protected unknownMessage(): string {
-    return this.sending.unknownMessage();
-  }
-
-  protected applyingMessage(): string {
-    return this.sending.applyingMessage();
-  }
-
-  protected isOwnMessage(row: ChatRow): boolean {
-    return row.type === 'message.posted' && row.data['authorId'] === this.currentMemberId;
-  }
-
-  protected authorName(row: ChatRow): string {
-    if (this.isOwnMessage(row)) return 'You';
-    return this.recipientName();
-  }
-
-  protected recipientName(): string {
-    const recipient = this.colleague();
-    if (!recipient) return '';
-    return recipient.displayName?.trim() || recipient.memberId;
-  }
-
-  protected titleForConversation(conversation: ChatConversation): string {
-    return directConversationTitle(conversation, this.currentMemberId, this.knownColleagues());
+  protected recipientLimitExceeded(): boolean {
+    if (this.groupSnapshot()) return this.selectedPeople().length > 97;
+    return this.selectedPeople().length > 96;
   }
 
   protected transcriptScrolled(): void {
@@ -518,8 +511,8 @@ export class DirectChat implements OnInit, OnDestroy {
     this.position = row.data.position;
     this.scrollToNewest = this.followNewest;
     this.clearVisibleReceipt();
-    if (row.data.type === 'message.posted' && !this.isOwnMessage(row.data)) {
-      this.statusText.set(`New message from ${this.recipientName()}`);
+    if (row.data.type === 'message.posted' && !directIsOwnMessage(row.data, this.currentMemberId)) {
+      this.statusText.set(`New message from ${directRecipientName(this.colleague())}`);
     }
   }
 
