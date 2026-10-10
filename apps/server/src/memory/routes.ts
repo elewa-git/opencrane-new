@@ -8,9 +8,12 @@ import { scopeAccess, scopeFor, resolveScope, memoryAccessChecks, MemoryRefused,
 import { detailFact, listFacts, memorySnapshot, readInput, readParams,
   scopeInput, limits, MemoryConflict } from './reads.ts';
 
+import { previewParams, turnMemoryPreview } from './turn-preview.ts';
+
 export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
   options?: MemoryOptions) {
   app.get('/api/memory/scopes', handle);
+  app.get('/api/memory/turns/:conversationId/:turnId', handle);
   app.get('/api/memory/:scopeId/facts', handle);
   app.get('/api/memory/:scopeId/facts/:memoryId', handle);
 
@@ -36,17 +39,7 @@ export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
       if (request.routeOptions.url === '/api/memory/scopes') {
         return await discoverScopes(request, options, requester, checks);
       }
-      const params = readParams.strip().parse(request.params);
-      const scope = await resolveScope(options, requester, params.scopeId);
-      const access = await scopeAccess(options, requester, scope, false, checks);
-      if (!access.canRead) {
-        throw new MemoryRefused();
-      }
-      if (request.routeOptions.url?.endsWith('/:memoryId')) {
-        return await readDetail(request, options, requester, scope);
-      }
-      const query = readInput.parse(request.query);
-      return await listFacts(options, requester, scope, query, config.cookieSecret);
+      return await readContent(request, options, requester, checks, config.cookieSecret);
     } catch (error) {
       let status = 503;
       if (error instanceof z.ZodError) {
@@ -104,4 +97,23 @@ async function readDetail(request: FastifyRequest, options: MemoryOptions, reque
     throw new MemoryRefused();
   }
   return detailFact(options, requester, scope, detail.data.memoryId);
+}
+
+async function readContent(request: FastifyRequest, options: MemoryOptions, requester: string,
+  checks: ReturnType<typeof memoryAccessChecks>, secret: string) {
+  if (request.routeOptions.url === '/api/memory/turns/:conversationId/:turnId') {
+    const params = previewParams.parse(request.params);
+    return await turnMemoryPreview(options, requester, params);
+  }
+  const params = readParams.strip().parse(request.params);
+  const scope = await resolveScope(options, requester, params.scopeId);
+  const access = await scopeAccess(options, requester, scope, false, checks);
+  if (!access.canRead) {
+    throw new MemoryRefused();
+  }
+  if (request.routeOptions.url?.endsWith('/:memoryId')) {
+    return await readDetail(request, options, requester, scope);
+  }
+  const query = readInput.parse(request.query);
+  return await listFacts(options, requester, scope, query, secret);
 }

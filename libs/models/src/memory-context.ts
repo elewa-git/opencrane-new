@@ -54,41 +54,45 @@ export async function memoryRights(store: EventStore, binding: Binding,
     'conversation' | 'turn' | 'thread'>, parsed: ReturnType<typeof parseMemoryRequest>,
   deadline: number) {
   const activity = await liveMemoryTurn(store, binding, claims, parsed, deadline);
-  const fresh = await authorityFence(store, performance.now(), [], deadline);
-  fresh.include('mcp-memory');
-  if (!await memoryPolicy(store, binding.silo, parsed, deadline)) {
-    throw new Error('Memory tool policy refused');
-  }
-  let canRemember = false;
-  if (!parsed.input) {
-    canRemember = await memoryPolicy(store, binding.silo, parsed, deadline, 'remember');
-  }
-  const selected = await selectedMemoryScope(store, binding, claims, parsed, fresh);
-  const scope = selected.scope;
-  await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
-  let contextDigest = await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'mcp_server', 'memory', fresh, activity.conversation);
-  // Keep discovery free of fact access. Each recall checks its selected scope separately.
-  if (parsed.input) {
-    let resourceType = 'memory_read';
-    if (parsed.input.operation === 'remember') {
-      // Limit agent writes to the requester, even when shared sources and grants are valid.
-      if (scope.scopeKind !== 'person' || scope.ownerId !== claims.requester) {
-        throw new MemoryPersonScopeOnly();
-      }
-      resourceType = 'memory_write';
+  const rights = await check(deadline);
+  return { ...rights, confirm: check };
+
+  async function check(checkDeadline = deadline) {
+    const fresh = await authorityFence(store, performance.now(), [], checkDeadline);
+    fresh.include('mcp-memory');
+    if (!await memoryPolicy(store, binding.silo, parsed, checkDeadline)) {
+      throw new Error('Memory tool policy refused');
     }
-    await requireRecordedGrants(store, binding.silo, claims, resourceType, scope.scopeId,
-      fresh, selected.requesterGroup);
-    contextDigest = await currentAuthority(store, binding, claims.requester, claims.assistant,
-      claims.conversation, resourceType, scope.scopeId, fresh, activity.conversation);
-  }
-  async function confirm() {
-    await activity.confirm(deadline, false);
+    let canRemember = false;
+    if (!parsed.input) {
+      canRemember = await memoryPolicy(store, binding.silo, parsed, checkDeadline, 'remember');
+    }
+    const selected = await selectedMemoryScope(store, binding, claims, parsed, fresh);
+    const scope = selected.scope;
+    await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
+    let contextDigest = await currentAuthority(store, binding, claims.requester,
+      claims.assistant, claims.conversation, 'mcp_server', 'memory', fresh,
+      activity.conversation);
+    // Keep discovery free of fact access. Each recall checks its selected scope separately.
+    if (parsed.input) {
+      let resourceType = 'memory_read';
+      if (parsed.input.operation === 'remember') {
+        // Limit agent writes to the requester, even when shared sources and grants are valid.
+        if (scope.scopeKind !== 'person' || scope.ownerId !== claims.requester) {
+          throw new MemoryPersonScopeOnly();
+        }
+        resourceType = 'memory_write';
+      }
+      await requireRecordedGrants(store, binding.silo, claims, resourceType, scope.scopeId,
+        fresh, selected.requesterGroup);
+      contextDigest = await currentAuthority(store, binding, claims.requester,
+        claims.assistant, claims.conversation, resourceType, scope.scopeId, fresh,
+        activity.conversation);
+    }
+    await activity.confirm(checkDeadline, false);
     await fresh();
+    return { scope, contextDigest, contextPosition: fresh.head, canRemember };
   }
-  await confirm();
-  return { scope, contextDigest, contextPosition: fresh.head, confirm, canRemember };
 }
 
 async function selectedMemoryScope(store: EventStore, binding: Binding, claims: ThreadIdentity,

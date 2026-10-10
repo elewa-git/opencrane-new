@@ -17,6 +17,8 @@ async function create(db: Query): Promise<void> {
     PRIMARY KEY (silo, scope_id, memory_id))`);
   await db.query(`CREATE INDEX IF NOT EXISTS memory_facts_order
     ON memory_facts (silo, scope_id, position, memory_id)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS memory_facts_initial
+    ON memory_facts (silo, scope_id, kind, memory_id COLLATE "C")`);
   await db.query(`CREATE INDEX IF NOT EXISTS memory_facts_search
     ON memory_facts USING GIN (search_vector)`);
   await db.query(`CREATE TABLE IF NOT EXISTS memory_dependencies (

@@ -23,6 +23,8 @@ flowchart LR
 ## What it is responsible for
 
 - Build recorded child participation and keep its history start separate from each join.
+- Recheck saved grants and permissions for a private turn memory preview without reading chat history again.
+- Check that each preview fact and its supporting facts are still usable.
 
 - Records verified tool dispatch outcomes and link attempts of the same call.
   Allows one unchanged retry after a recorded failure before dispatch.
