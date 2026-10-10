@@ -57,6 +57,48 @@ function changesMemberRole(event: EventEnvelope): boolean {
   return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed'].includes(event.type);
 }
 
+async function savedSequence(store: Pick<EventStore, 'readStream'>,
+  event: EventEnvelope): Promise<number | undefined> {
+  for await (const row of store.readStream(event.subject)) {
+    if (row.event.silo !== event.silo) {
+      throw new Error('Authorisation history silo mismatch');
+    }
+    if (row.event.id === event.id) {
+      return row.sequence;
+    }
+  }
+  return undefined;
+}
+
+/** Wait for earlier role changes on the other stream before changing permissions. */
+export async function requireEarlierRoleChanges(store: Pick<EventStore, 'readStream'>,
+  event: EventEnvelope, applied: (eventId: string) => Promise<boolean>): Promise<void> {
+  const sequence = await savedSequence(store, event);
+  if (sequence === undefined) {
+    throw new Error('The role or ownership job was not found in the event log');
+  }
+  const memberId = value(event, 'memberId');
+  let subject = `ownership-${event.silo}`;
+  if (event.type === 'ownership.transferred') {
+    subject = `member-${String(memberId)}`;
+  }
+  for await (const row of store.readStream(subject)) {
+    if (row.event.silo !== event.silo) {
+      throw new Error('Authorisation history silo mismatch');
+    }
+    if (row.sequence >= sequence) {
+      break;
+    }
+    const memberChange = changesMemberRole(row.event) || row.event.type === 'member.removed';
+    const ownershipChange = row.event.type === 'ownership.seeded'
+      || (row.event.type.startsWith('ownership.') && value(row.event, 'memberId') === memberId);
+    if ((memberChange || ownershipChange) && !await applied(row.event.id)) {
+      // Keep the job unacknowledged so its retry follows the earlier permission change.
+      throw new Error('An earlier role or ownership change has not been applied');
+    }
+  }
+}
+
 async function laterOwnershipApplied(store: Pick<EventStore, 'readStream'>,
   event: EventEnvelope, sequence: number,
   applied: (eventId: string) => Promise<boolean>): Promise<boolean> {

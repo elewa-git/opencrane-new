@@ -132,9 +132,13 @@ seed through the durable `seed-ownership` reaction. No owner edit is enabled unt
 seeding succeeds. Acceptance of an Owner-role invitation and rejoining an active
 member are refused. Recording an invitation grants no authority; the members
 projection preserves an active member's identity and role when they are invited
-again. Other member-stream events cannot change seeded owners or introduce an
-owner; member and IAM projections reject these legacy bypasses. Non-owner member commands remain
-P4-3 work. Ownership adds no conversation, memory, group or resource grant.
+again. A Member/Admin role change saved while the target is an Owner records a receipt
+without changing the owner role in either projection. OpenFGA role jobs wait for receipts
+for earlier relevant ownership events. Appointment jobs wait for receipts for earlier
+membership and role events for their target. Owner-role values and removal of
+an Owner remain rejected. Non-owner role commands use the
+[member role interface](../api/members.md#change-a-member-or-admin-role).
+Step-down requires another owner whose member events show active membership. Ownership adds no conversation, memory, group or resource grant.
 The [ownership interface](../api/ownership.md) exposes the original event receipt,
 recorded actor/target/time and both projection statuses, without a second ledger.
 

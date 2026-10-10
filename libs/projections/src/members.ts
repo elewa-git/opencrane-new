@@ -78,7 +78,10 @@ async function applyMember(
       return;
     }
   } else {
-    await refuseOwnerEdit(tables, db, event, id);
+    const noEffect = await refuseOwnerEdit(tables, db, event, id);
+    if (noEffect) {
+      return;
+    }
   }
   await applyIdentity(tables, db, event, data, id);
   if (event.type === "member.removed") {
@@ -264,7 +267,13 @@ async function refuseOwnerEdit(tables: MemberTables, db: Query,
     `SELECT owners FROM ${tables.ownership} WHERE silo = $1`, [event.silo]);
   const owners = ownership.rows[0]?.owners;
   const nextRole = legacyMemberRole(event);
+  if (owners?.includes(id) && event.type === 'member.role_changed'
+    && (nextRole === 'member' || nextRole === 'admin')) {
+    // Record the event without changing the owner's role or blocking later events.
+    return true;
+  }
   if (owners && (owners.includes(id) || nextRole === 'owner')) {
     throw new Error('Owner changes require the ownership stream');
   }
+  return false;
 }

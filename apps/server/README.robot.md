@@ -1263,7 +1263,7 @@ check. They carry the checked approval sequence and conversation position forwar
 then check only later conversation changes and the current tool policy before append.
 The approval append also uses the remaining write deadline. File commands load their history before checking participation.
 The offline upgrade must finish with old workers stopped before readers restart.
-No participant mutation endpoint is available. Real-service regression tests cover
+Participant controls use separate commands. Real-service regression tests cover
 removal, blocked delivery, re-joins, other access readers and 100,000 messages.
 Conversation lists reuse checked member facts within the request and pass the checked
 creation event to private-session checks. Each permission reply is followed by member and
@@ -1360,13 +1360,21 @@ participant controls and group sends use separate routes.
 `test/chat-access-regression.test.ts` covers the commands with real NATS, PostgreSQL
 and OpenFGA, alongside socket, history, file, desktop and approval refusals.
 The test for the last participant slot holds two additions after their final access
-checks, immediately before the real append. It checks one saved event, one HTTP 409, exactly 97 current
-participants and no event from a later stale edit.
-The removed-author test checks the error returned by the real HTTP access check.
-It requires `ParticipationRefused` while OpenFGA still permits posting. Removing
-that participation check makes the test fail, even though group sends are still
-refused for active participants. A successful group send followed by removal is
-NOT RUN until the group send routes are integrated.
+checks, immediately before the real append. It checks one saved event, one HTTP 409,
+exactly 97 current participants and no event from a later stale edit.
+The removed-author test keeps OpenFGA permission unchanged after removal. It checks
+that the request returns 403 and saves no message. A successful group send followed
+by removal is NOT RUN until the group send routes are integrated.
 
 The [participant command receipt](../../docs/process/p4-5-pr4-evidence.md) records checks
 and the remaining live qualification.
+
+## Changing member roles
+
+Owners and admins can change member and admin roles. Each change checks current
+access and records an appointment receipt. An owner stays an owner when another
+person's role changes. An owner can step down only while another active owner remains.
+See the [role contract](../../docs/api/members.md#change-a-member-or-admin-role).
+Role status requires the competing appointment's IAM receipt in either saved order.
+The content checkpoint must also cover both changes. A role receipt alone cannot report
+IAM as current while that appointment is still waiting to be applied.

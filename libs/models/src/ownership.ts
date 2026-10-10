@@ -141,11 +141,12 @@ function roleWithOwnership(state: StoredEvent | undefined, changes: StoredEvent[
 /** Ownership supplies owner transitions; member streams retain identity and other roles. */
 export async function currentMembership(store: Pick<EventStore, 'readStream'>,
   silo: string, memberId: string,
-  fresh?: { include: (...subjects: string[]) => void; deadline: number }) {
+  fresh?: { include: (...subjects: string[]) => void; deadline: number },
+  deadline = fresh?.deadline) {
   const subject = ownershipSubject(silo);
   fresh?.include(`member-${memberId}`, subject);
-  const membership = await history(store, `member-${memberId}`, silo, fresh?.deadline);
-  const ownership = await history(store, subject, silo, fresh?.deadline);
+  const membership = await history(store, `member-${memberId}`, silo, deadline);
+  const ownership = await history(store, subject, silo, deadline);
   const owners = ownershipState(ownership);
   const memberFacts = membership.filter(isMemberState);
   function concernsMember(row: StoredEvent) {

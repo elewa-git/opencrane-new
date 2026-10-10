@@ -24,7 +24,7 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills tables, including configured memory| projections["libs/projections<br/>read tables, message lookups and content keys"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
-  projections -->|writes tables and account bindings| pg
+  projections -->|writes tables, roles and account bindings| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
@@ -65,6 +65,9 @@ restore their periods of participation. Conversation tables are rebuilt with rea
 and workers stopped. The worker names the replay command when an upgrade needs it.
 
 ## Processes it handles
+
+A Member or Admin role change that reaches an Owner keeps the owner role. The worker
+records its position and continues with later events.
 
 1. **A member joins.** The worker reads the saved event and updates the member
    table. It saves its position with the table change, then sends a notice after

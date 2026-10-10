@@ -10,9 +10,9 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat, participation and permission checks"]
-  server -.->|checks access and passes for personal, assistant and group facts| libs["libs/*<br/>shared code"]
-  server -->|records changes, memory facts, model grants, participants, chats, computers and provider choices| nats["NATS<br/>event log"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat, role and participation checks"]
+  server -.->|checks access and passes for organisation, memory and chat| libs["libs/*<br/>shared code"]
+  server -->|records changes, memory facts, model grants, roles, participants, chats, computers and provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chat rows, closes, joins, facts, models and computers| postgres
@@ -48,6 +48,8 @@ flowchart LR
 - Accepts bound and email invitations after a recent sign-in with a verified email, while
   the inviter is still an owner or admin. Records whether a personal assistant was requested.
 - Checks an invitation email and explains that the person is confirmed when they accept.
+- Changes Member and Admin roles after checking current access. Owners use the ownership route.
+  Reports a competing appointment as applying until its permissions have been updated.
 - Records and renews email invitations for owners and admins. Reads saved command results.
 - Returns member headers to members and the email directory to current owners and admins.
   Keeps checking their access while a live member connection is open.

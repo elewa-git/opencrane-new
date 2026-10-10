@@ -921,3 +921,5 @@ budget replay, without using append validation. A real NATS test records usage
 with a non-zero cost, delivers it twice, restarts the budget actor and delivers it
 again. It checks one saved settlement and unchanged provider, model, payer and
 price-table fields. It sends no provider request.
+
+`currentMembership` accepts a separate history deadline for reads before a write access check.
