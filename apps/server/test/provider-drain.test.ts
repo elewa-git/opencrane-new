@@ -197,6 +197,8 @@ async function concurrentStarts() {
 it('orders concurrent drain starts across different provider connections', concurrentStarts);
 
 async function refusesSilentRollback() {
+  const start = await input();
+  expect((await request('POST', 'primary', start)).statusCode).toBe(200);
   const data = { providerId: 'primary', revision: 3, changedBy: 'owner',
     expectedProviderSequence: await nats.store.head('provider-*') };
   await append('provider-primary', 'provider.managed_calls_enabled', data);
@@ -204,7 +206,7 @@ async function refusesSilentRollback() {
   const before = await nats.store.head();
   expect((await request('POST', 'primary', command)).statusCode).toBe(403);
   expect(await nats.store.head()).toBe(before);
-  expect((await request('GET')).json()).toMatchObject({ enabled: true });
+  expect((await request('GET')).json()).toMatchObject({ enabled: true, draining: false });
 }
 it('refuses drain commands after switch-on rather than returning to the deployment key',
   refusesSilentRollback);

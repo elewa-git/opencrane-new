@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig, type tokenIssuer } from '@opencrane/auth';
 import { readProviders } from '@opencrane/projections';
 import { providerAuthority, providerCommand, providerReceipt,
+  providerDrainCommand, providerDrainStatus,
   readActiveMember, MemberAccessRefused, providerBindingCommand, providerDependencies,
   ProviderRefused, ProviderUnpriced, ProviderConflict, providerHistory, providerSecretRef,
   type ProviderSecrets, requestProviderVerification, providerTestQuote,
@@ -32,6 +33,8 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
   app.get('/api/org/providers', handlerFor(read));
   app.post('/api/org/providers', { bodyLimit: 8192 }, handlerFor(write));
   app.get('/api/org/providers/:providerId', handlerFor(read));
+  app.get('/api/org/providers/:providerId/drain', handlerFor(drain));
+  app.post('/api/org/providers/:providerId/drain', { bodyLimit: 4096 }, handlerFor(drain));
   app.get('/api/org/providers/:providerId/bindings', handlerFor(bindings));
   app.post('/api/org/providers/:providerId/bindings', { bodyLimit: 4096 }, handlerFor(bindings));
   app.get('/api/org/providers/:providerId/changes/:commandId', handlerFor(readStatus));
@@ -298,4 +301,16 @@ async function bindings(request: FastifyRequest, reply: FastifyReply,
   }
   const result = await providerDependencies(options.store, options.binding, memberId, providerId);
   return reply.send(result);
+}
+
+async function drain(request: FastifyRequest, reply: FastifyReply,
+  options: ProviderOptions, memberId: string) {
+  const { providerId } = providerParameters.parse(request.params);
+  if (request.method === 'POST') {
+    const receipt = await providerDrainCommand(options.store, options.binding,
+      memberId, providerId, request.body);
+    return reply.send(receipt);
+  }
+  const status = await providerDrainStatus(options.store, options.binding, memberId, providerId);
+  return reply.send(status);
 }

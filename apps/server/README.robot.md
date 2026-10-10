@@ -1531,3 +1531,15 @@ personal-payer test still requires at most two new rows after two budget changes
 There is no switch-on route in this slice. Safe migration must first stop new legacy
 admissions and drain running legacy turns. Managed dispatch remains refused until
 its gateway and provider checks are built.
+
+## Provider drain routes
+
+The drain GET and POST routes reuse provider session, Origin and error handling.
+Their contract is in [the models details](../../libs/models/README.robot.md#recorded-draining-before-managed-calls).
+Turn admission refuses an active drain before selecting a new turn's path and
+checks it again after the payer read. Replayed starts and final reports keep the
+saved turn. `test/provider-drain.test.ts` checks receipts, retry, cancellation,
+replay, stale inputs and refused callers using real NATS, PostgreSQL and OpenFGA.
+`test/provider-turn-admission.test.ts` checks admission and the payer-read race.
+The models provider contract test checks repeated gateway calls and settlement
+during drain. Production switch-on is still unavailable.

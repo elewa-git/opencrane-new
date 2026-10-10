@@ -22,9 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills tables for memory, provider choices, admission mode and child participants| projections["libs/projections<br/>read tables, message lookups and keys"]
-  ops["apps/ops<br/>workers"] -->|fills tables for memory, provider choices and spending mode| projections["libs/projections<br/>read tables, message lookups and keys"]
-  ops["apps/ops<br/>workers"] -->|fills tables for memory, provider choices, spending mode and child participants| projections["libs/projections<br/>read tables, message lookups and keys"]
+  ops["apps/ops<br/>workers"] -->|fills tables for memory, provider choices, drains, spending mode and child participants| projections["libs/projections<br/>read tables, message lookups and keys"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, private choices and confirmed owners| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
@@ -39,10 +37,8 @@ flowchart LR
 - Keeps delegated task relationships and outcomes in read tables. Rebuilding these
   tables starts no tasks and changes no permissions or spending.
 - Copies recorded tool dispatch evidence into conversation feeds without calling a tool.
-- Rebuilds saved provider choices alongside provider records without calling a provider.
+- Rebuilds saved provider choices, drains and switch-on from the spending stream without calling a provider.
 - Adds a new owner to the member tables only after confirmation is saved.
-- Rebuilds saved provider choices and the admission mode without calling a provider.
-- Rebuild saved provider choices and switch-on from the spending stream without calling a provider.
 - Turn ordered events into tables that the server can read.
 - Bind member accounts from bound invitations or accepted email invitations.
 - Keep old conversation participant records separate from new participant changes.

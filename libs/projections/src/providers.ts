@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { parseEventByType, providerBindingSchema, type EventEnvelope } from '@opencrane/events';
+import { parseEventByType, providerBindingSchema, providerDrainSchema,
+  type EventEnvelope } from '@opencrane/events';
 import type { Projection } from './runner.ts';
 import type { Query } from './db.ts';
 
@@ -29,6 +30,7 @@ export interface ProviderState {
   enabledModels: string[];
   modelsChanged?: ProviderFact;
   managedCallsEnabled?: true;
+  managedCallsDraining?: boolean;
 }
 export function applyProvider(state: ProviderState | undefined,
   event: EventEnvelope, position: number): ProviderState {
@@ -49,7 +51,7 @@ export function applyProvider(state: ProviderState | undefined,
   if (!state || state.providerId !== providerId) {
     throw new Error('Missing provider');
   }
-  if (applyRoutingChange(state, event.type, revision, position)) {
+  if (applyRoutingChange(state, event, revision, position)) {
     return state;
   }
   const fact: ProviderFact = { changeId: event.id, time: event.time, revision,
@@ -170,9 +172,11 @@ export async function readProviders(db: Query, silo: string, providerId?: string
   return result.rows.map(publicState);
 }
 
-function applyRoutingChange(state: ProviderState, type: string, revision: number,
+function applyRoutingChange(state: ProviderState, event: EventEnvelope, revision: number,
   position: number) {
-  const routingTypes = ['provider.model_binding_set', 'provider.managed_calls_enabled'];
+  const type = event.type;
+  const routingTypes = ['provider.model_binding_set', 'provider.managed_calls_enabled',
+    'provider.managed_calls_drain_set'];
   if (!routingTypes.includes(type)) {
     return false;
   }
@@ -181,8 +185,13 @@ function applyRoutingChange(state: ProviderState, type: string, revision: number
   }
   if (type === 'provider.managed_calls_enabled') {
     state.managedCallsEnabled = true;
+    state.managedCallsDraining = false;
     // Keep the provider position on its own stream for later configuration commands.
     return true;
+  }
+  if (type === 'provider.managed_calls_drain_set') {
+    const data = providerDrainSchema.parse(event.data);
+    state.managedCallsDraining = data.draining;
   }
   state.position = position;
   return true;

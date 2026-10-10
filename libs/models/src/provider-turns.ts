@@ -1,10 +1,10 @@
-import { providerBindingSchema } from '@opencrane/events';
+import { providerBindingSchema, providerDrainSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { readStreamSummary, type EventStore, type StoredEvent,
   type SummaryKind } from '@opencrane/event-store';
 
 type Choice = { providerId: string; bindingSequence: number; model: string; state: 'active' | 'paused' };
-type Routing = { choices: Map<string, Choice> };
+type Routing = { draining: boolean; choices: Map<string, Choice> };
 type Mode = { enabled: boolean; defaultPayingGroupId?: string };
 
 const budgetDetails = z.object({
@@ -16,10 +16,14 @@ function choiceKey(kind: string, dependantId: string) {
 }
 
 function emptyRouting(): Routing {
-  return { choices: new Map() };
+  return { draining: false, choices: new Map() };
 }
 
 function addRouting(summary: Routing, row: StoredEvent) {
+  if (row.event.type === 'provider.managed_calls_drain_set') {
+    const data = providerDrainSchema.parse(row.event.data);
+    summary.draining = data.draining;
+  }
   if (row.event.type !== 'provider.model_binding_set') {
     return;
   }
@@ -74,12 +78,14 @@ export async function providerTurnAdmission(store: EventStore, silo: string,
     const own = summary.choices.get(choiceKey('assistant', assistantId));
     const fallback = summary.choices.get(choiceKey('silo_default', silo));
     const choice = own ?? fallback;
-    return choice;
+    return { choice, draining: summary.draining };
   }
   // Fold payer and switch-on together so each new spending row is read only once.
   const budget = await readStreamSummary(
     store, silo, `budget-${silo}`, providerMode, deadline, takeBudgetAdmission);
-  const choice = await readStreamSummary(
+  const admission = await readStreamSummary(
     store, silo, 'provider-*', providerRouting, deadline, takeAdmission);
-  return { enabled: budget.enabled, defaultPayingGroupId: budget.defaultPayingGroupId, choice };
+  const draining = admission.draining && !budget.enabled;
+  return { enabled: budget.enabled, defaultPayingGroupId: budget.defaultPayingGroupId,
+    choice: admission.choice, draining };
 }

@@ -377,3 +377,8 @@ The providers fold stores `managedCallsEnabled: true` on the connection carrying
 `provider.managed_calls_enabled` on `budget-<silo>`. This does not advance its configuration revision
 or replace key verification. Replay restores the marker through the same fold.
 The marker applies to the silo, including after its default choice moves.
+
+`provider.managed_calls_drain_set` stores `managedCallsDraining` on its connection
+without changing its revision or verification. The latest drain event across the
+silo determines admission; one connection's projected flag is not the silo mode.
+Rebuild restores these records without admitting turns or touching spending.

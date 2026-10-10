@@ -1023,3 +1023,40 @@ conflict. `test/actor.test.ts` checks retries with the projected revision, with 
 without an open hold, and after switch-on refuses a reservation.
 A decision audit uses a fresh command id and `historyChecked: true` against zero.
 No earlier event can share that new command id.
+
+## Recorded draining before managed calls
+
+P4-22 row 4d is the first split of the remaining migration work. It provides
+`GET` and `POST /api/org/providers/:providerId/drain`. POST accepts `commandId`,
+`action: start | cancel`, `expectedRevision`, `expectedProviderSequence` and
+`expectedDrainSequence`. GET supplies both positions, the current revision,
+`draining` and `enabled`. Both operations require current Owner/Admin membership,
+provider management permission and the applied provider creation receipt. POST
+also requires the trusted Origin. Status uses the existing changes GET URL.
+
+Each command makes one conditional append to `provider-*`. A same-id retry returns
+the original receipt, even after cancellation. Changed arguments or a different
+administrator conflict. A stale position or revision conflicts. Configuration
+history is read before the two-second access check. Cancel writes a new event;
+it cannot undo switch-on or return managed traffic to a deployment key.
+
+The recorded drain stops new turn admissions and is checked again after payer
+reads. Already recorded turns can renew passes, make more calls and close through
+their original path. Spending checks and settlement keep the original payer,
+model and tariff. Switch-on ends draining when its event is replayed.
+The drain has no timer and no process-local setting. Replaying
+provider events restores it. Calls do not append provider events.
+
+Migration preparation reuses separate commands: create an explicitly named
+connection; save its existing key through secret custody; select its existing
+models; record explicit silo default task bindings. Each command has its own id,
+receipt and status read. A failed step resumes by that id; it does not repeat earlier
+steps or alter grants. An automatic first-provider default is not proof of the
+old deployment key's identity. The operator must record the intended choice.
+
+Remaining work: safe switch-on must prove that all legacy admissions and turns
+have finished before saving the marker, including admission already waiting to
+append when draining began. It must also check reservations and migration choices.
+The switch-on command, managed gateway startup, fallback-key refusal and recorded
+switch-off are not built here. Retirement remains unavailable. Fresh-install
+migration and managed dispatch are NOT RUN; this is source preparation only.

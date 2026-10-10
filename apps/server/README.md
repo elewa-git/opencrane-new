@@ -14,7 +14,7 @@ flowchart LR
   server -.->|checks access, refusal records, departure details, spending, memory and turn previews| libs["libs/*<br/>shared code"]
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member removal"]
   server -.->|checks access, refusal records, departure details, spending and memory| libs["libs/*<br/>shared code"]
-  server -->|records changes, memory facts, model grants, roles, participants, chats, computers and provider choices| nats["NATS<br/>event log"]
+  server -->|records changes, memory facts, model grants, roles, participants, chats, computers, provider choices and drains| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chat rows, closes, joins, facts, models and computers| postgres
@@ -121,6 +121,10 @@ not yet proven on a live computer; private chat memory stays off until it is.
 
 The reviewed tool list includes each tool's Allow mode. The computer and gateway
 use it to refuse calls if the tool changes to Ask during the turn.
+
+An owner or admin can stop new model turns before a provider change.
+Running turns keep their original path. Starting or cancelling this drain saves an event.
+Switching on calls through managed providers is still unavailable.
 
 ## Processes it handles
 
