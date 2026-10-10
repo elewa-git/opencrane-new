@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>private and direct chat, recovery, shared sessions and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>chat with honest Stop status, tool updates, shared sessions and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
@@ -27,7 +27,8 @@ flowchart LR
   sessions with them.
 - Lets someone choose one colleague for a direct conversation between two people.
   Direct chats send human text and never start assistant work.
-- Shows reviewed tool approvals, sanitised tool details, uploaded files and the assistant's desktop.
+- Shows live tool updates, reviewed approvals and cleaned tool details. It also
+  shows uploaded files and the assistant's desktop.
 - Gives admins pages for People & groups at `/org/people`,
   `/org/people/groups/<id>` and `/org/people/owners`, an integration register and detail at
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting
@@ -49,6 +50,8 @@ flowchart LR
    it brings them back to the start page, where they can open the workspace.
 2. **The first owner claims a new installation.** They sign in and enter its one-time token. The server records them as the owner.
 3. **A person sends a message.** The website opens a conversation and sends the message to the server. It shows the reply as it arrives and offers Stop.
+   After Stop, it says “Stopping…” while it waits for an ending report. If no report
+   arrives, it says “Stop not confirmed” and keeps the reply active so Stop can be tried again.
    Team turns are private by default. A memory-free choice applies to one turn and
    explains that it uses the shared disk. Recovery pauses sending and explains why.
    A reply whose output was lost stays incomplete.

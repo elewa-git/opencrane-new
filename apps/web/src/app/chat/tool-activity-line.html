@@ -1,7 +1,7 @@
 <button type="button" class="tool-line" [id]="'tool-' + record().id"
   (click)="openDetails($event)">
-  <oc-icon class="state-mark" [attr.data-state]="record().failed ? 'failed' : 'done'"
-    [name]="record().failed ? 'failed' : 'done'" />
-  {{ record().label }}
+  <oc-icon class="state-mark" [attr.data-state]="stateName()"
+    [name]="stateIcon()" />
+  <span class="tool-label">{{ lineLabel() }}</span>
   <oc-icon class="chevron" name="chevron" />
 </button>

@@ -8,6 +8,7 @@ export class ChatComposer {
   readonly draft = input('');
   readonly placeholder = input('Message your agent…');
   readonly working = input(false);
+  readonly stopping = input(false);
   readonly busy = input(false);
   readonly reason = input('');
   readonly queued = input(false);

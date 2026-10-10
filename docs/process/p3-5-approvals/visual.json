@@ -9,7 +9,7 @@
     "no-preference",
     "reduce"
   ],
-  "captures": 64,
+  "captures": 88,
   "files": [
     "approval-requested-1280-no-preference.png",
     "approval-requested-1280-reduce.png",
@@ -57,6 +57,24 @@
     "approval-terminal-denied-320-reduce.png",
     "approval-terminal-expired-320-reduce.png",
     "approval-terminal-cancelled-320-reduce.png",
+    "tool-activity-running-1280-no-preference.png",
+    "tool-activity-running-1280-reduce.png",
+    "tool-activity-running-390-no-preference.png",
+    "tool-activity-running-390-reduce.png",
+    "tool-activity-running-320-no-preference.png",
+    "tool-activity-running-320-reduce.png",
+    "tool-activity-completed-1280-no-preference.png",
+    "tool-activity-completed-1280-reduce.png",
+    "tool-activity-completed-390-no-preference.png",
+    "tool-activity-completed-390-reduce.png",
+    "tool-activity-completed-320-no-preference.png",
+    "tool-activity-completed-320-reduce.png",
+    "tool-activity-long-name-1280-no-preference.png",
+    "tool-activity-long-name-1280-reduce.png",
+    "tool-activity-long-name-390-no-preference.png",
+    "tool-activity-long-name-390-reduce.png",
+    "tool-activity-long-name-320-no-preference.png",
+    "tool-activity-long-name-320-reduce.png",
     "tool-details-1280-no-preference.png",
     "tool-details-1280-reduce.png",
     "tool-details-390-no-preference.png",
@@ -74,7 +92,13 @@
     "reconnected-390-no-preference.png",
     "reconnected-390-reduce.png",
     "reconnected-320-no-preference.png",
-    "reconnected-320-reduce.png"
+    "reconnected-320-reduce.png",
+    "stop-not-confirmed-1280-no-preference.png",
+    "stop-not-confirmed-1280-reduce.png",
+    "stop-not-confirmed-390-no-preference.png",
+    "stop-not-confirmed-390-reduce.png",
+    "stop-not-confirmed-320-no-preference.png",
+    "stop-not-confirmed-320-reduce.png"
   ],
   "captureChecks": [
     {
@@ -692,6 +716,234 @@
       ]
     },
     {
+      "file": "tool-activity-running-1280-no-preference.png",
+      "frames": [
+        "WRK-02-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "tool-activity-running-1280-reduce.png",
+      "frames": [
+        "WRK-02-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "tool-activity-running-390-no-preference.png",
+      "frames": [
+        "WRK-02-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-running-390-reduce.png",
+      "frames": [
+        "WRK-02-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-running-320-no-preference.png",
+      "frames": [
+        "WRK-02-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-running-320-reduce.png",
+      "frames": [
+        "WRK-02-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-completed-1280-no-preference.png",
+      "frames": [
+        "WRK-03-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "tool-activity-completed-1280-reduce.png",
+      "frames": [
+        "WRK-03-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "tool-activity-completed-390-no-preference.png",
+      "frames": [
+        "WRK-03-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-completed-390-reduce.png",
+      "frames": [
+        "WRK-03-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-completed-320-no-preference.png",
+      "frames": [
+        "WRK-03-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-completed-320-reduce.png",
+      "frames": [
+        "WRK-03-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-long-name-1280-no-preference.png",
+      "frames": [
+        "WRK-02-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "tool-activity-long-name-1280-reduce.png",
+      "frames": [
+        "WRK-02-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "tool-activity-long-name-390-no-preference.png",
+      "frames": [
+        "WRK-02-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-long-name-390-reduce.png",
+      "frames": [
+        "WRK-02-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-long-name-320-no-preference.png",
+      "frames": [
+        "WRK-02-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
+      "file": "tool-activity-long-name-320-reduce.png",
+      "frames": [
+        "WRK-02-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Measured the 44px tool activity button"
+      ]
+    },
+    {
       "file": "tool-details-1280-no-preference.png",
       "frames": [
         "WRK-03-1280",
@@ -922,6 +1174,66 @@
         "No horizontal overflow",
         "Captured at the listed width and motion setting"
       ]
+    },
+    {
+      "file": "stop-not-confirmed-1280-no-preference.png",
+      "frames": [],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "stop-not-confirmed-1280-reduce.png",
+      "frames": [],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "stop-not-confirmed-390-no-preference.png",
+      "frames": [],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "stop-not-confirmed-390-reduce.png",
+      "frames": [],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "stop-not-confirmed-320-no-preference.png",
+      "frames": [],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "stop-not-confirmed-320-reduce.png",
+      "frames": [],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
     }
   ],
   "environment": "Built Angular assets; Chromium; intercepted fixtures; no live governed turn",
@@ -953,11 +1265,14 @@
     "WRK-18-320",
     "WRK-19-320",
     "WRK-20-320",
+    "WRK-02-1280",
+    "WRK-02-390",
+    "WRK-02-320",
     "WRK-03-1280",
-    "WRK-04-1280",
     "WRK-03-390",
-    "WRK-04-390",
     "WRK-03-320",
+    "WRK-04-1280",
+    "WRK-04-390",
     "WRK-04-320",
     "WRK-07-1280",
     "WRK-07-390",
@@ -967,7 +1282,9 @@
     "WRK-22-320"
   ],
   "checks": [
-    "8 scenes captured at 1280, 390 and 320 pixels with both motion settings",
+    "12 scenes captured at 1280, 390 and 320 pixels with both motion settings",
+    "Running and completed governed tool calls match WRK-02 and WRK-03",
+    "A 200-character tool name wraps inside the transcript at every width",
     "No horizontal overflow in any capture",
     "Phone card actions, drawer buttons and drawer Back controls were measured",
     "Approval, tool and terminal buttons show the teal focus ring",
@@ -976,6 +1293,7 @@
     "Access checks keep polling and restore the cards after a later 200",
     "Tool and approval drawers open by keyboard and return focus after Escape",
     "No approval or tool details button offers retry wording",
-    "The existing empty conversation still shows No messages yet"
+    "The existing empty conversation still shows No messages yet",
+    "Stop timeout keeps the turn active, offers Stop again and never claims it ended"
   ]
 }

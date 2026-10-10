@@ -26,7 +26,8 @@ import { sessionSlug, type ChatConversation } from '@opencrane/protocol';
 import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
-  rejectedScreenshotIds, toolKind, turnContent, turnOutcome, turnStatusIcon,
+  rejectedScreenshotIds, toolActivityResult, toolActivityResultLabel,
+  toolKind as getToolKind, turnContent, turnOutcome, turnStatusIcon,
   type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
 import { ChatComposer } from './composer';
@@ -71,6 +72,9 @@ export class Workspace implements OnInit {
   protected readonly panelTab = signal<'files' | 'activity' | 'memory'>('files');
   protected readonly approvalWaiting = signal(false);
   protected readonly activity = computed(() => this.chat.turns().flatMap(turn => turn.tools));
+  protected readonly toolResult = toolActivityResult;
+  protected readonly toolResultLabel = toolActivityResultLabel;
+  protected readonly toolKind = getToolKind;
   protected readonly desktop = signal(globalThis.innerWidth >= 1100);
   protected readonly panel = signal(this.desktop());
   protected readonly panelExpanded = computed(this.isPanelExpanded.bind(this));
@@ -109,7 +113,7 @@ export class Workspace implements OnInit {
   constructor() {
     effect(this.rememberRecoveryFocus.bind(this));
     effect(this.resetCaptureWhenSessionChanges.bind(this));
-    effect(this.closeMissingToolDetails.bind(this));
+    effect(this.followOpenToolDetails.bind(this));
     afterEveryRender(this.afterRender.bind(this));
   }
   ngOnInit(): void { void this.chat.load(); }
@@ -223,30 +227,26 @@ export class Workspace implements OnInit {
   protected closeToolDetails(): void {
     this.toolDetails.set(undefined);
   }
-  protected toolResult(record: ToolActivityRecord): string {
-    if (record.failed) {
-      return `Failed · ${record.detail}`;
-    }
-    return `Completed · ${record.detail}`;
-  }
   protected toolTime(record: ToolActivityRecord): string {
     return utcDateTime(record.time);
   }
-  protected toolKind(record: ToolActivityRecord): string {
-    return toolKind(record);
-  }
-  private closeMissingToolDetails(): void {
+  private followOpenToolDetails(): void {
     const details = this.toolDetails();
     if (!details) return;
-    const recordStillExists = this.activity().some(
-      this.isSameToolRecord.bind(this, details.record.id),
-    );
-    if (recordStillExists) return;
+    const currentRecord = this.findToolRecord(details.record.id);
+    if (currentRecord === details.record) return;
+    if (currentRecord) {
+      this.toolDetails.set({ ...details, record: currentRecord });
+      return;
+    }
     this.toolDetails.set(undefined);
     requestAnimationFrame(this.focusTranscript.bind(this));
   }
-  private isSameToolRecord(recordId: string, record: ToolActivityRecord): boolean {
-    return record.id === recordId;
+  private findToolRecord(recordId: string): ToolActivityRecord | undefined {
+    for (const record of this.activity()) {
+      if (record.id === recordId) return record;
+    }
+    return undefined;
   }
   private focusTranscript(): void {
     this.transcriptElement()?.nativeElement.focus();

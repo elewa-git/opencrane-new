@@ -14,6 +14,7 @@ interface CaptureWorkspace {
   setReply(status: number): void;
   denyFeedRead(): void;
   setMessageStatus(status: number): void;
+  setStopResponse(response: Promise<Response>): void;
   confirmPendingMessage(): void;
   rows: Record<string, unknown>[];
 }
@@ -32,6 +33,7 @@ async function createCaptureWorkspace(
   let denyMessages = false;
   let messageStatus = 200;
   let messageRecorded = false;
+  let stopResponse: Promise<Response> | undefined;
   const initialConversation = { conversationId: 'chat', assistantId: 'assistant', assistantKind,
     payingGroupId: assistantKind === 'team' ? 'opaque-sales' : undefined,
     createdBy: 'me', createdAt: '2026-10-03T10:00:00Z', status: 'open', mode: 'agent_session' };
@@ -85,7 +87,12 @@ async function createCaptureWorkspace(
     }
     if (pathname.endsWith('/messages')) {
       if (denyMessages) return Promise.resolve(new Response('{}', { status: 403 }));
-      if (messageStatus === 0) return Promise.reject(new TypeError('Network lost'));
+      if (init?.method === 'POST' && isStopRequestBody(init.body) && stopResponse) {
+        return stopResponse;
+      }
+      if (messageStatus === 0) {
+        return Promise.reject(new TypeError('Network lost'));
+      }
       if (messageStatus !== 200) {
         return Promise.resolve(new Response('{}', { status: messageStatus }));
       }
@@ -122,7 +129,15 @@ async function createCaptureWorkspace(
     denyFeedRead() { denyMessages = true; },
     confirmPendingMessage() { messageRecorded = true; },
     setMessageStatus(status) { messageStatus = status; },
+    setStopResponse(response) { stopResponse = response; },
   };
+}
+
+function isStopRequestBody(body: BodyInit | null | undefined): boolean {
+  if (typeof body !== 'string') return false;
+  const parsed: unknown = JSON.parse(body);
+  const request = z.record(z.string(), z.unknown()).safeParse(parsed);
+  return request.success && typeof request.data['stopTurnId'] === 'string';
 }
 
 function screenshotRow(position: number): Record<string, unknown> {
@@ -479,7 +494,7 @@ it.each([500, 503, 403])('does not show empty states after a %s conversation rea
   await fixture.whenStable();
   expect(root.textContent).not.toContain('No screenshots yet');
 });
-it('renders streamed replies, wake progress and durable Stop, then replays the stopped partial', async () => {
+it('renders streamed replies and shows a stopped partial when the server ends the turn', async () => {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const creation = { conversationId: 'chat', createdBy: 'me', assistantId: 'assistant' };
   const rows = [{
@@ -515,8 +530,10 @@ it('renders streamed replies, wake progress and durable Stop, then replays the s
   expect(budgetNotice?.textContent).toContain('An Owner or Admin can review the limit');
   expect(budgetNotice?.textContent).toContain('next monthly budget period (UTC)');
   message('agent.turn_stop_requested', 6, { turnId: 'message' });
-  message('agent.message_completed', 7, { turnId: 'message', messageId: 'reply', text: 'Hello there and more' });
-  await fixture.whenStable(); expect(root.textContent).toContain('Stopped'); expect(root.textContent).not.toContain('and more');
+  await fixture.whenStable();
+  expect(root.textContent).not.toContain('Stopping…');
+  message('agent.turn_failed', 7, { turnId: 'message' });
+  await fixture.whenStable(); expect(root.textContent).toContain('Stopped');
   expect(root.querySelector('[aria-live="polite"]')).not.toBeNull();
 });
 
@@ -637,6 +654,34 @@ function toolRows(): Record<string, unknown>[] {
   ];
 }
 
+function runningToolRows(): Record<string, unknown>[] {
+  return [
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'started', position: 2, type: 'agent.tool_call_started',
+      time: '2026-10-04T10:01:00Z', data: { turnId: 'message', callId: 'tool-call-1',
+        serverId: 'fixture-erp', toolName: 'read_order' } },
+  ];
+}
+
+function sendConversationRow(
+  socket: SocketLike,
+  row: Record<string, unknown>,
+  conversationId = 'chat',
+): void {
+  const position = Number(row['position']);
+  const message = {
+    version: 1,
+    topic: 'conversation',
+    conversationId,
+    type: 'event',
+    position,
+    generation: 1,
+    row,
+  };
+  socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(message) }));
+}
+
 it('opens tool details from the line and focuses the line from Activity', async () => {
   HTMLElement.prototype.scrollIntoView = vi.fn();
   Object.assign(HTMLDialogElement.prototype, {
@@ -674,6 +719,435 @@ it('opens tool details from the line and focuses the line from Activity', async 
   await capture.fixture.whenStable();
   expect(document.activeElement).toBe(toolLine);
 });
+
+it('updates an open tool drawer when its finish event arrives', async () => {
+  Object.assign(HTMLDialogElement.prototype, {
+    showModal: openPanelDialog,
+    close: closePanelDialog,
+  });
+  const capture = await createCaptureWorkspace(runningToolRows());
+  const toolLine = capture.root.querySelector<HTMLButtonElement>('.tool-line');
+  if (!toolLine) throw new Error('Missing running tool line');
+  toolLine.click();
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.root.textContent).toContain('Running · The call has not finished.');
+
+  const finishedRow = { id: 'finished', position: 3, type: 'agent.tool_call_finished',
+    time: '2026-10-04T10:02:00Z', data: { turnId: 'message', callId: 'tool-call-1',
+      serverId: 'fixture-erp', toolName: 'read_order', status: 'completed', durationMs: 240 } };
+  sendConversationRow(capture.socket, finishedRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+
+  expect(capture.root.querySelector('.tool-line')?.textContent).toContain('read_order · Completed');
+  expect(capture.root.textContent).not.toContain('Running · The call has not finished.');
+  capture.fixture.destroy();
+});
+
+it('shows an unconfirmed tool when its turn ends without a finish report', async () => {
+  const capture = await createCaptureWorkspace(runningToolRows());
+  const endedRow = { id: 'ended', position: 3, type: 'agent.turn_failed',
+    time: '2026-10-04T10:02:00Z', data: { turnId: 'message', reason: 'computer_lost' } };
+  sendConversationRow(capture.socket, endedRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+
+  const toolLine = capture.root.querySelector('.tool-line');
+  expect(toolLine?.textContent).toContain('read_order · Unconfirmed');
+  expect(toolLine?.textContent).not.toContain('Running');
+  capture.fixture.destroy();
+});
+
+it('shows stopping until the server ends the turn and keeps later tool reports', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+  ]);
+  const deltaRow = { id: 'delta', position: 2, type: 'agent.message_delta',
+    time: '2026-10-04T10:00:01Z', data: { turnId: 'message', messageId: 'reply', text: 'Working' } };
+  sendConversationRow(capture.socket, deltaRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  sendConversationReady(capture.socket);
+  await capture.fixture.whenStable();
+
+  capture.root.querySelector<HTMLButtonElement>('.writing button')?.click();
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.root.textContent).toContain('Stopping…');
+  expect(capture.root.textContent).not.toContain('Stopped · partial reply kept');
+  expect(capture.root.querySelector('oc-chat-composer .stop')).toBeNull();
+  expect(capture.root.querySelector('oc-chat-composer .send')).toBeNull();
+  expect(capture.root.querySelector('.turn-status')?.textContent).toContain('Stopping…');
+  expect(capture.root.querySelector('oc-chat-composer')?.textContent).toContain('Stopping…');
+
+  const stopRequested = { id: 'stop-requested', position: 3,
+    type: 'agent.turn_stop_requested', time: '2026-10-04T10:00:02Z',
+    data: { turnId: 'message' } };
+  sendConversationRow(capture.socket, stopRequested);
+  const toolStarted = { id: 'tool-started', position: 4, type: 'agent.tool_call_started',
+    time: '2026-10-04T10:00:03Z', data: { turnId: 'message', callId: 'tool-call-1',
+      serverId: 'fixture-erp', toolName: 'read_order' } };
+  sendConversationRow(capture.socket, toolStarted);
+  const toolFinished = { id: 'tool-finished', position: 5, type: 'agent.tool_call_finished',
+    time: '2026-10-04T10:00:04Z', data: { turnId: 'message', callId: 'tool-call-1',
+      serverId: 'fixture-erp', toolName: 'read_order', status: 'completed' } };
+  sendConversationRow(capture.socket, toolFinished);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.root.textContent).toContain('Stopping…');
+  expect(capture.root.querySelector('.tool-line')?.textContent)
+    .toContain('read_order · Completed');
+  expect(capture.fixture.componentInstance['chat'].announcement())
+    .toBe('read_order call 1 completed.');
+
+  const ended = { id: 'turn-ended', position: 6, type: 'agent.turn_failed',
+    time: '2026-10-04T10:00:05Z', data: { turnId: 'message' } };
+  sendConversationRow(capture.socket, ended);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.root.textContent).toContain('Stopped · partial reply kept');
+  expect(capture.root.textContent).not.toContain('Stopping…');
+  capture.fixture.destroy();
+});
+
+it('shows Stop not confirmed after a queued cancellation timeout without ending the turn', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta',
+      time: '2026-10-04T10:00:01Z',
+      data: { turnId: 'message', messageId: 'reply', text: 'Working' } },
+  ], [], undefined, 'starting');
+  vi.useFakeTimers();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    await chat.stop();
+    const stopRequested = { id: 'stop-requested', position: 3,
+      type: 'agent.turn_stop_requested', time: '2026-10-04T10:00:02Z',
+      data: { turnId: 'message' } };
+    sendConversationRow(capture.socket, stopRequested);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    capture.fixture.detectChanges();
+
+    expect(chat.turns().at(-1)?.state).toBe('working');
+    expect(capture.root.textContent).toContain('Stop not confirmed');
+    expect(capture.root.textContent).not.toContain('Stopped · partial reply kept');
+    expect(capture.root.querySelector('oc-chat-composer .stop')).not.toBeNull();
+
+    const ended = { id: 'turn-ended', position: 4, type: 'agent.turn_failed',
+      time: '2026-10-04T10:00:05Z', data: { turnId: 'message' } };
+    sendConversationRow(capture.socket, ended);
+    capture.fixture.detectChanges();
+    expect(chat.turns().at(-1)?.state).toBe('stopped');
+    expect(capture.root.textContent).toContain('Stopped · partial reply kept');
+    expect(capture.root.textContent).not.toContain('Stop not confirmed');
+  } finally {
+    vi.useRealTimers();
+    capture.fixture.destroy();
+  }
+});
+
+it('shows a saved stop request as active after the workspace reloads', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta',
+      time: '2026-10-04T10:00:01Z',
+      data: { turnId: 'message', messageId: 'reply', text: 'Working' } },
+    { id: 'stop-requested', position: 3, type: 'agent.turn_stop_requested',
+      time: '2026-10-04T10:00:02Z', data: { turnId: 'message' } },
+  ]);
+
+  expect(capture.root.textContent).not.toContain('Stopping…');
+  expect(capture.root.querySelector('oc-chat-composer .stop')).not.toBeNull();
+  expect(capture.fixture.componentInstance['chat'].turns().at(-1)?.state).toBe('working');
+  capture.fixture.destroy();
+});
+
+it('does not send Stop for a completed turn', async () => {
+  const completedCapture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'ended', position: 2, type: 'agent.turn_completed',
+      time: '2026-10-04T10:00:01Z', data: { turnId: 'message' } },
+  ]);
+  const completedChat = completedCapture.fixture.componentInstance['chat'];
+  await completedChat.stop();
+  expect(completedCapture.postBodies.filter(isStopBody)).toHaveLength(0);
+  completedCapture.fixture.destroy();
+});
+
+it('does not reopen a completed turn after a delayed Stop reply', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta',
+      time: '2026-10-04T10:00:01Z',
+      data: { turnId: 'message', messageId: 'reply', text: 'Working' } },
+  ]);
+  let resolveStopResponse: (response: Response) => void = () => undefined;
+  const delayedStopResponse = new Promise<Response>(resolve => {
+    resolveStopResponse = resolve;
+  });
+  capture.setStopResponse(delayedStopResponse);
+  const chat = capture.fixture.componentInstance['chat'];
+  const stopRequest = chat.stop();
+  sendConversationRow(capture.socket, { id: 'ended', position: 3,
+    type: 'agent.turn_completed', time: '2026-10-04T10:00:02Z',
+    data: { turnId: 'message' } });
+  capture.fixture.detectChanges();
+  expect(chat.turns().at(-1)?.state).toBe('done');
+
+  resolveStopResponse(new Response('{"status":"appended"}'));
+  await stopRequest;
+  capture.fixture.detectChanges();
+
+  expect(chat.turns().at(-1)?.state).toBe('done');
+  expect(capture.root.textContent).toContain('Done');
+  expect(capture.root.textContent).not.toContain('Stopping…');
+  capture.fixture.destroy();
+});
+
+it('restores Stop when the stop request was not saved', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta',
+      time: '2026-10-04T10:00:01Z',
+      data: { turnId: 'message', messageId: 'reply', text: 'Working' } },
+  ]);
+  capture.setMessageStatus(409);
+  const chat = capture.fixture.componentInstance['chat'];
+
+  await chat.stop();
+  capture.fixture.detectChanges();
+
+  expect(capture.postBodies.filter(isStopBody)).toHaveLength(3);
+  expect(chat.turns().at(-1)?.state).toBe('working');
+  expect(capture.root.textContent).toContain('Stop not confirmed');
+  expect(capture.root.querySelector('oc-chat-composer .stop')).not.toBeNull();
+  const firstStopId = stopCommandId(capture.postBodies.filter(isStopBody)[0]);
+  expect(capture.calls).toContain(`GET /api/conversations/chat/changes/${firstStopId}`);
+
+  await chat.stop();
+  const stopIds = capture.postBodies.filter(isStopBody).map(stopCommandId);
+  expect(stopIds).toHaveLength(6);
+  expect(new Set(stopIds).size).toBe(2);
+  capture.fixture.destroy();
+});
+
+it('does not restore Stopping when the stop reply arrives after its timeout', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta',
+      time: '2026-10-04T10:00:01Z',
+      data: { turnId: 'message', messageId: 'reply', text: 'Working' } },
+  ]);
+  let resolveStopResponse: (response: Response) => void = () => undefined;
+  const delayedStopResponse = new Promise<Response>(resolve => {
+    resolveStopResponse = resolve;
+  });
+  capture.setStopResponse(delayedStopResponse);
+  vi.useFakeTimers();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    const stopRequest = chat.stop();
+    await vi.advanceTimersByTimeAsync(10_000);
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).toContain('Stop not confirmed');
+    const retryButton = capture.root.querySelector<HTMLButtonElement>(
+      'oc-chat-composer .stop');
+    expect(retryButton?.disabled).toBe(false);
+
+    resolveStopResponse(new Response('{"status":"appended"}'));
+    await stopRequest;
+    capture.fixture.detectChanges();
+
+    expect(chat.turns().at(-1)?.state).toBe('working');
+    expect(capture.root.textContent).toContain('Stop not confirmed');
+    expect(capture.root.textContent).not.toContain('Stopping…');
+  } finally {
+    vi.useRealTimers();
+    capture.fixture.destroy();
+  }
+});
+
+it('keeps replacement subscription replay quiet until its ready message', async () => {
+  const capture = await createCaptureWorkspace();
+  const chat = capture.fixture.componentInstance['chat'];
+  sendConversationReady(capture.socket);
+  await capture.fixture.whenStable();
+  expect(chat['conversationReady']).toBe(true);
+
+  chat.newSession();
+  const sent = await chat.send('Start a session');
+  expect(sent).toBe(true);
+  const conversationId = chat.selected();
+  const messageBody = capture.postBodies.find(isMessageBody);
+  if (!messageBody) throw new Error('Missing sent message command');
+  const messageId = messageBody.id;
+  const replayedStart = { id: 'replacement-start', position: 1,
+    type: 'agent.tool_call_started', time: '2026-10-04T10:01:00Z',
+    data: { turnId: messageId, callId: 'tool-call-1', serverId: 'fixture-erp',
+      toolName: 'read_order' } };
+  capture.socket.onmessage?.(new MessageEvent('message', {
+    data: JSON.stringify({ version: 1, topic: 'conversation', conversationId,
+      type: 'row', position: 1, generation: 1, row: replayedStart }),
+  }));
+  await capture.fixture.whenStable();
+
+  expect(chat.announcement()).toBe('');
+  sendConversationReady(capture.socket, conversationId, 1);
+  await capture.fixture.whenStable();
+  expect(chat.announcement()).toBe('');
+  capture.fixture.destroy();
+});
+
+it('announces each live tool transition once and stays quiet during history replay', async () => {
+  const rows = [
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+  ];
+  const capture = await createCaptureWorkspace(rows);
+  const statusRegion = capture.root.querySelector<HTMLElement>(
+    '.main > .sr-only[role="status"][aria-live="polite"]',
+  );
+  expect(capture.fixture.componentInstance['chat'].announcement()).toBe('');
+  expect(statusRegion).not.toBeNull();
+  if (!statusRegion) throw new Error('Missing polite conversation status');
+  sendConversationReady(capture.socket);
+  await capture.fixture.whenStable();
+
+  const startedRow = { id: 'started', position: 2, type: 'agent.tool_call_started',
+    time: '2026-10-04T10:01:00Z', data: { turnId: 'message', callId: 'tool-call-1',
+      serverId: 'fixture-erp', toolName: 'read_order' } };
+  sendConversationRow(capture.socket, startedRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(statusRegion.textContent).toContain('read_order call 1 started.');
+
+  const streamedRow = { id: 'delta', position: 3, type: 'agent.message_delta',
+    time: '2026-10-04T10:01:30Z', data: { turnId: 'message', messageId: 'reply', text: 'Still working.' } };
+  sendConversationRow(capture.socket, streamedRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.fixture.componentInstance['chat'].announcement())
+    .toBe('read_order call 1 started.');
+
+  const secondStartRow = { id: 'started-again', position: 4,
+    type: 'agent.tool_call_started', time: '2026-10-04T10:01:40Z',
+    data: { turnId: 'message', callId: 'tool-call-2', serverId: 'fixture-erp',
+      toolName: 'read_order' } };
+  sendConversationRow(capture.socket, secondStartRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.fixture.componentInstance['chat'].announcement())
+    .toBe('read_order call 2 started.');
+
+  sendConversationRow(capture.socket, startedRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.fixture.componentInstance['chat'].announcement())
+    .toBe('read_order call 2 started.');
+
+  const finishedRow = { id: 'finished', position: 5, type: 'agent.tool_call_finished',
+    time: '2026-10-04T10:02:00Z', data: { turnId: 'message', callId: 'tool-call-1',
+      serverId: 'fixture-erp', toolName: 'read_order', status: 'completed' } };
+  sendConversationRow(capture.socket, finishedRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(statusRegion.textContent).toContain('read_order call 1 completed.');
+  expect(capture.root.querySelectorAll('.main > .sr-only[role="status"][aria-live="polite"]'))
+    .toHaveLength(1);
+
+  const secondFinishedRow = { id: 'finished-again', position: 6,
+    type: 'agent.tool_call_finished', time: '2026-10-04T10:02:30Z',
+    data: { turnId: 'message', callId: 'tool-call-2', serverId: 'fixture-erp',
+      toolName: 'read_order', status: 'completed' } };
+  sendConversationRow(capture.socket, secondFinishedRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(statusRegion.textContent).toContain('read_order call 2 completed.');
+
+  const endedRow = { id: 'ended', position: 7, type: 'agent.turn_failed',
+    time: '2026-10-04T10:03:00Z', data: { turnId: 'message', reason: 'computer_lost' } };
+  sendConversationRow(capture.socket, endedRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  const lateFinishRow = { id: 'late-finish', position: 8,
+    type: 'agent.tool_call_finished', time: '2026-10-04T10:04:00Z',
+    data: { turnId: 'message', callId: 'tool-call-1', toolName: 'read_order',
+      status: 'completed' } };
+  sendConversationRow(capture.socket, lateFinishRow);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.fixture.componentInstance['chat'].announcement())
+    .toBe('read_order call 2 completed.');
+  capture.fixture.destroy();
+});
+
+it('does not announce tool rows replayed before the socket is ready', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+  ]);
+  const replayedStart = { id: 'replayed-start', position: 2,
+    type: 'agent.tool_call_started', time: '2026-10-04T10:00:01Z',
+    data: { turnId: 'message', callId: 'tool-call-1', serverId: 'fixture-erp',
+      toolName: 'read_order' } };
+  sendConversationRow(capture.socket, replayedStart);
+  await capture.fixture.whenStable();
+  expect(capture.fixture.componentInstance['chat'].announcement()).toBe('');
+
+  sendConversationReady(capture.socket);
+  await capture.fixture.whenStable();
+  expect(capture.fixture.componentInstance['chat'].announcement()).toBe('');
+
+  const liveStart = { ...replayedStart, id: 'live-start', position: 3,
+    data: { ...replayedStart.data, callId: 'tool-call-2' } };
+  sendConversationRow(capture.socket, liveStart);
+  await capture.fixture.whenStable();
+  expect(capture.fixture.componentInstance['chat'].announcement())
+    .toBe('read_order call 2 started.');
+  capture.fixture.destroy();
+});
+
+function sendConversationReady(
+  socket: SocketLike,
+  conversationId = 'chat',
+  position = 2,
+): void {
+  const message = {
+    version: 1,
+    topic: 'conversation',
+    conversationId,
+    type: 'ready',
+    position,
+    generation: 1,
+    computerState: 'ready',
+  };
+  socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(message) }));
+}
+
+function isStopBody(value: unknown): boolean {
+  const body = z.record(z.string(), z.unknown()).safeParse(value);
+  return body.success && typeof body.data['stopTurnId'] === 'string';
+}
+
+function stopCommandId(value: unknown): string {
+  const body = z.object({ id: z.string() }).parse(value);
+  return body.id;
+}
+
+function isMessageBody(value: unknown): value is { id: string; text: string } {
+  const body = z.record(z.string(), z.unknown()).safeParse(value);
+  return body.success && typeof body.data['id'] === 'string'
+    && typeof body.data['text'] === 'string';
+}
 
 it('announces one recovery after the socket reconnects and its conversation is ready', async () => {
   const capture = await createCaptureWorkspace();

@@ -184,10 +184,17 @@ first send; message ids stay stable across explicit retries. Pending messages ar
 kept only on this page and the UI warns that reload discards an unsent draft.
 No conversation content or credentials are stored in browser persistent storage.
 
-Stop records `agent.turn_stop_requested`, interrupts the computer and keeps text
-through that position on replay. HTTP reads page through history; realtime consumes
-every validated envelope, including several deltas in one zoneless render. Access
-refusal clears protected content. The computer state announces wake progress.
+Stop records `agent.turn_stop_requested` to ask the computer to interrupt the turn.
+The transcript says “Stopping…” until `agent.turn_failed` or `agent.turn_completed`
+confirms that the turn ended. After ten seconds without an ending report, the page
+says “Stop not confirmed”, shows the turn as active and lets the person try Stop again.
+A late ending report still sets the final turn state. Tool finishes still update the
+transcript while it is stopping. Every new socket connection resets readiness before
+the server replays saved rows and sends `ready`; replayed tool transitions stay quiet,
+while new transitions after `ready` are announced. HTTP reads page through history;
+realtime consumes every validated envelope, including several deltas in one zoneless
+render. Access refusal clears protected content. The computer state announces wake
+progress.
 
 Keyboard paths: Enter sends, Shift+Enter adds a line, Ctrl/Cmd+N opens a draft,
 Ctrl/Cmd+Shift+A asks the personal Agent, Ctrl/Cmd+K finds a session. Native panel
@@ -284,8 +291,13 @@ Restricted turns do not report commands. Team turns sent from the workspace run
 restricted, so they show at most the “Reply failed” line. Tool details show the
 recorded result, UTC time and event reference, then say that the location, account
 and attempt history are not available. The transcript does not show raw arguments,
-tokens or full tool output. A stored review that fails the review schema makes the
-GET return 400. The browser shows the read-failed state and pauses decisions.
+tokens or full tool output. Live tool start and finish rows update one polite status
+message. History replay and streamed text do not announce tool changes. If a turn
+ends before a tool finish report arrives, the tool says that no finish was confirmed;
+it does not claim that the call failed, completed or kept running. An open details
+drawer follows the latest saved tool row. A stored review that fails its schema
+makes the GET return 400. The browser shows the read-failed state and pauses
+decisions.
 Chromium captures use intercepted fixtures and do not prove a live governed turn.
 
 Run `nice -n 10 npm run visual:p4-4-screens` to capture direct-chat states at

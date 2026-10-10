@@ -98,6 +98,9 @@
               @if (turn.text) { <div class="prose" [class.ink]="turn.author === 'agent'">@for (paragraph of turn.text.split('\n\n'); track $index; let last = $last) { <div class="paragraph">@for (part of textParts(paragraph); track $index) {@switch (part.kind) {@case ('bold') {<strong>{{ part.text }}</strong>}@case ('citation') {<button type="button" class="citation" (click)="preview.set('Citation ' + part.text)"><span class="citation-paper" [ocDogEar]="true">{{ part.text.slice(1, -1) }}</span></button>}@case ('a2ui') {<div class="a2ui" [ocDogEar]="true"><header><span class="agent-badge">Ag</span> Interactive · built from approved components</header><p>This interface is not available yet.</p></div>}@default {<ng-container>{{ part.text }}</ng-container>}}}@if (last && turn.author === 'agent' && turn.state === 'working') {<span class="caret" aria-hidden="true"></span>}</div>}</div> }
               @if (turn.author === 'you') { <time class="own-time">{{ time(turn.time) }}</time> }
               @if (turn.author === 'agent' && turn.state === 'working' && turn.text && chat.computer() !== 'recovering') { <div class="writing"><oc-fold-loader /><em>Writing…</em><button type="button" [disabled]="chat.busy()" (click)="chat.stop()">Stop</button></div> }
+              @if (turn.author === 'agent' && chat.stopNotConfirmedFor(turn.id)) {
+                <p class="turn-status failed" role="status">Stop not confirmed. The agent may still be working.</p>
+              }
               @if (turn.author === 'agent' && turn.state === 'working' && !turn.text) { <div class="folding" role="status"><oc-fold-loader /> Folding…</div> }
               @for (file of turn.files; track file) {
                 <oc-conversation-file-card [conversationId]="chat.selected()" [path]="file"
@@ -175,7 +178,8 @@
         }
       <oc-chat-composer [draft]="draft()" [placeholder]="composerPlaceholder()"
         [working]="!!chat.active()"
-        [busy]="chat.busy() || chat.uploading() || chat.uploadPending()"
+        [stopping]="chat.active()?.state === 'stopping'"
+        [busy]="(chat.busy() && !chat.stopNotConfirmedFor()) || chat.uploading() || chat.uploadPending()"
         (attached)="chat.upload($event)" [reason]="reason()" [queued]="chat.queued()"
         [teamSession]="teamSession()" [memoryFree]="chat.executionMode() === 'memory_free'"
         (memoryFreeSelected)="selectMemoryFree()" (privateSelected)="selectPrivate()"
@@ -220,7 +224,7 @@
       [description]="toolKind(details.record)" backLabel="Back to conversation"
       [returnFocusTo]="details.opener" (closed)="closeToolDetails()">
       <dl class="tool-detail-ledger">
-        <dt>Result</dt><dd>{{ toolResult(details.record) }}</dd>
+          <dt>{{ toolResultLabel(details.record) }}</dt><dd>{{ toolResult(details.record) }}</dd>
         <dt>Recorded</dt><dd>{{ toolTime(details.record) }}</dd>
         <dt>Reference</dt><dd class="tool-reference">{{ details.record.id }}</dd>
       </dl>

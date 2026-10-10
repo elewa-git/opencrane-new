@@ -40,7 +40,21 @@ export async function chatFixture(page, scenario = 'live') {
   } else if (!['draft', 'empty-selected', 'attach', 'no-agent', 'queued', 'private-team-draft'].includes(scenario)) {
     const human = add('message.posted', { text: scenario === 'long-title' ? 'M'.repeat(500) : 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.', authorId: 'me' });
     add('agent.turn_started', { turnId: human.id });
-    if (scenario === 'workspace-evidence') {
+    if (scenario === 'stop-not-confirmed') {
+      add('agent.message_delta', { turnId: human.id, messageId: 'reply', text: 'Still working.' });
+    } else if (scenario === 'governed-tool-running') {
+      addGovernedToolStart(add, human.id);
+    } else if (scenario === 'governed-tool-long-name') {
+      add('agent.tool_call_started', { turnId: human.id, callId: 'tool-call-1',
+        serverId: 'fixture-erp', toolName: 'x'.repeat(200) });
+    } else if (scenario === 'governed-tool-completed') {
+      addGovernedToolStart(add, human.id);
+      add('agent.tool_call_finished', { turnId: human.id, callId: 'tool-call-1',
+        serverId: 'fixture-erp', toolName: 'read_order', status: 'completed', durationMs: 240 });
+      add('agent.message_delta', { turnId: human.id, messageId: 'reply',
+        text: 'The draft order is ready for review.' });
+      add('agent.turn_completed', { turnId: human.id });
+    } else if (scenario === 'workspace-evidence') {
       add('agent.command_ran', { turnId: human.id, exitCode: 1, commandDigest: 'a'.repeat(64) });
       add('agent.file_changed', { turnId: human.id, path: 'quarterly-board-pack.xlsx', changeType: 'created' });
       add('decision.recorded', { turnId: human.id, reason: 'budget_exhausted' });
@@ -94,7 +108,14 @@ export async function chatFixture(page, scenario = 'live') {
       if (offline) return route.abort('connectionfailed');
       if (url.pathname === '/api/conversations') { conversations.unshift({ ...conversations[0], conversationId: command.conversationId }); return fulfil({ status: 'appended', sequence: 1 }); }
       if (command.stopTurnId && stopConflict) { stopConflict = false; return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'conflict' }) }); }
-      if (command.stopTurnId) { add('agent.turn_stop_requested', { turnId: command.stopTurnId }); return fulfil({ status: 'appended', sequence: rows.length }); }
+      if (command.stopTurnId) {
+        add('agent.turn_stop_requested', { turnId: command.stopTurnId });
+        if (scenario === 'stop-not-confirmed') {
+          return fulfil({ status: 'appended', sequence: rows.length });
+        }
+        add('agent.turn_failed', { turnId: command.stopTurnId, reason: 'interrupted' });
+        return fulfil({ status: 'appended', sequence: rows.length });
+      }
       if (!rows.some(row => row.id === command.id)) {
         const row = add('message.posted', { text: command.text, authorId: 'me' }); row.id = command.id;
       }
@@ -139,6 +160,11 @@ export async function chatFixture(page, scenario = 'live') {
     online: () => { offline = false; },
     rows: () => rows,
   };
+}
+
+function addGovernedToolStart(addRow, turnId) {
+  return addRow('agent.tool_call_started', { turnId, callId: 'tool-call-1',
+    serverId: 'fixture-erp', toolName: 'read_order' });
 }
 
 function fixtureComputerState(scenario) {

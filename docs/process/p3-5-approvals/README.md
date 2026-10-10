@@ -25,6 +25,12 @@ Tool lines open a drawer with the result, recorded time and event reference.
 It says that the location, account and attempt history are not available. It does
 not show raw arguments, tokens or full tool output.
 
+The open drawer follows the latest tool row. If the turn ends before a finish
+report arrives, the line says that the result was not confirmed. It does not call
+the tool a failure or say that it kept running. Live start and finish updates are
+announced once in the polite status message. History replay and streamed text
+stay quiet.
+
 ## Visual comparison
 
 The frames were compared at 1280px and 390px where supplied, and the layouts were
@@ -34,8 +40,8 @@ motion. The differences below follow the data the server provides.
 | Frame | Result | What the screen shows and why it differs |
 | --- | --- | --- |
 | WRK-01 | Delivered | Existing empty conversation; captured as a regression check. |
-| WRK-02 | Not built | There is no record for a tool action while it is running. The page keeps its existing “Folding…” and “Agent working” text. |
-| WRK-03 | Adapted | Saved command and failed-turn records appear as quiet transcript buttons. Restricted turns do not report commands. Team turns sent from the workspace run restricted, so they show at most “Reply failed”. |
+| WRK-02 | Adapted | A reported governed tool call appears as a running line. The fixture compares it with the 1280px and 390px frame; the server reports no arguments or result while it runs. |
+| WRK-03 | Adapted | Finished governed calls, saved command records and failed-turn records appear as quiet transcript buttons. Restricted turns do not report commands. Team turns sent from the workspace run restricted, so they show at most “Reply failed”. |
 | WRK-04 | Delivered | A transcript button opens the cleaned result, time on the shared world clock and event reference. The location, account and attempt history are not available. |
 | WRK-05 | Not built | The server gives no attempt history. |
 | WRK-06 | Not built | The server gives no native-consent refusal report or link to tool settings. |
@@ -69,6 +75,14 @@ available. The reconnect line sits at the left and does not sit above a pending
 card. Folded cards do not show a decision time. Their wording names the viewer
 when the viewer asked for the approval and says “the requester” for anyone else.
 
+The Stop status is also captured at desktop and phone widths. If the server has
+not reported that a turn ended after ten seconds, the workspace says “Stop not
+confirmed”, keeps the turn active and offers Stop again.
+
+| State | 1280px | 390px |
+| --- | --- | --- |
+| Stop not confirmed | [Desktop capture](stop-not-confirmed-1280-no-preference.png) | [Phone capture](stop-not-confirmed-390-no-preference.png) |
+
 ## Checks
 
 The captures use sample data. They do not prove a live tool action with real approvals.
@@ -77,13 +91,13 @@ checks.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Lint | PASS | `nice -n 10 npm run lint`; nine existing max-lines warnings. |
-| Typecheck | PASS | `nice -n 10 npm run typecheck`. |
+| Lint | PASS | `nice -n 10 npm run lint`; 14 existing max-lines warnings. |
+| Web typecheck | PASS | `nice -n 10 npm run typecheck -w apps/web`. |
 | Root tests | NOT RUN | The requested checks excluded the full root suite. |
-| Web tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false`; 32 files, 358 tests. |
+| Web tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false`; 40 files, 614 tests. |
 | Event catalogue | PASS | `nice -n 10 npm run check:events`; 96 event types agree. |
 | Web build | PASS | `nice -n 10 npm run build -w apps/web`; existing CSS budget and CommonJS warnings. |
-| Approval visuals | PASS | `nice -n 10 npm run visual:p3-5-approvals`; 64 captures at 1280, 390 and 320 pixels with both motion settings. |
+| Approval visuals | PASS | `nice -n 10 node scripts/check-p3-5-approvals.mjs`; 88 captures at 1280, 390 and 320 pixels with both motion settings. Includes a 200-character tool name and Stop timeout. |
 | F2 overlays | NOT RUN | Not part of the requested review checks. |
 | F5 workspace | PASS | `nice -n 10 npm run visual:f5-workspace`; 18 captures. |
 | Chat browser | PASS | `nice -n 10 npm run visual:chat`; keyboard, focus, phone, streaming and reconnect checks. |
