@@ -214,6 +214,7 @@ it('refuses another organisation and a cookie role without projected membership'
 });
 
 it('loads through the dev proxy and preserves the accessible refresh journey in Chromium', async () => {
+  await prepareReviewedOdooCatalogue();
   const remote = await remoteFixture();
   installWorker(app, nats.store, 'test', remote.network).start();
   const target = await app.listen({ host: '127.0.0.1', port: 0 });
@@ -314,7 +315,6 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('link', { name: 'Integrations', exact: true }).click();
     await page.locator('.register-row').first().waitFor();
 
-    await prepareReviewedOdooCatalogue();
     const toolsLoaded = page.waitForResponse(r => r.url().endsWith('/odoo/tools'));
     await page.goto(`${base}/org/integrations/odoo/tools`);
     expect((await toolsLoaded).status()).toBe(200);
