@@ -150,3 +150,41 @@ Logs: `/tmp/fix-307c-red.log`, `/tmp/fix-307c-green.log`,
 `/tmp/fix-307c-events.log`.
 NOT RUN: full root suite, paid calls and fresh-install managed-provider qualification.
 The switch-on command and managed gateway remain unfinished.
+
+## Personal turn budget reads
+
+Date: 10 October 2026. Production fix: `a51652b7`.
+Rebased only this branch's twelve commits from `269556f9` onto `origin/main`
+at `f972aee1`. The rebase finished. README conflict resolutions keep main's
+delegation notes and this branch's provider notes. The accepted money actor
+patch is unchanged by the rebase.
+
+The train found that separate payer and provider-mode summaries each read the
+same two new budget rows. The existing personal-payer test reproduced this:
+FAIL before the fix, four rows read where at most two were allowed.
+Admission now gets the latest personal payer and switch-on state from one
+incremental fold of the exact silo budget stream. Its final switch-on check
+uses the same fold and reads only later rows. The old payer-only fold is removed.
+The switch-on race test still proves refusal before saving a start.
+
+Environment: Linux, Node 22.23.3, local worktree; disposable NATS and OpenFGA,
+recording gateway and PostgreSQL at `127.0.0.1:55432`. This is not a fresh install.
+Tests set the documented test-only `PG_TEST_URL`, use `nice -n 10` and one worker.
+PASS: two identical nine-file runs, 96 tests each, in 169.73 and 147.49 seconds.
+Each covers the personal-payer regression, both authority files and all six
+changed test files, including the memory-rights fixture. The payer test and both
+authority files are unchanged from main. No row limit or assertion was weakened.
+PASS: root lint, root typecheck, check:events (106 types), Knip and changelog
+validation. Root lint includes Knip and `npm run lint:changelog`; it reports
+15 existing warnings and no errors.
+
+The one authorised narrow money verification returned LAND with no new findings.
+Its report is `/home/jente/.fleet/reviews/p4-22-pr4c-budget-money.md`.
+Existing MINOR coverage follow-ups stay with #302.
+
+Logs: `/tmp/p4-22-pr4c-budget-before.log`,
+`/tmp/p4-22-pr4c-budget-tests-1.log`, `/tmp/p4-22-pr4c-budget-tests-2.log`,
+`/tmp/p4-22-pr4c-budget-lint.log`, `/tmp/p4-22-pr4c-budget-typecheck.log`,
+`/tmp/p4-22-pr4c-budget-events.log` and `/tmp/p4-22-pr4c-budget-rebase.diff`.
+NOT RUN: full root suite, paid calls and fresh-install managed-provider qualification.
+The switch-on command and managed gateway remain unfinished.
