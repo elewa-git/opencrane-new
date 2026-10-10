@@ -32,23 +32,29 @@ function addComputer(summary: ComputerSummary, row: StoredEvent) {
   const type = row.event.type;
   if (type === 'computer.turn_started') {
     const details = startDetails.parse(row.event.data);
+    // Keep native task records from granting permission to make calls.
+    if (details.task === 'native_descendant') return;
     addStart(summary, row, details);
     return;
   }
   if (type === 'computer.turn_closed') {
     const details = closeDetails.parse(row.event.data);
-    const previous = summary.turns.get(details.turnId);
-    if (!previous?.firstClose) {
-      summary.startCommandCount -= previous?.startCommandKeys?.size ?? 0;
-      const closedTurn: TurnSummary = { hasStart: previous?.hasStart ?? false,
-        firstClose: { sequence: row.sequence, status: details.status } };
-      summary.turns.set(details.turnId, closedTurn);
-    }
+    if (details.task === 'native_descendant') return;
+    addClose(summary, row, details);
     return;
   }
   if (!type.startsWith('computer.turn_')) summary.lifecycle = row;
   if (type === 'computer.claimed') summary.claim = row;
   if (type === 'computer.claimed' || type === 'computer.resumed') summary.grant = row;
+}
+function addClose(summary: ComputerSummary, row: StoredEvent,
+  details: z.infer<typeof closeDetails>) {
+  const previous = summary.turns.get(details.turnId);
+  if (previous?.firstClose) return;
+  summary.startCommandCount -= previous?.startCommandKeys?.size ?? 0;
+  const closedTurn: TurnSummary = { hasStart: previous?.hasStart ?? false,
+    firstClose: { sequence: row.sequence, status: details.status } };
+  summary.turns.set(details.turnId, closedTurn);
 }
 function addStart(summary: ComputerSummary, row: StoredEvent,
   details: z.infer<typeof startDetails>) {

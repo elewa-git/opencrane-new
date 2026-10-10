@@ -15,7 +15,7 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.->|signs memory passes| auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
   auth -->|updates saved computer facts from new events| events["Event log<br/>saved events"]
-  auth -.->|checks turn data and saved provider choice| catalogue["libs/events<br/>event definitions"]
+  auth -.->|checks chat turns and refuses native task passes| catalogue["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for
@@ -31,6 +31,7 @@ flowchart LR
 - Keep return links on the same website and end the Zitadel browser session at sign-out.
 - Sign and check short-lived passes for computers and individual chat turns.
   Keep a saved provider choice in a turn pass and refuse a different choice.
+- Refuse passes for native child tasks. Their saved records grant no call authority.
 - Check computer and turn passes against the computer's recorded state. It keeps a
   [stream summary](../../GLOSSARY.md#stream-summary) and reads new events before every check.
 - Share the computer summary with the server and models process so starting a

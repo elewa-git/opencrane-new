@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
+import { getEventDefinition } from '@opencrane/events';
 import { readStreamSummary, type StoredEvent } from '@opencrane/event-store';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { computerSummary, type ComputerSummary } from '../src/index.ts';
@@ -91,3 +92,19 @@ async function checksBeforeChangingFacts() {
   expect(summary.lifecycle).toBeUndefined();
 }
 it('leaves the summary unchanged when start fields are invalid', checksBeforeChangingFacts);
+
+function ignoresNativeAuthority() {
+  const example: unknown = getEventDefinition('delegation.started')?.example;
+  if (typeof example !== 'object' || example === null) throw new Error('Missing native example');
+  const native: Record<string, unknown> = { ...example, task: 'native_descendant' };
+  delete native['version'];
+  delete native['computerAdmission'];
+  const summary = computerSummary.empty();
+  const start = rowEvent('native-start', 'computer.turn_started', native);
+  computerSummary.add(summary, { sequence: 1, event: start });
+  const closed = { ...native, status: 'cancelled' };
+  const close = rowEvent('native-close', 'computer.turn_closed', closed);
+  computerSummary.add(summary, { sequence: 2, event: close });
+  expect(summary).toEqual(computerSummary.empty());
+}
+it('keeps native records out of turn and thread authority', ignoresNativeAuthority);

@@ -12,7 +12,7 @@ This shared library is used by the server, background workers and personal compu
 flowchart LR
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes and spending| models["libs/models<br/>AI rules and child joins"]
   ops["apps/ops<br/>background workers"] -.-> models
-  computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
+  computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
@@ -55,6 +55,8 @@ flowchart LR
   Reuse checked approval facts and read only later chat changes before a decision.
 - Refuse provider-bound model passes on the deployment-key gateway before holding money.
   Calls through saved provider choices are not available yet.
+- Refuse native child model calls before holding money. Older delegation records
+  grant no call authority either.
 - Check member or admin access for reads using saved membership and current permissions.
   Let one request reuse checks for the same saved access event.
 - Check that an invitation's sender still has authority before it is accepted.

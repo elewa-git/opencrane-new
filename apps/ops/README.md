@@ -13,7 +13,7 @@ flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events, assistant and provider choices| ops["apps/ops<br/>workers and table rebuilds"]
   ops -.->|uses| libs["libs/*<br/>shared code"]
-  ops -->|updates tables, jobs and configured memory| postgres["PostgreSQL<br/>read tables"]
+  ops -->|updates tables, task relationships, jobs and configured memory| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
   ops -->|checks and updates computers| kube["Kubernetes<br/>computer manager"]
   kube -->|runs| computer["apps/computer<br/>assistant runtime"]
@@ -24,6 +24,8 @@ flowchart LR
 - Records the first verified provider as the default once its chat model is enabled. Keeps later choices and pauses.
 - Keeps the member, group, model grant, tool catalogue, conversation, file, computer, budget and
   history tables up to date. Keeps memory current when its key directory is configured.
+- Copies delegated task relationships and outcomes with the `delegations` worker.
+  This worker starts no tasks and changes no permissions or spending.
 - Updates permissions and sets up a new member's assistant and computer when requested.
 - Starts computers, gives them short-lived access keys and pauses idle ones.
 - Settles model spending after a model request.

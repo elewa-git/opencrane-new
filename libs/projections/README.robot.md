@@ -19,6 +19,17 @@ waiting for their existing exclusive lock. The shared connection helper limits p
 connection waits to one second. Memory keys expose `status(identity)` without creating
 a key: it distinguishes missing custody, an available key and a destroyed-key marker.
 
+`delegations` fills `delegations` and `computer_delegations` using the ordinary
+checkpoint runner. The tables keep the full checked start data, original event ids,
+global positions and first terminal outcome. Root and parent indexes support task
+reads; computer roots are indexed by silo, assistant and generation. Legacy rows
+have no root or parent index entry and grant no authority. The projection does not
+verify native ancestry, issue tokens, reserve money or spawn work.
+`ProjectionRunner.rebuild(delegations)` rebuilds both tables offline with readers
+and workers stopped. No online replay command or browser read route is added here.
+`test/delegations.test.ts` uses disposable NATS/PostgreSQL and rebuilds the existing
+budget projection alongside the hierarchy, preserving 240 settled and 110 held cents.
+
 The public entrypoint is `src/index.ts`:
 
 ```ts

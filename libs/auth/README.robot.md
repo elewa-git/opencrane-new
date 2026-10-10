@@ -89,6 +89,10 @@ and records readiness again. Token values never enter events or projections.
 
 ## Computer summary
 
+Native descendant start/close records parse but do not enter the authority summary's
+turn or thread maps. `computerCredentials.turn` refuses `task: native_descendant`
+before issuance. This keeps saved delegation records separate from executable chat turns.
+
 `computerSummary` is the shared `SummaryKind<ComputerSummary>` used by credentials
 and server turn commands. The event store keeps up to 64 computers per store
 connection. Each use reads new events before copying facts; a dropped summary

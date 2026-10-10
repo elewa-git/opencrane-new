@@ -8,6 +8,13 @@ projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. The replay entrypoint never publishes events or runs reactions. Run it from the
 repository root on Node 22.
 
+## Delegated task worker
+
+`npm run worker -w apps/ops -- delegations` fills the delegation and computer-root
+tables using only the projection reader settings and `DATABASE_URL`. It runs no
+reactions. Offline rebuilding is available through `ProjectionRunner.rebuild(delegations)`
+with readers/workers stopped; `npm run replay -- delegations` is not supported yet.
+
 ## Inspect without changing state
 
 Set the projection reader's `NATS_URL`, `NATS_CA_FILE`, `NATS_CERT_FILE`,

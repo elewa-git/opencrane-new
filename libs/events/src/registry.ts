@@ -1,6 +1,7 @@
 import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
   from './conversation.ts';
 import { memoryWrittenExample } from './memory.ts';
+import { modernDelegationExample } from './delegation.ts';
 import { ownershipEvents } from './ownership-events.ts';
 import { providerEvents } from './provider-events.ts';
 import { auditEvents } from './audit-events.ts';
@@ -463,16 +464,17 @@ export const eventRegistry: readonly EventDefinition[] = [
   event(
     'delegation.started',
     'delegation',
-    'A parent computer delegated work to a child sub-agent.',
+    'The server recorded a native task binding; older computer pairs remain readable.',
     data.delegationStartedDataSchema,
-    { delegationId: 'deleg_1', parentComputerId: 'computer_1', childComputerId: 'computer_2', rootBudgetId: 'budget_acme' },
+    modernDelegationExample,
   ),
   event(
     'delegation.completed',
     'delegation',
-    "A child computer's delegated work finished.",
+    'A delegated task finished; cancellation stays separate from success and failure.',
     data.delegationCompletedDataSchema,
-    { delegationId: 'deleg_1', outcome: 'success' },
+    { version: 1, delegationId: 'child', outcome: 'completed',
+      terminalEvidence: { eventId: 'closed', position: 4 } },
   ),
 
   // Security

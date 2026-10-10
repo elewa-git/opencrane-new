@@ -8,6 +8,18 @@ append, project, dispatch or replay events.
 
 ## Public contract
 
+Delegation version 1 records one computer generation, root, requester, payer,
+parent/child turns and threads, spawn item and narrowed scopes. `dataClass` records
+whether the task uses shared or private data; it grants no audience access.
+`computerAdmission` names the computer start event and its global position.
+Completed records distinguish `completed`, `failed` and `cancelled`, with a terminal
+evidence reference and optional saved result reference. Exact unversioned records
+remain readable for replay; mixing formats is refused. Modern delegation envelopes
+require the matching delegation subject and the `opencrane-server` system principal/source.
+The computer schemas use `task: native_descendant` for the separate native format.
+Native computer envelopes also require the matching server principal/source and computer subject.
+These checks validate records, not ancestry or access. Native execution stays disabled.
+
 Import `@opencrane/events` through [src/index.ts](src/index.ts).
 From the repository root, validate unknown input without trusting its declared type:
 

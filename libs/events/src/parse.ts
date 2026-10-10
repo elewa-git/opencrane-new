@@ -1,5 +1,6 @@
 import { validPreferenceIdentity } from './conversation.ts';
 import { memoryWrittenEventSchema } from './memory.ts';
+import { checkDelegationEvent } from './delegation.ts';
 // Parses a raw event by binding its `type` field to the registry, so
 // `data` is checked against that type's own schema instead of the generic
 // `z.unknown()` placeholder. This is what should sit in front of every
@@ -42,7 +43,7 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     return { success: false, reason: 'unknown_event_type', type: typeField.data.type };
   }
 
-  const envelopeSchema = eventEnvelopeSchema(definition.dataSchema);
+  const envelopeSchema = eventEnvelopeSchema(definition.dataSchema).superRefine(checkDelegationEvent);
   const checkedSchema = definition.stream === 'chat-state'
     ? envelopeSchema.refine(validPreferenceIdentity)
     : envelopeSchema;
