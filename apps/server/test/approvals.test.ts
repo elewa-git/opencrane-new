@@ -755,3 +755,22 @@ async function refusesRetryAfterBindingEnds(change: string) {
 }
 it.each(['expiry', 'turn', 'grant'])('refuses a verified retry after %s changes',
   refusesRetryAfterBindingEnds, 40_000);
+
+async function refusesCallsAndApprovalsDuringControl() {
+  const f = await approvalFixture();
+  try {
+    expect((await f.call()).status).toBe(403);
+    const data = { assistantId: 'assistant', computerId: 'computer', generation: 1,
+      podUid: 'fixture', conversationId: 'conversation', requesterId: 'alice',
+      requesterEventId: 'turn', takeoverId: 'control', leaseId: 'control',
+      reason: 'requester_requested', affectedTurnIds: ['turn'] };
+    await f.append('computer-assistant', 'takeover.requested', data);
+    expect((await f.decide()).statusCode).toBe(409);
+    expect((await f.call()).status).toBe(403);
+    expect((await f.decide('rejected')).statusCode).toBe(200);
+  } finally {
+    await f.close();
+  }
+}
+it('refuses an old turn token and late approval during control but allows explicit denial',
+  refusesCallsAndApprovalsDuringControl);
