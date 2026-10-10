@@ -922,17 +922,13 @@ with a non-zero cost, delivers it twice, restarts the budget actor and delivers 
 again. It checks one saved settlement and unchanged provider, model, payer and
 price-table fields. It sends no provider request.
 
-<<<<<<< HEAD
 `currentMembership` accepts a separate history deadline for reads before a write access check.
 
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
 
-## Personal remember admission (P4-12 PR 3c, first slice)
-=======
-## Personal remember admission (P4-12 PR 3c)
->>>>>>> e5f69401 (🔒 Limit governed agent remember to the requester’s own memory)
+## Personal remember admission
 
 The signed capability can name `remember`. Its scope stays the requester's person scope.
 Group and assistant-notes writes return `agent_person_scope_only` even when grants and

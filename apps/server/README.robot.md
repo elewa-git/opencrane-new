@@ -1297,6 +1297,9 @@ Deployment keeps the backend behind the gateway; unsigned direct requests are re
 The [memory capability contract](../../libs/models/README.robot.md) explains signature,
 scope, policy and current grant checks. Replies fit within 16 KiB.
 `test/memory-mcp.test.ts` uses real agentgateway, NATS, PostgreSQL and OpenFGA.
+Its shared fixture renews gateway credentials before each test on the same live turn.
+The turn token still lasts two minutes. Long test runs must reach the intended memory
+check rather than fail earlier because a previous test's token has expired.
 The successful fixture records a `restricted` execution mode. A legacy start without
 a mode is refused, as is `memory_free`. Both the requester and assistant need
 recorded grants of the right identity kind and current OpenFGA permission.

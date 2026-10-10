@@ -66,3 +66,50 @@ Build warnings about existing stylesheet budgets and the noVNC CommonJS import r
 
 Fresh-install remember and recall, backend network isolation, stale content-generation
 rejection and native memory: **NOT RUN**. The draft awaits the orchestrator's next review.
+
+## Rebase repair — 10 October 2026
+
+Base: `6ebd942c` (`origin/main`, including #316). The rebase carried only this PR's
+12 original commits and the new regression commit. It completed successfully.
+Environment: the same Linux development worktree, with real disposable services and
+`PG_TEST_URL` set. This is not a fresh installation. No full root suite ran.
+
+The train reported eight failures at the shared recall step. A local run reproduced
+five of them in 139.85 seconds. The three earlier cases passed in that run. This
+difference comes from when the shared turn token reaches its two-minute expiry.
+The later tests were using credentials issued once during the file's initial setup.
+They failed before reaching their individual memory checks.
+
+No merged main change was found to alter this refusal. Comparing the pre-rebase PR
+with main showed unchanged token lifetimes, memory rights, backend memory MCP and
+memory command code. The tool audit additions in #311 are outside the memory
+decision branch. The group, member and browser changes did not change this shared
+personal fixture. The existing token expiry check correctly refused an old token.
+
+The regression was committed first in `63f1c94b`. It advances the clock by 121 seconds,
+proves that the old credential is refused before reaching the backend, and requires
+renewal for the same live turn to succeed with a 120-second token. It failed before
+the fixture fix and passed afterwards. Reissuing from the fixture's old clock was
+insufficient. The fix moves that test clock to the current time before issuing new
+credentials and renews them before each test. It keeps the original turn, grants,
+memory contents, assertions and production deadlines.
+
+All eight train failures have this same cause and fix:
+
+- refuses another person scope at the command boundary;
+- refuses an expired dependency at the command boundary;
+- rechecks dependencies after preparing the new revision key;
+- cleans recovery records only after a definite failure: prepared;
+- cleans recovery records only after a definite failure: unknown;
+- cleans recovery records only after a definite failure: legacy;
+- refuses a turn closed during write preparation;
+- rechecks stale grants at the backend and refuses an ended turn upstream.
+
+The repair changes test setup and documentation only. No production code changed
+in the repair. The original PR still contains its governed personal remember code.
+The models README repair removes saved conflict markers and retains both main's
+access and approval notes and this PR's personal remember contract.
+
+Failing-first logs: `/tmp/pr319-credential-red.log` and
+`/tmp/pr319-credential-green.log`. The initial changed-file failure log is
+`/tmp/pr319-rebase-failing.log`.

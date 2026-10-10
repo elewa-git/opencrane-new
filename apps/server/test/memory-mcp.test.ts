@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import * as crypto from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
@@ -126,10 +126,16 @@ async function close() {
   await setup?.close();
 }
 async function renewGatewayCredentials() {
+  // Keep each test on the same live turn with a fresh two-minute token.
+  const claims = decodeJwt(setup.headers['x-turn-token']);
+  const issuedAt = z.int().parse(claims.iat);
+  const now = Math.floor(Date.now() / 1000);
+  setup.credentialTime(now - issuedAt);
   const renewed = await setup.issue();
   Object.assign(setup.headers, renewed);
 }
 beforeAll(prepare, 120_000);
+beforeEach(renewGatewayCredentials);
 afterAll(close);
 
 function scopedRequester(team: boolean, kind: MemoryIdentity['scopeKind']) {
