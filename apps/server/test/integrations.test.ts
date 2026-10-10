@@ -214,9 +214,9 @@ it('refuses another organisation and a cookie role without projected membership'
 });
 
 it('loads through the dev proxy and preserves the accessible refresh journey in Chromium', async () => {
-  await prepareReviewedOdooCatalogue();
   const remote = await remoteFixture();
   installWorker(app, nats.store, 'test', remote.network).start();
+  await prepareReviewedOdooCatalogue();
   const target = await app.listen({ host: '127.0.0.1', port: 0 });
   const directory = await mkdtemp(join(tmpdir(), 'opencrane-org-browser-'));
   const proxy = join(directory, 'proxy.json');
@@ -506,7 +506,7 @@ it('restricts the model and spending read to projected owners and admins', async
   expect((await app.inject({ method: 'GET', url: '/api/org/models', headers: headers('oidc-alice', 'other') })).statusCode).toBe(403);
 });
 
-async function prepareReviewedOdooCatalogue() {
+async function prepareReviewedOdooCatalogue(reviewed = true) {
   const readDefinition = losslessJson(
     '{"name":"read","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}');
   const writeDefinition = losslessJson('{"name":"write","inputSchema":{"type":"object"}}');
@@ -521,6 +521,21 @@ async function prepareReviewedOdooCatalogue() {
   await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDigest: catalogueDigest(tools),
     checkedAt, expiresAt, connectionId: 'installed-odoo', accountMode: 'none', tools });
   await runner.run(mcpCatalogue);
+  if (reviewed) {
+    const state = await catalogue.tools('test', 'odoo');
+    function choice(tool: typeof tools[number]) {
+      const evidence = { costCents: tool.costCents, review: null };
+      return { name: tool.name, revision: tool.revision,
+        reviewDigest: losslessJson(JSON.stringify(evidence)).digest, mode: 'block' };
+    }
+    const payload = { commandId: 'prepare-review', expectedSequence: state.sequence,
+      policyRevision: state.policyRevision, catalogueDigest: state.catalogue!.schemaDigest,
+      connectionId: 'installed-odoo', accountMode: 'none', tools: tools.map(choice) };
+    const request = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
+      headers: { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin }, payload };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    await runner.run(mcpCatalogue);
+  }
   return writeDefinition.digest;
 }
 
@@ -1143,7 +1158,7 @@ async function refusesRemovedComputerAdministrator() {
 it('refuses the computer register after removal and a later invitation with old SQL and IAM',
   refusesRemovedComputerAdministrator);
 async function exactReviewCommand() {
-  await prepareReviewedOdooCatalogue();
+  await prepareReviewedOdooCatalogue(false);
   const state = await catalogue.tools('test', 'odoo');
   function choice(tool: NonNullable<NonNullable<typeof state.catalogue>['tools']>[number]) {
     const evidence = { costCents: tool.costCents ?? null, review: tool.review ?? null };
@@ -1159,7 +1174,10 @@ async function exactReviewCommand() {
 async function savesExactReview() {
   const payload = await exactReviewCommand();
   const before = await catalogue.tools('test', 'odoo');
-  expect(before.tools.every(tool => !tool.reviewed && tool.mode === 'block')).toBe(true);
+  function isBlocked(tool: typeof before.tools[number]) {
+    return !tool.reviewed && tool.mode === 'block';
+  }
+  expect(before.tools.every(isBlocked)).toBe(true);
   const request = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
     headers: { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin }, payload };
   expect((await app.inject(request)).statusCode).toBe(200);
@@ -1178,16 +1196,29 @@ async function savesExactReview() {
   expect(rows.filter(isReview)).toHaveLength(1);
   expect(rows.at(-1)?.event).toMatchObject({ principal: { kind: 'human', id: 'amina' },
     data: { reviewedBy: 'amina' } });
+  const restriction = { commandId: 'review-block', expectedSequence: saved.sequence,
+    connectionId: 'installed-odoo', toolName: 'read', toolRevision: saved.tools[0]!.revision,
+    mode: 'block' };
+  const restrictRequest = { ...request, url: '/api/org/integrations/odoo/tools',
+    payload: restriction };
+  expect((await app.inject(restrictRequest)).statusCode).toBe(200);
+  await runner.run(mcpCatalogue);
+  const blocked = await catalogue.tools('test', 'odoo');
+  expect(blocked.tools[0]?.mode).toBe('block');
+  await runner.rebuild(mcpCatalogue);
+  expect(await catalogue.tools('test', 'odoo')).toEqual(blocked);
 }
 it('discovery cannot review tools; an exact admin review saves once and replays', savesExactReview);
 
 async function refusesInexactReview(kind: string) {
   const command = await exactReviewCommand();
-  let payload: unknown = command;
+  let payload: object = command;
   let sub = 'oidc-amina';
   let origin = new URL(config.redirectUri).origin;
   let status = 409;
-  if (kind === 'hash') payload = { ...command, catalogueDigest: 'f'.repeat(64) };
+  if (kind === 'hash') {
+    payload = { ...command, catalogueDigest: 'f'.repeat(64) };
+  }
   if (kind === 'definition') {
     payload = { ...command, tools: [{ ...command.tools[0], revision: 'f'.repeat(64) },
       command.tools[1]] };
@@ -1196,18 +1227,37 @@ async function refusesInexactReview(kind: string) {
     payload = { ...command, tools: [{ ...command.tools[0], reviewDigest: 'f'.repeat(64) },
       command.tools[1]] };
   }
-  if (kind === 'stale') payload = { ...command, expectedSequence: 0 };
-  if (kind === 'revision') payload = { ...command, policyRevision: 0 };
-  if (kind === 'connection') payload = { ...command, connectionId: 'foreign' };
-  if (kind === 'account') payload = { ...command, accountMode: 'company' };
-  if (kind === 'incomplete') payload = { ...command, tools: [command.tools[0]] };
+  if (kind === 'stale') {
+    payload = { ...command, expectedSequence: 0 };
+  }
+  if (kind === 'revision') {
+    payload = { ...command, policyRevision: 0 };
+  }
+  if (kind === 'connection') {
+    payload = { ...command, connectionId: 'foreign' };
+  }
+  if (kind === 'account') {
+    payload = { ...command, accountMode: 'company' };
+  }
+  if (kind === 'incomplete') {
+    payload = { ...command, tools: [command.tools[0]] };
+  }
   if (kind === 'forged-admin') {
     payload = { ...command, reviewedBy: 'alice' };
     status = 400;
   }
-  if (kind === 'member') { sub = 'oidc-bob'; status = 403; }
-  if (kind === 'foreign') { sub = 'oidc-mallory'; status = 403; }
-  if (kind === 'origin') { origin = 'https://foreign.test'; status = 403; }
+  if (kind === 'member') {
+    sub = 'oidc-bob';
+    status = 403;
+  }
+  if (kind === 'foreign') {
+    sub = 'oidc-mallory';
+    status = 403;
+  }
+  if (kind === 'origin') {
+    origin = 'https://foreign.test';
+    status = 403;
+  }
   const before = await nats.store.head('mcp-odoo');
   const request = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
     headers: { ...headers(sub), origin }, payload };
@@ -1226,7 +1276,9 @@ async function refusesUnavailableReview(kind: 'cost' | 'expired' | 'ask-details'
     return { ...tool, costCents: undefined };
   }
   let saved = snapshot;
-  if (kind === 'cost') saved = { ...snapshot, tools: snapshot.tools!.map(removeCost) };
+  if (kind === 'cost') {
+    saved = { ...snapshot, tools: snapshot.tools!.map(removeCost) };
+  }
   if (kind === 'expired') {
     saved = { ...snapshot, checkedAt: '2026-01-01T00:00:00Z',
       expiresAt: '2026-01-01T00:05:00Z' };

@@ -326,3 +326,16 @@ name/pronouns up to 200/100 characters, 16 distinct groups/tasks and the fixed s
 It refuses controls and lone surrogates through the existing memory text check.
 Survey text stays data; no command or route is enabled. See the
 [accepted design](../../docs/specs/phase-4/p4-18-account-persona-welcome.md).
+The Node entrypoints `@opencrane/events/lossless-json` and
+`@opencrane/events/mcp-catalogue` share the existing JSON hash format across discovery,
+append validation and policy replay. They use Node's built-in SHA-256 implementation.
+They are separate from browser event schemas, so browser builds do not load Node crypto.
+`validateMcpCatalogue` checks the complete accepted tool count, distinct names, definition
+names, schemas, annotation flags, tool revisions and the catalogue digest.
+The event parser binds every MCP event's server id to its exact subject.
+
+## Exact tool review
+
+`mcp.server_reviewed` records exact catalogue and review digests, connection/account mode,
+all tool choices, the existing policy revision checked and the human reviewer.
+The resulting policy revision comes from the saved event position.

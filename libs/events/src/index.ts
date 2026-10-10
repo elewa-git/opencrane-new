@@ -36,7 +36,7 @@ export { memberInvitedDataSchema, memberRoleChangedDataSchema, memberRemovedData
 
 export { budgetCeilingSetDataSchema, decisionRecordedDataSchema } from './data.ts';
 
-export { toolApprovalRequestedDataSchema, mcpServerDiscoveredDataSchema } from './data.ts';
+export { toolApprovalRequestedDataSchema, mcpServerDiscoveredDataSchema, mcpServerReviewedDataSchema } from './data.ts';
 export { fileUploadedDataSchema, fileRejectedDataSchema, fileDeliveredDataSchema } from './file-events.ts';
 
 export { effectResolvedDataSchema, effectUncertainDataSchema } from './data.ts';

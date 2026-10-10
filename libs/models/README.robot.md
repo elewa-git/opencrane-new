@@ -1294,3 +1294,13 @@ and retry. It does not read spending history or provider mode. Model and memory
 admission keep their provider-mode checks through `decisionActivity`; this split
 does not change their money checks. Explicit denial remains allowed. Final dispatch
 serialisation is separate unfinished work.
+Memory discovery checks recall once and uses the same checked catalogue to decide
+whether to list remember. `toolDecision` supplies the existing review, mode and zero-cost
+rules for both. The backend repeats its own access check; write confirmations still
+read current policy. The slow-read regression keeps the original two-second lifetime.
+
+## Exact tool review
+
+`reviewToolPolicy` accepts one exact catalogue and all tool choices. It reads the server
+history once before the two-second membership check. It conditionally appends one
+`mcp.server_reviewed` event. Saved retries compare the event type, actor and full input.

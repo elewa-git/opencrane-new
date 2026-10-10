@@ -1,5 +1,6 @@
-import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
+import { validateMcpCatalogue, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { getEventDefinition, hostedCredentialContractSchema, mcpServerDiscoveredDataSchema,
+  mcpServerReviewedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
@@ -32,6 +33,15 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     const catalogue = mcpServerDiscoveredDataSchema.parse(parsed);
     next = applyCapture(next, state.catalogue, catalogue);
   }
+  if (event.type === 'mcp.server_reviewed') {
+    const review = mcpServerReviewedDataSchema.parse(parsed);
+    const tools = reviewedToolChoices(state, review, Date.parse(event.time));
+    if (!tools || event.principal?.kind !== 'human' || event.principal.id !== review.reviewedBy) {
+      throw new Error('Tool review does not match the saved catalogue');
+    }
+    next.tools = tools;
+    next.published = keepsPublication(state, tools);
+  }
   if (event.type === 'mcp.server_published') {
     next.published = state.startupReviewRequired !== true;
   }
@@ -46,6 +56,7 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   }
   if (event.type === 'mcp.tool_mode_set') {
     next.tools = applyMode(state, data);
+    next.published = keepsPublication(state, next.tools);
   }
   return toolPolicySchema.parse(next);
 }
@@ -88,7 +99,7 @@ function discoveredTool(tool: NonNullable<Catalogue['tools']>[number]): ToolPoli
   const readOnly = tool.readOnly === true && tool.destructive !== true;
   const suggestion = readOnly ? 'allow' : 'ask';
   const result: ToolPolicy['tools'][number] = { name: tool.name, revision: tool.revision,
-    reviewed: tool.reviewed, readOnly, mode: 'block', suggestion };
+    reviewed: false, readOnly, mode: 'block', suggestion };
   if (tool.costCents === 0) {
     result.costCents = 0;
   }
@@ -99,7 +110,7 @@ function applyMode(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy
   if (data['connectionId'] !== state.connectionId) {
     return state.tools;
   }
-  function matchesName(tool: ToolPolicy['tools'][number]) {
+  function matchesName(tool: { name: string }) {
     return tool.name === data['toolName'];
   }
   const selected = state.tools.find(matchesName);
@@ -107,6 +118,11 @@ function applyMode(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy
     return state.tools;
   }
   const mode = z.enum(['allow', 'ask', 'block']).parse(data['mode']);
+  const declaration = state.catalogue?.tools?.find(matchesName);
+  if (mode !== 'block' && (selected.costCents !== 0 ||
+      (mode === 'ask' && !declaration?.review))) {
+    return state.tools;
+  }
   function setMode(tool: ToolPolicy['tools'][number]) {
     if (tool === selected) {
       return { ...tool, mode };
@@ -149,10 +165,16 @@ function applyChange(next: ToolPolicy, state: ToolPolicy, data: Record<string, u
     return changed;
   }
   function retainUnchangedChoice(tool: ToolPolicy['tools'][number]) {
-    function matchesRevision(previous: ToolPolicy['tools'][number]) {
+    function matchesRevision(previous: { name: string; revision: string }) {
       return previous.name === tool.name && previous.revision === tool.revision;
     }
     const previous = state.tools.find(matchesRevision);
+    const previousDeclaration = state.catalogue?.tools?.find(matchesRevision);
+    const currentDeclaration = catalogue.tools?.find(matchesRevision);
+    if (!previousDeclaration || !currentDeclaration ||
+        toolReviewDigest(previousDeclaration) !== toolReviewDigest(currentDeclaration)) {
+      return blockTool(tool);
+    }
     return previous ?? blockTool(tool);
   }
   const tools = changed.tools.map(retainUnchangedChoice);
@@ -177,4 +199,72 @@ function checkPolicyIdentity(state: ToolPolicy, event: EventEnvelope,
       (state.catalogue !== null && serverId !== state.catalogue.serverId)) {
     throw new Error('MCP policy identity mismatch');
   }
+}
+
+export function reviewedToolChoices(state: ToolPolicy,
+  review: ReturnType<typeof mcpServerReviewedDataSchema.parse>, now: number) {
+  const catalogue = state.catalogue;
+  if (!catalogue || !matchesReview(state, review, now)) {
+    return null;
+  }
+  validateMcpCatalogue(catalogue);
+  const choices = new Map<string, typeof review.tools[number]>();
+  for (const choice of review.tools) {
+    if (choices.has(choice.name)) {
+      return null;
+    }
+    choices.set(choice.name, choice);
+  }
+  const tools: ToolPolicy['tools'] = [];
+  for (const tool of state.tools) {
+    const choice = choices.get(tool.name);
+    function matchesName(declaration: NonNullable<Catalogue['tools']>[number]) {
+      return declaration.name === tool.name;
+    }
+    const declaration = catalogue.tools?.find(matchesName);
+    if (!choice || !declaration || !matchesChoice(tool, declaration, choice)) {
+      return null;
+    }
+    const reviewed = { ...tool, reviewed: true, mode: choice.mode };
+    tools.push(reviewed);
+  }
+  return tools;
+}
+
+function keepsPublication(state: ToolPolicy, tools: ToolPolicy['tools']): boolean {
+  const restrictions = { allow: 0, ask: 1, block: 2 };
+  for (const tool of tools) {
+    function matchesName(previous: ToolPolicy['tools'][number]) {
+      return previous.name === tool.name;
+    }
+    const previous = state.tools.find(matchesName);
+    if (!previous || restrictions[tool.mode] < restrictions[previous.mode]) {
+      return false;
+    }
+  }
+  return state.published;
+}
+
+type Review = ReturnType<typeof mcpServerReviewedDataSchema.parse>;
+
+function matchesReview(state: ToolPolicy, review: Review, now: number): boolean {
+  return state.checkedAt !== null && state.expiresAt !== null &&
+    Date.parse(state.checkedAt) <= now && Date.parse(state.expiresAt) > now &&
+    review.catalogueDigest === state.catalogue?.schemaDigest &&
+    review.connectionId === state.connectionId && review.accountMode === state.accountMode &&
+    review.policyRevision === state.policyRevision && review.tools.length === state.tools.length;
+}
+
+function matchesChoice(tool: ToolPolicy['tools'][number],
+  declaration: NonNullable<Catalogue['tools']>[number], choice: Review['tools'][number]): boolean {
+  if (choice.revision !== tool.revision || choice.reviewDigest !== toolReviewDigest(declaration)) {
+    return false;
+  }
+  if (choice.mode !== 'block' && declaration.costCents !== 0) {
+    return false;
+  }
+  if (choice.mode === 'ask' && !declaration.review) {
+    return false;
+  }
+  return true;
 }

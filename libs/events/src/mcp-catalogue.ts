@@ -87,3 +87,9 @@ function objectFields(value: JsonValue): Map<string, JsonValue> {
   }
   return value.value;
 }
+
+export function toolReviewDigest(tool: { costCents?: number | undefined; review?: unknown }): string {
+  const evidence = { costCents: tool.costCents ?? null, review: tool.review ?? null };
+  const encoded = JSON.stringify(evidence);
+  return losslessJson(encoded).digest;
+}

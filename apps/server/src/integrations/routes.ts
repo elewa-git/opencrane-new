@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { budgetCommandSchema } from '@opencrane/protocol';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
-import { readToolPolicy, setToolPolicy, models, taskRouting, priceTableId, shortContextTokens, totals, readBudget, budgetSummary } from '@opencrane/models';
+import { readToolPolicy, setToolPolicy, reviewToolPolicy, models, taskRouting, priceTableId, shortContextTokens, totals, readBudget, budgetSummary } from '@opencrane/models';
 import type { Query } from '@opencrane/projections';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { isOrganisationSession, type AuthConfig, type tokenIssuer } from '@opencrane/auth';
@@ -32,7 +32,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
   if (options?.store && options.discovery) installWorker(app, options.store, options.silo, options.discovery).start();
   const authorisation = options && memberAuthorisation(options.binding);
   const now = options?.now ?? (() => new Date());
-  for (const path of ['/api/org/integrations', '/api/org/models', '/api/org/integrations/:serverId/tools', '/api/org/integrations/:serverId/discovery', '/api/org/integrations/discovery']) app.route({ method: !path.endsWith('/discovery') ? ['GET', 'POST'] : ['GET'], url: path, handler: async (request, reply) => {
+  for (const path of ['/api/org/integrations', '/api/org/models', '/api/org/integrations/:serverId/tools', '/api/org/integrations/:serverId/review', '/api/org/integrations/:serverId/discovery', '/api/org/integrations/discovery']) app.route({ method: !path.endsWith('/discovery') ? ['GET', 'POST'] : ['GET'], url: path, handler: async (request, reply) => {
     const session = sessionFor(request, config, now());
     if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });
     if (!options || !authorisation || !config.expectedOrgId) return reply.code(503).send({ status: 'unavailable' });
@@ -75,6 +75,9 @@ async function authorisedRequest(path: string, request: FastifyRequest, reply: F
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
         return reply.code(202).send(await registerRemote(options.store, options.silo, memberId, request.body));
       }
+      if (path.endsWith('/review')) {
+        return review(request, reply, config, options, memberId);
+      }
       if (path.endsWith('/tools')) {
         return await tools(request, reply, config, options, memberId);
       }
@@ -95,6 +98,29 @@ async function tools(request: FastifyRequest, reply: FastifyReply, config: AuthC
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
         const result = await setToolPolicy(options.store, options.binding, memberId, serverId, request.body);
         return reply.code(result.status === 'appended' ? 200 : result.status === 'unavailable' ? 503 : 409).send({ status: result.status, ...(result.status === 'appended' ? { policy: await readToolPolicy(options.store, options.silo, serverId) } : {}) });
+}
+
+async function review(request: FastifyRequest, reply: FastifyReply, config: AuthConfig,
+  options: IntegrationOptions, memberId: string) {
+  if (request.method !== 'POST') {
+    return reply.code(405).send({ status: 'refused' });
+  }
+  if (request.headers.origin !== new URL(config.redirectUri).origin) {
+    return reply.code(403).send({ status: 'refused' });
+  }
+  if (!options.store) return reply.code(503).send({ status: 'unavailable' });
+  const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
+  const { serverId } = params.parse(request.params);
+  const result = await reviewToolPolicy(options.store, options.binding, memberId,
+    serverId, request.body);
+  let statusCode = 409;
+  if (result.status === 'appended') {
+    statusCode = 200;
+  }
+  if (result.status === 'unavailable') {
+    statusCode = 503;
+  }
+  return reply.code(statusCode).send({ status: result.status });
 }
 
 function routeError(request: FastifyRequest, reply: FastifyReply, error: unknown) {

@@ -1959,3 +1959,16 @@ The [rebase receipt](../../docs/process/p4-13-pr1-rebase-repair.md) records the
 branch repair, focused fairness comparisons, failed checks and subsequent runs.
 It records the same fairness failure on main and the slow history reads under load.
 It makes no live qualification claim.
+The MCP recovery cases also start fresh service fixtures. This keeps earlier grant
+and catalogue histories out of each timed write. Each case must receive HTTP 200
+and reach the simulated append failure once before checking its recovery records.
+The following cases also use fresh services because NATS stops when a test finishes.
+Memory passes still last at most two seconds.
+
+## Exact tool review
+
+`POST /api/org/integrations/:serverId/review` requires a same-organisation Owner/Admin
+session and same-origin request. Input: `commandId`, `expectedSequence`, `policyRevision`,
+`catalogueDigest`, `connectionId`, `accountMode`, and every tool’s `name`, `revision`,
+`reviewDigest`, `mode`. The server supplies `reviewedBy`. Success is 200, stale or incomplete
+evidence is 409, invalid input is 400, and unavailable services return 503.
