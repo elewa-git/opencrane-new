@@ -127,13 +127,17 @@ function checkDependencies(rows: StoredEvent[], scope: Scope, input: Input,
   }
 }
 
+function requireAgentPersonScope(scope: Scope, requester: string) {
+  if (scope.scopeKind !== 'person' || scope.ownerId !== requester) {
+    throw new MemoryPersonScopeOnly();
+  }
+}
+
 export async function remember(options: MemoryOptions, requester: string, scope: Scope,
   raw: unknown, agent?: AgentWrite) {
   let principalKind: PrincipalKind = 'human';
   if (agent) {
-    if (scope.scopeKind !== 'person' || scope.ownerId !== requester) {
-      throw new MemoryPersonScopeOnly();
-    }
+    requireAgentPersonScope(scope, requester);
     principalKind = 'agent';
   }
   // Check write permission before inspecting private content or reserving a database client.

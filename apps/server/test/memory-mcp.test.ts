@@ -11,7 +11,7 @@ import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { fixture } from '@opencrane/models/testing';
-import { envelope, parseMemoryRequest, startDecision } from '@opencrane/models';
+import { envelope, parseMemoryRequest, startDecision, verifyMemoryContext } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -1255,16 +1255,18 @@ async function preparationTurn(body: Awaited<ReturnType<typeof recalledRemember>
     turnId: turn, threadId: thread, requesterId: 'alice', task: 'chat_turn',
     payingGroupId: 'personal-default', executionMode: 'restricted' });
   const { recallProof } = await import('../src/memory/recall-proof.ts');
-  const context = decodeJwt(await signedRemember(body));
-  const changedContext = { ...context, turn, thread };
-  const proofContext = changedContext as import('@opencrane/models').MemoryContext;
+  const changedMetadata = { ...metadata, threadId: thread };
+  const changedBody = { ...body, params: { ...body.params, _meta: changedMetadata } };
+  const overrides = { turn, thread };
+  const token = await signedRemember(changedBody, overrides);
+  const parsed = parseMemoryRequest(JSON.stringify(changedBody), rememberHeaders);
+  const proofContext = await verifyMemoryContext(token, setup.identity, parsed);
   const dependencies = body.params.arguments.dependsOn;
   const proof = recallProof(testAuthConfig().cookieSecret, proofContext, dependencies);
   const argumentsValue = { ...body.params.arguments, recallProof: proof };
-  const changedMetadata = { ...metadata, threadId: thread };
-  const changedBody = { ...body, params: { ...body.params,
-    arguments: argumentsValue, _meta: changedMetadata } };
-  return { body: changedBody, overrides: { turn, thread } };
+  const finalBody = { ...changedBody, params: { ...changedBody.params,
+    arguments: argumentsValue } };
+  return { body: finalBody, overrides };
 }
 
 async function refusesPreparedWrite(change: 'dependency' | 'turn') {

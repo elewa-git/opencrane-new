@@ -1,10 +1,11 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import type { Binding } from '@opencrane/authz';
 import { grantStream } from '@opencrane/authz';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { memoryScopeId } from '@opencrane/projections';
+import type { StoredEvent } from '@opencrane/event-store';
+import { natsFixture } from '@opencrane/event-store/testing';
+import { emptyToolPolicy, memoryScopeId } from '@opencrane/projections';
 import { memoryRights } from '../src/memory-context.ts';
-import { parseMemoryRequest } from '../src/mcp.ts';
+import { parseMcpCall, parseMemoryRequest } from '../src/mcp.ts';
 import { data } from '../src/state.ts';
 import { randomUUID } from 'node:crypto';
 import { authorityFence, currentAuthority } from '../src/authority.ts';
@@ -35,7 +36,17 @@ const body = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'rec
     'io.modelcontextprotocol/protocolVersion': '2026-07-28',
     'io.modelcontextprotocol/clientCapabilities': {} } } };
 const parsed = parseMemoryRequest(JSON.stringify(body), headers);
-const binding = { silo: 'test' } as Binding;
+const binding: Binding = { silo: 'test', apiUrl: 'http://127.0.0.1:1',
+  storeId: 'test-store', authorizationModelId: 'test-model' };
+let nats: Awaited<ReturnType<typeof natsFixture>>;
+async function prepareStore() {
+  nats = await natsFixture();
+}
+function closeStore() {
+  return nats.close();
+}
+beforeAll(prepareStore);
+afterAll(closeStore);
 let rows: StoredEvent[];
 let activity: Awaited<ReturnType<typeof decisionActivity>>;
 
@@ -47,16 +58,21 @@ function row(subject: string, type: string, data: object, sequence = 1, silo = '
 }
 async function* readStream(subject: string) {
   for (const saved of rows) {
-    if (saved.event.subject === subject) yield saved;
+    if (saved.event.subject === subject) {
+      yield await Promise.resolve(saved);
+    }
   }
 }
-const store = { readStream } as EventStore;
-async function confirm() {
-  return false;
+function confirm() {
+  return Promise.resolve(false);
 }
-async function confirmAccess() {}
+function confirmAccess() {
+  return Promise.resolve();
+}
 function prepare() {
+  vi.restoreAllMocks();
   vi.resetAllMocks();
+  vi.spyOn(nats.store, 'readStream').mockImplementation(readStream);
   rows = [row('assistant-assistant', 'assistant.created', { assistantId: 'assistant',
     kind: 'personal', ownerId: 'alice' })];
   for (const resourceType of ['mcp_server', 'memory_read']) {
@@ -78,13 +94,17 @@ function prepare() {
   vi.mocked(authorityFence).mockResolvedValue(fresh);
   vi.mocked(currentAuthority).mockResolvedValue('test-authority');
   vi.mocked(decisionActivity).mockResolvedValue(activity);
-  const policy = { outcome: 'allow', reason: 'policy_allow' } as Awaited<ReturnType<typeof mcpPolicy>>;
+  const policyArgs = parseMcpCall(JSON.stringify(body)).args;
+  const policy: Awaited<ReturnType<typeof mcpPolicy>> = { outcome: 'allow',
+    reason: 'policy_allow', schemaDigest: 'a'.repeat(64), review: undefined,
+    destination: 'test', waitLimited: false, expectedApproval: undefined,
+    policy: emptyToolPolicy(), revision: undefined, name: 'recall', args: policyArgs };
   vi.mocked(mcpPolicy).mockResolvedValue(policy);
 }
 beforeEach(prepare);
 
 async function allowed() {
-  await expect(memoryRights(store, binding, claims, parsed, performance.now() + 2000))
+  await expect(memoryRights(nats.store, binding, claims, parsed, performance.now() + 2000))
     .resolves.toMatchObject({ scope: { scopeId, ownerId: 'alice' } });
 }
 it('accepts matching saved access records', allowed);
@@ -101,7 +121,7 @@ async function refusesAssistant({ field, value }: { field: string; value: unknow
   } else {
     saved.event.data = { ...data(saved.event), [field]: value };
   }
-  await expect(memoryRights(store, binding, claims, parsed, performance.now() + 2000))
+  await expect(memoryRights(nats.store, binding, claims, parsed, performance.now() + 2000))
     .rejects.toThrow();
 }
 it.each(assistantChanges)('checks the assistant record independently: $field', refusesAssistant);
@@ -116,7 +136,7 @@ async function refusesGrant(field: string) {
   } else {
     saved.event.data = { ...data(saved.event), [field]: 'other' };
   }
-  await expect(memoryRights(store, binding, claims, parsed, performance.now() + 2000))
+  await expect(memoryRights(nats.store, binding, claims, parsed, performance.now() + 2000))
     .rejects.toThrow('Recorded memory grant refused');
 }
 it.each(grantChanges)('checks the grant record independently: %s', refusesGrant);
@@ -125,7 +145,7 @@ const startChanges = ['requesterId', 'conversationId'];
 async function refusesStart(field: string) {
   const start = activity.computer.firstStart!.event;
   start.data = { ...data(start), [field]: 'other' };
-  await expect(memoryRights(store, binding, claims, parsed, performance.now() + 2000))
+  await expect(memoryRights(nats.store, binding, claims, parsed, performance.now() + 2000))
     .rejects.toThrow('Memory turn refused');
 }
 it.each(startChanges)('checks the recorded turn independently: %s', refusesStart);
@@ -142,14 +162,14 @@ async function sharedWrite() {
   const request = { ...body, params: { ...body.params, name: 'remember', arguments: argumentsValue } };
   const writeHeaders = { ...headers, 'mcp-name': 'remember' };
   const write = parseMemoryRequest(JSON.stringify(request), writeHeaders);
-  await expect(memoryRights(store, binding, claims, write, performance.now() + 2000))
+  await expect(memoryRights(nats.store, binding, claims, write, performance.now() + 2000))
     .rejects.toThrow('agent_person_scope_only');
 }
 it('refuses assistant notes independently of proof and command checks', sharedWrite);
 
 async function closed() {
   activity.conversation.push(row('conversation-conversation', 'conversation.closed', {}));
-  await expect(memoryRights(store, binding, claims, parsed, performance.now() + 2000))
+  await expect(memoryRights(nats.store, binding, claims, parsed, performance.now() + 2000))
     .rejects.toThrow('Memory turn ended');
 }
 it('refuses a closed conversation with a live computer turn', closed);
