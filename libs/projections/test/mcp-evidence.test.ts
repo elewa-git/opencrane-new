@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
@@ -7,9 +8,14 @@ import { database } from './database.ts';
 
 const checkedAt = '2026-10-10T12:00:00.000Z';
 const expiresAt = '2026-10-10T12:05:00.000Z';
-const discovery = { serverId: 'fixture', toolCount: 1, schemaDigest: 'a'.repeat(64),
-  checkedAt, expiresAt, tools: [{ name: 'read', revision: 'b'.repeat(64),
-    reviewed: true, definition: '{"name":"read","inputSchema":{"type":"object"}}' }] };
+const definition = '{"inputSchema":{"type":"object"},"name":"read"}';
+const revision = createHash('sha256').update(definition).digest('hex');
+const revisions = JSON.stringify([{ name: 'read', revision }]);
+const schemaDigest = createHash('sha256').update(revisions).digest('hex');
+const emptyDigest = createHash('sha256').update('[]').digest('hex');
+const discovery = { serverId: 'fixture', toolCount: 1, schemaDigest,
+  checkedAt, expiresAt, tools: [{ name: 'read', revision,
+    reviewed: true, definition }] };
 function record(type: string, data: unknown) {
   return { ...event(type), type, subject: 'mcp-fixture', data };
 }
@@ -30,7 +36,7 @@ it('keeps the policy revision and choices when unchanged evidence is renewed', r
 
 function retainsSnapshots() {
   const before = discovered();
-  const catalogue = { ...discovery, schemaDigest: 'c'.repeat(64), tools: [] };
+  const catalogue = { ...discovery, schemaDigest: emptyDigest, toolCount: 0, tools: [] };
   const change = record('mcp.tools_changed', { serverId: 'fixture',
     previousSchemaDigest: discovery.schemaDigest, newSchemaDigest: catalogue.schemaDigest,
     catalogue });
@@ -49,7 +55,7 @@ async function rebuildsEvidence() {
     const registration = record('mcp.server_registered', { serverId: 'fixture',
       kind: 'remote', locator: 'https://fixture.example.test', registeredBy: 'admin' });
     const capture = record('mcp.server_discovered', discovery);
-    const catalogue = { ...discovery, schemaDigest: 'c'.repeat(64), tools: [] };
+    const catalogue = { ...discovery, schemaDigest: emptyDigest, toolCount: 0, tools: [] };
     const change = record('mcp.tools_changed', { serverId: 'fixture',
       previousSchemaDigest: discovery.schemaDigest, newSchemaDigest: catalogue.schemaDigest,
       catalogue });
@@ -59,7 +65,7 @@ async function rebuildsEvidence() {
     await runner.run(mcpCatalogue);
     const before = await storage.db.query('SELECT policy FROM mcp_catalogue');
     expect(before.rows[0]?.['policy']).toMatchObject({ checkedAt, expiresAt,
-      catalogue: { ...discovery, schemaDigest: 'c'.repeat(64), tools: [] },
+      catalogue: { ...discovery, schemaDigest: emptyDigest, toolCount: 0, tools: [] },
       previousCatalogue: discovery });
     await storage.reopen();
     await rebuildMcpCatalogueProjection(storage.db, nats.reader, logger, { verify: true });

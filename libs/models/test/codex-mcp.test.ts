@@ -4,21 +4,27 @@ import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { conversations, readConversation } from '@opencrane/projections';
 import { grantStream } from '@opencrane/authz';
-import { approvalCards, decideApproval, history, readApproval } from '../src/index.ts';
+import { approvalCards, decideApproval, envelope, history, losslessJson, readApproval } from '../src/index.ts';
 import { fixture } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 
+const toolDefinition = losslessJson('{"name":"write","inputSchema":{"type":"object"}}');
+const toolRevision = toolDefinition.digest;
+const catalogueDigest = losslessJson(JSON.stringify([{ name: 'write', revision: toolRevision }])).digest;
+
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
-async function prepareCapturedCall(setup: Fixture, toolMode: 'allow' | 'ask' = 'allow') {
+async function prepareCapturedCall(setup: Fixture, toolMode: 'allow' | 'ask' = 'allow',
+  ttlMs = 300_000) {
   const registration = { serverId: 'fixture', kind: 'remote',
     locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.server_registered', registration);
   const review = { action: 'Write note', consequence: 'The order note changes.',
     targetArgument: 'order', fields: ['order', 'note'], stepUp: false };
-  const tool = { name: 'write', revision: 'a'.repeat(64), reviewed: true, costCents: 0, review };
+  const tool = { name: 'write', revision: toolRevision, definition: toolDefinition.canonical, reviewed: true, costCents: 0, review };
   const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
-    schemaDigest: 'a'.repeat(64), toolCount: 1, tools: [tool] };
+    schemaDigest: catalogueDigest, toolCount: 1, tools: [tool],
+    checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + ttlMs).toISOString() };
   await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
   const publication = { serverId: 'fixture', publishedBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.server_published', publication);
@@ -29,7 +35,7 @@ async function prepareCapturedCall(setup: Fixture, toolMode: 'allow' | 'ask' = '
     await setup.auth.handler.handle(event, setup.db);
   }
   const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
-    toolRevision: 'a'.repeat(64), mode: toolMode, setBy: 'alice' };
+    toolRevision, mode: toolMode, setBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
   const threadId = capture.body.params._meta.threadId;
   const turn = { assistantId: 'assistant', computerId: 'computer',
@@ -422,7 +428,7 @@ async function bindsHeldApproval(change: string) {
     const decision = z.object({ approvalId: z.string() }).parse(await asked.json());
     if (change === 'unchanged') {
       const checkedAt = new Date().toISOString();
-      const check = { serverId: 'fixture', outcome: 'unchanged', schemaDigest: 'a'.repeat(64),
+      const check = { serverId: 'fixture', outcome: 'unchanged', schemaDigest: catalogueDigest,
         checkedAt, expiresAt: new Date(Date.parse(checkedAt) + 300_000).toISOString() };
       await setup.append('mcp-fixture', 'mcp.catalogue_checked', check);
     }
@@ -452,7 +458,7 @@ async function bindsHeldApproval(change: string) {
     }
     if (change === 'allow') {
       await setup.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture',
-        connectionId: 'installed', toolName: 'write', toolRevision: 'a'.repeat(64),
+        connectionId: 'installed', toolName: 'write', toolRevision,
         mode: 'allow', setBy: 'alice' });
     }
 
@@ -528,7 +534,7 @@ async function refusesLegacyCatalogue() {
     const publication = { serverId: 'fixture', publishedBy: 'alice' };
     await setup.append('mcp-fixture', 'mcp.server_published', publication);
     const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
-      toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'alice' };
+      toolRevision, mode: 'allow', setBy: 'alice' };
     await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
     const request = { method: 'POST', headers, body: JSON.stringify(capture.body) };
     const result = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`, request);
@@ -539,3 +545,73 @@ async function refusesLegacyCatalogue() {
   }
 }
 it('refuses legacy catalogue evidence at the real gateway', refusesLegacyCatalogue);
+
+async function refusesForgedEvidence(attack: 'revision' | 'server') {
+  const setup = await fixture();
+  try {
+    const base = await prepareCapturedCall(setup, 'ask', attack === 'server' ? 2000 : 300_000);
+    const headers = { ...base, 'x-opencrane-tool-mode': 'ask' };
+    const request = { method: 'POST', headers, body: JSON.stringify(capture.body) };
+    const url = `http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`;
+    const asked = await fetch(url, request);
+    expect(asked.status).toBe(403);
+    const decision = z.object({ approvalId: z.string() }).parse(await asked.json());
+    const current = await readApproval(setup.nats.store, 'test', decision.approvalId);
+    async function currentAuthority() {}
+    const approved = await decideApproval(setup.nats.store, 'test', decision.approvalId,
+      'alice', 'approved', true, currentAuthority, current);
+    expect(approved.status).toBe('appended');
+    const rows = await history(setup.nats.store, 'mcp-fixture', 'test');
+    function isDiscovery(row: (typeof rows)[number]) {
+      return row.event.type === 'mcp.server_discovered';
+    }
+    const saved = rows.find(isDiscovery);
+    const catalogue = z.record(z.string(), z.unknown()).parse(saved?.event.data);
+    const checkedAt = new Date().toISOString();
+    const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+    if (attack === 'revision') {
+      const tools = z.array(z.record(z.string(), z.unknown())).parse(catalogue['tools']);
+      tools[0] = { ...tools[0], definition: toolDefinition.canonical.replace('object', 'string') };
+      const changed = { ...catalogue, tools };
+      const data = { serverId: 'fixture', previousSchemaDigest: catalogueDigest,
+        newSchemaDigest: catalogueDigest, catalogue: changed };
+      const forged = envelope('test', 'mcp-fixture', 'mcp.tools_changed', data);
+      const publication = envelope('test', 'mcp-fixture', 'mcp.server_published',
+        { serverId: 'fixture', publishedBy: 'alice' });
+      const invalidHistory = [forged, publication];
+      await setup.nats.seed(invalidHistory);
+    } else {
+      await pause(2100);
+      const data = { serverId: 'another-server', outcome: 'unchanged',
+        schemaDigest: catalogueDigest, checkedAt, expiresAt };
+      const forged = envelope('test', 'mcp-fixture', 'mcp.catalogue_checked', data);
+      const invalidHistory = [forged];
+      await setup.nats.seed(invalidHistory);
+    }
+    const retryHeaders = { ...headers, 'x-opencrane-approval-id': decision.approvalId };
+    const retry = { ...request, headers: retryHeaders };
+    const refused = await fetch(url, retry);
+    expect(refused.status).toBe(403);
+    expect(setup.received()).toBe(0);
+    const approvalRows = await history(setup.nats.store, `approval-${decision.approvalId}`, 'test');
+    function isUsed(row: (typeof approvalRows)[number]) {
+      return row.event.type === 'approval.used';
+    }
+    expect(approvalRows.filter(isUsed)).toHaveLength(0);
+    // Check Allow too, so a new policy revision cannot hide a retained tool review.
+    const mode = envelope('test', 'mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture',
+      connectionId: 'installed', toolName: 'write', toolRevision, mode: 'allow', setBy: 'alice' });
+    const modeHistory = [mode];
+    await setup.nats.seed(modeHistory);
+    const allowHeaders = { ...base, 'x-opencrane-tool-mode': 'allow' };
+    const allowRequest = { ...request, headers: allowHeaders };
+    const allowResponse = await fetch(url, allowRequest);
+    expect(allowResponse.status).toBe(403);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(['revision', 'server'] as const)(
+  'refuses forged %s evidence and leaves the approval unused at the real gateway',
+  refusesForgedEvidence, 40_000);
