@@ -231,21 +231,32 @@ async function changesInventoryBeforeAppend() {
   await join('changed-at-append');
   const input = await review('changed-at-append');
   const save = nats.store.append.bind(nats.store);
-  async function changeInventory(command: Parameters<typeof save>[0]) {
-    if (eventTypeSchema.parse(command.event).type === 'member.removed') {
+  const readHead = nats.store.head.bind(nats.store);
+  let changed = false;
+  async function changeInventory(subject?: string, deadline?: number) {
+    const position = await readHead(subject, deadline);
+    const checkingAccess = deadline !== undefined && deadline - performance.now() <= 2000;
+    if (!changed && subject === 'member-changed-at-append' && checkingAccess) {
+      changed = true;
       const record = { ...event('late-team', 'team-late', 'team.created'),
         data: { teamId: 'late', name: 'Late group', createdBy: 'owner' } };
-      await save({ event: record, expectedSequence: 0 });
+      const command = { event: record, expectedSequence: 0 };
+      expect((await save(command)).status).toBe('appended');
     }
-    return save(command);
+    return position;
   }
-  const appendSpy = vi.spyOn(nats.store, 'append');
-  appendSpy.mockImplementation(changeInventory);
+  const headSpy = vi.spyOn(nats.store, 'head');
+  headSpy.mockImplementation(changeInventory);
   const response = await request('changed-at-append', 'remove', input);
+  expect(changed).toBe(true);
   expect(response.statusCode).toBe(409);
+  expect(response.json()).toMatchObject({ reason: 'stale_review' });
   expect((await currentMembership(nats.reader, 'test', 'changed-at-append')).role).toBe('member');
+  const rows = await history(nats.reader, 'member-changed-at-append', 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows.at(-1)?.event.type).toBe('member.joined');
 }
-it('refuses inventory changes after the final access check and before append',
+it('refuses inventory changes during the final access check and before append',
   changesInventoryBeforeAppend);
 
 async function removesDuringOtherMembersPosts() {
@@ -276,8 +287,12 @@ async function removesDuringOtherMembersPosts() {
     if (eventTypeSchema.parse(command.event).type === 'member.removed') await postMessage();
     return save(command);
   }
-  vi.spyOn(nats.store, 'head').mockImplementation(postDuringChecks);
-  vi.spyOn(nats.store, 'append').mockImplementation(postBeforeAppend);
+  await postMessage();
+  await project();
+  const headSpy = vi.spyOn(nats.store, 'head');
+  headSpy.mockImplementation(postDuringChecks);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  appendSpy.mockImplementation(postBeforeAppend);
   const response = await request(memberId, 'remove', input);
   expect(response.statusCode, response.body).toBe(200);
   expect(response.json()).toMatchObject({ access: 'revoked', reviewRevision: input.reviewRevision });
@@ -306,7 +321,8 @@ async function refusesTargetChangeBeforeAppend() {
     }
     return save(command);
   }
-  vi.spyOn(nats.store, 'append').mockImplementation(changeTarget);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  appendSpy.mockImplementation(changeTarget);
   const response = await request(memberId, 'remove', input);
   expect(response.statusCode, response.body).toBe(409);
   expect(response.json()).toMatchObject({ reason: 'concurrent_change' });
