@@ -11,6 +11,7 @@ import type { Query } from '@opencrane/projections';
 import { members, pgDb, ProjectionRunner, auditTrail, rebuildAuditProjection } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+import { refusalDigest } from '../src/members/refusals.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-acme',
   extraIdentities: [{ issuer: 'https://idp.example.test', subject: 'admin' }] });
@@ -1196,7 +1197,7 @@ it('appends nothing and writes no projection during successful or refused audit 
 
 async function limitsRefusalRecovery(actor: string, kind: 'human' | 'agent' | 'system',
   operation: 'invite' | 'join') {
-  const data = { memberId, originalCommandId: input.commandId, operation,
+  const data = { memberId, originalCommandDigest: refusalDigest(input.commandId), operation,
     inputDigest: 'a'.repeat(64), reason: 'access_refused' };
   const record = { ...event(randomUUID(), `memberaudit-${memberId}`, 'member.command_refused'),
     silo: 'acme', principal: { kind, id: actor }, data };
@@ -1316,7 +1317,7 @@ async function rebuildsWrongAccountHistoryWithoutForeignRecords() {
   const payload = { memberId, invitationId: created.invitationId,
     commandId: 'wrong-account-rebuild', displayName: 'Private name' };
   expect((await wrongAccountJoin(payload)).statusCode).toBe(409);
-  const data = { memberId, originalCommandId: input.commandId,
+  const data = { memberId, originalCommandDigest: refusalDigest(input.commandId),
     operation: 'invite', inputDigest: 'a'.repeat(64), reason: 'access_refused' };
   const foreign = { ...event('foreign-refusal', `memberaudit-${memberId}`, 'member.command_refused'),
     silo: 'other-silo', data };
