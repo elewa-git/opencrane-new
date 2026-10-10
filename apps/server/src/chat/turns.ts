@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
   type StoredEvent } from '@opencrane/event-store';
+import { chatMembership } from './participation.ts';
 import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
 import { agentSessionData, ReportRejected } from './reports.ts';
@@ -245,7 +246,8 @@ async function payingGroup(store: EventStore, context: TurnContext,
   if (!defaultPayingGroupId) {
     throw new ReportRejected('Paying group unavailable; configure the installation default');
   }
-  return { payer: defaultPayingGroupId, fresh: undefined };
+  const fresh = await requireTurnMember(store, context.silo, requesterId);
+  return { payer: defaultPayingGroupId, fresh };
 }
 function sessionPayer(conversation: ChatFacts, requesterId: string,
   assistantPayer: string | undefined) {
@@ -323,6 +325,15 @@ function addLifecycleDetails(data: { executionMode?: ExecutionMode; status?: 'co
   } else {
     data.status = status;
   }
+}
+
+export async function requireTurnMember(store: EventStore, silo: string, requesterId: string) {
+  const subjects = [`member-${requesterId}`];
+  const fresh = await authorityFence(store, performance.now(), subjects);
+  const active = await chatMembership(store, silo, requesterId, fresh.deadline);
+  if (!active) throw new TurnAdmissionRejected('Active silo membership required');
+  await fresh();
+  return fresh;
 }
 
 function applyProviderChoice(data: TurnBinding,

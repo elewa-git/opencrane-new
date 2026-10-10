@@ -15,7 +15,7 @@ import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { resumeComputer } from '../../../ops/src/lifecycle.ts';
-import { turnCommand, TurnAdmissionRejected } from './turns.ts';
+import { turnCommand, requireTurnMember, TurnAdmissionRejected } from './turns.ts';
 import { privateContext } from './private-context.ts';
 import { chatHistory } from './commands.ts';
 import { recordReport, reportPosition, ReportRejected } from './reports.ts';
@@ -76,18 +76,25 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
       try {
         const privateHistory = await privateContextFor(options, report, binding);
         if (!tokens) throw new Error('Turn issuer unavailable');
+        const fresh = await requireTurnMember(
+          options.store, options.silo, binding.requesterId);
         const credentials = computerCredentials(options.store, tokens, options.silo);
         const turn = { ...binding, assistantId: input.assistantId,
           model: binding.model ?? modelForTask(binding.task) };
         const grant = await credentials.turn(turn);
+await fresh();
         acknowledgement.model = turn.model;
         acknowledgement.token = grant.value;
         acknowledgement.expiresAt = grant.expiresAt;
         if (privateHistory !== undefined) acknowledgement.context = privateHistory;
       } catch (error) {
-        if (!(error instanceof PrivateContextUnavailable)) throw error;
-        await turnCommand(options.store, context, { ...report, status: 'failed' });
-        acknowledgement.refused = 'Private context unavailable';
+        if (error instanceof TurnAdmissionRejected) {
+          acknowledgement.refused = error.message;
+        } else {
+          if (!(error instanceof PrivateContextUnavailable)) throw error;
+          await turnCommand(options.store, context, { ...report, status: 'failed' });
+          acknowledgement.refused = 'Private context unavailable';
+        }
       }
     }
   }

@@ -30,6 +30,7 @@ async function setup(kind: 'personal' | 'team' = 'personal') {
   await nats.seed([
     { ...fixtureEvent('joined', 'member-alice', 'member.joined'), data: {
       memberId: 'alice', invitationId: 'invite-alice', role: 'member',
+      email: 'alice@example.test', displayName: 'Alice',
     } },
     { ...event('created', 'conversation-chat', 'conversation.created'), data: {
       conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
@@ -291,6 +292,7 @@ async function refusesRemovedTurnRequester(repeat: boolean) {
     } },
     { ...fixtureEvent('invited-again', 'member-alice', 'member.invited'), data: {
       memberId: 'alice', invitationId: 'next-invite', role: 'member',
+      email: 'alice@example.test', invitedBy: 'admin',
     } },
   ]);
   const before = await nats.store.head(subject);
