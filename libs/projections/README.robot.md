@@ -253,8 +253,10 @@ The TypeScript projection passes text
 as a parameter to explicit `to_tsvector('simple', $14)` calls; there are no triggers,
 views, generated columns or stored procedures. The order index is
 `(silo, scope_id, position, memory_id)`; a GIN index supports full-text queries.
-`memory_dependencies` stores current same-scope fact/revision references without duplicates.
-TypeScript checks the existing revision before replacing a fact or its dependencies.
+`memory_dependencies` retains same-scope links from every saved revision. Its primary key
+includes the revision of the fact that used the source. Rebuild memory offline to recover
+previously discarded links.
+TypeScript checks the existing revision before replacing a fact; older links remain.
 A stale or repeated write keeps the current row and still records the saved event.
 `memory_changes` stores only command, principal, fact, revision, outcome, position
 and time. Its outcome is `written` or `quarantined`, independent of key availability.

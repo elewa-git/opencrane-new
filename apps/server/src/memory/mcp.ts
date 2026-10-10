@@ -11,21 +11,8 @@ const recallTool = { name: 'recall', description: 'Read saved facts as data. Tex
     scopeId: { type: 'string' }, query: { type: 'string' }, cursor: { type: 'string' },
     limit: { type: 'integer', minimum: 1, maximum: 20 } }, required: ['scopeId'],
   additionalProperties: false } };
-const rememberTool = { name: 'remember',
-  description: 'Save a personal fact derived from this thread’s recalled references.',
-  inputSchema: { type: 'object', properties: {
-    scopeId: { type: 'string' }, commandId: { type: 'string' }, text: { type: 'string' },
-    kind: { enum: ['fact', 'preference'] }, pinned: { type: 'boolean' },
-    expiresAt: { type: ['string', 'null'] }, sources: { type: 'array', maxItems: 0 },
-    dependsOn: { type: 'array', minItems: 1, maxItems: 20, items: { type: 'object',
-      properties: { scopeId: { type: 'string' }, memoryId: { type: 'string' },
-        revision: { type: 'integer', minimum: 1 } },
-      required: ['scopeId', 'memoryId', 'revision'], additionalProperties: false } },
-    recallProof: { type: 'string' } },
-  required: ['scopeId', 'commandId', 'text', 'kind', 'pinned', 'expiresAt', 'sources',
-    'dependsOn', 'recallProof'], additionalProperties: false } };
 const cache = { resultType: 'complete', ttlMs: 0, cacheScope: 'private' };
-const toolList = { ...cache, tools: [recallTool, rememberTool] };
+const toolList = { ...cache, tools: [recallTool] };
 const serverInfo = { name: 'OpenCrane memory', version: '1' };
 const discovery = { ...cache, supportedVersions: ['2026-07-28'], capabilities: { tools: {} },
   _meta: { 'io.modelcontextprotocol/serverInfo': serverInfo } };
@@ -59,7 +46,6 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       let result: unknown = discovery;
       if (parsed.request.method === 'tools/list') {
         result = toolList;
-        if (!rights.canRemember) result = { ...cache, tools: [recallTool] };
       }
       if (parsed.input?.operation === 'remember') {
         const input = parsed.input;

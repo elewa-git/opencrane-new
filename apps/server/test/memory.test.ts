@@ -1538,7 +1538,9 @@ it.each(['other_scope', 'stale', 'destroyed', 'expired'] as const)(
   'refuses a %s dependency without appending', async function dependencyRefusal(kind) {
     const memoryId = `dependency-${kind}`;
     let expiresAt: string | null = null;
-    if (kind === 'expired') expiresAt = '2029-01-01T00:00:00Z';
+    if (kind === 'expired') {
+      expiresAt = '2029-01-01T00:00:00Z';
+    }
     await write('bob', 'person', memoryId, undefined, false, 'acme', [], expiresAt);
     const scopeId = memoryScopeId('acme', 'person', 'bob');
     const identity = { silo: 'acme', scopeId, scopeKind: 'person' as const,

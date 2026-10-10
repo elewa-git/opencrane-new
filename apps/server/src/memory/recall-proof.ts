@@ -69,4 +69,7 @@ export function checkRecallProof(secret: string, context: MemoryContext, proof: 
       throw new MemoryRefused();
     }
   }
+  // Refuse writes until trusted records cover every memory reference loaded into the turn.
+  // A caller-selected page cannot establish complete evidence, even with a valid signature.
+  throw new MemoryRefused('Complete memory evidence unavailable');
 }

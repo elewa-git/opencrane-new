@@ -893,13 +893,17 @@ async function grantWrite(granteeKind: string) {
   const grant = await setup.append(grantStream('memory_write', scopeId), 'grant.given', fields);
   await setup.auth.handler.handle(grant, setup.db);
 }
+function independentFact(fact: { memoryId: string }) {
+  return fact.memoryId.startsWith('fact_');
+}
 async function recalledRemember(commandId: string) {
   await grantWrite('member');
   await grantWrite('assistant');
   const response = await setup.call(headers, call, route);
   expect(response.status, response.text).toBe(200);
   const page = recallProofSchema.parse(JSON.parse(response.text)).result.structuredContent;
-  const fact = page.facts[0]!;
+  // Choose an original test fact. Earlier tests deliberately erase sources of derived facts.
+  const fact = page.facts.find(independentFact)!;
   const dependency = { scopeId, memoryId: fact.memoryId, revision: fact.revision };
   const argumentsValue = { scopeId, commandId, text: 'Derived deliveries fact', kind: 'fact',
     pinned: false, expiresAt: null, sources: [], dependsOn: [dependency],

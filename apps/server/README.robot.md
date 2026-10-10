@@ -128,7 +128,9 @@ The full encrypted event size is checked before a revision key is created. Chang
 inputs return 409. Lost replies return `outcome: "unknown"`; clients check
 `GET /api/memory/:scopeId/changes/:commandId` instead of resending. Status returns only
 this principal's original command, after projection catch-up, including for a notes writer
-without a read grant. Receipts contain references and audience, never text.
+without a read grant. Receipts contain references and audience, never text. An unusable
+consumed command keeps its accepted receipt and adds `contentStatus`: erased, superseded or invalid. It never
+compares old text, provisions a replacement key or appends again. Missing custody returns 503.
 
 The existing 0700 key directory also holds temporary command records. Their fingerprint
 leaves text out. A resolved record is deleted. Each new record stores the expected scope
@@ -1523,7 +1525,9 @@ It binds the silo, requester, assistant, computer generation, conversation, turn
 content class and selected scope. It contains no fact text and needs no saved permit table.
 Proof bytes count towards the 16 KiB reply limit. Page-limit placeholders are excluded.
 Remember requires this proof, non-empty same-scope `dependsOn`, and empty `sources`.
-The command also checks that dependency revisions still exist, decrypt and have not expired.
+The command checks current key status, expiry and all historical dependencies before using text.
+The exposed remember tool is refused and omitted from discovery because a selective proof
+cannot establish every reference loaded into a turn. Internal command recovery remains tested.
 An agent cannot claim a human statement. This proof checks references, not whether the
 model's wording follows logically from them.
 

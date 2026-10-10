@@ -94,7 +94,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
     }
     await activity.confirm(checkDeadline, false);
     await fresh();
-    return { scope, contextDigest, contextPosition: fresh.head, canRemember };
+    return { scope, contextDigest, contextPosition: fresh.head };
   }
 }
 

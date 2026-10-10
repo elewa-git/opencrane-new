@@ -3,7 +3,8 @@ import { opendir } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { authorityFence, MemoryPersonScopeOnly, readActiveMember } from '@opencrane/models';
+import { authorityFence, MemoryPersonScopeOnly, memoryReferences,
+  readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryIdentity } from '@opencrane/projections';
 import { memoryTextSchema, memoryWrittenDataSchema, memoryWrittenEventSchema,
   } from '@opencrane/events';
@@ -75,11 +76,16 @@ function originalInput(row: StoredEvent, keys: ReturnType<typeof memoryKeys>) {
     expiresAt: saved.data.expiresAt, sources: saved.data.sources, dependsOn: saved.data.dependsOn };
 }
 function originalReceipt(row: StoredEvent, keys: ReturnType<typeof memoryKeys>, input: Input,
-  audience: { kind: string; ownerId: string }) {
+  rows: StoredEvent[], audience: { kind: string; ownerId: string }) {
   if (row.event.type !== 'memory.written') {
     throw new MemoryConflict();
   }
   const receipt = savedReceipt(row, audience);
+  const references = memoryReferences(rows, row.event.silo, receipt.scopeId, keys);
+  const contentStatus = references.current(receipt);
+  if (contentStatus !== 'current') {
+    return { ...receipt, contentStatus };
+  }
   const original = originalInput(row, keys);
   if (original === null) {
     return { outcome: 'unavailable', memoryId: receipt.memoryId };
@@ -102,32 +108,17 @@ function statementSources(input: Input, requester: string) {
 }
 function checkDependencies(rows: StoredEvent[], scope: Scope, input: Input,
   keys: ReturnType<typeof memoryKeys>, silo: string) {
+  if (input.dependsOn.length === 0) {
+    return;
+  }
+  const references = memoryReferences(rows, silo, scope.scopeId, keys);
   const seen = new Set<string>();
   for (const dependency of input.dependsOn) {
     const reference = JSON.stringify(dependency);
-    if (dependency.scopeId !== scope.scopeId || seen.has(reference)) {
+    if (seen.has(reference) || references.current(dependency) !== 'current') {
       throw new MemoryConflict();
     }
     seen.add(reference);
-    let latest: ReturnType<typeof memoryWrittenEventSchema.parse> | undefined;
-    for (const row of rows) {
-      if (row.event.type !== 'memory.written') {
-        continue;
-      }
-      const saved = memoryWrittenEventSchema.parse(row.event);
-      if (saved.data.memoryId === dependency.memoryId) {
-        latest = saved;
-      }
-    }
-    if (!latest || !('schemaVersion' in latest.data) ||
-        latest.data.revision !== dependency.revision) {
-      throw new MemoryConflict();
-    }
-    const identity = { silo, ...scope, memoryId: dependency.memoryId, revision: dependency.revision };
-    if (keys.decrypt(identity, latest.data) === null ||
-        (latest.data.expiresAt !== null && Date.parse(latest.data.expiresAt) <= Date.now())) {
-      throw new MemoryConflict();
-    }
   }
 }
 
@@ -208,7 +199,7 @@ async function rememberLocked(options: MemoryOptions, requester: string, scope: 
     performance.now() + 100, rows, principalKind);
   if (state.original) {
     journal.remove();
-    return originalReceipt(state.original, keys, input, audience);
+    return originalReceipt(state.original, keys, input, state.rows, audience);
   }
   const { text: _text, ...metadata } = input;
   const hash = createHash('sha256');
@@ -291,7 +282,7 @@ async function appendPrepared(options: MemoryOptions, input: Input,
       readDeadline, rows, principalKind);
     if (reconciled.original) {
       journal.remove();
-      return originalReceipt(reconciled.original, keys, input, audience);
+      return originalReceipt(reconciled.original, keys, input, reconciled.rows, audience);
     }
     keys.delete(identity);
     journal.remove();
@@ -329,10 +320,13 @@ export async function readCommand(options: MemoryOptions, requester: string, sco
     return { outcome: 'unknown' };
   }
   journal.remove();
-  if (originalInput(state.original, keys) === null) {
-    return { outcome: 'unavailable', memoryId };
+  const receipt = savedReceipt(state.original, audience);
+  const references = memoryReferences(state.rows, options.silo, scope.scopeId, keys);
+  const contentStatus = references.current(receipt);
+  if (contentStatus !== 'current') {
+    return { ...receipt, contentStatus };
   }
-  return savedReceipt(state.original, audience);
+  return receipt;
 }
 
 type JournalEntry = NonNullable<ReturnType<ReturnType<typeof commandJournal>['read']>>;

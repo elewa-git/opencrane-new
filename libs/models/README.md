@@ -13,7 +13,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals, saved fact references, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
@@ -40,7 +40,7 @@ A change to the tools or their rules ends that approval.
 
 - Build recorded child participation and keep its history start separate from each join.
 - Recheck saved grants and permissions for a private turn memory preview without reading chat history again.
-- Check that each preview fact and its supporting facts are still usable.
+- Check that each preview fact and the facts used by a new fact are still usable.
 
 - Records verified tool dispatch outcomes and link attempts of the same call.
   Allows one unchanged retry after a recorded failure before dispatch.

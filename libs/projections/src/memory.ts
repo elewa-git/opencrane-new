@@ -27,7 +27,10 @@ async function create(db: Query): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS memory_dependencies (
     silo TEXT NOT NULL, scope_id TEXT NOT NULL, memory_id TEXT NOT NULL,
     revision BIGINT NOT NULL, dependency_id TEXT NOT NULL, dependency_revision BIGINT NOT NULL,
-    PRIMARY KEY (silo, scope_id, memory_id, dependency_id, dependency_revision))`);
+    PRIMARY KEY (silo, scope_id, memory_id, revision, dependency_id, dependency_revision))`);
+  await db.query(`ALTER TABLE memory_dependencies DROP CONSTRAINT memory_dependencies_pkey`);
+  await db.query(`ALTER TABLE memory_dependencies ADD PRIMARY KEY
+    (silo, scope_id, memory_id, revision, dependency_id, dependency_revision)`);
   await db.query(`CREATE TABLE IF NOT EXISTS memory_changes (
     silo TEXT NOT NULL, scope_id TEXT NOT NULL, change_id TEXT NOT NULL, command_id TEXT,
     principal_kind TEXT, principal_id TEXT, memory_id TEXT NOT NULL, revision BIGINT,
@@ -65,6 +68,14 @@ async function writeMemory(
   const fact = [event.silo, data.scopeId, data.memoryId];
   const fields = metadata(current);
   const values = [...fact, ...fields, data.ciphertext, data.keyId, status, text, position, event.time];
+  // Retain links from every saved revision, even when its value is no longer current.
+  if (current !== null) {
+    for (const dependency of current.dependsOn) {
+      const edge = [...fact, current.revision, dependency.memoryId, dependency.revision];
+      await db.query(`INSERT INTO memory_dependencies VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT DO NOTHING`, edge);
+    }
+  }
   const previous = await db.query<{ revision: string | number | null }>(
     'SELECT revision FROM memory_facts WHERE silo=$1 AND scope_id=$2 AND memory_id=$3', fact,
   );
@@ -83,14 +94,6 @@ async function writeMemory(
     scope_kind=$4, owner_id=$5, revision=$6, kind=$7, pinned=$8, expires_at=$9,
     sources=$10, ciphertext=$11, key_id=$12, content_status=$13,
     search_text=$14, search_vector=to_tsvector('simple',$14), position=$15, saved_at=$16`, values);
-  await db.query(`DELETE FROM memory_dependencies
-    WHERE silo=$1 AND scope_id=$2 AND memory_id=$3`, fact);
-  if (current !== null) {
-    for (const dependency of current.dependsOn) {
-      const edge = [...fact, current.revision, dependency.memoryId, dependency.revision];
-      await db.query('INSERT INTO memory_dependencies VALUES ($1,$2,$3,$4,$5,$6)', edge);
-    }
-  }
   await writeChange(db, event, data, current, position);
 }
 
