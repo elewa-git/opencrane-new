@@ -1901,3 +1901,54 @@ async function refusesRemovedAuthorAtParticipationCheck() {
 }
 it('refuses a removed group author at the participation check before appending',
   refusesRemovedAuthorAtParticipationCheck, 120_000);
+
+async function desktopWithColdFactsAndDelayedProjection() {
+  const context = await fixture();
+  const readStream = context.nats.store.readStream.bind(context.nats.store);
+  try {
+    const checkpoint = await context.nats.store.head();
+    await context.agentSession('cold-desktop');
+    await context.append('computer-assistant', 'computer.claimed', {
+      assistantId: 'assistant', computerId: 'desktop', generation: 1, tokenId: 'token:test',
+    }, false);
+    await context.append('computer-assistant', 'computer.ready', {
+      assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
+    }, false);
+    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
+      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
+      granteeKind: 'member', grantedBy: 'alice',
+    });
+    const events = [];
+    const encrypted = context.keys.encrypt('test', 'cold-desktop', 'Long saved chat');
+    for (let index = 0; index < 1000; index++) {
+      const data = { conversationId: 'cold-desktop', authorId: 'alice', authorKind: 'human',
+        contentType: 'text', ...encrypted };
+      const event = envelope('test', 'conversation-cold-desktop', 'message.posted', data);
+      events.push(event);
+    }
+    await context.nats.seed(events);
+    await context.db.query("UPDATE projection_checkpoints SET sequence = $1" +
+      " WHERE name = 'conversations'", [checkpoint]);
+    async function* creationOnly(subject: string, from?: number, deadline?: number) {
+      for await (const row of readStream(subject, from, deadline)) {
+        if (subject === 'conversation-cold-desktop' &&
+            row.event.type !== 'conversation.created') {
+          throw new Error('Desktop access must not scan conversation activity');
+        }
+        yield row;
+      }
+    }
+    const reads = vi.spyOn(context.nats.store, 'readStream');
+    reads.mockImplementation(creationOnly);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(viewAccess(context.options, 'alice', 'cold-desktop'))
+        .resolves.toMatchObject({ computerId: 'desktop' });
+    }
+    reads.mockRestore();
+  } finally {
+    vi.restoreAllMocks();
+    await context.close();
+  }
+}
+it('admits and renews a desktop with cold facts while projection lags a long chat creation',
+  desktopWithColdFactsAndDelayedProjection, 120_000);

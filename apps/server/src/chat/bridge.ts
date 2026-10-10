@@ -82,7 +82,7 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
         const turn = { ...binding, assistantId: input.assistantId,
           model: binding.model ?? modelForTask(binding.task) };
         const grant = await credentials.turn(turn);
-await fresh();
+        await fresh();
         acknowledgement.model = turn.model;
         acknowledgement.token = grant.value;
         acknowledgement.expiresAt = grant.expiresAt;

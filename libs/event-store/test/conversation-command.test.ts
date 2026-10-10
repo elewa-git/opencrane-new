@@ -118,3 +118,25 @@ async function validatesPrivatePreferences() {
 }
 it('saves preferences only on the named person’s stream with their human identity',
   validatesPrivatePreferences);
+
+async function closesOnSmallAccessStream() {
+  const nats = await natsFixture();
+  try {
+    const data = { conversationId: 'chat', closedBy: 'alice' };
+    const closed = { ...event('close', 'participation-chat', 'conversation.closed'), data };
+    const command = { event: closed, expectedSequence: 0 };
+    expect(await nats.store.append(command)).toMatchObject({ status: 'appended' });
+    const old = { ...closed, id: 'old-close', commandId: 'old-close',
+      subject: 'conversation-chat' };
+    expect(parseEventByType(old).success).toBe(true);
+    expect(await nats.store.append({ event: old, expectedSequence: 0 }))
+      .toMatchObject({ status: 'rejected' });
+    await nats.seed([old]);
+    const rows = await Array.fromAsync(nats.store.readStream('conversation-chat'));
+    expect(rows[0]?.event.type).toBe('conversation.closed');
+  } finally {
+    await nats.close();
+  }
+}
+it('writes closes only to the small access stream and keeps old closes readable',
+  closesOnSmallAccessStream);
