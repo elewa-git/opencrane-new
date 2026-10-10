@@ -104,6 +104,9 @@ function validConversationWrite(event: EventEnvelope): boolean {
   if (stream !== 'participation') {
     return true;
   }
+  if (event.type === 'conversation.closed') {
+    return event.subject === `participation-${Reflect.get(event.data, 'conversationId')}`;
+  }
   const actorField = event.type === 'participant.added' ? 'addedBy' : 'removedBy';
   const fields = ['conversationId', 'participantId', actorField];
   for (const field of fields) {

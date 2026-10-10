@@ -1198,3 +1198,14 @@ is retained. No dependency was added. [The accepted design](../../docs/specs/pha
 owns the plan. Tests use synthetic material and a local HTTP fixture. Live Kubernetes,
 custody-only namespace permissions, encryption at rest, backups, restore, power-loss and
 fresh-install journeys remain NOT RUN. Deployment wiring belongs to later work.
+
+## Conversation closing reads
+
+`history` includes `conversation.closed` records from the participation stream
+when reading conversation facts. It sorts both histories by their saved position.
+`decisionActivity` reads both streams before its short authority check. Its final
+check reads only new records and treats a close on either stream as a refusal.
+Participant changes do not become message activity. Access checks still use their
+own member, participant and grant facts. Older closing events remain valid.
+The decision, gateway and approval tests write current closes to participation
+streams. Projection replay tests also cover the earlier form.

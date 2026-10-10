@@ -7,6 +7,7 @@ import type { FileOptions } from './files/routes.ts';
 // Entry point: starts the Fastify server and attaches the WebSocket
 // server to its underlying HTTP server. Run with:
 //   node --experimental-strip-types src/main.ts
+import { requireLegacyClosesProjected } from './chat/participation.ts';
 import { conversationKeys } from './chat/keys.ts';
 import { startBridges } from './chat/start.ts';
 import type { ChatOptions } from './chat/routes.ts';
@@ -57,6 +58,7 @@ if (databaseUrl) {
 const keyDirectory = process.env['CONVERSATION_KEYS_DIR'];
 const chat: ChatOptions | undefined = realtime && events && modelDb && keyDirectory ? { silo: realtime.binding.silo, store: events.store,
   db: modelDb.db, feed: realtime.feed, binding: realtime.binding, keys: conversationKeys(keyDirectory) } : undefined;
+if (chat) await requireLegacyClosesProjected(chat.store, chat.db);
 if (realtime && chat) realtime.chat = chat;
 let files: FileOptions | undefined;
 if (chat && process.env['MINIO_CREDENTIALS_FILE']) {

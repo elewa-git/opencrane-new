@@ -84,9 +84,11 @@ export function conversationEventId(event: EventEnvelope): string {
   }
   const id: unknown = Reflect.get(event.data, 'conversationId');
   if (typeof id !== 'string' || !id) throw new Error('Invalid conversation identity');
-  const participant = ['participant.added', 'participant.removed'].includes(event.type);
+  const accessChange = [
+    'participant.added', 'participant.removed', 'conversation.closed',
+  ].includes(event.type);
   const legacySubject = `conversation-${id}`;
-  if (event.subject !== legacySubject && !(participant && event.subject === `participation-${id}`)) {
+  if (event.subject !== legacySubject && !(accessChange && event.subject === `participation-${id}`)) {
     throw new Error('Conversation subject mismatch');
   }
   return id;

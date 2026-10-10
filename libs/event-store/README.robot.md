@@ -241,3 +241,13 @@ before loading provider configuration and spending mode. Its one append checks
 both that position and the provider-category position. This refuses switch-on on
 the budget stream between the command's last check and its append. Any other new
 event also causes a conflict; the administrator can reload and try again.
+
+Preference parsing binds the human principal to that member id. Access checks remain the caller’s job.
+
+## Conversation closing writes
+
+New `conversation.closed` commands require `participation-<conversationId>`.
+The event registry and `validConversationWrite` reject a conversation subject or
+a different data id. Older closing events on `conversation-<conversationId>` still
+parse and replay. The server, models and conversation worker read both forms.
+`test/conversation-command.test.ts` checks current writes and older replay data.

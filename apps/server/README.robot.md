@@ -1268,16 +1268,22 @@ only old conversation-stream changes. The reader checks each saved record agains
 once and retains the latest join or removal per person. Later reads fetch only newer
 legacy references; modern participation never enters that query. Stop readers before
 replay so retained facts cannot outlive replacement tables.
-File reads and desktop checks read the projected close together with the conversation
-worker's position. They confirm a projected close against NATS, or read every later
-conversation record when no close is projected. A buffered report cannot hide a close.
-If that backlog cannot be checked before the read deadline, access is unavailable.
-The closure summary retains only a closed flag and the last checked position for up to
-256 conversations. Checks resume after that position or the worker's newer position,
-so a delayed worker does not make every lease reread the same chat activity. The shared
-summary reader gives catch-up its own ten-second deadline; a caller still refuses access
-when its original deadline expires. Restart readers after event-store restoration and
-stop them before replacing the conversation tables, as with retained participation facts.
+New `conversation.closed` events use `participation-<conversationId>`, alongside
+participant changes. File and desktop checks read this small stream. They never
+scan messages for a closing event. The closure summary retains a closed flag and
+the last checked position for up to 256 conversations. A projected close is checked
+against its exact NATS event before use. This also supports older closes recorded
+on a conversation stream.
+
+Upgrades stop old server writers and catch up the conversations worker before
+starting the new server. `requireLegacyClosesProjected` compares the conversation
+stream position with that worker's checkpoint once at startup. Startup refuses
+when the worker is behind, so an older close cannot be missed. A fresh installation
+with no conversations needs no checkpoint. This check is outside every desktop
+lease. After startup, new closes are visible without waiting for the worker.
+Restart readers after event-store restoration or table replacement. Retained
+summaries must not survive either operation.
+
 Approval decisions read history and the encrypted review before the two-second write
 check. They carry the checked approval sequence and conversation position forward,
 then check only later conversation changes and the current tool policy before append.
@@ -1514,27 +1520,34 @@ Effective inherited access and public child commands are later work. No child em
 
 `GET /api/memory/turns/:conversationId/:turnId` returns a bounded preview for a saved private turn. It does not issue a token, record loaded facts or send text to a computer. It returns at most 32 references and 16,384 UTF-8 bytes. Each category reads at most 33 candidates. The shared `memoryReferences` check validates each fact and all its supporting facts before decryption and again before release. Expired, erased, superseded or unchecked references are omitted. The server checks access again without reading chat history. Denied scopes have no ids, counts or omission flags. Missing turn ownership returns 404; service, permission, content or projection uncertainty returns 503. All responses use `Cache-Control: no-store`. Fresh-install qualification is NOT RUN.
 
-## Immediate access invalidation (P4-3 row 7, #85)
+## Immediate access invalidation
 
-Desktop and file command checks use `chatMembership`, the shared event reader.
+
+Desktop, queued computer work and personal turn checks use `chatMembership`.
 It starts inactive, activates only on join or owner bootstrap, and ends membership
 on removal. An invitation or role change after removal does not activate it.
-The reader checks the silo and member id and retains only current membership and
-its checked position. Later checks read new member events instead of keeping the
-whole history. Missing membership is refused too.
+The reader checks the silo and member id and retains current membership and its
+checked position. Computer-register reads use `readActiveMember` with the admin
+role. They also require the current member event and its applied permission receipt.
+
+A first personal start and every repeated start check the requester before the
+lifecycle append or returned binding. Shared admission retains its member and group
+checks. The bridge reads private history outside the two-second access check, then
+checks membership before minting the turn token and confirms the member position
+again before releasing the token or history. Queued message/tool frames check
+membership after building the tool list and before sending. File delivery checks
+`ownConversation` before sending bytes; `fileCommand` checks again before saving
+the acknowledgement. Terminal reports can still record the outcome of earlier work.
 
 Desktop freshness subjects are the member, `participation-<conversationId>` and
 shared-desktop grant streams. Team grants also check the member and team streams.
-No conversation stream is watched. Creation and old participation facts use the
-shared participation reader; the closure reader still checks a delayed worker's
-unchecked records, as described above. Chat activity does not invalidate a desktop
-lease. Access checks keep their existing 1,200 ms deadline. A confirmed refusal stops
-the check while other reads are still waiting.
+No conversation stream is watched or scanned during the 1,200 ms access check.
+Chat activity does not invalidate a lease. A confirmed refusal stops the check
+while other reads are still waiting.
 
-The [entry-point record](../../docs/process/p4-3-row7-access.md) lists the checked
-paths, existing limits, failing-first results and remaining live qualification.
-This change adds no member removal route or cleanup reaction.
-
+The [entry-point record](../../docs/process/p4-3-row7-access.md) lists the routes,
+event checks, failing-first results and remaining live qualification.
+This change adds no member removal route or dependency.
 
 ## Reviewed member removal
 

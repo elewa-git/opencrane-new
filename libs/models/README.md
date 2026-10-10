@@ -22,6 +22,8 @@ flowchart LR
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|saves holds and settlements, reads activity, grants, payer and switch-on| store["libs/event-store<br/>event log"]
+
+models -->|saves changes and spending, reads activity, grants and access changes| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for

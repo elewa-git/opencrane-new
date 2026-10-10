@@ -244,7 +244,7 @@ export const eventRegistry: readonly EventDefinition[] = [
   ),
   event(
     'conversation.closed',
-    'conversation',
+    'participation',
     'A conversation was closed; the computer should stop work on it.',
     data.conversationClosedDataSchema,
     { conversationId: 'conv_1', closedBy: 'mem_1' },

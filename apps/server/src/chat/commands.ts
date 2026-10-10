@@ -3,6 +3,7 @@ import { readStreamSummary, readEventAt, type SummaryKind,
   type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { chatIdSchema, groupConversationCommandSchema,
   conversationCreatedDataSchema, getEventDefinition } from '@opencrane/events';
+import { participationClosed } from './participation.ts';
 import type { conversationKeys } from './keys.ts';
 
 const id = chatIdSchema;
@@ -91,7 +92,16 @@ export async function chatHistory(
     if (row.event.silo !== silo) throw new Error('Conversation silo mismatch');
     rows.push(row);
   }
+  for await (const row of store.readStream(`participation-${conversation}`, 1, deadline)) {
+    if (row.event.silo !== silo) throw new Error('Conversation silo mismatch');
+    if (row.event.type === 'conversation.closed') rows.push(row);
+  }
+  rows.sort(comparePosition);
   return rows;
+}
+
+function comparePosition(first: StoredEvent, second: StoredEvent) {
+  return first.sequence - second.sequence;
 }
 
 type Commands = { created?: StoredEvent; closed: boolean; positions: Map<string, number> };
@@ -131,6 +141,8 @@ export async function chatCommand(
     await fresh?.('retry');
     return { status: 'appended' as const, sequence: previous.sequence };
   }
+  const closed = await participationClosed(store, context.silo, input.conversationId);
+  if (closed) throw new ChatConflict('Conversation state conflict');
   validateConversation(facts, input, context.memberId);
   if ('stopTurnId' in input) {
     const turnFacts = await readStreamSummary(store, context.silo, subject, commands,

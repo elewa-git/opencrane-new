@@ -68,10 +68,10 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   let executionMode = facts.turn?.lastStartExecutionMode;
   if (input.status === 'started' && !facts.turn?.hasStart) {
     try {
-      executionMode = input.executionMode ?? 'memory_free';
-      const admission = await admitTurn(store, context, conversation, facts, data,
+      executionMode = startExecutionMode(facts, input);
+      const admission = await startAuthority(store, context, conversation, facts, data,
         requested.executionMode, executionMode);
-      data.payingGroupId = admission.payer;
+      if (admission.payer) data.payingGroupId = admission.payer;
       fresh = admission.fresh;
     } catch (error) {
       if (!isFinalAdmissionRefusal(error)) throw error;
@@ -99,6 +99,20 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   if (input.status === 'started') return { ...data, threadId: z.string().parse(data.threadId),
     executionMode: executionMode ?? 'memory_free' };
   return undefined;
+}
+
+function startExecutionMode(facts: ComputerFacts, input: TurnInput) {
+  if (facts.turn?.hasStart) return facts.turn.lastStartExecutionMode ?? 'memory_free';
+  return input.executionMode ?? 'memory_free';
+}
+
+async function startAuthority(store: EventStore, context: TurnContext, conversation: ChatFacts,
+  facts: ComputerFacts, data: TurnBinding, requested: unknown, mode: ExecutionMode) {
+  if (facts.turn?.hasStart) {
+    const fresh = await requireTurnMember(store, context.silo, data.requesterId);
+    return { fresh, payer: undefined };
+  }
+  return admitTurn(store, context, conversation, facts, data, requested, mode);
 }
 
 async function saveTurn(store: EventStore, facts: ComputerFacts,

@@ -1,3 +1,4 @@
+import { chatMembership } from './participation.ts';
 import type { Client } from 'minio/dist/esm/minio.mjs';
 import { fileDeliveredDataSchema, fileUploadedDataSchema,
   mcpServerDiscoveredDataSchema } from '@opencrane/events';
@@ -9,7 +10,7 @@ import { applyToolPolicy, emptyToolPolicy } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
-import { turnCommand, requiredExecutionMode, type ExecutionMode } from './turns.ts';
+import { turnCommand, requiredExecutionMode, TurnAdmissionRejected, type ExecutionMode } from './turns.ts';
 import { chatHistory } from './commands.ts';
 import { agentSession } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
@@ -203,6 +204,8 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
       sentAt: performance.now(),
     });
   }
+  const active = await chatMembership(options.store, options.silo, turn.requesterId);
+  if (!active) throw new TurnAdmissionRejected('Active silo membership required');
   link.socket.send(JSON.stringify(turn));
 }
 
