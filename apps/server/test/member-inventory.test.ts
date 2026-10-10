@@ -138,6 +138,56 @@ async function waitsForGrantRevocation() {
 }
 it('keeps both inventories incomplete until a grant revocation is applied', waitsForGrantRevocation);
 
+async function waitsForGroupRemoval() {
+  const memberId = 'removed-group';
+  const teamId = 'last-group';
+  const resourceId = 'group-model';
+  const assistantId = 'last-group-helper';
+  await append(`member-${memberId}`, 'member.joined', {
+    memberId, role: 'member', email: 'group@example.test', displayName: 'Removed group',
+  });
+  await append(`team-${teamId}`, 'team.created', {
+    teamId, name: 'Last group', createdBy: 'owner',
+  });
+  await append(`team-${teamId}`, 'team.member_added', {
+    teamId, memberId, addedBy: 'owner',
+  });
+  await append(`assistant-${assistantId}`, 'assistant.created', {
+    assistantId, kind: 'team', ownerId: teamId, name: 'Last group helper',
+  });
+  await append(grantStream('model', resourceId), 'grant.given', {
+    resourceType: 'model', resourceId, granteeKind: 'team',
+    granteeId: teamId, grantedBy: 'owner',
+  });
+  await project();
+  const initial = await readInventory('departure', memberId);
+  expect(initial).toMatchObject({ complete: true, accessLost: [
+    { resourceId }, { resourceId: assistantId },
+  ] });
+
+  const removal = await append(`team-${teamId}`, 'team.member_removed', {
+    teamId, memberId, removedBy: 'owner',
+  }, false);
+  await project();
+  expect(await auth.team(memberId, teamId)).toMatchObject({ allowed: true });
+  expect(await auth.use('person', memberId, 'model', resourceId))
+    .toMatchObject({ allowed: true });
+  expect(await auth.actsFor(memberId, assistantId)).toMatchObject({ allowed: true });
+  for (const section of ['access', 'departure']) {
+    const body = await readInventory(section, memberId);
+    expect(body.complete).toBe(false);
+    expect(body.unavailableSections).toContain('group_membership');
+  }
+
+  await auth.handler.handle(removal, pgDb(dbs.queue));
+  expect(await auth.team(memberId, teamId)).toMatchObject({ allowed: false });
+  const access = await readInventory('access', memberId);
+  expect(access).toMatchObject({ complete: true, unavailableSections: [], rows: [] });
+  const departure = await readInventory('departure', memberId);
+  expect(departure).toMatchObject({ complete: true, unavailableSections: [], accessLost: [] });
+}
+it('keeps both inventories incomplete until the last group removal is applied', waitsForGroupRemoval);
+
 async function recordsSources() {
   await append('assistant-personal', 'assistant.created', {
     assistantId: 'personal', kind: 'personal', ownerId: 'bob',
