@@ -1137,3 +1137,31 @@ Logs: `/tmp/p4-22-pr4d-settlement-restack-tests.log`,
 NOT RUN: full root suite, paid calls, fresh-install managed-provider qualification
 and another independent review. The switch-on command and managed gateway remain
 unfinished.
+
+## Restack after the spending-limit revision fix
+
+Date: 10 October 2026. Restacked source: `59931d5f`.
+Replayed only this branch's eight commits from `00da8fde` onto `0199abaa`
+from `work/p4-22-pr4c`. The rebase finished. README diagram conflicts retain
+main's member-access description, the parent's spending-revision description
+and this branch's draining description. Production additions and removals match
+the previous drain branch at `5e99e5d5`.
+
+The actor and its tests match the fixed parent. Both authority test files match
+main and remain unchanged. The parent's narrow money verification returned LAND.
+No new money behaviour is added by this restack.
+
+Environment: Linux, Node 22.23.3, local worktree; disposable NATS and OpenFGA,
+a recording gateway and PostgreSQL at `127.0.0.1:55432`. This is not a fresh install.
+PASS: all three changed test files, once, 48 tests. The run sets `PG_TEST_URL`,
+uses `nice -n 10` and one worker. PASS: event catalogue (105 types), changelog
+and Markdown checks. The fixed parent passed full lint, typecheck, Knip and both
+seven-file test runs, including the unchanged authority files.
+
+Logs: `/tmp/fix-307c-restack-314-tests.log`,
+`/tmp/fix-307c-restack-314-events.log`,
+`/tmp/fix-307c-restack-314-changelog.log` and
+`/tmp/fix-307c-restack-314-docs.log`.
+NOT RUN on this restack: another full lint or typecheck, full root suite,
+paid calls or fresh-install managed-provider qualification.
+The switch-on command and managed gateway remain unfinished.
