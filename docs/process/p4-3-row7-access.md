@@ -83,11 +83,64 @@ checks the conversation stream position remains unchanged after refusal.
 
 ## Verification and remaining qualification
 
-Full results are recorded with the implementation commit and in the draft PR.
-Changed tests run twice with `PG_TEST_URL` set. The existing desktop activity tests
-throw if a freshness check watches `conversation-chat`; chat messages, files and
-turn reports keep the viewer open. Outage, late-reply and watchdog tests retain
-the original lease deadlines.
+Production code tested: [6a6b7923](https://github.com/elewa-git/opencrane-new/commit/6a6b79230543bb587c50b4fa1b3977fbd3a549df).
+The following evidence update changes documentation only.
+The environment used the local disposable PostgreSQL test server with isolated
+fixture databases, disposable NATS/OpenFGA, a scripted desktop peer and the real
+agentgateway binary with a recording upstream. No paid model call was made.
+
+| Check | Result and observation |
+| --- | --- |
+| `npm ci` and requested tool symlinks | PASS. This worktree has its own installed dependencies. |
+| `nice -n 10 npm run lint` | PASS, including Knip and `npm run lint:changelog`. Fifteen existing warnings; no errors. |
+| `nice -n 10 npm run typecheck` | PASS across all workspaces. |
+| `npm run check:events` | PASS: 99 event types agree. No event contract changed. |
+| Regression batch below | PASS: 102 tests across five files. |
+| Second changed-test run | PASS: 48 tests across the two changed test files. |
+| Selected existing removal proofs below | PASS: seven selected tests; the other 148 cases were skipped. |
+| Browser canvas checks below | PASS: 18 tests across three files. |
+| Independent review | PASS after the second and final pass verified the test style fix. No remaining blocker. |
+
+The first regression batch used:
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npx vitest run \
+  apps/server/test/live-view-activity.test.ts \
+  apps/server/test/file-upload-failures.test.ts \
+  apps/server/test/file-command-refusals.test.ts \
+  apps/server/test/live-view-unavailable.test.ts \
+  apps/server/test/view-lease.test.ts --maxWorkers=1
+```
+
+The second run used the same command with only `live-view-activity.test.ts` and
+`file-upload-failures.test.ts`. Both runs set `PG_TEST_URL`.
+The existing desktop activity tests throw if a freshness check watches
+`conversation-chat`. Chat messages, files and turn reports keep the viewer open.
+The outage and late-reply cases keep the original lease deadlines.
+
+The existing socket and gateway proofs used:
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npx vitest run \
+  apps/server/test/chat-access-regression.test.ts \
+  apps/server/test/realtime.test.ts \
+  libs/models/test/gateway.test.ts \
+  libs/models/test/authority-standalone.test.ts \
+  -t 'revokes a socket within two seconds while its content read is waiting|closes within two seconds of.*while SQL content and IAM are delayed|enforces reviewed tool modes at the real gateway|refuses standalone|refuses group spending' \
+  --maxWorkers=1
+```
+
+Those tests prove chat and admin-feed closure during blocked content reads,
+refusal of stale member authority without waiting for IAM, and gateway refusal
+without another upstream call. They also cover authority expiry and a removal
+that lands after the member history was read.
+
+The existing browser tests used:
+
+```sh
+nice -n 10 npm test -w @opencrane/web -- \
+  --watch=false --include='src/app/live-view/*.spec.ts'
+```
 
 Fresh-install removal, a real desktop canvas on a newly installed silo, live
 identity/provider checks and the combined departure/cleanup journey are NOT RUN.
