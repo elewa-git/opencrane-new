@@ -1451,10 +1451,9 @@ shared-only execution, its input isolation and shared agent writes are deferred 
 after #94. Native turns still
 receive no memory tools. Fresh-install qualification and backend network isolation are NOT RUN.
 
-Source checks on 10 October 2026: PASS for lint (including Knip), typecheck,
-check:events (99 types) and lint:changelog. The five-file targeted set passed
-222 tests twice with `PG_TEST_URL` set. It covers memory MCP, capability claims,
-human memory, memory-worker replay and native tool refusal. All commands used
-`nice -n 10`. `npm ci` and shared NATS/Lychee links were installed first.
-The test commit precedes implementation. No full root suite, independent review,
-fresh-install journey or native memory qualification was run.
+Source evidence for the 10 October 2026 rework is recorded in the
+[rework receipt](../../docs/process/p4-12-pr3c-rework.md). The seven-file memory set
+passed 271 tests twice with `PG_TEST_URL` set. After the lint corrections, the final
+changed memory files passed 99 tests twice. Web tests passed 589 tests, and the existing
+chat fixture produced 24 captures. The receipt records source checks, initial failures
+and the remaining live qualification. No full root suite ran.
