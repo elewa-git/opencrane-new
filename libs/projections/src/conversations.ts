@@ -297,6 +297,7 @@ function foldActivity(state: ConversationActivity, event: EventEnvelope, positio
   const closedBy: unknown = Reflect.get(event.data, 'closedBy');
   if (typeof closedBy !== 'string') throw new Error('Invalid closing person');
   state.closed = true;
+  state.latest_activity = String(position);
   state.closed_event_id = event.id;
   state.closed_position = String(position);
   state.closed_by = closedBy;

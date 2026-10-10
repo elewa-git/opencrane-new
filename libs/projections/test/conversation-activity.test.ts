@@ -81,7 +81,7 @@ async function keepsVisibleActivityAfterClose() {
   try {
     const created = await fixture.append('conversation.created', creation);
     expect(await fixture.metadata()).toMatchObject({ latest_activity: String(created.position) });
-    const message = await fixture.append('message.posted', postedMessage);
+    await fixture.append('message.posted', postedMessage);
     const firstClose = await fixture.append('conversation.closed', { closedBy: 'alice' });
     for (const report of lateReports) {
       const saved = await fixture.append(report.type, report.fields);

@@ -336,10 +336,11 @@ Shared-child creation starts each named person's interval. Origin and original
 parent joins stay in `conversation_feed.data`; interval event ids link back to those records.
 Explicit child joins and removals use the existing interval rules and offline rebuild.
 
-`conversations.latest_activity` stores the global position of creation or the latest
-visible `message.posted` or `agent.message_completed` before close. Closing keeps this position.
-Token deltas, tool reports, turn endings, participation and private choices do not advance it.
-Reports after close still enter `conversation_feed`, but cannot advance visible activity.
+`conversations.latest_activity` stores the global position of creation, the latest
+visible `message.posted` or `agent.message_completed`, or the first close. Later closes
+keep the first close's position. Token deltas, tool reports, turn endings, participation
+and private choices do not advance it. Reports after close still enter `conversation_feed`,
+but cannot advance visible activity.
 `conversations.position` continues to track the latest shared feed event folded into metadata.
 
 The first `conversation.closed` sets `closed_event_id`, `closed_position`, `closed_by`
