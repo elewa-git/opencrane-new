@@ -60,3 +60,51 @@ Logs: `/tmp/p4-22-pr4c-tests-1.log`, `/tmp/p4-22-pr4c-tests-2.log`,
 `/tmp/p4-22-pr4c-lint-final.log` and `/tmp/p4-22-pr4c-typecheck.log`.
 NOT RUN: full root suite, paid provider calls, fresh-install managed-provider
 qualification and another independent review of this correction.
+
+## Settlement after provider switch-on
+
+Date: 10 October 2026. Source: `475b0053e7994e686fd54fcc3ff86d953676ad25`.
+Rebased only this branch's four commits from `47cd8db0` onto `origin/main`
+at `471e22cc`. The rebase finished. Kept main's approval documentation.
+Environment: Linux, Node 22.23.3, local worktree; disposable NATS and OpenFGA,
+a recording gateway and PostgreSQL at `127.0.0.1:55432`. This is not a fresh install.
+No paid provider calls were made.
+
+The actor now reads only events after its saved budget position when an append
+conflicts. If they are all switch-on markers, it refuses new holds without
+stopping the actor. It retries settlement and other budget changes once after
+those markers. A spending-limit retry checks access again within the original
+deadline. Another budget writer's changes still stop the old actor.
+
+Failing-first commits: `84cbcc72` and `fb9cbd29`. The tests first reproduced
+unreleased unsent holds during the allow audit and final permit queue, a late
+usage settlement conflict and a spending-limit retry after access expired.
+An interim broad batch had 78 passes and that one access-retry failure.
+The committed fix passed all 79 tests in the first final seven-file batch.
+Both authority files are unchanged from main, including the 100,000-event guard.
+PASS: the second final run passed all 75 tests in the five changed test files.
+
+The new checks prove zero-cost release after a refused decision, one settlement
+per dispatched call at exactly one cent, and continued settlement, release and
+expiry on the same actor. They also prove that refusing a new hold does not stop
+that progress and that a replacement budget writer still stops the old actor.
+The replay test now sends its request through the replayed actor. A separate
+activity test refuses switch-on without relying on a budget append conflict.
+
+PASS: root lint, root typecheck, event catalogue (103 types), Knip and changelog.
+Lint reports 15 existing warnings and no errors. A final ESLint check of the
+actor and edited model tests also passed. Tests set the documented test-only
+`PG_TEST_URL` and run under `nice -n 10` with one worker.
+
+Logs: `/tmp/p4-22-pr4c-settlement-red.log`,
+`/tmp/p4-22-pr4c-settlement-red-usage.log`,
+`/tmp/p4-22-pr4c-settlement-red-access.log`,
+`/tmp/p4-22-pr4c-settlement-final-1.log`,
+`/tmp/p4-22-pr4c-settlement-final-2.log`,
+`/tmp/p4-22-pr4c-settlement-lint.log`,
+`/tmp/p4-22-pr4c-settlement-typecheck.log` and
+`/tmp/p4-22-pr4c-settlement-final-eslint.log`.
+
+NOT RUN: full root suite, fresh-install managed-provider qualification,
+paid calls and another independent review. Switch-on still has no production
+command; the managed-provider capability remains unfinished.
