@@ -4,12 +4,13 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { seedOwnership } from '@opencrane/models';
+import { currentMembership, seedOwnership } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { auditTrail, connectMemberFeed, members, pgDb, ProjectionRunner,
   readEvents, rebuildMemberProjection } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+import { refusalDigest } from '../src/members/refusals.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -407,17 +408,48 @@ async function reconcilesLostStepDown() {
 it('Check status reconciles an own lost step-down response before its IAM receipt',
   reconcilesLostStepDown);
 
+async function assertRefusalPreservesAuthority(memberId: string, commandId: string,
+  before: number, memberSequence: number, ownershipSequence: number, role: string) {
+  const rows = [];
+  const latest = await nats.reader.head();
+  for await (const row of readEvents(nats.reader, before + 1, latest)) {
+    rows.push(row);
+  }
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.event).toMatchObject({
+    subject: `memberaudit-${memberId}`, type: 'member.command_refused',
+    data: { memberId, originalCommandDigest: refusalDigest(commandId), operation: 'join' },
+  });
+  expect(await nats.store.head(`member-${memberId}`)).toBe(memberSequence);
+  expect(await nats.store.head('ownership-acme')).toBe(ownershipSequence);
+  const membership = await currentMembership(nats.store, 'acme', memberId);
+  expect(membership.role).toBe(role);
+  expect(auth.handler.eventTypes).not.toContain('member.command_refused');
+  await runner.run(members);
+  const projected = await dbs.queue.query<{ role: string; status: string }>(
+    'SELECT role, status FROM members WHERE silo = $1 AND member_id = $2', ['acme', memberId]);
+  if (role) {
+    expect(projected.rows[0]?.role).toBe(role);
+  } else {
+    expect(projected.rows[0]?.status).toBe('invited');
+  }
+}
+
 async function refusesOwnerInvitation() {
   await append('member-invitee', 'member.invited', {
     memberId: 'invitee', email: 'invitee@example.test', role: 'owner', invitedBy: 'owner',
     invitationId: 'invite-owner', expiresAt: '2026-11-01T00:00:00Z', invitedIdentity: { issuer: config.issuerUrl, sub: 'idp-invitee' },
   });
   const before = await nats.store.head();
+  const memberSequence = await nats.store.head('member-invitee');
+  const ownershipSequence = await nats.store.head('ownership-acme');
   const input = { memberId: 'invitee', invitationId: 'invite-owner',
     commandId: 'join-owner', displayName: 'Invitee' };
   const response = await request('POST', input, 'idp-invitee', '/members/join');
   expect(response.statusCode).toBe(409);
   expect(response.json()).toMatchObject({ reason: 'ownership_stream_required' });
+  await assertRefusalPreservesAuthority('invitee', input.commandId, before,
+    memberSequence, ownershipSequence, '');
   expect(await nats.store.head()).toBe(before);
 }
 it('invitation acceptance cannot appoint an owner outside the ownership stream', refusesOwnerInvitation);
@@ -478,7 +510,11 @@ async function refusesOwnerReinvitation() {
   const input = { memberId: actorId, invitationId: 'reinvite-owner',
     commandId: 'rejoin-owner', displayName: actorId };
   const before = await nats.store.head();
+  const memberSequence = await nats.store.head(`member-${actorId}`);
+  const ownershipSequence = await nats.store.head('ownership-acme');
   expect((await request('POST', input, `idp-${actorId}`, '/members/join')).statusCode).toBe(409);
+  await assertRefusalPreservesAuthority(actorId, input.commandId, before,
+    memberSequence, ownershipSequence, 'owner');
   expect(await nats.store.head()).toBe(before);
 }
 it('reinviting an active owner cannot demote them through invitation acceptance',
