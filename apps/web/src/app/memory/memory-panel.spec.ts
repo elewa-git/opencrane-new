@@ -368,6 +368,74 @@ it('checks an unknown command with GET and never sends it again', async () => {
   expect(requestUrl(calls[3]?.[0])).toContain('/changes/mem_');
 });
 
+it('keeps an unknown command available after Cancel is pressed', async () => {
+  stubReplies(response(200, { scopes: [personalScope()] }),
+    response(200, { scopeId: 'scope', facts: [], returnedCount: 0, nextCursor: null }),
+    new Response('', { status: 503 }));
+  const fixture = await loadPanel();
+  fixture.componentInstance['openStore']();
+  fixture.componentInstance['storeText'].set('Check the original request');
+  await fixture.componentInstance['saveFact']();
+  const originalCommandId = fixture.componentInstance['storeCommandId']();
+  fixture.componentInstance['cancelStore']();
+  expect(fixture.componentInstance['storeOpen']()).toBe(true);
+  expect(fixture.componentInstance['storeState']()).toBe('unknown');
+  expect(fixture.componentInstance['storeCommandId']()).toBe(originalCommandId);
+  await fixture.componentInstance['checkStoreStatus']();
+  expect(requestUrl(vi.mocked(fetch).mock.calls[3]?.[0])).toContain(originalCommandId);
+});
+
+it('shows the validation explanation beside invalid stored text', async () => {
+  stubReplies(response(200, { scopes: [personalScope()] }),
+    response(200, { scopeId: 'scope', facts: [], returnedCount: 0, nextCursor: null }));
+  const fixture = await loadPanel();
+  fixture.componentInstance['openStore']();
+  fixture.componentInstance['storeText'].set('é'.repeat(2049));
+  fixture.detectChanges();
+  const field = pageElement(fixture).querySelector<HTMLTextAreaElement>('.fact-entry textarea');
+  expect(visibleText(fixture)).toContain('Facts must be 1 to 4,096 UTF-8 bytes.');
+  expect(field?.getAttribute('aria-invalid')).toBe('true');
+});
+
+it('clears every store field and pending command when the write is refused', async () => {
+  stubReplies(response(200, { scopes: [personalScope()] }),
+    response(200, { scopeId: 'scope', facts: [], returnedCount: 0, nextCursor: null }),
+    response(403, { status: 'refused' }));
+  const fixture = await loadPanel();
+  fixture.componentInstance['openStore']();
+  fixture.componentInstance['storeText'].set('Private draft');
+  fixture.componentInstance['storeCommandId'].set('mem_pending');
+  fixture.componentInstance['storeSource'].set({
+    conversationId: 'private-chat', messageId: 'private-message',
+  });
+  await fixture.componentInstance['saveFact']();
+  expect(fixture.componentInstance['storeOpen']()).toBe(false);
+  expect(fixture.componentInstance['storeText']()).toBe('');
+  expect(fixture.componentInstance['storeCommandId']()).toBe('');
+  expect(fixture.componentInstance['storeSource']()).toBeUndefined();
+  expect(fixture.componentInstance['storeState']()).toBe('editing');
+});
+
+it('clears the store draft and command when the requester changes', async () => {
+  stubReplies(response(200, { scopes: [personalScope()] }),
+    response(200, { scopeId: 'scope', facts: [], returnedCount: 0, nextCursor: null }),
+    response(200, { scopes: [] }));
+  const fixture = await loadPanel();
+  fixture.componentInstance['openStore']();
+  fixture.componentInstance['storeText'].set('Another person’s draft');
+  fixture.componentInstance['storeCommandId'].set('mem_pending');
+  fixture.componentInstance['storeSource'].set({
+    conversationId: 'private-chat', messageId: 'private-message',
+  });
+  fixture.componentRef.setInput('requesterId', 'another-member');
+  fixture.detectChanges();
+  await fixture.whenStable();
+  expect(fixture.componentInstance['storeOpen']()).toBe(false);
+  expect(fixture.componentInstance['storeText']()).toBe('');
+  expect(fixture.componentInstance['storeCommandId']()).toBe('');
+  expect(fixture.componentInstance['storeSource']()).toBeUndefined();
+});
+
 it('waits for Retry-After and retries only a definitely busy command', async () => {
   stubReplies(response(200, { scopes: [personalScope()] }),
     response(200, { scopeId: 'scope', facts: [], returnedCount: 0, nextCursor: null }),
