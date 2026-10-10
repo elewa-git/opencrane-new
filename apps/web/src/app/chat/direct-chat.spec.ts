@@ -1030,6 +1030,29 @@ async function clearsAfterRealRefusal(): Promise<void> {
 
 it('clears protected data and ignores a held refresh after real access loss', clearsAfterRealRefusal);
 
+async function focusesUnavailableNoticeAfterPhoneMenuRevocation(): Promise<void> {
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  await openExisting(fixture);
+  const opener = root(fixture).querySelector<HTMLButtonElement>('.navigation-toggle');
+  opener?.click();
+  await settle(fixture);
+  expect(root(fixture).querySelector('oc-navigation-menu dialog')?.hasAttribute('open')).toBe(true);
+  const socket = api.sockets.at(-1);
+  const refused = { version: 1, topic: 'conversation', type: 'refused',
+    conversationId: 'existing', position: 2, generation: 1 };
+  socket?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(refused) }));
+  await settle(fixture);
+  await settleAnimationFrames();
+  const unavailableHeading = root(fixture).querySelector('h1');
+  expect(root(fixture).querySelector('oc-navigation-menu dialog')?.hasAttribute('open')).toBe(false);
+  expect(document.activeElement).toBe(unavailableHeading);
+  fixture.destroy();
+}
+
+it('focuses the unavailable notice after phone-menu revocation',
+  focusesUnavailableNoticeAfterPhoneMenuRevocation);
+
 async function restoresSearchFocus(): Promise<void> {
   const fixture = await mount();
   await chooseColleague(fixture, 'Grace Achieng');
