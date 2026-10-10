@@ -221,10 +221,15 @@ async function approvalPolicyChanged(store: EventStore, silo: string, request: R
 async function approvalChangedSinceRead(store: EventStore, silo: string,
   current: Awaited<ReturnType<typeof readApproval>>, deadline: number) {
   const request = current.request;
-  const subject = `conversation-${request.conversationId}`;
-  for await (const row of store.readStream(subject, current.conversationPosition + 1, deadline)) {
-    if (row.event.silo !== silo) throw new Error('Wrong silo');
-    if (invalidatesApproval(row.event, request.turnId)) return true;
+  const subjects = [`conversation-${request.conversationId}`,
+    `participation-${request.conversationId}`];
+  // Resume both streams from the saved global position. Do not reread messages.
+  const fromSequence = current.conversationPosition + 1;
+  for (const subject of subjects) {
+    for await (const row of store.readStream(subject, fromSequence, deadline)) {
+      if (row.event.silo !== silo) throw new Error('Wrong silo');
+      if (invalidatesApproval(row.event, request.turnId)) return true;
+    }
   }
   return approvalPolicyChanged(store, silo, request, deadline);
 }

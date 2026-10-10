@@ -78,7 +78,8 @@ models -->|saves changes and spending, reads activity, grants and access changes
   if its event could not be saved.
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.
   Keep approval lists within the caller’s current period of participation.
-  Reuse checked approval facts and read only later chat changes before a decision.
+  Reuse checked approval facts and read only later messages and access changes
+  before a decision.
 - Refuse provider-bound model passes on the deployment-key gateway before holding money.
   Read switch-on from the silo’s spending stream before checking access.
   Calls through saved provider choices are not available yet.
