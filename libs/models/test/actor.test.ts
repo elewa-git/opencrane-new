@@ -354,11 +354,13 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   await saveSwitchOn();
   const before = await nats.store.head('budget-test');
   let checks = 0;
-  async function checkAccess() {
+  function checkAccess() {
     checks++;
     if (checks === 2) {
-      throw new Error('Access expired');
+      const error = new Error('Access expired');
+      return Promise.reject(error);
     }
+    return Promise.resolve();
   }
   const payload = {
     scope: 'global', dailyCeilingCents: 200, ceilingCents: 200, setBy: 'alice',

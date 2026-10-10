@@ -24,6 +24,7 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills tables for memory, provider choices, admission mode and child participants| projections["libs/projections<br/>read tables, message lookups and keys"]
   ops["apps/ops<br/>workers"] -->|fills tables for memory, provider choices and spending mode| projections["libs/projections<br/>read tables, message lookups and keys"]
+  ops["apps/ops<br/>workers"] -->|fills tables for memory, provider choices, spending mode and child participants| projections["libs/projections<br/>read tables, message lookups and keys"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, private choices and confirmed owners| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections

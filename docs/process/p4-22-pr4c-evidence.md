@@ -108,3 +108,45 @@ Logs: `/tmp/p4-22-pr4c-settlement-red.log`,
 NOT RUN: full root suite, fresh-install managed-provider qualification,
 paid calls and another independent review. Switch-on still has no production
 command; the managed-provider capability remains unfinished.
+
+## Spending-limit revisions after switch-on
+
+Date: 10 October 2026. Production fix: `f8514740`.
+Replayed only this branch's eight commits from `471e22cc` onto `origin/main`
+at `6ebd942c`. The rebase finished. Documentation conflicts retain main's
+invitation and member-access notes alongside the provider notes. Range comparison
+shows no production changes from conflict resolution.
+
+The editor's revision now refers to the last budget event. The actor still uses
+its full stream position for conditional appends. Skipping switch-on leaves the
+reported revision valid when no budget change was saved. An edit can retry after
+expired access or a refused reservation without releasing an existing hold.
+A saved budget change still makes an older client revision conflict.
+
+Failing-first commit: `03c1b1eb`. FAIL as expected: three regression cases returned
+`conflict` instead of saving the retry. PASS after the fix: all three cases,
+including retries with and without an open hold, use the real PostgreSQL budget
+projection. They confirm no write on refusal, unchanged held cents and matching
+actor and projected summaries after the successful retry. The callback then kept
+its explicit promise return; the focused final rerun also passed all three cases.
+
+Environment: Linux, Node 22.23.3, local worktree; disposable NATS and OpenFGA,
+a recording gateway and PostgreSQL at `127.0.0.1:55432`. This is not a fresh install.
+Tests set `PG_TEST_URL`, run under `nice -n 10` and use one worker.
+PASS: both seven-file runs, 81 tests each, covering all five changed test files
+and both unchanged authority files. Both authority files match `origin/main`,
+and the 100,000-event guard passes. PASS: root lint, typecheck, event catalogue
+(104 types), Knip and changelog. Lint reports 15 existing warnings and no errors.
+The final focused ESLint check also passed.
+
+The one authorised narrow money verification returned LAND for this correction.
+Its report is `/home/jente/.fleet/reviews/p4-22-pr4c-money-final.md`.
+Existing MINOR follow-ups remain with #302. No new findings were raised.
+
+Logs: `/tmp/fix-307c-red.log`, `/tmp/fix-307c-green.log`,
+`/tmp/fix-307c-tests-1.log`, `/tmp/fix-307c-tests-2.log`,
+`/tmp/fix-307c-final-fixture.log`, `/tmp/fix-307c-lint.log`,
+`/tmp/fix-307c-eslint.log`, `/tmp/fix-307c-typecheck.log` and
+`/tmp/fix-307c-events.log`.
+NOT RUN: full root suite, paid calls and fresh-install managed-provider qualification.
+The switch-on command and managed gateway remain unfinished.
