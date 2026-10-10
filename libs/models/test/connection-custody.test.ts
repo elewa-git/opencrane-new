@@ -1,6 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
+import { mkdtemp, rm, readdir, readFile, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { afterEach, expect, it } from 'vitest';
+import { z } from 'zod';
 import { connectionCustody, type ConnectionStage } from '../src/connection-custody.ts';
 
 const material = 'synthetic-custody-material';
@@ -10,13 +13,22 @@ const stage: ConnectionStage = {
   profileId: 'profile-a', purpose: 'personal', generation: 1, endpointDigest: 'a'.repeat(64),
   operationId: 'operation-a', expectedSequence: 0, appendUntil: 123456789,
 };
-type Secret = {
-  metadata: { name: string; namespace: string; uid: string; resourceVersion: string;
-    labels: Record<string, string>; annotations: Record<string, string> };
-  data: { token: string };
-};
+const secretSchema = z.object({
+  apiVersion: z.literal('v1'), kind: z.literal('Secret'),
+  immutable: z.literal(true), type: z.literal('Opaque'),
+  metadata: z.object({ name: z.string(), namespace: z.string(),
+    uid: z.string().default('uid-original'), resourceVersion: z.string().default('1'),
+    labels: z.record(z.string(), z.string()), annotations: z.record(z.string(), z.string()) }),
+  data: z.object({ token: z.string() }),
+});
+type Secret = z.infer<typeof secretSchema>;
+const deleteSchema = z.object({ preconditions: z.unknown() });
+const directories: string[] = [];
 const servers: ReturnType<typeof createServer>[] = [];
 async function closeServers() {
+  for (const directory of directories.splice(0)) {
+    await rm(directory, { recursive: true, force: true });
+  }
   for (const server of servers.splice(0)) {
     server.closeAllConnections();
     server.close();
@@ -40,7 +52,8 @@ async function fixture() {
     }
     const chunks: Buffer[] = [];
     for await (const chunk of request) {
-      chunks.push(Buffer.from(chunk as Uint8Array));
+      if (!Buffer.isBuffer(chunk)) throw new Error('Fixture request invalid');
+      chunks.push(chunk);
     }
     const body = Buffer.concat(chunks).toString();
     if (request.method === 'POST') {
@@ -48,7 +61,8 @@ async function fixture() {
         response.writeHead(409).end(material);
         return;
       }
-      const parsed = JSON.parse(body) as Secret;
+      const raw: unknown = JSON.parse(body);
+      const parsed = secretSchema.parse(raw);
       parsed.metadata.uid = 'uid-original';
       parsed.metadata.resourceVersion = '1';
       secret = parsed;
@@ -60,7 +74,8 @@ async function fixture() {
       }
     }
     if (request.method === 'DELETE') {
-      preconditions = (JSON.parse(body) as { preconditions: unknown }).preconditions;
+      const raw: unknown = JSON.parse(body);
+      preconditions = deleteSchema.parse(raw).preconditions;
       if (changeOnDelete) {
         secret!.metadata.resourceVersion = '2';
         response.writeHead(409).end(material);
@@ -87,8 +102,14 @@ async function fixture() {
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Fixture unavailable');
-  const custody = connectionCustody(`http://127.0.0.1:${address.port}`, 'custody', keyring);
-  return { custody, get secret() { return secret!; }, get creates() { return creates; },
+  const port = address.port;
+  const directory = await mkdtemp(`${tmpdir()}/connection-stage-`);
+  directories.push(directory);
+  function restart() {
+    return connectionCustody(`http://127.0.0.1:${port}`, 'custody', keyring, directory);
+  }
+  const custody = restart();
+  return { custody, restart, directory, get secret() { return secret!; }, get creates() { return creates; },
     get deletes() { return deletes; }, get preconditions() { return preconditions; },
     loseCreate() { loseCreate = true; }, changeOnDelete() { changeOnDelete = true; },
     fail() { unavailable = true; } };
@@ -99,15 +120,22 @@ async function recoversLostCreate() {
   store.loseCreate();
   const first = await store.custody.stage(stage, material);
   expect(first.status).toBe('recovered');
-  const recovered = await store.custody.recover(stage, first.identity);
+  const recovered = await store.restart().recover(stage);
   expect(recovered).toEqual(first);
-  const repeated = await store.custody.stage(stage, material, first.identity);
-  expect(repeated).toEqual(first);
+  const attempts = [store.custody.stage(stage, material), store.restart().stage(stage, material)];
+  const repeated = await Promise.all(attempts);
+  expect(repeated[0]).toEqual(first);
+  expect(repeated[1]).toEqual(first);
   expect(store.creates).toBe(1);
   expect(JSON.stringify(first).includes(material)).toBe(false);
-  expect(store.secret.metadata.annotations['opencrane.ai/operationId']).toBe(stage.operationId);
-  expect(store.secret.metadata.annotations['opencrane.ai/expectedSequence']).toBe('0');
-  expect(store.secret.metadata.annotations['opencrane.ai/appendUntil']).toBe('123456789');
+  const filenames = await readdir(store.directory);
+  for (const filename of filenames) {
+    const path = `${store.directory}/${filename}`;
+    expect((await readFile(path, 'utf8')).includes(material)).toBe(false);
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+  }
+  const changedGeneration = { ...stage, generation: 2 };
+  expect((await store.restart().stage(changedGeneration, material)).status).toBe('conflict');
 }
 it('recovers one private generation after a lost create reply', recoversLostCreate);
 
@@ -145,7 +173,7 @@ async function refusesIdentity(field: 'uid' | 'resourceVersion' | 'namespace') {
   const store = await fixture();
   const saved = await store.custody.stage(stage, material);
   store.secret.metadata[field] = 'changed';
-  expect((await store.custody.recover(stage, saved.identity)).status).toBe('conflict');
+  expect((await store.restart().recover(stage)).status).toBe('conflict');
   expect((await store.custody.stage(stage, material, saved.identity)).status).toBe('conflict');
   expect((await store.custody.remove(stage, saved.identity)).status).toBe('conflict');
   expect(store.deletes).toBe(0);

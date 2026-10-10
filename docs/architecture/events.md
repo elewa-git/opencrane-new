@@ -346,7 +346,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
 | `mcp.tools_changed` | drift check | catalogue | quarantine the server in gateway config until re-reviewed |
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade | grants | OpenFGA tuples |
-| `connection.created` | person | connections (secret *reference* only) | — (the credential is written to the secret store inside the command, before the append; a clean-up job removes orphaned secrets) |
+| `connection.created` | person command after private secret staging | connections (secret *reference* only) | planned cleanup verifies that an orphan cannot become current before deleting its exact UID/version |
 | `connection.refreshed` | reaction (OAuth refresh) | connections | — |
 | `connection.revoked` | person, admin or reaction | connections | delete the secret |
 
