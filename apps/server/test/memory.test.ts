@@ -1764,11 +1764,20 @@ it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as cons
     function allRequestsReachedSlowWorkOrFinished() {
       expect(delayed + completed).toBe(assistants.length);
     }
+    function poolClientsReleased() {
+      let expectedBusyClients = 0;
+      if (isAppend) {
+        expectedBusyClients = 1;
+      }
+      expect(pool.totalCount - pool.idleCount).toBe(expectedBusyClients);
+    }
     try {
       await stalled;
       await vi.waitFor(allRequestsReachedSlowWorkOrFinished, { timeout: 1500 });
       const result = await pool.query('SELECT 1 AS available');
       expect(result.rows).toEqual([{ available: 1 }]);
+      // Wait for lock cleanup while the slow work still blocks every delayed request.
+      await vi.waitFor(poolClientsReleased, { timeout: 1500 });
       if (isAppend) {
         expect(delayed).toBe(1);
         expect(pool.totalCount - pool.idleCount).toBe(1);
