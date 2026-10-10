@@ -357,6 +357,11 @@ it('does not resend acknowledged uploads after reconnect even when workspace byt
     assistantId: 'assistant', ownerId: 'alice', kind: 'personal',
   });
   await nats.store.append({ event: assistant, expectedSequence: 0 });
+  const joined = envelope('test', 'member-alice', 'member.joined', {
+    memberId: 'alice', email: 'alice@example.test', displayName: 'Alice',
+    role: 'member', invitationId: 'invite-alice',
+  });
+  await nats.seed([joined]);
   await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create', conversationId: 'conversation', assistantId: 'assistant' });
   const bytes = Buffer.alloc(160_000, 'a'), sha256 = createHash('sha256').update(bytes).digest('hex');
   const file = { conversationId: 'conversation', fileId: 'file', name: 'notes.txt', mime: 'text/plain', size: bytes.length, sha256, objectKey: 'test/file', uploadedBy: 'alice' };

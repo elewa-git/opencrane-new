@@ -680,6 +680,11 @@ it('keeps 30 finished chats unread after the turn is accepted',
 
 async function routesAndCachesAssistants() {
   const fixture = await finishedChatFixture(0);
+  const joined = envelope('test', 'member-alice', 'member.joined', {
+    memberId: 'alice', email: 'alice@example.test', displayName: 'Alice',
+    role: 'member', invitationId: 'invite-alice',
+  });
+  await fixture.seed([joined]);
   const dbs = await databases();
   const stop = new AbortController();
   const tokens = await bridgeTokens(fixture);

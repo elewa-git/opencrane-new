@@ -1086,6 +1086,10 @@ function resolveMemberId(_silo: string, _issuer: string, subject: string) {
 }
 
 async function refusesAllModelAccessRoutesAfterRemoval() {
+  await append('member-admin', 'member.role_changed', {
+    memberId: 'admin', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+  });
+  await runner.run(members);
   const base = '/api/org/models/gpt-6.1-sol/access';
   expect((await request(base, 'idp-admin')).statusCode).toBe(200);
   const removed = { ...event('access-removed-admin', 'member-admin', 'member.removed'),

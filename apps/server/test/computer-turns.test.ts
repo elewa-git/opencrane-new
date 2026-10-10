@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { readEventAt, type AppendCommand } from '@opencrane/event-store';
+import { readEventAt, type AppendCommand, type StoredEvent } from '@opencrane/event-store';
 import { event as fixtureEvent, countReads, expectNoWholeReads, natsFixture } from '@opencrane/event-store/testing';
 import { turnCommand } from '../src/chat/turns.ts';
 
@@ -298,7 +298,7 @@ async function refusesRemovedTurnRequester(repeat: boolean) {
   const before = await nats.store.head(subject);
   await expect(turnCommand(nats.store, context, input))
     .rejects.toThrow('Active silo membership required');
-  const rows = [];
+  const rows: StoredEvent[] = [];
   for await (const row of nats.store.readStream(subject, before + 1)) rows.push(row);
   function isStart(row: typeof rows[number]) {
     return row.event.type === 'computer.turn_started';
