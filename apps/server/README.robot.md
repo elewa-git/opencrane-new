@@ -1732,3 +1732,16 @@ control status, remaining transition schemas and strict modern started/ended dat
 are deferred. There is no route that can trigger intent, pause reaction, local gate,
 writer or input path. Supervisor proof, dispatch ordering and recovery remain later
 work. The accepted [design](../../docs/specs/phase-3/p3-17-take-control.md) owns that scope.
+
+## Source check receipt — 10 October 2026
+
+Source `4c8baa19`; Linux, Node 22.23.3 and disposable NATS, PostgreSQL, OpenFGA
+and the pinned gateway. This was not a fresh silo.
+PASS: clean `npm ci`, lint, workspace typecheck, check:events (107 types), Knip
+and lint:changelog. Final server typecheck and focused lint also passed.
+PASS: two five-file changed-test runs, each with 101 passes and one browser skip.
+Both used `nice -n 10`, the supplied `PG_TEST_URL` and one Vitest worker.
+The earlier nine-file run had 184 passes, one skip and one existing viewer timeout.
+That viewer case passed in both clean runs. Its timeout and access limits were unchanged.
+NOT RUN: optional 390px approval browser test, full root suite, independent review
+and fresh-install control journey. Takeover remains an internal first split.
