@@ -30,10 +30,10 @@ async function append(subject: string, type: string, data: unknown, apply = true
 async function project() {
   for (const projection of [members, conversations, computers]) await runner.run(projection);
 }
-function request(section: string, sub = 'owner', orgId = 'org-acme') {
+function request(section: string, sub = 'owner', orgId = 'org-acme', memberId = 'bob') {
   const session = { sub, orgId, roles: ['owner'], authTime: 1790856000, exp: 2000000000 };
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  return app.inject({ method: 'GET', url: `/api/members/bob/${section}`, headers });
+  return app.inject({ method: 'GET', url: `/api/members/${memberId}/${section}`, headers });
 }
 async function initialise() {
   nats = await natsFixture();
@@ -92,6 +92,45 @@ async function refusesReaders() {
   }
 }
 it('requires current Owner/Admin events and available OpenFGA despite an elevated cookie', refusesReaders);
+
+async function waitsForGrantRevocation() {
+  const memberId = 'revoked-grant';
+  const resourceId = 'revoked-model';
+  await append(`member-${memberId}`, 'member.joined', {
+    memberId, role: 'member', email: 'revoked@example.test', displayName: 'Revoked grant',
+  });
+  await append(grantStream('model', resourceId), 'grant.given', {
+    resourceType: 'model', resourceId, granteeKind: 'member',
+    granteeId: memberId, grantedBy: 'owner',
+  });
+  await project();
+  expect((await request('departure', 'owner', 'org-acme', memberId)).json())
+    .toMatchObject({ complete: true, accessLost: [{ resourceId }] });
+
+  const revocation = await append(grantStream('model', resourceId), 'grant.revoked', {
+    resourceType: 'model', resourceId, granteeKind: 'member',
+    granteeId: memberId, revokedBy: 'owner',
+  }, false);
+  await project();
+  expect(await auth.use('person', memberId, 'model', resourceId))
+    .toMatchObject({ allowed: true });
+  for (const section of ['access', 'departure']) {
+    const response = await request(section, 'owner', 'org-acme', memberId);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ complete: false });
+    expect(response.json<{ unavailableSections: string[] }>().unavailableSections)
+      .toContain('grants');
+  }
+
+  await auth.handler.handle(revocation, pgDb(dbs.queue));
+  expect(await auth.use('person', memberId, 'model', resourceId))
+    .toMatchObject({ allowed: false });
+  expect((await request('access', 'owner', 'org-acme', memberId)).json())
+    .toMatchObject({ complete: true, unavailableSections: [], rows: [] });
+  expect((await request('departure', 'owner', 'org-acme', memberId)).json())
+    .toMatchObject({ complete: true, unavailableSections: [], accessLost: [] });
+}
+it('keeps both inventories incomplete until a grant revocation is applied', waitsForGrantRevocation);
 
 async function recordsSources() {
   await append('assistant-personal', 'assistant.created', {
