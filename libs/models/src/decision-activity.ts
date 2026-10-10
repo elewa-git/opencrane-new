@@ -17,7 +17,6 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
   const head = await store.head(undefined, deadline);
   const managedCallsEnabled = await managedProviderCallsEnabled(store, silo, deadline);
   const conversationSubject = `conversation-${conversationId}`;
-  const accessSubject = `participation-${conversationId}`;
   const computerSubject = `computer-${assistantId}`;
   function capturedBeforeCheck(row: StoredEvent) {
     return row.sequence <= head;
@@ -36,25 +35,17 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
     decisionChatSummary, deadline, takeConversation);
   const computerRead = readStreamSummary(store, silo, computerSubject,
     computerSummary, deadline, takeComputer);
-  function takeAccess(rows: StoredEvent[]) {
-    function isClose(row: StoredEvent) {
-      return row.sequence <= head && row.event.type === 'conversation.closed';
-    }
-    return rows.filter(isClose);
-  }
-  const accessRead = readStreamSummary(store, silo, accessSubject,
-    decisionChatSummary, deadline, takeAccess);
-  const [chat, computer, access] = await Promise.all([conversationRead, computerRead, accessRead]);
-  const subjectHeads = [store.head(conversationSubject, deadline),
+  const [chat, computer] = await Promise.all([conversationRead, computerRead]);
+  const subjectHeads = [store.head(conversationSubject, deadline, true),
     store.head(computerSubject, deadline)] as const;
   const [conversationHead, computerHead] = await Promise.all(subjectHeads);
   // Refuse saved facts beyond restored history. Keep the original shared deadline.
   if (conversationHead < chat.sequence || computerHead < computer.sequence) {
     throw new Error('Authority changed');
   }
-  const conversation = [...chat.conversation, ...access];
+  const conversation = chat.conversation;
   const positions = new Map<string, number>();
-  const subjects = [conversationSubject, computerSubject, accessSubject];
+  const subjects = [conversationSubject, computerSubject];
 
   async function confirm(deadline: number, needsApproval: boolean) {
     // Read only activity saved since the histories above. Never replay a long chat
@@ -66,9 +57,10 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
     let foundNewRows = false;
     for (const subject of subjects) {
       const from = (positions.get(subject) ?? head) + 1;
-      const to = await store.head(subject, deadline);
+      const includeConversationCloses = subject === conversationSubject;
+      const to = await store.head(subject, deadline, includeConversationCloses);
       if (to < from) continue;
-      for await (const row of store.readStream(subject, from, deadline)) {
+      for await (const row of store.readStream(subject, from, deadline, includeConversationCloses)) {
         if (row.sequence > to) break;
         const changed = changesDecisionActivity(row.event, turnId, needsApproval);
         if (changed) throw new Error('Authority changed');

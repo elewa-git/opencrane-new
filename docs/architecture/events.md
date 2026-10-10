@@ -276,7 +276,7 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `file.uploaded` | upload or explicit screenshot command after a clean scan and promotion | conversation files, conversations | deliver bytes over the bridge; wake a suspended computer |
 | `file.rejected` | upload or screenshot command after an infected verdict | conversations | refuse the upload clearly; no bytes stored |
 | `file.delivered` | command after the computer acknowledges verified bytes | conversation files, conversations | browser may show the workspace path and delivery outcome (`saved` or `kept_existing`); reconnects skip acknowledged files |
-| `conversation.closed` | command on `participation-<id>`; older conversation subjects remain readable | conversations | tell the computer to stop work for it |
+| `conversation.closed` | command on `participation-<id>`; accepts legacy `conversation-<id>` appends and replay | conversations | tell the computer to stop work for it |
 | `conversation.archive_set` | preference command (not exposed yet): conversationId, memberId, joinEventId, archived; exact human principal and member subject | conversation_list_state in the conversations projection; set this join’s archive choice | none; excludes shared feeds and OpenFGA |
 | `conversation.read_advanced` | preference command (not exposed yet): conversationId, memberId, joinEventId, throughPosition, throughEventId; exact human principal and member subject | conversation_list_state; verify the visible row’s identity and keep the furthest read position within this join | none; excludes shared feeds and OpenFGA |
 

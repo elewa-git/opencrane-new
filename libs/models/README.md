@@ -21,9 +21,13 @@ flowchart LR
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
+<<<<<<< HEAD
   models -->|saves holds and settlements, reads activity, grants, payer and switch-on| store["libs/event-store<br/>event log"]
 
 models -->|saves changes and spending, reads activity, grants and access changes| store["libs/event-store<br/>event log"]
+=======
+  models -->|saves changes and spending, reads activity, grants and access changes| store["libs/event-store<br/>event log and closing activity"]
+>>>>>>> ee799ef5 (🔒 Read closing activity once and preserve legacy close writes)
 ```
 
 ## What it is responsible for
@@ -90,6 +94,7 @@ models -->|saves changes and spending, reads activity, grants and access changes
   Keep membership checks for writes within the caller’s original deadline.
 - Check that an invitation's sender still has authority before it is accepted.
 - Keep chat, computer and model grant facts in memory and read new events before each call.
+  Include both closing formats in the existing chat activity read.
   Keep only the latest grant facts for each person, assistant or group.
   Check those facts before watching the streams that decide access. These checks
   share two seconds because the gateway waits only that long. Older summaries

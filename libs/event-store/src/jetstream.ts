@@ -34,6 +34,24 @@ function readSubject(subject: string): string {
   return category ? `ev.${category[1]}.*` : wireSubject(subject);
 }
 
+function conversationReadSubject(subject: string, includeConversationCloses: boolean): string {
+  const wire = readSubject(subject);
+  if (!includeConversationCloses) return wire;
+  if (!subject.startsWith('conversation-') || subject.endsWith('-*')) {
+    throw new Error('Closing activity requires one conversation');
+  }
+  const conversationId = subject.slice('conversation-'.length);
+  // Use one indexed query for both close formats. Filter other categories before returning rows.
+  return `ev.*.${conversationId}`;
+}
+
+function matchesConversationRead(event: EventEnvelope, subject: string): boolean {
+  if (event.subject === subject) return true;
+  const conversationId = subject.slice('conversation-'.length);
+  return event.subject === `participation-${conversationId}` &&
+    event.type === 'conversation.closed';
+}
+
 const streamName = "EVENTS";
 const requestMs = 250;
 const readMs = 1_000;
@@ -365,8 +383,9 @@ export class EventStore {
     subject: string,
     fromSequence = 1,
     deadline = Infinity,
+    includeConversationCloses = false,
   ): AsyncGenerator<StoredEvent> {
-    const wire = readSubject(subject);
+    const wire = conversationReadSubject(subject, includeConversationCloses);
     const head = await this.readHead(deadline);
     let sequence = Math.max(1, fromSequence);
     while (sequence <= head) {
@@ -379,10 +398,10 @@ export class EventStore {
       if (!message || message.seq > head) {
         break;
       }
-      yield {
-        sequence: message.seq,
-        event: decodeEvent(message.data, message.subject),
-      };
+      const event = decodeEvent(message.data, message.subject);
+      if (!includeConversationCloses || matchesConversationRead(event, subject)) {
+        yield { sequence: message.seq, event };
+      }
       sequence = message.seq + 1;
     }
   }
@@ -467,10 +486,11 @@ export class EventStore {
   }
 
   /** Return the latest global position, or latest position for an entity or category. */
-  async head(subject?: string, deadline = Infinity): Promise<number> {
+  async head(subject?: string, deadline = Infinity,
+    includeConversationCloses = false): Promise<number> {
     const manager = this.manager;
     if (subject !== undefined) {
-      const wire = readSubject(subject);
+      const wire = conversationReadSubject(subject, includeConversationCloses);
       const query = { last_by_subj: wire };
       function readSubjectHead() {
         return manager.streams.getMessage(streamName, query);

@@ -87,12 +87,8 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
   }
   try {
     const deadline = performance.now() + 10_000;
-    const facts = await readStreamSummary(store, silo, `conversation-${conversationId}`,
+    return await readStreamSummary(store, silo, `conversation-${conversationId}`,
       chat, deadline, take);
-    const access = await readStreamSummary(store, silo, `participation-${conversationId}`,
-      chat, deadline, take);
-    facts.closed ||= access.closed;
-    return facts;
   } catch (error) {
     if (error instanceof WrongSiloError) throw new Error('Conversation silo mismatch', { cause: error });
     throw error;

@@ -14,8 +14,8 @@ import {
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
-  type StoredEvent } from '@opencrane/event-store';
-import { chatMembership } from './participation.ts';
+  type StoredEvent, type SummaryKind } from '@opencrane/event-store';
+import { chatMembership, participationClosed } from './participation.ts';
 import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
 import { agentSessionData, ReportRejected } from './reports.ts';
@@ -56,6 +56,10 @@ type WriteAuthority = () => Promise<void>;
 /** Append one lifecycle event. Reports cannot reopen a closed turn. */
 export async function turnCommand(store: EventStore, context: TurnContext, input: TurnInput) {
   const conversation = await readChatFacts(store, context.silo, input.conversationId, input.turnId);
+  if (input.status === 'started') {
+    const closed = await participationClosed(store, context.silo, input.conversationId);
+    conversation.closed ||= closed;
+  }
   const requested = requestedTurn(conversation, context.assistantId);
   const subject = `computer-${context.assistantId}`;
   const facts = await computerFacts(store, context.silo, context.assistantId, input);

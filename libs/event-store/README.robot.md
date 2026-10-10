@@ -246,8 +246,19 @@ Preference parsing binds the human principal to that member id. Access checks re
 
 ## Conversation closing writes
 
-New `conversation.closed` commands require `participation-<conversationId>`.
-The event registry and `validConversationWrite` reject a conversation subject or
-a different data id. Older closing events on `conversation-<conversationId>` still
-parse and replay. The server, models and conversation worker read both forms.
-`test/conversation-command.test.ts` checks current writes and older replay data.
+The server writes new `conversation.closed` commands to `participation-<conversationId>`.
+The append adapter also accepts `conversation-<conversationId>` for older callers.
+Both forms must match the data id and retain the same conditional append and retry rules.
+Older closing events still parse and replay. Participant writes still require participation.
+`test/conversation-command.test.ts` checks current and older appends and reads.
+
+Conversation activity reads can pass `includeConversationCloses: true` in a summary kind,
+or `true` as the fourth `readStream` argument. This uses one indexed NATS query,
+`ev.*.<conversationId>`, and returns only the exact conversation's events and its
+participation-stream closes. It never returns another entity's events or participant changes.
+Ordinary stream reads and append positions keep their existing meaning.
+The matching third `head` argument returns the query's latest candidate position.
+An unrelated entity with the same id can advance that position, but cannot supply
+activity or access facts. The activity reader filters these rows before making a decision.
+Model decisions use this path for both their initial history and later changes.
+They do not start another participation-stream read.

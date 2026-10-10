@@ -71,7 +71,9 @@ Older events without that choice still parse. Email-only join events also record
 the account issuer and subject. Older joins without those fields remain valid.
 
 Group chat records name each participant explicitly. Participant changes use a
-separate event stream so ordinary messages do not change access.
+separate event stream so ordinary messages do not change access. New closing
+events use that stream too. Older callers can still save a close on the conversation
+stream, and both forms replay.
 
 New group chats record at most 97 people, including their creator. Older saved
 events keep their original reading rules.

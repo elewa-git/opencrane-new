@@ -1203,8 +1203,10 @@ fresh-install journeys remain NOT RUN. Deployment wiring belongs to later work.
 
 `history` includes `conversation.closed` records from the participation stream
 when reading conversation facts. It sorts both histories by their saved position.
-`decisionActivity` reads both streams before its short authority check. Its final
-check reads only new records and treats a close on either stream as a refusal.
+`decisionActivity` includes both close formats in its existing conversation activity read.
+It uses the event store's single indexed query and does not read another authority stream.
+Its final check reads only new records and treats a close on either stream as a refusal.
+The combined query returns no unrelated entity events or participant changes.
 Human approval decisions also check newer records on both streams before saving.
 They resume from the saved global event position without rereading messages.
 Participant changes do not become message activity. Access checks still use their

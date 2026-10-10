@@ -15,8 +15,8 @@ flowchart LR
   server -->|records changes, memory facts, grants, roles, participants, computers, provider choices, drains and tool catalogues| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, invitations, chats, facts, models and tools| postgres
-  server -->|sends turns, models, tools and approvals; receives reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|reads members, invitations, chats, closing records, joins, facts, models and tools| postgres
+  server -->|sends turns, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -186,15 +186,11 @@ Switching on calls through managed providers is still unavailable.
    then sends it on to the model provider.
 9. **A person watches the assistant's desktop.** The server checks their conversation
    access and desktop grant. A confirmed member removal or conversation permission denial
-<<<<<<< HEAD
-   ends the view straight away, even if another access read is slow.
+   ends the view straight away, even if another access read is slow. A later invitation
+   on a removed member’s event stream does not restore desktop or file access.
 10. **An admin opens groups or ownership.** The server loads the records, then checks
     current access before replying. Slow histories can finish. A removal during
     loading denies the reply; unrelated chat activity does not interrupt it.
-=======
-   ends the view straight away, even if another access read is slow. A later invitation
-   on a removed member’s event stream does not restore desktop or file access.
->>>>>>> 318c3ea6 (🔒 Keep member removal effective for desktop and file access)
 
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.

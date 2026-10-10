@@ -21,6 +21,7 @@ function addChat(summary: StoredEvent[], row: StoredEvent) {
 
 export const decisionChatSummary: SummaryKind<StoredEvent[]> = {
   name: 'decision-chat', keep: 64, empty: emptyChat, add: addChat,
+  includeConversationCloses: true,
   budget: { limit: 72 * 1024 * 1024, size: chatSize },
 };
 function chatSize(summary: StoredEvent[]) {

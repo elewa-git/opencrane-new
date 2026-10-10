@@ -897,6 +897,10 @@ removal during that read, through the real HTTP route and disposable services.
 
 ## Chat summary and report writes
 
+Report reads do not load participation history. Turn starts check the small participation
+closure summary separately, before deciding whether to start or repeat a turn.
+The report summary's position still belongs only to the conversation stream.
+
 Reports and turn commands share the server's `chat` summary, built on the event
 store's stream summary. The server keeps up to 64 conversations per store connection and rebuilds a dropped summary from
 the first event. Each call reads through the latest saved event before copying
