@@ -1,9 +1,37 @@
-import type { ChatConversation, ChatRow } from '@opencrane/protocol';
+import { chatMessageSchema, chatRowSchema, type ChatConversation, type ChatRow }
+  from '@opencrane/protocol';
+import type { Colleague, ReviewedSnapshot } from './recipient-picker';
+
+export type DirectUpdate =
+  | { kind: 'ignore' }
+  | { kind: 'access_changed' }
+  | { kind: 'reload' }
+  | { kind: 'invalid' }
+  | { kind: 'append'; row: ChatRow };
+
+export function readDirectUpdate(
+  raw: unknown, conversationId: string, generation: number, position: number,
+): DirectUpdate {
+  const parsed = chatMessageSchema.safeParse(raw);
+  if (!parsed.success || parsed.data.conversationId !== conversationId) {
+    return { kind: 'ignore' };
+  }
+  if (parsed.data.type === 'refused') return { kind: 'access_changed' };
+  if (parsed.data.type === 'resync' || parsed.data.generation !== generation) {
+    return { kind: 'reload' };
+  }
+  if (parsed.data.type !== 'event' || !parsed.data.row) return { kind: 'ignore' };
+  const row = chatRowSchema.safeParse(parsed.data.row);
+  if (!row.success) return { kind: 'invalid' };
+  if (row.data.position <= position) return { kind: 'ignore' };
+  if (row.data.position !== position + 1) return { kind: 'reload' };
+  return { kind: 'append', row: row.data };
+}
 
 export function directConversations(rows: ChatConversation[]): ChatConversation[] {
   const direct: ChatConversation[] = [];
   for (const row of rows) {
-    if (row.mode === 'direct') direct.push(row);
+    if (row.mode === 'direct' || row.mode === 'group') direct.push(row);
   }
   return direct;
 }
@@ -19,7 +47,8 @@ export function directConversationById(
   rows: ChatConversation[], conversationId: string,
 ): ChatConversation | undefined {
   for (const row of rows) {
-    if (row.mode === 'direct' && row.conversationId === conversationId) return row;
+    if ((row.mode === 'direct' || row.mode === 'group')
+      && row.conversationId === conversationId) return row;
   }
   return undefined;
 }
@@ -52,6 +81,62 @@ export function directRecipientName(
 ): string {
   if (!colleague) return '';
   return colleague.displayName?.trim() || colleague.memberId;
+}
+
+export function directConversationHeaderTitle(
+  conversation: ChatConversation | undefined, memberId: string,
+  colleagues: { memberId: string; displayName: string | null }[],
+  recipient: { memberId: string; displayName: string | null } | undefined,
+): string {
+  if (!conversation) return directRecipientName(recipient);
+  return directConversationTitle(conversation, memberId, colleagues);
+}
+
+export function directConversationMode(conversation: ChatConversation | undefined)
+  : 'direct' | 'group' | undefined {
+  if (!conversation || conversation.mode === 'agent_session') return undefined;
+  return conversation.mode;
+}
+
+export function mergeDirectColleagues(
+  known: { memberId: string; displayName: string | null }[],
+  latest: { memberId: string; displayName: string | null }[],
+): { memberId: string; displayName: string | null }[] {
+  const merged = new Map<string, { memberId: string; displayName: string | null }>();
+  for (const colleague of known) merged.set(colleague.memberId, colleague);
+  for (const colleague of latest) merged.set(colleague.memberId, colleague);
+  return Array.from(merged.values());
+}
+
+export function isDirectTranscriptNearNewest(transcript: HTMLElement): boolean {
+  const remaining = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight;
+  return remaining < 80;
+}
+
+export function focusDirectComposer(host: HTMLElement | undefined): void {
+  if (!host) return;
+  const field = host.querySelector('textarea');
+  if (field instanceof HTMLTextAreaElement) field.focus();
+}
+
+export function hasDirectMessage(rows: ChatRow[], messageId: string): boolean {
+  if (!messageId) return false;
+  for (const row of rows) {
+    if (row.id === messageId) return true;
+  }
+  return false;
+}
+
+export function exceedsDirectRecipientLimit(
+  people: Colleague[], snapshot: ReviewedSnapshot | undefined,
+): boolean {
+  const maximum = snapshot ? 97 : 96;
+  return people.length > maximum;
+}
+
+export function directDraftKey(conversationId: string, colleagueId: string | undefined): string {
+  if (conversationId) return `conversation:${conversationId}`;
+  return `recipient:${colleagueId ?? ''}`;
 }
 
 export function groupAuthorName(
@@ -90,6 +175,15 @@ export function directConversationTitle(
   conversation: ChatConversation, memberId: string,
   colleagues: { memberId: string; displayName: string | null }[],
 ): string {
+  if (conversation.mode === 'group') {
+    const names: string[] = [];
+    for (const participantId of conversation.participantIds) {
+      if (participantId === memberId) continue;
+      const colleague = directColleagueById(colleagues, participantId);
+      names.push(colleague?.displayName?.trim() || participantId);
+    }
+    return names.join(', ') || 'Group conversation';
+  }
   if (conversation.mode !== 'direct') return '';
   const otherId = otherParticipant(conversation.participantIds, memberId);
   if (!otherId) return 'Direct conversation';

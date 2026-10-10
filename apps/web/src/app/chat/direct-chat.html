@@ -35,18 +35,20 @@
     <header class="workspace-header">
       <button #navigationOpener class="navigation-toggle" type="button"
         aria-label="Open direct conversations" [attr.aria-expanded]="navigationOpen()"
-        [disabled]="composerBusy()" (click)="openNavigation()">☰</button>
+        [disabled]="composerBusy()" (click)="navigationOpen.set(true)">☰</button>
       <a class="back-link" href="/workspace" aria-label="Back to workspace">‹</a>
       <h1 tabindex="-1" #accessHeading>
         @if (pageState() === 'access_changed' || pageState() === 'not_found') { Unavailable }
-        @else if (selectedConversationId()) { {{ selectedConversationTitle() }} }
+        @else if (selectedConversationId()) {
+          {{ headerTitle(selectedConversation(), currentMemberId, knownColleagues(), colleague()) }}
+        }
         @else { New conversation }
       </h1>
       @if (groupSnapshot(); as snapshot) {
         <span class="header-status">Group · {{ snapshot.members.length }} people</span>
       } @else if (selectedPeople().length > 1) {
         <span class="header-status">Group · {{ selectedPeople().length + 1 }} people</span>
-      } @else if (isGroupConversation()) {
+      } @else if (selectedConversation()?.mode === 'group') {
         <span class="header-status">Group</span>
       } @else if (colleague()) { <span class="header-status">Direct · 2 people</span> }
       @if (pageState() === 'ready') {
@@ -79,7 +81,7 @@
           <button class="button secondary retry-page" type="button"
             [attr.aria-disabled]="refreshing()" (click)="load()">Try again</button>
         } @else {
-          @if (!isGroupConversation()) {
+          @if (selectedConversation()?.mode !== 'group') {
           <oc-recipient-picker [colleagues]="colleagues()" [query]="colleagueQuery()"
             [searchState]="colleagueState()"
             [selected]="colleague()" [draft]="!selectedConversationId()"
@@ -91,7 +93,7 @@
             (recipientChanged)="clearColleague()"
             (selectionChanged)="selectionChanged($event)" />
           }
-          @if (colleague() || isGroupConversation()) {
+          @if (colleague() || selectedConversation()?.mode === 'group') {
           @if (historyState() === 'loading') {
             <p class="empty-transcript">Loading messages…</p>
           } @else if (historyState() === 'failed') {
@@ -104,14 +106,17 @@
               <article class="message" [class.own]="ownMessage(row, currentMemberId)">
                 @if (!ownMessage(row, currentMemberId)) {
                   <span class="avatar" aria-hidden="true">
-                    {{ directAvatar(isGroupConversation()
-                      ? groupAuthor(row) : recipientDisplayName(colleague())) }}
+                    {{ directAvatar(selectedConversation()?.mode === 'group'
+                      ? groupAuthor(row, currentMemberId, knownColleagues())
+                      : recipientDisplayName(colleague())) }}
                   </span>
                 }
                 <div class="message-content">
-                  @if (!ownMessage(row, currentMemberId) || isGroupConversation()) {
+                  @if (!ownMessage(row, currentMemberId) || selectedConversation()?.mode === 'group') {
                     <header><strong>
-                      @if (isGroupConversation()) { {{ groupAuthor(row) }} }
+                      @if (selectedConversation()?.mode === 'group') {
+                        {{ groupAuthor(row, currentMemberId, knownColleagues()) }}
+                      }
                       @else { {{ messageAuthor(row, currentMemberId,
                         recipientDisplayName(colleague())) }} }
                     </strong><time>{{ directTime(row.time) }}</time></header>
@@ -119,7 +124,7 @@
                   <p>{{ directDisplayText(row) }}</p>
                   @if (ownMessage(row, currentMemberId)) {
                     <span class="message-receipt">
-                      @if (isGroupConversation()) { Saved · }
+                      @if (selectedConversation()?.mode === 'group') { Saved · }
                       {{ directTime(row.time) }}
                     </span>
                   }
@@ -132,7 +137,8 @@
       </div>
     </section>
 
-    @if (pageState() === 'ready' && (colleague() || isGroupConversation() || selectedPeople().length > 1
+    @if (pageState() === 'ready' && (colleague() || selectedConversation()?.mode === 'group'
+      || selectedPeople().length > 1
       || groupSnapshot() || pending())) {
       <footer class="composer-dock">
         <div class="send-feedback">
@@ -157,12 +163,13 @@
             <oc-shared-state kind="failed" [message]="failure()" [showAction]="false" />
           }
           @if (recordedMessage()) {
-            <p class="recorded-receipt">Message recorded. Refresh to read it in the transcript.</p>
+            <p class="recorded-receipt">Saved. Refresh to read it in the transcript.</p>
           }
         </div>
         <div #composer class="composer-wrap">
           <oc-chat-composer [directMode]="true" [draft]="draft()"
-            [placeholder]="'Message'" [busy]="composerBusy() || recipientLimitExceeded()"
+            [placeholder]="'Message'" [busy]="composerBusy() || exceedsDirectRecipientLimit(
+              selectedPeople(), groupSnapshot())"
             (draftChange)="changeDraft($event)" (submitted)="submitMessage($event)" />
         </div>
       </footer>
@@ -170,7 +177,7 @@
   </main>
 </div>
 <oc-navigation-menu [open]="navigationOpen()" label="Direct conversations"
-  [returnFocusTo]="navigationOpener" (closed)="navigationClosed()">
+  [returnFocusTo]="navigationOpener" (closed)="navigationOpen.set(false)">
   <a href="/workspace">Ask your assistant</a>
   <a href="/workspace/direct" [attr.aria-disabled]="composerBusy()"
         (click)="protectPendingNavigation($event)">New direct chat</a>
