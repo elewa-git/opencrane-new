@@ -450,7 +450,7 @@ async function refusesOwnerInvitation() {
   expect(response.json()).toMatchObject({ reason: 'ownership_stream_required' });
   await assertRefusalPreservesAuthority('invitee', input.commandId, before,
     memberSequence, ownershipSequence, '');
-  expect(await nats.store.head()).toBe(before);
+  expect(await nats.store.head()).toBe(before + 1);
 }
 it('invitation acceptance cannot appoint an owner outside the ownership stream', refusesOwnerInvitation);
 
@@ -515,7 +515,7 @@ async function refusesOwnerReinvitation() {
   expect((await request('POST', input, `idp-${actorId}`, '/members/join')).statusCode).toBe(409);
   await assertRefusalPreservesAuthority(actorId, input.commandId, before,
     memberSequence, ownershipSequence, 'owner');
-  expect(await nats.store.head()).toBe(before);
+  expect(await nats.store.head()).toBe(before + 1);
 }
 it('reinviting an active owner cannot demote them through invitation acceptance',
   refusesOwnerReinvitation);

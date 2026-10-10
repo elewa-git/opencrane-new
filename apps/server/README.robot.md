@@ -1406,3 +1406,8 @@ reject raw command-reference fields without adding a field-name exception.
 Audit routes call `isOrganisationSession` with `extraIdentities: []`. Both history
 routes require the configured organisation even when development sign-in allows
 a named outsider. The source guard continues to cover `audit/routes.ts`.
+
+Ownership refusal tests allow exactly one `member.command_refused` audit event.
+They still require unchanged member and ownership stream positions, unchanged
+effective roles and an unchanged membership outcome after projection. The pending
+Owner-role invitation remains invited; the active owner remains an owner.
