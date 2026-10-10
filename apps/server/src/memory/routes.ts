@@ -8,6 +8,7 @@ import { scopeAccess, scopeFor, resolveScope, memoryAccessChecks, MemoryRefused,
 import { detailFact, listFacts, memorySnapshot, readInput, readParams,
   scopeInput, limits, MemoryConflict } from './reads.ts';
 
+import { maintenanceStatus } from './maintenance.ts';
 import { previewParams, turnMemoryPreview } from './turn-preview.ts';
 
 export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
@@ -15,6 +16,7 @@ export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
   app.get('/api/memory/scopes', handle);
   app.get('/api/memory/turns/:conversationId/:turnId', handle);
   app.get('/api/memory/:scopeId/facts', handle);
+  app.get('/api/memory/:scopeId/maintenance', handle);
   app.get('/api/memory/:scopeId/facts/:memoryId', handle);
 
   async function handle(request: FastifyRequest, reply: FastifyReply) {
@@ -110,6 +112,10 @@ async function readContent(request: FastifyRequest, options: MemoryOptions, requ
   const access = await scopeAccess(options, requester, scope, false, checks);
   if (!access.canRead) {
     throw new MemoryRefused();
+  }
+  if (request.routeOptions.url?.endsWith('/maintenance')) {
+    z.strictObject({}).parse(request.query);
+    return await maintenanceStatus(options, scope);
   }
   if (request.routeOptions.url?.endsWith('/:memoryId')) {
     return await readDetail(request, options, requester, scope);

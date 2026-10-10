@@ -1675,3 +1675,33 @@ stale expected sequence return 409. A lost append reply or unseen status stays u
 status never resends. Saved retries work beyond NATS's duplicate window.
 Networking stays disabled. Decision bindings, observation/audit detail, member policy
 views, effective admission and fresh-install qualification remain for later work.
+
+## Nightly memory bindings (P4-17 PR 1, first part)
+
+`POST /api/memory/:scopeId/maintenance/binding` accepts `commandId`,
+`expectedRevision` (zero before setup), `assistantId`, `payingGroupId`, `enabled`
+and explicit `acceptedCapCents: 100`. The authenticated current member is the
+consenting execution member. No caller-supplied member or admin impersonation is
+accepted. Group scope requires its own group assistant. Notes require their own
+assistant, its real audience, actsFor, and both current read and write permissions.
+An enabled binding requires current payer membership and any assistant payer match.
+Disabling still checks scope access, but can succeed after assistant or payer loss.
+
+History is read before the two-second authority check. Only exact member,
+assistant, audience, payer and grant streams decide access. Each command makes
+one conditional append on the scope stream. Config revisions count binding changes;
+content movement is a separate append conflict. An identical retry returns the
+original receipt. Changed commands or stale revisions return 409. Lost append
+replies return unknown; the original `/changes/:commandId` GET checks saved history.
+
+`GET /api/memory/:scopeId/maintenance` checks scope read access once and requires
+caught-up memory tables and an unchanged table generation. It returns the current
+binding and `not_configured`, `disabled` or `qualification_blocked`. Dispatch is
+always disabled and `nextAt` is null. All responses use no-store. There is no run,
+retry or scheduler endpoint. Dirty selection, run contracts/history and nightly
+admission are deferred to the second part of the accepted row to keep this change
+small. No allowance is allocated and nothing can spend. The cap records consent.
+
+`test/memory.test.ts` covers HTTP consent, scope/assistant/payer refusal, retries,
+conflicts, status privacy and equal binding tables after offline replay without
+external ports. Fresh-install qualification and independent review: NOT RUN.

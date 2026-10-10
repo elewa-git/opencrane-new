@@ -10,6 +10,7 @@ import { memoryTextSchema, memoryWrittenDataSchema, memoryWrittenEventSchema,
 import type { StoredEvent } from '@opencrane/event-store';
 import { memoryAccessChecks, scopeAccess, MemoryRefused, type MemoryOptions,
   type Scope } from './access.ts';
+import { bindingReceipt } from './maintenance.ts';
 import { MemoryConflict, memorySnapshot } from './reads.ts';
 import { checkSources } from './sources.ts';
 import { commandJournal } from './journal.ts';
@@ -75,6 +76,9 @@ function originalInput(row: StoredEvent, keys: ReturnType<typeof memoryKeys>) {
 }
 function originalReceipt(row: StoredEvent, keys: ReturnType<typeof memoryKeys>, input: Input,
   audience: { kind: string; ownerId: string }) {
+  if (row.event.type !== 'memory.written') {
+    throw new MemoryConflict();
+  }
   const receipt = savedReceipt(row, audience);
   const original = originalInput(row, keys);
   if (original === null) {
@@ -304,6 +308,9 @@ export async function readCommand(options: MemoryOptions, requester: string, sco
   commandId: string, audience: { kind: string; ownerId: string }) {
   await memorySnapshot(options, scope);
   const state = await commandHistory(options, scope.scopeId, requester, commandId);
+  if (state.original?.event.type === 'memory.maintenance_bound') {
+    return bindingReceipt(state.original);
+  }
   if (!options.keyDirectory) {
     throw new Error('Memory custody unavailable');
   }

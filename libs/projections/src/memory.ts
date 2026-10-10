@@ -1,5 +1,5 @@
 import { parseEventByType, memoryWrittenEventSchema, memoryTextSchema, type EventEnvelope,
-  type MemoryIdentity } from '@opencrane/events';
+  type MemoryIdentity, memoryMaintenanceBoundDataSchema } from '@opencrane/events';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
 import { memoryIdentity } from './memory-keys.ts';
@@ -8,6 +8,9 @@ type SavedMemoryWrite = ReturnType<typeof memoryWrittenEventSchema.parse>['data'
 type MemoryWrite = Extract<SavedMemoryWrite, { schemaVersion: 1 }>;
 
 async function create(db: Query): Promise<void> {
+  await db.query(`CREATE TABLE IF NOT EXISTS memory_maintenance_bindings (
+    silo TEXT NOT NULL, scope_id TEXT NOT NULL, data JSONB NOT NULL, position BIGINT NOT NULL,
+    PRIMARY KEY (silo, scope_id))`);
   await db.query(`CREATE TABLE IF NOT EXISTS memory_facts (
     silo TEXT NOT NULL, scope_id TEXT NOT NULL, memory_id TEXT NOT NULL,
     scope_kind TEXT, owner_id TEXT, revision BIGINT, kind TEXT, pinned BOOLEAN,
@@ -35,7 +38,8 @@ async function create(db: Query): Promise<void> {
 }
 
 async function drop(db: Query): Promise<void> {
-  await db.query('DROP TABLE IF EXISTS memory_dependencies, memory_changes, memory_facts');
+  await db.query(`DROP TABLE IF EXISTS memory_maintenance_bindings,
+    memory_dependencies, memory_changes, memory_facts`);
 }
 
 function ignored(): Promise<void> {
@@ -111,6 +115,18 @@ export function memoryProjection(custody: {
     string | null | Promise<string | null>;
 }): Projection {
   async function prepare(envelope: EventEnvelope): Promise<Projection['apply']> {
+    if (envelope.type === 'memory.maintenance_bound') {
+      if (!parseEventByType(envelope).success) {
+        throw new Error('Invalid saved binding event');
+      }
+      const data = memoryMaintenanceBoundDataSchema.parse(envelope.data);
+      async function applyBinding(db: Query, _event: EventEnvelope, position: number) {
+        const values = [envelope.silo, data.scopeId, JSON.stringify(data), position];
+        await db.query(`INSERT INTO memory_maintenance_bindings VALUES ($1,$2,$3,$4)
+          ON CONFLICT (silo, scope_id) DO UPDATE SET data=$3, position=$4`, values);
+      }
+      return applyBinding;
+    }
     if (envelope.type !== 'memory.written') {
       if (envelope.type.startsWith('memory.')) {
         throw new Error('Memory change is not supported by this projection yet');

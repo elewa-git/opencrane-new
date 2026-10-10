@@ -471,6 +471,7 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
+| `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | dispatch disabled; no scheduling or spending |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
 | `memory.corrected` / `memory.forgotten` | OpenCrane memory MCP (correct/forget); nightly per-scope dreaming job (corrected only) | Postgres memory projection for that scope | forget: record a tombstone, then delete every revision key and searchable text |
 | `memory.consolidated` | Reserved for later use; not emitted by MVP dreaming | Postgres memory projection for that scope | — |

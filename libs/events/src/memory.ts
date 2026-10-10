@@ -111,3 +111,9 @@ export const memoryWrittenExample = {
   kind: 'fact' as const, pinned: false, expiresAt: null, sources: [], dependsOn: [],
   ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', keyId: `key:${'a'.repeat(64)}`,
 };
+
+export const memoryMaintenanceBoundDataSchema = z.strictObject({
+  scopeId: digest, scopeKind, ownerId: identifier, memberId: identifier,
+  assistantId: identifier, payingGroupId: identifier, enabled: z.boolean(),
+  acceptedCapCents: z.literal(100), revision,
+});

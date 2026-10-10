@@ -44,8 +44,11 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     return { success: false, reason: 'unknown_event_type', type: typeField.data.type };
   }
 
-  const envelopeSchema = eventEnvelopeSchema(definition.dataSchema).superRefine(checkDelegationEvent)
-    .refine(validEgressRuleEvent);
+  let envelopeSchema = eventEnvelopeSchema(definition.dataSchema)
+    .superRefine(checkDelegationEvent).refine(validEgressRuleEvent);
+  if (definition.type === 'memory.maintenance_bound') {
+    envelopeSchema = envelopeSchema.refine(validMaintenanceBinding);
+  }
   const checkedSchema = definition.stream === 'chat-state'
     ? envelopeSchema.refine(validPreferenceIdentity)
     : envelopeSchema;
@@ -64,4 +67,15 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     }
   }
   return { success: true, event };
+}
+
+function validMaintenanceBinding(event: EventEnvelope) {
+  const fields = z.object({ scopeId: z.string(), scopeKind: z.string(), ownerId: z.string(),
+    memberId: z.string() }).parse(event.data);
+  if (fields.scopeKind === 'person' && fields.ownerId !== fields.memberId) {
+    return false;
+  }
+  return event.subject === `scope-${fields.scopeId}` && event.source === 'opencrane-server' &&
+    event.principal?.kind === 'human' && event.principal.id === fields.memberId &&
+    typeof event.commandId === 'string';
 }

@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory, provider, spending, child and destination tables| projections["libs/projections<br/>read tables, message lookups and keys"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child and destination tables| projections["libs/projections<br/>read tables, message lookups and keys"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, private choices, confirmed owners and startup review| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
@@ -37,6 +37,9 @@ flowchart LR
 - Keeps hosted tool policies unpublished, including older records and replay.
 - Keeps startup tool policies unpublished through review and replay.
   Existing per-call connections, including memory, keep their reviewed status.
+
+- Keeps each scope’s chosen member, assistant and paying group for nightly memory upkeep.
+  Rebuilding this choice makes no outside calls.
 - Rebuild child participants and their recorded parent references from saved events.
 - Keep an index for reading initial memory in a stable order.
 - Keeps delegated task relationships and outcomes in read tables. Rebuilding these

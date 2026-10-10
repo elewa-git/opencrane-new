@@ -2386,83 +2386,189 @@ it('lets another member save with four occupied slots and a flood across scopes 
   fairQueueAcrossScopesAndSessions);
 
 const bindingInput = { commandId: 'bind-own', expectedRevision: 0,
-  assistantId: 'personal', payingGroupId: 'sales', enabled: true, acceptedCapCents: 100 };
-function bind(scopePath: string, payload: unknown, memberId = 'bob') {
+  assistantId: 'dream-personal', payingGroupId: 'dream-sales', enabled: true, acceptedCapCents: 100 };
+function bind(scopePath: string, payload: object, memberId = 'dreamer') {
   const session = { sub: `idp-${memberId}`, orgId: 'org-acme', roles: ['owner'],
     authTime: 1790856000, exp: 2000000000 };
   const headers = { origin: new URL(config.redirectUri).origin,
     cookie: `${config.cookieName}=${encodeSession(config, session)}` };
   const url = `${scopePath}/maintenance/binding`;
-  return app.inject({ method: 'POST', url, headers, payload });
+  const request = { method: 'POST' as const, url, headers, payload };
+  return app.inject(request);
 }
-it('requires explicit nightly cost acceptance and the consenting member themselves',
-  async function explicitBinding() {
-    const position = await nats.store.head();
-    const missingAcceptance = { ...bindingInput, acceptedCapCents: undefined };
-    expect((await bind(path('bob'), missingAcceptance)).statusCode).toBe(422);
-    expect((await bind(path('bob'), bindingInput, 'admin')).statusCode).toBe(404);
-    expect((await bind(path('owner'), bindingInput)).statusCode).toBe(404);
-    expect(await nats.store.head()).toBe(position);
-  });
-it('checks assistant audience and paying group membership without changing facts',
-  async function bindingMatrix() {
-    const refused = [
-      { ...bindingInput, payingGroupId: 'missing' },
-      { ...bindingInput, assistantId: 'missing' },
-      { ...bindingInput, assistantId: 'personal', commandId: 'wrong-group' },
-    ];
-    const position = await nats.store.head();
-    expect((await bind(path('bob'), refused[0])).statusCode).toBe(404);
-    expect((await bind(path('bob'), refused[1])).statusCode).toBe(404);
-    expect((await bind(path('sales', 'group'), refused[2])).statusCode).toBe(404);
-    expect((await bind(path('personal', 'assistant_notes'), bindingInput)).statusCode).toBe(404);
-    expect(await nats.store.head()).toBe(position);
-    const saved = await bind(path('bob'), bindingInput);
-    expect(saved.statusCode).toBe(200);
-    expect(saved.json()).toMatchObject({ outcome: 'saved', binding: {
-      memberId: 'bob', assistantId: 'personal', payingGroupId: 'sales',
-      acceptedCapCents: 100, enabled: true, revision: 1 }, dispatch: 'disabled' });
-    const shared = { ...bindingInput, commandId: 'bind-group', assistantId: 'shared' };
-    expect((await bind(path('sales', 'group'), shared)).statusCode).toBe(200);
-  });
-it('returns the original binding receipt and conflicts on changed or stale commands',
-  async function originalBinding() {
-    const position = await nats.store.head();
-    expect((await bind(path('bob'), bindingInput)).statusCode).toBe(200);
-    const changed = { ...bindingInput, enabled: false };
-    expect((await bind(path('bob'), changed)).statusCode).toBe(409);
-    const stale = { ...bindingInput, commandId: 'stale-binding' };
-    expect((await bind(path('bob'), stale)).statusCode).toBe(409);
-    expect(await nats.store.head()).toBe(position);
-    await runner.run(projection);
-    const receipt = await get(`${path('bob')}/changes/bind-own`);
-    expect(receipt.statusCode).toBe(200);
-    expect(receipt.json()).toMatchObject({ outcome: 'saved', binding: { revision: 1 } });
-    const status = await get(`${path('bob')}/maintenance`);
-    expect(status.statusCode).toBe(200);
-    expect(status.headers['cache-control']).toBe('no-store');
-    expect(status.json()).toMatchObject({ status: 'qualification_blocked', dispatch: 'disabled',
-      nextAt: null, binding: { memberId: 'bob', revision: 1 } });
-    expect((await get(`${path('bob')}/maintenance`, 'admin')).statusCode).toBe(404);
-    expect((await get(`${path('sales', 'group')}/maintenance`, 'admin')).statusCode).toBe(404);
-  });
-it('rebuilds binding status without any key, model, tool, computer or scheduler port',
-  async function replayBinding() {
-    const before = await get(`${path('bob')}/maintenance`);
-    function absentKeys() {
-      return null;
-    }
-    const metadataProjection = memoryProjection({ decrypt: absentKeys });
-    const database = pgDb(storage.queue);
-    const rowsBefore = await database.query(
-      'SELECT * FROM memory_maintenance_bindings ORDER BY scope_id');
-    await runner.rebuild(metadataProjection);
-    const after = await get(`${path('bob')}/maintenance`);
-    expect(after.statusCode).toBe(200);
-    expect(after.json()).toEqual(before.json());
-    const rowsAfter = await database.query(
-      'SELECT * FROM memory_maintenance_bindings ORDER BY scope_id');
-    expect(rowsAfter.rows).toEqual(rowsBefore.rows);
-    // Restore the shared fact tables for the rest of this file's existing tests.
-    await runner.rebuild(projection);
-  });
+async function explicitBinding() {
+  await append('member-dreamer', 'member.joined', { memberId: 'dreamer', role: 'member',
+    email: 'dreamer@example.test', displayName: 'Dreamer' });
+  await append('team-dream-sales', 'team.created',
+    { teamId: 'dream-sales', name: 'Dream Sales', createdBy: 'owner' });
+  await append('team-dream-sales', 'team.member_added',
+    { teamId: 'dream-sales', memberId: 'dreamer', addedBy: 'owner' });
+  await append('assistant-dream-personal', 'assistant.created',
+    { assistantId: 'dream-personal', kind: 'personal', ownerId: 'dreamer' });
+  await append('assistant-dream-shared', 'assistant.created',
+    { assistantId: 'dream-shared', kind: 'team', ownerId: 'dream-sales' });
+  for (const target of [projection, groups, computers]) {
+    await runner.run(target);
+  }
+  const position = await nats.store.head();
+  const empty = await get(`${path('dreamer')}/maintenance`, 'dreamer');
+  expect(empty.json()).toMatchObject({ status: 'not_configured', binding: null,
+    dispatch: 'disabled', nextAt: null });
+  const missingAcceptance = { ...bindingInput, acceptedCapCents: undefined };
+  expect((await bind(path('dreamer'), missingAcceptance)).statusCode).toBe(422);
+  expect((await bind(path('dreamer'), bindingInput, 'admin')).statusCode).toBe(404);
+  expect((await bind(path('owner'), bindingInput)).statusCode).toBe(404);
+  expect(await nats.store.head()).toBe(position);
+}
+it('requires explicit nightly cost acceptance and the consenting member themselves', explicitBinding);
+
+async function bindingMatrix() {
+  const refused = [
+    { ...bindingInput, payingGroupId: 'missing' },
+    { ...bindingInput, assistantId: 'missing' },
+    { ...bindingInput, assistantId: 'dream-personal', commandId: 'wrong-group' },
+  ] as const;
+  const position = await nats.store.head();
+  expect((await bind(path('dreamer'), refused[0])).statusCode).toBe(404);
+  expect((await bind(path('dreamer'), refused[1])).statusCode).toBe(404);
+  expect((await bind(path('dream-sales', 'group'), refused[2])).statusCode).toBe(404);
+  expect((await bind(path('dream-personal', 'assistant_notes'), bindingInput)).statusCode).toBe(404);
+  expect(await nats.store.head()).toBe(position);
+  const saved = await bind(path('dreamer'), bindingInput);
+  expect(saved.statusCode).toBe(200);
+  expect(saved.json()).toMatchObject({ outcome: 'saved', binding: {
+    memberId: 'dreamer', assistantId: 'dream-personal', payingGroupId: 'dream-sales',
+    acceptedCapCents: 100, enabled: true, revision: 1 }, dispatch: 'disabled' });
+  const shared = { ...bindingInput, commandId: 'bind-group', assistantId: 'dream-shared' };
+  expect((await bind(path('dream-sales', 'group'), shared)).statusCode).toBe(200);
+}
+it('checks assistant audience and paying group membership without changing facts', bindingMatrix);
+
+async function originalBinding() {
+  const position = await nats.store.head();
+  expect((await bind(path('dreamer'), bindingInput)).statusCode).toBe(200);
+  const changed = { ...bindingInput, enabled: false };
+  expect((await bind(path('dreamer'), changed)).statusCode).toBe(409);
+  const stale = { ...bindingInput, commandId: 'stale-binding' };
+  expect((await bind(path('dreamer'), stale)).statusCode).toBe(409);
+  expect(await nats.store.head()).toBe(position);
+  await runner.run(projection);
+  const receipt = await get(`${path('dreamer')}/changes/bind-own`, 'dreamer');
+  expect(receipt.statusCode).toBe(200);
+  expect(receipt.json()).toMatchObject({ outcome: 'saved', binding: { revision: 1 } });
+  const status = await get(`${path('dreamer')}/maintenance`, 'dreamer');
+  expect(status.statusCode).toBe(200);
+  expect(status.headers['cache-control']).toBe('no-store');
+  expect(status.json()).toMatchObject({ status: 'qualification_blocked', dispatch: 'disabled',
+    nextAt: null, binding: { memberId: 'dreamer', revision: 1 } });
+  expect((await get(`${path('dreamer')}/maintenance`, 'admin')).statusCode).toBe(404);
+  expect((await get(`${path('dream-sales', 'group')}/maintenance`, 'admin')).statusCode).toBe(404);
+}
+it('returns the original binding receipt and conflicts on changed or stale commands', originalBinding);
+
+async function replayBinding() {
+  const before = await get(`${path('dreamer')}/maintenance`, 'dreamer');
+  function absentKeys() {
+    return null;
+  }
+  const metadataProjection = memoryProjection({ decrypt: absentKeys });
+  const database = pgDb(storage.queue);
+  const rowsBefore = await database.query(
+    'SELECT * FROM memory_maintenance_bindings ORDER BY scope_id');
+  await runner.rebuild(metadataProjection);
+  const after = await get(`${path('dreamer')}/maintenance`, 'dreamer');
+  expect(after.statusCode).toBe(200);
+  expect(after.json()).toEqual(before.json());
+  const rowsAfter = await database.query(
+    'SELECT * FROM memory_maintenance_bindings ORDER BY scope_id');
+  expect(rowsAfter.rows).toEqual(rowsBefore.rows);
+  // Restore the shared fact tables for the rest of this file's existing tests.
+  await runner.rebuild(projection);
+}
+it('rebuilds binding status without any key, model, tool, computer or scheduler port', replayBinding);
+
+async function noteBinding() {
+  const scopeId = memoryScopeId('acme', 'assistant_notes', 'dream-shared');
+  const input = { ...bindingInput, assistantId: 'dream-shared', commandId: 'bind-notes' };
+  for (const resourceType of ['memory_read', 'memory_write']) {
+    await append(grantStream(resourceType, scopeId), 'grant.given', {
+      resourceType, resourceId: scopeId, granteeKind: 'member', granteeId: 'dreamer',
+      grantedBy: 'owner' });
+  }
+  expect((await bind(path('dream-shared', 'assistant_notes'), input)).statusCode).toBe(200);
+  const wrongAssistant = { ...input, commandId: 'wrong-note-assistant',
+    assistantId: 'dream-personal', expectedRevision: 1 };
+  expect((await bind(path('dream-shared', 'assistant_notes'), wrongAssistant)).statusCode).toBe(404);
+  await append(grantStream('memory_read', scopeId), 'grant.revoked', {
+    resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'member',
+    granteeId: 'dreamer', revokedBy: 'owner' });
+  const noRead = { ...input, commandId: 'notes-no-read', expectedRevision: 1 };
+  expect((await bind(path('dream-shared', 'assistant_notes'), noRead)).statusCode).toBe(404);
+}
+it('requires both note grants and keeps the real assistant audience', noteBinding);
+
+async function lostBindingReply() {
+  const input = { ...bindingInput, commandId: 'bind-lost-reply', expectedRevision: 1 };
+  const originalAppend = nats.store.append.bind(nats.store);
+  async function loseReply(command: Parameters<typeof nats.store.append>[0]): Promise<never> {
+    await originalAppend(command);
+    throw new Error('Lost reply');
+  }
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  appendSpy.mockImplementation(loseReply);
+  try {
+    const response = await bind(path('dreamer'), input);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ outcome: 'unknown', dispatch: 'disabled' });
+  } finally {
+    appendSpy.mockRestore();
+  }
+  await runner.run(projection);
+  const receipt = await get(`${path('dreamer')}/changes/bind-lost-reply`, 'dreamer');
+  expect(receipt.json()).toMatchObject({ outcome: 'saved', binding: { revision: 2 } });
+  const position = await nats.store.head();
+  expect((await bind(path('dreamer'), input)).statusCode).toBe(200);
+  expect(await nats.store.head()).toBe(position);
+}
+it('checks the original command after an accepted append loses its reply', lostBindingReply);
+
+async function disableLostAuthority() {
+  await append('team-dream-sales', 'team.member_removed',
+    { teamId: 'dream-sales', memberId: 'dreamer', removedBy: 'owner' });
+  await append('assistant-dream-personal', 'assistant.settings_changed', {
+    assistantId: 'dream-personal', changedBy: 'owner', active: false, changedFields: ['active'] });
+  const disable = { ...bindingInput, commandId: 'disable-dream',
+    expectedRevision: 2, enabled: false };
+  expect((await bind(path('dreamer'), disable)).statusCode).toBe(200);
+  await runner.run(projection);
+  const status = await get(`${path('dreamer')}/maintenance`, 'dreamer');
+  expect(status.json()).toMatchObject({ status: 'disabled', binding: { revision: 3 } });
+  const enable = { ...bindingInput, commandId: 'enable-again', expectedRevision: 3 };
+  const position = await nats.store.head();
+  expect((await bind(path('dreamer'), enable)).statusCode).toBe(404);
+  expect(await nats.store.head()).toBe(position);
+}
+it('allows disable after payer or assistant loss and refuses renewed enablement', disableLostAuthority);
+
+async function invalidBindingEvent() {
+  const scopeId = memoryScopeId('acme', 'person', 'dreamer');
+  const data = { scopeId, scopeKind: 'person', ownerId: 'dreamer', memberId: 'admin',
+    assistantId: 'dream-personal', payingGroupId: 'dream-sales', enabled: true,
+    acceptedCapCents: 100, revision: 4 };
+  const record = { ...event('bad-binding', `scope-${scopeId}`, 'memory.maintenance_bound'),
+    source: 'opencrane-server', silo: 'acme', data, commandId: 'bad-binding',
+    principal: { kind: 'human' as const, id: 'admin' } };
+  const position = await nats.store.head();
+  const command = { event: record, expectedSequence: await nats.store.head(record.subject),
+    historyChecked: true as const };
+  expect(await nats.store.append(command)).toMatchObject({
+    status: 'rejected', reason: 'invalid_event' });
+  const wrongScope = { ...record, subject: 'scope-wrong',
+    principal: { kind: 'human' as const, id: 'dreamer' },
+    data: { ...data, memberId: 'dreamer' } };
+  const wrongCommand = { event: wrongScope, expectedSequence: 0 };
+  expect(await nats.store.append(wrongCommand)).toMatchObject({
+    status: 'rejected', reason: 'invalid_event' });
+  expect(await nats.store.head()).toBe(position);
+}
+it('refuses binding events that claim another member or another scope', invalidBindingEvent);

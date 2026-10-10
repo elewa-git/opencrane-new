@@ -403,3 +403,13 @@ assistant rules. It checks policy agreement only, not permission to send traffic
 `ProjectionRunner.rebuild(egressPolicy)` rebuilds offline with readers/workers stopped.
 No replay reaction, token, worker or socket is started. Command receipt recovery reads
 the event log, so a missing or behind table cannot decide whether a change saved.
+
+## Nightly binding read table
+
+The existing `memory` projection also fills `memory_maintenance_bindings` with the
+latest checked binding data and event position per silo/scope. The table update,
+processed event id and checkpoint commit together through ProjectionRunner.
+Binding preparation never decrypts a fact or calls any execution service. Offline
+memory rebuild restores these rows with readers and workers stopped. Existing
+installations create the added table on worker startup. Dirty batches and run
+history are not stored yet.

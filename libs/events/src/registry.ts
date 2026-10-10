@@ -1,7 +1,7 @@
 import { egressEvents } from './egress.ts';
 import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
   from './conversation.ts';
-import { memoryWrittenExample } from './memory.ts';
+import { memoryWrittenExample, memoryMaintenanceBoundDataSchema } from './memory.ts';
 import { modernDelegationExample } from './delegation.ts';
 import { ownershipEvents } from './ownership-events.ts';
 import { providerEvents } from './provider-events.ts';
@@ -34,6 +34,12 @@ import * as data from './data.ts';
 const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
 
 export const eventRegistry: readonly EventDefinition[] = [
+  event('memory.maintenance_bound', 'scope',
+    'A member accepted the nightly cap and chose a memory maintenance binding.',
+    memoryMaintenanceBoundDataSchema,
+    { scopeId: memoryWrittenExample.scopeId, scopeKind: 'person', ownerId: 'alice',
+      memberId: 'alice', assistantId: 'assistant_1', payingGroupId: 'team_1',
+      enabled: true, acceptedCapCents: 100, revision: 1 }),
   ...providerEvents,
   ...fileEvents,
   ...identityEvents,
