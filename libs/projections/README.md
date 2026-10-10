@@ -32,12 +32,14 @@ flowchart LR
 
 ## What it is responsible for
 
+- Copies recorded tool dispatch evidence into conversation feeds without calling a tool.
+- Rebuilds saved provider choices alongside provider records without calling a provider.
 - Turn ordered events into tables that the server can read.
 - Bind member accounts from bound invitations or accepted email invitations.
 - Keep old conversation participant records separate from new participant changes.
 - Keep the latest model grant for each person, group or assistant, including revoked history.
 - Keep assistant names and personal owners' display names for access choices.
-- Copy tool progress and tool access decisions into each conversation's feed.
+- Copy tool progress, dispatch records and tool access decisions into each conversation's feed.
   Keep the call id so the page can match a decision to its tool call.
   Index message ids so an authorised caller can find one source message quickly.
 - Save table changes and each worker's position together in one database step.

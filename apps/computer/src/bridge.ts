@@ -42,6 +42,12 @@ let initialised = false;
 let reported = false;
 let client: Socket | undefined;
 function memoryFreeMessage(message: Record<string, unknown>, line: string) {
+  if (message['id'] !== undefined && message['method'] === 'mcpServer/elicitation/request') {
+    channel.notification(message);
+    const error = { code: -32601, message: 'Native consent is not supported' };
+    persistent.reply(message['id'], error);
+    return;
+  }
   channel.notification(message);
   if (client) client.write(line + '\n');
 }
@@ -70,6 +76,10 @@ async function privateSession() {
   let threadId: string | undefined;
   function dispatchPrivateMessage(message: Record<string, unknown>) {
     if (message['id'] !== undefined && typeof message['method'] === 'string') {
+      if (message['method'] === 'mcpServer/elicitation/request' &&
+          record(message['params'])['threadId'] === threadId) {
+        channel.notification(message);
+      }
       connection.reply(message['id'], { code: -32601, message: 'Not available in a private turn' });
       return;
     }

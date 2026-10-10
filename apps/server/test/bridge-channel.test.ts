@@ -65,6 +65,16 @@ it('authenticates, overlaps conversations and replays a strict report sequence a
     channel.notification({ method: 'item/reasoning/summaryTextDelta', params: { threadId: 'thread-1', delta: 'Checking the request.' } });
     channel.notification({ method: 'item/completed', params: { threadId: 'thread-1', item: { type: 'commandExecution', command: 'echo safe', exitCode: 0 } } });
     await until(() => reports.some(r => r.type === 'agent.command_ran'));
+    channel.notification({ id: 17, method: 'mcpServer/elicitation/request',
+      params: { threadId: 'thread-1', serverName: 'oc_0123456789',
+        message: 'Private native consent request' } });
+    function hasConsentRefusal() {
+      return reports.some(isConsentRefusal);
+    }
+    function isConsentRefusal(report: typeof reports[number]) {
+      return report.type === 'agent.native_consent_refused';
+    }
+    await until(hasConsentRefusal);
     const last = reports.at(-1)!.sequence; socket.terminate(); await once(socket, 'close');
     channel.notification({ method: 'turn/completed', params: { threadId: 'thread-1', turn: { status: 'completed' } } });
     channel.notification({ method: 'turn/completed', params: { threadId: 'thread-2', turn: { status: 'completed' } } });

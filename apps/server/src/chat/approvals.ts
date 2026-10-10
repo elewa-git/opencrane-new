@@ -53,7 +53,7 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
   session: SessionData, memberId: string, conversationId: string, joinPosition: number) {
   const inputSchema = z.object({
     approvalId: z.string().regex(/^[a-f0-9]{64}$/u),
-    decision: z.enum(['approved', 'rejected']),
+    decision: z.enum(['approved', 'rejected', 'retry']),
   }).strict();
   const input = inputSchema.parse(req.body);
   const readOptions = { deadline: performance.now() + 10_000 };

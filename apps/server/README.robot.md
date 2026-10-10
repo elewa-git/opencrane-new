@@ -1378,3 +1378,7 @@ See the [role contract](../../docs/api/members.md#change-a-member-or-admin-role)
 Role status requires the competing appointment's IAM receipt in either saved order.
 The content checkpoint must also cover both changes. A role receipt alone cannot report
 IAM as current while that appointment is still waiting to be applied.
+
+## Recorded tool failures and approval actions
+
+The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.

@@ -10,6 +10,8 @@ export interface BridgeReport {
   requesterId?: string;
   type: string;
   callId?: string;
+  nativeRequestId?: string;
+  serverName?: string;
   serverId?: string;
   toolName?: string;
   status?: 'completed' | 'failed';
@@ -20,7 +22,7 @@ export interface BridgeReport {
   messageId?: string;
   text?: string;
   executionMode?: 'restricted' | 'memory_free';
-  reason?: 'restricted_tool_refused';
+  reason?: 'restricted_tool_refused' | 'unsupported_native_consent';
   memoryOnly?: boolean;
 }
 
@@ -246,7 +248,7 @@ function readStorageDetails(value: Record<string, unknown>, report: BridgeReport
   }
   const reason = value['reason'];
   if (reason !== undefined) {
-    if (reason !== 'restricted_tool_refused') throw new Error('Invalid journal reason');
+    if (reason !== 'restricted_tool_refused' && reason !== 'unsupported_native_consent') throw new Error('Invalid journal reason');
     report.reason = reason;
   }
   const memoryOnly = value['memoryOnly'];
@@ -257,6 +259,10 @@ function readStorageDetails(value: Record<string, unknown>, report: BridgeReport
 }
 
 function readToolDetails(value: Record<string, unknown>, report: BridgeReport) {
+  const nativeRequestId = optionalString(value, 'nativeRequestId');
+  const serverName = optionalString(value, 'serverName');
+  if (nativeRequestId !== undefined) report.nativeRequestId = nativeRequestId;
+  if (serverName !== undefined) report.serverName = serverName;
   const callId = optionalString(value, 'callId');
   const serverId = optionalString(value, 'serverId');
   const toolName = optionalString(value, 'toolName');

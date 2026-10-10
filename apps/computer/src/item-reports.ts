@@ -28,7 +28,13 @@ function toolReport(input: Turn, item: Record<string, unknown>, finished: boolea
   return report;
 }
 
-export function itemReport(input: Turn, params: Record<string, unknown>, method: unknown) {
+export function itemReport(input: Turn, params: Record<string, unknown>, method: unknown,
+  requestId?: unknown, codexTurnId?: string) {
+  if (method === 'mcpServer/elicitation/request') {
+    const data = nativeConsentReport(input, params, requestId, codexTurnId);
+    if (data) return { type: 'agent.native_consent_refused', data };
+    return;
+  }
   if (method !== 'item/started' && method !== 'item/completed') return;
   const item = record(params['item']);
   const finished = method === 'item/completed';
@@ -54,4 +60,22 @@ export function itemReport(input: Turn, params: Record<string, unknown>, method:
     } };
   }
   return;
+}
+
+function nativeConsentReport(input: Turn, params: Record<string, unknown>,
+  requestId: unknown, codexTurnId: string | undefined) {
+  if (params['turnId'] !== undefined && params['turnId'] !== null &&
+      params['turnId'] !== codexTurnId) return;
+  if (typeof requestId !== 'string' && !Number.isSafeInteger(requestId)) return;
+  const nativeRequestId = String(requestId);
+  const serverName = params['serverName'];
+  if (!isToolCallText(nativeRequestId) || !isToolCallText(serverName)) return;
+  function namesServer(server: NonNullable<Turn['tools']>[number]) {
+    return server.key === serverName;
+  }
+  const server = input.tools?.find(namesServer);
+  const data: Partial<BridgeReport> = { nativeRequestId, serverName,
+    reason: 'unsupported_native_consent' };
+  if (server) data.serverId = server.serverId;
+  return data;
 }

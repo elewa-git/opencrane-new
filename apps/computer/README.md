@@ -16,7 +16,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts and pauses| computer
-  server["apps/server<br/>the back end"] <-->|turns, models, approvals and reports| computer
+  server["apps/server<br/>the back end"] <-->|turns, models, approvals, dispatch and consent reports| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
@@ -24,6 +24,8 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+- Refuses unsupported native MCP consent and reports its request without private text.
 
 - Builds the container image with Codex, a browser, a remote desktop and document tools.
 - Runs the bridge that receives chat turns and sends progress reports to the server.

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { chatIdSchema, conversationCreatedDataSchema, hasDirectParticipants } from '@opencrane/events';
+import { chatIdSchema, conversationCreatedDataSchema, hasDirectParticipants,
+  toolDispatchRecordedDataSchema, agentNativeConsentRefusedDataSchema } from '@opencrane/events';
 export const computerStateSchema = z.enum(['ready', 'starting', 'recovering', 'not_applicable']);
 export type ComputerState = z.infer<typeof computerStateSchema>;
 export const chatSubscribeSchema = z.object({ type: z.literal('subscribe'), topic: z.literal('conversation'),
@@ -17,7 +18,11 @@ const decisionRowDataSchema = z.object({ outcome: z.enum(['allow', 'ask', 'deny'
 function validateRowFields(row: { type: string; data: unknown }, context: z.RefinementCtx) {
   validateCreationRow(row, context);
   let fieldsSchema;
-  if (row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished') {
+  if (row.type === 'agent.native_consent_refused') {
+    fieldsSchema = agentNativeConsentRefusedDataSchema;
+  } else if (row.type === 'tool.dispatch_recorded') {
+    fieldsSchema = toolDispatchRecordedDataSchema;
+  } else if (row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished') {
     fieldsSchema = toolRowDataSchema;
   } else if (row.type === 'decision.recorded') {
     fieldsSchema = decisionRowDataSchema;
@@ -43,10 +48,15 @@ export const chatRowSchema = z.object({
     text: z.string().optional(),
     turnId: z.string().optional(),
     callId: z.string().optional(),
+    nativeRequestId: z.string().optional(),
+    serverName: z.string().optional(),
     serverId: z.string().optional(),
     toolName: z.string().optional(),
     status: z.string().optional(),
     durationMs: z.int().nonnegative().optional(),
+    logicalRequestId: z.string().optional(),
+    startedAt: z.iso.datetime().optional(),
+    evidence: z.enum(['connection_refused', 'response_received', 'transport_uncertain']).optional(),
     outcome: z.string().optional(),
     requestId: z.string().optional(),
     approvalId: z.string().optional(),

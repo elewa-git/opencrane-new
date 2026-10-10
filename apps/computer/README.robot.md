@@ -661,3 +661,7 @@ recovery after refused renewal, and older-server behaviour. The server's
 `test/bridge-replay.test.ts` checks delivery, signed claims and renewal with real
 NATS and sockets, using a recording Codex driver. Image publication, live Codex
 model delivery and a fresh-install chat journey remain NOT RUN.
+
+## Recorded tool failures and approval actions
+
+The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.

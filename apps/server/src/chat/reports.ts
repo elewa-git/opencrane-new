@@ -1,5 +1,6 @@
 import {
   conversationCreatedDataSchema, agentToolCallStartedDataSchema, agentToolCallFinishedDataSchema,
+  agentNativeConsentRefusedDataSchema,
 } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -28,7 +29,11 @@ const toolStartedReportSchema = agentToolCallStartedDataSchema.extend({
 const toolFinishedReportSchema = agentToolCallFinishedDataSchema.extend({
   ...toolReportFields, type: z.literal('agent.tool_call_finished'),
 });
+const nativeConsentReportSchema = agentNativeConsentRefusedDataSchema.extend({
+  ...toolReportFields, type: z.literal('agent.native_consent_refused'),
+});
 const reportSchema = z.union([
+  nativeConsentReportSchema,
   existingReportSchema, toolStartedReportSchema, toolFinishedReportSchema,
 ]);
 export async function reportPosition(store: EventStore, silo: string, computerId: string) {
@@ -96,7 +101,10 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
 }
 function reportData(report: z.infer<typeof reportSchema>, silo: string, assistantId: string, keys: ReturnType<typeof conversationKeys>) {
   const common = { conversationId: report.conversationId, turnId: report.turnId };
-  if (report.type === 'agent.tool_call_started') {
+  if (report.type === 'agent.native_consent_refused') {
+    return { ...common, nativeRequestId: report.nativeRequestId, serverName: report.serverName,
+      serverId: report.serverId, reason: report.reason };
+  } else if (report.type === 'agent.tool_call_started') {
     return { ...common, callId: report.callId, serverId: report.serverId,
       toolName: report.toolName };
   } else if (report.type === 'agent.tool_call_finished') {

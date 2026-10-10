@@ -16,11 +16,13 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chat rows, closes, joins, facts, models and computers| postgres
-  server -->|sends turns, models, tools and approvals; receives reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|sends turns, models, tools and approvals; receives dispatch, consent and progress reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
 ## What it is responsible for
+
+- Returns missing approval details and accepts requester retries after verified non-dispatch.
 
 - Lets owners and admins save provider choices and pauses, count affected assistants
   and recover saved results. Conflicting requests cannot report an unsaved change
