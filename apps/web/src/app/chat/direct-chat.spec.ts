@@ -851,8 +851,34 @@ async function keepsRefusedDraft(status: number): Promise<void> {
     fixture.destroy();
   }
 
-it.each([400, 403, 409])('keeps typed text after a %i send and keeps its failure through refresh',
+it.each([400, 409])('keeps typed text after a %i send and keeps its failure through refresh',
   keepsRefusedDraft);
+
+async function purgesProtectedContentAfterRefusedGroupSend(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  const groupRow = Array.from(root(fixture).querySelectorAll<HTMLButtonElement>('.conversation-row'))
+    .find((row) => row.textContent?.includes('Chris Njeri'));
+  groupRow?.click();
+  await settle(fixture);
+  typeDraft(fixture, 'Protected group draft');
+  function refusePost(request: RequestRecord): Response | undefined {
+    if (request.method === 'POST') return reply({ status: 'refused' }, 403);
+    return undefined;
+  }
+  api.override(refusePost);
+  enterMessage(fixture, 'Protected group draft');
+  await settle(fixture);
+  expect(root(fixture).querySelector('h1')?.textContent).toContain('Unavailable');
+  expect(root(fixture).textContent).not.toContain('Hello everyone');
+  expect(root(fixture).textContent).not.toContain('Chris Njeri');
+  expect(root(fixture).querySelector('oc-chat-composer')).toBeNull();
+  fixture.destroy();
+}
+
+it('purges protected content after a refused group message post',
+  purgesProtectedContentAfterRefusedGroupSend);
 
 async function retainsConversationNames(): Promise<void> {
   const fixture = await mount();
