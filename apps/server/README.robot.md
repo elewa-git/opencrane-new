@@ -1402,3 +1402,7 @@ Refusal status reads compare a SHA-256 digest of the requested command id with
 `originalCommandDigest`. Refusal events never store the raw id. Invitation events
 and status replies retain their existing command ids. The event security checks
 reject raw command-reference fields without adding a field-name exception.
+
+Audit routes call `isOrganisationSession` with `extraIdentities: []`. Both history
+routes require the configured organisation even when development sign-in allows
+a named outsider. The source guard continues to cover `audit/routes.ts`.
