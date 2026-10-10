@@ -188,6 +188,51 @@ async function waitsForGroupRemoval() {
 }
 it('keeps both inventories incomplete until the last group removal is applied', waitsForGroupRemoval);
 
+async function waitsForSharedAssistantMembership() {
+  const memberId = 'pending-group';
+  const teamId = 'assistant-only-group';
+  const assistantId = 'assistant-only-helper';
+  await append(`member-${memberId}`, 'member.joined', {
+    memberId, role: 'member', email: 'pending@example.test', displayName: 'Pending group',
+  });
+  await append(`team-${teamId}`, 'team.created', {
+    teamId, name: 'Assistant only', createdBy: 'owner',
+  });
+  await append(`assistant-${assistantId}`, 'assistant.created', {
+    assistantId, kind: 'team', ownerId: teamId, name: 'Shared helper',
+  });
+  const membership = await append(`team-${teamId}`, 'team.member_added', {
+    teamId, memberId, addedBy: 'owner',
+  }, false);
+  await project();
+  expect(await auth.actsFor(memberId, assistantId)).toMatchObject({ allowed: false });
+
+  const pendingSelection = {
+    resourceType: 'assistant', resourceId: assistantId, relation: 'acts_for',
+    sources: [{ kind: 'group', groupId: teamId }],
+    eligibility: { person: 'unavailable' },
+  };
+  const access = await readInventory('access', memberId);
+  expect(access).toMatchObject({ complete: false, rows: [pendingSelection] });
+  expect(access.unavailableSections).toContain('group_membership');
+  const departure = await readInventory('departure', memberId);
+  expect(departure).toMatchObject({ complete: false, accessLost: [pendingSelection] });
+  expect(departure.unavailableSections).toContain('group_membership');
+
+  await auth.handler.handle(membership, pgDb(dbs.queue));
+  const selectedAccess = await readInventory('access', memberId);
+  expect(selectedAccess).toMatchObject({ rows: [
+    { resourceId: assistantId, eligibility: { person: 'allowed' } },
+  ] });
+  expect(selectedAccess.unavailableSections).not.toContain('group_membership');
+  const selectedDeparture = await readInventory('departure', memberId);
+  expect(selectedDeparture).toMatchObject({ complete: true, unavailableSections: [], accessLost: [
+    { resourceId: assistantId, eligibility: { person: 'allowed' } },
+  ] });
+}
+it('waits for shared-assistant membership even without resource grants',
+  waitsForSharedAssistantMembership);
+
 async function recordsSources() {
   await append('assistant-personal', 'assistant.created', {
     assistantId: 'personal', kind: 'personal', ownerId: 'bob',
