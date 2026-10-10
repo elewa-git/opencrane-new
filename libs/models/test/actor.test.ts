@@ -327,6 +327,30 @@ async function stopsSettlementAfterSwitchOnAndAnotherLeader() {
 it('keeps the old actor stopped when another budget writer follows switch-on',
   stopsSettlementAfterSwitchOnAndAnotherLeader);
 
+async function rechecksAccessBeforeRetryingConfiguration() {
+  const reservationId = await reserve(false, 'unsent-release');
+  await saveSwitchOn();
+  let checks = 0;
+  function checkAccess() {
+    checks++;
+    if (checks === 2) {
+      const error = new Error('Access expired');
+      return Promise.reject(error);
+    }
+    return Promise.resolve();
+  }
+  const payload = {
+    scope: 'global', dailyCeilingCents: 200, ceilingCents: 200, setBy: 'alice',
+  };
+  await expect(actor.configure(payload, 'configure-switch', undefined, checkAccess))
+    .rejects.toThrow('Access expired');
+  expect(actor.state.ceilingCents).toBe(100);
+  await actor.releaseUndispatched(reservationId);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 0, monthCents: 0 });
+}
+it('rechecks access when retrying a spending-limit write after switch-on',
+  rechecksAccessBeforeRetryingConfiguration);
+
 async function advancesAfterLostReservationReply() {
   const faulty = await lostReplyStore(nats.connection);
   const store = faulty.store;
