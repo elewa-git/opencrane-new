@@ -2,7 +2,8 @@ import { z } from 'zod';
 import type { IncomingHttpHeaders } from 'node:http';
 import type { EventStore } from '@opencrane/event-store';
 import { isToolCallText } from '@opencrane/events/tool-call';
-import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
+import { mcpServerDiscoveredDataSchema, memoryTextSchema,
+  memoryWrittenDataSchema } from '@opencrane/events';
 import { history } from './actor.ts';
 import { losslessJson, type JsonValue } from './lossless-json.ts';
 import { readToolPolicy } from './tool-policy.ts';
@@ -133,6 +134,11 @@ const recallInput = z.strictObject({ scopeId: z.string().regex(/^[a-f0-9]{64}$/u
   query: z.string().default(''), cursor: z.string().max(2000).optional(),
   limit: z.int().min(1).max(20).default(20) });
 
+const rememberInput = memoryWrittenDataSchema.pick({ kind: true, pinned: true,
+  expiresAt: true, sources: true, dependsOn: true }).extend({
+  scopeId: z.string().regex(/^[a-f0-9]{64}$/u), commandId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
+  text: memoryTextSchema, recallProof: z.string().min(1).max(10000) }).strict();
+
 export function parseMemoryRequest(raw: string, headers: IncomingHttpHeaders) {
   if (Buffer.byteLength(raw) > 16384 || headers['mcp-session-id'] !== undefined) {
     throw new Error('Memory request refused');
@@ -145,8 +151,13 @@ export function parseMemoryRequest(raw: string, headers: IncomingHttpHeaders) {
     request = discovery.data;
   } else {
     request = parseMcpCall(raw).call;
-    if (request.params.name !== 'recall') throw new Error('Memory tool refused');
-    input = recallInput.parse(request.params.arguments);
+    if (request.params.name === 'recall') {
+      input = { operation: 'recall' as const, ...recallInput.parse(request.params.arguments) };
+    } else if (request.params.name === 'remember') {
+      input = { operation: 'remember' as const, ...rememberInput.parse(request.params.arguments) };
+    } else {
+      throw new Error('Memory tool refused');
+    }
   }
   const name = request.method === 'tools/call' ? request.params.name : '';
   if (headers['mcp-protocol-version'] !== version ||

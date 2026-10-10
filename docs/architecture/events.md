@@ -453,6 +453,8 @@ hosted provider tools with unknown prices remain disabled.
 
 Version-1 `memory.written` records the derived scope identity, initial revision, kind, pin,
 expiry, typed sources and unique same-scope dependencies with ciphertext and a revision key reference.
+Governed personal remember records an agent principal bound to the requester and links
+the conversation, turn and decision request. Its dependencies need signed recalled references.
 Append checks that the key reference is derived from the recorded memory revision identity.
 The [memory design](../specs/phase-4/p4-12-memory.md) defines the limits and later work.
 Unversioned events still parse for replay; unknown ownership stays quarantined.

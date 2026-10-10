@@ -1426,3 +1426,32 @@ receipt reports unavailable selection rather than denied access.
 Failed reads return 503. Only counts and dates leave conversation tables.
 Tool, publication and connection readiness stay unavailable. Removal stays disabled.
 `test/member-inventory.test.ts` uses real services. Fresh-install qualification: NOT RUN.
+
+## Governed personal remember (P4-12 PR 3c, first slice)
+
+`remember` uses the human command path with an agent principal bound to the requester.
+Its command id is separate from human command ids. Retries return the original receipt;
+changed input conflicts. Recovery checks the recorded principal kind, including after a
+saved append loses its reply. The event links the conversation, turn and decision request.
+
+A recall page includes `recallProof`, a signed list of returned fact ids and revisions.
+It binds the silo, requester, assistant, computer generation, conversation, turn, thread,
+content class and selected scope. It contains no fact text and needs no saved permit table.
+Proof bytes count towards the 16 KiB reply limit. Page-limit placeholders are excluded.
+Remember requires this proof, non-empty same-scope `dependsOn`, and empty `sources`.
+The command also checks that dependency revisions still exist, decrypt and have not expired.
+An agent cannot claim a human statement. This proof checks references, not whether the
+model's wording follows logically from them.
+
+The final append rechecks the original capability deadline, live turn and watched grants.
+Shared writes and claimed `shared_only` contexts remain refused. Server-recorded shared-only
+execution, shared-input isolation and shared writes are the next slice. Native turns still
+receive no memory tools. Fresh-install qualification and backend network isolation are NOT RUN.
+
+Source checks on 10 October 2026: PASS for lint (including Knip), typecheck,
+check:events (99 types) and lint:changelog. The five-file targeted set passed
+222 tests twice with `PG_TEST_URL` set. It covers memory MCP, capability claims,
+human memory, memory-worker replay and native tool refusal. All commands used
+`nice -n 10`. `npm ci` and shared NATS/Lychee links were installed first.
+The test commit precedes implementation. No full root suite, independent review,
+fresh-install journey or native memory qualification was run.

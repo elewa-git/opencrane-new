@@ -16,7 +16,8 @@ const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const claimsSchema = z.object({ silo: identifier, requester: identifier, assistant: identifier,
   computer: identifier, generation: z.int().positive(), conversation: identifier,
-  turn: identifier, thread: identifier, operation: z.enum(['recall', 'server/discover', 'tools/list']),
+  turn: identifier, thread: identifier,
+  operation: z.enum(['recall', 'remember', 'server/discover', 'tools/list']),
   scopes: z.array(digest).max(1), contentAccess: z.literal('private'),
   bodyDigest: digest, callId: z.string().min(1).max(200), requestId: z.uuid(),
   contextPosition: z.int().nonnegative(), exp: z.number(), iat: z.number() });
@@ -29,7 +30,7 @@ export async function verifyMemoryContext(token: string,
   const verified = await jwtVerify(token, keys, { issuer: identity.issuer,
     audience: 'memory-mcp', algorithms: ['ES256'], requiredClaims: ['exp', 'iat'] });
   const claims = claimsSchema.parse(verified.payload);
-  const operation = parsed.input ? 'recall' : parsed.request.method;
+  const operation = parsed.input ? parsed.input.operation : parsed.request.method;
   const scopes = parsed.input ? [parsed.input.scopeId] : [];
   if (claims.exp * 1000 <= Date.now() || claims.exp <= claims.iat || claims.exp - claims.iat > 2 ||
       claims.iat * 1000 > Date.now() || claims.bodyDigest !== parsed.bodyDigest ||
@@ -48,7 +49,13 @@ export async function memoryRights(store: EventStore, binding: Binding,
   const activity = await liveMemoryTurn(store, binding, claims, parsed, deadline);
   const fresh = await authorityFence(store, performance.now(), [], deadline);
   fresh.include('mcp-memory');
-  await memoryPolicy(store, binding.silo, parsed, deadline);
+  if (!await memoryPolicy(store, binding.silo, parsed, deadline)) {
+    throw new Error('Memory tool policy refused');
+  }
+  let canRemember = false;
+  if (!parsed.input) {
+    canRemember = await memoryPolicy(store, binding.silo, parsed, deadline, 'remember');
+  }
   const selected = await selectedMemoryScope(store, binding, claims, parsed, fresh);
   const scope = selected.scope;
   await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
@@ -56,14 +63,23 @@ export async function memoryRights(store: EventStore, binding: Binding,
     claims.conversation, 'mcp_server', 'memory', fresh, activity.conversation);
   // Keep discovery free of fact access. Each recall checks its selected scope separately.
   if (parsed.input) {
-    await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scope.scopeId,
+    let resourceType = 'memory_read';
+    if (parsed.input.operation === 'remember') {
+      // Refuse private output in shared scopes even when a caller supplies a shared source.
+      if (scope.scopeKind !== 'person') throw new Error('Shared memory write refused');
+      resourceType = 'memory_write';
+    }
+    await requireRecordedGrants(store, binding.silo, claims, resourceType, scope.scopeId,
       fresh, selected.requesterGroup);
     contextDigest = await currentAuthority(store, binding, claims.requester, claims.assistant,
-      claims.conversation, 'memory_read', scope.scopeId, fresh, activity.conversation);
+      claims.conversation, resourceType, scope.scopeId, fresh, activity.conversation);
   }
-  await activity.confirm(deadline, false);
-  await fresh();
-  return { scope, contextDigest, contextPosition: fresh.head };
+  async function confirm() {
+    await activity.confirm(deadline, false);
+    await fresh();
+  }
+  await confirm();
+  return { scope, contextDigest, contextPosition: fresh.head, confirm, canRemember };
 }
 
 async function selectedMemoryScope(store: EventStore, binding: Binding, claims: ThreadIdentity,
@@ -166,14 +182,15 @@ function isResourceGrant(event: StoredEvent['event'], fields: Record<string, unk
 }
 
 async function memoryPolicy(store: EventStore, silo: string,
-  parsed: ReturnType<typeof parseMemoryRequest>, deadline: number) {
-  // Check the recall policy for discovery too, so blocked tools are never offered.
+  parsed: ReturnType<typeof parseMemoryRequest>, deadline: number,
+  toolName = parsed.input?.operation ?? 'recall') {
+  // Check recall for discovery. Check each write's own policy before signing its pass.
   const request = { jsonrpc: '2.0', id: parsed.request.id, method: 'tools/call', params: {
-    name: 'recall', arguments: parsed.input ?? {}, _meta: parsed.request.params._meta } };
+    name: toolName, arguments: parsed.input ?? {}, _meta: parsed.request.params._meta } };
   const call = parseMcpCall(JSON.stringify(request));
-  const headers = { ...parsed.headers, 'mcp-method': 'tools/call', 'mcp-name': 'recall' };
+  const headers = { ...parsed.headers, 'mcp-method': 'tools/call', 'mcp-name': toolName };
   const policy = await mcpPolicy(store, silo, 'memory', 'server', call, headers, deadline);
-  if (policy.outcome !== 'allow') throw new Error('Memory tool policy refused');
+  return policy.outcome === 'allow';
 }
 
 type ThreadIdentity = Parameters<typeof memoryRights>[2];
@@ -221,7 +238,7 @@ export async function prepareMemoryContext(store: EventStore, binding: Binding,
   requestId: string) {
   const parsed = parseMemoryRequest(raw, headers);
   const rights = await memoryRights(store, binding, claims, parsed, deadline);
-  const operation = parsed.input ? 'recall' : parsed.request.method;
+  const operation = parsed.input ? parsed.input.operation : parsed.request.method;
   const scopes = parsed.input ? [parsed.input.scopeId] : [];
   const callId = parsed.request.params._meta.callId;
   const payload = { ...claims, operation, scopes, contentAccess: 'private',

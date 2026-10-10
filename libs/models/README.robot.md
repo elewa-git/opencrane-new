@@ -927,3 +927,17 @@ price-table fields. It sends no provider request.
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
+
+## Personal remember admission (P4-12 PR 3c, first slice)
+
+The signed capability can name `remember`. Its scope stays the requester's person scope.
+Both requester and assistant need recorded `memory_write` grants and current OpenFGA rights;
+a read grant cannot supply write permission. Ask and Block policies refuse the write.
+Discovery omits remember unless its reviewed zero-cost policy is Allow. Recall-only
+installations keep working without a remember policy.
+
+`memoryRights` returns a final check over the original access snapshot and live turn.
+The server calls it before the conditional append, with the capability's original deadline.
+It watches small access streams and checks later turn activity separately. It does not add
+conversation or memory-content streams to the access snapshot. The server's signed recalled
+references and command checks are described in `apps/server/README.robot.md`.

@@ -236,7 +236,7 @@ async function scopedRecall(team: boolean) {
         const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
         const discovery = await target.call(discoveryHeaders, discoveryBody, route);
         expect(discovery.status, discovery.text).toBe(200);
-        expect(discovery.text).not.toMatch(/remember|correct|forget/u);
+        expect(discovery.text).not.toMatch(/correct|forget/u);
       }
     }
   } finally {
@@ -818,41 +818,6 @@ it('recalls through the thread proxy, real gateway and backend with replaced cre
     }
   });
 
-it('rechecks stale grants at the backend and refuses an ended turn upstream', async function stale() {
-  expect((await setup.call(headers, call, route)).status).toBe(200);
-  const valid = capability;
-  const revoked = await setup.append(grantStream('memory_read', scopeId), 'grant.revoked', {
-    resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'assistant',
-    granteeId: 'assistant', revokedBy: 'alice' });
-  const database = vi.spyOn(setup.db, 'query');
-  try {
-    const response = await app.inject({ method: 'POST', url: route,
-      headers: { ...headers, 'x-memory-context': valid }, payload: call });
-    expect(response.statusCode).toBe(403);
-    expect(database).not.toHaveBeenCalled();
-    capability = '';
-    expect((await setup.call(headers, call, route)).status).toBe(403);
-    expect(capability).toBe('');
-    await setup.auth.handler.handle(revoked, setup.db);
-    const grant = await setup.append(grantStream('memory_read', scopeId), 'grant.given', {
-      resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'assistant',
-      granteeId: 'assistant', grantedBy: 'alice' });
-    await setup.auth.handler.handle(grant, setup.db);
-    expect((await setup.call(headers, call, route)).status).toBe(200);
-    const active = capability;
-    await setup.append('computer-assistant', 'computer.turn_closed', {
-      assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
-      turnId: 'turn', requesterId: 'alice', task: 'chat_turn',
-      payingGroupId: 'personal-default', status: 'completed' });
-    const ended = await app.inject({ method: 'POST', url: route,
-      headers: { ...headers, 'x-memory-context': active }, payload: call });
-    expect(ended.statusCode).toBe(403);
-    capability = '';
-    expect((await setup.call(headers, call, route)).status).toBe(403);
-    expect(capability).toBe('');
-  } finally { database.mockRestore(); }
-});
-
 const rememberedSchema = z.object({ result: z.object({ structuredContent: z.object({
   outcome: z.string(), memoryId: z.string(), changeId: z.string().optional() }) }) });
 const recallProofSchema = z.object({ result: z.object({ structuredContent: z.object({
@@ -898,8 +863,10 @@ async function backendRemember(body: Awaited<ReturnType<typeof recalledRemember>
 
 it('remembers a recalled personal fact once through the gateway with an agent principal',
   async function governedRemember() {
+    const reservationsBefore = setup.actor.state.reservations.length;
     const body = await recalledRemember('agent-command');
-    const humanInput = { ...body.params.arguments, sources: [], dependsOn: [] };
+    const { scopeId: _scope, recallProof: _proof, ...command } = body.params.arguments;
+    const humanInput = { ...command, sources: [], dependsOn: [] };
     const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'alice' };
     const options = { silo: 'test', store: setup.nats.store, db: setup.db,
       binding: setup.binding, feed: { memberId }, keyDirectory: dirname(setup.options.configFile) };
@@ -925,7 +892,7 @@ it('remembers a recalled personal fact once through the gateway with an agent pr
     const changed = { ...body, params: { ...body.params, arguments: changedArguments } };
     expect((await setup.call(rememberHeaders, changed, route)).status).toBe(403);
     await setup.runner.run(projection);
-    expect(setup.actor.state.reservations).toHaveLength(0);
+    expect(setup.actor.state.reservations).toHaveLength(reservationsBefore);
   });
 
 const invalidLineage = ['forged', 'missing', 'unrecalled', 'revision', 'human-source'];
@@ -941,7 +908,9 @@ async function refusesLineage(change: string) {
     argumentsValue.dependsOn = [{ ...argumentsValue.dependsOn[0]!, revision: 2 }];
   }
   if (change === 'human-source') {
-    Object.assign(argumentsValue, { sources: [{ memberId: 'alice', commandId: argumentsValue.commandId }] });
+    const source = { memberId: 'alice', commandId: argumentsValue.commandId };
+    const humanSources = { sources: [source] };
+    Object.assign(argumentsValue, humanSources);
   }
   const changed = { ...body, params: { ...body.params, arguments: argumentsValue } };
   const before = await setup.nats.store.head(`scope-${scopeId}`);
@@ -959,7 +928,7 @@ it.each(invalidLineage)('requires signed recalled references before a write: %s'
 async function refusesWriteGrant(granteeKind: string) {
   const body = await recalledRemember(`revoked-write-${granteeKind}`);
   const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
-  await setup.append(grantStream('memory_write', scopeId), 'grant.revoked', {
+  const revoked = await setup.append(grantStream('memory_write', scopeId), 'grant.revoked', {
     resourceType: 'memory_write', resourceId: scopeId, granteeKind, granteeId, revokedBy: 'alice' });
   const append = vi.spyOn(setup.nats.store, 'append');
   try {
@@ -968,6 +937,8 @@ async function refusesWriteGrant(granteeKind: string) {
     expect((await setup.call(rememberHeaders, body, route)).status).toBe(403);
   } finally {
     append.mockRestore();
+    await setup.auth.handler.handle(revoked, setup.db);
+    await grantWrite(granteeKind);
   }
 }
 it.each(['member', 'assistant'])('requires current write grants for the %s', refusesWriteGrant);
@@ -988,3 +959,161 @@ it('keeps personal recall proof out of shared writes and forged shared-only cont
       append.mockRestore();
     }
   });
+
+async function refusesChangedWrite(change: string) {
+  const body = await recalledRemember(`during-write-${change}`);
+  const originalLock = setup.db.lock!.bind(setup.db);
+  let revoked: Awaited<ReturnType<typeof setup.append>> | undefined;
+  async function changedLock<Result>(name: string,
+    work: (db: import('@opencrane/projections').Db) => Promise<Result>,
+    options?: { timeoutMs: number }) {
+    if (change === 'expiry') {
+      await pause(2100);
+    } else {
+      revoked = await setup.append(grantStream('memory_write', scopeId), 'grant.revoked', {
+        resourceType: 'memory_write', resourceId: scopeId, granteeKind: 'assistant',
+        granteeId: 'assistant', revokedBy: 'alice' });
+    }
+    return originalLock(name, work, options);
+  }
+  const lock = vi.spyOn(setup.db, 'lock').mockImplementation(changedLock);
+  const append = vi.spyOn(setup.nats.store, 'append');
+  try {
+    expect((await backendRemember(body)).statusCode).toBe(403);
+    expect(append).not.toHaveBeenCalled();
+  } finally {
+    append.mockRestore();
+    lock.mockRestore();
+    if (revoked) {
+      await setup.auth.handler.handle(revoked, setup.db);
+      await grantWrite('assistant');
+    }
+  }
+}
+it.each(['expiry', 'revocation'])('checks the original capability immediately before saving: %s',
+  refusesChangedWrite);
+
+it('refuses a recall proof from another live thread with an otherwise valid signed call',
+  async function refusesOtherThreadProof() {
+    const body = await recalledRemember('other-thread-proof');
+    await setup.append('conversation-conversation', 'agent.turn_started', {
+      assistantId: 'assistant', conversationId: 'conversation', turnId: 'other-turn' });
+    await setup.append('computer-assistant', 'computer.turn_started', {
+      assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+      turnId: 'other-turn', threadId: 'other-thread', requesterId: 'alice', task: 'chat_turn',
+      payingGroupId: 'personal-default', executionMode: 'restricted' });
+    const otherMetadata = { ...metadata, threadId: 'other-thread' };
+    const changed = { ...body, params: { ...body.params, _meta: otherMetadata } };
+    const overrides = { turn: 'other-turn', thread: 'other-thread' };
+    const append = vi.spyOn(setup.nats.store, 'append');
+    try {
+      expect((await backendRemember(changed, overrides)).statusCode).toBe(403);
+      expect(append).not.toHaveBeenCalled();
+    } finally {
+      append.mockRestore();
+    }
+  });
+
+it('recovers an agent command after a saved append loses its reply', async function lostAgentReply() {
+  const body = await recalledRemember('lost-agent-reply');
+  const originalAppend = setup.nats.store.append.bind(setup.nats.store);
+  async function loseReply(command: Parameters<typeof originalAppend>[0])
+    : Promise<Awaited<ReturnType<typeof originalAppend>>> {
+    await originalAppend(command);
+    throw new Error('Reply lost');
+  }
+  const append = vi.spyOn(setup.nats.store, 'append').mockImplementationOnce(loseReply);
+  try {
+    const response = await backendRemember(body);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(rememberedSchema.parse(response.json()).result.structuredContent.outcome).toBe('unknown');
+  } finally {
+    append.mockRestore();
+  }
+  const { reconcileCommands } = await import('../src/memory/commands.ts');
+  const options = { silo: 'test', store: setup.nats.store, db: setup.db,
+    binding: setup.binding, feed: { memberId }, keyDirectory: dirname(setup.options.configFile) };
+  await pause(2100);
+  await reconcileCommands(options);
+  const recovered = await backendRemember(body);
+  expect(recovered.statusCode, recovered.body).toBe(200);
+  expect(rememberedSchema.parse(recovered.json()).result.structuredContent.outcome).toBe('saved');
+  await setup.runner.run(projection);
+});
+
+async function refusesRememberPolicy(policy: 'ask' | 'block') {
+  const body = await recalledRemember(`remember-policy-${policy}`);
+  const fields = { serverId: 'memory', connectionId: 'server', toolName: 'remember',
+    toolRevision: 'a'.repeat(64), mode: policy, setBy: 'alice' };
+  await setup.append('mcp-memory', 'mcp.tool_mode_set', fields);
+  const append = vi.spyOn(setup.nats.store, 'append');
+  try {
+    expect((await backendRemember(body)).statusCode).toBe(403);
+    expect(append).not.toHaveBeenCalled();
+    expect((await setup.call(rememberHeaders, body, route)).status).toBe(403);
+    const discovery = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: { _meta: metadata } };
+    const listHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
+    const response = await setup.call(listHeaders, discovery, route);
+    expect(response.status, response.text).toBe(200);
+    expect(response.text).toContain('recall');
+    expect(response.text).not.toContain('remember');
+  } finally {
+    append.mockRestore();
+    const allowed = { ...fields, mode: 'allow' };
+    await setup.append('mcp-memory', 'mcp.tool_mode_set', allowed);
+  }
+}
+it.each(['ask', 'block'] as const)('refuses remember policy %s without an approval',
+  refusesRememberPolicy);
+
+it('refuses a valid recalled reference after its revision key is destroyed',
+  async function destroyedDependency() {
+    const body = await recalledRemember('destroyed-dependency');
+    const dependency = body.params.arguments.dependsOn[0]!;
+    const identity = { silo: 'test', ...dependency, scopeKind: 'person' as const, ownerId: 'alice' };
+    keys.delete(identity);
+    const append = vi.spyOn(setup.nats.store, 'append');
+    try {
+      expect((await backendRemember(body)).statusCode).toBe(403);
+      expect(append).not.toHaveBeenCalled();
+    } finally {
+      append.mockRestore();
+      await setup.runner.rebuild(projection);
+    }
+  });
+
+it('rechecks stale grants at the backend and refuses an ended turn upstream', async function stale() {
+  expect((await setup.call(headers, call, route)).status).toBe(200);
+  const valid = capability;
+  const revoked = await setup.append(grantStream('memory_read', scopeId), 'grant.revoked', {
+    resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'assistant',
+    granteeId: 'assistant', revokedBy: 'alice' });
+  const database = vi.spyOn(setup.db, 'query');
+  try {
+    const response = await app.inject({ method: 'POST', url: route,
+      headers: { ...headers, 'x-memory-context': valid }, payload: call });
+    expect(response.statusCode).toBe(403);
+    expect(database).not.toHaveBeenCalled();
+    capability = '';
+    expect((await setup.call(headers, call, route)).status).toBe(403);
+    expect(capability).toBe('');
+    await setup.auth.handler.handle(revoked, setup.db);
+    const grant = await setup.append(grantStream('memory_read', scopeId), 'grant.given', {
+      resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'assistant',
+      granteeId: 'assistant', grantedBy: 'alice' });
+    await setup.auth.handler.handle(grant, setup.db);
+    expect((await setup.call(headers, call, route)).status).toBe(200);
+    const active = capability;
+    await setup.append('computer-assistant', 'computer.turn_closed', {
+      assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+      turnId: 'turn', requesterId: 'alice', task: 'chat_turn',
+      payingGroupId: 'personal-default', status: 'completed' });
+    const ended = await app.inject({ method: 'POST', url: route,
+      headers: { ...headers, 'x-memory-context': active }, payload: call });
+    expect(ended.statusCode).toBe(403);
+    capability = '';
+    expect((await setup.call(headers, call, route)).status).toBe(403);
+    expect(capability).toBe('');
+  } finally { database.mockRestore(); }
+});
