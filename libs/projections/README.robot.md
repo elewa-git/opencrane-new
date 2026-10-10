@@ -374,6 +374,6 @@ set: `nice -n 10 npx vitest run libs/projections/test/conversation-activity.test
 Fresh-install lifecycle journeys remain NOT RUN.
 
 The providers fold stores `managedCallsEnabled: true` on the connection carrying
-`provider.managed_calls_enabled`. This does not advance its configuration revision
+`provider.managed_calls_enabled` on `budget-<silo>`. This does not advance its configuration revision
 or replace key verification. Replay restores the marker through the same fold.
 The marker applies to the silo, including after its default choice moves.

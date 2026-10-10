@@ -60,7 +60,7 @@ async function choice(kind: 'assistant' | 'silo_default', state = 'active') {
 }
 
 async function switchOn() {
-  await save('provider-primary', 'provider.managed_calls_enabled', switchData);
+  await save('budget-test', 'provider.managed_calls_enabled', switchData);
 }
 
 async function usesChoice(kind: 'assistant' | 'silo_default') {
@@ -127,12 +127,12 @@ it('keeps the old path before switch-on and retains an already recorded turn', k
 function foldsSwitchWithoutChangingConfiguration() {
   const created = { ...event('provider', 'provider-primary', 'provider.created'),
     data: { ...provider, provider: 'openai', name: 'Primary' } };
-  const switched = { ...event('switch', 'provider-primary'),
+  const switched = { ...event('switch', 'budget-test'),
     type: 'provider.managed_calls_enabled', data: switchData };
   expect(parseEventByType(switched).success).toBe(true);
   const initial = applyProvider(undefined, created, 1);
   const state = applyProvider(initial, switched, 2);
-  expect(state).toMatchObject({ revision: 1, position: 2, managedCallsEnabled: true });
+  expect(state).toMatchObject({ revision: 1, position: 1, managedCallsEnabled: true });
 }
 it('validates and folds switch-on without rotating the provider configuration',
   foldsSwitchWithoutChangingConfiguration);
@@ -141,8 +141,13 @@ async function refusesModeChangeDuringAdmission() {
   await setup();
   const readStream = nats.store.readStream.bind(nats.store);
   let switched = false;
+  let budgetReads = 0;
   async function* switchDuringPayerRead(subject: string, from?: number, deadline?: number) {
-    if (subject === 'budget-test' && !switched) {
+    if (subject === 'budget-test') {
+      budgetReads++;
+    }
+    // Wait until the payer read; the earlier budget read checks provider mode.
+    if (subject === 'budget-test' && budgetReads === 2 && !switched) {
       switched = true;
       await switchOn();
     }

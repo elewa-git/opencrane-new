@@ -22,6 +22,9 @@ async function readsOnlyNewActivity() {
       events.push(activityEvent(`start-${index}`, 'computer-assistant', 'computer.turn_started'));
       events.push(activityEvent(`close-${index}`, 'computer-assistant', 'computer.turn_closed'));
     }
+    const budget = { ...event('budget', 'budget-test'), type: 'budget.ceiling_set',
+      data: { scope: 'global', ceilingCents: 20000, setBy: 'alice' } };
+    events.push(budget);
     await nats.seed(events);
     await decisionActivity(nats.store, 'test', 'assistant', 'chat', 'turn', Infinity);
     const reads = countReads(nats.store);
@@ -29,11 +32,7 @@ async function readsOnlyNewActivity() {
       performance.now() + 2000);
     expectNoWholeReads(reads.calls);
     for (const call of reads.calls) {
-      if (call.subject === 'provider-*') {
-        expect(call.fromSequence).toBe(1);
-      } else {
-        expect(call.fromSequence).toBeGreaterThan(1);
-      }
+      expect(call.fromSequence).toBeGreaterThan(1);
       expect(call.rows).toBe(0);
     }
   } finally {

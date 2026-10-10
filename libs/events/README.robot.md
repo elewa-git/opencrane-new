@@ -200,8 +200,18 @@ additions require `joinKind: explicit_child`. They grant no parent rights. No em
 new removal routes require it. It identifies the departure inventory the admin
 reviewed. It contains no private history or credentials.
 
-`provider.managed_calls_enabled` records the silo's managed-call mode on the reviewed
-provider stream. Its data names that provider, its unchanged revision, the changer
-and the reviewed provider-category position. It carries no key and grants no access.
+`provider.managed_calls_enabled` records the silo's managed-call mode on `budget-<silo>`.
+Other subjects are rejected. Its data names the reviewed provider, its unchanged revision,
+the changer and the reviewed provider-category position. It carries no key and grants no access.
+The switch-on command is not built yet. It must drain running legacy turns before saving this
+event; schema validation alone cannot prove that condition.
+
+Saving switch-on advances the spending stream. A budget writer using the old position cannot
+save another hold. Safe activation must replace that writer after reading the marker. This event
+has no production command yet.
 The switch-on command is not built yet. It must drain running legacy turns before
 saving this event; schema validation alone cannot prove that condition.
+
+Saving switch-on advances the spending stream. A budget writer using the old
+position cannot save another hold. Safe activation must replace that writer after
+reading the marker. This event has no production command yet.

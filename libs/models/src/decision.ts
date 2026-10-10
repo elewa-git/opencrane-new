@@ -253,7 +253,11 @@ export async function startDecision(
         ...(permitId ? { permitId } : {}),
       });
       if (approvalId) event.correlation.approval = approvalId;
-      if ((await actor.store.append({ event, expectedSequence: 0 })).status !== 'appended') throw new Error('Decision audit unavailable');
+      const command = { event, expectedSequence: 0, historyChecked: true as const };
+      const result = await actor.store.append(command);
+      if (result.status !== 'appended') {
+        throw new Error('Decision audit unavailable');
+      }
     };
     void (async () => {
       res.setHeader('content-type', 'application/json');

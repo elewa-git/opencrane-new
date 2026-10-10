@@ -1,7 +1,8 @@
 import { expect, it, vi } from 'vitest';
-import { getEventDefinition, computerTurnStartedDataSchema } from '@opencrane/events';
-import { BudgetActor, history } from '../src/actor.ts';
+import { getEventDefinition, computerTurnStartedDataSchema, parseEventByType } from '@opencrane/events';
+import { BudgetActor, envelope, history } from '../src/actor.ts';
 import { priceTableId } from '../src/state.ts';
+import { managedProviderCallsEnabled } from '../src/provider-turns.ts';
 import { fixture } from './fixture.ts';
 
 const budgetReservedDataSchema = getEventDefinition('budget.reserved')!.dataSchema;
@@ -155,7 +156,7 @@ async function refusesLegacyTrafficAfterSwitch() {
     await setup.append('provider-primary', 'provider.created', {
       providerId: 'primary', provider: 'openai', name: 'Primary', revision: 1, changedBy: 'alice',
     });
-    await setup.append('provider-primary', 'provider.managed_calls_enabled', {
+    await setup.append('budget-test', 'provider.managed_calls_enabled', {
       providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
     });
     expect((await setup.call()).status).toBe(403);
@@ -176,7 +177,7 @@ async function refusesModeChangeBeforeReservation() {
     await setup.append('provider-primary', 'provider.created', {
       providerId: 'primary', provider: 'openai', name: 'Primary', revision: 1, changedBy: 'alice',
     });
-    await setup.append('provider-primary', 'provider.managed_calls_enabled', {
+    await setup.append('budget-test', 'provider.managed_calls_enabled', {
       providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
     });
     return reserve(...args);
@@ -194,3 +195,51 @@ async function refusesModeChangeBeforeReservation() {
 }
 it('refuses switch-on racing the budget queue without holding money',
   refusesModeChangeBeforeReservation);
+
+function requiresSiloSpendingStreamForSwitchOn() {
+  const payload = {
+    providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+  };
+  const switched = envelope('test', 'budget-test', 'provider.managed_calls_enabled', payload);
+  expect(getEventDefinition(switched.type)?.stream).toBe('budget');
+  expect(parseEventByType(switched).success).toBe(true);
+  const providerSubject = { ...switched, subject: 'provider-primary' };
+  const otherSilo = { ...switched, subject: 'budget-other' };
+  expect(parseEventByType(providerSubject).success).toBe(false);
+  expect(parseEventByType(otherSilo).success).toBe(false);
+}
+it('requires switch-on to use the exact silo spending stream',
+  requiresSiloSpendingStreamForSwitchOn);
+
+async function keepsModeAfterBudgetReplay() {
+  const setup = await fixture();
+  try {
+    await setup.append('provider-primary', 'provider.created', {
+      providerId: 'primary', provider: 'openai', name: 'Primary', revision: 1, changedBy: 'alice',
+    });
+    await setup.append('budget-test', 'provider.managed_calls_enabled', {
+      providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+    });
+    const replay = new BudgetActor(setup.nats.store, 'test');
+    await replay.start();
+    const enabled = await managedProviderCallsEnabled(setup.nats.store, 'test', Infinity);
+    expect(enabled).toBe(true);
+    expect(replay.state.reservations).toHaveLength(0);
+    const reads = vi.spyOn(setup.nats.store, 'readStream');
+    try {
+      expect((await setup.call()).status).toBe(403);
+      function readsProviderCategory(args: Parameters<typeof setup.nats.store.readStream>) {
+        return args[0].includes('*');
+      }
+      expect(reads.mock.calls.some(readsProviderCategory)).toBe(false);
+    } finally {
+      reads.mockRestore();
+    }
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('keeps switch-on after spending replay without scanning provider connections',
+  keepsModeAfterBudgetReplay);

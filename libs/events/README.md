@@ -30,6 +30,7 @@ flowchart LR
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads owner, assistant and provider choices| events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices and switch-on| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices and spending mode| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turn and spending data| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> zod["Zod<br/>data checks"]
@@ -46,6 +47,7 @@ flowchart LR
 - Defines owner appointment requests and confirmations on member records.
 
 - Define the record that says managed provider calls were switched on.
+  Keep that record in the silo’s spending stream.
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.
 - Define the wrapper every event shares (its id, its type, what it is about,

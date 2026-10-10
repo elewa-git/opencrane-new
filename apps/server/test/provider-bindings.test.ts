@@ -234,7 +234,7 @@ async function replaysRecordedSwitchOn() {
   const before = (await readProviders(db, 'acme', 'primary'))[0];
   if (!before) throw new Error('Missing fixture provider');
   const expectedProviderSequence = await nats.store.head('provider-*');
-  await append('provider-primary', 'provider.managed_calls_enabled', {
+  await append('budget-acme', 'provider.managed_calls_enabled', {
     providerId: 'primary', revision: before.revision, changedBy: 'owner', expectedProviderSequence,
   });
   await runner.run(providers);

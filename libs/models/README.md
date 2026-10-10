@@ -19,7 +19,11 @@ flowchart LR
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
+<<<<<<< HEAD
   models -->|saves changes and spending, reads new activity and grant facts| store["libs/event-store<br/>event log"]
+=======
+  models -->|saves changes, reads activity, grants and spending mode| store["libs/event-store<br/>event log"]
+>>>>>>> d8dccd76 (🔒 Check provider mode through the exact silo spending stream)
 ```
 
 ## What it is responsible for
@@ -64,6 +68,7 @@ flowchart LR
   Keep approval lists within the caller’s current period of participation.
   Reuse checked approval facts and read only later chat changes before a decision.
 - Refuse provider-bound model passes on the deployment-key gateway before holding money.
+  Read switch-on from the silo’s spending stream before checking access.
   Calls through saved provider choices are not available yet.
 - Refuse native child model calls before holding money. Older delegation records
   grant no call authority either.

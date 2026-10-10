@@ -37,9 +37,7 @@ export function applyProvider(state: ProviderState | undefined,
   }
   const data = z.record(z.string(), z.unknown()).parse(event.data);
   const providerId = z.string().parse(data['providerId']);
-  if (event.subject !== `provider-${providerId}`) {
-    throw new Error('Provider subject mismatch');
-  }
+  requireProviderSubject(event, providerId);
   const revision = z.int().positive().parse(data['revision']);
   if (event.type === 'provider.created') {
     if (state || revision !== 1) {
@@ -78,6 +76,15 @@ export function applyProvider(state: ProviderState | undefined,
   }
   state.position = position;
   return state;
+}
+function requireProviderSubject(event: EventEnvelope, providerId: string) {
+  let expectedSubject = `provider-${providerId}`;
+  if (event.type === 'provider.managed_calls_enabled') {
+    expectedSubject = `budget-${event.silo}`;
+  }
+  if (event.subject !== expectedSubject) {
+    throw new Error('Provider subject mismatch');
+  }
 }
 function applyVerification(state: ProviderState, data: Record<string, unknown>,
   fact: ProviderFact) {
@@ -174,6 +181,8 @@ function applyRoutingChange(state: ProviderState, type: string, revision: number
   }
   if (type === 'provider.managed_calls_enabled') {
     state.managedCallsEnabled = true;
+    // Keep the provider position on its own stream for later configuration commands.
+    return true;
   }
   state.position = position;
   return true;
