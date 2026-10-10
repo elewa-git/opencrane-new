@@ -145,7 +145,7 @@ function ownsDemotion(row: StoredEvent | undefined, actor: string, memberId: str
   return data.newRole === 'member';
 }
 
-async function projectionProgress(options: GroupOptions, row: StoredEvent,
+export async function projectionProgress(options: GroupOptions, row: StoredEvent,
   appointment: StoredEvent | undefined) {
   const auth = memberAuthorisation(options.binding);
   const requiredPosition = Math.max(row.sequence, appointment?.sequence ?? 0);

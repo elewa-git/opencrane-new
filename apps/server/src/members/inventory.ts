@@ -6,17 +6,28 @@ import type { StoredEvent } from '@opencrane/event-store';
 import { memberAuthorisation } from '@opencrane/authz';
 import type { MemberAccessRow } from '@opencrane/protocol';
 import type { GroupOptions } from './group-routes.ts';
+import { retainedContent } from './retained-content.ts';
 
 const categories = ['team', 'assistant', 'grant', 'routine', 'connection', 'computer'];
 const publicResources = new Set(['model', 'mcp_server', 'mcp_tool', 'shared_desktop']);
-const checkpointQuery = `SELECT name, sequence FROM projection_checkpoints
-  WHERE name IN ('computers', 'conversations') ORDER BY name`;
 type Assistant = ReturnType<typeof assistantCreatedDataSchema.parse>;
 type Grant = ReturnType<typeof grantGivenDataSchema.parse>;
 type GrantFact = {
   record: StoredEvent;
   grant: Pick<Grant, 'resourceType' | 'resourceId' | 'granteeId' | 'granteeKind'>;
 };
+
+async function latestInput(options: GroupOptions, subject: string, position: number,
+  deadline: number) {
+  if (position === 0) return undefined;
+  for await (const row of options.store.readStream(subject, position, deadline)) {
+    if (row.sequence !== position || row.event.silo !== options.silo) {
+      throw new Error('Inventory cannot be read completely');
+    }
+    return row;
+  }
+  throw new Error('Inventory cannot be read completely');
+}
 
 async function recordedInputs(options: GroupOptions, deadline: number) {
   const rows: StoredEvent[] = [];
@@ -25,7 +36,11 @@ async function recordedInputs(options: GroupOptions, deadline: number) {
     const subject = `${category}-*`;
     const position = await options.store.head(subject, deadline);
     positions[subject] = position;
-    if (category === 'computer') continue;
+    if (category === 'computer') {
+      const row = await latestInput(options, subject, position, deadline);
+      if (row) rows.push(row);
+      continue;
+    }
     for await (const row of options.store.readStream(subject, 1, deadline)) {
       if (row.sequence > position) break;
       if (row.event.silo !== options.silo || rows.length >= 10_000) {
@@ -211,9 +226,7 @@ async function addSharedAssistants(options: GroupOptions, memberId: string, inpu
 }
 
 export async function memberInventory(options: GroupOptions, memberId: string, deadline: number) {
-  let head = await options.store.head(undefined, deadline);
   const inputs = await recordedInputs(options, deadline);
-  for (const position of Object.values(inputs.positions)) head = Math.max(head, position);
   const unavailable = new Set<string>();
   const groups = groupFacts(inputs.rows, memberId);
   await checkGroupRemovals(options, groups, unavailable, deadline);
@@ -236,15 +249,25 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   recordUnavailablePermissions(rows, unavailable);
   const personalConnections = versionAbsence(inputs.rows, 'connection', unavailable);
   const routines = versionAbsence(inputs.rows, 'routine', unavailable);
-  const content = await retainedContent(options, memberId, head);
+  const content = await retainedContent(options, memberId, inputs, deadline);
   if (!content.current) unavailable.add('retained_content');
-  for (const [subject, position] of Object.entries(inputs.positions)) {
-    if (await options.store.head(subject, deadline) !== position) unavailable.add('changed_inventory');
+  async function checkCurrent(checkDeadline: number) {
+    for (const [subject, position] of Object.entries(inputs.positions)) {
+      const currentPosition = await options.store.head(subject, checkDeadline);
+      if (currentPosition !== position) {
+        return false;
+      }
+    }
+    return content.checkCurrent(checkDeadline);
+  }
+  if (!await checkCurrent(deadline)) {
+    unavailable.add('changed_inventory');
   }
   const hash = createHash('sha256');
   hash.update(JSON.stringify([1, inputs.positions, content]));
   return { rows, complete: unavailable.size === 0, unavailableSections: Array.from(unavailable),
-    reviewRevision: hash.digest('hex'), ownedSharedWork: [], personalConnections, routines,
+    reviewRevision: hash.digest('hex'), checkCurrent, ownedSharedWork: [],
+    personalConnections, routines,
     personalComputer: content.computers, retainedHistory: content.history };
 }
 
@@ -268,35 +291,9 @@ function versionAbsence(rows: StoredEvent[], category: string, unavailable: Set<
   return { status: 'absent_on_version' as const, message };
 }
 
-async function retainedContent(options: GroupOptions, memberId: string, head: number) {
-  const checkpoints = await options.db.query<{ name: string; sequence: string }>(
-    checkpointQuery);
-  const positions = new Map<string, number>();
-  for (const row of checkpoints.rows) positions.set(row.name, Number(row.sequence));
-  const current = (positions.get('computers') ?? -1) >= head &&
-    (positions.get('conversations') ?? -1) >= head;
-  if (!current) return { current, computers: [], history: null };
-  const computers = await options.db.query<{ assistantId: string; computerId: string | null;
-    status: string }>(`SELECT assistant_id AS "assistantId", computer_id AS "computerId", status
-    FROM computers WHERE silo = $1 AND owner_id = $2 AND kind = 'personal'`,
-  [options.silo, memberId]);
-  // Return totals only. Never fetch titles, messages, files or private conversation streams.
-  const history = await options.db.query<{ count: string; firstAt: string | null; lastAt: string | null }>(
-    `SELECT count(*) AS count, min(f.time) AS "firstAt", max(f.time) AS "lastAt"
-    FROM conversation_feed f WHERE f.silo = $1 AND f.type = 'conversation.created'
-      AND EXISTS (SELECT 1 FROM conversation_participants p WHERE p.silo = f.silo
-        AND p.conversation_id = f.conversation_id AND p.participant_id = $2)`,
-    [options.silo, memberId]);
-  const after = await options.db.query<{ name: string; sequence: string }>(
-    checkpointQuery);
-  if (after.rows.length !== positions.size) return { current: false, computers: [], history: null };
-  for (const row of after.rows) {
-    if (positions.get(row.name) !== Number(row.sequence)) {
-      return { current: false, computers: [], history: null };
-    }
-  }
-  const total = history.rows[0];
-  if (!total) throw new Error('History count unavailable');
-  return { current, positions: Array.from(positions.entries()), computers: computers.rows,
-    history: { count: Number(total.count), firstAt: total.firstAt, lastAt: total.lastAt } };
+export function reviewedRevision(inventoryRevision: string, memberSequence: number,
+  ownershipSequence: number) {
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify([inventoryRevision, memberSequence, ownershipSequence]));
+  return hash.digest('hex');
 }

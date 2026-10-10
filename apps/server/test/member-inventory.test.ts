@@ -82,7 +82,7 @@ async function emptyReview() {
     accessLost: [], ownedSharedWork: [], personalComputer: [],
     routines: { status: 'absent_on_version' },
     personalConnections: { status: 'absent_on_version' },
-    retainedHistory: { count: 0, firstAt: null, lastAt: null }, permissions: { remove: false } });
+    retainedHistory: { count: 0, firstAt: null, lastAt: null }, permissions: { remove: true } });
   const before = await nats.store.head();
   expect((await request('access')).json()).toMatchObject({ complete: true, rows: [] });
   expect(await nats.store.head()).toBe(before);

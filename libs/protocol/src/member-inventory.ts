@@ -33,6 +33,6 @@ export const memberDepartureSchema = memberAccessSchema.omit({ rows: true }).ext
   retainedHistory: z.object({
     count: z.int().nonnegative(), firstAt: z.string().nullable(), lastAt: z.string().nullable(),
   }).strict().nullable(),
-  permissions: z.object({ remove: z.literal(false) }).strict(),
+  permissions: z.object({ remove: z.boolean() }).strict(),
 }).strict();
 export type MemberAccessRow = z.infer<typeof accessRow>;

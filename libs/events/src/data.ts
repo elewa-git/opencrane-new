@@ -144,7 +144,8 @@ export const memberRoleChangedDataSchema = z
   .strict();
 
 export const memberRemovedDataSchema = z
-  .object({ memberId: id, removedBy: id, reason: reasonCodeSchema.optional() })
+  .object({ memberId: id, removedBy: id, reason: reasonCodeSchema.optional(),
+    reviewRevision: z.string().regex(/^[a-f0-9]{64}$/u).optional() })
   .strict();
 
 function hasNoNul(value: string) {

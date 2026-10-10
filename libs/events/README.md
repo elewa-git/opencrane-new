@@ -25,6 +25,9 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals, participants, child chats, delegation and owner appointments| events["libs/events<br/>event and memory checks"]
   store["libs/event-store<br/>saved event log"] -.->|checks private chat choices, child records and delegated tasks| events
   projections["libs/projections<br/>read tables"] -.->|checks saved task relationships| events
+  server["apps/server<br/>back end"] -.->|checks reviewed removals and memory commands and records dispatch, consent, invitation refusals and participant facts| events["libs/events<br/>event and memory text checks"]
+  store["libs/event-store<br/>saved event log"] -.-> events
+  projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads owner, assistant and provider choices| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turn and spending data| events
   computer["apps/computer<br/>report text check"] -.-> events
@@ -38,6 +41,7 @@ flowchart LR
   remain readable. These records grant no permission to run a task.
 
 - Defines tool dispatch records, unsupported consent refusals, requester retries and safe invitation refusal records.
+- Records the departure review used for a member removal. Older removals still replay.
 - Defines owner appointment requests and confirmations on member records.
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.

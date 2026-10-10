@@ -121,7 +121,7 @@ the personal default.
 | `silo.owner_bootstrapped` | authenticated installation-token claim | members, identities | OpenFGA owner/member; seed ownership; emit `assistant.created` (personal); seed model `grant.given` |
 | `member.joined` | invitation accepted | members | OpenFGA `member`; emit personal `assistant.created` unless `personalAssistant: none`; seed model `grant.given` |
 | `member.role_changed` | non-owner role command | members | OpenFGA role tuples |
-| `member.removed` | non-owner removal command | members | OpenFGA delete; emit `connection.revoked` for each connection; suspend the person's computer; audit |
+| `member.removed` | reviewed non-owner removal command; optional `reviewRevision` for old events | members | OpenFGA delete; deny access immediately from events; departure cleanup is pending |
 | `ownership.seeded` | fenced installation migration or bootstrap reaction | current owner set | OpenFGA seed receipt after existing owner tuples converge |
 | `ownership.transferred` | Owner command | request only when `awaitingConfirmation: true`; older events add the owner | confirm active successor on their member stream; OpenFGA request receipt |
 | `member.ownership_confirmed` | appointment reaction | successor role and owner set | OpenFGA owner tuple and receipt |

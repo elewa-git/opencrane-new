@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
@@ -6,7 +5,7 @@ import { currentMembership, readActiveMember, MemberAccessRefused } from '@openc
 import { memberAccessSchema, memberDepartureSchema } from '@opencrane/protocol';
 import type { GroupOptions } from './group-routes.ts';
 import { sessionFor } from './routes.ts';
-import { memberInventory } from './inventory.ts';
+import { memberInventory, reviewedRevision } from './inventory.ts';
 
 const parameters = z.object({ memberId: z.string().regex(/^[\w-]{1,200}$/u) }).strict();
 export function registerMemberInventory(app: FastifyInstance, config: AuthConfig,
@@ -53,7 +52,7 @@ async function sendInventory(reply: FastifyReply, request: FastifyRequest, optio
   memberId: string, target: Awaited<ReturnType<typeof currentMembership>>,
   inventory: Awaited<ReturnType<typeof memberInventory>>, memberSequence: number) {
   const checkedAt = new Date().toISOString();
-  const { rows, ...departure } = inventory;
+  const { rows, checkCurrent: _checkCurrent, ...departure } = inventory;
   if (request.routeOptions.url?.endsWith('/access')) {
     const unavailableSections = [...inventory.unavailableSections];
     if (rows.length) unavailableSections.push('use_availability');
@@ -67,10 +66,9 @@ async function sendInventory(reply: FastifyReply, request: FastifyRequest, optio
     departure.complete = false;
     departure.unavailableSections.push('changed_membership');
   }
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([departure.reviewRevision, memberSequence, ownershipSequence]));
-  departure.reviewRevision = hash.digest('hex');
+  departure.reviewRevision = reviewedRevision(departure.reviewRevision, memberSequence,
+    ownershipSequence);
   const body = { ...departure, accessLost: rows, checkedAt, memberSequence,
-    ownershipSequence, permissions: { remove: false } };
+    ownershipSequence, permissions: { remove: departure.complete && target.role !== 'owner' } };
   return reply.send(memberDepartureSchema.parse(body));
 }

@@ -1434,7 +1434,14 @@ Owner-role invitation remains invited; the active owner remains an owner.
 
 The Owner/Admin GETs `/api/members/:memberId/access` and `/api/members/:memberId/departure`
 check events and OpenFGA once. They stop after ten seconds or 10,000 inventory records.
-Checked event positions, computer rows and history totals form the review revision.
+Checked inventory event positions, computer rows, history totals and positions in
+the target's retained rows form the review revision. Processing receipts show that
+both table workers have processed the reviewed category events. The inventory
+compares positions in the target's computer and history rows before and after the
+SQL reads. Messages and table updates for another member do not change these positions.
+The conversation worker's checkpoint is only a starting point for checking pending
+events. Only the target's conversation creation and participation events must have
+been processed. Checkpoint movement never makes the review stale or incomplete.
 Behind tables and unsupported ownership, routines or connections block completion.
 The latest grant changes include revocations for each member, group or assistant.
 The latest group removals are kept even when no access rows remain. Both reads
@@ -1443,7 +1450,8 @@ Shared-assistant selection checks the group membership and its receipt independe
 of resource grants, as well as the assistant creation receipt. A missing membership
 receipt reports unavailable selection rather than denied access.
 Failed reads return 503. Only counts and dates leave conversation tables.
-Tool, publication and connection readiness stay unavailable. Removal stays disabled.
+Tool, publication and connection readiness stay unavailable. A complete departure
+review enables removal for an active non-owner.
 `test/member-inventory.test.ts` uses real services. Fresh-install qualification: NOT RUN.
 
 ## Governed personal remember (P4-12 PR 3c)
@@ -1487,3 +1495,25 @@ Effective inherited access and public child commands are later work. No child em
 ## Private turn memory preview
 
 `GET /api/memory/turns/:conversationId/:turnId` returns a bounded preview for a saved private turn. It does not issue a token, record loaded facts or send text to a computer. It returns at most 32 references and 16,384 UTF-8 bytes. Each category reads at most 33 candidates. The shared `memoryReferences` check validates each fact and all its supporting facts before decryption and again before release. Expired, erased, superseded or unchecked references are omitted. The server checks access again without reading chat history. Denied scopes have no ids, counts or omission flags. Missing turn ownership returns 404; service, permission, content or projection uncertainty returns 503. All responses use `Cache-Control: no-store`. Fresh-install qualification is NOT RUN.
+
+## Reviewed member removal
+
+The [removal contract](../../docs/api/members.md#reviewed-member-removal) covers
+review conflicts, receipts and delayed table and permission updates.
+Removal compares the reviewed revision, then checks the inventory category positions
+again before append. These checks remain separate from the small member and ownership
+streams that decide access. The conditional append checks the target member position;
+ordinary removal does not use the event store's migration-only global condition.
+The inventory check and target append are separate operations. Only changes on the
+target member stream are ordered atomically against removal.
+`test/member-removal.test.ts` covers refusals, lost replies, ownership races and replay.
+It also projects another member's message between the computer and history SQL reads.
+Removal succeeds with the same reviewed revision. A target computer or history change
+between those reads refuses removal, including when the target's history is still
+waiting to be projected. The final check reads only events saved after the inventory
+finished. It refuses a new target history event even before that event is projected.
+The tests also refuse a late target role change and a changed inventory category.
+The socket and desktop tests remove through HTTP with slow content reads.
+`test/removal-gateway.test.ts` covers gateway refusal with existing and fresh credentials
+while IAM is delayed.
+Fresh-install qualification and browser canvas clearing remain NOT RUN.

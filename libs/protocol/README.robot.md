@@ -127,4 +127,5 @@ participants and optional recorded group association. See the
 departure reviews. They keep recorded grant sources separate from checked
 person/assistant permissions and unavailable use readiness. Departure revisions bind
 the actual checked inputs. Missing permission evidence makes the review incomplete.
-`permissions.remove` is always false; these reads add no removal command.
+`permissions.remove` is a boolean. The server enables it only for a complete
+review of an active non-owner. The removal route still checks the review again.
