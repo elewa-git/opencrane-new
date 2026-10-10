@@ -36,6 +36,55 @@ export function directConversations(rows: ChatConversation[]): ChatConversation[
   return direct;
 }
 
+function isFocusedControl(activeElement: Element | null, control: HTMLElement): boolean {
+  return control === activeElement;
+}
+
+export function trapDirectDialogFocus(panel: HTMLElement, event: KeyboardEvent): void {
+  if (event.key !== 'Tab') return;
+  const controls = panel.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), input:not([disabled]), [tabindex="0"]',
+  );
+  const focusableControls = Array.from(controls);
+  const first = focusableControls[0];
+  const last = focusableControls.at(-1);
+  if (!first || !last) {
+    event.preventDefault();
+    return;
+  }
+  const activeIndex = focusableControls.findIndex(isFocusedControl.bind(
+    null, document.activeElement));
+  if (event.shiftKey && activeIndex <= 0) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey
+    && (activeIndex === focusableControls.length - 1 || activeIndex === -1)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function isDifferentParticipant(participantId: string, candidateId: string): boolean {
+  return candidateId !== participantId;
+}
+
+export function directConversationsAfterParticipantEvent(
+  rows: ChatConversation[], conversationId: string, row: ChatRow,
+): ChatConversation[] {
+  const participantId = row.data['participantId'];
+  if (typeof participantId !== 'string') return rows;
+  const participantMemberId = participantId;
+  function updateConversation(conversation: ChatConversation): ChatConversation {
+    if (conversation.conversationId !== conversationId
+      || (conversation.mode !== 'group' && conversation.mode !== 'direct')) return conversation;
+    const participantIds = conversation.participantIds.filter(isDifferentParticipant.bind(
+      null, participantMemberId));
+    if (row.type === 'participant.added') participantIds.push(participantMemberId);
+    return { ...conversation, participantIds };
+  }
+  return rows.map(updateConversation);
+}
+
 export function otherParticipant(participantIds: string[], memberId: string): string | undefined {
   for (const participantId of participantIds) {
     if (participantId !== memberId) return participantId;

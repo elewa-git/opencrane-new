@@ -20,8 +20,9 @@ export async function fetchDirectConversations(signal: AbortSignal) {
   return read('/api/conversations', signal, chatListSchema);
 }
 
-export async function searchColleagues(query: string, signal: AbortSignal) {
+export async function searchColleagues(query: string, signal: AbortSignal, after = '') {
   const params = new URLSearchParams({ q: query, limit: '20' });
+  if (after) params.set('after', after);
   return read(`/api/chat/colleagues?${params.toString()}`, signal, chatColleaguesSchema);
 }
 

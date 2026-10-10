@@ -4,7 +4,8 @@
     <nav class="rail-content" aria-label="Workspace">
       <a class="rail-action" href="/workspace">Ask your assistant</a>
       <h2>People</h2>
-      <a class="rail-action active" href="/workspace/direct" [attr.aria-disabled]="composerBusy()"
+      <a class="rail-action active" href="/workspace/direct"
+        [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
         (click)="protectPendingNavigation($event)">New direct chat</a>
       <h2>Direct conversations</h2>
       @if (listState() === 'loading' && conversations().length === 0) {
@@ -17,7 +18,7 @@
         @for (conversation of conversations(); track conversation.conversationId) {
           @if (conversation.mode === 'direct' || conversation.mode === 'group') {
             <button class="conversation-row" type="button"
-              [attr.aria-disabled]="composerBusy()"
+              [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
               [attr.title]="composerBusy() ? 'Wait until this message is confirmed.' : null"
               [class.selected]="selectedConversationId() === conversation.conversationId"
               [attr.aria-current]="selectedConversationId() === conversation.conversationId ? 'page' : null"
@@ -67,7 +68,10 @@
     <section #transcript class="transcript" (scroll)="transcriptScrolled()" aria-label="Direct conversation" [attr.aria-busy]="pageState() === 'loading'">
       <div class="transcript-inner">
         @if (participantManager.state() !== 'closed') {
-          <section class="participant-panel" aria-labelledby="participantHeading"
+          <section #participantPanel class="participant-panel" role="dialog"
+            aria-labelledby="participantHeading"
+            [attr.aria-modal]="phoneParticipantPicker() ? 'true' : null"
+            (keydown)="trapParticipantFocus($event)"
             (keydown.escape)="closeParticipants()">
             <button class="participant-back" type="button" (click)="closeParticipants()">
               ‹ Back to conversation
@@ -112,6 +116,12 @@
                   <input type="search" [value]="participantManager.query()"
                     (input)="editParticipantQuery($event)" placeholder="Search colleagues">
                 </label>
+                @if (participantManager.colleagueSearchState() === 'loading'
+                    && participantManager.eligible().length === 0) {
+                  <p role="status">Searching colleagues…</p>
+                } @else if (participantManager.colleagueSearchState() === 'failed') {
+                  <p role="status">Colleagues could not be searched.</p>
+                }
                 <ul class="participant-list eligible-list">
                   @for (person of participantManager.eligible(); track person.memberId) {
                     <li><span>{{ person.displayName || person.memberId }}</span>
@@ -120,9 +130,19 @@
                         (click)="participantManager.add(person.memberId)">Add</button>
                     </li>
                   } @empty {
-                    <li class="participant-empty">No other eligible colleagues</li>
+                    @if (participantManager.colleagueSearchState() === 'ready') {
+                      <li class="participant-empty">No other eligible colleagues</li>
+                    }
                   }
                 </ul>
+                @if (participantManager.nextColleagueCursor()) {
+                  <button class="participant-action" type="button"
+                    [disabled]="participantManager.colleagueSearchState() === 'loading'"
+                    (click)="participantManager.loadMoreEligible()">
+                    {{ participantManager.colleagueSearchState() === 'loading'
+                      ? 'Searching…' : 'Load more colleagues' }}
+                  </button>
+                }
               } @else if (participantManager.canLeave()) {
                 <button class="participant-leave" type="button"
                   [disabled]="participantManager.state() !== 'ready'"
@@ -264,13 +284,16 @@
 <oc-navigation-menu [open]="navigationOpen()" label="Direct conversations"
   [returnFocusTo]="navigationOpener" (closed)="navigationOpen.set(false)">
   <a href="/workspace">Ask your assistant</a>
-  <a href="/workspace/direct" [attr.aria-disabled]="composerBusy()"
+  <a href="/workspace/direct"
+    [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
         (click)="protectPendingNavigation($event)">New direct chat</a>
   @for (conversation of conversations(); track conversation.conversationId) {
     @if (conversation.mode === 'direct' || conversation.mode === 'group') {
       <button class="conversation-row" type="button"
-              [attr.aria-disabled]="composerBusy()"
-              [attr.title]="composerBusy() ? 'Wait until this message is confirmed.' : null"
+              [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+              [attr.title]="participantChangeUnsettled()
+                ? 'Check the participant change before leaving this chat.'
+                : composerBusy() ? 'Wait until this message is confirmed.' : null"
         [class.selected]="selectedConversationId() === conversation.conversationId"
         (click)="selectConversation(conversation.conversationId)">
         {{ conversationTitle(conversation, currentMemberId, knownColleagues()) }}

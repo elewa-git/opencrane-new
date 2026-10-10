@@ -24,9 +24,11 @@ import {
   directConversationHeaderTitle, directConversationMode, directDraftKey, directMessageText,
   formatDirectTime,
   exceedsDirectRecipientLimit, focusDirectComposer, hasDirectMessage,
-  isDirectTranscriptNearNewest, mergeDirectColleagues,
+  directConversationsAfterParticipantEvent, isDirectTranscriptNearNewest,
+  mergeDirectColleagues,
   otherParticipant, readDirectUpdate, scrollDirectTranscript,
   directAuthorName, directIsOwnMessage, directRecipientName, groupAuthorName,
+  trapDirectDialogFocus,
 } from './direct-chat-display';
 import {
   fetchChatContext, fetchDirectConversations, fetchDirectHistory, searchColleagues,
@@ -104,6 +106,7 @@ export class DirectChat implements OnInit, OnDestroy {
   private readonly composerElement = viewChild<ElementRef<HTMLElement>>('composer');
   private readonly accessHeading = viewChild<ElementRef<HTMLElement>>('accessHeading');
   private readonly participantHeading = viewChild<ElementRef<HTMLElement>>('participantHeading');
+  private readonly participantPanel = viewChild<ElementRef<HTMLElement>>('participantPanel');
   private readonly participantOpener = viewChild<ElementRef<HTMLButtonElement>>(
     'participantOpener');
   private focusAccessHeading = false;
@@ -227,11 +230,22 @@ export class DirectChat implements OnInit, OnDestroy {
 
   protected editParticipantQuery(event: Event): void {
     const input = event.target;
-    if (input instanceof HTMLInputElement) this.participantManager.query.set(input.value);
+    if (input instanceof HTMLInputElement) this.participantManager.setQuery(input.value);
+  }
+
+  protected phoneParticipantPicker(): boolean {
+    return window.innerWidth <= 700;
+  }
+
+  protected trapParticipantFocus(event: KeyboardEvent): void {
+    if (!this.phoneParticipantPicker() || event.key !== 'Tab') return;
+    const panel = this.participantPanel()?.nativeElement;
+    if (!panel) return;
+    trapDirectDialogFocus(panel, event);
   }
 
   protected selectColleague(value: Colleague): void {
-    if (this.composerBusy()) return;
+    if (this.composerBusy() || this.participantChangeUnsettled()) return;
     this.rememberDraft();
     this.clearConversationView();
     this.colleague.set(value);
@@ -246,7 +260,7 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   protected clearColleague(): void {
-    if (this.composerBusy()) return;
+    if (this.composerBusy() || this.participantChangeUnsettled()) return;
     this.rememberDraft();
     this.clearConversationView();
     this.colleague.set(undefined);
@@ -259,7 +273,7 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   protected async selectConversation(conversationId: string): Promise<void> {
-    if (this.composerBusy()) return;
+    if (this.composerBusy() || this.participantChangeUnsettled()) return;
     const conversation = directConversationById(this.conversations(), conversationId);
     if (!conversation || (conversation.mode !== 'direct' && conversation.mode !== 'group')) return;
     let selectedColleague: Colleague | undefined;
@@ -328,7 +342,11 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   protected protectPendingNavigation(event: MouseEvent): void {
-    if (this.composerBusy()) event.preventDefault();
+    if (this.composerBusy() || this.participantChangeUnsettled()) event.preventDefault();
+  }
+
+  protected participantChangeUnsettled(): boolean {
+    return Boolean(this.participantManager.commandId());
   }
 
   private async loadColleagues(query: string): Promise<void> {
@@ -481,6 +499,21 @@ export class DirectChat implements OnInit, OnDestroy {
     this.focusAccessHeading = true;
   }
 
+  private applyParticipantEvent(row: ChatRow): void {
+    if (row.type !== 'participant.added' && row.type !== 'participant.removed') return;
+    const participantId = row.data['participantId'];
+    if (typeof participantId !== 'string') return;
+    if (row.type === 'participant.removed' && participantId === this.currentMemberId) {
+      this.clearAfterAccessChange();
+      return;
+    }
+
+    this.participantManager.applyEvent(row);
+    const updatedConversations = directConversationsAfterParticipantEvent(
+      this.conversations(), this.selectedConversationId(), row);
+    this.conversations.set(updatedConversations);
+  }
+
   private draftKey(): string {
     return directDraftKey(this.selectedConversationId(), this.colleague()?.memberId);
   }
@@ -529,6 +562,7 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   private receive(raw: unknown): void {
+    if (this.pageState() === 'access_changed') return;
     const update = readDirectUpdate(raw, this.selectedConversationId(), this.generation,
       this.position);
     if (update.kind === 'ignore') return;
@@ -544,6 +578,8 @@ export class DirectChat implements OnInit, OnDestroy {
       this.statusText.set('A conversation update could not be read. Refresh to try again.');
       return;
     }
+    this.applyParticipantEvent(update.row);
+    if (this.pageState() === 'access_changed') return;
     this.messages.set(appendDirectMessage(this.messages(), update.row));
     this.position = update.row.position;
     this.scrollToNewest = this.followNewest;

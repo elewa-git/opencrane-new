@@ -1,7 +1,9 @@
 import { signal } from '@angular/core';
-import { chatParticipantCommandSchema } from '@opencrane/protocol';
+import { chatParticipantCommandSchema, type ChatRow } from '@opencrane/protocol';
 import { z } from 'zod';
-import { changeParticipant, checkDirectChange, fetchParticipants } from './direct-chat-api';
+import {
+  changeParticipant, checkDirectChange, fetchParticipants, searchColleagues,
+} from './direct-chat-api';
 import type { Colleague } from './recipient-picker';
 import { newDirectCommandId } from './direct-chat-address';
 
@@ -13,19 +15,27 @@ function isColleague(memberId: string, person: Colleague): boolean {
   return person.memberId === memberId;
 }
 
-function matchesQuery(person: Colleague, query: string, present: Set<string>): boolean {
-  const name = person.displayName ?? person.memberId;
-  return !present.has(person.memberId) && name.toLowerCase().includes(query);
-}
-
 function memberIdOf(person: { memberId: string }): string {
   return person.memberId;
+}
+
+function isNotParticipant(
+  participantId: string, person: { memberId: string },
+): boolean {
+  return person.memberId !== participantId;
+}
+
+function isNotPresent(present: Set<string>, person: Colleague): boolean {
+  return !present.has(person.memberId);
 }
 
 export class DirectChatParticipants {
   readonly state = signal<State>('closed');
   readonly rows = signal<{ memberId: string; displayName: string | null }[]>([]);
   readonly query = signal('');
+  readonly eligibleColleagues = signal<Colleague[]>([]);
+  readonly nextColleagueCursor = signal<string | null>('');
+  readonly colleagueSearchState = signal<'idle' | 'loading' | 'failed' | 'ready'>('idle');
   readonly notice = signal('');
   readonly commandId = signal('');
   readonly action = signal<Action | ''>('');
@@ -35,6 +45,7 @@ export class DirectChatParticipants {
   readonly checking = signal(false);
   readonly stale = signal<Colleague | undefined>(undefined);
   private request: AbortController | undefined;
+  private colleagueSearchRequest: AbortController | undefined;
   private readonly conversationId: () => string;
   private readonly colleagues: () => Colleague[];
   private readonly readAllowed: () => boolean;
@@ -62,6 +73,7 @@ export class DirectChatParticipants {
     this.stale.set(undefined);
     this.query.set('');
     await this.read();
+    if (this.state() === 'ready' && this.canManage()) await this.searchEligible();
   }
 
   close(): void {
@@ -70,6 +82,7 @@ export class DirectChatParticipants {
 
   reset(): void {
     this.request?.abort();
+    this.colleagueSearchRequest?.abort();
     this.state.set('closed');
     this.rows.set([]);
     this.commandId.set('');
@@ -80,19 +93,30 @@ export class DirectChatParticipants {
     this.checking.set(false);
     this.notice.set('');
     this.query.set('');
+    this.eligibleColleagues.set([]);
+    this.nextColleagueCursor.set('');
+    this.colleagueSearchState.set('idle');
     this.stale.set(undefined);
   }
 
   eligible(): Colleague[] {
-    const query = this.query().trim().toLowerCase();
     const memberIds = this.rows().map(memberIdOf);
     const present = new Set(memberIds);
     const stale = this.stale();
     if (stale) present.add(stale.memberId);
-    function isEligible(person: Colleague): boolean {
-      return matchesQuery(person, query, present);
-    }
-    return this.colleagues().filter(isEligible);
+    return this.eligibleColleagues().filter(isNotPresent.bind(null, present));
+  }
+
+  setQuery(query: string): void {
+    this.query.set(query);
+    this.eligibleColleagues.set([]);
+    this.nextColleagueCursor.set('');
+    void this.searchEligible();
+  }
+
+  async loadMoreEligible(): Promise<void> {
+    if (this.colleagueSearchState() === 'loading' || !this.nextColleagueCursor()) return;
+    await this.searchEligible(this.nextColleagueCursor() ?? undefined);
   }
 
   async add(memberId: string): Promise<void> {
@@ -105,6 +129,24 @@ export class DirectChatParticipants {
 
   async leave(): Promise<void> {
     await this.send({ action: 'leave' });
+  }
+
+  applyEvent(row: ChatRow): void {
+    if (row.type !== 'participant.added' && row.type !== 'participant.removed') return;
+    const participantId = row.data['participantId'];
+    if (typeof participantId !== 'string') return;
+
+    const participants = this.rows();
+    if (row.type === 'participant.removed') {
+      this.rows.set(participants.filter(isNotParticipant.bind(null, participantId)));
+      return;
+    }
+    if (participants.some(isColleague.bind(null, participantId))) return;
+    const colleague = this.colleagues().find(isColleague.bind(null, participantId));
+    this.rows.set([...participants, {
+      memberId: participantId,
+      displayName: colleague?.displayName ?? null,
+    }]);
   }
 
   async checkStatus(): Promise<void> {
@@ -165,6 +207,31 @@ export class DirectChatParticipants {
     this.canManage.set(result.value.canManage);
     this.canLeave.set(result.value.canLeave);
     this.state.set('ready');
+  }
+
+  private async searchEligible(after?: string): Promise<void> {
+    const conversationId = this.conversationId();
+    if (!conversationId || !this.readAllowed() || !this.canManage()) return;
+    this.colleagueSearchRequest?.abort();
+    const request = new AbortController();
+    this.colleagueSearchRequest = request;
+    this.colleagueSearchState.set('loading');
+    const result = await searchColleagues(this.query().trim(), request.signal, after);
+    if (request.signal.aborted || conversationId !== this.conversationId()
+      || !this.readAllowed()) return;
+    if (result.kind === 'access_changed') {
+      this.accessChanged();
+      return;
+    }
+    if (result.kind !== 'ok') {
+      this.colleagueSearchState.set('failed');
+      return;
+    }
+    let colleagues = result.value.rows;
+    if (after) colleagues = [...this.eligibleColleagues(), ...result.value.rows];
+    this.eligibleColleagues.set(colleagues);
+    this.nextColleagueCursor.set(result.value.next);
+    this.colleagueSearchState.set('ready');
   }
 
   private async send(change: Change): Promise<void> {

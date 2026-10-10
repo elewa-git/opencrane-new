@@ -1104,6 +1104,7 @@ async function purgesSocketHistoryAndIgnoresLatePrivateEvents(): Promise<void> {
   await settle(fixture);
   const socketService = fixture.debugElement.injector.get(WebSocketService);
   expect(root(fixture).textContent).toContain('You no longer have access');
+  expect(root(fixture).textContent).not.toContain('Private socket text');
   expect(socketService.messages()).toEqual([]);
   expect(socketService.lastMessage()).toBeUndefined();
 
@@ -1378,6 +1379,105 @@ async function checksLostParticipantReplyWithoutResending(): Promise<void> {
 it('checks a lost participant reply by its original command id without resending',
   checksLostParticipantReplyWithoutResending);
 
+async function keepsAnUnknownParticipantCommandWithItsConversation(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  function loseParticipantReply(request: RequestRecord): Response | undefined {
+    if (request.url.endsWith('/participants') && request.method === 'POST') {
+      throw new TypeError('Reply lost after append');
+    }
+    if (request.url.includes('/changes/')) return reply({ status: 'not_found' }, 404);
+    return undefined;
+  }
+  api.override(loseParticipantReply);
+  const grace = Array.from(root(fixture).querySelectorAll('.participant-list li'))
+    .find((row) => row.textContent?.includes('Grace Achieng'));
+  grace?.querySelector<HTMLButtonElement>('button')?.click();
+  await settle(fixture);
+  const commandId = String(api.requests.find((request) =>
+    request.url.endsWith('/participants') && request.method === 'POST')?.body?.['id']);
+  buttonNamed(fixture, '‹ Back to conversation').click();
+  await settle(fixture);
+  const otherConversation = Array.from(root(fixture).querySelectorAll('.conversation-row'))
+    .find((row) => row.textContent?.includes('Grace Achieng'));
+  otherConversation?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('Hello everyone');
+  buttonNamed(fixture, 'Participants').click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('Check the original change status');
+  buttonNamed(fixture, 'Check status').click();
+  await settle(fixture);
+  expect(api.requests.filter((request) => request.url.endsWith('/participants')
+    && request.method === 'POST')).toHaveLength(1);
+  expect(api.requests.some((request) => request.url.endsWith(`/changes/${commandId}`))).toBe(true);
+  fixture.destroy();
+}
+
+it('keeps an unknown participant command with its conversation',
+  keepsAnUnknownParticipantCommandWithItsConversation);
+
+async function searchesAndPagesParticipantChoicesOnTheServer(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  function participantSearch(request: RequestRecord): Response | undefined {
+    const url = new URL(request.url, location.origin);
+    if (!url.pathname.endsWith('/api/chat/colleagues')) return undefined;
+    if (url.searchParams.get('q') !== 'Zara') return undefined;
+    if (!url.searchParams.has('after')) {
+      return reply({ rows: [{ memberId: 'zara', displayName: 'Zara Njeri' }], next: 'zara' });
+    }
+    return reply({ rows: [{ memberId: 'zulu', displayName: 'Zulfiqar Ali' }], next: null });
+  }
+  api.override(participantSearch);
+  const search = root(fixture).querySelector<HTMLInputElement>('.participant-search input');
+  if (!search) throw new Error('Expected the participant search field');
+  search.value = 'Zara';
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('Zara Njeri');
+  buttonNamed(fixture, 'Load more colleagues').click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('Zulfiqar Ali');
+  const searches = api.requests.filter((request) =>
+    new URL(request.url, location.origin).pathname === '/api/chat/colleagues');
+  const lastSearchUrl = new URL(searches.at(-1)?.url ?? '/api/chat/colleagues', location.origin);
+  expect(lastSearchUrl.searchParams.get('after')).toBe('zara');
+  fixture.destroy();
+}
+
+it('searches and pages eligible participants on the server',
+  searchesAndPagesParticipantChoicesOnTheServer);
+
+async function trapsPhoneParticipantPickerFocus(): Promise<void> {
+  vi.stubGlobal('innerWidth', 390);
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  const panel = root(fixture).querySelector<HTMLElement>('.participant-panel');
+  expect(panel?.getAttribute('aria-modal')).toBe('true');
+  const controls = Array.from(panel?.querySelectorAll<HTMLElement>(
+    'button:not([disabled]), input:not([disabled])') ?? []);
+  const first = controls[0];
+  const last = controls.at(-1);
+  if (!first || !last) throw new Error('Expected participant picker controls');
+  last.focus();
+  last.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  expect(document.activeElement).toBe(first);
+  first.dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'Tab', shiftKey: true, bubbles: true, cancelable: true,
+  }));
+  expect(document.activeElement).toBe(last);
+  fixture.destroy();
+}
+
+it('traps focus inside the phone participant picker', trapsPhoneParticipantPickerFocus);
+
 async function updatesParticipantRowsFromLiveRemoval(): Promise<void> {
   const api = createFetchFixture();
   api.addGroupConversation();
@@ -1388,18 +1488,19 @@ async function updatesParticipantRowsFromLiveRemoval(): Promise<void> {
   const participantReadsBefore = api.requests.filter((request) =>
     request.url.endsWith('/participants') && request.method === 'GET').length;
   const removedRow = {
-    id: 'participant-removed-5', position: 2, type: 'participant.removed',
+    id: 'participant-removed-5', position: 3, type: 'participant.removed',
     time: '2026-10-06T09:01:00Z',
     data: { conversationId: 'group-chat', participantId: 'bob', removedBy: 'alice' },
   };
   const removal = {
     version: 1, topic: 'conversation', type: 'event', conversationId: 'group-chat',
-    position: 2, generation: 1, row: removedRow,
+    position: 3, generation: 1, row: removedRow,
   };
   socket.onmessage(new MessageEvent('message', { data: JSON.stringify(removal) }));
   await settle(fixture);
 
-  const participantRows = Array.from(root(fixture).querySelectorAll('.participant-list li'));
+  const participantRows = Array.from(root(fixture).querySelectorAll(
+    '.participant-list:first-of-type li'));
   expect(participantRows.some((row) => row.textContent?.includes('Grace Achieng'))).toBe(false);
   const participantReadsAfter = api.requests.filter((request) =>
     request.url.endsWith('/participants') && request.method === 'GET').length;

@@ -48,6 +48,7 @@
     "visual:p3-18-screens": "npm run build -w apps/web && node scripts/check-p3-18-screens.mjs",
     "visual:p4-14-chat": "npm run build -w apps/web && node scripts/check-p4-14-chat.mjs",
     "visual:p4-4-screens": "npm run build -w apps/web && node scripts/check-p4-4-screens.mjs",
+    "visual:p4-5-pr7": "npm run build -w apps/web && node scripts/capture-p4-5-pr7.mjs",
     "visual:p4-21-screens": "npm run build -w apps/web && node scripts/check-p4-21-screens.mjs"
   },
   "devDependencies": {
