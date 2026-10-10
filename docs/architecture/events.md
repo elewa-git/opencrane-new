@@ -65,6 +65,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `toolset-<profile>` | computer profile (an image plus Codex built-in tool settings) | changed |
 | `conversation-<id>` | conversation | creation, messages, agent activity, close |
 | `participation-<id>` | participation | participant additions and removals |
+| `chat-state-<memberId>` | chat-state | one person's archive and read choices, tied to a join |
 | `approval-<id>` | approval request | requested, decided, used, expired, cancelled |
 | `decision-<request>` | gateway admission attempt | allow, ask or deny before dispatch |
 | `effect-<permit>` | gateway-observed external call | observed, uncertain, resolved |
@@ -269,6 +270,8 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `file.rejected` | upload or screenshot command after an infected verdict | conversations | refuse the upload clearly; no bytes stored |
 | `file.delivered` | command after the computer acknowledges verified bytes | conversation files, conversations | browser may show the workspace path and delivery outcome (`saved` or `kept_existing`); reconnects skip acknowledged files |
 | `conversation.closed` | command | conversations | tell the computer to stop work for it |
+| `conversation.archive_set` | preference command (not exposed yet): conversationId, memberId, joinEventId, archived; exact human principal and member subject | conversation_list_state in the conversations projection; set this join's archive choice | none; excludes shared feeds and OpenFGA |
+| `conversation.read_advanced` | preference command (not exposed yet): conversationId, memberId, joinEventId, throughPosition, throughEventId; exact human principal and member subject | conversation_list_state; verify the visible row's identity and keep the furthest read position within this join | none; excludes shared feeds and OpenFGA |
 
 Screenshot files use the same `file.uploaded` / `file.rejected` contract. Their
 optional `screenshot` metadata records `computerId`, positive `generation`, UTC

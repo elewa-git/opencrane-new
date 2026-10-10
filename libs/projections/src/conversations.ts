@@ -4,6 +4,8 @@ import { conversationCreatedDataSchema, conversationEventId, decisionRecordedDat
 import { ProjectionRunner, type EventSource, type Projection } from './runner.ts';
 import type { Logger } from '@opencrane/observability';
 import type { Db, Query } from './db.ts';
+import { createConversationListState, applyConversationPreference }
+  from './conversation-list-state.ts';
 
 export const conversations: Projection = {
   name: 'conversations',
@@ -14,10 +16,11 @@ export const conversations: Projection = {
   },
   async drop(db) {
     const tables = 'conversation_participants, conversations, conversation_feed, ' +
-      'conversation_legacy_participation';
+      'conversation_legacy_participation, conversation_list_state';
     await db.query(`DROP TABLE IF EXISTS ${tables}`);
   },
   async apply(db, event, position) {
+    if (await applyConversationPreference(db, event, position)) return;
     const entry = conversationFeedEntry(event);
     if (!entry) return;
     const { conversationId, data } = entry;
@@ -55,6 +58,7 @@ async function createConversationTables(db: Query): Promise<void> {
     event_id TEXT NOT NULL, type TEXT NOT NULL, data JSONB NOT NULL, time TEXT NOT NULL,
     PRIMARY KEY (silo, conversation_id, position))`);
   await createParticipationTables(db);
+  await createConversationListState(db);
   await db.query(`CREATE TABLE IF NOT EXISTS conversation_legacy_participation (
     silo TEXT NOT NULL, conversation_id TEXT NOT NULL, position BIGINT NOT NULL,
     event_id TEXT NOT NULL, PRIMARY KEY (silo, conversation_id, position))`);

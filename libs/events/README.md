@@ -22,8 +22,8 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals and participant facts| events["libs/events<br/>event and memory text checks"]
-  store["libs/event-store<br/>saved event log"] -.-> events
+  server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals, participants and chat choices| events["libs/events<br/>event and memory checks"]
+  store["libs/event-store<br/>saved event log"] -.->|checks private chat choices| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turn and spending data| events
@@ -63,6 +63,8 @@ separate event stream so ordinary messages do not change access.
 
 New group chats record at most 97 people, including their creator. Older saved
 events keep their original reading rules.
+
+Archive and read choices name one person and their join. They contain no chat text.
 
 ## Processes it handles
 

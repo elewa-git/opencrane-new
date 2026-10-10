@@ -65,3 +65,5 @@ export { providerTurnBindingSchema, optionalProviderTurnBindingSchema } from './
 
 export { toolDispatchRecordedDataSchema, agentNativeConsentRefusedDataSchema } from './data.ts';
 export { grantGivenDataSchema, teamCreatedDataSchema } from './data.ts';
+export { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
+  from './conversation.ts';

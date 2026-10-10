@@ -30,7 +30,7 @@ import {
 } from "./contract.ts";
 
 function readSubject(subject: string): string {
-  const category = /^([a-z]+)-\*$/u.exec(subject);
+  const category = /^(chat-state|[a-z]+)-\*$/u.exec(subject);
   return category ? `ev.${category[1]}.*` : wireSubject(subject);
 }
 

@@ -1,3 +1,5 @@
+import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
+  from './conversation.ts';
 import { memoryWrittenExample } from './memory.ts';
 import { ownershipEvents } from './ownership-events.ts';
 import { providerEvents } from './provider-events.ts';
@@ -131,6 +133,12 @@ export const eventRegistry: readonly EventDefinition[] = [
   ),
 
   // Conversations and agent activity
+  event('conversation.archive_set', 'chat-state', 'A person set their archive choice.',
+    conversationArchiveSetDataSchema,
+    { conversationId: 'conv_1', memberId: 'mem_1', joinEventId: 'join_1', archived: true }),
+  event('conversation.read_advanced', 'chat-state', 'A person advanced their read position.',
+    conversationReadAdvancedDataSchema, { conversationId: 'conv_1', memberId: 'mem_1',
+      joinEventId: 'join_1', throughPosition: 1, throughEventId: 'event_1' }),
   event(
     'conversation.created',
     'conversation',

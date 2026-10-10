@@ -52,3 +52,20 @@ export function conversationEventId(event: EventEnvelope): string {
   }
   return id;
 }
+
+const preferenceFields = { conversationId, memberId: chatIdSchema,
+  joinEventId: z.string().min(1) };
+export const conversationArchiveSetDataSchema = z.strictObject({
+  ...preferenceFields, archived: z.boolean(),
+});
+export const conversationReadAdvancedDataSchema = z.strictObject({
+  ...preferenceFields, throughPosition: z.int().positive(), throughEventId: z.string().min(1),
+});
+
+export function validPreferenceIdentity(event: EventEnvelope): boolean {
+  if (typeof event.data !== 'object' || event.data === null) return false;
+  const memberId: unknown = Reflect.get(event.data, 'memberId');
+  return typeof memberId === 'string' && event.subject === `chat-state-${memberId}` &&
+    event.principal?.kind === 'human' && event.principal.id === memberId &&
+    event.commandId !== undefined;
+}
