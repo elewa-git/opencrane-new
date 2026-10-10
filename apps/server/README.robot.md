@@ -1914,3 +1914,9 @@ Logs are in `/tmp/pr335-computer-cache/`: `before-7d4f0092.log`,
 Tests use disposable NATS and OpenFGA, local PostgreSQL and real bridge sockets.
 NOT RUN: optional browser test, full root suite and fresh-install control journey.
 The PR comment records hosted CI on the pushed head. The merge train owns landing.
+## Memory input rebase checks
+
+The [rebase receipt](../../docs/process/p4-13-pr1-rebase-repair.md) records the
+branch repair, focused fairness comparisons, failed checks and subsequent runs.
+It records the same fairness failure on main and the slow history reads under load.
+It makes no live qualification claim.
