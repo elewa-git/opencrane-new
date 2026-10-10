@@ -87,3 +87,14 @@ function failedEvidence() {
   expect(isToolPolicyAvailable(failed, Date.parse(checkedAt))).toBe(false);
 }
 it('refuses expired evidence and failed checks without a timer', failedEvidence);
+
+function discoveryCannotReview() {
+  const capture = record('mcp.server_discovered', discovery);
+  const mode = record('mcp.tool_mode_set', { serverId: 'fixture', toolName: 'read',
+    connectionId: 'installed', toolRevision: revision, mode: 'allow', setBy: 'admin' });
+  const captured = applyToolPolicy(emptyToolPolicy(), capture, 1);
+  const changed = applyToolPolicy(captured, mode, 2);
+  expect(changed.tools).toMatchObject([{ reviewed: false, mode: 'block' }]);
+  expect(applyToolPolicy(emptyToolPolicy(), capture, 1).tools).toEqual(changed.tools);
+}
+it('keeps discovery claims and legacy mode choices blocked during replay', discoveryCannotReview);
