@@ -1569,7 +1569,7 @@ async function participantPosition(context: Fixture) {
   return people.accessPosition;
 }
 
-async function managesGroupParticipants() {
+async function managesGroupParticipants(legacyClose: boolean) {
   const context = await fixture();
   try {
     await createParticipantGroup(context);
@@ -1618,9 +1618,17 @@ async function managesGroupParticipants() {
     expect(await context.nats.store.head('participation-participants')).toBe(before);
     const changed = { ...add, participantId: 'bob' };
     expect((await participantRequest(context, changed)).statusCode).toBe(409);
-    await context.append('conversation-participants', 'conversation.closed', {
+    let closeSubject = 'participation-participants';
+    if (legacyClose) closeSubject = 'conversation-participants';
+    await context.append(closeSubject, 'conversation.closed', {
       conversationId: 'participants', closedBy: 'alice',
     }, false);
+    if (legacyClose) {
+      // Project older closes before starting new writers, as an upgrade requires.
+      await context.runner.run(conversations);
+      await expect(requireLegacyClosesProjected(context.nats.store, context.db))
+        .resolves.toBeUndefined();
+    }
     expect((await participantRequest(context, add)).statusCode).toBe(200);
     const newEdit = { id: 'closed-edit', action: 'remove', participantId: 'bob',
       expectedAccessPosition: before };
@@ -1630,7 +1638,8 @@ async function managesGroupParticipants() {
     await context.close();
   }
 }
-it('checks creator rights, saved retries, departed targets, closure and IAM receipts',
+it.each([false, true])(
+  'checks creator rights, saved retries, departed targets, closure and IAM receipts (legacy: %s)',
   managesGroupParticipants, 120_000);
 
 function pauseParticipantAppends(context: Fixture) {
@@ -1807,17 +1816,19 @@ it.each([false, true])('revokes every read path after self-leave (blocked socket
 
 async function checksParticipantAdmissionAfterColdHistory() {
   const context = await fixture();
-  const read = context.nats.store.readStream.bind(context.nats.store);
+  const query = context.db.query.bind(context.db);
   const head = context.nats.store.head.bind(context.nats.store);
   let delayed = false;
   let revokeTarget = false;
   let targetChecks = 0;
-  async function* slowColdHistory(subject: string, from = 1, deadline = Infinity) {
-    if (subject === 'conversation-participants' && from > 1 && !delayed) {
+  async function slowColdCloseLookup<Row extends Record<string, unknown>>(
+    sql: string, parameters?: unknown[],
+  ) {
+    if (sql.includes("type = 'conversation.closed'") && !delayed) {
       delayed = true;
       await delay(2200);
     }
-    yield* read(subject, from, deadline);
+    return query<Row>(sql, parameters);
   }
   async function removeTargetDuringAdmission(subject?: string, deadline?: number) {
     if (revokeTarget && subject === 'member-bob') {
@@ -1838,7 +1849,7 @@ async function checksParticipantAdmissionAfterColdHistory() {
       conversationId: 'participants', authorId: 'alice', authorKind: 'human',
       contentType: 'text', ...encrypted,
     }, false);
-    context.nats.store.readStream = slowColdHistory;
+    context.db.query = slowColdCloseLookup;
     const remove = { id: 'cold-remove', action: 'remove', participantId: 'bob',
       expectedAccessPosition };
     const removed = await participantRequest(context, remove);
@@ -1854,7 +1865,7 @@ async function checksParticipantAdmissionAfterColdHistory() {
     expect(targetChecks).toBe(1);
     expect(await head('participation-participants')).toBe(before);
   } finally {
-    context.nats.store.readStream = read;
+    context.db.query = query;
     context.nats.store.head = head;
     await context.close();
   }
