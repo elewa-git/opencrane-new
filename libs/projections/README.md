@@ -43,8 +43,6 @@ calculated from the definitions. Checks renew only the same server in the same s
 A fresh catalogue check does not approve startup credentials. Required startup review
 keeps calls blocked.
 
-
-
 - Keep dated tool snapshots and the earlier list after a change.
 
 The members worker keeps an index of the saved streams used in access and departure
