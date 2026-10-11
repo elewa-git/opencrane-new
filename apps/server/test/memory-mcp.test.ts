@@ -10,7 +10,8 @@ import type { MemoryIdentity } from '@opencrane/events';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
-import { catalogueEvidence, fixture, toolEvidence } from '@opencrane/models/testing';
+import { catalogueEvidence, fixture, reviewCatalogue,
+  toolEvidence } from '@opencrane/models/testing';
 import { envelope, memoryRights, parseMemoryRequest, readToolPolicy, startDecision,
   verifyMemoryContext } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
@@ -31,8 +32,16 @@ let isolateRecoveryServices = false;
 let keys: ReturnType<typeof memoryKeys>;
 const scopeId = memoryScopeId('test', 'person', 'alice');
 const route = '/mcp/memory/server';
-const recallTool = toolEvidence({ name: 'recall', reviewed: true, costCents: 0 });
-const rememberTool = toolEvidence({ name: 'remember', reviewed: true, costCents: 0 });
+const recallReview = { action: 'Read saved memory', consequence: 'Saved facts are returned.',
+  targetArgument: 'scopeId', fields: ['scopeId', 'query'], stepUp: false };
+const rememberReview = { action: 'Save memory', consequence: 'A new personal fact is saved.',
+  targetArgument: 'scopeId', fields: ['scopeId', 'text', 'dependsOn'], stepUp: false };
+const recallDeclaration = { name: 'recall', reviewed: true, costCents: 0,
+  review: recallReview };
+const rememberDeclaration = { name: 'remember', reviewed: true, costCents: 0,
+  review: rememberReview };
+const recallTool = toolEvidence(recallDeclaration);
+const rememberTool = toolEvidence(rememberDeclaration);
 const memoryCatalogue = catalogueEvidence([recallTool, rememberTool]);
 const metadata = { threadId: 'thread', callId: 'memory-call',
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
@@ -59,12 +68,12 @@ async function govern(target: Awaited<ReturnType<typeof fixture>>, recordedGrant
     registeredBy: 'alice' });
   await target.append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
     connectionId: 'server', accountMode: 'none', ...memoryCatalogue });
-  await target.append('mcp-memory', 'mcp.server_published',
-    { serverId: 'memory', publishedBy: 'alice' });
+  await reviewCatalogue(target, 'memory');
   await mode(target, 'allow');
   const rememberPolicy = { serverId: 'memory', connectionId: 'server', toolName: 'remember',
     toolRevision: rememberTool.revision, mode: 'allow', setBy: 'alice' };
   await target.append('mcp-memory', 'mcp.tool_mode_set', rememberPolicy);
+  await publishMemory(target);
   for (const granteeKind of ['member', 'assistant']) {
     const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
     const subject = grantStream('mcp_server', 'memory');
@@ -74,6 +83,11 @@ async function govern(target: Awaited<ReturnType<typeof fixture>>, recordedGrant
     if (recordedGrants) grant = await target.append(subject, 'grant.given', fields);
     await target.auth.handler.handle(grant, target.db);
   }
+}
+function publishMemory(target: Awaited<ReturnType<typeof fixture>>) {
+  // Publish after widening a mode because a wider choice clears publication.
+  return target.append('mcp-memory', 'mcp.server_published',
+    { serverId: 'memory', publishedBy: 'alice' });
 }
 function mode(target: Awaited<ReturnType<typeof fixture>>, value: 'allow' | 'ask' | 'block') {
   return target.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
@@ -634,6 +648,7 @@ it('refuses changed MCP policy at both the gateway and backend', async function 
     expect(capability).toBe('');
   }
   await mode(setup, 'allow');
+  await publishMemory(setup);
 });
 
 async function refusesMissingPermission(granteeKind: string) {
@@ -1224,6 +1239,7 @@ async function refusesRememberPolicy(policy: 'ask' | 'block') {
     append.mockRestore();
     const allowed = { ...fields, mode: 'allow' };
     await setup.append('mcp-memory', 'mcp.tool_mode_set', allowed);
+    await publishMemory(setup);
   }
 }
 it.each(['ask', 'block'] as const)('refuses remember policy %s without an approval',
@@ -1255,6 +1271,7 @@ async function listsRecallWithSlowCatalogueReads() {
     reads.mockRestore();
     const allowed = { ...fields, mode: 'allow' };
     await setup.append('mcp-memory', 'mcp.tool_mode_set', allowed);
+    await publishMemory(setup);
   }
 }
 it('lists recall with blocked remember and slow catalogue reads', listsRecallWithSlowCatalogueReads);

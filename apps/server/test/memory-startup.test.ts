@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
 import { dirname } from 'node:path';
 import { grantStream } from '@opencrane/authz';
-import { catalogueEvidence, fixture, toolEvidence } from '@opencrane/models/testing';
+import { catalogueEvidence, fixture, reviewCatalogue,
+  toolEvidence } from '@opencrane/models/testing';
 import { readToolPolicy } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
@@ -28,11 +29,12 @@ async function reviewMemory(setup: Awaited<ReturnType<typeof fixture>>,
   const discovery = { serverId: 'memory', connectionId: 'server', accountMode: 'none',
     ...memoryCatalogue };
   await setup.append('mcp-memory', 'mcp.server_discovered', discovery);
-  const publication = { serverId: 'memory', publishedBy: 'alice' };
-  await setup.append('mcp-memory', 'mcp.server_published', publication);
+  await reviewCatalogue(setup, 'memory');
   const mode = { serverId: 'memory', connectionId: 'server', toolName: 'recall',
     toolRevision: recallTool.revision, mode: 'allow', setBy: 'alice' };
   await setup.append('mcp-memory', 'mcp.tool_mode_set', mode);
+  const publication = { serverId: 'memory', publishedBy: 'alice' };
+  await setup.append('mcp-memory', 'mcp.server_published', publication);
   const resources = [['mcp_server', 'memory'], ['memory_read', scopeId]] as const;
   const grantees = [['member', 'alice'], ['assistant', 'assistant']] as const;
   for (const [resourceType, resourceId] of resources) {

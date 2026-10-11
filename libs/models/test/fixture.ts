@@ -326,18 +326,20 @@ export function catalogueEvidence(tools: CatalogueTool[]) {
   return { tools, toolCount: tools.length, schemaDigest: catalogueDigest(tools) };
 }
 
-export async function reviewCatalogue(setup: Awaited<ReturnType<typeof fixture>>) {
-  const state = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+export async function reviewCatalogue(setup: Awaited<ReturnType<typeof fixture>>,
+  serverId = 'fixture') {
+  const state = await readToolPolicy(setup.nats.store, 'test', serverId);
   const catalogue = state.catalogue!;
   function choice(tool: NonNullable<typeof catalogue.tools>[number]) {
     return { name: tool.name, revision: tool.revision,
       reviewDigest: toolReviewDigest(tool), mode: 'block' };
   }
-  const command = { commandId: 'review-fixture', expectedSequence: state.sequence,
+  const command = { commandId: `review-${serverId}-${state.sequence}`,
+    expectedSequence: state.sequence,
     policyRevision: state.policyRevision, catalogueDigest: catalogue.schemaDigest,
     connectionId: state.connectionId, accountMode: state.accountMode,
     tools: catalogue.tools!.map(choice) };
   const result = await reviewToolPolicy(setup.nats.store, setup.auth.binding, 'alice',
-    'fixture', command);
+    serverId, command);
   expect(result.status).toBe('appended');
 }
