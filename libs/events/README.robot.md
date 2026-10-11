@@ -222,7 +222,6 @@ position and the previous drain position with the provider's current revision.
 Starting and cancelling both use this event. It grants no access, changes no key
 or model choice and reserves no money. A drain command cannot reverse switch-on.
 
-
 ## Destination rule records
 
 `egress.destination_allowed` and `egress.destination_revoked` save one subject's exact
