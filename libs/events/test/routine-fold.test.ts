@@ -26,7 +26,8 @@ function example(type: string): Record<string, unknown> {
 }
 function saved(type: string): EventEnvelope {
   const event = record(type, example(type));
-  if (type === 'routine.created' || type === 'routine.resumed' || type === 'routine.updated') {
+  if (type === 'routine.created' || type === 'routine.resumed' || type === 'routine.updated' ||
+      type === 'routine.paused' || type === 'routine.retired') {
     event.principal = { kind: 'human', id: 'alice' };
   }
   return event;
@@ -90,3 +91,60 @@ function refusesForgedRunAndActiveMigration() {
 }
 it('refuses foreign frozen definitions and requires paused legacy modernisation',
   refusesForgedRunAndActiveMigration);
+
+function duplicateCreateKeepsResumedState() {
+  const created = saved('routine.created');
+  const resumed = saved('routine.resumed');
+  const initial = foldRoutine(undefined, created);
+  const active = foldRoutine(initial, resumed);
+  const before = structuredClone(active);
+  const originalCreate = structuredClone(created);
+
+  expect(active.status).toBe('active');
+  expect(foldRoutine(active, created)).toEqual(active);
+  expect(active).toEqual(before);
+  expect(created).toEqual(originalCreate);
+}
+it('ignores a duplicate create delivered after resume', duplicateCreateKeepsResumedState);
+
+function duplicateResumeKeepsPausedState() {
+  const created = saved('routine.created');
+  const resumed = saved('routine.resumed');
+  const paused = saved('routine.paused');
+  paused.data = { ...example('routine.paused'), controlRevision: 2, next: null };
+  const initial = foldRoutine(undefined, created);
+  const active = foldRoutine(initial, resumed);
+  const stopped = foldRoutine(active, paused);
+  const before = structuredClone(stopped);
+
+  expect(stopped.status).toBe('paused');
+  expect(foldRoutine(stopped, resumed)).toEqual(stopped);
+  expect(stopped).toEqual(before);
+
+  const laterResume = saved('routine.resumed');
+  laterResume.id = 'later-resume';
+  laterResume.commandId = 'later-resume';
+  laterResume.data = { ...example('routine.resumed'), controlRevision: 3 };
+  const reactivated = foldRoutine(stopped, laterResume);
+  expect(reactivated).toMatchObject({ status: 'active',
+    definition: { controlRevision: 3 }, executionAvailable: false });
+}
+it('ignores an earlier duplicate resume delivered after pause', duplicateResumeKeepsPausedState);
+
+function duplicateHistoryKeepsRetiredState() {
+  const history = [saved('routine.created'), saved('routine.resumed'), saved('routine.due'),
+    saved('routine.run_finished'), saved('routine.paused'), saved('routine.retired')];
+  let state;
+  for (const event of history) {
+    state = foldRoutine(state, event);
+  }
+  const retired = structuredClone(state);
+
+  expect(state).toMatchObject({ status: 'retired', activeRun: null,
+    lastRun: { outcome: 'cancelled' }, executionAvailable: false });
+  for (const event of history) {
+    state = foldRoutine(state, event);
+    expect(state).toEqual(retired);
+  }
+}
+it('ignores duplicate history delivered after retirement', duplicateHistoryKeepsRetiredState);
