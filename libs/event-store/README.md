@@ -25,7 +25,7 @@ flowchart LR
   models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes and migration positions| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams and finds numbered events| nats["NATS JetStream<br/>event service"]
-  store -.->|checks chat choices and tool hashes| events["libs/events<br/>event definitions"]
+  store -.->|checks private chat choices| events["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for

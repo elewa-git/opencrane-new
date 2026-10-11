@@ -2,6 +2,30 @@
 
 For people, read [README.md](README.md) first.
 
+## Dated MCP catalogue evidence
+
+Tool lists carry check and expiry dates; undated lists cannot authorise calls.
+`tool.approval_requested.policySequence` stores the stable `policyRevision`,
+not the latest MCP stream position. Unchanged checks keep waiting approvals valid.
+The [projection contract](../../libs/projections/README.robot.md#dated-mcp-catalogue-evidence)
+records snapshot and expiry rules for #48 PR 1.
+
+The shared policy reader checks complete saved definitions and hashes before keeping
+review choices or renewing catalogue evidence. It binds every event to its exact MCP
+server and silo. `test/codex-mcp.test.ts` seeds bad saved records to check gateway refusal
+and unused waiting approvals. Model test fixtures now use complete checked definitions;
+access deadlines, volume limits and gateway assertions remain unchanged.
+
+MCP decisions use one saved history for both tool rules and review details. They do not
+read the same history again for review text. Memory discovery keeps recall available
+when remember is blocked, including with slow catalogue reads. The two-second deadline,
+current grants and permissions, catalogue hashes and expiry checks still apply.
+
+Memory discovery checks recall once and uses the same checked catalogue to decide
+whether to list remember. `toolDecision` supplies the existing review, mode and zero-cost
+rules for both. The backend repeats its own access check; write confirmations still
+read current policy. The slow-read regression keeps the original two-second lifetime.
+
 ## Budget writes
 
 Native descendant model admission is explicitly disabled in `requireTurnDelegation`.
@@ -390,7 +414,7 @@ the model nor browser supplies approval authority or replacement review text.
 `approvalCards`, `readApproval` and `decideApproval` replay approval streams; reads
 record expiry/cancellation through conditional appends. A request is bound to silo,
 requester, conversation, logical turn, assistant, server, tool/schema revision,
-policy sequence, connection/profile and argument/review digests. Only the original
+stable tool rule revision, connection/profile and argument/review digests. Only the original
 requester can decide. A current authority fence precedes consumption; audit and a
 final fence precede forwarding. A lost acknowledgement burns authority. Consumption
 means outcome unknown until a later feature supplies trusted effect evidence.

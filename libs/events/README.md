@@ -31,6 +31,10 @@ flowchart LR
   events -.-> zod["Zod<br/>data checks"]
 ```
 
+Tool catalogue records keep exact definitions and the dates of successful or failed checks.
+The back end checks tool hashes against their saved definitions. A hash is a fixed-length
+value calculated from those definitions. Older records remain readable for replay.
+
 ## What it is responsible for
 
 - Define exact HTTPS destination rules for the silo, a person or an assistant.

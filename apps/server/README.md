@@ -20,6 +20,9 @@ flowchart LR
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
+Tool discovery records the exact definitions and how long the check remains valid.
+Descriptions are untrusted text. They never become instructions for the server.
+
 ## What it is responsible for
 
 - Let owners and admins save one destination rule and read its original receipt.
@@ -94,7 +97,7 @@ flowchart LR
   Checks closing events even while read tables are catching up. Keeps the last
   checked position, so later checks read only new events.
   Gives late participants only files and screenshots saved since their latest join.
-- Offers a personal assistant only reviewed, free tools with checked saved definitions that both the person and assistant can use.
+- Offers a personal assistant only reviewed, free tools that both the person and assistant can use.
 - Returns spending records to current owners and admins. It reads the records first,
   then checks access, so a longer read does not use up the write access time limit.
   Resolving a hold also reads its history first and rechecks access before saving.
