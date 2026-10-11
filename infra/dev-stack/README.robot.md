@@ -339,14 +339,23 @@ The owner's own browser sign-in remains a manual check and is **NOT RUN** by the
 
 ### Organisation browser checks
 
-`journey.ts` calls `browser-phase4.ts` after the existing browser checks. It reuses
-the signed-in owner and member pages. Group create and removal go through the live
-screen; adding the seeded member uses the same authenticated group command because
-the member picker is not built. A model grant is added to the disposable event store
-so the group can create a shared assistant. The member starts a private session with
-that assistant. The direct chat sends one message each way and reads the conversation
-stream to check message order. The model stub exposes `/journey-counts`; the journey
-compares its model request count before and after the direct exchange.
+`journey.ts` calls `browser-phase4.ts` and `browser-group-chat.ts` after the existing
+browser checks. Both modules reuse the signed-in owner and member pages. The group
+chat check creates a conversation from the To line with two colleagues, checks the
+mode before the first message, and sends ordinary messages to each member. It waits
+for earlier computer starts to finish, then counts AI, computer and budget events
+around those sends. It adds a third seeded member and
+checks that earlier messages stay hidden from that member. The check also removes a
+member, asks another member to leave, and records how quickly each screen clears.
+It checks the long-name and no-match picker states, refuses an unauthorised add, and
+refuses a people-and-assistant choice without saving a conversation. It restarts the
+server and checks that replay keeps the group mode and participants.
+
+The shared-assistant check adds a model grant to the disposable event store so the
+group can create an assistant. The member starts a private session with it. The direct
+chat sends one message each way and reads the conversation stream to check message
+order. The model stub exposes `/journey-counts`; the journey compares its model request
+count before and after the direct exchange.
 
 The provider check saves the text `journey-placeholder-not-a-provider-key`. It is a
 fake value, never a provider credential. The check confirms that the input clears and
@@ -356,6 +365,8 @@ outside the event store. Stack cleanup removes that folder. It does not ask the 
 to answer. Each assertion is written to
 `docs/process/p4-journey/run-<attempt>.json`; screenshots sit beside this receipt in
 `run-<attempt>/`. Set `P4_JOURNEY_ATTEMPT` to keep the two fresh run receipts apart.
+The group chat receipt is part of the same JSON file. Its screenshots are saved under
+`run-<attempt>/group-chat/` at 1280px and 390px.
 
 The spare stack allows six computer pods and disks, with up to 3 GiB of memory
 and 6 GiB of disk requests. The sixth place lets a saved-data repeat start a new

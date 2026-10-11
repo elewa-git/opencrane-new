@@ -36,7 +36,8 @@ flowchart LR
 - Run browser checks against real local services. The approval check sends Codex's
   tool request shape. The thread id ties the call to its live chat turn. The call id
   links the tool's attempts and progress reports.
-- Check group management, direct chats, shared assistants and provider key saving in a fresh stack.
+- Check group chats from the To line, participant access, direct chats, shared assistants and
+  provider key saving in a fresh stack.
 - Keep one extra computer place so a saved-data repeat can start a new shared assistant.
 - Measure reply arrival, process memory and open files during live-view checks.
 - Keep up to three separate development stacks on one machine.
@@ -51,8 +52,9 @@ flowchart LR
 2. **A developer checks a change.** A browser signs in, sends a chat message and checks
    that the reply remains after a reload. Other checks cover uploads, approvals, budgets
    and the computer screen. The organisation checks also cover groups, direct chats, shared
-   assistants and saving a provider key. Budget checks restore the test limits even if a
-   browser step fails.
+   assistants and saving a provider key. Group chat checks cover the mode before the first
+   message, who can read each message, quiet ordinary sends, and access clearing after a
+   person leaves. Budget checks restore the test limits even if a browser step fails.
    Failed approval checks save the card's text and a screenshot before closing the test turn.
 3. **A developer runs a separate stack.** `claim.sh` reserves one of two spare test stacks, numbered 1 and 2.
    Its services use separate data and ports, and `down.sh --id` removes that stack and

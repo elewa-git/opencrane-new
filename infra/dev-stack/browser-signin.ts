@@ -87,7 +87,10 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
     step = 'return';
     await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith('/auth/'));
   } catch {
-    if (transport === 'net::ERR_NETWORK_CHANGED' && attempt < 2) {
+    const providerDidNotFinish = step === 'provider input' && transport === '';
+    const navigationWasInterrupted = ['net::ERR_NETWORK_CHANGED', 'net::ERR_ABORTED']
+      .includes(transport);
+    if ((providerDidNotFinish || navigationWasInterrupted) && attempt < 2) {
       console.log('Retry sign-in after browser network change');
       await delay(1000);
       const me = await readAuthenticationState(page, origin);
@@ -165,7 +168,7 @@ export async function browserSessions(config: AuthConfig, origin: string) {
     stage = 'refusal checks';
     await refusalChecks(browser, config, origin, users.member);
     assert(ownerPage);
-    return { sessions, memberPages, ownerPage, close: async () => {
+    return { browser, sessions, memberPages, ownerPage, close: async () => {
       try {
         stage = 'token exposure probes';
         await tokenExposureChecks(browser, config, origin, users.member, (step) => { stage = step; });

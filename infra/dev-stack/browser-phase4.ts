@@ -759,10 +759,28 @@ async function startDirectDraft(page: Page, origin: string): Promise<void> {
 
   const colleagueSearch = page.locator('#colleague-search');
   await colleagueSearch.waitFor();
-  await colleagueSearch.fill(ownerId);
-  const colleagueButton = page.getByRole('button', { name: ownerId, exact: true });
+  const colleaguesResponse = await page.request.get(
+    `${origin}/api/chat/colleagues?limit=50`);
+  assert.equal(colleaguesResponse.status(), 200);
+  const colleagues = await colleaguesResponse.json() as {
+    rows: Array<{ memberId: string; displayName: string | null }>;
+  };
+  const colleague = colleagues.rows.find(matchesColleagueId);
+  assert(colleague, `The direct chat list does not include ${ownerId}`);
+  const displayName = colleague.displayName?.trim() || ownerId;
+  await colleagueSearch.fill(displayName);
+  const colleagueButton = page.locator('.colleague-option')
+    .filter({ hasText: displayName }).first();
   await colleagueButton.waitFor();
   await colleagueButton.click();
+  const finishSelection = page.getByRole('button', { name: 'Use selection', exact: true });
+  await finishSelection.waitFor({ state: 'visible', timeout: 10_000 });
+  await finishSelection.click();
+  await page.locator('#message').waitFor({ state: 'visible', timeout: 10_000 });
+}
+
+function matchesColleagueId(colleague: { memberId: string }): boolean {
+  return colleague.memberId === ownerId;
 }
 
 async function directConversations(page: Page): Promise<DirectConversation[]> {

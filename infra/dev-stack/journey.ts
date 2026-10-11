@@ -1,9 +1,9 @@
 import { uploadJourney } from './upload-journey.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
@@ -21,9 +21,10 @@ import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.t
 import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
 import { browserPhase4, type Phase4Assertion } from './browser-phase4.ts';
+import { browserGroupChat } from './browser-group-chat.ts';
 import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
-import { namespace, secondary } from './identity.ts';
+import { namespace, secondary, stackId } from './identity.ts';
 import { base, directory, readEnv, root, authEnv } from './config.ts';
 import { SandboxClient } from '../../apps/ops/src/kubernetes.ts';
 import { suspendComputer, type ComputerState } from '../../apps/ops/src/lifecycle.ts';
@@ -74,6 +75,12 @@ async function runPhase4Journey() {
       origin, directory, attempt: phase4Attempt, silo, modelStubPort: settings['MODEL_STUB_PORT']!,
       secondaryStack: secondary,
       store: events.store, append, assertions: phase4Assertions });
+    const groupMembers = await groupChatMembers();
+    await browserGroupChat({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
+      otherPage: groupMembers.otherPage, thirdPage: groupMembers.thirdPage,
+      origin, directory, attempt: phase4Attempt,
+      store: events.store, assertions: phase4Assertions,
+      restartConversations: restartServerAndReplay });
   } catch (error) {
     journeyFailure = error;
     phase4Assertions.push({ id: 'journey.execution', status: 'FAIL',
@@ -93,6 +100,133 @@ async function runPhase4Journey() {
   console.log(`PASS Phase 4 browser journey; receipt run-${phase4Attempt}.json`);
 }
 
+async function groupChatMembers() {
+  assert(browser, 'The group chat journey needs signed-in browser sessions');
+  const laterMember = 'p4-5-later-participant';
+  const subject = `dev-${laterMember}`;
+  const now = Math.floor(Date.now() / 1000);
+  const cookieValue = `${config.cookieName}=${encodeSession(config, {
+    sub: subject, orgId: config.expectedOrgId!, roles: [], authTime: now, exp: now + 3600,
+  })}`;
+  identities.set(laterMember, { sub: subject, cookie: cookieValue });
+  await ensureNamedMember(laterMember, 'Maximiliana Alexandra de la Cruz-Wellington');
+  await until(async () => (await authz.check(laterMember, 'member')).allowed,
+    'later group participant OpenFGA');
+
+  const otherMember = 'audit-other-member';
+  const otherSubject = `dev-${otherMember}`;
+  const otherCookie = `${config.cookieName}=${encodeSession(config, {
+    sub: otherSubject, orgId: config.expectedOrgId!, roles: [], authTime: now, exp: now + 3600,
+  })}`;
+  identities.set(otherMember, { sub: otherSubject, cookie: otherCookie });
+  await ensureMember(otherMember, 'member');
+  await until(async () => (await authz.check(otherMember, 'member')).allowed,
+    'second group colleague OpenFGA');
+
+  const otherPage = await openSyntheticGroupPage(otherCookie);
+  const thirdPage = await openSyntheticGroupPage(cookieValue);
+  return { otherPage, thirdPage };
+}
+
+async function openSyntheticGroupPage(cookie: string) {
+  assert(browser);
+  const context = await browser.browser.newContext({ viewport: { width: 390, height: 844 } });
+  const value = cookie.slice(cookie.indexOf('=') + 1);
+  await context.addCookies([{ name: config.cookieName, value, url: origin,
+    httpOnly: true, sameSite: 'Lax' }]);
+  const page = await context.newPage();
+  page.setDefaultTimeout(30_000);
+  await page.goto(`${origin}/workspace/direct`);
+  await page.locator('#colleague-search').waitFor();
+  return page;
+}
+
+async function restartServerAndReplay(): Promise<void> {
+  await restartStackServer();
+  const environment = { ...base, ...await readEnv('projection') };
+  await promisify(execFile)('npm', ['run', 'start', '-w', 'apps/ops', '--', 'conversations',
+    '--confirm-conversations-stopped'], { cwd: root, env: environment, timeout: 120_000 });
+}
+
+async function restartStackServer(): Promise<void> {
+  const pidPath = `${directory}/server.pid`;
+  const processRecord = (await readFile(pidPath, 'utf8')).trim().split(' ');
+  const serverPid = Number(processRecord[0]);
+  assert(Number.isInteger(serverPid) && serverPid > 1, 'The stack server PID is missing');
+  const statBeforeStop = await readFile(`/proc/${serverPid}/stat`, 'utf8');
+  const startToken = statStartToken(statBeforeStop);
+  assert.equal(startToken, processRecord[1], 'The stack server process changed');
+  const commandLine = (await readFile(`/proc/${serverPid}/cmdline`, 'utf8'))
+    .split('\0').filter(Boolean);
+  assert(commandLine.some(isServerEntrypoint), 'The stack server PID is not the server process');
+  const environmentEntries = (await readFile(`/proc/${serverPid}/environ`, 'utf8'))
+    .split('\0').filter(Boolean);
+  const serverEnvironment = Object.fromEntries(environmentEntries.map(splitEnvironmentEntry));
+  const serverWorkingDirectory = await readFile(`/proc/${serverPid}/cwd`, 'utf8').catch(() => root);
+  process.kill(-serverPid, 'SIGTERM');
+  await until(async () => !await processExists(serverPid), 'old stack server stopped');
+  await rm(pidPath, { force: true });
+
+  const log = await open(`${directory}/server.log`, 'a', 0o600);
+  try {
+    const restarted = spawn(commandLine[0]!, commandLine.slice(1), {
+      cwd: serverWorkingDirectory, env: serverEnvironment, detached: true,
+      stdio: ['ignore', log.fd, log.fd],
+    });
+    await once(restarted, 'spawn');
+    const restartedPid = restarted.pid!;
+    const restartedToken = await untilValue(() => processStartToken(restartedPid),
+      'new stack server process started');
+    await writeFile(pidPath, `${restartedPid} ${restartedToken}`, { mode: 0o600 });
+    restarted.unref();
+    await until(async () => (await fetch(`${server}/healthz`).catch(returnUnavailable)).ok,
+      'restarted stack server health');
+  } finally {
+    await log.close();
+  }
+}
+
+function isServerEntrypoint(argument: string): boolean {
+  return argument.endsWith('apps/server/src/main.ts');
+}
+
+function splitEnvironmentEntry(entry: string): [string, string] {
+  const separator = entry.indexOf('=');
+  return [entry.slice(0, separator), entry.slice(separator + 1)];
+}
+
+function statStartToken(stat: string): string | undefined {
+  const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+  if (fields[0] === 'Z') return undefined;
+  return fields[19];
+}
+
+async function processStartToken(pid: number): Promise<string | undefined> {
+  try {
+    return statStartToken(await readFile(`/proc/${pid}/stat`, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+async function processExists(pid: number): Promise<boolean> {
+  return Boolean(await processStartToken(pid));
+}
+
+async function untilValue<T>(read: () => Promise<T | undefined>, label: string): Promise<T> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const value = await read();
+    if (value !== undefined) return value;
+    await delay(50);
+  }
+  throw new Error(`Timed out: ${label}`);
+}
+
+function returnUnavailable(): Response {
+  return new Response(null, { status: 503 });
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return 'The browser journey returned an unknown error.';
@@ -104,12 +238,14 @@ async function until(check: () => Promise<boolean> | boolean, label: string) {
     await delay(50);
   }
 }
-async function append(type: string, subject: string, data: Record<string, unknown>, source = 'dev-stack-journey') {
+async function append(type: string, subject: string, data: Record<string, unknown>,
+  source = 'dev-stack-journey', principalId = 'dev-only-bootstrap') {
   const example = getEventDefinition(type)?.example;
   assert(example && typeof example === 'object');
   const eventId = randomUUID();
   const parsed = parseEventByType({ id: eventId, commandId: eventId, type, subject, silo, source,
-    time: new Date().toISOString(), principal: { kind: 'human', id: 'dev-only-bootstrap' }, data: { ...example, ...data } });
+    time: new Date().toISOString(), principal: { kind: 'human', id: principalId },
+    data: { ...example, ...data } });
   assert(parsed.success);
   let expectedSequence = 0;
   for await (const stored of events.store.readStream(subject)) expectedSequence = stored.sequence;
@@ -126,16 +262,27 @@ function headers(memberId: string) {
   })}` };
 }
 async function invite(memberId: string, role: 'admin' | 'member') {
-  // Dev-only bootstrap: the first-member policy is still separate from identity-provider login.
+  // Use the seeded owner as inviter so OpenFGA can confirm invitation authority.
+  const email = signedInMemberEmail(memberId);
   await append('member.invited', `member-${memberId}`, { memberId, role, invitationId: `invite-${memberId}-${id}`,
-    email: `${memberId}@example.test`, invitedBy: 'dev-only-bootstrap',
+    email, invitedBy: 'jente-rosseel',
     invitedIdentity: { issuer: config.issuerUrl, sub: identities.get(memberId)?.sub ?? `dev-${memberId}` },
-    expiresAt: new Date(Date.now() + 3600_000).toISOString() });
+    expiresAt: new Date(Date.now() + 3600_000).toISOString() }, 'dev-stack-journey',
+  '378127409465593948');
 }
-async function join(memberId: string) {
+function signedInMemberEmail(memberId: string): string {
+  if (memberId === 'zitadel-owner') {
+    return `opencrane2-dev-ci-${stackId}-owner@example.test`;
+  }
+  if (memberId === 'zitadel-member') {
+    return `opencrane2-dev-ci-${stackId}-member@example.test`;
+  }
+  return `${memberId}@example.test`;
+}
+async function join(memberId: string, displayName = memberId) {
   const response = await fetch(`${server}/members/join`, { method: 'POST',
     headers: { ...headers(memberId), 'content-type': 'application/json' },
-    body: JSON.stringify({ memberId, invitationId: `invite-${memberId}-${id}`, commandId: `join-${memberId}-${id}`, displayName: memberId }),
+    body: JSON.stringify({ memberId, invitationId: `invite-${memberId}-${id}`, commandId: `join-${memberId}-${id}`, displayName }),
     signal: AbortSignal.timeout(5000) });
   assert.equal(response.status, 200);
   const body: unknown = await response.json();
@@ -153,6 +300,20 @@ async function ensureMember(memberId: string, role: 'admin' | 'member') {
   }
   await invite(memberId, role);
   await join(memberId);
+}
+async function ensureNamedMember(memberId: string, displayName: string) {
+  if (await activeMember(memberId)) return;
+  const invitationId = `invite-${memberId}-${id}`;
+  const email = `${memberId}@example.test`;
+  await append('member.invited', `member-${memberId}`, { memberId, role: 'member', invitationId,
+    email, invitedBy: 'jente-rosseel',
+    invitedIdentity: { issuer: config.issuerUrl, sub: identities.get(memberId)?.sub ?? `dev-${memberId}` },
+    expiresAt: new Date(Date.now() + 3600_000).toISOString() }, 'dev-stack-journey',
+  '378127409465593948');
+  await append('member.joined', `member-${memberId}`, { memberId, invitationId,
+    displayName, email, role: 'member' }, 'dev-stack-journey',
+  identities.get(memberId)?.sub ?? `dev-${memberId}`);
+  await until(() => activeMember(memberId), `seeded member projection ${memberId}`);
 }
 async function computerEvents(assistantId: string) {
   const result = [];
@@ -378,7 +539,7 @@ try {
     identities.set(other, { sub, cookie: `${config.cookieName}=${encodeSession(config, {
       sub, orgId: config.expectedOrgId!, roles: [], authTime: now, exp: now + 300,
     })}` });
-    await ensureMember(other, 'member');
+    await ensureNamedMember(other, 'Audit colleague');
     await until(async () => (await authz.check(other, 'member')).allowed, 'other audit member OpenFGA');
     await until(async () => (await fetch(`${origin}/api/chat`, { headers: headers(other) })).status === 200,
       'other audit member authenticated live chat access');
