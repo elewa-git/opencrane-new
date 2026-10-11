@@ -1,4 +1,4 @@
-import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -37,15 +37,23 @@ function serverEvents(modeValue: 'allow' | 'ask' = 'allow') {
   });
   const checkedAt = new Date().toISOString();
   const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+  const tool = { name: 'read', revision, reviewed: true, costCents: 0,
+    definition, review: { action: 'PRIVATE_REVIEW_TEXT', consequence: 'Private detail',
+      targetArgument: 'id', fields: ['id'], stepUp: false } };
   const discovery = envelope('test', 'mcp-fixture', 'mcp.server_discovered', {
     checkedAt, expiresAt,
     serverId: 'fixture', connectionId: 'connection', accountMode: 'none',
     schemaDigest, toolCount: 1,
     discoverResult: 'PRIVATE_DISCOVERY_RESULT',
-    tools: [{ name: 'read', revision, reviewed: true, costCents: 0,
-      definition, review: { action: 'PRIVATE_REVIEW_TEXT', consequence: 'Private detail',
-        targetArgument: 'id', fields: ['id'] } }],
+    tools: [tool],
   });
+  const choice = { name: 'read', revision, reviewDigest: toolReviewDigest(tool),
+    mode: 'block' };
+  const review = envelope('test', 'mcp-fixture', 'mcp.server_reviewed', {
+    serverId: 'fixture', catalogueDigest: schemaDigest, policyRevision: 2,
+    connectionId: 'connection', accountMode: 'none', reviewedBy: 'person', tools: [choice],
+  });
+  review.principal = { kind: 'human', id: 'person' };
   const publication = envelope('test', 'mcp-fixture', 'mcp.server_published', {
     serverId: 'fixture', publishedBy: 'person',
   });
@@ -53,8 +61,11 @@ function serverEvents(modeValue: 'allow' | 'ask' = 'allow') {
     serverId: 'fixture', connectionId: 'connection', toolName: 'read',
     toolRevision: revision, mode: modeValue, setBy: 'person',
   });
-  return [registration, discovery, publication, mode].map((event, index) =>
-    storedEvent(index + 1, event));
+  const events = [registration, discovery, review, mode, publication];
+  function withPosition(event: EventEnvelope, index: number) {
+    return storedEvent(index + 1, event);
+  }
+  return events.map(withPosition);
 }
 
 function conversationEvents(memoryFree = false) {

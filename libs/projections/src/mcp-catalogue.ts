@@ -6,8 +6,9 @@ import type { Projection } from './runner.ts';
 
 const eventTypes = new Set<string>([
   'mcp.catalogue_checked', 'mcp.server_registered', 'mcp.server_discovered', 'mcp.server_rejected',
-  'mcp.server_published', 'mcp.server_unpublished', 'mcp.tool_mode_set', 'mcp.tools_changed',
+  'mcp.server_reviewed', 'mcp.server_published', 'mcp.server_unpublished', 'mcp.tool_mode_set', 'mcp.tools_changed',
 ]);
+const policyOnlyEvents = new Set(['mcp.catalogue_checked', 'mcp.server_reviewed']);
 type ToolMode = 'allow' | 'ask' | 'block';
 
 interface McpCatalogueTables {
@@ -92,7 +93,7 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
       const current = savedPolicy ? toolPolicySchema.parse(savedPolicy) : emptyToolPolicy();
       const policy = applyToolPolicy(current, event, position);
       await db.query(`UPDATE ${tables.catalogue} SET policy = $3 WHERE silo = $1 AND server_id = $2`, [event.silo, serverId, JSON.stringify(policy)]);
-      if (event.type === 'mcp.catalogue_checked') return;
+      if (policyOnlyEvents.has(event.type)) return;
       if (event.type === 'mcp.tool_mode_set') {
         await db.query(`INSERT INTO ${tables.toolModes} VALUES ($1, $2, $3, $4)
         ON CONFLICT (silo, server_id, tool_name) DO UPDATE SET mode = $4`,

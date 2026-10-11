@@ -12,7 +12,8 @@ import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memo
 import { memoryWrittenEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
+import { readToolPolicy, reviewToolPolicy } from '@opencrane/models';
 import type { MemoryOptions } from '../src/memory/access.ts';
 import { reconcileCommands } from '../src/memory/commands.ts';
 import * as memoryAdmission from '../src/memory/admission.ts';
@@ -179,9 +180,15 @@ async function previewSetup() {
   await append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory', connectionId: 'server',
     accountMode: 'none', schemaDigest: catalogueDigest(tools), toolCount: 1, tools,
     checkedAt, expiresAt });
+  const state = await readToolPolicy(nats.store, 'acme', 'memory');
+  const choice = { name: tool.name, revision: tool.revision,
+    reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+  const review = { commandId: `preview-review-${++count}`, expectedSequence: state.sequence,
+    policyRevision: state.policyRevision, catalogueDigest: catalogueDigest(tools),
+    connectionId: 'server', accountMode: 'none', tools: [choice] };
+  const result = await reviewToolPolicy(nats.store, auth.binding, 'owner', 'memory', review);
+  expect(result.status).toBe('appended');
   await append('mcp-memory', 'mcp.server_published', { serverId: 'memory', publishedBy: 'owner' });
-  await append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory', connectionId: 'server',
-    toolName: 'recall', toolRevision: tool.revision, mode: 'allow', setBy: 'owner' });
   await previewGrant('mcp_server', 'memory');
   for (const scope of previewScopes) await previewGrant('memory_read', scope.scopeId);
   for (const target of [projection, groups, computers]) await runner.run(target);

@@ -28,6 +28,13 @@ export const mcpEvents = [
       checkedAt: '2026-10-10T12:00:00.000Z', expiresAt: '2026-10-10T12:05:00.000Z' },
   ),
   event(
+    'mcp.server_reviewed', 'mcp',
+    'An owner or admin reviewed exact saved tools and chose their modes.',
+    data.mcpServerReviewedDataSchema,
+    { serverId: 'mcp_1', catalogueDigest: DIGEST_EXAMPLE, connectionId: 'installed',
+      accountMode: 'none', policyRevision: 1, reviewedBy: 'mem_1', tools: [] },
+  ),
+  event(
     'mcp.server_rejected',
     'mcp',
     'Validation (SSRF guard or image scan) failed, so the server was rejected.',

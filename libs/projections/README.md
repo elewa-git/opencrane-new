@@ -40,7 +40,6 @@ calculated from the definitions. Checks renew only the same server in the same s
 A fresh catalogue check does not approve startup credentials. Required startup review
 keeps calls blocked.
 
-- Keep dated tool snapshots and the earlier list after a change.
 - Keep current destination rules, including who revoked them and when.
 
 - Keeps hosted tool policies unpublished, including older records and replay.
@@ -50,6 +49,9 @@ keeps calls blocked.
 - Keeps each scope’s chosen member, assistant and paying group for nightly memory upkeep.
   Rebuilding this choice makes no outside calls.
 - Keeps control references and affected-turn counts in history without private turn details.
+- Keep tool discovery separate from an owner or admin’s recorded review.
+  Require a new review when the connection or account mode changes.
+  Keep blocked tools blocked when rebuilding the tables.
 
 - Rebuild child participants and their recorded parent references from saved events.
 - Keep an index for reading initial memory in a stable order.

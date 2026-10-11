@@ -1959,3 +1959,17 @@ The [rebase receipt](../../docs/process/p4-13-pr1-rebase-repair.md) records the
 branch repair, focused fairness comparisons, failed checks and subsequent runs.
 It records the same fairness failure on main and the slow history reads under load.
 It makes no live qualification claim.
+
+## Exact tool review
+
+`POST /api/org/integrations/:serverId/review` requires a same-organisation Owner/Admin
+session and same-origin request. Input: `commandId`, `expectedSequence`, `policyRevision`,
+`catalogueDigest`, `connectionId`, `accountMode`, and every tool’s `name`, `revision`,
+`reviewDigest`, `mode`. The server supplies `reviewedBy`. Success is 200, stale or incomplete
+evidence is 409, invalid input is 400, and unavailable services return 503.
+
+Approval, bridge tool-offer and memory test fixtures save `mcp.server_reviewed`
+before enabling tools. The review names the saved catalogue, connection, account
+mode, cost and approval details. Fixtures publish after choosing a wider mode.
+Memory Ask fixtures include complete review details. The bridge fixture includes
+the saved `stepUp: false` field when calculating its review digest.

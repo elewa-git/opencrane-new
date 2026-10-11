@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { conversations, readConversation } from '@opencrane/projections';
 import { grantStream } from '@opencrane/authz';
 import { approvalCards, decideApproval, envelope, history, losslessJson, readApproval } from '../src/index.ts';
-import { fixture } from './fixture.ts';
+import { fixture, reviewCatalogue } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 
 const toolDefinition = losslessJson('{"name":"write","inputSchema":{"type":"object"}}');
@@ -28,6 +28,7 @@ async function prepareCapturedCall(setup: Fixture, toolMode: 'allow' | 'ask' = '
     schemaDigest: catalogueDigest, toolCount: 1, tools: [tool],
     checkedAt, expiresAt };
   await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
+  await reviewCatalogue(setup);
   const publication = { serverId: 'fixture', publishedBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.server_published', publication);
   for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
@@ -39,6 +40,7 @@ async function prepareCapturedCall(setup: Fixture, toolMode: 'allow' | 'ask' = '
   const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
     toolRevision, mode: toolMode, setBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+  await setup.append('mcp-fixture', 'mcp.server_published', publication);
   const threadId = capture.body.params._meta.threadId;
   const turn = { assistantId: 'assistant', computerId: 'computer',
     conversationId: 'conversation', turnId: 'captured-turn', threadId,

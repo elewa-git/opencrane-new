@@ -38,6 +38,9 @@ A change to the tools or their rules ends that approval.
 - Refuse model, tool and memory calls while computer control is pending.
   Recheck turn and control changes before saving a human approval decision.
 
+- Check an owner or admin’s review against the exact saved tool definitions.
+  Apply stricter rules straight away and disable publication when a rule becomes wider.
+
 - Build recorded child participation and keep its history start separate from each join.
 - Recheck saved grants and permissions for a private turn memory preview without reading chat history again.
 - Check that each preview fact and the facts used by a new fact are still usable.

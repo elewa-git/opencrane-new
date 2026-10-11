@@ -463,3 +463,15 @@ and projection catch-up before serving it. No HTTP reader is exposed here.
 Edits invalidate later current answers; restart requires the next generation.
 `ProjectionRunner.rebuild(personalSettings)` restores the same progress offline with
 readers/workers stopped. It needs no keys and performs no outside actions.
+
+## Exact tool review
+
+Discovery always sets `reviewed: false`. Only `mcp.server_reviewed` can mark review.
+Its choices must match saved definition and review digests. Replay applies Block immediately;
+widening a mode clears publication. Unchanged catalogue checks keep `policyRevision` stable.
+
+A changed connection or account mode clears every tool review and sets Block, even
+when the tool definitions, costs and approval details stay the same. A later legacy
+publication does not restore those reviews. The snapshot security tests cover both
+binding changes. Their invalid mode cases start from Block and request Allow, so
+connection, revision and review checks each cause a visible refusal on their own.

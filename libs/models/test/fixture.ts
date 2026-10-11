@@ -1,4 +1,4 @@
-import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import type { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { z } from 'zod';
@@ -18,7 +18,7 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
 import { conversationKeys, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { modelGrantHandler, BudgetActor, budgets, envelope, history, ingestUsage, models, settlementHandler, startDecision, startGateway } from '../src/index.ts';
+import { reviewToolPolicy, readToolPolicy, modelGrantHandler, BudgetActor, budgets, envelope, history, ingestUsage, models, settlementHandler, startDecision, startGateway } from '../src/index.ts';
 
 export let fga: Awaited<ReturnType<typeof openfga>>;
 beforeAll(async () => { fga = await openfga(); }, 120_000);
@@ -324,4 +324,22 @@ export function toolEvidence(tool: Omit<CatalogueTool, 'revision' | 'definition'
 
 export function catalogueEvidence(tools: CatalogueTool[]) {
   return { tools, toolCount: tools.length, schemaDigest: catalogueDigest(tools) };
+}
+
+export async function reviewCatalogue(setup: Awaited<ReturnType<typeof fixture>>,
+  serverId = 'fixture') {
+  const state = await readToolPolicy(setup.nats.store, 'test', serverId);
+  const catalogue = state.catalogue!;
+  function choice(tool: NonNullable<typeof catalogue.tools>[number]) {
+    return { name: tool.name, revision: tool.revision,
+      reviewDigest: toolReviewDigest(tool), mode: 'block' };
+  }
+  const command = { commandId: `review-${serverId}-${state.sequence}`,
+    expectedSequence: state.sequence,
+    policyRevision: state.policyRevision, catalogueDigest: catalogue.schemaDigest,
+    connectionId: state.connectionId, accountMode: state.accountMode,
+    tools: catalogue.tools!.map(choice) };
+  const result = await reviewToolPolicy(setup.nats.store, setup.auth.binding, 'alice',
+    serverId, command);
+  expect(result.status).toBe('appended');
 }

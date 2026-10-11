@@ -326,3 +326,9 @@ name/pronouns up to 200/100 characters, 16 distinct groups/tasks and the fixed s
 It refuses controls and lone surrogates through the existing memory text check.
 Survey text stays data; no command or route is enabled. See the
 [accepted design](../../docs/specs/phase-4/p4-18-account-persona-welcome.md).
+
+## Exact tool review
+
+`mcp.server_reviewed` records exact catalogue and review digests, connection/account mode,
+all tool choices, the existing policy revision checked and the human reviewer.
+The resulting policy revision comes from the saved event position.

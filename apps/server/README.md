@@ -40,6 +40,8 @@ Descriptions are untrusted text. They never become instructions for the server.
 
 - Record internal control intent for the current requester. Refuse new work while it is pending.
   Keep authorised viewing, explicit stops and approval denial available.
+- Accept an owner or admin’s review of exact saved tool definitions and free tool use.
+  Refuse old reviews and changes to another connection.
 
 - Read recorded child participants without reading the whole conversation.
 

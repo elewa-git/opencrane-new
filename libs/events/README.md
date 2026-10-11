@@ -49,6 +49,7 @@ value calculated from those definitions. Older records remain readable for repla
 - Records nightly memory setup with the consenting member, assistant, paying group
   and accepted cap of 100 euro cents. This record starts no work and spends no money.
 - Define computer-wide control intent with the reviewed requester and affected turn ids.
+- Describe an owner or admin’s exact tool review separately from tool discovery.
 
 - Defines shared child records with a parent message, fixed payer and named people.
 - Define strict routine records and rebuild their saved facts without starting work.

@@ -363,6 +363,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | --- | --- | --- | --- |
 | `mcp.server_registered` | admin | catalogue (draft; transport kind and optional catalogue reference) | validate (SSRF / image scan) → `mcp.server_discovered` or `mcp.server_rejected` |
 | `mcp.server_discovered` | reaction | catalogue (exact tool snapshots, digests, check and expiry dates, server identity and rejection reasons; old undated records remain unavailable) | — |
+| `mcp.server_reviewed` | Owner/Admin | exact catalogue, connection, account mode and tool review digests with chosen modes | restrictions apply immediately; widening disables publication |
 | `mcp.catalogue_checked` | reaction | catalogue (checked saved definitions for the exact server and silo, with fresh check/expiry dates or a failed check; policyRevision stays unchanged) | — |
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
@@ -629,7 +630,7 @@ The same procedure recovers from a corrupted projection, adds a new read model, 
 `mcp.server_discovered` may carry an installed `connectionId`, explicit `accountMode` (`none`, `personal`, `company`) and a bounded tool list with `name`, schema
 `revision`, `reviewed` and optional `readOnly`/`destructive` hints. Legacy discovery
 remains replayable but grants no execution. Duplicate names fail closed. Discovery
-resets modes to Block; hints only suggest a choice. Drift/unpublish/rejection
+never marks tools reviewed and resets modes to Block; hints only suggest a choice. Drift/unpublish/rejection
 quarantines execution. A new publication cannot restore a changed tool's old mode.
 
 Dated snapshots must contain every accepted tool definition. The back end recalculates
@@ -645,6 +646,15 @@ These entries carry no definition or policy and are excluded from `toolCount`
 and `schemaDigest`. They remain available in event-backed discovery status for
 review; legacy events without this field remain readable. See the
 [discovery validation contract](../../apps/server/README.robot.md#remote-mcp-registration-p3-3).
+
+`mcp.server_reviewed` names the exact catalogue digest, connection and account mode.
+Each tool choice names its definition revision, mode and `reviewDigest`. That digest
+covers the saved zero-cost declaration and safe approval details. Allow/Ask requires
+explicit `costCents: 0`; Ask also requires approval details. The command accepts the
+current `policyRevision` as a check, rather than letting the caller choose a new revision.
+Discovery never marks review. Review does not grant access or publish a server.
+Restrictions take effect immediately. A wider mode withdraws publication until a later
+publication command. Replay applies the same rules.
 
 `mcp.tool_mode_set` adds `connectionId` and `toolRevision`; both must match the
 current reviewed tool for execution. Legacy name-only events remain readable but

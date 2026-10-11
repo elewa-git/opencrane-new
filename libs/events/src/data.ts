@@ -478,6 +478,14 @@ export const mcpServerDiscoveredDataSchema = z
   })
   .strict().refine(validCatalogueDates);
 
+export const mcpServerReviewedDataSchema = z.object({
+  serverId: id, catalogueDigest: digestSchema, connectionId: id,
+  accountMode: z.enum(['none', 'personal', 'company']),
+  policyRevision: z.int().nonnegative(), reviewedBy: id,
+  tools: z.array(z.object({ name: id, revision: digestSchema, reviewDigest: digestSchema,
+    mode: z.enum(['allow', 'ask', 'block']) }).strict()).max(1000),
+}).strict();
+
 export const mcpServerRejectedDataSchema = z
   .object({ serverId: id, reason: reasonCodeSchema })
   .strict();

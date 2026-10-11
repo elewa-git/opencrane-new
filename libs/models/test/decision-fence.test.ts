@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { setTimeout as delay } from 'node:timers/promises';
 import { decideApproval, readApproval } from '../src/index.ts';
-import { catalogueEvidence, fixture, toolEvidence } from './fixture.ts';
+import { reviewCatalogue, catalogueEvidence, fixture, toolEvidence } from './fixture.ts';
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 interface Injection { label: string; subject: string; type: string; data: Record<string, unknown> }
@@ -76,6 +76,7 @@ async function setUpMcp(setup: Fixture, mode: 'allow' | 'ask' = 'allow') {
   const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
     ...catalogue };
   await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
+  await reviewCatalogue(setup);
   const publication = { serverId: 'fixture', publishedBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.server_published', publication);
   const grantees = [['alice', 'member'], ['assistant', 'assistant']];
@@ -88,6 +89,7 @@ async function setUpMcp(setup: Fixture, mode: 'allow' | 'ask' = 'allow') {
   const policy = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
     toolRevision: tool.revision, mode, setBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.tool_mode_set', policy);
+  await setup.append('mcp-fixture', 'mcp.server_published', publication);
 }
 
 const otherTurnStarted: Injection = {

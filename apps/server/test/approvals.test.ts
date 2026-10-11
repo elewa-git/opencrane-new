@@ -7,11 +7,13 @@ import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { approvalCardsSchema, chatFeedSchema } from '@opencrane/protocol';
 import { auditTrail, readAudit, conversations, readConversation } from '@opencrane/projections';
-import { history, readApproval, decideApproval, ingestUsage } from '@opencrane/models';
+import { history, readApproval, readToolPolicy, decideApproval,
+  ingestUsage } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
-import { catalogueEvidence, fixture, toolEvidence } from '@opencrane/models/testing';
+import { catalogueEvidence, fixture, reviewCatalogue,
+  toolEvidence } from '@opencrane/models/testing';
 async function approvalFixture(stepUp = false) {
   const f = await fixture();
   await f.runner.initialise(conversations);
@@ -34,8 +36,9 @@ async function approvalFixture(stepUp = false) {
     return f.append('mcp-fixture', 'mcp.server_discovered', data);
   }
   await discover(stepUp);
-  await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
+  await reviewCatalogue(f);
   await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture', connectionId: 'installed', toolName: 'write', toolRevision: tool.revision, mode: 'ask', setBy: 'alice' });
+  await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
   for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
     const event = await f.append(grantStream('mcp_server', 'fixture'), 'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture', granteeId, granteeKind, grantedBy: 'alice' });
     await f.auth.handler.handle(event, f.db);
@@ -67,6 +70,27 @@ async function approvalFixture(stepUp = false) {
   };
   return { ...f, config, app, headers, read, decide, call, body, discover, close: async () => { await app.close(); await f.close(); } };
 }
+
+async function exactReviewFixture() {
+  const setup = await approvalFixture();
+  try {
+    const rows = await history(setup.nats.store, 'mcp-fixture', 'test');
+    function isExactReview(row: (typeof rows)[number]) {
+      return row.event.type === 'mcp.server_reviewed';
+    }
+    const reviews = rows.filter(isExactReview);
+    expect(reviews).toHaveLength(1);
+    const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    expect(policy).toMatchObject({ published: true,
+      tools: [{ name: 'write', reviewed: true, mode: 'ask', costCents: 0 }] });
+    const response = await setup.call();
+    expect(response.text).toContain('approvalId');
+    expect((await setup.read()).cards).toHaveLength(1);
+  } finally {
+    await setup.close();
+  }
+}
+it('starts approval tests with an exact saved review and a published Ask tool', exactReviewFixture);
 
 it('opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart', async () => {
   const f = await approvalFixture();
