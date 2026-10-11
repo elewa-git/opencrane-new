@@ -552,15 +552,16 @@ links, duplicate delivery, later writes and transaction rollback. Physical key c
 cleanup exhaustion, append ambiguity/lost reply, disabled model endpoint and fresh-install
 HTTP forget qualification are NOT RUN in this split. Existing authority tests are unchanged.
 
-Source receipt, 11 October 2026: base `ef6e3420` plus the `work/p4-13-pr2` diff,
+Source receipt, 11 October 2026: code `e768ada9`, including main at `e8f25d6d`,
 with failing-first test commit `f4589959`. The environment is a local Linux worktree
 with a clean npm ci, real disposable PostgreSQL/NATS and test key files, not a fresh silo.
-PASS: monorepo lint, workspace typecheck, check:events (115 types), Knip and lint:changelog.
-PASS: changed files twice, 28 tests each; final related regression run, 25 files / 1,059 tests.
-PASS: the requested standalone `apps/server/test/memory.test.ts` rerun, 129 tests.
+PASS: monorepo lint, workspace typecheck, check:events (121 types), Knip and lint:changelog.
+PASS: changed files twice after merging main, 28 tests each; related run, 27 files / 1,156 tests.
+PASS: the standalone `apps/server/test/memory.test.ts` rerun before merging main, 129 tests.
 Its log is `/tmp/p4-13-memory-alone.log`.
 Vitest, lint and typecheck used `nice -n 10`. The full root suite was not run.
 The second independent review verified the late-dependency fix and reported no blockers.
-Logs are on the builder host: `/tmp/p4-13-lint-final.log`, `/tmp/p4-13-typecheck-2.log`,
-`/tmp/p4-13-typecheck-final.log`, `/tmp/p4-13-tests-final.log` and
-`/tmp/p4-13-changed-final-{1,2}.log`. CI and live qualification remain separate gates.
+Logs are on the builder host: `/tmp/p4-13-merged-lint.log`,
+`/tmp/p4-13-merged-typecheck.log`, `/tmp/p4-13-merged-events.log`,
+`/tmp/p4-13-merged-tests.log` and `/tmp/p4-13-merged-changed-{1,2}.log`.
+Hosted CI could not be read with the current repository token. Live qualification is NOT RUN.
