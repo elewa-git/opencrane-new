@@ -106,6 +106,97 @@ async function refusesReaders() {
 }
 it('requires current Owner/Admin events and available OpenFGA despite an elevated cookie', refusesReaders);
 
+async function refusesUnrebuiltUpgrade(revoked: boolean) {
+  const memberId = revoked ? 'upgrade-revoked' : 'upgrade-granted';
+  const resourceId = memberId;
+  await append(`member-${memberId}`, 'member.joined', {
+    memberId, role: 'member', email: `${memberId}@example.test`, displayName: memberId,
+  });
+  await append(grantStream('model', resourceId), 'grant.given', {
+    resourceType: 'model', resourceId, granteeKind: 'member',
+    granteeId: memberId, grantedBy: 'owner',
+  });
+  let pendingRevocation;
+  if (revoked) {
+    pendingRevocation = await append(grantStream('model', resourceId), 'grant.revoked', {
+      resourceType: 'model', resourceId, granteeKind: 'member',
+      granteeId: memberId, revokedBy: 'owner',
+    }, false);
+  }
+  await project();
+  // Preserve the old worker checkpoint, as an upgrade does when adding an empty index.
+  await options.db.query('DROP TABLE inventory_inputs');
+  await options.db.query('DROP TABLE IF EXISTS inventory_inputs_backfill');
+  await runner.initialise(members);
+  try {
+    await append(grantStream('model', `unrelated-${memberId}`), 'grant.given', {
+      resourceType: 'model', resourceId: `unrelated-${memberId}`, granteeKind: 'member',
+      granteeId: 'someone-else', grantedBy: 'owner',
+    });
+    await project();
+    const review = await readInventory('departure', memberId);
+    expect(review.complete).toBe(false);
+    expect(review.unavailableSections).toContain('inventory_index');
+    expect(review.permissions.remove).toBe(false);
+    expect(review.routines.status).toBe('unavailable');
+
+    await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, createLogger('upgrade-rebuild'));
+    const rebuilt = await readInventory('departure', memberId);
+    if (pendingRevocation) {
+      expect(rebuilt.complete).toBe(false);
+      expect(rebuilt.unavailableSections).toContain('grants');
+      expect(rebuilt.accessLost).toEqual([]);
+      await auth.handler.handle(pendingRevocation, pgDb(dbs.queue));
+      expect(await readInventory('departure', memberId))
+        .toMatchObject({ complete: true, accessLost: [] });
+    } else {
+      expect(rebuilt).toMatchObject({ complete: true, accessLost: [{ resourceId }] });
+    }
+  } finally {
+    await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, createLogger('upgrade-cleanup'));
+    if (pendingRevocation) await auth.handler.handle(pendingRevocation, pgDb(dbs.queue));
+  }
+}
+it.each([false, true])('refuses an unrebuilt upgrade index: pending revocation %s',
+  refusesUnrebuiltUpgrade);
+
+async function ignoresLargeUnrelatedHistoryTail() {
+  await project();
+  const before = await readInventory('departure', 'bob');
+  expect(before).toMatchObject({ complete: true, accessLost: [], retainedHistory: { count: 0 } });
+  const records = [];
+  for (let index = 0; index < 10_001; index++) {
+    const data = { conversationId: 'unrelated-volume', memberId: 'someone-else',
+      joinEventId: 'unrelated-join', throughPosition: 1, throughEventId: 'unrelated-message' };
+    const record = { ...event(`inventory-${++counter}`, 'chat-state-someone-else',
+      'conversation.read_advanced'), silo: 'acme', data };
+    records.push(record);
+  }
+  await nats.seed(records);
+  const globalReads = vi.spyOn(nats.store, 'readEvent');
+  const started = performance.now();
+  const response = await request('departure');
+  expect(response.statusCode, response.body).toBe(200);
+  expect(performance.now() - started).toBeLessThan(2_000);
+  const pending = memberDepartureSchema.parse(response.json());
+  expect(pending.accessLost).toEqual([]);
+  if (pending.complete) {
+    expect(pending.retainedHistory).toEqual(before.retainedHistory);
+    expect(pending.reviewRevision).toBe(before.reviewRevision);
+  } else {
+    expect(pending.permissions.remove).toBe(false);
+    expect(pending.unavailableSections.length).toBeGreaterThan(0);
+  }
+  expect(globalReads).not.toHaveBeenCalled();
+  globalReads.mockRestore();
+  await project();
+  const after = await readInventory('departure', 'bob');
+  expect(after).toMatchObject({ complete: true, accessLost: [], retainedHistory: { count: 0 } });
+  expect(after.reviewRevision).toBe(before.reviewRevision);
+}
+it('returns a bounded review after 10,001 unrelated pending history events',
+  ignoresLargeUnrelatedHistoryTail, 120_000);
+
 async function waitsForGrantRevocation() {
   const memberId = 'revoked-grant';
   const resourceId = 'revoked-model';
