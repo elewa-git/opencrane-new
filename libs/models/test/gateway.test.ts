@@ -309,7 +309,9 @@ it.each([
       await f.append('conversation-conversation', 'agent.command_ran', {
         conversationId: 'conversation', turnId: 'turn', commandDigest: 'a'.repeat(64), exitCode: 0,
       });
-      await f.append('conversation-conversation', type, payload);
+      const subject = type === 'conversation.closed'
+        ? 'participation-conversation' : 'conversation-conversation';
+      await f.append(subject, type, payload);
     }
     return result;
   });

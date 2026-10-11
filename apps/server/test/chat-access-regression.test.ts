@@ -27,8 +27,8 @@ import { viewAccess } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { reviewedRemoval } from './support/reviewed-removal.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
-import { conversationParticipationReader }
-  from '../src/chat/access.ts';
+import { requireLegacyClosesProjected } from '../src/chat/participation.ts';
+import { conversationParticipationReader } from '../src/chat/access.ts';
 import * as chatAccess from '../src/chat/access.ts';
 
 async function countedOpenFga(apiUrl: string) {
@@ -841,7 +841,7 @@ const unchangedAccessEvents = [
     data: { conversationId: 'agent', turnId: 'agent-turn' } },
   { subject: 'conversation-agent', type: 'agent.turn_failed',
     data: { conversationId: 'agent', turnId: 'agent-turn', reason: 'unavailable' } },
-  { subject: 'conversation-agent', type: 'conversation.closed',
+  { subject: 'participation-agent', type: 'conversation.closed',
     data: { conversationId: 'agent', closedBy: 'alice' } },
   { subject: 'conversation-agent', type: 'file.uploaded', data: {
     conversationId: 'agent', fileId: 'file', uploadedBy: 'alice', name: 'notes.txt',
@@ -1464,7 +1464,7 @@ async function refusesCloseBeforeBufferedReport() {
       granteeKind: 'member', grantedBy: 'alice',
     });
     await context.runner.run(conversations);
-    await context.append('conversation-agent', 'conversation.closed', {
+    await context.append('participation-agent', 'conversation.closed', {
       conversationId: 'agent', closedBy: 'alice',
     }, false);
     await context.append('conversation-agent', 'agent.turn_completed', {
@@ -1569,7 +1569,7 @@ async function participantPosition(context: Fixture) {
   return people.accessPosition;
 }
 
-async function managesGroupParticipants() {
+async function managesGroupParticipants(legacyClose: boolean) {
   const context = await fixture();
   try {
     await createParticipantGroup(context);
@@ -1618,9 +1618,17 @@ async function managesGroupParticipants() {
     expect(await context.nats.store.head('participation-participants')).toBe(before);
     const changed = { ...add, participantId: 'bob' };
     expect((await participantRequest(context, changed)).statusCode).toBe(409);
-    await context.append('conversation-participants', 'conversation.closed', {
+    let closeSubject = 'participation-participants';
+    if (legacyClose) closeSubject = 'conversation-participants';
+    await context.append(closeSubject, 'conversation.closed', {
       conversationId: 'participants', closedBy: 'alice',
     }, false);
+    if (legacyClose) {
+      // Project older closes before starting new writers, as an upgrade requires.
+      await context.runner.run(conversations);
+      await expect(requireLegacyClosesProjected(context.nats.store, context.db))
+        .resolves.toBeUndefined();
+    }
     expect((await participantRequest(context, add)).statusCode).toBe(200);
     const newEdit = { id: 'closed-edit', action: 'remove', participantId: 'bob',
       expectedAccessPosition: before };
@@ -1630,7 +1638,8 @@ async function managesGroupParticipants() {
     await context.close();
   }
 }
-it('checks creator rights, saved retries, departed targets, closure and IAM receipts',
+it.each([false, true])(
+  'checks creator rights, saved retries, departed targets, closure and IAM receipts (legacy: %s)',
   managesGroupParticipants, 120_000);
 
 function pauseParticipantAppends(context: Fixture) {
@@ -1807,17 +1816,19 @@ it.each([false, true])('revokes every read path after self-leave (blocked socket
 
 async function checksParticipantAdmissionAfterColdHistory() {
   const context = await fixture();
-  const read = context.nats.store.readStream.bind(context.nats.store);
+  const query = context.db.query.bind(context.db);
   const head = context.nats.store.head.bind(context.nats.store);
   let delayed = false;
   let revokeTarget = false;
   let targetChecks = 0;
-  async function* slowColdHistory(subject: string, from = 1, deadline = Infinity) {
-    if (subject === 'conversation-participants' && from > 1 && !delayed) {
+  async function slowColdCloseLookup<Row extends Record<string, unknown>>(
+    sql: string, parameters?: unknown[],
+  ) {
+    if (sql.includes("type = 'conversation.closed'") && !delayed) {
       delayed = true;
       await delay(2200);
     }
-    yield* read(subject, from, deadline);
+    return query<Row>(sql, parameters);
   }
   async function removeTargetDuringAdmission(subject?: string, deadline?: number) {
     if (revokeTarget && subject === 'member-bob') {
@@ -1838,7 +1849,7 @@ async function checksParticipantAdmissionAfterColdHistory() {
       conversationId: 'participants', authorId: 'alice', authorKind: 'human',
       contentType: 'text', ...encrypted,
     }, false);
-    context.nats.store.readStream = slowColdHistory;
+    context.db.query = slowColdCloseLookup;
     const remove = { id: 'cold-remove', action: 'remove', participantId: 'bob',
       expectedAccessPosition };
     const removed = await participantRequest(context, remove);
@@ -1854,7 +1865,7 @@ async function checksParticipantAdmissionAfterColdHistory() {
     expect(targetChecks).toBe(1);
     expect(await head('participation-participants')).toBe(before);
   } finally {
-    context.nats.store.readStream = read;
+    context.db.query = query;
     context.nats.store.head = head;
     await context.close();
   }
@@ -1901,3 +1912,75 @@ async function refusesRemovedAuthorAtParticipationCheck() {
 }
 it('refuses a removed group author at the participation check before appending',
   refusesRemovedAuthorAtParticipationCheck, 120_000);
+
+async function desktopWithColdFactsAndDelayedProjection() {
+  const context = await fixture();
+  const readStream = context.nats.store.readStream.bind(context.nats.store);
+  try {
+    const checkpoint = await context.nats.store.head();
+    await context.agentSession('cold-desktop');
+    await context.append('computer-assistant', 'computer.claimed', {
+      assistantId: 'assistant', computerId: 'desktop', generation: 1, tokenId: 'token:test',
+    }, false);
+    await context.append('computer-assistant', 'computer.ready', {
+      assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
+    }, false);
+    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
+      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
+      granteeKind: 'member', grantedBy: 'alice',
+    });
+    const events = [];
+    const encrypted = context.keys.encrypt('test', 'cold-desktop', 'Long saved chat');
+    for (let index = 0; index < 1000; index++) {
+      const data = { conversationId: 'cold-desktop', authorId: 'alice', authorKind: 'human',
+        contentType: 'text', ...encrypted };
+      const event = envelope('test', 'conversation-cold-desktop', 'message.posted', data);
+      events.push(event);
+    }
+    await context.nats.seed(events);
+    await context.db.query("UPDATE projection_checkpoints SET sequence = $1" +
+      " WHERE name = 'conversations'", [checkpoint]);
+    async function* creationOnly(subject: string, from?: number, deadline?: number) {
+      for await (const row of readStream(subject, from, deadline)) {
+        if (subject === 'conversation-cold-desktop' &&
+            row.event.type !== 'conversation.created') {
+          throw new Error('Desktop access must not scan conversation activity');
+        }
+        yield row;
+      }
+    }
+    const reads = vi.spyOn(context.nats.store, 'readStream');
+    reads.mockImplementation(creationOnly);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(viewAccess(context.options, 'alice', 'cold-desktop'))
+        .resolves.toMatchObject({ computerId: 'desktop' });
+    }
+    reads.mockRestore();
+  } finally {
+    vi.restoreAllMocks();
+    await context.close();
+  }
+}
+it('admits and renews a desktop with cold facts while projection lags a long chat creation',
+  desktopWithColdFactsAndDelayedProjection, 120_000);
+
+async function requiresLegacyClosesBeforeStartup() {
+  const context = await fixture();
+  try {
+    await context.agentSession('legacy-close');
+    const closed = envelope('test', 'conversation-legacy-close', 'conversation.closed', {
+      conversationId: 'legacy-close', closedBy: 'alice',
+    });
+    await context.nats.seed([closed]);
+    await expect(requireLegacyClosesProjected(context.nats.store, context.db))
+      .rejects.toThrow('Conversation worker must catch up before server startup');
+    await context.runner.run(conversations);
+    await expect(requireLegacyClosesProjected(context.nats.store, context.db))
+      .resolves.toBeUndefined();
+    await expect(viewAccess(context.options, 'alice', 'legacy-close')).rejects.toThrow('Access changed');
+  } finally {
+    await context.close();
+  }
+}
+it('requires older closing events to be projected before the server starts',
+  requiresLegacyClosesBeforeStartup, 120_000);

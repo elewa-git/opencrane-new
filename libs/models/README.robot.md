@@ -477,6 +477,21 @@ adds each type during its access check and expects 200. Removing the matching
 entry from `outputReportTypes` makes that read return 503. Chat and computer
 facts catch up before the short access check; only new activity is read during it.
 
+## Conversation closing reads
+
+`history` includes `conversation.closed` records from the participation stream
+when reading conversation facts. It sorts both histories by their saved position.
+`decisionActivity` includes both close formats in its existing conversation activity read.
+It uses the event store's single indexed query and does not read another authority stream.
+Its final check reads only new records and treats a close on either stream as a refusal.
+The combined query returns no unrelated entity events or participant changes.
+Human approval decisions also check newer records on both streams before saving.
+They resume from the saved global event position without rereading messages.
+Participant changes do not become message activity. Access checks still use their
+own member, participant and grant facts. Older closing events remain valid.
+The decision, gateway and approval tests write current closes to participation
+streams. Projection replay tests also cover the earlier form.
+
 ## Decision activity summaries
 
 Model decisions read `decision-grants` through `readStreamSummary` before the

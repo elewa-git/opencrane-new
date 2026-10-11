@@ -226,6 +226,11 @@ it.each(['startup', 'migration'] as const)('upgrades an existing budget through 
     const defaults = (await history(nats.store, 'budget-test', 'test')).filter(row =>
       row.event.type === 'budget.ceiling_set' && z.object({ defaultPayingGroupId: z.string().optional() }).parse(row.event.data).defaultPayingGroupId);
     expect(defaults).toHaveLength(1);
+    const joined = envelope('test', 'member-alice', 'member.joined', {
+      memberId: 'alice', email: 'alice@example.test', displayName: 'Alice',
+      role: 'member', invitationId: 'invite-alice',
+    });
+    await nats.seed([joined]);
     await nats.store.append({ expectedSequence: 0, event: envelope('test', 'assistant-personal', 'assistant.created', { assistantId: 'personal', ownerId: 'alice', kind: 'personal' }) });
     await nats.store.append({ expectedSequence: 0, event: envelope('test', 'computer-personal', 'computer.ready', { assistantId: 'personal', computerId: 'personal', generation: 1 }) });
     const keys = conversationKeys(directory); keys.provision('test', 'chat');

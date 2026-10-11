@@ -241,3 +241,24 @@ before loading provider configuration and spending mode. Its one append checks
 both that position and the provider-category position. This refuses switch-on on
 the budget stream between the command's last check and its append. Any other new
 event also causes a conflict; the administrator can reload and try again.
+
+Preference parsing binds the human principal to that member id. Access checks remain the caller’s job.
+
+## Conversation closing writes
+
+The server writes new `conversation.closed` commands to `participation-<conversationId>`.
+The append adapter also accepts `conversation-<conversationId>` for older callers.
+Both forms must match the data id and retain the same conditional append and retry rules.
+Older closing events still parse and replay. Participant writes still require participation.
+`test/conversation-command.test.ts` checks current and older appends and reads.
+
+Conversation activity reads can pass `includeConversationCloses: true` in a summary kind,
+or `true` as the fourth `readStream` argument. This uses one indexed NATS query,
+`ev.*.<conversationId>`, and returns only the exact conversation's events and its
+participation-stream closes. It never returns another entity's events or participant changes.
+Ordinary stream reads and append positions keep their existing meaning.
+The matching third `head` argument returns the query's latest candidate position.
+An unrelated entity with the same id can advance that position, but cannot supply
+activity or access facts. The activity reader filters these rows before making a decision.
+Model decisions use this path for both their initial history and later changes.
+They do not start another participation-stream read.

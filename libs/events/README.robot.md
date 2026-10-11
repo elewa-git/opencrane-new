@@ -134,8 +134,10 @@ ids follow the member-id rule: 1–200 characters, without dots, whitespace, `*`
 Ids such as `ext:jane` are valid. Conversation ids reject `provider-`.
 `groupId` and non-negative safe integer `groupSnapshotPosition` must appear together.
 Assistant and payer fields are refused. Direct and legacy session rules stay unchanged.
-Participant events now own `participation-<id>`; append refuses conversation subjects,
-but replay still reads them. Stored participant schemas retain their earlier non-empty
+Participant events and `conversation.closed` own `participation-<id>`.
+Append refuses participant events on conversation subjects, but replay still reads them.
+For compatibility, close appends also accept the matching conversation subject.
+The server writes new closes to participation. Stored participant schemas retain their earlier non-empty
 string fields; new appends check the member-id format separately.
 `conversationEventId` matches the data id to the exact current or legacy subject.
 The event store calls it before append, so mismatched ids cannot block later consumers.

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { budgetCeilingSetDataSchema, effectResolvedDataSchema, effectUncertainDataSchema,
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
@@ -24,7 +24,18 @@ export async function history(store: Pick<EventStore, 'readStream'>,
     if (row.event.silo !== silo) throw new Error('Wrong silo');
     rows.push(row);
   }
+  if (subject.startsWith('conversation-')) {
+    const conversationId = subject.slice('conversation-'.length);
+    for await (const row of store.readStream(`participation-${conversationId}`, 1, deadline)) {
+      if (row.event.silo !== silo) throw new Error('Wrong silo');
+      if (row.event.type === 'conversation.closed') rows.push(row);
+    }
+    rows.sort(compareEventPosition);
+  }
   return rows;
+}
+function compareEventPosition(first: StoredEvent, second: StoredEvent) {
+  return first.sequence - second.sequence;
 }
 export function envelope(silo: string, subject: string, type: string, payload: unknown, id: string = randomUUID(), now = new Date()): EventEnvelope {
   const parsed = parseEventByType({ id, commandId: id, type, subject, silo, data: payload,

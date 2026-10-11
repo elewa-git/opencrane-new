@@ -148,7 +148,7 @@ beforeEach(async () => {
   tokens = await tokenIssuer({ privateKeyPath: `${keyDirectory}/key.pem`, issuer: 'https://lifecycle.test/' });
   decision = await startDecision(actor, { jwks: tokens.jwks, issuer: 'https://lifecycle.test/' }, authorisation.binding);
   app = buildServer(config, { audit: { silo: 'test', store: nats.store, db: pgDb(dbs.queue), feed, binding: authorisation.binding }, integrations: { silo: 'test', store: nats.store, feed, catalogue, budget: { decisionUrl: decision.url, tokens }, modelDb: pgDb(dbs.queue), binding: authorisation.binding,
-    now: () => new Date('2026-10-01T09:40:00Z') }, computers: { silo: 'test', feed,
+    now: () => new Date('2026-10-01T09:40:00Z') }, computers: { silo: 'test', store: nats.store, feed,
     computers: computerRows, binding: authorisation.binding, now: () => new Date('2026-10-01T09:40:00Z') } });
 }, 30_000);
 
@@ -1077,3 +1077,24 @@ async function refusesResolutionWithoutOpenFgaAdminPermission() {
 }
 it('refuses a resolution when the saved admin role has no OpenFGA admin permission',
   refusesResolutionWithoutOpenFgaAdminPermission);
+
+async function refusesRemovedComputerAdministrator() {
+  const request = { url: '/api/org/computers', headers: headers('oidc-amina') };
+  expect((await app.inject(request)).statusCode).toBe(200);
+  await append(fixture('member.removed', 'member-amina', {
+    memberId: 'amina', removedBy: 'alice',
+  }));
+  await append(fixture('member.invited', 'member-amina', {
+    memberId: 'amina', role: 'admin', invitationId: 'invite-again',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-amina' },
+  }));
+  expect(await authorisation.check('amina', 'admin')).toMatchObject({ allowed: true });
+  expect(await feed.memberId('test', config.issuerUrl, 'oidc-amina')).toBe('amina');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await app.inject(request);
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.body).not.toContain('computer-alice');
+  }
+}
+it('refuses the computer register after removal and a later invitation with old SQL and IAM',
+  refusesRemovedComputerAdministrator);

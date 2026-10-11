@@ -21,8 +21,8 @@ with `libs/events`.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -->|saves changes within the caller time limit| store["libs/event-store<br/>checked events and memory key references"]
-  models["libs/models<br/>AI rules and budgets"] -->|saves changes and checks migration positions| store
+  server["apps/server<br/>back end"] -->|saves changes within the caller time limit| store["libs/event-store<br/>checked event writes and stream ownership"]
+  models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes and migration positions| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams and finds numbered events| nats["NATS JetStream<br/>event service"]
   store -.->|checks private chat choices| events["libs/events<br/>event definitions"]
@@ -52,6 +52,10 @@ flowchart LR
 - Require encrypted NATS connections and the right credentials for each role.
 
 Conversation writes check that the saved conversation id matches the subject.
+New closing events and participant changes use the participation stream. This keeps
+access checks separate from messages. Older callers can still save closing events
+on the conversation stream, and replay reads both forms. Model decisions read both
+closing formats through their existing conversation activity read.
 New group chats are limited to 97 people so their permission update fits in one write.
 
 Private chat choices use a separate stream for each person. They require that person's human identity.

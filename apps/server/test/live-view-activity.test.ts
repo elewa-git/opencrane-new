@@ -103,7 +103,7 @@ function conversationEvent(type: string, turnId = 'turn-1') {
     overrides['participantId'] = 'bob';
   }
   let subject = 'conversation-chat';
-  if (type.startsWith('participant.')) {
+  if (type.startsWith('participant.') || type === 'conversation.closed') {
     subject = 'participation-chat';
   }
   return eventInjection(subject, type, overrides);
@@ -515,7 +515,7 @@ function revocation(type: string) {
     details['participantId'] = 'alice';
   }
   let subject = 'conversation-chat';
-  if (type === 'participant.removed') {
+  if (type === 'participant.removed' || type === 'conversation.closed') {
     subject = 'participation-chat';
   }
   return eventInjection(subject, type, details);
@@ -595,7 +595,7 @@ function revocationTests() {
 }
 describe('real revocations during an access check still close the viewer', revocationTests);
 
-async function closesRemovedMemberBeforeSlowDesktopRead() {
+async function closesRemovedMemberBeforeSlowDesktopRead(laterInvitation: boolean) {
   const readable = new PassThrough();
   function openStreamingDesktop() {
     const writable = new PassThrough();
@@ -654,9 +654,16 @@ async function closesRemovedMemberBeforeSlowDesktopRead() {
     await desktopReadStarted.promise;
     const revokedAt = performance.now();
     await remove();
-    await observed.closed;
-    const remaining = Math.max(0, revokedAt + 1700 - performance.now());
-    await delay(remaining);
+    if (laterInvitation) {
+      const invitation = {
+        memberId: 'alice', invitationId: 'later-invite', email: 'a@example.test',
+        role: 'member', invitedBy: 'owner',
+      };
+      const invited = eventInjection('member-alice', 'member.invited', invitation);
+      await appendInjection(current, invited);
+    }
+    await delay(2000);
+    expect(observed.result(), 'Removal must close the viewer within two seconds').toBeDefined();
     // Keep sending frames so the test proves the server stops desktop bytes after removal.
     expect(frameTimes.at(-1)).toBeLessThan(revokedAt + 1500);
     await expectRevoked(current, observed, revokedAt, 'member.removed / slow desktop read');
@@ -665,8 +672,10 @@ async function closesRemovedMemberBeforeSlowDesktopRead() {
     releaseDesktopRead.resolve();
   }
 }
-it('closes a removed member within 2,000 ms despite a slow desktop read and stops bytes by 1,500 ms',
-  closesRemovedMemberBeforeSlowDesktopRead, 30_000);
+it.each([false, true])(
+  'stops desktop bytes and closes within two seconds with a hung read (later invitation: %s)',
+  closesRemovedMemberBeforeSlowDesktopRead, 30_000,
+);
 
 async function confirmsChatActivity() {
   const injection = conversationEvent('agent.turn_completed');
@@ -704,7 +713,7 @@ async function checksUnprojectedActivityOnce() {
     store: current.nats.store, db: current.db, silo: 'test', binding: current.binding,
   };
   await viewAccess(options, 'alice', 'chat');
-  expect(conversationRows).toBeGreaterThanOrEqual(100);
+  expect(conversationRows).toBe(1);
   for (let attempt = 0; attempt < 3; attempt++) {
     conversationRows = 0;
     await viewAccess(options, 'alice', 'chat');
@@ -714,7 +723,7 @@ async function checksUnprojectedActivityOnce() {
   await appendInjection(current, conversationEvent('agent.turn_completed'));
   await expect(viewAccess(options, 'alice', 'chat')).rejects.toThrow('Access changed');
 }
-it('checks older unprojected chat activity once and still finds a later close',
+it('skips unprojected chat activity and still finds a later close',
   checksUnprojectedActivityOnce, 30_000);
 
 async function keepsExactChangedMessage() {
@@ -743,3 +752,33 @@ async function keepsActiveSiloMembershipRefusalMessage() {
 }
 it('keeps the exact refusal message for a removed silo member',
   keepsActiveSiloMembershipRefusalMessage, 30_000);
+
+async function refusesRemovedMemberTickets() {
+  const current = await createFixture();
+  await grantDirectly(current);
+  const admitted = await admit(current);
+  await appendInjection(current, revocation('member.removed'));
+  const invitation = {
+    memberId: 'alice', invitationId: 'later-invite', email: 'a@example.test',
+    role: 'member', invitedBy: 'owner',
+  };
+  const invited = eventInjection('member-alice', 'member.invited', invitation);
+  await appendInjection(current, invited);
+  const response = await admission(current);
+  expect(response.statusCode).toBe(403);
+  const viewer = connect(admitted);
+  const rejected = Promise.withResolvers<number>();
+  function refuseUpgrade(_request: unknown, upgrade: IncomingMessage) {
+    rejected.resolve(upgrade.statusCode ?? 0);
+    upgrade.resume();
+    viewer.terminate();
+  }
+  function acceptUpgrade() {
+    rejected.resolve(101);
+  }
+  viewer.once('unexpected-response', refuseUpgrade);
+  viewer.once('open', acceptUpgrade);
+  expect(await rejected.promise).toBe(403);
+}
+it('refuses new tickets and old ticket upgrades after removal followed by an invitation',
+  refusesRemovedMemberTickets, 30_000);

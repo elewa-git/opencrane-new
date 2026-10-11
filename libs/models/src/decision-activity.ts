@@ -36,7 +36,7 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
   const computerRead = readStreamSummary(store, silo, computerSubject,
     computerSummary, deadline, takeComputer);
   const [chat, computer] = await Promise.all([conversationRead, computerRead]);
-  const subjectHeads = [store.head(conversationSubject, deadline),
+  const subjectHeads = [store.head(conversationSubject, deadline, true),
     store.head(computerSubject, deadline)] as const;
   const [conversationHead, computerHead] = await Promise.all(subjectHeads);
   // Refuse saved facts beyond restored history. Keep the original shared deadline.
@@ -57,9 +57,10 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
     let foundNewRows = false;
     for (const subject of subjects) {
       const from = (positions.get(subject) ?? head) + 1;
-      const to = await store.head(subject, deadline);
+      const includeConversationCloses = subject === conversationSubject;
+      const to = await store.head(subject, deadline, includeConversationCloses);
       if (to < from) continue;
-      for await (const row of store.readStream(subject, from, deadline)) {
+      for await (const row of store.readStream(subject, from, deadline, includeConversationCloses)) {
         if (row.sequence > to) break;
         const changed = changesDecisionActivity(row.event, turnId, needsApproval);
         if (changed) throw new Error('Authority changed');
@@ -76,6 +77,9 @@ function changesDecisionActivity(event: EventEnvelope, turnId: string, needsAppr
   if (event.subject.startsWith('computer-')) {
     const turnActivity = ['computer.turn_started', 'computer.turn_closed'].includes(event.type);
     return !turnActivity || data(event)['turnId'] === turnId;
+  }
+  if (event.subject.startsWith('participation-')) {
+    return event.type === 'conversation.closed';
   }
   if (needsApproval && invalidatesApproval(event, turnId)) return true;
   if (closesDecisionTurn(event, turnId)) return true;

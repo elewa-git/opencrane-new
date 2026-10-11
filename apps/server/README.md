@@ -15,8 +15,8 @@ flowchart LR
   server -->|records changes, memory facts, grants, roles, participants, computers, provider choices, drains and tool catalogues| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, invitations, chats, facts, models and tools| postgres
-  server -->|sends turns, models, tools and approvals; receives reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|reads members, invitations, chats, closing records, joins, facts, models and tools| postgres
+  server -->|sends turns, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -75,8 +75,9 @@ flowchart LR
   counts and dates for private history. A complete review lets admins remove access.
 - Keeps checking member access while a live connection is open.
 - Records changes as events and reads the current state from PostgreSQL.
-- Keep the original provider choice when repeating or closing a recorded turn.
-  Pass its model to the turn-token issuer and the computer that runs the turn.
+- Keeps the original provider choice when repeating or closing a recorded turn.
+  Checks current membership before repeating a start and passes the saved model
+  to the turn-token issuer and the computer that runs the turn.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
   Checks saved participation changes before returning private content.
   Checks closing events even while read tables are catching up. Keeps the last
@@ -186,7 +187,8 @@ Switching on calls through managed providers is still unavailable.
    then sends it on to the model provider.
 9. **A person watches the assistant's desktop.** The server checks their conversation
    access and desktop grant. A confirmed member removal or conversation permission denial
-   ends the view straight away, even if another access read is slow.
+   ends the view straight away, even if another access read is slow. A later invitation
+   on a removed member’s event stream does not restore desktop or file access.
 10. **An admin opens groups or ownership.** The server loads the records, then checks
     current access before replying. Slow histories can finish. A removal during
     loading denies the reply; unrelated chat activity does not interrupt it.

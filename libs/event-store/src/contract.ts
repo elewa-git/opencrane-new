@@ -79,6 +79,9 @@ export function validateCommand(
   ) {
     return undefined;
   }
+  if (event.type === 'conversation.closed') {
+    return event;
+  }
   return event.subject.startsWith(`${getEventDefinition(event.type)?.stream}-`)
     ? event
     : undefined;
@@ -104,6 +107,10 @@ function validConversationWrite(event: EventEnvelope): boolean {
   if (stream !== 'participation') {
     return true;
   }
+  if (event.type === 'conversation.closed') {
+    // Keep older append callers working. The server writes new closes to participation.
+    return true;
+  }
   const actorField = event.type === 'participant.added' ? 'addedBy' : 'removedBy';
   const fields = ['conversationId', 'participantId', actorField];
   for (const field of fields) {
@@ -119,6 +126,9 @@ function validExpectedSubject(command: AppendCommand, event: EventEnvelope): boo
   const expected = command.expectedSubject;
   if (expected === undefined || expected === event.subject) {
     return true;
+  }
+  if (event.type === 'conversation.closed' && event.subject.startsWith('conversation-')) {
+    return expected === 'conversation-*';
   }
   const category = `${getEventDefinition(event.type)?.stream}-*`;
   return expected === category;

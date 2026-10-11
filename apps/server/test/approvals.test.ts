@@ -608,7 +608,7 @@ async function refusesApprovalChangeDuringFinalCheck(type: string) {
           contentType: 'text', ...encrypted,
         });
       } else {
-        await setup.append('conversation-conversation', type, {
+        await setup.append('participation-conversation', type, {
           conversationId: 'conversation', closedBy: 'alice',
         });
       }

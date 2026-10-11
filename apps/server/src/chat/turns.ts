@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
   type StoredEvent } from '@opencrane/event-store';
+import { chatMembership, participationClosed } from './participation.ts';
 import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
 import { agentSessionData, ReportRejected } from './reports.ts';
@@ -55,6 +56,10 @@ type WriteAuthority = () => Promise<void>;
 /** Append one lifecycle event. Reports cannot reopen a closed turn. */
 export async function turnCommand(store: EventStore, context: TurnContext, input: TurnInput) {
   const conversation = await readChatFacts(store, context.silo, input.conversationId, input.turnId);
+  if (input.status === 'started') {
+    const closed = await participationClosed(store, context.silo, input.conversationId);
+    conversation.closed ||= closed;
+  }
   const requested = requestedTurn(conversation, context.assistantId);
   const subject = `computer-${context.assistantId}`;
   const facts = await computerFacts(store, context.silo, context.assistantId, input);
@@ -65,12 +70,13 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   let refusal: TurnAdmissionRejected | undefined;
   requireThreadOwner(facts, data);
   let executionMode = facts.turn?.lastStartExecutionMode;
-  if (input.status === 'started' && !facts.turn?.hasStart) {
+  // Check current membership on repeats before returning the saved turn.
+  if (input.status === 'started') {
     try {
-      executionMode = input.executionMode ?? 'memory_free';
-      const admission = await admitTurn(store, context, conversation, facts, data,
+      executionMode = startExecutionMode(facts, input);
+      const admission = await startAuthority(store, context, conversation, facts, data,
         requested.executionMode, executionMode);
-      data.payingGroupId = admission.payer;
+      if (admission.payer) data.payingGroupId = admission.payer;
       fresh = admission.fresh;
     } catch (error) {
       if (!isFinalAdmissionRefusal(error)) throw error;
@@ -98,6 +104,20 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   if (input.status === 'started') return { ...data, threadId: z.string().parse(data.threadId),
     executionMode: executionMode ?? 'memory_free' };
   return undefined;
+}
+
+function startExecutionMode(facts: ComputerFacts, input: TurnInput) {
+  if (facts.turn?.hasStart) return facts.turn.lastStartExecutionMode ?? 'memory_free';
+  return input.executionMode ?? 'memory_free';
+}
+
+async function startAuthority(store: EventStore, context: TurnContext, conversation: ChatFacts,
+  facts: ComputerFacts, data: TurnBinding, requested: unknown, mode: ExecutionMode) {
+  if (facts.turn?.hasStart) {
+    const fresh = await requireTurnMember(store, context.silo, data.requesterId);
+    return { fresh, payer: undefined };
+  }
+  return admitTurn(store, context, conversation, facts, data, requested, mode);
 }
 
 async function saveTurn(store: EventStore, facts: ComputerFacts,
@@ -245,7 +265,8 @@ async function payingGroup(store: EventStore, context: TurnContext,
   if (!defaultPayingGroupId) {
     throw new ReportRejected('Paying group unavailable; configure the installation default');
   }
-  return { payer: defaultPayingGroupId, fresh: undefined };
+  const fresh = await requireTurnMember(store, context.silo, requesterId);
+  return { payer: defaultPayingGroupId, fresh };
 }
 function sessionPayer(conversation: ChatFacts, requesterId: string,
   assistantPayer: string | undefined) {
@@ -323,6 +344,15 @@ function addLifecycleDetails(data: { executionMode?: ExecutionMode; status?: 'co
   } else {
     data.status = status;
   }
+}
+
+export async function requireTurnMember(store: EventStore, silo: string, requesterId: string) {
+  const subjects = [`member-${requesterId}`];
+  const fresh = await authorityFence(store, performance.now(), subjects);
+  const active = await chatMembership(store, silo, requesterId, fresh.deadline);
+  if (!active) throw new TurnAdmissionRejected('Active silo membership required');
+  await fresh();
+  return fresh;
 }
 
 function applyProviderChoice(data: TurnBinding,

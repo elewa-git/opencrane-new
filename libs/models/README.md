@@ -15,13 +15,12 @@ to handle AI calls.
 flowchart LR
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices, draining, owner appointments and spending| models["libs/models<br/>AI rules, provider choice and spending"]
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
-  ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves holds and settlements, reads activity, grants, payer and switch-on| store["libs/event-store<br/>event log"]
+  models -->|saves spending changes and reads activity, grants and closing records| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -76,7 +75,8 @@ flowchart LR
   if its event could not be saved.
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.
   Keep approval lists within the caller’s current period of participation.
-  Reuse checked approval facts and read only later chat changes before a decision.
+  Reuse checked approval facts and read only later messages and access changes
+  before a decision.
 - Refuse provider-bound model passes on the deployment-key gateway before holding money.
   Read switch-on from the silo’s spending stream before checking access.
   Calls through saved provider choices are not available yet.
@@ -87,6 +87,7 @@ flowchart LR
   Keep membership checks for writes within the caller’s original deadline.
 - Check that an invitation's sender still has authority before it is accepted.
 - Keep chat, computer and model grant facts in memory and read new events before each call.
+  Include both closing formats in the existing chat activity read.
   Keep only the latest grant facts for each person, assistant or group.
   Check those facts before watching the streams that decide access. These checks
   share two seconds because the gateway waits only that long. Older summaries

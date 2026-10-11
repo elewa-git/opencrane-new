@@ -17,6 +17,10 @@ function emptyChanges(): Changes {
 }
 function addChange(changes: Changes, row: StoredEvent) {
   const event = row.event;
+  if (event.type === 'conversation.closed') {
+    conversationEventId(event);
+    return;
+  }
   if (!['participant.added', 'participant.removed'].includes(event.type)) {
     throw new Error('Invalid participation event');
   }
@@ -158,6 +162,7 @@ function emptyClosure(): Closure {
   return { closed: false };
 }
 function addClosure(closure: Closure, row: StoredEvent) {
+  conversationEventId(row.event);
   if (row.event.type === 'conversation.closed') {
     closure.closed = true;
   }
@@ -168,6 +173,11 @@ function isClosed(closure: Closure) {
 const closureKind: SummaryKind<Closure> = {
   name: 'conversation-closure', keep: 256, empty: emptyClosure, add: addClosure,
 };
+export function participationClosed(store: Pick<EventStore, 'readStream'>,
+  silo: string, conversationId: string, deadline = performance.now() + 2000) {
+  return readStreamSummary(store, silo, `participation-${conversationId}`,
+    closureKind, deadline, isClosed);
+}
 const closureReaders = new WeakMap<object, Pick<EventStore, 'readStream'>>();
 
 function closureReader(store: Pick<EventStore, 'readStream' | 'readEvent'>, db: Query) {
@@ -192,17 +202,14 @@ export function conversationClosed(store: Pick<EventStore, 'readStream' | 'readE
 
 async function* closureRecords(store: Pick<EventStore, 'readStream' | 'readEvent'>,
   db: Query, silo: string, conversationId: string, checkedFrom: number, deadline: number) {
-  // Read the close and worker position together so a replay cannot mix two table versions.
-  const result = await db.query<{ sequence: string; position: string | null;
-    event_id: string | null }>(
-    `SELECT c.sequence, f.position, f.event_id FROM projection_checkpoints c
-      LEFT JOIN conversation_feed f ON f.silo = $1 AND f.conversation_id = $2
-        AND f.type = 'conversation.closed'
-      WHERE c.name = 'conversations' ORDER BY f.position DESC LIMIT 1`,
-    [silo, conversationId]);
+  // Confirm older closes by their saved position. Upgrade with old writers stopped
+  // and the conversation worker caught up before starting this server.
+  const result = await db.query<{ position: string; event_id: string }>(
+    `SELECT position, event_id FROM conversation_feed
+      WHERE silo = $1 AND conversation_id = $2 AND type = 'conversation.closed'
+      ORDER BY position DESC LIMIT 1`, [silo, conversationId]);
   const reference = result.rows[0];
-  if (!reference) throw new Error('Conversation projection unavailable');
-  if (reference.position !== null) {
+  if (reference) {
     const row = await store.readEvent(Number(reference.position), deadline);
     if (row.event.silo !== silo || conversationEventId(row.event) !== conversationId ||
         row.event.id !== reference.event_id || row.event.type !== 'conversation.closed') {
@@ -211,10 +218,8 @@ async function* closureRecords(store: Pick<EventStore, 'readStream' | 'readEvent
     yield row;
     return;
   }
-  // Resume after checked records when the worker is behind. Keep a close permanently.
-  // Check every newer record so a buffered report cannot hide a close.
-  const fromSequence = Math.max(Number(reference.sequence) + 1, checkedFrom);
-  for await (const row of store.readStream(`conversation-${conversationId}`, fromSequence,
+  // Read only access changes. Messages and reports cannot use a viewer's check time.
+  for await (const row of store.readStream(`participation-${conversationId}`, checkedFrom,
     deadline)) {
     if (row.event.silo !== silo || conversationEventId(row.event) !== conversationId) {
       throw new ParticipationRefused('Conversation refused');
@@ -253,5 +258,16 @@ export async function chatMembership(store: Pick<EventStore, 'readStream'>, silo
       throw new ParticipationRefused('Active silo membership required', { cause: error });
     }
     throw error;
+  }
+}
+
+export async function requireLegacyClosesProjected(store: EventStore, db: Query) {
+  // Check once at startup. Older closes must be indexed before new writers start.
+  const position = await store.head('conversation-*');
+  const result = await db.query<{ sequence: string }>(
+    "SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'");
+  const projected = Number(result.rows[0]?.sequence ?? 0);
+  if (projected < position) {
+    throw new Error('Conversation worker must catch up before server startup');
   }
 }

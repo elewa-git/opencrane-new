@@ -35,6 +35,10 @@ async function admissionGrowth(longChat: boolean) {
       if (result.status !== 'appended') throw new Error('Fixture append refused');
       positions.set(subject, result.sequence);
     }
+    await append('member-alice', 'member.joined', {
+      memberId: 'alice', role: 'member', email: 'alice@example.test',
+      displayName: 'Alice', invitationId: 'invite-alice',
+    }, 'joined');
     const identity = { assistantId: 'assistant', computerId: 'computer', generation: 1 };
     await append('assistant-assistant', 'assistant.created', {
       assistantId: 'assistant', ownerId: 'alice', kind: 'personal',

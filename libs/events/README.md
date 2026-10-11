@@ -22,7 +22,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks reviewed removals and memory commands and records dispatch, consent, refusals and participant facts| events["libs/events<br/>event, memory and destination checks"]
+  server["apps/server<br/>back end"] -.->|checks memory and removal rules and records access changes, tool decisions and dispatch| events["libs/events<br/>event and memory checks"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
@@ -71,7 +71,9 @@ Older events without that choice still parse. Email-only join events also record
 the account issuer and subject. Older joins without those fields remain valid.
 
 Group chat records name each participant explicitly. Participant changes use a
-separate event stream so ordinary messages do not change access.
+separate event stream so ordinary messages do not change access. New closing
+events use that stream too. Older callers can still save a close on the conversation
+stream, and both forms replay.
 
 New group chats record at most 97 people, including their creator. Older saved
 events keep their original reading rules.

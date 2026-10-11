@@ -6,6 +6,7 @@ type Message = { authorId: unknown; executionMode: unknown };
 type ComputerReports = { lastSequence: number; positions: Map<number, number> };
 type ChatSummary = {
   created: Record<string, unknown> | undefined;
+  conversationClosed: boolean;
   messages: Map<string, Message>;
   closedTurnIds: Set<string>;
   reports: Map<string, ComputerReports>;
@@ -22,11 +23,12 @@ export type ChatFacts = {
 const closedTurn = z.object({ turnId: z.string() });
 
 function emptyChat(): ChatSummary {
-  return { created: undefined, messages: new Map(), closedTurnIds: new Set(),
+  return { created: undefined, conversationClosed: false, messages: new Map(), closedTurnIds: new Set(),
     reports: new Map(), reportCount: 0 };
 }
 function addChat(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
+  if (event.type === 'conversation.closed') summary.conversationClosed = true;
   let data: Record<string, unknown> | undefined;
   if (event.type === 'conversation.created' || event.type === 'message.posted') {
     data = z.record(z.string(), z.unknown()).parse(event.data);
@@ -78,14 +80,15 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
     return {
       created: summary.created === undefined ? undefined : { ...summary.created },
       message: message === undefined ? undefined : { ...message },
-      closed: summary.closedTurnIds.has(turnId),
+      closed: summary.conversationClosed || summary.closedTurnIds.has(turnId),
       lastReportSequence: reports?.lastSequence ?? 0,
       reportPosition, sequence,
     };
   }
   try {
+    const deadline = performance.now() + 10_000;
     return await readStreamSummary(store, silo, `conversation-${conversationId}`,
-      chat, performance.now() + 10_000, take);
+      chat, deadline, take);
   } catch (error) {
     if (error instanceof WrongSiloError) throw new Error('Conversation silo mismatch', { cause: error });
     throw error;

@@ -43,6 +43,11 @@ async function replayFixture(conversationIds = ['alice', 'bob']) {
   const keys = conversationKeys(directory), server = createServer(), wss = new WebSocketServer({ server });
   const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
   for (const conversationId of conversationIds) {
+    const joined = envelope('test', `member-${conversationId}`, 'member.joined', {
+      memberId: conversationId, email: `${conversationId}@example.test`,
+      displayName: conversationId, role: 'member', invitationId: `invite-${conversationId}`,
+    });
+    await nats.seed([joined]);
     keys.provision('test', conversationId);
     await chatCommand(nats.store, keys, { silo: 'test', memberId: conversationId }, { id: `create-${conversationId}`, conversationId, assistantId: 'assistant' });
     await chatCommand(nats.store, keys, { silo: 'test', memberId: conversationId }, { id: `message-${conversationId}`, conversationId, text: 'Hello' });
@@ -675,6 +680,11 @@ it('keeps 30 finished chats unread after the turn is accepted',
 
 async function routesAndCachesAssistants() {
   const fixture = await finishedChatFixture(0);
+  const joined = envelope('test', 'member-alice', 'member.joined', {
+    memberId: 'alice', email: 'alice@example.test', displayName: 'Alice',
+    role: 'member', invitationId: 'invite-alice',
+  });
+  await fixture.seed([joined]);
   const dbs = await databases();
   const stop = new AbortController();
   const tokens = await bridgeTokens(fixture);

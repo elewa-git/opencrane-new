@@ -5,6 +5,8 @@ import { readBeforeDeadline, type EventStore } from './jetstream.ts';
 export interface SummaryKind<Summary> {
   name: string;
   keep: number;
+  /** Include both closing formats in one conversation activity read. */
+  includeConversationCloses?: true;
   /** Limit the total size of cached streams of this kind, as well as their count. */
   budget?: { limit: number; size(summary: Summary): number };
   empty(): Summary;
@@ -102,7 +104,8 @@ export function readStreamSummary<Summary, Result>(
       logRebuild('Rebuilding %s summary for %s in silo %s', kind.name, subject, silo);
     }
     const catchUpDeadline = Math.max(deadline, performance.now() + 10_000);
-    const rows = store.readStream(subject, entry.sequence + 1, catchUpDeadline);
+    const rows = store.readStream(subject, entry.sequence + 1, catchUpDeadline,
+      kind.includeConversationCloses);
     try {
       for await (const row of rows) {
         if (row.event.silo !== silo) throw new WrongSiloError();

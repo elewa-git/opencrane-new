@@ -60,7 +60,9 @@ it('uses the newest matching personal payer and reads at most two new budget row
   usesLatestMatchingDefaultWithoutOldBudgetReads);
 
 async function seedAssistant() {
-  await nats.seed([
+  const joined = fixtureEvent('joined', 'member-alice', 'member.joined');
+  joined.data = { ...joined.data, memberId: 'alice' };
+  await nats.seed([joined,
     { ...event('assistant', 'assistant-assistant', 'assistant.created'),
       data: { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' } },
     { ...event('ready', 'computer-assistant', 'computer.ready'),
