@@ -136,6 +136,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
   const admitted: string[] = [], observations: Promise<void>[] = [];
   let upstreamBody = '';
+  const mcpPrecondition = { revision: undefined as string | undefined, generation: 'instance-1' };
   let mcpResponse = { status: 200, marker: false, body: '{"jsonrpc":"2.0","id":1,"result":{"content":[]}}' };
   let received = 0, hold = false, rejection = 0, providerHeaders: string[] = [], providerAuthHash = '';
   const providerRequests: {
@@ -194,7 +195,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     stub.listen(upstreamPort, '127.0.0.1');
     await once(stub, 'listening');
   }
-  const mcpRoutes = [{ serverId: 'fixture', connectionId: 'installed',
+  const mcpRoutes: { serverId: string; connectionId: string; upstream: string;
+    generation: string; revisionHeader?: 'x-opencrane-mcp-revision' }[] = [{ serverId: 'fixture', connectionId: 'installed',
     upstream: `127.0.0.1:${address.port}`, generation: 'instance-1',
     revisionHeader: 'x-opencrane-mcp-revision' as const }];
   const dispatchOptions = { routes: mcpRoutes, requireLeader: async function requireLeader() {} };
@@ -233,7 +235,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   };
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { tokens, keys, stopDispatch, closeUpstream, resumeUpstream,
+  return { mcpPrecondition, tokens, keys, stopDispatch, closeUpstream, resumeUpstream,
     upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,

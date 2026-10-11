@@ -1,3 +1,5 @@
+import { setTimeout as pause } from 'node:timers/promises';
+import { z } from 'zod';
 import { expect, it } from 'vitest';
 import { grantStream } from '@opencrane/authz';
 import { catalogueEvidence, fixture, toolEvidence } from './fixture.ts';
@@ -56,12 +58,12 @@ async function send(setup: Fixture, value: string, changedBody = body,
   return fetch(`${setup.options.decisionUrl}${path}`, request);
 }
 
-const changes = ['catalogue', 'generation', 'expiry', 'backend', 'body', 'silo'] as const;
+const changes = ['catalogue', 'generation', 'expiry', 'backend', 'body', 'route', 'silo', 'permit expiry'] as const;
 async function refusesChangedCall(change: typeof changes[number]) {
   const setup = await fixture();
   try {
     const headers = await prepare(setup);
-    const value = await permit(setup, headers);
+    let value = await permit(setup, headers);
     const route = setup.options.mcpRoutes[0]!;
     let changedBody = body;
     let path = '/dispatch/mcp/fixture/installed';
@@ -81,8 +83,17 @@ async function refusesChangedCall(change: typeof changes[number]) {
       await setup.append('mcp-fixture', 'mcp.catalogue_checked', data);
     } else if (change === 'body') {
       changedBody = body.replace('write', 'other');
-    } else {
+    } else if (change === 'route') {
       path = '/dispatch/mcp/other/installed';
+    } else if (change === 'silo') {
+      const [encoded, signature] = value.split('.');
+      const decoded: unknown = JSON.parse(Buffer.from(encoded!, 'base64url').toString());
+      const binding = z.record(z.string(), z.unknown()).parse(decoded);
+      binding['silo'] = 'other';
+      const substituted = Buffer.from(JSON.stringify(binding)).toString('base64url');
+      value = `${substituted}.${signature}`;
+    } else {
+      await pause(2100);
     }
     const response = await send(setup, value, changedBody, path);
     expect(response.status).toBe(403);
@@ -116,7 +127,7 @@ async function refusesUnsupported() {
   const setup = await fixture();
   try {
     const headers = await prepare(setup);
-    delete (setup.options.mcpRoutes[0] as { revisionHeader?: string }).revisionHeader;
+    delete setup.options.mcpRoutes[0]!.revisionHeader;
     const request = { method: 'POST', headers, body };
     const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
       request);
@@ -127,3 +138,25 @@ async function refusesUnsupported() {
   }
 }
 it('denies mutable servers without an operator-reviewed atomic revision contract', refusesUnsupported);
+
+const upstreamChanges = ['revision', 'generation'] as const;
+async function refusesUpstreamChange(change: typeof upstreamChanges[number]) {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    setup.mcpPrecondition.revision = catalogue.schemaDigest;
+    const value = await permit(setup, headers);
+    if (change === 'revision') {
+      setup.mcpPrecondition.revision = 'a'.repeat(64);
+    } else {
+      setup.mcpPrecondition.generation = 'instance-2';
+    }
+    const response = await send(setup, value);
+    expect(response.status).toBe(409);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(upstreamChanges)('requires the backend to atomically refuse a changed %s',
+  refusesUpstreamChange);
