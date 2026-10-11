@@ -16,7 +16,7 @@ let storage: Awaited<ReturnType<typeof databases>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
 let counter = 0;
 const key = { siloId: 'test', userId: 'alice', profileId: 'profile-id', serverId: 'server-id',
-  credentialGeneration: 1 };
+  startupAccessGeneration: 1 };
 
 async function initialise() {
   nats = await natsFixture();

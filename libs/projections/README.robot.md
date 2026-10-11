@@ -480,7 +480,9 @@ connection, revision and review checks each cause a visible refusal on their own
 
 `mcpInstances` is an optional projection with one `mcp_instances` JSON row per silo/id.
 `applyMcpInstance` is its shared TypeScript fold. `mcpInstanceId` hashes the fixed tuple
-of silo, user, opaque profile, server and credential generation, in that order.
+of silo, user, opaque profile, server and startup access generation, in that order.
+`startupAccessGeneration` counts versions of the profile's startup access material.
+Renaming this field preserves the tuple order and the calculated instance id.
 The fold checks that id, exact stream, start deadline, installed bindings and every run.
 A replacement run requires recorded absence of the original stopped Pod and increments
 the run generation by one. Changed UID/spec or late old-run records refuse replay.

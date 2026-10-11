@@ -5,7 +5,7 @@ import type { EventEnvelope } from './envelope.ts';
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const identitySchema = z.strictObject({ siloId: id, userId: id, profileId: id,
-  serverId: id, credentialGeneration: z.int().positive() });
+  serverId: id, startupAccessGeneration: z.int().positive() });
 
 export const mcpInstanceStartSchema = identitySchema.extend({
   instanceId: digest, connectionId: id, imageDigest: digest,
@@ -30,22 +30,27 @@ function missingIsUnknown(data: z.infer<typeof observation>) {
 export const mcpInstanceObservedSchema = observation.refine(missingIsUnknown);
 
 export function validMcpInstanceEvent(event: EventEnvelope): boolean {
-  const data = z.object({ instanceId: digest }).parse(event.data);
-  if (event.subject !== `mcp-instance-${data.instanceId}`) return false;
+  const identity = z.object({ instanceId: digest }).safeParse(event.data);
+  if (!identity.success) return false;
+  if (event.subject !== `mcp-instance-${identity.data.instanceId}`) return false;
   if (event.type === 'mcp.instance_start_requested') {
-    const start = mcpInstanceStartSchema.parse(event.data);
+    const result = mcpInstanceStartSchema.safeParse(event.data);
+    if (!result.success) return false;
+    const start = result.data;
     const duration = Date.parse(start.deadline) - Date.parse(start.requestedAt);
     return start.siloId === event.silo && duration > 0 && duration <= 20_000;
   }
   if (event.type === 'mcp.instance_stop_requested') {
-    const stop = mcpInstanceStopSchema.parse(event.data);
+    const result = mcpInstanceStopSchema.safeParse(event.data);
+    if (!result.success) return false;
+    const stop = result.data;
     return event.principal?.kind === 'human' && event.principal.id === stop.requestedBy;
   }
   return true;
 }
 
 const key = { siloId: 'silo_1', userId: 'member_1', profileId: 'profile_1',
-  serverId: 'server_1', credentialGeneration: 1 };
+  serverId: 'server_1', startupAccessGeneration: 1 };
 const instanceId = 'f881c4329e9b65a9d225a3598a1f5a0f572307d8c8e1e3884528802df17f3523';
 const startExample = { ...key, instanceId, connectionId: 'connection_1',
   imageDigest: 'a'.repeat(64), installGeneration: 1, upstreamBindingDigest: 'b'.repeat(64),

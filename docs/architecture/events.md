@@ -378,6 +378,11 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `connection.refreshed` | reaction (OAuth refresh) | connections | — |
 | `connection.revoked` | person, admin or reaction | connections | delete the secret |
 
+Private instance starts identify the silo, user, opaque profile, server and
+`startupAccessGeneration`. This positive integer counts versions of the profile's
+startup access material; it contains no secret value. The separate `runGeneration`
+counts process starts for that fixed identity.
+
 ### Budgets (single-writer actor per silo)
 
 | Event | Emitted by | Projections | Reactions |

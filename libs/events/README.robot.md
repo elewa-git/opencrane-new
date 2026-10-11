@@ -337,8 +337,11 @@ The resulting policy revision comes from the saved event position.
 
 `mcp.instance_start_requested`, `mcp.instance_observed` and
 `mcp.instance_stop_requested` use `mcp-instance-<instanceId>` subjects.
-Start binds the silo, user, opaque profile, server and credential generation,
+Start binds the silo, user, opaque profile, server and startup access generation,
 plus installed connection, image/install generation, upstream and workload digests.
+`startupAccessGeneration` counts versions of the profile's startup access material.
+It is a positive integer, contains no secret value and is separate from `runGeneration`.
+Malformed instance data returns `invalid_event` rather than throwing from the identity check.
 The deadline is positive and at most 20 seconds after the requested time.
 Observations bind the original start, run, Pod UID and workload digest.
 A `not_found` reason requires `unknown`; callable claims and secret fields are refused.

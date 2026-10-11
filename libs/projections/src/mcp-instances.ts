@@ -5,10 +5,10 @@ import type { Projection } from './runner.ts';
 
 type Start = ReturnType<typeof mcpInstanceStartSchema.parse>;
 const identitySchema = mcpInstanceStartSchema.pick({ siloId: true, userId: true,
-  profileId: true, serverId: true, credentialGeneration: true });
+  profileId: true, serverId: true, startupAccessGeneration: true });
 export function mcpInstanceId(raw: unknown): string {
   const key = identitySchema.parse(raw);
-  const fields = [key.siloId, key.userId, key.profileId, key.serverId, key.credentialGeneration];
+  const fields = [key.siloId, key.userId, key.profileId, key.serverId, key.startupAccessGeneration];
   const hash = createHash('sha256');
   hash.update(JSON.stringify(fields));
   return hash.digest('hex');
@@ -72,7 +72,7 @@ function applyStart(current: McpInstanceState | undefined, event: EventEnvelope,
   sequence: number): McpInstanceState {
   const start = mcpInstanceStartSchema.parse(event.data);
   const identity = { siloId: start.siloId, userId: start.userId, profileId: start.profileId,
-    serverId: start.serverId, credentialGeneration: start.credentialGeneration };
+    serverId: start.serverId, startupAccessGeneration: start.startupAccessGeneration };
   const duration = Date.parse(start.deadline) - Date.parse(start.requestedAt);
   if (start.instanceId !== mcpInstanceId(identity) || event.silo !== start.siloId ||
       event.subject !== `mcp-instance-${start.instanceId}` || duration <= 0 || duration > 20_000) {

@@ -44,6 +44,7 @@ value calculated from those definitions. Older records remain readable for repla
 
 - Define private tool-instance starts, observations and owner stop requests.
   These records contain identity and timing details, with no credentials or callable status.
+  A counter names the version of startup access material, separately from process starts.
 - Define exact HTTPS destination rules for the silo, a person or an assistant.
   Refuse reserved internal names, including `home.arpa` and names beneath it.
 

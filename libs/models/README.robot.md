@@ -1309,6 +1309,8 @@ history once before the two-second membership check. It conditionally appends on
 
 `mcpInstanceCommand`, `mcpInstanceStatus` and `mcpInstanceChange` take the checked
 binding/member separately from an exact instance/profile/server reference.
+Saved starts use `startupAccessGeneration`, the positive integer version of the
+profile's startup access material. The fold checks it as part of the fixed instance id.
 They read only that instance before checking current membership. Reads use
 `readActiveMember`; writes use `authorityFence` over small membership streams and
 one conditional append to the instance. No conversation history is read or watched.
