@@ -16,7 +16,7 @@ export interface McpDispatchOptions {
   routes: Route[];
   requireLeader: () => Promise<void>;
 }
-type Policy = Awaited<ReturnType<typeof mcpPolicy>>;
+type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
 interface Permit {
   requestId: string;
   silo: string;
@@ -65,6 +65,9 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
   function issue(policy: Policy, body: string, requestId: string,
     confirmAccess: () => Promise<void>) {
     const route = requireContract(policy);
+    if (policy.dispatchBinding !== digest(JSON.stringify(route))) {
+      throw new Error('MCP backend changed during the decision');
+    }
     const expiresAt = Math.min(Date.now() + 2000, Date.parse(policy.policy.expiresAt!));
     for (const [token, permit] of pending) {
       if (permit.expiresAt <= Date.now()) pending.delete(token);
