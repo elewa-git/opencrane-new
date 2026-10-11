@@ -200,7 +200,9 @@ async function refusesChangeDuringLeaderCheck() {
 }
 it('refuses catalogue changes while the leadership check waits', refusesChangeDuringLeaderCheck);
 
-const blockPoints = ['first policy read', 'access read', 'terminating read or admission'] as const;
+const blockPoints = [
+  'first policy read', 'leadership check', 'access read', 'terminating read or admission',
+] as const;
 async function refusesBlockDuringFinalAccessReads(point: typeof blockPoints[number]) {
   const setup = await fixture();
   try {
@@ -252,6 +254,7 @@ async function refusesBlockDuringFinalAccessReads(point: typeof blockPoints[numb
       if (event.type === 'mcp.dispatch_admitted') await saveBlock();
       return append(command);
     }
+    if (point === 'leadership check') setup.dispatchOptions.requireLeader = saveBlock;
     const delayedRead = vi.spyOn(setup.nats.store, 'head');
     const delayedAppend = vi.spyOn(setup.nats.store, 'append');
     delayedRead.mockImplementation(blockDuringRead);
@@ -343,3 +346,44 @@ async function refusesGenerationDuringDecisionSave() {
 }
 it('refuses a replacement generation while saving the allow decision',
   refusesGenerationDuringDecisionSave);
+
+async function allowsAdmissionBeforeBlock() {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    let blocked = false;
+    async function blockAfterAdmission(command: AppendCommand) {
+      const result = await append(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'mcp.dispatch_admitted' && result.status === 'appended') {
+        const block = { commandId: 'block-after-admission', expectedSequence: result.sequence,
+          connectionId: 'installed', toolName: 'write', toolRevision: tool.revision, mode: 'block' };
+        const saved = await setToolPolicy(setup.nats.store, setup.binding, 'alice',
+          'fixture', block);
+        expect(saved.status).toBe('appended');
+        blocked = true;
+      }
+      return result;
+    }
+    const delayed = vi.spyOn(setup.nats.store, 'append');
+    delayed.mockImplementation(blockAfterAdmission);
+    try {
+      const response = await send(setup, value);
+      expect(response.status, await response.text()).toBe(200);
+      expect(blocked).toBe(true);
+      expect(setup.received()).toBe(1);
+      const request = { method: 'POST', headers, body };
+      const later = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+        request);
+      expect(later.status, await later.text()).toBe(403);
+      expect(setup.received()).toBe(1);
+    } finally {
+      delayed.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('allows an admitted call while a later Block refuses later calls', allowsAdmissionBeforeBlock);
