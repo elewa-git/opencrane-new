@@ -1420,3 +1420,29 @@ Failing tests were committed before their fixes. The two authority tests are unc
 NOT RUN: full root suite, fresh install qualification, independent review and hosted CI.
 Logs: `/tmp/p3-6-pr2-tests-rebased-{1,2}.log`, `/tmp/p3-6-pr2-lint-rebased.log`,
 `/tmp/p3-6-pr2-typecheck-rebased.log` and `/tmp/p3-6-pr2-red-*.log`.
+
+## Checks for Block during final MCP access reads
+
+Date: 11 October 2026. Runtime source: `18bb3606`, rebased onto `eb67de6e`.
+Environment: Linux, Node 22.23.3, local worktree, disposable NATS and OpenFGA,
+the supplied PostgreSQL test server and a recording upstream. This is not a fresh install.
+
+FAIL before the fix, as expected: the regression in `61881db0` saved Block through
+`setToolPolicy` after the MCP position read, while a member-position read waited.
+The upstream received one request. PASS after the fix: the same test records zero
+upstream requests and HTTP 403. The test commit precedes the fix.
+
+PASS: the first seven-file batch passed 270 tests in 704.54 seconds. It includes both
+changed files, both unchanged authority guards, decision races, gateway and memory-context
+checks. The opt-in paid-provider test was skipped. PASS: both changed files passed again,
+46 tests in 146.53 seconds. Both runs used the supplied `PG_TEST_URL`, `nice -n 10` and
+one worker. The authority files and their limits match main.
+
+PASS: full lint (16 warnings, no errors), workspace typecheck, event catalogue
+(121 types), standalone Knip and changelog validation. No dependencies were added.
+NOT RUN: full root suite, fresh-install qualification, paid calls and hosted CI.
+
+Logs: `/tmp/p3-6-pr2-review-red.log`, `/tmp/p3-6-pr2-review-green.log`,
+`/tmp/p3-6-pr2-review-tests-{1,2}.log`, `/tmp/p3-6-pr2-review-lint.log`,
+`/tmp/p3-6-pr2-review-typecheck.log`, `/tmp/p3-6-pr2-review-events.log`,
+`/tmp/p3-6-pr2-review-knip.log` and `/tmp/p3-6-pr2-review-changelog.log`.
