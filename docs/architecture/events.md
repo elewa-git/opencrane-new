@@ -525,9 +525,24 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` | person | routines | schedule the next firing |
-| `routine.due` | scheduler | routines (last firing) | emit `message.posted` to the routine's assistant; one firing only |
+| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts (pure fold only) | none; routine execution is unavailable |
+| `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
+| `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
+| `routine.run_activation_admitted` / `routine.run_finished` | server system | saved run facts | none; records grant no authority |
+| `routine.run_stop_requested` | server for checked owner/admin | saved Stop intent | none; execution integration is not built |
 | `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; native execution remains disabled |
+
+Routine version 1 stores a full encrypted request, one member owner, a team assistant,
+its fixed payer, explicit company connection/profile/account and daily/weekly schedule.
+Definition, schedule and control revisions bind later records. Due records freeze the request
+and occurrence/root/input ids. Skip and missed records carry local slots or a compact range.
+Run admission, Stop and completion name the saved run; completion records terminal evidence.
+Modern envelopes require the matching routine stream, server source, bound actor and command id.
+Exact unversioned cron and firedAt-only records remain replay-only. Mixed formats refuse.
+Legacy folds keep Needs migration with no definition, run or execution authority.
+Migration requires a full paused modern update. The pure fold starts no work, even for modern dues.
+Live grant, identity and budget checks and all execution paths remain unimplemented.
+The [accepted design](../specs/phase-4/p4-24-routines.md) describes the later steps.
 
 Delegation version 1 names one root, computer generation, requester and payer. It
 records parent/child turns and threads, the native spawn item, content class,

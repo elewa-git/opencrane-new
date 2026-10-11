@@ -57,10 +57,14 @@ function rejectedFields(type: string, patch: Record<string, unknown>): string[] 
 
 function rejectedIssueFields(issue: z.core.$ZodIssue): string[] {
   if (issue.code === 'invalid_union') {
-    const modernIssues = issue.errors[0];
-    if (modernIssues) return modernIssues.flatMap(rejectedIssueFields);
+    const firstAlternativeIssues = issue.errors[0];
+    if (firstAlternativeIssues) {
+      return firstAlternativeIssues.flatMap(rejectedIssueFields);
+    }
   }
-  if (issue.code === 'unrecognized_keys') return issue.keys;
+  if (issue.code === 'unrecognized_keys') {
+    return issue.keys;
+  }
   return [String(issue.path.at(-1))];
 }
 

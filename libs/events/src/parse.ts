@@ -3,6 +3,7 @@ import { validEgressRuleEvent } from './egress.ts';
 import { validPreferenceIdentity } from './conversation.ts';
 import { memoryWrittenEventSchema } from './memory.ts';
 import { checkDelegationEvent } from './delegation.ts';
+import { checkRoutineEvent } from './routines.ts';
 // Parses a raw event by binding its `type` field to the registry, so
 // `data` is checked against that type's own schema instead of the generic
 // `z.unknown()` placeholder. This is what should sit in front of every
@@ -49,6 +50,7 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   envelopeSchema = envelopeSchema.superRefine(checkDelegationEvent);
   envelopeSchema = envelopeSchema.refine(validEgressRuleEvent);
   envelopeSchema = envelopeSchema.refine(validSurveyEvent);
+  envelopeSchema = envelopeSchema.superRefine(checkRoutineEvent);
   if (definition.type === 'memory.maintenance_bound') {
     envelopeSchema = envelopeSchema.refine(validMaintenanceBinding);
   }

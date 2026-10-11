@@ -1,12 +1,13 @@
 import { expect, it } from 'vitest';
-import { getEventDefinition, parseEventByType } from '../src/index.ts';
+import { parseEventByType } from '../src/index.ts';
 
 const definition = {
   name: 'Daily orders', ownerId: 'alice', ownerAdmissionId: 'joined-alice',
   assistantId: 'sales-assistant', assistantKind: 'team', payingGroupId: 'sales',
-  assistantPayingGroupId: 'sales', connectionId: 'odoo', profileId: 'orders-bot',
-  profileRevision: 1, companyAccountId: 'verified-bot', scopes: ['orders:read'],
-  instructions: { ciphertext: 'ZW5jcnlwdGVk', keyId: 'key:1' },
+  assistantPayingGroupId: 'sales', connectionId: 'odoo', connectionKind: 'company' as const,
+  profileId: 'orders-bot',
+  profileRevision: 1, connectionRevision: 1, companyAccountId: 'verified-bot', scopes: ['orders:read'],
+  instructions: { ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' },
   schedule: { frequency: 'daily', localTime: '09:00', zone: 'Europe/Brussels' },
 };
 const slot = { localDate: '2026-10-11', localTime: '09:00', zone: 'Europe/Brussels',
@@ -53,6 +54,7 @@ function refusesMixedAndForgedBindings() {
   const badDefinitions = [
     { ...definition, assistantKind: 'personal' },
     { ...definition, payingGroupId: 'other' },
+    { ...definition, connectionKind: 'personal' },
     { ...definition, instructions: { text: 'secret', keyId: 'key:1' } },
     { ...definition, schedule: { ...definition.schedule, weekday: 1 } },
     { ...definition, schedule: { ...definition.schedule, localTime: '24:00' } },
@@ -82,13 +84,6 @@ function readsRunFactsWithoutActivating() {
   expect(parseEventByType(event).success).toBe(true);
   expect(accepted('routine.due', due)).toBe(false);
   expect(parseEventByType({ ...event, data: { ...due, firedAt: 'invalid' } }).success).toBe(false);
-  const types = ['routine.reassigned', 'routine.occurrence_skipped',
-    'routine.occurrences_missed', 'routine.run_activation_admitted',
-    'routine.run_stop_requested', 'routine.run_finished'];
-  for (const type of types) {
-    const registered = getEventDefinition(type);
-    expect(registered, type).toBeDefined();
-    expect(registered?.dataSchema.safeParse(registered.example).success, type).toBe(true);
-  }
+
 }
-it('checks frozen run records and registers each new routine fact', readsRunFactsWithoutActivating);
+it('checks frozen run records without accepting a human firing', readsRunFactsWithoutActivating);

@@ -617,24 +617,6 @@ export const scopePromotedDataSchema = z
 
 // --- Routines and delegation ----------------------------------------------
 
-export const routineCreatedDataSchema = z
-  .object({ routineId: id, assistantId: id, schedule: id, createdBy: id })
-  .strict();
-
-export const routineUpdatedDataSchema = z
-  .object({ routineId: id, schedule: id, updatedBy: id })
-  .strict();
-
-export const routinePausedDataSchema = z.object({ routineId: id, pausedBy: id }).strict();
-
-export const routineResumedDataSchema = z.object({ routineId: id, resumedBy: id }).strict();
-
-export const routineRetiredDataSchema = z.object({ routineId: id, retiredBy: id }).strict();
-
-export const routineDueDataSchema = z
-  .object({ routineId: id, firedAt: z.iso.datetime({ offset: true }) })
-  .strict();
-
 export { delegationStartedDataSchema, delegationCompletedDataSchema } from './delegation.ts';
 
 // --- Security --------------------------------------------------------------

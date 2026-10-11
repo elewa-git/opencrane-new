@@ -23,7 +23,7 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>event, survey hash, memory and destination checks"]
+  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>event checks, survey hashes and saved routine facts"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
@@ -51,6 +51,8 @@ value calculated from those definitions. Older records remain readable for repla
 - Define computer-wide control intent with the reviewed requester and affected turn ids.
 
 - Defines shared child records with a parent message, fixed payer and named people.
+- Define strict routine records and rebuild their saved facts without starting work.
+  Older routines stay readable and need migration before use.
 - Defines delegated task relationships and outcomes, including cancellation. Older records
   remain readable. These records grant no permission to run a task.
 
@@ -105,6 +107,9 @@ Archive and read choices name one person and their join. They contain no chat te
 2. **A developer adds an event type.** The registry and event catalogue are
    updated together. `npm run check:events` checks that this list and the event
    catalogue match.
+
+3. **Saved routine records are read again.** `foldRoutine` rebuilds their definition
+   and run facts. It grants no access and starts no work.
 
 ## How to run or test it
 
