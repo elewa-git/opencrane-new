@@ -382,6 +382,8 @@ connections, including memory records without a startup contract, retain their
 reviewed publication. Rebuilding the catalogue applies the same checks and starts
 no process. Transport kind alone does not decide whether credentials are used at
 startup or supplied for each call.
+A per-call connection still needs complete definitions, checked hashes and current
+catalogue dates before it can run calls.
 
 The providers fold stores `managedCallsEnabled: true` on the connection carrying
 `provider.managed_calls_enabled` on `budget-<silo>`. This does not advance its configuration revision

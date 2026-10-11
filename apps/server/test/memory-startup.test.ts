@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { dirname } from 'node:path';
 import { grantStream } from '@opencrane/authz';
-import { fixture } from '@opencrane/models/testing';
+import { catalogueEvidence, fixture, toolEvidence } from '@opencrane/models/testing';
 import { readToolPolicy } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
@@ -13,6 +13,8 @@ const imageDigest = 'a'.repeat(64);
 const memoryLocator = `registry.example.test/opencrane/server@sha256:${imageDigest}`;
 const scopeId = memoryScopeId('test', 'person', 'alice');
 const contracts = [undefined, { credentialMode: 'per_call', materialKind: 'per_call_lease' }];
+const recallTool = toolEvidence({ name: 'recall', reviewed: true, costCents: 0 });
+const memoryCatalogue = catalogueEvidence([recallTool]);
 
 function memberId() {
   return Promise.resolve('alice');
@@ -23,14 +25,13 @@ async function reviewMemory(setup: Awaited<ReturnType<typeof fixture>>,
   const registration = { serverId: 'memory', kind: 'hosted', locator: memoryLocator,
     registeredBy: 'alice', credentialContract };
   await setup.append('mcp-memory', 'mcp.server_registered', registration);
-  const tool = { name: 'recall', revision: imageDigest, reviewed: true, costCents: 0 };
   const discovery = { serverId: 'memory', connectionId: 'server', accountMode: 'none',
-    schemaDigest: imageDigest, toolCount: 1, tools: [tool] };
+    ...memoryCatalogue };
   await setup.append('mcp-memory', 'mcp.server_discovered', discovery);
   const publication = { serverId: 'memory', publishedBy: 'alice' };
   await setup.append('mcp-memory', 'mcp.server_published', publication);
   const mode = { serverId: 'memory', connectionId: 'server', toolName: 'recall',
-    toolRevision: imageDigest, mode: 'allow', setBy: 'alice' };
+    toolRevision: recallTool.revision, mode: 'allow', setBy: 'alice' };
   await setup.append('mcp-memory', 'mcp.tool_mode_set', mode);
   const resources = [['mcp_server', 'memory'], ['memory_read', scopeId]] as const;
   const grantees = [['member', 'alice'], ['assistant', 'assistant']] as const;
@@ -62,7 +63,7 @@ async function keepsMemoryCallable(credentialContract: (typeof contracts)[number
     await setup.runtime.stop();
     await reviewMemory(setup, credentialContract);
     await worker.discover('memory');
-    const tool = { name: 'recall', revision: imageDigest, reviewed: true, costCents: 0 };
+    const tool = recallTool;
     const status = await discoveryStatus(setup.nats.store, 'test', 'memory');
     expect(status).toMatchObject({ state: 'needs_input', reason: 'pending_review',
       inventory: { connectionId: 'server', tools: [tool] } });

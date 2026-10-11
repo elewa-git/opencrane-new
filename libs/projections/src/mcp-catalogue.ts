@@ -197,6 +197,10 @@ export function mapMcpCatalogueRows(rows: McpCatalogueRow[]): IntegrationRow[] {
 
 
 function catalogueStatus(row: McpCatalogueRow, policy: ToolPolicy | null): IntegrationRow['status'] {
+  // Keep the saved startup result visible when tool discovery is blocked.
+  if (policy?.startupReviewRequired === true) {
+    return catalogueRowStatus(row);
+  }
   const missingDates = row.tool_count !== null && !policy?.checkedAt;
   const stalePublication = row.lifecycle === 'published' &&
     (!policy || !isToolPolicyAvailable(policy));

@@ -26,7 +26,7 @@ flowchart LR
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners and startup review| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
-  projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
+  projections -.-> events["libs/events<br/>event data checks"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
 ```
 
@@ -37,6 +37,8 @@ It retains both lists after a change, so the earlier list can still be read.
 A server without a fresh check is shown as unavailable. Saved definitions must
 match their hashes before review choices are kept. A hash is a fixed-length value
 calculated from the definitions. Checks renew only the same server in the same silo.
+A fresh catalogue check does not approve startup credentials. Required startup review
+keeps calls blocked.
 
 - Keep dated tool snapshots and the earlier list after a change.
 - Keep current destination rules, including who revoked them and when.
