@@ -25,6 +25,7 @@ vi.mock('node:crypto', cryptoModule);
 let setup: Awaited<ReturnType<typeof fixture>>;
 let app: ReturnType<typeof buildServer>;
 let capability = '';
+let isolateRecoveryServices = false;
 let keys: ReturnType<typeof memoryKeys>;
 const scopeId = memoryScopeId('test', 'person', 'alice');
 const route = '/mcp/memory/server';
@@ -145,8 +146,15 @@ async function renewGatewayCredentials() {
   // Keep catalogue expiry from hiding the memory check each test intends to exercise.
   await setup.append('mcp-memory', 'mcp.catalogue_checked', check);
 }
+async function prepareTestServices() {
+  if (isolateRecoveryServices) {
+    await prepareRecoveryServices();
+  }
+  await renewGatewayCredentials();
+}
+
 beforeAll(prepare, 120_000);
-beforeEach(renewGatewayCredentials);
+beforeEach(prepareTestServices);
 afterAll(close);
 
 function scopedRequester(team: boolean, kind: MemoryIdentity['scopeKind']) {
@@ -1402,7 +1410,18 @@ async function dependencyRace() {
 }
 it('rechecks dependencies after preparing the new revision key', dependencyRace);
 
+async function prepareRecoveryServices() {
+  // Keep earlier grant and catalogue histories out of the timed recovery write.
+  // Give later cases their own services because NATS stops when each test finishes.
+  await close();
+  await prepare();
+}
+
 async function recoveryCleanup(stage: 'prepared' | 'unknown' | 'legacy') {
+  if (!isolateRecoveryServices) {
+    isolateRecoveryServices = true;
+    await prepareRecoveryServices();
+  }
   const body = await recalledRemember(`agent-recovery-${stage}`);
   const unavailable = { status: 'unavailable' as const, cause: new Error('Unavailable') };
   const append = vi.spyOn(setup.nats.store, 'append').mockResolvedValueOnce(unavailable);
