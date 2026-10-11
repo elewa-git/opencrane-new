@@ -2163,10 +2163,15 @@ it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as cons
     expect((await remember('bob', 'person', `after-pool-${commandStage}`)).statusCode).toBe(200);
   });
 
-async function fairWrites(stage: 'scope history' | 'append') {
-  // Start fresh so earlier history and recovery cases do not delay this write flood.
+async function prepareFairWriteServices() {
+  // Give each case its own services. NATS fixtures stop when their test finishes.
+  // Keep earlier histories and recovery records out of the timed flood.
   await cleanup();
   await setup();
+}
+
+async function fairWrites(stage: 'scope history' | 'append') {
+  await prepareFairWriteServices();
   const commandStage = stage.replaceAll(' ', '-');
   const assistantId = `fair-${commandStage}`;
   await append(`assistant-${assistantId}`, 'assistant.created',
@@ -2277,6 +2282,7 @@ it.each(['scope history', 'append'] as const)(
   'lets another member save while one member floods slow %s writes', fairWrites);
 
 async function fairQueueAcrossScopesAndSessions() {
+  await prepareFairWriteServices();
   const floodScopes = new Set<string>();
   const groupsToWrite: string[] = [];
   for (let index = 0; index < 8; index++) {
