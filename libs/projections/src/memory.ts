@@ -1,7 +1,10 @@
 import { parseEventByType, memoryWrittenEventSchema, memoryTextSchema, type EventEnvelope,
-  type MemoryIdentity, memoryMaintenanceBoundDataSchema } from '@opencrane/events';
+  type MemoryIdentity, memoryMaintenanceBoundDataSchema, memoryForgottenEventSchema,
+  memoryForgottenDataSchema } from '@opencrane/events';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
+import type { StoredEvent } from '@opencrane/event-store';
+import { memoryErasureHistory } from './memory-erasure.ts';
 import { memoryIdentity } from './memory-keys.ts';
 
 type SavedMemoryWrite = ReturnType<typeof memoryWrittenEventSchema.parse>['data'];
@@ -76,9 +79,15 @@ async function writeMemory(
         ON CONFLICT DO NOTHING`, edge);
     }
   }
-  const previous = await db.query<{ revision: string | number | null }>(
-    'SELECT revision FROM memory_facts WHERE silo=$1 AND scope_id=$2 AND memory_id=$3', fact,
+  const previous = await db.query<{ revision: string | number | null; content_status: string }>(
+    `SELECT revision, content_status FROM memory_facts
+      WHERE silo=$1 AND scope_id=$2 AND memory_id=$3`, fact,
   );
+  // Keep the tombstone permanent if a later saved write reuses this identity.
+  if (previous.rows[0]?.content_status === 'erased') {
+    await writeChange(db, event, data, current, position);
+    return;
+  }
   // Keep a newer or equal revision, including when an old event has no known owner.
   const previousRevision = previous.rows[0]?.revision;
   if (previousRevision !== undefined && previousRevision !== null) {
@@ -112,11 +121,48 @@ async function writeChange(
   await db.query('INSERT INTO memory_changes VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', change);
 }
 
+async function hideMemoryFacts(db: Query, silo: string, scopeId: string, hidden: string[]) {
+  if (hidden.length === 0) {
+    return;
+  }
+  const parameters = [silo, scopeId, hidden];
+  // Clear every dependent copy together, including links saved after the tombstone.
+  await db.query(`UPDATE memory_facts SET content_status='erased', search_text=NULL,
+    search_vector=NULL, sources='[]', ciphertext='', key_id=''
+    WHERE silo=$1 AND scope_id=$2 AND memory_id=ANY($3::text[])`, parameters);
+}
+
+function prepareForgotten(envelope: EventEnvelope,
+  erasure: Awaited<ReturnType<typeof memoryErasureHistory>> | undefined) {
+  const saved = memoryForgottenEventSchema.parse(envelope);
+  if (!('schemaVersion' in saved.data) || !erasure) {
+    throw new Error('Memory change is not supported by this projection yet');
+  }
+  const data = memoryForgottenDataSchema.parse(saved.data);
+  const hidden = [...erasure.hidden(saved.silo, data.scopeId)];
+  async function applyForgotten(db: Query, _event: EventEnvelope, position: number) {
+    await hideMemoryFacts(db, saved.silo, data.scopeId, hidden);
+    await db.query(`UPDATE memory_facts SET revision=$4
+      WHERE silo=$1 AND scope_id=$2 AND memory_id=$3`,
+      [saved.silo, data.scopeId, data.memoryId, data.revision]);
+    const change = [saved.silo, data.scopeId, saved.id, saved.commandId ?? null,
+      saved.principal?.kind ?? null, saved.principal?.id ?? null, data.memoryId,
+      data.revision, 'forgotten', position, saved.time];
+    await db.query('INSERT INTO memory_changes VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+      change);
+  }
+  return applyForgotten;
+}
+
 /** Give replay only decryption access, so it cannot create or delete a revision key. */
 export function memoryProjection(custody: {
   decrypt(identity: MemoryIdentity, value: { ciphertext: string; keyId: string }):
     string | null | Promise<string | null>;
 }): Projection {
+  let erasure: Awaited<ReturnType<typeof memoryErasureHistory>> | undefined;
+  async function inspectHistory(events: AsyncIterable<StoredEvent>) {
+    erasure = await memoryErasureHistory(events);
+  }
   async function prepare(envelope: EventEnvelope): Promise<Projection['apply']> {
     if (envelope.type === 'memory.maintenance_bound') {
       if (!parseEventByType(envelope).success) {
@@ -129,6 +175,9 @@ export function memoryProjection(custody: {
           ON CONFLICT (silo, scope_id) DO UPDATE SET data=$3, position=$4`, values);
       }
       return applyBinding;
+    }
+    if (envelope.type === 'memory.forgotten') {
+      return prepareForgotten(envelope, erasure);
     }
     if (envelope.type !== 'memory.written') {
       if (envelope.type.startsWith('memory.')) {
@@ -145,7 +194,11 @@ export function memoryProjection(custody: {
     const data = parsed.data;
     let text: string | null = null;
     let status = 'quarantined';
-    if (identity !== null) {
+    const hidden = identity !== null &&
+      erasure?.hidden(identity.silo, identity.scopeId).has(identity.memoryId);
+    if (hidden) {
+      status = 'erased';
+    } else if (identity !== null) {
       text = await custody.decrypt(identity, data);
       if (text !== null) text = text.normalize('NFC');
       status = 'available';
@@ -159,10 +212,14 @@ export function memoryProjection(custody: {
     const current = 'schemaVersion' in data ? data : null;
     async function apply(db: Query, _event: EventEnvelope, position: number): Promise<void> {
       await writeMemory(db, parsed, data, current, text, status, position);
+      if (identity && erasure) {
+        const affected = [...erasure.hidden(identity.silo, identity.scopeId)];
+        await hideMemoryFacts(db, identity.silo, identity.scopeId, affected);
+      }
     }
     return apply;
   }
-  return { name: 'memory', create, drop, prepare, apply: requiresPreparation };
+  return { name: 'memory', create, drop, inspectHistory, prepare, apply: requiresPreparation };
 }
 
 /** Read only one silo and scope; callers must check permission before using this query. */
@@ -176,6 +233,7 @@ export async function readMemoryFactIds(
     searchClause = " AND search_vector @@ to_tsquery('simple', $3)";
   }
   const result = await db.query<{ memory_id: string }>(`SELECT memory_id FROM memory_facts
-    WHERE silo=$1 AND scope_id=$2${searchClause} ORDER BY position, memory_id`, parameters);
+    WHERE silo=$1 AND scope_id=$2 AND content_status='available'${searchClause}
+    ORDER BY position, memory_id`, parameters);
   return result.rows;
 }

@@ -12,6 +12,8 @@ export interface Projection {
   prepare?(event: EventEnvelope): Promise<Projection['apply']>;
   /** Record completion only after all events from position one have been applied. */
   completeRebuild?(db: Query): Promise<void>;
+  /** Read metadata through a fixed position before any payload preparation. */
+  inspectHistory?(events: AsyncIterable<StoredEvent>): Promise<void>;
 }
 export interface EventSource {
   head(): Promise<number>;
@@ -154,6 +156,7 @@ export class ProjectionRunner {
       }
       return;
     }
+    await projection.inspectHistory?.(readEvents(this.source, 1, head, signal));
     for await (const stored of readEvents(this.source, checkpoint + 1, head, signal)) {
       signal?.throwIfAborted();
       checkpoint = this.db.lock
@@ -191,6 +194,7 @@ export class ProjectionRunner {
     if (!Number.isSafeInteger(head) || head < 0) {
       throw new Error("Invalid replay head");
     }
+    await projection.inspectHistory?.(readEvents(this.source, 1, head));
     await this.checkPreparation(projection, head);
     async function resetTables(tx: Query): Promise<void> {
       await projection.drop(tx);

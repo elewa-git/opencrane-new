@@ -519,13 +519,23 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 | --- | --- | --- | --- |
 | `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | dispatch disabled; no scheduling or spending |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
-| `memory.corrected` / `memory.forgotten` | OpenCrane memory MCP (correct/forget); nightly per-scope dreaming job (corrected only) | Postgres memory projection for that scope | forget: record a tombstone, then delete every revision key and searchable text |
+| `memory.corrected` | OpenCrane memory MCP (planned); nightly dreaming job (planned) | Postgres memory projection (planned) | correction cleanup is planned |
+| `memory.forgotten` | Person HTTP command (planned); other scopes disabled | Postgres memory projection hides the fact and all dependent facts | revision-key cleanup is planned; no command or reaction is enabled yet |
 | `memory.consolidated` | Reserved for later use; not emitted by MVP dreaming | Postgres memory projection for that scope | — |
 | `scope.promotion_requested` / `scope.promoted` | person / approver | scopes | OpenFGA viewer tuples; copy to the target dataset |
 
 For the MVP, `memory.*` events in NATS JetStream are the truth; the Postgres memory projection holds facts per scope and uses full-text search. Replay applies recorded changes without model calls. Scopes are person, assistant notes and flat group only, with no organisation or department memory. Any group member may write group memory without approval. Each member works in their own thread or sub-agent of the group assistant, with personal memory plus group memory; preferences stay personal and shared knowledge goes to the group.
 
 Codex reaches the OpenCrane memory MCP through the local forwarding proxy and agentgateway. `ext_authz` passes allowed scopes from IAM context (assistant grants ∩ requester rights); per-thread turn tokens keep each member's personal memory out of other threads. Memory is never written to the shared computer's disk. Preferences and pinned facts enter the thread's instructions at turn start with a size cap; the rest is fetched with `recall`.
+
+Version-1 forgotten data records scope identity, memory id, expected revision and the
+next tombstone revision. It contains no text, ciphertext or key. The projection reads
+metadata through a fixed event position before decrypting any memory. It follows all
+saved dependency links in TypeScript, removes affected search text and vectors in one
+transaction, and never restores a hidden identity from a later write. Legacy tombstones
+still parse, but stop projection replay because their ownership is unknown.
+Physical key deletion, cleanup evidence, person HTTP forget and its status are not built
+yet. Forget remains disabled for every scope until these can work together.
 
 Nightly dreaming runs per scope in the handler runtime, using a cheap model through the gateway with a budget. It merges duplicates, flags contradictions and expires stale facts through `memory.corrected`; it never crosses scopes. `memory.consolidated` and the existing scope-promotion rows are retained for contract compatibility, with no MVP emitters or promotion reactions enabled. The stream table's older scope description includes these deferred operations. Sharing data across groups is a later design topic.
 

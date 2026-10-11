@@ -176,6 +176,28 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
       }));
     });
 
+  it('hides existing dependents when a later write adds a link to an already forgotten fact',
+    async function laterDependency() {
+      const root = await append('root');
+      const child = await append('child');
+      const childSource = [{ scopeId: child.scopeId, memoryId: child.memoryId, revision: 1 }];
+      await append('grandchild', 'alice', 'Existing private copy', childSource);
+      await runner.run(projection);
+      await tombstone(root);
+      await runner.run(projection);
+      const saved = await readEventAt(nats.reader, `scope-${root.scopeId}`, 2, Infinity);
+      const original = memoryWrittenEventSchema.parse(saved!.event);
+      const rootSource = [{ scopeId: root.scopeId, memoryId: root.memoryId, revision: 1 }];
+      const data = { ...original.data, dependsOn: rootSource };
+      const later = { ...original, id: 'later-link', commandId: 'later-link', data };
+      await nats.seed([later]);
+      await runner.run(projection);
+      expect(await readMemoryFactIds(storage.db, root.silo, root.scopeId)).toEqual([]);
+      const before = await state();
+      await runner.rebuild(projection);
+      expect(await state()).toEqual(before);
+    });
+
   it('quarantines earlier control text without stopping replay', async function controls() {
     await append('old-controls');
     function decrypt() {
@@ -368,7 +390,11 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
       const before = await state();
       const saved = event('unsupported');
       const definition = getEventDefinition(type)!;
-      const envelope = { ...saved, type, subject: 'scope-old', data: definition.example };
+      let data = definition.example;
+      if (type === 'memory.forgotten') {
+        data = { scopeId: 'old', memoryId: 'first' };
+      }
+      const envelope = { ...saved, type, subject: 'scope-old', data };
       await nats.seed([envelope]);
       await expect(runner.run(projection)).rejects.toThrow('Memory change is not supported');
       expect(await state()).toEqual(before);

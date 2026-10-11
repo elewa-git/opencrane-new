@@ -259,7 +259,7 @@ previously discarded links.
 TypeScript checks the existing revision before replacing a fact; older links remain.
 A stale or repeated write keeps the current row and still records the saved event.
 `memory_changes` stores only command, principal, fact, revision, outcome, position
-and time. Its outcome is `written` or `quarantined`, independent of key availability.
+and time. Its outcome is `written`, `quarantined` or `forgotten`, independent of key availability.
 It never stores plaintext, ciphertext, keys or source payloads.
 
 Only a destroyed key yields `unavailable`, with null search text/vector. Missing
@@ -269,12 +269,18 @@ is quarantined with null search text/vector, without stopping replay. Decryption
 this older text; write validation still refuses it. Legacy writes retain ciphertext and references as `quarantined`,
 with unknown ownership and no searchable content. Parsing uses `parseEventByType`
 and the full replay schema, plus `memoryIdentity` / `memoryWrittenIdentity`.
-Other memory event types stop replay until their projection rules are implemented;
-correction, forgetting and dependency invalidation remain later work. The server now
+Version-1 tombstones set `content_status=erased` and clear text, vectors, sources,
+ciphertext and key references for the root and all dependent facts in one transaction.
+The root keeps its tombstone revision. Later writes cannot replace an erased row.
+Correction, consolidation and legacy tombstones still stop replay. The server now
 exposes authorised scopes and paged list/search reads.
-`readMemoryFactIds(db, silo, scopeId, search?)` returns ids in saved-event order.
+`readMemoryFactIds(db, silo, scopeId, search?)` returns available ids in saved-event order.
 Its optional search uses PostgreSQL `to_tsquery` syntax. Both paths restrict silo and
 scope; callers must check permission before calling it.
+Before preparation, `inspectHistory` reads metadata through the fixed position. It
+follows all historical dependency links with a visited set, separately for each silo
+and scope. Hidden writes skip decryption entirely. The scan retains ids and links only.
+It runs before ordinary catch-up too, including after restart.
 Rebuild prepares the entire saved history before dropping any tables, then prepares
 each event again before its transaction. It discards each prepared result during the
 first pass to avoid holding all plaintext in memory. It rebuilds only through the
@@ -532,3 +538,29 @@ and receipts.
 No new worker or dependency is needed. `apps/server/test/member-inventory.test.ts` covers exact reads, pending
 empty revocations, overlap, overflow, unrelated activity and online replay using
 real NATS, PostgreSQL and OpenFGA. Fresh-install qualification: NOT RUN.
+
+## Tombstone replay split
+
+P4-13 PR 2 is split to respect the 600-line ceiling. This first part supports safe
+projection/replay of version-1 tombstones only. No HTTP forget command, cleanup reaction,
+cleanup event or completion status is enabled. Every scope's forget remains disabled.
+The next part must deliver person HTTP forget, physical erasure of all revisions and
+candidate keys, cleanup evidence/status and job recovery together before exposing it.
+
+Local source tests cover pending replay without decryption, transitive and historical
+links, duplicate delivery, later writes and transaction rollback. Physical key cleanup,
+cleanup exhaustion, append ambiguity/lost reply, disabled model endpoint and fresh-install
+HTTP forget qualification are NOT RUN in this split. Existing authority tests are unchanged.
+
+Source receipt, 11 October 2026: base `ef6e3420` plus the `work/p4-13-pr2` diff,
+with failing-first test commit `f4589959`. The environment is a local Linux worktree
+with a clean npm ci, real disposable PostgreSQL/NATS and test key files, not a fresh silo.
+PASS: monorepo lint, workspace typecheck, check:events (115 types), Knip and lint:changelog.
+PASS: changed files twice, 28 tests each; final related regression run, 25 files / 1,059 tests.
+PASS: the requested standalone `apps/server/test/memory.test.ts` rerun, 129 tests.
+Its log is `/tmp/p4-13-memory-alone.log`.
+Vitest, lint and typecheck used `nice -n 10`. The full root suite was not run.
+The second independent review verified the late-dependency fix and reported no blockers.
+Logs are on the builder host: `/tmp/p4-13-lint-final.log`, `/tmp/p4-13-typecheck-2.log`,
+`/tmp/p4-13-typecheck-final.log`, `/tmp/p4-13-tests-final.log` and
+`/tmp/p4-13-changed-final-{1,2}.log`. CI and live qualification remain separate gates.

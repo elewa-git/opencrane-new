@@ -609,7 +609,7 @@ export const memoryCorrectedDataSchema = z
   .object({ scopeId: id, memoryId: id, ...encryptedText })
   .strict();
 
-export const memoryForgottenDataSchema = z.object({ scopeId: id, memoryId: id }).strict();
+export { memoryForgottenDataSchema } from './memory.ts';
 
 export const memoryConsolidatedDataSchema = z
   .object({ scopeId: id, consolidationId: id, memoryIds: z.array(id).min(1) })
