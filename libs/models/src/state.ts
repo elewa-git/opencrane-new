@@ -179,6 +179,33 @@ function matchesScope(reason: StopReason, call: Pick<ModelCall, 'payingGroupId' 
   }
   return reason.scopeId === call.assistantId;
 }
+function capMessage(reason: StopReason): string {
+  if (reason.scope === 'global') {
+    return `Silo spending cap reached (${reason.kind})`;
+  }
+  if (reason.scope === 'paying_group') {
+    return 'Paying group spending cap reached';
+  }
+  return 'Assistant spending cap reached';
+}
+export function budgetStopMessage(state: BudgetState, call: ModelCall, stopId: string): string {
+  function matchesStop(stop: BudgetState['stops'][number]) {
+    return stop.id === stopId;
+  }
+  const stop = state.stops.find(matchesStop);
+  if (!stop) {
+    throw new Error('Unknown budget stop');
+  }
+  const messages: string[] = [];
+  // Keep the saved cause after recovery, but omit caps belonging to other work.
+  for (const reason of stop.reasons) {
+    if (matchesScope(reason, call)) {
+      messages.push(capMessage(reason));
+    }
+  }
+  return messages.join('; ') +
+    '; ask an Owner or Admin or wait for the next UTC budget period';
+}
 function sameLimit(left: StopReason, right: StopReason) {
   if (left.scope !== right.scope || left.kind !== right.kind) {
     return false;

@@ -1234,6 +1234,13 @@ no new scope stop. Repeated refusals of a saved identity append nothing. The fol
 requires that stop id to exist, keeps the first reference and restores it on replay.
 `budgetStopId` returns that reference for saved work or the active stop for new work.
 
+Refusal messages use the reasons under that stop reference. They name the silo's
+daily or monthly cap, the paying group's cap or the assistant's cap. Several caps
+appear only when those saved reasons apply to the refused work. A recovered limit
+does not change the reason shown for an already stopped turn. The real-NATS tests
+in `test/budget-stop-message.test.ts` check these messages and their saved reasons,
+including zero ceilings, several causes, unrelated work and replay after recovery.
+
 `reserve` and `requireOpenReservation` check stops in the actor queue. Admin
 summaries include saved stops and known turns. Rebuild projections on upgrade.
 PR 2 owns the shared dispatch gate and admitted work without reservations.

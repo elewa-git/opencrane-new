@@ -62,6 +62,7 @@ flowchart LR
   was saved, so they can retry a refused edit without releasing a hold first.
 - Keep a saved stop when a spending limit is exhausted. A changed limit or new
   budget period can allow new work, while previously stopped work stays stopped.
+  Name the cap that stopped the turn in its refusal, using the saved reasons.
   Save each refused turn before replying, including turns refused by an existing
   stop. Applying the stop to every tool and running computer is still planned.
 - Hold money before an AI call and settle the charge when usage is reported.

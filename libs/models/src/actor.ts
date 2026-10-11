@@ -5,7 +5,7 @@ import { budgetCeilingSetDataSchema, effectResolvedDataSchema, effectUncertainDa
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { registerHandler } from '@opencrane/handlers';
-import { applyBudget, costCents, data, emptyBudget, models, budgetStopId,
+import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budgetStopMessage,
   exceededReasons, type BudgetState, type ModelCall } from './state.ts';
 
 type ModelUsage = {
@@ -192,9 +192,10 @@ export class BudgetActor {
     await this.append('budget.exhausted', refusal);
   }
   private requireBudget(call: ModelCall) {
-    if (budgetStopId(this.state, call, this.now()) !== undefined) {
-      throw new BudgetRefused('Silo, Paying group or Assistant spending cap reached; ' +
-        'ask an Owner or Admin or wait for the next UTC budget period');
+    const stopId = budgetStopId(this.state, call, this.now());
+    if (stopId !== undefined) {
+      const message = budgetStopMessage(this.state, call, stopId);
+      throw new BudgetRefused(message);
     }
   }
   requireOpenReservation(reservationId: string, fresh: () => Promise<void>) {

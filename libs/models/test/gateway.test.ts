@@ -522,7 +522,11 @@ it.each([[1, 2000], [2000, 1]])('holds at most one call under daily %i / monthly
     if (allowedReplies.length) {
       await f.settled();
     }
-    expect((await f.call()).text).toContain('spending cap reached');
+    const period = daily === 1 ? 'daily' : 'monthly';
+    expect((await f.call()).text).toContain(`Silo spending cap reached (${period})`);
+    expect(f.actor.state.stops[0]?.reasons).toEqual([
+      expect.objectContaining({ scope: 'global', kind: period, reason: 'bound_refused' }),
+    ]);
     await f.runner.initialise(conversations); await f.runner.run(conversations);
     const feed = await readConversation(f.db, 'test', 'conversation');
     expect(feed.rows.filter(row => row.type === 'decision.recorded')).toHaveLength(8);
