@@ -178,7 +178,8 @@ async function createsOnlyEmptyConversations() {
   const nats = await natsFixture();
   try {
     const created = { ...event('first-chat', 'conversation-chat', 'conversation.created'),
-      data: { conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice' } };
+      data: { conversationId: 'chat', mode: 'agent_session',
+        assistantId: 'assistant', createdBy: 'alice' } };
     const first = await nats.store.append({ event: created, expectedSequence: 0 });
     expect(first.status).toBe('appended');
     const position = await nats.store.head(created.subject);
@@ -194,7 +195,10 @@ async function createsOnlyEmptyConversations() {
       subject: 'conversation-second', data: { ...created.data, conversationId: 'second' } };
     const newConversation = { event: next, expectedSequence: position,
       expectedSubject: 'conversation-*' };
-    expect((await nats.store.append(newConversation)).status).toBe('appended');
+    const second = await nats.store.append(newConversation);
+    expect(second.status).toBe('appended');
+    const checkedRetry = { ...newConversation, historyChecked: true as const };
+    expect(await nats.store.append(checkedRetry)).toEqual(second);
     const records = await Array.fromAsync(nats.store.readStream(created.subject));
     expect(records).toHaveLength(1);
     expect(records[0]?.event.data).toEqual(created.data);
