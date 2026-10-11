@@ -1165,3 +1165,36 @@ Logs: `/tmp/fix-307c-restack-314-tests.log`,
 NOT RUN on this restack: another full lint or typecheck, full root suite,
 paid calls or fresh-install managed-provider qualification.
 The switch-on command and managed gateway remain unfinished.
+
+## Private connection custody (P3-8 PR 1)
+
+`src/connection-custody.ts` stages immutable Opaque Secrets through a private loopback
+`kubectl proxy`. It accepts one namespace, private HMAC keyring and shared private journal
+directory. Names identify the silo, installed connection, profile and generation. Labels also identify
+the user, server and purpose. A keyed check (HMAC) covers those fields, the operation id,
+expected sequence, deadline and material. Retain older
+key ids while their generations exist. Results contain only status and exact identity.
+`connection-stage-journal.ts` reuses exclusive 0600 provider-file writes, then flushes files
+and their directory. It stores the operation id, reference, expected sequence, deadline and first UID and version.
+A separate create claim is flushed before POST. Only its first writer sends the create.
+If the reply is lost before the UID/version is saved, recovery returns `conflict` unless
+an exact identity from an independent create reply is supplied. Matching bindings,
+material and HMAC alone never establish the original UID. A retry never sends another
+create, even when the original object has disappeared.
+
+The journal stores no material or verifier and cannot activate a connection. Deletion
+checks stored contents and sends both UID/version preconditions. It saves the exact
+identity for the deletion check before DELETE. `deleted` requires a later GET returning
+404. A finaliser can leave the token readable after a successful DELETE; that returns
+`unknown`. After restart, a pending deletion only checks absence. It never repeats DELETE
+or adopts the version changed by a finaliser. A failed request also leaves deletion
+unresolved; a later absence check can finish it. Conflicts and unknown outcomes retain
+material. A 404 never proves failed activation. The later orphan reconciler must prevent
+late appends before cleanup. No routes, event writes or material releases are registered.
+
+Checks adapt OC1 commit `10abd0ef6`, `kubernetes-mcp-connection-secret-store.ts` and
+`mcp-connection-material-verifier.ts`. [The original AGPL-3.0-or-later notice](src/connection-custody.NOTICE)
+is retained. No dependency was added. [The accepted design](../../docs/specs/phase-3/p3-8-p3-9-personal-connections.md)
+owns the plan. Tests use synthetic material and a local HTTP fixture. Live Kubernetes,
+custody-only namespace permissions, encryption at rest, backups, restore, power-loss and
+fresh-install journeys remain NOT RUN. Deployment wiring belongs to later work.

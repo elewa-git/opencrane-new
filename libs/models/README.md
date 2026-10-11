@@ -6,7 +6,10 @@ The AI access and spending library for OpenCrane. Its running part is the models
 
 ## Where it fits
 
-This shared library is used by the server, background workers and personal computers. It checks passes with `libs/auth`, permissions with `libs/authz`, and starts agentgateway to handle AI calls.
+This shared library is used by the server, background workers and personal computers.
+Its private credential adapter talks to Kubernetes through the server’s local proxy.
+It checks passes with `libs/auth`, permissions with `libs/authz`, and starts agentgateway
+to handle AI calls.
 
 ```mermaid
 flowchart LR
@@ -14,14 +17,19 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
-  models -.-> auth["libs/auth<br/>access passes"]
-  models -.-> authz["libs/authz<br/>permission checks"]
+  models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
+  models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|saves holds and settlements, reads activity, grants, payer and switch-on| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
+
+- Stage private credentials in immutable Kubernetes Secrets. Check their owner, profile,
+  operation, contents, unique identity (UID) and version before recovery or deletion.
+  Keep private repair records so a restart cannot accept a replacement Secret.
+  Confirm that the Secret is absent before reporting deletion.
 
 - Build recorded child participation and keep its history start separate from each join.
 - Recheck saved grants and permissions for a private turn memory preview without reading chat history again.
@@ -103,6 +111,12 @@ turn. A waiting Ask call can use only its own approval, once. Approvals opened b
 a waiting computer expire after 15 minutes, even while the chat turn stays open.
 
 ## Processes it handles
+
+A private credential stage saves one generation and returns its reference, UID and version.
+Recovery needs its saved identity or an exact identity supplied by the caller.
+A lost create reply without that evidence is refused, and the create is never sent again.
+Deletion stays unresolved while the Secret exists. A later check can confirm its removal.
+This adapter grants no tool access.
 
 1. **A person sends a chat message.** The server and the computer pick the model for the task. The computer sends the AI call to agentgateway. agentgateway asks the models process, which checks the passes, permissions and budget and holds the money. If the call is allowed, agentgateway sends it to the AI provider.
 2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the full amount stays held for review. A later report of an unknown result restores money released before an allowed call was sent.
