@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
 import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
-  mcpCatalogue, computers, modelAccess, delegations,
+  mcpCatalogue, computers, modelAccess, egressPolicy, delegations,
   conversations, files, memoryKeys, memoryProjection, type Projection, type Db,
 } from '@opencrane/projections';
 import { dispatch, HandlerRuntime } from '@opencrane/handlers';
@@ -76,6 +76,7 @@ async function runProjectionWorker(projection: Projection) {
     await groupRunner.initialise(groups);
     await groupRunner.initialise(providers);
     await groupRunner.initialise(modelAccess);
+    await groupRunner.initialise(egressPolicy);
   }
   if (mode === 'members') {
     await db.db.lock!('initialise', initialiseGroups);
@@ -89,6 +90,7 @@ async function runProjectionWorker(projection: Projection) {
       await runner.run(groups, { signal: stop.signal });
       await runner.run(providers, { signal: stop.signal });
       await runner.run(modelAccess, { signal: stop.signal });
+      await runner.run(egressPolicy, { signal: stop.signal });
     }
     await delay(100, undefined, { signal: stop.signal });
   }

@@ -1588,3 +1588,25 @@ Logs: `/tmp/p4-22-pr4d-budget-tests.log`, `/tmp/p4-22-pr4d-budget-lint.log`,
 and `/tmp/p4-22-pr4d-budget-restack.diff`.
 NOT RUN: full root suite, paid calls and fresh-install managed-provider qualification.
 The switch-on command and managed gateway remain unfinished.
+
+## Destination policy commands (P3-20 PR 1, first split)
+
+The existing `modelAccess` service options supply the silo, session identity, event
+store and permissions service for these routes. Owner/Admin access is required.
+`POST /api/org/egress/destinations` accepts `commandId`, `expectedSequence`,
+`action: allow|revoke`, `scope: silo|person|assistant`, `subjectId`, `host`, and optional
+`port` (443). It saves one rule with one conditional append. Each change id belongs to its first
+saved target and arguments across all destination rules in the silo. Writes read
+`egress-*` and check its latest position in that append. The caller's
+`expectedSequence` still checks the selected rule. A concurrent save on any rule
+returns 409, so the caller must reload before retrying. This serialises policy
+saves without adding another event or a separate receipt store. Reads of policy
+and membership history finish before the two-second check of membership positions.
+`GET /api/org/egress/destinations/changes/:commandId` takes the same scope/subject/
+host/port in query parameters. It returns only the original caller's saved receipt.
+Both routes use no-store; writes require the configured browser origin. Saved results
+carry command/event ids, operation, time and sequence. Changed saved arguments or a
+stale expected sequence return 409. A lost append reply or unseen status stays unknown;
+status never resends. Saved retries work beyond NATS's duplicate window.
+Networking stays disabled. Decision bindings, observation/audit detail, member policy
+views, effective admission and fresh-install qualification remain for later work.

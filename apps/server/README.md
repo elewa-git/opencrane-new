@@ -10,19 +10,20 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership and member access"]
-  server -.->|checks access, refusal records, departure details, spending, memory and turn previews| libs["libs/*<br/>shared code"]
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member removal"]
-  server -.->|checks access, refusal records, departure details, spending and memory| libs["libs/*<br/>shared code"]
-  server -->|records changes, memory facts, model grants, roles, participants, chats, computers, provider choices and drains| nats["NATS<br/>event log"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership, member access and destination rules"]
+  server -.->|checks access, departures, spending, memory, tool reviews and turn previews| libs["libs/*<br/>shared code"]
+  server -->|records changes, memory facts, grants, roles, participants, computers, provider choices, drains and tool catalogues| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, invitations, chat rows, closes, joins, facts, models and computers| postgres
-  server -->|sends turns, models, tools and approvals; receives dispatch, consent and progress reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|reads members, invitations, chats, facts, models and tools| postgres
+  server -->|sends turns, models, tools and approvals; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
 ## What it is responsible for
+
+- Let owners and admins save one destination rule and read its original receipt.
+  A change reference keeps its original rule and arguments when a request is repeated.
 
 - Preview bounded facts for a saved private turn without sending text to a computer.
   Facts with expired or unusable supporting facts are left out.

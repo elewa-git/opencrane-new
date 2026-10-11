@@ -221,3 +221,16 @@ budget writer has saved a change. This event has no production command yet.
 position and the previous drain position with the provider's current revision.
 Starting and cancelling both use this event. It grants no access, changes no key
 or model choice and reserves no money. A drain command cannot reverse switch-on.
+
+## Destination rule records
+
+`egress.destination_allowed` and `egress.destination_revoked` save one subject's exact
+HTTPS hostname and integer port. Commands convert IDNA names to lower-case ASCII;
+records require that saved form. Port defaults to 443 in commands. Wildcards, URLs,
+IP/numeric hosts, malformed labels and internal names are refused. The reserved
+suffixes `localhost`, `local`, `internal`, `lan`, `home`, `svc`, `test`, `invalid`,
+`example`, `onion` and `home.arpa` refuse both the name itself and all descendants.
+The checks use whole DNS labels after IDNA conversion. DNS address checks
+belong to later admission work; no DNS lookup or network permission is added here.
+Event parsing checks the stream format, silo scope and human actor. Commands and
+projections check its exact identity. Server commands bind each change id to its first saved rule and arguments across the silo.
