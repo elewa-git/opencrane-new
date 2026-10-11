@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, participant, tool and destination tables| projections["libs/projections<br/>read tables, message lookups and keys"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, drain, child, participant, tool and destination tables| projections["libs/projections<br/>read tables, message lookups and keys"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners and startup review| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
@@ -56,8 +56,6 @@ calculated from the definitions. Checks renew only the same server in the same s
 - Copies recorded tool dispatch evidence into conversation feeds without calling a tool.
 - Rebuilds saved provider choices, drains and switch-on from the spending stream without calling a provider.
 - Adds a new owner to the member tables only after confirmation is saved.
-- Rebuilds saved provider choices and the admission mode without calling a provider.
-- Rebuild saved provider choices and switch-on from the spending stream without calling a provider.
 - Turn ordered events into tables that the server can read.
 - Bind member accounts from bound invitations or accepted email invitations.
 - Keep old conversation participant records separate from new participant changes.
