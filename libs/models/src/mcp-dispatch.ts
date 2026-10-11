@@ -116,7 +116,8 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
     const position = await store.head(`mcp-${route.serverId}`, deadline);
     if (position !== permit.catalogueSequence) throw new Error('MCP policy changed');
     await options!.requireLeader();
-    // Finish with access after the leadership read, so a change during that read refuses the send.
+    // Finish with two matching access-position reads after checking leadership.
+    // Refuse policy changes saved while any of those reads are still pending.
     await permit.confirmAccess();
     const currentRoute = routeFor(route.serverId, route.connectionId);
     if (JSON.stringify(currentRoute) !== JSON.stringify(permit.route)) {

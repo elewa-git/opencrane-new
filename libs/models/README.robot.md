@@ -338,6 +338,12 @@ access callback retains the original two-second deadline. Pending permits are bo
 
 The final check compares the MCP stream position with the approved snapshot, confirms
 the existing leadership connection, rechecks access and checks expiry before sending.
+Final MCP access checks read every watched position again after the last read. They
+continue until two consecutive complete passes match, within the original two-second
+deadline. Every advance still goes through the existing access-change checks. A Block
+saved after one policy-position read and before another access read completes refuses
+the send. The regression saves Block through `setToolPolicy` and records zero upstream
+requests. The unchanged authority tests keep their original deadlines and volume limits.
 Any newer MCP event refuses the permit, including an unchanged freshness check.
 Waiting approvals retain their stable policy revision and can obtain a fresh permit.
 The final check reads no complete catalogue or conversation history. Only reviewed transport headers leave this
@@ -349,6 +355,13 @@ Hosted image admission, recorded lifecycle generations, configuration acknowledg
 automatic card cancellation on lifecycle changes remain later design rows. These fixed routes
 provide no image admission or installer. The P3-14 shared send gate is not merged; this small
 permit check adds no spending gate and can move behind it later.
+
+### Open items
+
+The memory MCP route already bypasses this sender on main. Its signed context can be
+reused within its lifetime and has no backend generation or catalogue revision. A
+follow-up PR moves memory MCP onto the shared dispatch check and retains its scope,
+access and write checks. This PR leaves that route's runtime behaviour unchanged.
 
 Model and MCP admission share `currentAuthority`: current member/role, team
 membership, assistant activation, conversation participation, requester and
