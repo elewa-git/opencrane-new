@@ -34,6 +34,7 @@ flowchart LR
 ## What it is responsible for
 
 - Define exact HTTPS destination rules for the silo, a person or an assistant.
+  Refuse reserved internal names, including `home.arpa` and names beneath it.
 
 - Defines shared child records with a parent message, fixed payer and named people.
 - Defines delegated task relationships and outcomes, including cancellation. Older records

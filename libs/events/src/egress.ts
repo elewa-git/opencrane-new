@@ -4,8 +4,8 @@ import type { EventEnvelope } from './envelope.ts';
 import { event } from './definition.ts';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
-const internalSuffixes = new Set(['localhost', 'local', 'internal', 'lan', 'home', 'svc',
-  'test', 'invalid', 'example', 'onion']);
+const internalSuffixes = ['localhost', 'local', 'internal', 'lan', 'home', 'svc',
+  'test', 'invalid', 'example', 'onion', 'home.arpa'];
 function normaliseHost(host: string) {
   if (/[^\p{L}\p{N}.-]/u.test(host)) return '';
   try {
@@ -14,12 +14,18 @@ function normaliseHost(host: string) {
     return '';
   }
 }
+function isInternalHostname(host: string) {
+  for (const suffix of internalSuffixes) {
+    if (host === suffix || host.endsWith(`.${suffix}`)) return true;
+  }
+  return false;
+}
 function isPublicHostname(host: string) {
   if (host.length > 253 || !/^[a-z0-9.-]+$/u.test(host)) return false;
   if (normaliseHost(host) !== host) return false;
   const labels = host.split('.');
   const suffix = labels.at(-1) ?? '';
-  if (labels.length < 2 || !/[a-z]/u.test(suffix) || internalSuffixes.has(suffix)) return false;
+  if (labels.length < 2 || !/[a-z]/u.test(suffix) || isInternalHostname(host)) return false;
   for (const label of labels) {
     if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(label)) return false;
   }
