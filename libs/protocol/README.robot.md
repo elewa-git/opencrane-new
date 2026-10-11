@@ -155,3 +155,10 @@ records snapshot and expiry rules for #48 PR 1.
 Tool policy replies also carry `silo` and `serverId`, taken from the saved events.
 Older projected replies default these fields to null. The back end checks them during
 replay; parsing a browser reply does not authorise a tool call.
+
+## Inventory history availability
+
+Departure routines and personal connections carry `absent_on_version` only after
+a complete check. Known unsupported records carry `unsupported_history`. Missing,
+changed or over-limit inventory inputs carry `unavailable`, with removal disabled.
+The member inventory integration tests check overflow and the shared reply schema.

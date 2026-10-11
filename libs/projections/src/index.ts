@@ -52,3 +52,5 @@ export { delegations } from './delegations.ts';
 export { egressPolicy, readEgressRule, egressRulesAllow, egressGrantStream } from './egress-policy.ts';
 
 export { personalSettings, readSurvey } from './personal-settings.ts';
+export { readInventoryReferences, inventoryCategoryPositions, inventoryCategories }
+  from './inventory-inputs.ts';

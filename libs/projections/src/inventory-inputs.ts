@@ -1,0 +1,180 @@
+import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
+import type { Query } from './db.ts';
+
+export const inventoryCategories = [
+  'team', 'assistant', 'grant', 'routine', 'connection', 'computer',
+];
+
+export async function createInventoryInputs(db: Query, table: string) {
+  await db.query(`CREATE TABLE IF NOT EXISTS ${table} (
+    silo TEXT NOT NULL, subject TEXT NOT NULL, category TEXT NOT NULL,
+    link_kind TEXT NOT NULL, link_id TEXT NOT NULL, event_type TEXT NOT NULL,
+    position BIGINT NOT NULL, event_id TEXT NOT NULL,
+    PRIMARY KEY (silo, subject, link_kind, link_id))`);
+  await db.query(`CREATE INDEX IF NOT EXISTS ${table}_links
+    ON ${table} (silo, category, link_kind, link_id, subject)`);
+}
+
+function field(data: unknown, name: string) {
+  if (typeof data !== 'object' || data === null) {
+    throw new Error('Inventory data unavailable');
+  }
+  const value: unknown = Reflect.get(data, name);
+  if (typeof value !== 'string') {
+    throw new Error('Inventory link unavailable');
+  }
+  return value;
+}
+
+function links(event: EventEnvelope): [string, string][] {
+  const data = event.data;
+  if (typeof data !== 'object' || data === null) {
+    throw new Error('Inventory data unavailable');
+  }
+  if (event.type.startsWith('team.member_')) {
+    return [['member', field(data, 'memberId')]];
+  }
+  if (event.type === 'assistant.created') {
+    let kind = 'team';
+    if (field(data, 'kind') === 'personal') {
+      kind = 'member';
+    }
+    return [[kind, field(data, 'ownerId')]];
+  }
+  if (event.type.startsWith('grant.')) {
+    const granteeId = field(data, 'granteeId');
+    const granteeKind: unknown = Reflect.get(data, 'granteeKind');
+    if (typeof granteeKind === 'string') {
+      return [[granteeKind, granteeId]];
+    }
+    // Keep all old revoke targets until their permission receipts have arrived.
+    return [['member', granteeId], ['team', granteeId], ['assistant', granteeId]];
+  }
+  if (event.type.startsWith('computer.')) {
+    return [['assistant', field(data, 'assistantId')]];
+  }
+  return [];
+}
+
+export async function applyInventoryInput(db: Query, table: string,
+  event: EventEnvelope, position: number) {
+  const category = getEventDefinition(event.type)?.stream;
+  if (!category || !inventoryCategories.includes(category)) {
+    return;
+  }
+  const recordedLinks = links(event);
+  recordedLinks.push(['stream', '']);
+  for (const [kind, id] of recordedLinks) {
+    await db.query(`INSERT INTO ${table} VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (silo, subject, link_kind, link_id) DO UPDATE
+      SET event_type = $6, position = $7, event_id = $8`,
+    [event.silo, event.subject, category, kind, id, event.type, position, event.id]);
+  }
+}
+
+type Reference = { subject: string; position: string };
+
+async function linkedSubjects(db: Query, silo: string, category: string,
+  memberId: string, groupIds: string[], assistantIds: string[]) {
+  const result = await db.query<{ subject: string }>(`SELECT DISTINCT subject
+    FROM inventory_inputs WHERE silo = $1 AND category = $2 AND (
+      (link_kind = 'member' AND link_id = $3) OR
+      (link_kind = 'team' AND link_id = ANY($4::text[])) OR
+      (link_kind = 'assistant' AND link_id = ANY($5::text[])))
+    ORDER BY subject LIMIT 101`, [silo, category, memberId, groupIds, assistantIds]);
+  function subject(row: { subject: string }) {
+    return row.subject;
+  }
+  return result.rows.map(subject);
+}
+
+function entityIds(subjects: string[], prefix: string) {
+  function id(subject: string) {
+    return subject.slice(prefix.length);
+  }
+  return subjects.map(id);
+}
+
+async function expandedPeopleWithinLimit(db: Query, silo: string, subjects: string[]) {
+  const result = await db.query<{ link_id: string }>(`SELECT link_id
+    FROM inventory_inputs WHERE silo = $1 AND subject = ANY($2::text[])
+      AND link_kind = 'member' AND event_type = 'team.member_added'
+    ORDER BY subject, link_id LIMIT 10001`, [silo, subjects]);
+  // Keep the index read inside the same record limit as the saved histories.
+  if (result.rows.length > 10_000) {
+    return false;
+  }
+  const people = new Set<string>();
+  for (const row of result.rows) {
+    people.add(row.link_id);
+    if (people.size > 500) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Keep removed memberships and revoked grants discoverable when the visible list is empty. */
+export async function readInventoryReferences(db: Query, silo: string, memberId: string) {
+  const empty: Reference[] = [];
+  const teams = await linkedSubjects(db, silo, 'team', memberId, [], []);
+  if (teams.length > 100) {
+    return { references: empty, complete: false };
+  }
+  const peopleWithinLimit = await expandedPeopleWithinLimit(db, silo, teams);
+  if (!peopleWithinLimit) {
+    return { references: empty, complete: false };
+  }
+  const groupIds = entityIds(teams, 'team-');
+  // Include old ownership that used the member id where a group id was expected.
+  const owners = [...groupIds, memberId];
+  const assistants = await linkedSubjects(db, silo, 'assistant', memberId, owners, []);
+  if (assistants.length > 100) {
+    return { references: empty, complete: false };
+  }
+  const assistantIds = entityIds(assistants, 'assistant-');
+  const grants = await linkedSubjects(db, silo, 'grant', memberId, groupIds, assistantIds);
+  if (grants.length > 100) {
+    return { references: empty, complete: false };
+  }
+  const computers = await linkedSubjects(db, silo, 'computer', memberId, [], assistantIds);
+  if (computers.length > 100) {
+    return { references: empty, complete: false };
+  }
+  const subjects = [...teams, ...assistants, ...grants, ...computers];
+  const result = await db.query<Reference & { category: string }>(`SELECT subject, position, category
+    FROM inventory_inputs WHERE silo = $1 AND link_kind = 'stream'
+      AND (subject = ANY($2::text[]) OR category IN ('routine', 'connection'))
+    ORDER BY subject LIMIT 10001`, [silo, subjects]);
+  if (result.rows.length > 10_000) {
+    return { references: empty, complete: false };
+  }
+  const totals = new Map<string, number>();
+  const references: Reference[] = [];
+  for (const row of result.rows) {
+    const total = (totals.get(row.category) ?? 0) + 1;
+    if (total > 100) {
+      return { references, complete: false };
+    }
+    totals.set(row.category, total);
+    const reference = { subject: row.subject, position: row.position };
+    references.push(reference);
+  }
+  return { references, complete: true };
+}
+
+export async function inventoryCategoryPositions(db: Query, silo: string) {
+  const metadata = await db.query<{ generation: string }>(`SELECT g.generation
+    FROM projection_generations g JOIN projection_checkpoints c ON c.name = g.name
+    WHERE g.name = 'members'`);
+  const generation = metadata.rows[0]?.generation;
+  if (generation === undefined) {
+    throw new Error('Inventory checkpoint unavailable');
+  }
+  const result = await db.query<{ category: string; position: string }>(`SELECT category,
+    max(position) AS position FROM inventory_inputs WHERE silo = $1 AND link_kind = 'stream'
+    GROUP BY category ORDER BY category`, [silo]);
+  const positions: Record<string, number> = {};
+  for (const row of result.rows) positions[`${row.category}-*`] = Number(row.position);
+  return { positions, generation: Number(generation) };
+}

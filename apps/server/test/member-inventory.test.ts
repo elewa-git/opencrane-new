@@ -242,18 +242,18 @@ async function exactRevokedInputs() {
   const memberId = 'exact-revoked';
   const resourceId = 'exact-server';
   const subject = grantStream('mcp_server', resourceId);
-  await append(subject, 'grant.given', {
-    resourceType: 'mcp_server', resourceId, granteeKind: 'member',
-    granteeId: memberId, grantedBy: 'owner',
-  });
-  const revoked = await append(subject, 'grant.revoked', {
-    resourceType: 'mcp_server', resourceId, granteeKind: 'member',
-    granteeId: memberId, revokedBy: 'owner',
-  }, false);
+  const grant = { resourceType: 'mcp_server', resourceId, granteeKind: 'member',
+    granteeId: memberId, grantedBy: 'owner' };
+  await append(subject, 'grant.given', grant);
+  const revocation = { resourceType: 'mcp_server', resourceId, granteeKind: 'member',
+    granteeId: memberId, revokedBy: 'owner' };
+  const revoked = await append(subject, 'grant.revoked', revocation, false);
   await project();
   const reads = vi.spyOn(nats.store, 'readStream');
   const pending = await memberInventory(options, memberId, performance.now() + 10_000);
   expect(pending).toMatchObject({ complete: false, rows: [], unavailableSections: ['grants'] });
+  expect(reads.mock.calls).toHaveLength(1);
+  expect(reads.mock.calls[0]?.[0]).toBe(subject);
   for (const [readSubject] of reads.mock.calls) expect(readSubject).not.toContain('*');
   reads.mockRestore();
   await auth.handler.handle(revoked, pgDb(dbs.queue));
@@ -266,32 +266,34 @@ async function overlappingToolGroups() {
   const memberId = 'overlap';
   const resourceId = 'overlap-server';
   for (const teamId of ['overlap-one', 'overlap-two']) {
-    await append(`team-${teamId}`, 'team.created', { teamId, name: teamId, createdBy: 'owner' });
-    await append(`team-${teamId}`, 'team.member_added', { teamId, memberId, addedBy: 'owner' });
-    await append(grantStream('mcp_server', resourceId), 'grant.given', {
-      resourceType: 'mcp_server', resourceId, granteeKind: 'team',
-      granteeId: teamId, grantedBy: 'owner',
-    });
+    const group = { teamId, name: teamId, createdBy: 'owner' };
+    const membership = { teamId, memberId, addedBy: 'owner' };
+    await append(`team-${teamId}`, 'team.created', group);
+    await append(`team-${teamId}`, 'team.member_added', membership);
+    const grant = { resourceType: 'mcp_server', resourceId, granteeKind: 'team',
+      granteeId: teamId, grantedBy: 'owner' };
+    await append(grantStream('mcp_server', resourceId), 'grant.given', grant);
   }
   await project();
   const review = await memberInventory(options, memberId, performance.now() + 10_000);
   expect(review.complete).toBe(true);
   expect(review.rows).toHaveLength(1);
   expect(review.rows[0]?.sources).toHaveLength(2);
-  await append('conversation-unrelated', 'conversation.created', {
-    conversationId: 'unrelated', assistantId: 'unrelated', createdBy: 'someone-else',
-  });
-  await append('conversation-unrelated', 'message.posted', {
-    conversationId: 'unrelated', authorId: 'someone-else', authorKind: 'human',
-    ciphertext: Buffer.from('Unrelated message content').toString('base64'), keyId: 'key:unrelated', contentType: 'text',
-  });
+  const conversation = { conversationId: 'unrelated', assistantId: 'unrelated',
+    createdBy: 'someone-else' };
+  await append('conversation-unrelated', 'conversation.created', conversation);
+  const ciphertext = Buffer.from('Unrelated message content').toString('base64');
+  const message = { conversationId: 'unrelated', authorId: 'someone-else',
+    authorKind: 'human', ciphertext, keyId: 'key:unrelated', contentType: 'text' };
+  await append('conversation-unrelated', 'message.posted', message);
   expect(await review.checkCurrent(performance.now() + 10_000)).toBe(true);
   await project();
   const after = await memberInventory(options, memberId, performance.now() + 10_000);
   expect(after.complete).toBe(true);
   expect(after.reviewRevision).toBe(review.reviewRevision);
-  await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, createLogger('inventory-replay'),
-    { verify: true });
+  const replayLogger = createLogger('inventory-replay');
+  const replayOptions = { verify: true };
+  await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, replayLogger, replayOptions);
   const replayed = await memberInventory(options, memberId, performance.now() + 10_000);
   expect(replayed.reviewRevision).toBe(review.reviewRevision);
   expect(replayed.rows).toEqual(review.rows);
@@ -304,12 +306,10 @@ async function blocksExpandedPeople() {
   const teamId = 'large-audience-group';
   const teamIds = [teamId, 'large-audience-overlap'];
   for (const groupId of teamIds) {
-    await append(`team-${groupId}`, 'team.created', {
-      teamId: groupId, name: groupId, createdBy: 'owner',
-    });
-    await append(`team-${groupId}`, 'team.member_added', {
-      teamId: groupId, memberId, addedBy: 'owner',
-    });
+    const group = { teamId: groupId, name: groupId, createdBy: 'owner' };
+    const membership = { teamId: groupId, memberId, addedBy: 'owner' };
+    await append(`team-${groupId}`, 'team.created', group);
+    await append(`team-${groupId}`, 'team.member_added', membership);
   }
   const audience = [];
   for (let index = 1; index < 500; index++) {
@@ -339,8 +339,10 @@ async function blocksTooManyGroups() {
   const memberId = 'many-groups';
   for (let index = 0; index < 101; index++) {
     const teamId = `many-groups-${index}`;
-    await append(`team-${teamId}`, 'team.created', { teamId, name: teamId, createdBy: 'owner' });
-    await append(`team-${teamId}`, 'team.member_added', { teamId, memberId, addedBy: 'owner' });
+    const group = { teamId, name: teamId, createdBy: 'owner' };
+    const membership = { teamId, memberId, addedBy: 'owner' };
+    await append(`team-${teamId}`, 'team.created', group);
+    await append(`team-${teamId}`, 'team.member_added', membership);
   }
   await project();
   const overflow = await memberInventory(options, memberId, performance.now() + 10_000);

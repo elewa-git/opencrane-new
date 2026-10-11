@@ -20,7 +20,7 @@ export const memberAccessSchema = z.object({
   rows: z.array(accessRow),
 }).strict();
 const versionAbsence = z.object({
-  status: z.enum(['absent_on_version', 'unsupported_history']), message: z.string(),
+  status: z.enum(['absent_on_version', 'unsupported_history', 'unavailable']), message: z.string(),
 }).strict();
 export const memberDepartureSchema = memberAccessSchema.omit({ rows: true }).extend({
   memberSequence: z.int().nonnegative(), ownershipSequence: z.int().nonnegative(),

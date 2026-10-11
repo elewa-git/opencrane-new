@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child and destination tables| projections["libs/projections<br/>read tables, survey progress with hashes and keys"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, destination, inventory and survey tables| projections["libs/projections<br/>read tables, inventory inputs and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|events and private instance records in order| projections
@@ -42,6 +42,15 @@ match their hashes before review choices are kept. A hash is a fixed-length valu
 calculated from the definitions. Checks renew only the same server in the same silo.
 A fresh catalogue check does not approve startup credentials. Required startup review
 keeps calls blocked.
+
+
+
+- Keep dated tool snapshots and the earlier list after a change.
+
+The members worker keeps an index of the saved streams used in access and departure
+reviews. The index retains removed memberships and revoked grants, so an empty list
+cannot hide permission updates that are still pending. Member replay rebuilds it
+without changing permissions or making outside calls.
 
 - Keep current destination rules, including who revoked them and when.
 

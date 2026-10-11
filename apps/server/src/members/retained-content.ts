@@ -8,7 +8,7 @@ type ContentPositions = {
   creation: string;
   participation: string;
 };
-type HistoryPositions = Record<string, number>;
+type HistoryPositions = { sequence: number };
 
 async function contentPositions(options: GroupOptions, memberId: string) {
   const result = await options.db.query<ContentPositions>(`SELECT
@@ -34,9 +34,7 @@ function samePositions(before: ContentPositions, after: ContentPositions) {
 function inputEventIds(inputs: Inputs) {
   const ids: string[] = [];
   for (const row of inputs.rows) {
-    const separator = row.event.subject.indexOf('-');
-    const category = row.event.subject.slice(0, separator);
-    if (inputs.positions[`${category}-*`] === row.sequence) ids.push(row.event.id);
+    if (inputs.positions[row.event.subject] === row.sequence) ids.push(row.event.id);
   }
   return ids;
 }
@@ -67,19 +65,14 @@ function changesHistory(row: StoredEvent, memberId: string) {
 async function historyInputs(options: GroupOptions, memberId: string,
   previousPositions: HistoryPositions, deadline: number) {
   const eventIds: string[] = [];
-  const positions: HistoryPositions = {};
-  for (const subject of ['conversation-*', 'participation-*']) {
-    const position = await options.store.head(subject, deadline);
-    positions[subject] = position;
-    const previous = previousPositions[subject];
-    if (previous === undefined) throw new Error('History position unavailable');
-    if (position <= previous) continue;
-    for await (const row of options.store.readStream(subject, previous + 1, deadline)) {
-      if (row.sequence > position) break;
-      if (row.event.silo !== options.silo) throw new Error('History belongs to another silo');
-      if (changesHistory(row, memberId)) eventIds.push(row.event.id);
-      if (eventIds.length > 10_000) throw new Error('History cannot be checked completely');
-    }
+  const position = await options.store.head(undefined, deadline);
+  const positions = { sequence: position };
+  const previous = previousPositions.sequence;
+  if (position - previous > 10_000) throw new Error('History cannot be checked completely');
+  for (let sequence = previous + 1; sequence <= position; sequence++) {
+    const row = await options.store.readEvent(sequence, deadline);
+    if (row.event.silo !== options.silo) throw new Error('History belongs to another silo');
+    if (changesHistory(row, memberId)) eventIds.push(row.event.id);
   }
   return { eventIds, positions };
 }
@@ -91,7 +84,7 @@ async function historyApplied(options: GroupOptions, memberId: string, deadline:
   if (sequence === undefined) return { current: false, positions: undefined };
   // Use the worker's position only to skip events it has already processed.
   // Check pending creation and participation events for this member, ignoring messages.
-  const previous = { 'conversation-*': Number(sequence), 'participation-*': Number(sequence) };
+  const previous = { sequence: Number(sequence) };
   const inputs = await historyInputs(options, memberId, previous, deadline);
   const applied = await options.db.query<{ count: string }>(`SELECT count(*) AS count
     FROM projection_events WHERE projection = 'conversations' AND event_id = ANY($1::text[])`,

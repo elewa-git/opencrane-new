@@ -10,11 +10,14 @@ import {
 import type { Query } from "./db.ts";
 import type { Projection } from "./runner.ts";
 
+import { applyInventoryInput, createInventoryInputs } from './inventory-inputs.ts';
+
 interface MemberTables {
   members: string;
   identities: string;
   changes: string;
   ownership: string;
+  inventory: string;
 }
 
 const live = {
@@ -22,12 +25,14 @@ const live = {
   identities: "member_identities",
   changes: "member_changes",
   ownership: "silo_ownership",
+  inventory: "inventory_inputs",
 } satisfies MemberTables;
 export const replayMemberTables = {
   members: "members_replay",
   identities: "member_identities_replay",
   changes: "member_changes_replay",
   ownership: "silo_ownership_replay",
+  inventory: "inventory_inputs_replay",
 } satisfies MemberTables;
 
 function field(data: unknown, name: string): string {
@@ -178,6 +183,7 @@ function memberProjection(name: string, tables: MemberTables): Projection {
   return {
     name,
     async create(db) {
+      await createInventoryInputs(db, tables.inventory);
       await db.query(`CREATE TABLE IF NOT EXISTS ${tables.ownership} (
         silo TEXT PRIMARY KEY, owners JSONB NOT NULL)`);
       await db.query(`CREATE TABLE IF NOT EXISTS ${tables.members} (
@@ -192,12 +198,16 @@ function memberProjection(name: string, tables: MemberTables): Projection {
         PRIMARY KEY (silo, position))`);
     },
     async drop(db) {
+      await db.query(`DROP TABLE IF EXISTS ${tables.inventory}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.ownership}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.changes}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.identities}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.members}`);
     },
-    apply: (db, event, position) => applyMember(tables, db, event, position),
+    async apply(db, event, position) {
+      await applyInventoryInput(db, tables.inventory, event, position);
+      await applyMember(tables, db, event, position);
+    },
   };
 }
 

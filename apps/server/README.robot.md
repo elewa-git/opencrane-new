@@ -1531,13 +1531,20 @@ Owner-role invitation remains invited; the active owner remains an owner.
 
 The Owner/Admin GETs `/api/members/:memberId/access` and `/api/members/:memberId/departure`
 check events and OpenFGA once. They stop after ten seconds or 10,000 inventory records.
+The members projection indexes the exact streams for groups, assistants, grants,
+computers and unsupported routine/connection history. Inventory loading reads no
+wildcard streams. Category positions check index freshness and prevent new links
+from being missed. Reviews include at most 100 recorded groups and 500 distinct
+expanded people; overflow adds `inventory_limits` and keeps removal disabled.
+Missing or behind index data adds `inventory_index`. Rebuild members on upgrade.
+The existing 20/50 browsing and 100 candidate limits are unchanged.
 Checked inventory event positions, computer rows, history totals and positions in
 the target's retained rows form the review revision. Processing receipts show that
-both table workers have processed the reviewed category events. The inventory
+both table workers have processed the latest reviewed events on exact streams. The inventory
 compares positions in the target's computer and history rows before and after the
 SQL reads. Messages and table updates for another member do not change these positions.
 The conversation worker's checkpoint is only a starting point for checking pending
-events. Only the target's conversation creation and participation events must have
+events by their exact saved positions, with at most 10,000 records per tail read. Only the target's conversation creation and participation events must have
 been processed. Checkpoint movement never makes the review stale or incomplete.
 Behind tables and unsupported ownership, routines or connections block completion.
 The latest grant changes include revocations for each member, group or assistant.
@@ -1973,3 +1980,24 @@ before enabling tools. The review names the saved catalogue, connection, account
 mode, cost and approval details. Fixtures publish after choosing a wider mode.
 Memory Ask fixtures include complete review details. The bridge fixture includes
 the saved `stepUp: false` field when calculating its review digest.
+
+## Exact inventory source checks — 11 October 2026
+
+The tests were committed before the fix. They first failed on wildcard reads,
+501 expanded people and 101 groups. A second failing test required unknown routine
+and connection history when overflow prevents a complete read.
+
+PASS: the two changed test files ran twice with the supplied PostgreSQL URL,
+`nice -n 10` and one worker. The three-file run passed 31 tests in 66.71 seconds,
+including unchanged member-removal regressions. The second run passed all 18 tests
+in the two changed files in 53.85 seconds. Both used real NATS, PostgreSQL and
+OpenFGA. Online member replay rebuilt the index without changing permissions.
+The two authority test files remain unchanged.
+
+PASS: full lint, workspace typecheck, event catalogue (112 types), Knip and changelog checks.
+Lint reports 15 existing warnings and no errors.
+Logs are `/tmp/p4-23-pr3-tests-final-{7,8}.log`,
+`/tmp/p4-23-pr3-typecheck-final.log`, `/tmp/p4-23-pr3-events.log`,
+`/tmp/p4-23-pr3-knip.log`, `/tmp/p4-23-pr3-changelog.log` and
+`/tmp/p4-23-pr3-lint-complete.log`.
+NOT RUN: full root suite, independent review and fresh-install qualification.

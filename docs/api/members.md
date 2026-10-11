@@ -9,7 +9,8 @@ Reads use `no-store`, verified session identity, current events and IAM; they ap
 | `GET /api/members?q=&after=&limit=20` | Owner/Admin-only name/email search. Returns `rows`, `next`, `counts`, `checkedAt`, `projection.content` and `permissions.invite: false`. |
 
 Only Owners get `manageOwnership: true` for the existing ownership API. Role/removal flags stay false.
-`personalAssistant` and `rejoinedAt` return `{ status: unavailable }`. Access/departure reads are absent.
+`personalAssistant` and `rejoinedAt` return `{ status: unavailable }`.
+The access and departure reads are described below.
 Existing screens stay unchanged.
 
 Paging follows colleagues: default 20, maximum 50, query ≤100 characters, ids ≤200 safe characters.
@@ -340,3 +341,23 @@ An exact retry returns the original receipt; changed arguments return
 `command_id_reused`. Status reads save nothing. Removed callers receive 403,
 including for status. An Admin who removes themselves and loses the reply
 learns the result from that 403. Cleanup remains unavailable.
+
+## Access and departure inventory
+
+Owner/Admin GETs `/api/members/:memberId/access` and
+`/api/members/:memberId/departure` read indexed stream names and exact saved events.
+The index must be current for each recorded category; no category history or whole
+conversation is loaded. The retained-history check reads only saved positions
+since its worker checkpoint, then only positions saved since inventory loading.
+Each history read stops at ten seconds or 10,000 records.
+
+Reviews stop at 100 groups, 100 grant streams, 100 assistants and 500 distinct
+expanded people. Overlap counts once. Overflow reports `complete: false` and
+`inventory_limits`; behind indexing reports `inventory_index`. Both block removal.
+Removed memberships and revoked grants remain incomplete until their IAM receipts
+arrive, even when no visible access rows remain. Unrelated chat activity does not
+change the review revision.
+
+Routine and connection history reports `absent_on_version` only after a complete
+check. Known unsupported records report `unsupported_history`; incomplete reads
+report `unavailable`. These states never stand in for an exact zero count.

@@ -3,12 +3,13 @@ import { z } from 'zod';
 import { assistantCreatedDataSchema, grantGivenDataSchema, grantRevokedDataSchema,
   teamCreatedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
+import { readInventoryReferences, inventoryCategoryPositions, inventoryCategories }
+  from '@opencrane/projections';
 import { memberAuthorisation } from '@opencrane/authz';
 import type { MemberAccessRow } from '@opencrane/protocol';
 import type { GroupOptions } from './group-routes.ts';
 import { retainedContent } from './retained-content.ts';
 
-const categories = ['team', 'assistant', 'grant', 'routine', 'connection', 'computer'];
 const publicResources = new Set(['model', 'mcp_server', 'mcp_tool', 'shared_desktop']);
 type Assistant = ReturnType<typeof assistantCreatedDataSchema.parse>;
 type Grant = ReturnType<typeof grantGivenDataSchema.parse>;
@@ -17,31 +18,31 @@ type GrantFact = {
   grant: Pick<Grant, 'resourceType' | 'resourceId' | 'granteeId' | 'granteeKind'>;
 };
 
-async function latestInput(options: GroupOptions, subject: string, position: number,
-  deadline: number) {
-  if (position === 0) return undefined;
-  for await (const row of options.store.readStream(subject, position, deadline)) {
-    if (row.sequence !== position || row.event.silo !== options.silo) {
-      throw new Error('Inventory cannot be read completely');
-    }
-    return row;
-  }
-  throw new Error('Inventory cannot be read completely');
-}
-
-async function recordedInputs(options: GroupOptions, deadline: number) {
-  const rows: StoredEvent[] = [];
-  const positions: Record<string, number> = {};
-  for (const category of categories) {
+async function recordedInputs(options: GroupOptions, memberId: string, deadline: number) {
+  const indexedPositions = await inventoryCategoryPositions(options.db, options.silo);
+  const categoryPositions: Record<string, number> = {};
+  let current = true;
+  for (const category of inventoryCategories) {
     const subject = `${category}-*`;
     const position = await options.store.head(subject, deadline);
-    positions[subject] = position;
-    if (category === 'computer') {
-      const row = await latestInput(options, subject, position, deadline);
-      if (row) rows.push(row);
-      continue;
+    categoryPositions[subject] = position;
+    if (position !== (indexedPositions.positions[subject] ?? 0)) {
+      current = false;
     }
-    for await (const row of options.store.readStream(subject, 1, deadline)) {
+  }
+  const indexed = await readInventoryReferences(options.db, options.silo, memberId);
+  const rows: StoredEvent[] = [];
+  const positions: Record<string, number> = {};
+  for (const reference of indexed.references) {
+    const subject = reference.subject;
+    const position = await options.store.head(subject, deadline);
+    positions[subject] = position;
+    let fromSequence = 1;
+    if (!subject.startsWith('team-') && !subject.startsWith('grant-') &&
+        !subject.startsWith('assistant-')) {
+      fromSequence = position;
+    }
+    for await (const row of options.store.readStream(subject, fromSequence, deadline)) {
       if (row.sequence > position) break;
       if (row.event.silo !== options.silo || rows.length >= 10_000) {
         throw new Error('Inventory cannot be read completely');
@@ -49,7 +50,12 @@ async function recordedInputs(options: GroupOptions, deadline: number) {
       rows.push(row);
     }
   }
-  return { rows, positions };
+  function eventOrder(first: StoredEvent, second: StoredEvent) {
+    return first.sequence - second.sequence;
+  }
+  rows.sort(eventOrder);
+  return { rows, positions, categoryPositions, current, withinLimits: indexed.complete,
+    generation: indexedPositions.generation };
 }
 
 function groupFacts(rows: StoredEvent[], memberId: string) {
@@ -225,9 +231,20 @@ async function addSharedAssistants(options: GroupOptions, memberId: string, inpu
   }
 }
 
-export async function memberInventory(options: GroupOptions, memberId: string, deadline: number) {
-  const inputs = await recordedInputs(options, deadline);
+function unavailableIndexSections(inputs: { current: boolean; withinLimits: boolean }) {
   const unavailable = new Set<string>();
+  if (!inputs.current) {
+    unavailable.add('inventory_index');
+  }
+  if (!inputs.withinLimits) {
+    unavailable.add('inventory_limits');
+  }
+  return unavailable;
+}
+
+export async function memberInventory(options: GroupOptions, memberId: string, deadline: number) {
+  const inputs = await recordedInputs(options, memberId, deadline);
+  const unavailable = unavailableIndexSections(inputs);
   const groups = groupFacts(inputs.rows, memberId);
   await checkGroupRemovals(options, groups, unavailable, deadline);
   for (const groupId of groups.memberships.keys()) {
@@ -247,12 +264,14 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   }
   const rows = await accessRows(options, memberId, inputs.rows, assistants, groups, unavailable, deadline);
   recordUnavailablePermissions(rows, unavailable);
-  const personalConnections = versionAbsence(inputs.rows, 'connection', unavailable);
-  const routines = versionAbsence(inputs.rows, 'routine', unavailable);
   const content = await retainedContent(options, memberId, inputs, deadline);
   if (!content.current) unavailable.add('retained_content');
   async function checkCurrent(checkDeadline: number) {
-    for (const [subject, position] of Object.entries(inputs.positions)) {
+    const indexed = await inventoryCategoryPositions(options.db, options.silo);
+    if (indexed.generation !== inputs.generation) {
+      return false;
+    }
+    for (const [subject, position] of Object.entries(inputs.categoryPositions)) {
       const currentPosition = await options.store.head(subject, checkDeadline);
       if (currentPosition !== position) {
         return false;
@@ -260,11 +279,16 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
     }
     return content.checkCurrent(checkDeadline);
   }
-  if (!await checkCurrent(deadline)) {
+  const unchanged = await checkCurrent(deadline);
+  if (!unchanged) {
     unavailable.add('changed_inventory');
   }
+  const absenceChecked = inputs.current && inputs.withinLimits && unchanged;
+  const personalConnections = versionAbsence(inputs.rows, 'connection', unavailable, absenceChecked);
+  const routines = versionAbsence(inputs.rows, 'routine', unavailable, absenceChecked);
   const hash = createHash('sha256');
-  hash.update(JSON.stringify([1, inputs.positions, content]));
+  const reviewedInputs = [2, inputs.positions, inputs.categoryPositions, inputs.generation, content];
+  hash.update(JSON.stringify(reviewedInputs));
   return { rows, complete: unavailable.size === 0, unavailableSections: Array.from(unavailable),
     reviewRevision: hash.digest('hex'), checkCurrent, ownedSharedWork: [],
     personalConnections, routines,
@@ -280,14 +304,19 @@ function recordUnavailablePermissions(rows: MemberAccessRow[], unavailable: Set<
   }
 }
 
-function versionAbsence(rows: StoredEvent[], category: string, unavailable: Set<string>) {
+function versionAbsence(rows: StoredEvent[], category: string, unavailable: Set<string>,
+  absenceChecked: boolean) {
   for (const row of rows) {
     if (!row.event.type.startsWith(`${category}.`)) continue;
     unavailable.add(category);
     return { status: 'unsupported_history' as const, message: 'Not available yet' };
   }
+  if (!absenceChecked) {
+    unavailable.add(category);
+    return { status: 'unavailable' as const, message: 'History could not be checked completely' };
+  }
   let message = 'None possible on this version';
-  if (category === 'routine') message = 'Routine ownership: Not available yet';
+  if (category === 'routine') message = 'Routines are not available on this version';
   return { status: 'absent_on_version' as const, message };
 }
 

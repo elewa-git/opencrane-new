@@ -46,6 +46,10 @@ async function sameState(db: Query): Promise<boolean> {
     rows(db, 'silo_ownership', 'silo'),
     rows(db, replayMemberTables.ownership, 'silo'),
   ]));
+  comparisons.push(await Promise.all([
+    rows(db, 'inventory_inputs', 'silo, subject, link_kind, link_id'),
+    rows(db, replayMemberTables.inventory, 'silo, subject, link_kind, link_id'),
+  ]));
   return comparisons.every(([current, rebuilt]) =>
     JSON.stringify(current) === JSON.stringify(rebuilt),
   );
@@ -57,16 +61,19 @@ async function switchTables(db: Db, changed: boolean): Promise<void> {
       await db.transaction(async (tx) => {
         await tx.query("SET LOCAL lock_timeout = '250ms'");
         // Identity readers take these live tables in this order.
-        await tx.query(`LOCK TABLE member_identities, members, member_changes, silo_ownership,
+        await tx.query(`LOCK TABLE member_identities, members, member_changes,
+          silo_ownership, inventory_inputs,
           ${replayMemberTables.identities}, ${replayMemberTables.members}, ${replayMemberTables.changes},
-          ${replayMemberTables.ownership}
+          ${replayMemberTables.ownership}, ${replayMemberTables.inventory}
           IN ACCESS EXCLUSIVE MODE`);
         // Keep the live table objects so their owners and grants do not change.
-        await tx.query("TRUNCATE member_identities, members, member_changes, silo_ownership");
+        await tx.query(`TRUNCATE member_identities, members, member_changes,
+          silo_ownership, inventory_inputs`);
         await tx.query(`INSERT INTO members SELECT * FROM ${replayMemberTables.members}`);
         await tx.query(`INSERT INTO member_identities SELECT * FROM ${replayMemberTables.identities}`);
         await tx.query(`INSERT INTO member_changes SELECT * FROM ${replayMemberTables.changes}`);
         await tx.query(`INSERT INTO silo_ownership SELECT * FROM ${replayMemberTables.ownership}`);
+        await tx.query(`INSERT INTO inventory_inputs SELECT * FROM ${replayMemberTables.inventory}`);
         await replayMembers.drop(tx);
         await tx.query("DELETE FROM projection_events WHERE projection = $1", [members.name]);
         await tx.query("UPDATE projection_events SET projection = $1 WHERE projection = $2", [members.name, replayMembers.name]);
