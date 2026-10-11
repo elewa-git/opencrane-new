@@ -1397,13 +1397,13 @@ NOT RUN: independent review, HTTP journeys, live Kubernetes and fresh-install qu
 
 ## Final MCP send checks — 11 October 2026
 
-Runtime source: `80d286f5`, rebased onto `897e42d3`. Linux, Node 22.23.3,
+Runtime source: `a6e08fd1`, rebased onto `ef6e3420`. Linux, Node 22.23.3,
 disposable NATS/OpenFGA, local PostgreSQL and a recording upstream; no paid calls.
-PASS: clean npm ci, requested binary links, lint (15 warnings, no errors),
-workspace typecheck, check:events (113 types), Knip and lint:changelog.
-PASS: two final 20-file batches, 862 tests each, in 165.28 s and 176.64 s.
+PASS: clean npm ci, requested binary links, lint (warnings, no errors),
+workspace typecheck, check:events (115 types), Knip and lint:changelog.
+PASS: two final 21-file batches, 889 tests each, in 224.55 s and 180.74 s.
 Both used the supplied PG_TEST_URL, nice -n 10 and one worker.
 Failing tests were committed before their fixes. The two authority tests are unchanged.
 NOT RUN: full root suite, fresh install qualification, independent review and hosted CI.
-Logs: `/tmp/p3-6-pr2-tests-final-{1,2}.log`, `/tmp/p3-6-pr2-lint-final.log`,
-`/tmp/p3-6-pr2-typecheck-complete.log` and `/tmp/p3-6-pr2-red-*.log`.
+Logs: `/tmp/p3-6-pr2-tests-rebased-{1,2}.log`, `/tmp/p3-6-pr2-lint-rebased.log`,
+`/tmp/p3-6-pr2-typecheck-rebased.log` and `/tmp/p3-6-pr2-red-*.log`.

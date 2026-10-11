@@ -30,6 +30,14 @@ The models actor orders dispatch and expiry on one budget stream. This record
 changes no money. Its absence proves non-dispatch only for the new sender contract.
 The first successful append permits one gateway send; duplicates grant no send.
 
+## MCP approval transport binding
+
+`tool.approval_requested.dispatchBinding` is an optional SHA-256 digest of the reviewed
+transport route, including server, connection, backend address and instance generation.
+It participates in the approval id. Missing fields remain readable for replay.
+A gateway call with a different current transport binding cannot use that old approval.
+
+
 ## Public contract
 
 Delegation version 1 records one computer generation, root, requester, payer,
