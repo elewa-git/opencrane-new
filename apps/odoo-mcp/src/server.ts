@@ -3,6 +3,8 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { losslessJson } from '@opencrane/models';
 import { z } from 'zod';
 import { callTool, catalogue, discover } from './tools.ts';
+import { upstreamSchema } from './odoo.ts';
+import type { Upstream } from './odoo.ts';
 
 const version = '2026-07-28';
 const meta = z.object({ 'io.modelcontextprotocol/protocolVersion': z.literal(version),
@@ -14,16 +16,18 @@ const requestSchema = z.object({ jsonrpc: z.literal('2.0'),
     arguments: z.unknown().optional(), cursor: z.string().optional() }).strict(),
 }).strict();
 const publicErrors = new Set(['write_unavailable', 'unknown_tool',
-  'read_unavailable', 'record_limit', 'invalid_request']);
+  'read_unavailable', 'read_refused', 'invalid_response', 'credential_required',
+  'record_limit', 'invalid_request']);
 
-export function createAdapter() {
+export function createAdapter(upstream?: Upstream) {
+  const reviewedUpstream = upstream === undefined ? undefined : upstreamSchema.parse(upstream);
   const server = Fastify({ bodyLimit: 16384, requestTimeout: 15000, logger: false });
   server.removeContentTypeParser('application/json');
   server.addContentTypeParser('application/json', { parseAs: 'buffer' }, parseJson);
   server.setErrorHandler(invalidRequest);
   server.get('/', methodRefused);
   server.post('/', dispatch);
-  function dispatch(request: FastifyRequest, reply: FastifyReply) {
+  async function dispatch(request: FastifyRequest, reply: FastifyReply) {
     const identifier = z.object({ id: z.union([z.string(), z.number()]) }).safeParse(request.body);
     const id = identifier.success ? identifier.data.id : null;
     try {
@@ -34,7 +38,7 @@ export function createAdapter() {
         || headers['mcp-session-id'] !== undefined) {
         throw new Error('invalid_request');
       }
-      const result = execute(call);
+      const result = await execute(call);
       const response = { jsonrpc: '2.0', id, result };
       if (Buffer.byteLength(JSON.stringify(response)) > 65536) {
         throw new Error('record_limit');
@@ -50,9 +54,10 @@ export function createAdapter() {
       const response = { jsonrpc: '2.0', id, error: { code: -32602, message } };
       return reply.send(response);
     }
-    function execute(call: z.infer<typeof requestSchema>) {
+    async function execute(call: z.infer<typeof requestSchema>) {
       if (call.method === 'tools/call' && call.params.name && call.params.cursor === undefined) {
-        return callTool(call.params.name, call.params.arguments);
+        return callTool(reviewedUpstream, call.params.name, call.params.arguments,
+          request.headers.authorization);
       }
       if (call.params.name !== undefined || call.params.arguments !== undefined
         || call.params.cursor !== undefined) {

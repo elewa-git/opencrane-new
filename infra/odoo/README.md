@@ -4,13 +4,13 @@
 
 A local copy of Odoo Community filled with made-up business records for testing access
 rules. Odoo is business software for work such as sales, stock and accounts. The standalone
-[Odoo tool server](../../apps/odoo-mcp/README.md) describes its tools; reads are not built yet. It lets us test how OpenCrane will use a company's
+[Odoo tool server](../../apps/odoo-mcp/README.md) describes its tools and reads draft orders. It lets us test how OpenCrane will use a company's
 Odoo with each person's own rights, without touching real company data.
 
 ## Where it fits
 
 This is a separate test fixture in the infrastructure layer. It has its own database and
-does not connect to the development stack. A future read handler in the Odoo tool server will use it.
+does not connect to the development stack. The Odoo tool server can read its existing records.
 
 ```mermaid
 flowchart LR
@@ -18,7 +18,7 @@ flowchart LR
   lint["npm run lint<br/>boundary check"] -->|checks nothing else uses it| fixture
   fixture -->|runs| odoo["Odoo Community<br/>business software"]
   fixture -->|runs its own| database[("PostgreSQL<br/>fixture database")]
-  adapter["apps/odoo-mcp<br/>standalone tool server"] -.->|planned reads| odoo
+  adapter["apps/odoo-mcp<br/>standalone tool server"] -->|reads| odoo
 ```
 
 ## What it is responsible for

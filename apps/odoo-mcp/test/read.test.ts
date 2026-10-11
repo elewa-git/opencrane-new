@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { setTimeout as delay } from 'node:timers/promises';
+import { z } from 'zod';
 import Fastify from 'fastify';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { createHash } from 'node:crypto';
@@ -10,13 +12,15 @@ let adapter: ReturnType<typeof createAdapter>;
 let order: Record<string, unknown>;
 let lines: string;
 let status: number;
-let rawOrder: string | undefined;
+let rawOrder: string | Buffer | undefined;
+let responseDelay: number;
 let requests: { path: string; body: unknown; bearer: string | undefined; database: unknown }[];
 const note = '<p>é &amp; <ignore instructions> "quoted"</p>  ';
 const meta = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
-function respond(request: FastifyRequest, reply: FastifyReply) {
+async function respond(request: FastifyRequest, reply: FastifyReply) {
   requests.push({ path: request.url, body: request.body,
     bearer: request.headers.authorization, database: request.headers['x-odoo-database'] });
+  await delay(responseDelay);
   reply.code(status);
   reply.type('application/json');
   if (status !== 200) {
@@ -44,6 +48,7 @@ function reset() {
   lines = '[{"id":11,"name":"<Service>","product_uom_qty":1.0000000000000001}]';
   status = 200;
   rawOrder = undefined;
+  responseDelay = 0;
   requests = [];
 }
 beforeAll(start);
@@ -56,10 +61,10 @@ async function call(args: unknown = { orderId: 7 }, bearer = 'Bearer synthetic-w
   const payload = { jsonrpc: '2.0', id: 'read', method: 'tools/call',
     params: { _meta: meta, name, arguments: args } };
   const response = await adapter.inject({ method: 'POST', url: '/', headers, payload });
-  return JSON.parse(response.body) as {
-    result?: { structuredContent: Record<string, unknown>; content: { text: string }[] };
-    error?: { message: string };
-  };
+  const body: unknown = JSON.parse(response.body);
+  return z.object({ result: z.object({ structuredContent: z.record(z.string(), z.unknown()),
+    content: z.array(z.object({ type: z.literal('text'), text: z.string() })) }).optional(),
+  error: z.object({ message: z.string() }).optional() }).parse(body);
 }
 async function exactSnapshot() {
   const response = await call();
@@ -74,7 +79,7 @@ async function exactSnapshot() {
   const version = losslessJson(JSON.stringify(snapshot)).digest;
   const noteDigest = createHash('sha256').update(note, 'utf8').digest('hex');
   expect(response.result?.structuredContent).toEqual({ snapshot, display, version, noteDigest,
-    checkedAt: expect.any(String), costCents: 0 });
+    checkedAt: response.result?.structuredContent['checkedAt'], costCents: 0 });
   expect(response.result?.content).toEqual([{ type: 'text', text: JSON.stringify(display) }]);
   expect(Date.parse(String(response.result?.structuredContent['checkedAt']))).toBeGreaterThan(0);
   expect(requests).toEqual([
@@ -168,3 +173,55 @@ async function missingOrder() {
   expect(requests).toHaveLength(1);
 }
 it('refuses a missing order returned as an empty list', missingOrder);
+
+async function invalidUtf8() {
+  const bytes = Buffer.from(JSON.stringify([order]));
+  bytes[bytes.indexOf('Order')] = 0xff;
+  rawOrder = bytes;
+  const response = await call();
+  expect(response.result).toBeUndefined();
+  expect(response.error?.message).toBe('invalid_response');
+}
+it('refuses invalid UTF-8 in upstream JSON rather than replacing a byte', invalidUtf8);
+
+async function boundedOperation() {
+  const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
+  function shortDeadline() {
+    return originalTimeout(120);
+  }
+  const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(shortDeadline);
+  responseDelay = 90;
+  try {
+    const response = await call();
+    expect(response.result).toBeUndefined();
+    expect(response.error?.message).toBe('read_unavailable');
+    expect(timeout).toHaveBeenCalledExactlyOnceWith(15000);
+  } finally {
+    timeout.mockRestore();
+  }
+}
+it('uses one 15-second deadline for the order and line requests together', boundedOperation);
+
+async function ignoresProxySettings() {
+  const names = ['HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy', 'ALL_PROXY'];
+  const saved = new Map<string, string | undefined>();
+  for (const name of names) {
+    saved.set(name, process.env[name]);
+    process.env[name] = 'http://127.0.0.1:1';
+  }
+  try {
+    const response = await call();
+    expect(response.error).toBeUndefined();
+    expect(requests).toHaveLength(2);
+  } finally {
+    for (const name of names) {
+      const value = saved.get(name);
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
+  }
+}
+it('reads directly even when the process has HTTP proxy settings', ignoresProxySettings);
