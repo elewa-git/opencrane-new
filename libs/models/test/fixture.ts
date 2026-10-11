@@ -132,7 +132,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   let clock = Date.now();
   const actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly, 'personal-default');
   const keys = conversationKeys(`${directory}/keys`); keys.provision('test', 'conversation');
-  const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens }, binding, 0, keys);
+
   let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
   const admitted: string[] = [], observations: Promise<void>[] = [];
   let upstreamBody = '';
@@ -194,10 +194,16 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     stub.listen(upstreamPort, '127.0.0.1');
     await once(stub, 'listening');
   }
+  const mcpRoutes = [{ serverId: 'fixture', connectionId: 'installed',
+    upstream: `127.0.0.1:${address.port}`, generation: 'instance-1',
+    revisionHeader: 'x-opencrane-mcp-revision' as const }];
+  const dispatchOptions = { routes: mcpRoutes, requireLeader: async function requireLeader() {} };
+  const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
+    binding, 0, keys, undefined, dispatchOptions);
   let options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`, keyFile,
     port: await freePort(), readinessPort: await freePort(), decisionUrl: decision.url, issuer,
-    mcpRoutes: [{ serverId: 'fixture', connectionId: 'installed', upstream: `127.0.0.1:${address.port}` }],
+    mcpRoutes,
     ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }),
     onChildSpawn: registerGatewayCleanup };
   let gateway: Awaited<ReturnType<typeof startGateway>>;
