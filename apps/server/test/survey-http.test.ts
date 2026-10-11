@@ -37,7 +37,7 @@ async function start() {
   fga = await openfga();
   dbs = await databases();
   directory = await mkdtemp(`${tmpdir()}/survey-http-`);
-  keys = conversationKeys(directory);
+  keys = conversationKeys(`${directory}/personal`);
   keys.provision('test', 'personal:alice');
   const binding = await createStore(fga.apiUrl, 'test');
   const joined = { ...event('joined', 'member-alice'), data: {
@@ -47,8 +47,11 @@ async function start() {
   expect((await nats.store.append({ event: joined, expectedSequence: 0 })).status).toBe('appended');
   const db = pgDb(dbs.queue);
   await memberAuthorisation(binding).handler.handle(joined, db);
-  const chat = { silo: 'test', store: nats.store, db, keys, binding, feed: { memberId } };
-  app = buildServer(config, { chat });
+  const chatKeys = conversationKeys(`${directory}/chat`);
+  const chat = { silo: 'test', store: nats.store, db, keys: chatKeys,
+    binding, feed: { memberId } };
+  const onboarding = { ...chat, keys };
+  app = buildServer(config, { chat, onboarding });
   const logger = createLogger('survey-http', { level: 'silent' });
   runner = new ProjectionRunner(db, nats.reader, logger);
   await runner.initialise(personalSettings);
@@ -222,21 +225,35 @@ async function slowHistory() {
 it('loads slow history before opening the small write access check', slowHistory);
 
 async function unrelatedChurn() {
+  let churned = false;
   const head = nats.store.head.bind(nats.store);
   nats.store.head = async function churn(subject, deadline) {
     if (subject?.startsWith('conversation-') || subject?.startsWith('computer-')) {
       throw new Error('Unrelated turn and file activity must not be watched');
     }
+    if (subject === 'member-alice' && deadline !== undefined && !churned) {
+      churned = true;
+      const turn = event('turn-churn', 'computer-computer_1', 'computer.turn_started');
+      const file = event('file-churn', 'conversation-conv_1', 'file.uploaded');
+      for (const record of [turn, file]) {
+        Reflect.deleteProperty(record.data, 'memberId');
+        const command = { event: record, expectedSequence: 0 };
+        expect((await nats.store.append(command)).status).toBe('appended');
+      }
+    }
     return head(subject, deadline);
   };
   expect((await save(1, 0)).statusCode).toBe(200);
+  expect(churned).toBe(true);
   expect((await progress()).survey.nextStep).toBe(2);
   nats.store.head = head;
   expect((await post({}, { ...headers, origin: 'https://other.test' })).statusCode).toBe(403);
+  const position = await nats.store.head('personal-alice');
   await rm(directory, { recursive: true, force: true });
-  const current = await progress().catch(function unavailableKeys() { return null; });
-  expect(current).toBeNull();
-  expect((await save(2, 2, 'missing-key')).statusCode).toBe(503);
+  const unavailableRequest = { url: '/api/onboarding', headers };
+  const unavailable = await app.inject(unavailableRequest);
+  expect(unavailable.statusCode).toBe(503);
+  expect((await save(2, position, 'missing-key')).statusCode).toBe(503);
 }
 it('ignores unrelated turn and file streams, checks Origin and refuses missing custody', unrelatedChurn);
 
