@@ -72,6 +72,110 @@ describe.skipIf(!process.env['PG_TEST_URL'])('memory with PostgreSQL and NATS', 
     return identity;
   }
 
+
+  async function tombstone(identity: MemoryIdentity, changeId = 'forget-first') {
+    const { silo: _silo, ...fields } = identity;
+    const data = { schemaVersion: 1, ...fields, expectedRevision: 1, revision: 2 };
+    const envelope = { ...event(changeId), type: 'memory.forgotten',
+      subject: `scope-${identity.scopeId}`, data };
+    await nats.seed([envelope]);
+  }
+
+  async function hiddenRows() {
+    const result = await storage.db.query(`SELECT memory_id, content_status,
+      search_text, search_vector FROM memory_facts ORDER BY memory_id`);
+    return result.rows;
+  }
+
+  it('restarts and rebuilds pending erasure without decrypting hidden text or changing keys',
+    async function pendingErasure() {
+      const root = await append('root');
+      const source = [{ scopeId: root.scopeId, memoryId: root.memoryId, revision: 1 }];
+      const child = await append('child', 'alice', 'Derived private text', source);
+      const childSource = [{ scopeId: child.scopeId, memoryId: child.memoryId, revision: 1 }];
+      await append('grandchild', 'alice', 'Another private copy', childSource);
+      await append('unrelated', 'bob', 'Independent text');
+      await tombstone(root);
+      const files = await readdir(directory);
+      function decryptVisible(identity: MemoryIdentity, value: { ciphertext: string; keyId: string }) {
+        if (identity.ownerId === 'alice') {
+          throw new Error('Hidden text must never be decrypted');
+        }
+        return keys.decrypt(identity, value);
+      }
+      const pending = memoryProjection({ decrypt: decryptVisible });
+      await runner.run(pending);
+      const expected = [
+        { memory_id: 'child', content_status: 'erased', search_text: null, search_vector: null },
+        { memory_id: 'grandchild', content_status: 'erased', search_text: null, search_vector: null },
+        { memory_id: 'root', content_status: 'erased', search_text: null, search_vector: null },
+        expect.objectContaining({ memory_id: 'unrelated', search_text: 'Independent text' }),
+      ];
+      expect(await hiddenRows()).toEqual(expected);
+      expect(await readMemoryFactIds(storage.db, root.silo, root.scopeId)).toEqual([]);
+      await storage.reopen();
+      runner = new ProjectionRunner(storage.db, nats.reader, logger);
+      await runner.rebuild(pending);
+      expect(await hiddenRows()).toEqual(expected);
+      expect(await readdir(directory)).toEqual(files);
+      expect(keys.status(root)).toBe('available');
+    });
+
+  it('removes root and dependent search text atomically, then recovers after an index failure',
+    async function erasureRollback() {
+      const root = await append('root');
+      const source = [{ scopeId: root.scopeId, memoryId: root.memoryId, revision: 1 }];
+      await append('child', 'alice', 'Private copy', source);
+      await runner.run(projection);
+      const before = await state();
+      await tombstone(root);
+      async function prepare(envelope: EventEnvelope) {
+        const apply = await projection.prepare!(envelope);
+        async function fail(tx: Query, saved: EventEnvelope, position: number) {
+          await apply(tx, saved, position);
+          throw new Error('Injected index failure');
+        }
+        return fail;
+      }
+      const failing = { ...projection, prepare };
+      await expect(runner.run(failing)).rejects.toThrow('Injected index failure');
+      expect(await state()).toEqual(before);
+      expect(await runner.checkpoint(projection)).toBe(2);
+      await runner.run(projection);
+      expect(await hiddenRows()).toEqual([
+        { memory_id: 'child', content_status: 'erased', search_text: null, search_vector: null },
+        { memory_id: 'root', content_status: 'erased', search_text: null, search_vector: null },
+      ]);
+      const changes = (await state()).changes;
+      expect(changes).toContainEqual(expect.objectContaining({ outcome: 'forgotten', revision: '2' }));
+      expect(JSON.stringify(changes)).not.toContain('Private');
+    });
+
+  it('keeps tombstones permanent across duplicate delivery and later writes with historical links',
+    async function noResurrection() {
+      const root = await append('root');
+      const source = [{ scopeId: root.scopeId, memoryId: root.memoryId, revision: 1 }];
+      await append('child', 'alice', 'Private copy', source);
+      await runner.run(projection);
+      await tombstone(root);
+      await tombstone(root);
+      const original = await readEventAt(nats.reader, `scope-${root.scopeId}`, 1, Infinity);
+      const child = await readEventAt(nats.reader, `scope-${root.scopeId}`, 2, Infinity);
+      const savedChild = memoryWrittenEventSchema.parse(child!.event);
+      const changedChild = { ...savedChild, id: 'child-again', commandId: 'child-again',
+        data: { ...savedChild.data, dependsOn: [] } };
+      const laterRoot = { ...original!.event, id: 'root-again', commandId: 'root-again' };
+      await nats.seed([laterRoot, changedChild]);
+      await runner.run(projection);
+      expect(await readMemoryFactIds(storage.db, root.silo, root.scopeId)).toEqual([]);
+      const before = await state();
+      await runner.rebuild(projection);
+      expect(await state()).toEqual(before);
+      expect(before.dependencies).toContainEqual(expect.objectContaining({
+        memory_id: 'child', dependency_id: 'root',
+      }));
+    });
+
   it('quarantines earlier control text without stopping replay', async function controls() {
     await append('old-controls');
     function decrypt() {
