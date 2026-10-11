@@ -173,3 +173,48 @@ it.skipIf(!process.env["PG_TEST_URL"])(
   },
   30_000,
 );
+
+async function inventoryBackfilled(db: Pick<ReturnType<typeof pgDb>, 'query'>) {
+  const table = await db.query<{ name: string | null }>(
+    "SELECT to_regclass('inventory_inputs_backfill')::text AS name");
+  if (!table.rows[0]?.name) return false;
+  const marker = await db.query('SELECT version FROM inventory_inputs_backfill WHERE version = 1');
+  return marker.rows.length === 1;
+}
+
+async function completesOnlyFullInventoryReplay() {
+  const nats = await natsFixture();
+  const storage = await database('pg');
+  const logger = createLogger('inventory-backfill', { level: 'silent' });
+  try {
+    await nats.seed([event('backfill-one'), event('backfill-two', 'member-bob')]);
+    const runner = new ProjectionRunner(storage.db, nats.reader, logger);
+    await runner.initialise(members);
+    expect(await inventoryBackfilled(storage.db)).toBe(false);
+    const incomplete: EventSource = {
+      head: nats.reader.head.bind(nats.reader),
+      async *subscribe() {
+        for await (const stored of nats.reader.subscribe(1)) {
+          yield stored;
+          break;
+        }
+      },
+    };
+    const broken = new ProjectionRunner(storage.db, incomplete, logger);
+    await expect(broken.run(members)).rejects.toThrow('incomplete');
+    expect(await inventoryBackfilled(storage.db)).toBe(false);
+    expect(await runner.checkpoint(members)).toBe(1);
+    await runner.run(members);
+    expect(await inventoryBackfilled(storage.db)).toBe(false);
+    await rebuildMemberProjection(storage.db, nats.reader, logger);
+    expect(await inventoryBackfilled(storage.db)).toBe(true);
+    await runner.rebuild(members);
+    expect(await inventoryBackfilled(storage.db)).toBe(true);
+  } finally {
+    await storage.close();
+    await nats.close();
+  }
+}
+it.skipIf(!process.env['PG_TEST_URL'])(
+  'requires a complete inventory rebuild after an interrupted first replay',
+  completesOnlyFullInventoryReplay);
