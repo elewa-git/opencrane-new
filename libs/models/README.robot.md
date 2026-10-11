@@ -1314,6 +1314,9 @@ They read only that instance before checking current membership. Reads use
 one conditional append to the instance. No conversation history is read or watched.
 Stop binds the expected sequence, run and original start. An unchanged retry returns
 its original receipt even after a later run. Changed payloads conflict.
+After an append, the command reads the returned position and checks the saved silo,
+subject, command id, event type, principal and exact stop payload before returning a receipt.
+This also applies when concurrent duplicate recovery returns another request's position.
 Change reads report applied intent for that original reference, never current readiness.
 A missing change is unknown. Missing instance history is refused without terminal proof.
 Status excludes workload addresses, Pod ids and credential material; expired waking

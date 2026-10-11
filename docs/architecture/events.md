@@ -71,6 +71,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `decision-<request>` | gateway admission attempt | allow, ask or deny before dispatch |
 | `effect-<permit>` | gateway-observed external call | observed, uncertain, resolved |
 | `mcp-<server>` | MCP server in the catalogue | registered, discovered, tool modes, published, tools changed |
+| `mcp-instance-<instanceId>` | private MCP instance | start requested, observed, stop requested |
 | `credential-<lease>` | request-bound credential release | released |
 | `egress-grant-<subjectDigest>-<destinationDigest>` | one silo, subject and HTTPS destination | destination allowed or revoked |
 | `egress-<request>` | observed egress | observed |

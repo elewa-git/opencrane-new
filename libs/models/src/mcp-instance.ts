@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { Binding } from '@opencrane/authz';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { mcpInstanceStartSchema, mcpInstanceStopSchema } from '@opencrane/events';
+import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
+import { mcpInstanceStartSchema, mcpInstanceStopSchema,
+  type EventEnvelope } from '@opencrane/events';
 import { applyMcpInstance, type McpInstanceState } from '@opencrane/projections';
 import { history } from './actor.ts';
 import { authorityFence } from './authority.ts';
@@ -57,6 +58,21 @@ function receipt(row: StoredEvent) {
   const data = schema.parse(row.event.data);
   return { status: 'applied' as const, operation: row.event.type, changeRef: data.changeRef,
     sequence: row.sequence, runGeneration: data.runGeneration };
+}
+
+function reconcileStop(saved: StoredEvent, attempted: EventEnvelope) {
+  const event = saved.event;
+  if (event.silo !== attempted.silo || event.subject !== attempted.subject ||
+      event.commandId !== attempted.commandId || event.type !== attempted.type ||
+      event.principal?.kind !== attempted.principal?.kind ||
+      event.principal?.id !== attempted.principal?.id) {
+    throw new Error('Instance change payload mismatch');
+  }
+  const savedPayload = mcpInstanceStopSchema.parse(event.data);
+  const attemptedPayload = mcpInstanceStopSchema.parse(attempted.data);
+  if (JSON.stringify(savedPayload) !== JSON.stringify(attemptedPayload)) {
+    throw new Error('Instance change payload mismatch');
+  }
 }
 
 export async function mcpInstanceChange(store: EventStore, binding: Binding,
@@ -115,5 +131,9 @@ export async function mcpInstanceCommand(store: EventStore, binding: Binding,
   await fresh();
   const result = await store.append(command);
   if (result.status !== 'appended') throw new Error('Instance append unconfirmed');
-  return receipt({ event, sequence: result.sequence });
+  // Check the saved stop because concurrent recovery can return another request's position.
+  const saved = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
+  if (!saved) throw new Error('Saved instance change unavailable');
+  reconcileStop(saved, event);
+  return receipt(saved);
 }

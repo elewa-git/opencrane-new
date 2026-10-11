@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves spending and instance changes; reads activity, grants, closing records and spending stops| store["libs/event-store<br/>event log"]
+  models -->|saves spending and instance changes; checks saved stops and reads activity, grants, closing records and spending stops| store["libs/event-store<br/>event log"]
 ```
 
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
@@ -31,6 +31,8 @@ A change to the tools or their rules ends that approval.
 - Read private tool-instance status and original changes for their current member owner.
   Save an owner stop request with one event. Wake stays refused until hosted admission
   and personal profiles are available. No instance starts or credentials are released.
+  Check the saved stop before returning its receipt, so a concurrent retry cannot
+  claim success for different details under the same request id.
 - Stage private credentials in immutable Kubernetes Secrets. Check their owner, profile,
   operation, contents, unique identity (UID) and version before recovery or deletion.
   Keep private repair records so a restart cannot accept a replacement Secret.
