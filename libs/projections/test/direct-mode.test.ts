@@ -24,12 +24,16 @@ async function rejectsDirectMutation(type: string) {
     expect(await nats.store.head(created.subject)).toBe(saved.sequence);
     const data = invalidData(type);
     const invalid = envelope('test', 'conversation-direct', type, data);
-    if (type === 'participant.added') {
-      // Replay old subjects without allowing commands to write new participant events there.
-      await nats.connection.request('ev.conversation.direct', JSON.stringify(invalid));
+    if (type === 'conversation.created' || type === 'participant.added') {
+      // Save older invalid history so current command checks cannot prevent testing replay.
+      const reply = await nats.connection.request(
+        'ev.conversation.direct', JSON.stringify(invalid),
+      );
+      expect(reply.json()).toEqual({ stream: 'EVENTS', seq: saved.sequence + 1 });
     } else {
-      expect((await nats.store.append({ expectedSequence: saved.sequence, event: invalid })).status)
-        .toBe('appended');
+      const command = { expectedSequence: saved.sequence, event: invalid };
+      const appended = await nats.store.append(command);
+      expect(appended.status).toBe('appended');
     }
     const history: StoredEvent[] = [];
     for await (const stored of nats.reader.readStream(created.subject)) {
