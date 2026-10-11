@@ -83,3 +83,132 @@ Logs: `lint.log`, `typecheck.log` and `check-events.log`.
 
 NOT RUN: full root suite, deployment, fresh-install qualification and a new
 independent review. This repair does not claim the memory capability is qualified.
+
+## First rebase and checks
+
+Date: 11 October 2026. Tested source: `4005e90b`, with guide corrections only.
+The environment was the same shared Linux host and PostgreSQL endpoint described above.
+Logs are in `/tmp/pr323-final-rebase/`. This was not a fresh installation.
+
+Before: the published branch ended at `fdd9dd35` and was based on `b7cf2e2d`.
+Rebasing only its seven commits reproduced the stop at `5f5eac00` and all six reported
+conflicts. The last documentation commit also conflicted in the server's agent guide.
+
+PASS: rebased those seven commits onto `41dd9149570308bd1e2a6d7b9bde5fb214167e45`.
+The commit comparison accounts for every original commit. No dependency commit was replayed.
+Test commits still come before their implementations. No new behaviour was introduced
+while resolving conflicts, and no assertion or deadline was weakened.
+
+The server guide keeps member removal, departure details and turn previews, adds memory
+link checks and describes the agent-write refusal. Its diagram no longer repeats arrows.
+The model guides keep child joins, confirmed owners and preview permission checks. They
+also explain that new facts need usable supporting facts and discovery offers recall only.
+The model exports match main exactly, including both child-conversation helpers and
+`memoryReferences`, which checks saved fact references without reading their text.
+The memory-rights code keeps main's final permission recheck and does not read chat history
+again. It removes only the unused discovery result that advertised agent writes.
+The projection guide keeps initial-memory ordering and all current chat and owner behaviour.
+It adds retention of links from every saved fact revision.
+The server's agent guide keeps both the complete preview and reviewed-removal contracts
+alongside the memory-input checks and this receipt.
+
+Main's preview handler, routes, shared fact-validity helper, model exports and member-removal
+code and tests are unchanged. The preview still allows at most 32 references and 16,384 bytes.
+Each category reads at most 33 candidates. Saved grants and current requester and assistant
+permissions are checked again before release. Unusable supporting facts are omitted.
+Unrelated turn activity does not refuse readers. New human facts use the same validity
+helper. Erased, expired, superseded, missing-key or invalid ancestors cannot support them.
+Historical links survive repeated writes and replay. Agent writes remain refused because
+a selective signed recall page cannot prove every reference loaded into a turn.
+
+The same five-file command above ran twice, with `PG_TEST_URL` set and `nice -n 10`.
+Both runs passed 239 of 240 tests. Both failed only the known slow-append fairness case:
+2-of-13 in the first run, then 5-of-13 in the second. Each batch's one-file retry passed
+all 119 tests. The batch results remain FAIL; both isolated retries are PASS. All other
+focused tests passed twice. These runs include the private-preview cases added by PR #327;
+those cases are unchanged. Logs are `changed-tests-1.log`, `changed-tests-2.log`,
+`known-flake-rerun.log` and `known-flake-rerun-2.log`.
+
+PARTIAL: the remaining package run was stopped after main advanced. It had reported
+one failure in `apps/server/test/chat-http.test.ts`. The unchanged file then passed
+alone on the same source. Its batch failure is not treated as the known memory flake.
+The interrupted run has no complete totals. Logs are `package-tests.log` and
+`chat-http-before.log`. The final source is tested again below.
+
+PASS: lint, including Knip and `lint:changelog`; 15 existing warnings and no errors.
+PASS: typecheck across all workspaces. PASS: check:events, 106 event types agree.
+All checks ran under `nice -n 10`. Logs are `lint.log`, `typecheck.log` and `events.log`.
+The final guide checks are recorded with the next rebase below.
+
+NOT RUN: local full root suite, deployment, fresh-install qualification and another independent
+review. The PR comment records the pushed commit and the final GitHub CI result.
+
+## Package checks before the latest rebase
+
+The seven commits were also rebased onto `158bf7dc40030f2a7dfe98c29e8564973f52ee5e`.
+The memory implementation and tests were unchanged by this second rebase.
+All runs used the same PostgreSQL endpoint and `nice -n 10`.
+Logs for these runs are in `/tmp/pr323-final-rebase/latest/`.
+
+PASS: the MCP, recall-proof, model-rights and memory-projection files ran twice.
+Each run passed all 121 tests across four files (`other-memory-1.log` and
+`other-memory-2.log`). The server memory file passed all 119 tests in its first run.
+Its second run passed 118 tests and failed the known slow-append fairness case, 2-of-13.
+The permitted one-file retry also failed that case, 2-of-13, with 118 tests passing.
+Those two results remain FAIL. No assertion or deadline changed. Logs are
+`memory-1.log`, `memory-2.log` and `memory-2-known-flake-rerun.log`.
+
+FAIL: the remaining package batch completed with 1,898 tests passing, three failing
+and six skipped across 135 files. The upload test exceeded its 180-second limit.
+One model access test could not start its gateway readiness server. A model volume
+case received a NATS timeout. These failures are not treated as the known memory flake.
+The gateway's two chosen ports differed; the logs do not prove the startup cause.
+Other worktrees were also running integration tests on this shared host.
+
+PASS: the unchanged upload and model access files passed separately, all 82 tests.
+The unchanged model volume file also passed separately, all 25 tests. No production
+code, assertion, timeout or fixture was changed to obtain these results.
+The batch remains FAIL. Logs are `package-tests.log`, `package-failures-isolated.log`
+and `decision-cost-isolated.log`.
+
+## Latest rebase and checks
+
+PASS: rebased the same seven commits onto the latest fetched main,
+`5f75ec5b971f23c756ee43004230bbfa78cd8a16`, which also adds provider draining.
+The commit comparison still accounts for all seven original commits. Test commits
+remain before their implementations. The memory code and focused tests are unchanged
+from the second rebase. Only documentation corrections are added after the replay.
+
+The server guide keeps provider choices and draining alongside turn previews and
+memory-link checks. The model guide keeps approval changes, provider choices and
+draining alongside checks on saved fact references. The server's agent guide keeps
+its complete drain contract and the memory receipt. The model exports match this
+main exactly. Provider admission, drain commands, spending and member removal code
+also match this main. The preview's bounds and final access checks remain unchanged.
+
+PASS: all 48 provider-draining and admission tests across three files.
+Log: `final-main-provider-tests.log`. PASS: lint, including Knip and changelog validation,
+with 15 existing warnings and no errors. PASS: typecheck across all workspaces.
+PASS: check:events, 108 event types agree. Logs are `final-lint.log`,
+`final-typecheck.log` and `final-events.log`.
+
+FAIL: the first five-file memory run on this latest main passed 239 tests and failed only
+the known slow-append fairness case, 2-of-13. Every invalid-input and bounded private
+preview case passed. Log: `final-memory-1.log`.
+
+FAIL: the second five-file run passed 238 tests and failed two MCP command-recovery
+cases, `unknown` and `legacy`. All 119 server memory tests passed, including fairness.
+The command helper had returned a refusal instead of the expected receipt. It catches
+command errors, so this log does not prove the underlying cause. These failures are
+not classified as the known fairness flake. Log: `final-memory-2.log`.
+
+PASS: the unchanged MCP file passed separately, all 64 tests, including both failed
+recovery cases. Log: `final-mcp-isolated.log`. The two five-file batches remain FAIL.
+Every changed invalid-input, proof and recovery case, plus every bounded private
+preview case, passed twice on this latest base; the recovery cases' second passing
+result comes from the separate MCP run. No assertion, deadline or fixture changed.
+
+PASS: documentation lint, offline links and changelog validation after the receipt
+was updated. Logs: `final-docs.log`, `final-links.log` and `final-changelog.log`.
+NOT RUN: local full root suite, deployment, fresh-install qualification or another
+independent review. The PR comment records the pushed head and GitHub CI result.

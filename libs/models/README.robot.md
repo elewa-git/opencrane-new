@@ -991,11 +991,12 @@ The signed capability can name `remember`. Its scope stays the requester's perso
 Group and assistant-notes writes return `agent_person_scope_only` even when grants and
 shared recalled references are valid. Both requester and assistant need recorded `memory_write` grants and current OpenFGA rights;
 a read grant cannot supply write permission. Ask and Block policies refuse the write.
-Discovery omits remember unless its reviewed zero-cost policy is Allow. Recall-only
+Discovery omits remember until trusted records cover every loaded fact reference. Recall-only
 installations keep working without a remember policy.
 
-`memoryRights` returns a final check over the original access snapshot and live turn.
-The server calls it before the conditional append, with the capability's original deadline.
+`memoryRights` returns a final check that reads saved grants, current permissions and tool
+policy again. It reuses the conversation history already read. The server calls it before
+the conditional append, with the capability's original deadline.
 It watches small access streams and checks later turn activity separately. It does not add
 conversation or memory-content streams to the access snapshot. The server's signed recalled
 references and command checks are described in `apps/server/README.robot.md`.
@@ -1012,7 +1013,12 @@ join for other chats. Authority still uses the current join. Neither helper read
 
 ## Memory reference validity
 
-`memoryReferences(rows, silo, scopeId, custody)` checks metadata and key status without reading fact text. It keeps the first metadata for an equal revision, as the projection does. It walks all historical dependencies, refuses cycles and keeps legacy corrections or tombstones unusable. Missing or damaged custody raises an error. Private turn previews omit references that cannot be checked. Discovery offers recall only until trusted records cover every loaded memory reference.
+`memoryReferences(rows, silo, scopeId, custody)` checks metadata and key status without
+reading fact text. It keeps the first metadata for an equal revision, as the projection does.
+It walks all historical dependencies, refuses cycles and keeps legacy corrections or
+tombstones unusable. Missing or damaged custody raises an error. Private turn previews omit
+references that cannot be checked. Discovery offers recall only until trusted records cover
+every loaded memory reference.
 
 ## Turn admission after the recorded switch-on event
 
