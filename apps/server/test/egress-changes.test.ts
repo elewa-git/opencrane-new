@@ -227,6 +227,22 @@ async function concurrentChangedTargetConflicts() {
 it('saves only one target when two requests race with the same change id',
   concurrentChangedTargetConflicts);
 
+async function concurrentChangedPayloadConflicts() {
+  const first = { ...input, commandId: 'racing-action', host: 'racing-action.npmjs.org' };
+  const second = { ...first, action: 'revoke' };
+  const position = await nats.store.head();
+  const responses = await concurrentCommands(first, second);
+  function statusCode(response: typeof responses[number]) {
+    return response.statusCode;
+  }
+  const statuses = responses.map(statusCode);
+  statuses.sort();
+  expect(statuses).toEqual([200, 409]);
+  expect(await nats.store.head()).toBe(position + 1);
+}
+it('returns a known conflict when different actions race under the same change id',
+  concurrentChangedPayloadConflicts);
+
 async function savesAfterLegacyObservation() {
   const observation = { ...event('old-observation', 'egress-old-observation', 'egress.observed'),
     data: { requestId: 'request', permitId: 'permit', channel: 'command',
