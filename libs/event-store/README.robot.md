@@ -233,7 +233,6 @@ configuration and a fresh silo installation remain unqualified.
 `chat-state-<memberId>` maps to `ev.chat-state.<memberId>`, including category reads.
 Preference parsing binds the human principal to that member id. Access checks remain the caller's job.
 
-
 `expectedGlobalSequence` is allowed only for `ownership.seeded` and
 `provider.managed_calls_drain_set`. A drain command captures the global position
 before loading provider configuration and spending mode. Its one append checks
