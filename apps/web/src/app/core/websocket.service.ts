@@ -74,7 +74,14 @@ export class WebSocketService implements OnDestroy {
     this.clearReconnectTimer();
     this.reconnectAttempt = 0;
     this.closeSocket('client closed');
+    this.clearMessages();
     this.stateSignal.set('closed');
+  }
+
+  /** Drops messages kept for subscribers that join later. */
+  clearMessages(): void {
+    this.historySignal.set([]);
+    this.lastMessageSignal.set(undefined);
   }
 
   /** Sends a typed message. Returns false without throwing if the socket is not open. */
@@ -192,8 +199,9 @@ export class WebSocketService implements OnDestroy {
   }
 
   private pushMessage(message: ServerMessage): void {
-    this.incoming.next(message);
     this.lastMessageSignal.set(message);
     this.historySignal.update((history) => [...history, message].slice(-MAX_HISTORY));
+    // Store first so an access-loss subscriber can synchronously clear this event too.
+    this.incoming.next(message);
   }
 }

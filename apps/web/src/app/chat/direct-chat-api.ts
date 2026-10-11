@@ -1,6 +1,6 @@
 import {
   chatChangeSchema, chatColleaguesSchema, chatContextSchema, chatFeedSchema,
-  chatListSchema,
+  chatListSchema, chatParticipantCommandSchema, chatParticipantsSchema,
 } from '@opencrane/protocol';
 import type { ChatRow } from '@opencrane/protocol';
 import { z } from 'zod';
@@ -20,8 +20,9 @@ export async function fetchDirectConversations(signal: AbortSignal) {
   return read('/api/conversations', signal, chatListSchema);
 }
 
-export async function searchColleagues(query: string, signal: AbortSignal) {
+export async function searchColleagues(query: string, signal: AbortSignal, after = '') {
   const params = new URLSearchParams({ q: query, limit: '20' });
+  if (after) params.set('after', after);
   return read(`/api/chat/colleagues?${params.toString()}`, signal, chatColleaguesSchema);
 }
 
@@ -100,6 +101,17 @@ export async function checkDirectChange(
   const conversation = encodeURIComponent(conversationId);
   const command = encodeURIComponent(commandId);
   return read(`/api/conversations/${conversation}/changes/${command}`, signal, chatChangeSchema);
+}
+
+export async function fetchParticipants(conversationId: string, signal: AbortSignal) {
+  const id = encodeURIComponent(conversationId);
+  return read(`/api/conversations/${id}/participants`, signal, chatParticipantsSchema);
+}
+
+export async function changeParticipant(conversationId: string,
+  body: z.infer<typeof chatParticipantCommandSchema>, signal: AbortSignal) {
+  const id = encodeURIComponent(conversationId);
+  return write(`/api/conversations/${id}/participants`, body, signal, appendReceiptSchema);
 }
 
 async function read<T>(url: string, signal: AbortSignal, schema: z.ZodType<T>)
