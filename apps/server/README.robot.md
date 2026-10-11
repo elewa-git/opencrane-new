@@ -23,7 +23,11 @@ starting the two-second write check. File and approval ids keep their existing
 word-character restrictions; chat ids keep the wider event-catalogue format.
 
 `test/member-guard-http.test.ts` checks all 16 migrated HTTP operations for missing
-organisation setup, an unlisted identity and a cookie from another issuer. The
+organisation setup, an unlisted identity and a cookie from another issuer. It also
+checks a silo/binding mismatch with otherwise-valid membership and separate Origin
+refusals for POST messages and participants. Each write succeeds from the website
+with the same cookie and body. Removing the silo comparison or write Origin check
+makes these cases fail with HTTP 200 instead of 403. The
 first test commit fails 22 cases before the guard is added: 16 setup statuses and
 six missing cache headers. Existing route tests cover allowed requests, removals,
 conversation access, Origin and slow histories. The required changed-route checks
@@ -648,6 +652,10 @@ The P3-2 approval endpoint is `GET|POST /api/conversations/:conversationId/appro
 GET restores safe decrypted cards and a session/conversation-bound CSRF token; POST
 accepts only `approvalId` and `decision` (`approved` or `rejected`). It requires the
 requester's authenticated session, current authority, exact Origin and `x-csrf-token`.
+Missing and inaccessible approval ids both return HTTP 403 `{status: 'refused'}`.
+Invalid decision input still returns 400; unavailable dependencies still return 503.
+The approval privacy test uses the same authorised caller for missing ids, another
+requester's approval and an approval from another conversation.
 409 means the decision lost its conditional append; 428 requires step-up; uncertain
 transport or persistence needs Check status, never an automatic repeat of an effect.
 A required step-up uses `/auth/login?approval=<id>&returnTo=<local-path>`, OIDC

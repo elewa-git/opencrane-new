@@ -61,8 +61,7 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
     decision: z.enum(['approved', 'rejected', 'retry']),
   }).strict();
   const input = inputSchema.parse(req.body);
-  const readOptions = { deadline: performance.now() + 10_000 };
-  const checked = await readApproval(options.store, options.silo, input.approvalId, readOptions);
+  const checked = await readDecisionApproval(options, input.approvalId);
   const { request, requestPosition } = checked;
   if (request.conversationId !== conversationId || request.requesterId !== memberId) {
     return reply.code(403).send({ status: 'refused' });
@@ -97,6 +96,19 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
     memberId, input.decision, recent, checkedAuthority, checked);
   const statusCode = approvalDecisionStatus(result.status);
   return reply.code(statusCode).send({ status: result.status });
+}
+
+async function readDecisionApproval(options: ChatOptions, approvalId: string) {
+  const readOptions = { deadline: performance.now() + 10_000 };
+  try {
+    return await readApproval(options.store, options.silo, approvalId, readOptions);
+  } catch (error) {
+    // Hide missing approval records in the same way as another person's approval.
+    if (error instanceof z.ZodError) {
+      throw new MemberRefusal(403, 'refused', { cause: error });
+    }
+    throw error;
+  }
 }
 
 function approvalDecisionStatus(status: Awaited<ReturnType<typeof decideApproval>>['status']) {
