@@ -1434,7 +1434,8 @@ async function hidesPreJoinCreationTime() {
     const joinedAt = new Date('2026-10-09T10:00:00.000Z');
     const created = envelope('test', 'conversation-late-time', 'conversation.created', {
       conversationId: 'late-time', mode: 'group', createdBy: 'alice',
-      participantIds: ['alice', 'carol'],
+      participantIds: ['alice', 'carol'], groupId: 'original-team',
+      groupSnapshotPosition: 1,
     }, 'created-late-time', createdAt);
     const joined = envelope('test', 'participation-late-time', 'participant.added', {
       conversationId: 'late-time', participantId: 'bob', addedBy: 'alice',
@@ -1448,6 +1449,12 @@ async function hidesPreJoinCreationTime() {
     expect(page.rows[0]).toMatchObject({ conversationId: 'late-time',
       createdAt: joinedAt.toISOString() });
     expect(JSON.stringify(page)).not.toContain(createdAt.toISOString());
+    expect(page.rows[0]).not.toHaveProperty('createdBy');
+    expect(page.rows[0]).not.toHaveProperty('groupId');
+    expect(page.rows[0]).not.toHaveProperty('groupSnapshotPosition');
+    const original = await listPage(fixture, '', 'alice');
+    expect(original.rows[0]).toMatchObject({ createdBy: 'alice',
+      createdAt: createdAt.toISOString(), groupId: 'original-team', groupSnapshotPosition: 1 });
   } finally {
     await fixture.close();
   }
