@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child and destination tables| projections["libs/projections<br/>read tables, survey progress and keys"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child and destination tables| projections["libs/projections<br/>read tables, survey progress with hashes and keys"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
@@ -101,7 +101,8 @@ these details. The reports remain in the feed so their saved evidence is availab
 
 ## Processes it handles
 
-A saved survey event arrives. The worker keeps its encrypted answers and saved date.
+A saved survey event arrives. The worker checks the hash of its encrypted bytes, then keeps the answers, hash
+and saved date.
 Editing an earlier step clears later current answers; replay restores the same progress
 without reading or creating a key. Survey routes and saves are not exposed yet.
 

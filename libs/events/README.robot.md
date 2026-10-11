@@ -70,7 +70,10 @@ Tests validate every registry example and reject malformed envelopes, invalid mo
 plaintext content, raw credentials and undeclared fields. The catalogue check compares
 event names in both directions. The registry is split into definitions and identity
 entries to keep hand-written production modules under the size limit.
-Runtime dependency: Zod only. No app or product-domain dependency belongs here.
+Runtime dependencies: Zod and `@noble/hashes` 2.4.0. The latter supplies synchronous
+SHA-256 for shared Node/browser schemas. Its npm metadata and installed LICENSE were
+checked: MIT, OSI-approved; no runtime dependencies.
+No app or product-domain dependency belongs here.
 
 Live append, ordered replay, failover and backup/restore remain separate event-store
 qualification work. This package alone cannot prove those guarantees.
@@ -299,6 +302,9 @@ accepted [design](../../docs/specs/phase-3/p3-17-take-control.md).
 `onboarding.survey_step_saved` and `onboarding.survey_restarted` use `personal-<memberId>`
 (wire `ev.personal.<memberId>`). Strict version-1 schemas require the matching human
 principal, command id and `opencrane-server` source. The full event limit is 16,384 bytes.
+Saved steps require `ciphertextDigest`: lower-case 64-hex SHA-256 of the base64-decoded
+ciphertext bytes, including the nonce and authentication tag. Parsing recomputes it
+without keys and refuses missing, malformed or mismatched values. `keyId` is unchanged.
 `surveyAnswersSchema` checks four typed steps, UTF-8 text up to 4,096 bytes,
 name/pronouns up to 200/100 characters, 16 distinct groups/tasks and the fixed style/task ids.
 It refuses controls and lone surrogates through the existing memory text check.

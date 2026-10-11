@@ -450,7 +450,7 @@ Source receipt, 11 October 2026: branch `work/p4-18-pr3`, base `1a9b578d`,
 test-first commit `1f55453e`; local worktree, disposable services, no fresh install.
 PASS: clean npm ci, lint, typecheck, check:events (115 types), Knip and lint:changelog.
 PASS: eight focused/regression files, 593 tests on each of two final-source runs,
-with PostgreSQL/NATS and `nice -n 10`. PASS: independent source review, no findings.
+with PostgreSQL/NATS and `nice -n 10`.
 Logs: `/tmp/p4-18-pr3-exact-tests-{1,2}.log`, `/tmp/p4-18-pr3-lint-final.log`,
-`/tmp/p4-18-pr3-typecheck-final.log` and `/tmp/p4-18-pr3-review.md` on the builder host.
+`/tmp/p4-18-pr3-typecheck-final.log` on the builder host.
 The root test suite was not run. CI and live qualification remain separate gates.

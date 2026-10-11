@@ -1,13 +1,18 @@
+import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { parseEventByType, surveyAnswersSchema } from '../src/index.ts';
 
 function savedStep() {
+  const encryptedBytes = Buffer.alloc(100);
+  const hash = createHash('sha256');
+  hash.update(encryptedBytes);
+  const ciphertextDigest = hash.digest('hex');
   return {
     id: 'step-1', commandId: 'save-1', type: 'onboarding.survey_step_saved',
     source: 'opencrane-server', time: '2026-10-11T12:00:00Z', silo: 'test',
     subject: 'personal-alice', principal: { kind: 'human', id: 'alice' },
     data: { schemaVersion: 1, memberId: 'alice', generation: 1, step: 1,
-      ciphertext: Buffer.alloc(100).toString('base64'), keyId: `key:${'a'.repeat(64)}` },
+      ciphertext: encryptedBytes.toString('base64'), ciphertextDigest, keyId: `key:${'a'.repeat(64)}` },
   };
 }
 
@@ -36,6 +41,7 @@ it('accepts encrypted survey events only for their named member and bounded enve
 
 function refusesChangedCiphertext() {
   const saved = savedStep();
+  expect(parseEventByType(saved).success).toBe(true);
   const changedCiphertext = `B${saved.data.ciphertext.slice(1)}`;
   const tampered = { ...saved, data: { ...saved.data, ciphertext: changedCiphertext } };
   expect(parseEventByType(tampered).success).toBe(false);

@@ -96,7 +96,9 @@ If a stale read slips past validation, the expected-version check rejects the ap
 
 Both events require schema version 1, the member's exact personal subject, a command id,
 a matching human principal and the server source. The whole event is at most 16 KiB.
-Steps 1–4 store ciphertext and key references. Text fields are at most 4 KiB;
+Steps 1–4 store ciphertext, key references and `ciphertextDigest`: lower-case 64-hex
+SHA-256 of the exact decoded ciphertext bytes. Parsing and projection recompute it
+without keys and refuse missing, malformed or mismatched digests. Text fields are at most 4 KiB;
 name/pronouns are at most 200/100 characters and task choices at most 16.
 Editing an earlier step removes later answers from current progress. Restart advances
 one generation. Historical encrypted answers stay in the event log. These wishes grant

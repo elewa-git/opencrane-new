@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { record as asRecord } from './record.ts';
 // Security rules from docs/architecture/events.md rule 5 and plan.md,
 // checked as schema rules:
@@ -34,7 +35,14 @@ function rejectedFields(type: string, patch: Record<string, unknown>): string[] 
   const { dataSchema, example } = definitionFor(type);
   // The unpatched example must be valid, so any failure below is the patch's.
   expect(dataSchema.safeParse(example).success).toBe(true);
-  const result = dataSchema.safeParse({ ...asRecord(example), ...patch });
+  const patchedData = { ...asRecord(example), ...patch };
+  if (type === 'onboarding.survey_step_saved' && typeof patch['ciphertext'] === 'string') {
+    // Keep the digest valid so these tests still isolate the ciphertext format checks.
+    const hash = createHash('sha256');
+    hash.update(Buffer.from(patch['ciphertext'], 'base64'));
+    patchedData['ciphertextDigest'] = hash.digest('hex');
+  }
+  const result = dataSchema.safeParse(patchedData);
   if (result.success) {
     return [];
   }

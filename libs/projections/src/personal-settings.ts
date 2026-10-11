@@ -3,8 +3,8 @@ import { parseEventByType, surveyStepSavedDataSchema, surveyRestartedDataSchema,
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
 
-type SavedStep = { step: number; ciphertext: string; keyId: string; eventId: string;
-  commandId: string; time: string; position: number };
+type SavedStep = { step: number; ciphertext: string; ciphertextDigest: string; keyId: string;
+  eventId: string; commandId: string; time: string; position: number };
 type Survey = { generation: number; steps: SavedStep[]; nextStep: number | null;
   position: number };
 
@@ -47,7 +47,8 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
     }
     // Keep later answers in event history. Editing a step removes them from current progress.
     survey.steps = survey.steps.slice(0, data.step - 1);
-    const saved: SavedStep = { step: data.step, ciphertext: data.ciphertext, keyId: data.keyId,
+    const saved: SavedStep = { step: data.step, ciphertext: data.ciphertext,
+      ciphertextDigest: data.ciphertextDigest, keyId: data.keyId,
       eventId: event.id, commandId: event.commandId, time: event.time, position };
     survey.steps.push(saved);
     survey.nextStep = data.step === 4 ? null : data.step + 1;

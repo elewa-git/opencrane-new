@@ -455,7 +455,9 @@ wrong-server and wrong-silo renewal, changed tools and mismatched change records
 
 `personalSettings` runs under ProjectionRunner. `personal_settings` stores one JSON
 survey per `(silo, member_id)`: generation, ordered encrypted steps, next step and
-global progress position. Each step retains ciphertext/key id and event/command/time/position.
+global progress position. Each step retains ciphertext, `ciphertextDigest`, key id and event/command/time/position.
+The projection recomputes SHA-256 of the decoded encrypted bytes before saving progress.
+Missing, malformed or mismatched digests stop the update without reading keys.
 `readSurvey` returns this internal record or null; callers must check current membership
 and projection catch-up before serving it. No HTTP reader is exposed here.
 Edits invalidate later current answers; restart requires the next generation.
