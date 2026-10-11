@@ -336,15 +336,21 @@ It expires within two seconds or at catalogue expiry, whichever comes first. The
 access callback retains the original two-second deadline. Pending permits are bounded to
 1,024; expired entries are dropped before issuing another. Restart drops them all.
 
-The final check compares the MCP stream position with the approved snapshot, confirms
-the existing leadership connection, rechecks access and checks expiry before sending.
-Final MCP access checks read every watched position again after the last read. They
-continue until two consecutive complete passes match, within the original two-second
-deadline. Every advance still goes through the existing access-change checks. A Block
-saved after one policy-position read and before another access read completes refuses
-the send. The regression saves Block through `setToolPolicy` and records zero upstream
-requests. The unchanged authority tests keep their original deadlines and volume limits.
-Any newer MCP event refuses the permit, including an unchanged freshness check.
+The final check confirms leadership and current access within the original two-second
+access deadline. It consumes each pass locally even on refusal, then conditionally
+appends `mcp.dispatch_admitted` to `mcp-<server>` before sending. The expected sequence
+covers the same stream as `setToolPolicy`, unpublication and tool-change quarantine.
+If Block or a hold was saved first, admission conflicts and refuses. If admission was
+saved first, that call may proceed; the later Block applies to later admissions.
+Replay never sends a call or restores the process-local pass.
+
+The sender tries admission at most three times. It retries a conflict only when every
+new row is another call's admission. It reads only rows after its checked position,
+checks access again and keeps the original deadline. Policy, freshness or hold changes
+refuse the pass. Admission advances the write position without changing tool rules,
+approval revisions or evidence dates. It therefore does not refuse another caller's
+access check. The repeat-until-matching access passes have been removed.
+The unchanged authority tests keep their original deadlines and volume limits.
 Waiting approvals retain their stable policy revision and can obtain a fresh permit.
 The final check reads no complete catalogue or conversation history. Only reviewed transport headers leave this
 process; permits and caller credentials do not. A substituted backend or generation fails.

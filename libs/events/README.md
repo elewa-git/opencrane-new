@@ -28,7 +28,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance records| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks control, turns, instance-bound approvals, spending limits, stops, expired holds and one-use send permissions| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks tool admission, control, turns, instance-bound approvals, spending limits, stops, expired holds and one-use send permissions| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
   events -.-> zones["Intl<br/>built-in time zone rules"]
@@ -157,3 +157,6 @@ const result = parseEventByType({ type: 'not.registered' });
 - [Event store](../event-store/README.md): where events are saved.
 - [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
 - [Glossary](../../GLOSSARY.md): plain meanings of shared terms.
+
+Tool send admission records share the server's tool-rule stream. They order a call
+against Block and tool holds. Replaying these records never sends a call.

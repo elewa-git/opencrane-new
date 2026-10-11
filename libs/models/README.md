@@ -14,7 +14,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals, saved fact references, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
-  models -->|sends tools after matching access reads| mcp["MCP server<br/>checks revision before execution"]
+  models -->|sends tools after saved admission| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
@@ -30,8 +30,9 @@ A change to the tools or their rules ends that approval.
 Configured tool servers need an atomic revision check: they compare the approved tool
 list and running instance before executing a call. The models process checks a one-use
 pass before sending the original request. Servers without this contract are refused.
-Before sending, it reads each small access stream at least twice and requires matching positions.
-A tool rule saved while another access read is waiting refuses the call.
+Before sending, it saves one admission record on the server's tool-rule stream.
+Block saved first refuses admission. Admission saved first allows that call;
+Block applies to later calls. It checks the small access streams within two seconds.
 
 ## What it is responsible for
 

@@ -201,7 +201,7 @@ async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head
   };
   include(...subjects);
   const outputHeads = new Map<string, number>(earlierPositions);
-  async function confirmPositions() {
+  async function confirm() {
     if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
     async function readSubjectHead(subject: string) {
       const sequence = await store.head(subject, deadline);
@@ -219,24 +219,7 @@ async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head
       await checkChanges(store, subject, fromSequence, sequence, deadline);
       outputHeads.set(subject, sequence);
     }
-    return { changed: changed.length > 0, positions: JSON.stringify(current) };
-  }
-  async function confirm(requireStablePositions = false) {
-    let previousPositions: string | undefined;
-    let changed = false;
-    while (true) {
-      const current = await confirmPositions();
-      if (current.changed) {
-        changed = true;
-      }
-      if (!requireStablePositions || current.positions === previousPositions) {
-        return changed;
-      }
-      // Read every watched position again after the last read. Require two matching passes
-      // so a policy change during another pending read cannot authorise a send.
-      // Keep the original deadline; continuing changes or slow reads must refuse the call.
-      previousPositions = current.positions;
-    }
+    return changed.length > 0;
   }
   async function fresh() {
     // Recheck every subject because access can change while reading reports.
@@ -321,6 +304,10 @@ export async function decisionAuthorityFence(store: EventStore, started: number,
 function unrelatedDecisionEvent(event: EventEnvelope, requesterId: string,
   grantees: Set<string>) {
   const fields = data(event);
+  // Keep another admitted call from changing this call's tool access.
+  if (event.subject.startsWith('mcp-') && event.type === 'mcp.dispatch_admitted') {
+    return true;
+  }
   if (event.type === 'grant.given' || event.type === 'grant.revoked') {
     // Refuse team grant changes because they may alter this person's access.
     return fields['granteeKind'] !== 'team' && !matchesGrantKind(fields, grantees);

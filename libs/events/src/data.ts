@@ -454,6 +454,13 @@ function validCatalogueDates(value: { checkedAt?: string | undefined; expiresAt?
   return age >= 0 && age <= 300_000;
 }
 
+export const mcpDispatchAdmittedDataSchema = z.strictObject({
+  serverId: z.string().regex(/^[\w-]{1,200}$/u),
+  connectionId: z.string().regex(/^[\w-]{1,200}$/u), requestId: id,
+  toolName: z.string().min(1).max(200), toolRevision: digestSchema,
+  schemaDigest: digestSchema, generation: z.string().regex(/^[\w-]{1,200}$/u),
+});
+
 export const mcpCatalogueCheckedDataSchema = z.discriminatedUnion('outcome', [
   z.object({ serverId: id, outcome: z.literal('unchanged'), schemaDigest: digestSchema,
     ...catalogueDates }).strict().refine(validCatalogueDates),

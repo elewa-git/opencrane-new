@@ -3,6 +3,7 @@ import { request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
 import type { mcpPolicy } from './mcp.ts';
+import { envelope } from './actor.ts';
 
 const identifier = z.string().regex(/^[\w-]{1,200}$/u);
 export const mcpDispatchRouteSchema = z.strictObject({
@@ -28,6 +29,7 @@ interface Permit {
   toolName: string;
   bodyDigest: string;
   expiresAt: number;
+  accessDeadline: number;
   confirmAccess: () => Promise<void>;
 }
 
@@ -63,7 +65,7 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
   }
 
   function issue(policy: Policy, body: string, requestId: string,
-    confirmAccess: () => Promise<void>) {
+    confirmAccess: () => Promise<void>, accessDeadline: number) {
     const route = requireContract(policy);
     if (policy.dispatchBinding !== digest(JSON.stringify(route))) {
       throw new Error('MCP backend changed during the decision');
@@ -87,7 +89,7 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
     const signature = signatureHash.digest('base64url');
     const token = `${encoded}.${signature}`;
     // Keep permits only in this active process. A restart cannot revive an old call.
-    pending.set(token, { ...binding, confirmAccess });
+    pending.set(token, { ...binding, confirmAccess, accessDeadline });
     return token;
   }
 
@@ -107,32 +109,77 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
     const permit = consume(req, body);
     const expectedPath = `/dispatch/mcp/${permit.route.serverId}/${permit.route.connectionId}`;
     if (req.url !== expectedPath) throw new Error('MCP dispatch route refused');
-    const route = routeFor(permit.route.serverId, permit.route.connectionId);
-    if (JSON.stringify(route) !== JSON.stringify(permit.route)) {
-      throw new Error('MCP backend changed');
-    }
+    const route = requireCurrentRoute(permit);
     const remaining = Math.max(0, permit.expiresAt - Date.now());
-    const deadline = performance.now() + remaining;
+    const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
     const position = await store.head(`mcp-${route.serverId}`, deadline);
-    if (position !== permit.catalogueSequence) throw new Error('MCP policy changed');
+    await requireOnlyAdmissions(store, silo, `mcp-${route.serverId}`,
+      permit.catalogueSequence, position, deadline);
     await options!.requireLeader();
-    // Finish with two matching access-position reads after checking leadership.
-    // Refuse policy changes saved while any of those reads are still pending.
-    await permit.confirmAccess();
-    const currentRoute = routeFor(route.serverId, route.connectionId);
+    await admit(req, res, permit, route, position, deadline);
+    requireCurrentRoute(permit);
+    requireFreshDispatch(req, res, permit);
+    forward(route, permit, body, res);
+  }
+
+  function requireCurrentRoute(permit: Permit) {
+    const currentRoute = routeFor(permit.route.serverId, permit.route.connectionId);
     if (JSON.stringify(currentRoute) !== JSON.stringify(permit.route)) {
       throw new Error('MCP backend changed');
     }
-    requireFreshDispatch(req, res, permit);
-    forward(route, permit, body, res);
+    return currentRoute;
+  }
+
+  async function admit(req: IncomingMessage, res: ServerResponse, permit: Permit,
+    route: Route, position: number, deadline: number) {
+    const subject = `mcp-${route.serverId}`;
+    const payload = { serverId: route.serverId, connectionId: route.connectionId,
+      requestId: permit.requestId, toolName: permit.toolName,
+      toolRevision: permit.toolRevision, schemaDigest: permit.schemaDigest,
+      generation: route.generation! };
+    const event = envelope(silo, subject, 'mcp.dispatch_admitted', payload);
+    let expectedSequence = position;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await permit.confirmAccess();
+      requireCurrentRoute(permit);
+      requireFreshDispatch(req, res, permit);
+      // Order sends with Block and quarantine writes on the same server stream.
+      // A later Block applies to later admissions, even if this send is still pending.
+      const command = { event, expectedSequence, deadline, historyChecked: true as const };
+      const result = await store.append(command);
+      if (result.status === 'appended') return;
+      if (result.status !== 'conflict' || attempt === 2) {
+        throw new Error('MCP admission refused');
+      }
+      const currentPosition = await store.head(subject, deadline);
+      await requireOnlyAdmissions(store, silo, subject, expectedSequence,
+        currentPosition, deadline);
+      expectedSequence = currentPosition;
+    }
   }
 
   return { issue, handle, bindPolicy };
 }
 
+async function requireOnlyAdmissions(store: EventStore, silo: string, subject: string,
+  fromPosition: number, toPosition: number, deadline: number) {
+  if (toPosition === fromPosition) return;
+  if (toPosition < fromPosition) throw new Error('MCP policy changed');
+  let checkedPosition = fromPosition;
+  // Read only the new rows. A policy, freshness or hold change must refuse the pass.
+  for await (const row of store.readStream(subject, fromPosition + 1, deadline)) {
+    if (row.sequence > toPosition) break;
+    if (row.event.silo !== silo || row.event.type !== 'mcp.dispatch_admitted') {
+      throw new Error('MCP policy changed');
+    }
+    checkedPosition = row.sequence;
+  }
+  if (checkedPosition !== toPosition) throw new Error('MCP position unavailable');
+}
+
 function requireFreshDispatch(req: IncomingMessage, res: ServerResponse,
   permit: Permit) {
-  if (permit.expiresAt <= Date.now() ||
+  if (permit.expiresAt <= Date.now() || performance.now() >= permit.accessDeadline ||
       req.socket.destroyed || res.destroyed) {
     throw new Error('MCP dispatch expired');
   }

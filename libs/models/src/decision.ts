@@ -299,19 +299,16 @@ export async function startDecision(
       const authority = await decisionAuthorityFence(actor.store, started,
         subjects, turnToken.requester, computer.assistant, grants);
       let needsApproval = false;
-      async function confirmAccess(requireStablePositions: boolean) {
+      async function confirmAccess() {
         while (true) {
           const activityChanged = await activity.confirm(authority.deadline, needsApproval);
-          const authorityChanged = await authority(requireStablePositions);
+          const authorityChanged = await authority();
           if (!activityChanged && !authorityChanged) return;
           // Recheck both because a turn can stop while unrelated grants are being read.
         }
       }
       async function confirmDecision() {
-        await confirmAccess(false);
-      }
-      async function confirmDispatch() {
-        await confirmAccess(true);
+        await confirmAccess();
       }
       const snapshot = { include: authority.include, head: authority.head,
         deadline: authority.deadline };
@@ -372,7 +369,7 @@ export async function startDecision(
         linkApprovalAttempt(toolFacts, approvalId);
         await audit(outcome, reason, approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
         await fresh();
-        setDispatchPermit(res, dispatch, outcome, policy, raw, requestId, confirmDispatch);
+        setDispatchPermit(res, dispatch, outcome, policy, raw, requestId, fresh, fresh.deadline);
         res.setHeader('x-request-id', requestId);
         markRefusedDecision(res, outcome === 'allow');
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
@@ -432,9 +429,9 @@ async function dispatchRequest(req: IncomingMessage, res: ServerResponse,
 
 function setDispatchPermit(res: ServerResponse, dispatch: ReturnType<typeof mcpDispatch>,
   outcome: string, policy: Awaited<ReturnType<typeof mcpPolicy>>, body: string,
-  requestId: string, confirmAccess: () => Promise<void>) {
+  requestId: string, confirmAccess: () => Promise<void>, accessDeadline: number) {
   if (outcome !== 'allow') return;
-  const permit = dispatch.issue(policy, body, requestId, confirmAccess);
+  const permit = dispatch.issue(policy, body, requestId, confirmAccess, accessDeadline);
   res.setHeader('x-opencrane-mcp-permit', permit);
 }
 

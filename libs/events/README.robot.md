@@ -420,3 +420,10 @@ transport route, including server, connection, backend address and instance gene
 It participates in the approval id. Missing fields remain readable for replay.
 A gateway call with a different current transport binding cannot use that old approval.
 
+## MCP send admission
+
+`mcp.dispatch_admitted` records one accepted send on `mcp-<server>`. It carries the
+request id, connection, tool name and revision, catalogue digest and backend generation.
+It contains no pass, credentials or arguments. Its conditional append orders that
+call against policy and quarantine writes. No reaction sends a call on replay.
+Only the catalogue write position advances; tool policy and approval revision stay stable.

@@ -20,6 +20,10 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   const data = z.record(z.string(), z.unknown()).parse(parsed);
   checkPolicyIdentity(state, event, data);
   const identity = { silo: event.silo, serverId: String(data['serverId']) };
+  // Advance the write position without changing approvals or catalogue evidence.
+  if (event.type === 'mcp.dispatch_admitted') {
+    return { ...state, sequence };
+  }
   if (event.type === 'mcp.catalogue_checked') {
     return applyCheck(state, data, sequence);
   }

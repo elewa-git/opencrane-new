@@ -440,6 +440,9 @@ A published server without a fresh check is shown as unavailable.
 `mcp.tools_changed.catalogue` stores the next snapshot; replay retains the previous one.
 `mcp.catalogue_checked` renews a matching digest or records a failed check.
 Catalogue checks leave `policyRevision` stable; policy changes advance it.
+`mcp.dispatch_admitted` advances only `sequence`. It preserves rules, approval revisions,
+check dates and lifecycle. Both the normal catalogue projection and rebuild use this fold.
+Replay never performs a send.
 The latest `sequence` still advances for writes.
 Expiry uses the shortest discovery/page TTL, capped at 300,000 ms. Zero expires immediately.
 Undated legacy records have no reviewed tools. A check cannot renew a list without

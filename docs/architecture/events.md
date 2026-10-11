@@ -70,7 +70,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `approval-<id>` | approval request | requested, decided, used, expired, cancelled |
 | `decision-<request>` | gateway admission attempt | allow, ask or deny before dispatch |
 | `effect-<permit>` | gateway-observed external call | observed, uncertain, resolved |
-| `mcp-<server>` | MCP server in the catalogue | registered, discovered, tool modes, published, tools changed |
+| `mcp-<server>` | MCP server in the catalogue | registered, discovered, tool modes, published, tools changed, dispatch admitted |
 | `mcp-instance-<instanceId>` | private MCP instance | start requested, observed, stop requested |
 | `credential-<lease>` | request-bound credential release | released |
 | `egress-grant-<subjectDigest>-<destinationDigest>` | one silo, subject and HTTPS destination | destination allowed or revoked |
@@ -368,6 +368,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.catalogue_checked` | reaction | catalogue (checked saved definitions for the exact server and silo, with fresh check/expiry dates or a failed check; policyRevision stays unchanged) | — |
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
+| `mcp.dispatch_admitted` | models process | catalogue write position only; preserve tool rules, policy revision and check dates | Order one-use send admission with policy and hold changes on `mcp-<server>`. Replay never sends a call. |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
 | `mcp.tools_changed` | drift check | catalogue (before/after snapshots, dated new catalogue and changed policyRevision) | quarantine the server in gateway config until re-reviewed |
 | `mcp.instance_start_requested` | reserved lifecycle command; wake is refused for now | exact personal instance identity, installed image, run and original change; 20-second deadline | none; no workload or release handler |

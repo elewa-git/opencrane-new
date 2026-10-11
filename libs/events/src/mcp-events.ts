@@ -49,6 +49,14 @@ export const mcpEvents = [
     { serverId: 'mcp_1', toolName: 'odoo.write', mode: 'ask', setBy: 'mem_1' },
   ),
   event(
+    'mcp.dispatch_admitted', 'mcp',
+    'A one-use call was admitted before later tool policy or hold changes.',
+    data.mcpDispatchAdmittedDataSchema,
+    { serverId: 'mcp_1', connectionId: 'installed', requestId: 'call_1',
+      toolName: 'odoo.write', toolRevision: DIGEST_EXAMPLE,
+      schemaDigest: DIGEST_EXAMPLE, generation: 'instance-1' },
+  ),
+  event(
     'mcp.server_published',
     'mcp',
     'An admin published an MCP server, generating its gateway route.',

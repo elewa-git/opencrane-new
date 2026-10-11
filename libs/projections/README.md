@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, destination, inventory and survey tables| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, tool admission, destination, inventory and survey tables| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|events and private instance records in order| projections
@@ -198,3 +198,6 @@ await eventStore.close();
 - [Handlers](../handlers/README.md): background reactions to saved events.
 - [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
 - [Glossary](../../GLOSSARY.md): plain meanings of shared terms.
+
+Tool admission records advance the catalogue's write position. They leave tool rules,
+approval revisions and check dates unchanged. Rebuilding the tables never sends calls.
