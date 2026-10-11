@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
+import type { StoredEvent } from '@opencrane/event-store';
 import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { conversations, ProjectionRunner } from '../src/index.ts';
@@ -19,6 +20,8 @@ async function rejectsDirectMutation(type: string) {
     });
     const saved = await nats.store.append({ expectedSequence: 0, event: created });
     if (saved.status !== 'appended') throw new Error('Creation failed');
+    expect(saved.sequence).toBe(1);
+    expect(await nats.store.head(created.subject)).toBe(saved.sequence);
     const data = invalidData(type);
     const invalid = envelope('test', 'conversation-direct', type, data);
     if (type === 'participant.added') {
@@ -28,9 +31,37 @@ async function rejectsDirectMutation(type: string) {
       expect((await nats.store.append({ expectedSequence: saved.sequence, event: invalid })).status)
         .toBe('appended');
     }
+    const history: StoredEvent[] = [];
+    for await (const stored of nats.reader.readStream(created.subject)) {
+      history.push(stored);
+    }
+    expect(history).toEqual([
+      { sequence: 1, event: created },
+      { sequence: 2, event: invalid },
+    ]);
     const runner = new ProjectionRunner(storage.db, nats.reader, createLogger('direct-mode'));
     await runner.initialise(conversations);
     await expect(runner.rebuild(conversations)).rejects.toThrow('Direct conversation is immutable');
+    expect(await runner.checkpoint(conversations)).toBe(saved.sequence);
+    const metadata = await storage.db.query(
+      'SELECT mode, position FROM conversations WHERE silo = $1 AND conversation_id = $2',
+      ['test', 'direct'],
+    );
+    expect(metadata.rows).toEqual([{ mode: 'direct', position: '1' }]);
+    const participants = await storage.db.query(
+      `SELECT participant_id, end_position FROM conversation_participants
+        WHERE silo = $1 AND conversation_id = $2 ORDER BY participant_id`,
+      ['test', 'direct'],
+    );
+    expect(participants.rows).toEqual([
+      { participant_id: 'alice', end_position: null },
+      { participant_id: 'bob', end_position: null },
+    ]);
+    const feed = await storage.db.query(
+      'SELECT event_id FROM conversation_feed WHERE silo = $1 AND conversation_id = $2',
+      ['test', 'direct'],
+    );
+    expect(feed.rows).toEqual([{ event_id: created.id }]);
   } finally {
     await storage.close();
     await nats.close();
