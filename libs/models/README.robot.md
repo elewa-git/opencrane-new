@@ -970,9 +970,13 @@ join for other chats. Authority still uses the current join. Neither helper read
 ## Private turn memory preview
 
 `memoryRights` returns a `confirm(deadline)` function for preview reads. It checks saved grants, current permissions and tool policy again using the conversation history already read. The final short check never reloads that history. Turn starts do not grant access or refuse a memory read.
+
 ## Memory reference validity
+
 `memoryReferences(rows, silo, scopeId, custody)` checks metadata and key status without reading fact text. It keeps the first metadata for an equal revision, as the projection does. It walks historical dependencies, refuses cycles and keeps legacy corrections or tombstones unusable. Missing or damaged custody raises an error. Private turn previews omit references that cannot be checked.
+
 ## Turn admission after the recorded switch-on event
+
 `provider-turn-routing` keeps the current binding for each dependant and task,
 while `provider-call-mode` keeps the silo's switch-on marker and latest personal
 paying group from `budget-<silo>`. Admission uses both facts from the same

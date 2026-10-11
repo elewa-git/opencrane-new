@@ -2,9 +2,16 @@ import { computerSummary, type ComputerSummary, type TurnSummary,
   type ThreadSummary } from '@opencrane/auth';
 import type { Binding } from '@opencrane/authz';
 import { optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
-import { authorityFence, groupMembership, PayingGroupRefused, MemberAccessRefused,
-  activeMember, currentMembership } from '@opencrane/models';
-  activeMember, providerTurnAdmission, managedProviderCallsEnabled } from '@opencrane/models';
+import {
+  authorityFence,
+  groupMembership,
+  PayingGroupRefused,
+  MemberAccessRefused,
+  activeMember,
+  currentMembership,
+  providerTurnAdmission,
+  managedProviderCallsEnabled,
+} from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
