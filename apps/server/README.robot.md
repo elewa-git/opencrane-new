@@ -1757,3 +1757,37 @@ The earlier nine-file run had 184 passes, one skip and one existing viewer timeo
 That viewer case passed in both clean runs. Its timeout and access limits were unchanged.
 NOT RUN: optional 390px approval browser test, full root suite, independent review
 and fresh-install control journey. Takeover remains an internal first split.
+
+## Review fixes and source checks — 11 October 2026
+
+Source: `935882c3`. Rebased onto `origin/main` at `5f75ec5b`; the rebase finished.
+Kept main's provider, memory-preview and member-removal changes alongside control intent.
+Environment: Linux, Node 22.23.3, disposable NATS and OpenFGA, PostgreSQL at
+`127.0.0.1:55432`, a real bridge socket and the pinned gateway with a recording upstream.
+This was not a fresh silo. No paid model calls were made.
+
+Tests were committed first: `b4e39876` before the bridge fix in `530cd296`, and
+`0720cbfd` before the approval fix in `935882c3`. All four bridge regressions failed
+before the fix. The unchanged approval-stream assertion exposed unrelated budget reads
+introduced by the rebase. That assertion and the new unavailable-budget test failed
+before approval activity was separated from provider-mode checking.
+
+PASS: two final runs of all six changed test files, each with 109 passes and one
+optional browser skip. They took 396.10 s and 457.67 s. Both used `nice -n 10`,
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and one worker.
+The files were `bridge-control`, `takeover`, `approvals`, `live-view-activity`,
+`computer-summary` and `memory-rights`.
+PASS: 25 provider/activity regressions and the existing stop/reconnect regression.
+PASS: lint, workspace typecheck and check:events (109 types). Lint includes Knip
+and lint:changelog; it reports 15 existing warnings and no errors.
+The two authority test files remain unchanged.
+
+Logs: `/tmp/p3-17-pr1-tests-final-1.log`, `/tmp/p3-17-pr1-tests-final-2.log`,
+`/tmp/p3-17-pr1-provider-regressions.log`, `/tmp/p3-17-pr1-stop-reconnect.log`,
+`/tmp/p3-17-pr1-lint-complete.log`, `/tmp/p3-17-pr1-typecheck-complete.log` and
+`/tmp/p3-17-pr1-events-final.log`. Failing-first logs are
+`/tmp/p3-17-pr1-red-final.log` and `/tmp/p3-17-pr1-approval-red.log`.
+
+NOT RUN: optional approval browser test, full root suite and fresh-install control journey.
+The orchestrator's narrow verification and hosted CI are still pending.
+Remaining individual guard tests are recorded in issue #302.
