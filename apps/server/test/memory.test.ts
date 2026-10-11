@@ -2164,6 +2164,9 @@ it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as cons
   });
 
 async function fairWrites(stage: 'scope history' | 'append') {
+  // Start fresh so earlier history and recovery cases do not delay this write flood.
+  await cleanup();
+  await setup();
   const commandStage = stage.replaceAll(' ', '-');
   const assistantId = `fair-${commandStage}`;
   await append(`assistant-${assistantId}`, 'assistant.created',
