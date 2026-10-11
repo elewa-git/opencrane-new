@@ -1,6 +1,7 @@
 import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { parseEventByType } from '@opencrane/events';
 import { expect, it, vi } from 'vitest';
 import { BudgetActor, history, ingestUsage, priceTableId } from '../src/index.ts';
 
@@ -21,6 +22,18 @@ async function budgetFixture() {
     };
     return actor.reserve(call, 1000);
   }
+  async function confirmAccess() {}
+  async function reserveAdmitted() {
+    const id = await reserve();
+    const reservation = actor.state.reservations.at(-1)!;
+    const dispatch = {
+      callId: id, decisionId: `decision-${id}`, bodyDigest: '1'.repeat(64),
+      reservationId: id, modelCall: reservation.call,
+    };
+    // Keep the hold uncertain at expiry because this call has permission to be sent.
+    await actor.admitDispatch(dispatch, confirmAccess);
+    return id;
+  }
   async function close() {
     vi.restoreAllMocks();
     await nats.close();
@@ -29,7 +42,7 @@ async function budgetFixture() {
   function advance() {
     now = new Date(now.getTime() + 181_000);
   }
-  return { nats, actor, directory, reserve, close, advance, clock };
+  return { nats, actor, directory, reserve, reserveAdmitted, close, advance, clock };
 }
 function usageLine(id: string) {
   const usage = {
@@ -67,7 +80,7 @@ it('leaves old usage unread on an idle tick and picks up the next usage line', r
 
 async function recordsTimeoutOnce() {
   const fixture = await budgetFixture();
-  const id = await fixture.reserve();
+  const id = await fixture.reserveAdmitted();
   fixture.advance();
   const reads = vi.spyOn(fixture.nats.store, 'readStream');
   try {
@@ -83,6 +96,8 @@ async function recordsTimeoutOnce() {
     expect(reads).not.toHaveBeenCalled();
     const rows = await history(fixture.nats.store, `effect-${id}`, 'test');
     expect(rows).toMatchObject([{ event: { type: 'effect.uncertain' } }]);
+    expect(restarted.state.reservations[0]).toMatchObject({ amountCents: 1000, expired: true });
+    expect(restarted.state.reservations[0]?.settledCents).toBeUndefined();
     await restarted.effect(id, { inputTokens: 100, outputTokens: 10 });
     const lateRows = await history(fixture.nats.store, `effect-${id}`, 'test');
     expect(lateRows.at(-1)?.event.type).toBe('effect.observed');
@@ -144,15 +159,29 @@ it('waits for a complete usage line and retries it after a failed append', retri
 async function retriesFailedTimeoutAppend() {
   const fixture = await budgetFixture();
   try {
-    const id = await fixture.reserve();
+    const id = await fixture.reserveAdmitted();
     fixture.advance();
-    const appends = vi.spyOn(fixture.nats.store, 'append');
+    const append = fixture.nats.store.append.bind(fixture.nats.store);
     const unavailable = { status: 'unavailable' as const, cause: new Error('Temporary NATS outage') };
-    appends.mockResolvedValueOnce(unavailable);
+    let failed = false;
+    async function failTimeoutAppend(command: Parameters<typeof append>[0]) {
+      const parsed = parseEventByType(command.event);
+      if (!failed && parsed.success && parsed.event.type === 'effect.uncertain' &&
+          parsed.event.subject === `effect-${id}`) {
+        // Fail the effect write after expiry has saved the refusal of further sends.
+        failed = true;
+        return unavailable;
+      }
+      return append(command);
+    }
+    const appends = vi.spyOn(fixture.nats.store, 'append');
+    appends.mockImplementation(failTimeoutAppend);
     await expect(fixture.actor.expire()).rejects.toThrow('Effect append failed');
     await fixture.actor.expire();
     const rows = await history(fixture.nats.store, `effect-${id}`, 'test');
     expect(rows).toMatchObject([{ event: { type: 'effect.uncertain' } }]);
+    expect(fixture.actor.state.reservations[0]).toMatchObject({ amountCents: 1000, expired: true });
+    expect(fixture.actor.state.reservations[0]?.settledCents).toBeUndefined();
   } finally {
     await fixture.close();
   }

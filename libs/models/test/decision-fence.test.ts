@@ -697,6 +697,11 @@ function injectStopDuringAuthorityCheck(setup: Fixture, route: 'model' | 'mcp',
   let audited = false;
   let grantChecks = 0;
   let injected = false;
+  let grantCheckBeforeInjection = 2;
+  if (afterAudit) {
+    // Inject during the one final access check after the audit is saved.
+    grantCheckBeforeInjection = 1;
+  }
   async function recordAudit(command: Parameters<typeof append>[0]) {
     const result = await append(command);
     const event = z.object({ type: z.string() }).parse(command.event);
@@ -713,7 +718,7 @@ function injectStopDuringAuthorityCheck(setup: Fixture, route: 'model' | 'mcp',
     if (args[0] === grant.subject && !injected && audited === afterAudit) {
       grantChecks++;
       // Wait until the call has passed its first permission check.
-      if (grantChecks === 2) {
+      if (grantChecks === grantCheckBeforeInjection) {
         injected = true;
         await setup.append(grant.subject, grant.type, grant.data);
         await setup.append(stopped.subject, stopped.type, stopped.data);

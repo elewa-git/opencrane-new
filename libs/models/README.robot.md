@@ -446,6 +446,11 @@ start; saved event ids prevent duplicate records.
 The budget actor remembers reservations with saved uncertainty. `expire()` skips
 their repeated timeout checks. A restarted actor checks each old reservation once
 and remembers the existing uncertainty. Later usage still records its observation.
+`test/idle.test.ts` admits calls before checking unknown timeout outcomes. It keeps
+the 1,000-cent hold after expiry and restart, records uncertainty once, and retries
+an effect write that fails after the budget expiry write succeeds. The final-check
+cases in `test/decision-fence.test.ts` inject turn closure during the single access
+check after the audit. Their refusal, release and zero-send assertions are unchanged.
 Lost-output reports grant no authority. The existing output-report allowlist
 accepts `agent.output_lost` so it cannot refuse an in-flight call or a reader.
 Private turn admission keeps its existing small access streams.
