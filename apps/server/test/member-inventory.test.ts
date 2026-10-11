@@ -1,11 +1,12 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
+import type { EventEnvelope } from '@opencrane/events';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { conversations, members, computers, pgDb, ProjectionRunner,
-  rebuildMemberProjection } from '@opencrane/projections';
+  rebuildMemberProjection, type Query } from '@opencrane/projections';
 import { memberAccessSchema, memberDepartureSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { memberInventory } from '../src/members/inventory.ts';
@@ -165,6 +166,33 @@ async function refusesUnrebuiltUpgrade(revoked: boolean) {
 it.each([false, true])('refuses an unrebuilt upgrade index: pending revocation %s',
   refusesUnrebuiltUpgrade);
 
+async function projectVolumeFixtures(records: EventEnvelope[], firstPosition: number) {
+  const db = pgDb(dbs.queue);
+  function eventId(record: EventEnvelope) {
+    return record.id;
+  }
+  const eventIds = records.map(eventId);
+  const lastPosition = firstPosition + records.length - 1;
+  for (const projection of [members, conversations, computers]) {
+    async function applyRecords(transaction: Query) {
+      const checkpoint = await transaction.query<{ sequence: string }>(
+        'SELECT sequence FROM projection_checkpoints WHERE name = $1', [projection.name]);
+      expect(Number(checkpoint.rows[0]?.sequence)).toBe(firstPosition - 1);
+      // Apply these fixtures together so cleanup does not commit every unrelated read receipt.
+      for (let index = 0; index < records.length; index++) {
+        const record = records[index];
+        if (!record) throw new Error('Volume fixture missing');
+        await projection.apply(transaction, record, firstPosition + index);
+      }
+      await transaction.query(`INSERT INTO projection_events
+        SELECT $1, event_id FROM unnest($2::text[]) AS event_id`, [projection.name, eventIds]);
+      await transaction.query('UPDATE projection_checkpoints SET sequence = $2 WHERE name = $1',
+        [projection.name, lastPosition]);
+    }
+    await db.transaction(applyRecords);
+  }
+}
+
 async function ignoresLargeUnrelatedHistoryTail() {
   const creation = await append('conversation-unrelated-volume', 'conversation.created', {
     conversationId: 'unrelated-volume', assistantId: 'unrelated-volume',
@@ -188,6 +216,7 @@ async function ignoresLargeUnrelatedHistoryTail() {
       principal: { kind: 'human' as const, id: 'someone-else' }, data };
     records.push(record);
   }
+  const firstPosition = await nats.store.head() + 1;
   await nats.seed(records);
   const globalReads = vi.spyOn(nats.store, 'readEvent');
   try {
@@ -207,7 +236,7 @@ async function ignoresLargeUnrelatedHistoryTail() {
     expect(globalReads).not.toHaveBeenCalled();
   } finally {
     globalReads.mockRestore();
-    await project();
+    await projectVolumeFixtures(records, firstPosition);
   }
   const after = await readDeparture('bob');
   expect(after).toMatchObject({ complete: true, accessLost: [], retainedHistory: { count: 0 } });
