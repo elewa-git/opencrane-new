@@ -3,7 +3,8 @@ import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { creationEvent, privateSessionReader, sharedAssistantAuthority,
   writePrivateSession } from './private-session.ts';
 import { sessionSlug } from '@opencrane/protocol';
-import { conversationListQuery, conversationListCursor, ConversationListChanged }
+import { conversationListQuery, conversationListCursor, ConversationListChanged,
+  ConversationListIncomplete }
   from './list-cursor.ts';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
@@ -177,14 +178,12 @@ async function read(
   return conversationList(options, memberId, request.query, secret);
 }
 
-async function conversationList(options: ChatOptions, memberId: string,
-  input: unknown, secret: string) {
-  const query = conversationListQuery.parse(input);
-  const revision = await conversationListRevision(options.db, options.silo);
-  const identity = [options.silo, memberId, query.section, query.q, query.limit, revision];
-  const cursor = conversationListCursor(secret, identity, query.cursor);
-  const candidates = await conversationListCandidates(options.db, options.silo,
-    memberId, cursor.before);
+type ListQuery = z.infer<typeof conversationListQuery>;
+type ListCandidate = Awaited<ReturnType<typeof conversationListCandidates>>[number];
+
+async function visibleListMatches(options: ChatOptions, memberId: string,
+  query: ListQuery, candidates: ListCandidate[]) {
+  const visibleCandidates: typeof candidates = [];
   const readPrivate = privateSessionReader(options, memberId);
   const readParticipation = conversationParticipationReader(options, memberId);
   async function authorisedSummary(candidate: (typeof candidates)[number]) {
@@ -195,6 +194,10 @@ async function conversationList(options: ChatOptions, memberId: string,
       if (row.mode === 'agent_session') {
         await readPrivate(row.conversationId, access.creation.event);
       }
+      if (access.accessPosition !== candidate.participationPosition) {
+        throw new ConversationListChanged();
+      }
+      visibleCandidates.push(candidate);
       const state = z.object({ archived: z.boolean() }).nullable().parse(candidate.state);
       const archived = state?.archived ?? false;
       if (archived !== (query.section === 'archived')) return undefined;
@@ -205,6 +208,11 @@ async function conversationList(options: ChatOptions, memberId: string,
       const searchableTitle = normalisedTitle.toLowerCase();
       if (!searchableTitle.includes(search)) return undefined;
       if (row.mode !== 'agent_session') {
+        // Return current people and join time without details from an earlier creation.
+        if (access.historyPosition > access.creation.sequence) {
+          return { conversationId: row.conversationId, mode: row.mode,
+            createdAt: candidate.joinedAt, participantIds: access.participantIds, ...display };
+        }
         return { ...row, participantIds: access.participantIds, ...display };
       }
       return { ...row, ...display };
@@ -213,26 +221,59 @@ async function conversationList(options: ChatOptions, memberId: string,
       throw error;
     }
   }
-  const rows = [];
-  let scanned = 0;
-  for (let offset = 0; offset < candidates.length && rows.length < query.limit; offset += 8) {
+  const matches = [];
+  for (let offset = 0; offset < candidates.length; offset += 8) {
     const batch = candidates.slice(offset, offset + 8);
     const checks = batch.map(authorisedSummary);
     const summaries = await Promise.all(checks);
-    for (const row of summaries) {
-      scanned++;
-      if (row) rows.push(row);
-      if (rows.length === query.limit) break;
+    for (let index = 0; index < summaries.length; index++) {
+      const row = summaries[index];
+      const candidate = batch[index];
+      if (row && candidate) matches.push({ row, position: candidate.scanPosition });
     }
   }
-  const currentRevision = await conversationListRevision(options.db, options.silo);
+  // Restore activity order after concurrent access checks finish in a different order.
+  const visibleIds = new Set<string>();
+  for (const candidate of visibleCandidates) visibleIds.add(candidate.conversation.conversationId);
+  function isVisible(candidate: (typeof candidates)[number]) {
+    return visibleIds.has(candidate.conversation.conversationId);
+  }
+  const authorised = candidates.filter(isVisible);
+  return { matches, authorised, isVisible };
+}
+
+async function conversationList(options: ChatOptions, memberId: string,
+  input: unknown, secret: string) {
+  const query = conversationListQuery.parse(input);
+  const candidates = await conversationListCandidates(options.db, options.silo, memberId);
+  // Refuse a partial scan without returning rows or positions from denied chats.
+  if (candidates.length === 100) throw new ConversationListIncomplete();
+  const visible = await visibleListMatches(options, memberId, query, candidates);
+  const { matches, authorised, isVisible } = visible;
+  const revision = await conversationListRevision(options.db, authorised);
+  const identity = [options.silo, memberId, query.section, query.q, query.limit, revision];
+  const cursor = conversationListCursor(secret, identity, query.cursor);
+  const currentCandidates = await conversationListCandidates(options.db, options.silo, memberId);
+  if (currentCandidates.length === 100) throw new ConversationListIncomplete();
+  const currentVisible = currentCandidates.filter(isVisible);
+  const currentRevision = await conversationListRevision(options.db, currentVisible);
   if (currentRevision !== revision) throw new ConversationListChanged();
-  // Continue even after an empty scan; denied candidates do not prove the list has ended.
+  function beforeCursor(match: (typeof matches)[number]) {
+    const [activity, joined] = match.position;
+    const [beforeActivity, beforeJoined] = cursor.before;
+    return activity < beforeActivity || (activity === beforeActivity && joined < beforeJoined);
+  }
+  const remaining = matches.filter(beforeCursor);
+  const page = remaining.slice(0, query.limit);
+  function summaryRow(match: (typeof matches)[number]) {
+    return match.row;
+  }
+  const rows = page.map(summaryRow);
   let nextCursor: string | null = null;
-  if (scanned < candidates.length || candidates.length === 100) {
-    const lastScanned = candidates[scanned - 1];
-    if (!lastScanned) throw new Error('Conversation scan unavailable');
-    nextCursor = cursor.next(lastScanned.scanPosition);
+  if (remaining.length > page.length) {
+    const lastVisible = page.at(-1);
+    if (!lastVisible) throw new Error('Conversation page unavailable');
+    nextCursor = cursor.next(lastVisible.position);
   }
   return { rows, nextCursor };
 }
@@ -426,6 +467,9 @@ async function assistantCreationDetails(options: ChatOptions, memberId: string,
 function chatRefusal(request: FastifyRequest, reply: FastifyReply, error: unknown) {
   if (error instanceof MemberRefusal) {
     return reply.code(error.statusCode).send({ status: error.status });
+  }
+  if (error instanceof ConversationListIncomplete) {
+    return reply.code(503).send({ status: 'list_incomplete' });
   }
   if (error instanceof ConversationListChanged) {
     return reply.code(409).send({ status: 'list_changed' });

@@ -605,17 +605,27 @@ recorded report refusal stops automatic recovery.
 `GET /api/conversations` accepts `section=recent|archived` (default recent), `q`
 (up to 100 characters), `limit` (default 20, maximum 50), and `cursor`.
 It keeps the existing `rows` fields and adds `nextCursor`: null means exhausted.
-Each request checks at most 100 candidates in batches of eight. An empty page
-can have a continuation. Search matches a case-insensitive substring of the visible
+Each request reads at most 100 candidates and checks access in batches of eight.
+Reaching 100 returns 503 `list_incomplete`, with no rows or cursor. This fixed limit
+also applies to lists with 100 or more allowed chats; retrying cannot finish such a list
+until it fits within the limit. Complete scans choose pages only from allowed matches.
+Empty successful pages always have a null cursor. Search matches a case-insensitive substring of the visible
 first-message title, after access checks and decryption. No hidden totals are returned.
 Saved archive choices apply only to the current join. Ordinary late joins start without
-pre-join activity. The list orders by each participant's visible activity position,
+pre-join activity. Their `createdAt` is their current join time. Their reply omits
+`createdBy`, `groupId` and `groupSnapshotPosition` from the original creation.
+Initial and explicit shared-child participants keep their allowed creation details.
+The list orders by each participant's visible activity position,
 then their join position to break ties. Closed activity stays at the first close.
-Signed cursors contain a hashed binding and two scan positions, with no conversation ids or text.
+Signed cursors contain a hashed binding and two positions from the last visible match.
+Denied rows never supply cursor positions or decide whether another page exists.
 They use the cookie secret with the `conversation-list` signing purpose and bind silo,
 requester, section, query, limit, projection generation and list revision.
-Activity, participation or archive changes reset pages with 409 `list_changed`, including
-changes during the request. Read markers and token deltas do not reset pages.
+Only authorised chats supply activity, participation and archive positions to the
+revision. Its generation lookup reads one projection record; candidate reads use the
+member activity index and a fixed limit. A second bounded read checks allowed positions
+before release. Visible changes reset pages with 409 `list_changed`. Unrelated private
+or denied activity leaves a complete scan's cursor unchanged. Read markers and token deltas do not reset pages.
 Readers check access once per candidate; they never watch conversation content for access.
 The existing website still parses the rows and loads only the first page until its update.
 Upgrades require the offline conversation replay before restarting readers and workers.

@@ -132,3 +132,8 @@ computer or approvals. The browser must clear protected content and ignore late
 HTTP responses on refusal. Participant admission checks closure immediately before
 append; an already admitted edit can finish during a concurrent close, but cannot
 reopen it. These two streams do not form one transaction.
+
+List continuations use only visible matches. An empty successful list has no continuation.
+A scan that reaches 100 candidates returns 503 `list_incomplete` without rows or a cursor.
+Ordinary late group joiners receive their join time and current participants. Their list
+row omits the original creator and group snapshot details.

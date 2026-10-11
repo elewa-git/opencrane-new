@@ -111,11 +111,15 @@ export async function rebuildConversationsProjection(db: Db, source: EventSource
   if (!db.lock) {
     throw new Error('Conversations replay requires projection locking');
   }
-  // Allow replay to initialise empty upgrade tables that the normal worker must refuse.
+  // Initialise runner records before rebuilding old tables and creating new indexes.
+  async function initialiseReplay() {
+    // Leave old tables intact until rebuild drops them and creates the new shape.
+  }
+  const initialProjection: Projection = { ...conversations, create: initialiseReplay };
   const replayProjection: Projection = { ...conversations, create: createConversationTables };
   async function rebuild(locked: Db): Promise<number> {
     const runner = new ProjectionRunner(locked, source, logger);
-    await runner.initialise(replayProjection);
+    await runner.initialise(initialProjection);
     await runner.rebuild(replayProjection);
     return runner.checkpoint(replayProjection);
   }

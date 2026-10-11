@@ -2,6 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
 export class ConversationListChanged extends Error {}
+export class ConversationListIncomplete extends Error {}
 export const conversationListQuery = z.strictObject({
   section: z.enum(['recent', 'archived']).default('recent'),
   q: z.string().max(100).default(''),

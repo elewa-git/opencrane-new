@@ -165,5 +165,7 @@ The member inventory integration tests check overflow and the shared reply schem
 
 `chatListSchema` accepts optional nullable `nextCursor` alongside the existing rows.
 New list replies include it; older replies remain valid. A non-null value requests the
-next bounded scan, even if rows is empty. See the
+next page of visible matches. Empty successful pages have a null cursor.
+Group rows may omit `createdBy`: ordinary late joiners receive their join time and
+current participants, without the original creator or group snapshot. See the
 [server list contract](../../apps/server/README.robot.md#chat-ui-reads-and-stop).
