@@ -1452,3 +1452,37 @@ Logs: `/tmp/p3-6-pr2-review-red.log`, `/tmp/p3-6-pr2-review-green.log`,
 `/tmp/p3-6-pr2-review-tests-{1,2}.log`, `/tmp/p3-6-pr2-review-lint.log`,
 `/tmp/p3-6-pr2-review-typecheck.log`, `/tmp/p3-6-pr2-review-events.log`,
 `/tmp/p3-6-pr2-review-knip.log` and `/tmp/p3-6-pr2-review-changelog.log`.
+
+## Checks for ordered MCP send admission
+
+Date: 11 October 2026. Runtime source: `b056dcfbd845d2041862b8704e3cf58728caea10`.
+Rebased onto `d7e253aa`; the rebase finished and main is an ancestor.
+Environment: Linux, Node 22, local worktree, disposable NATS and OpenFGA,
+the supplied PostgreSQL test server and a recording upstream. This is not a fresh install.
+
+FAIL before the fix, as expected: Block saved during the terminating access pass
+still sent one upstream request. The regression commits `3b51b2d5` and `a0623e25`
+precede implementation `81afabcd`. PASS after the fix: Block before admission
+returns HTTP 403 and sends zero upstream requests. Admission before Block allows
+that call and refuses the next one. Two competing calls on the same tool both succeed.
+Admission records leave the approval revision and tool choices unchanged on replay.
+
+PASS: the first targeted batch passed 1,067 tests in 26 files in 477.85 seconds.
+It includes `mcp-dispatch.test.ts`, `codex-mcp.test.ts`, projection `mcp-evidence.test.ts`,
+both unchanged authority guards, `decision-fence.test.ts` and all event-schema tests.
+PASS: the three changed files passed again, 57 tests in 212.15 seconds.
+Both runs used `nice -n 10 npx vitest run`, one worker and the supplied `PG_TEST_URL`.
+Both authority test files still match main exactly.
+
+PASS: full `npm run lint` (16 warnings, no errors), workspace `npm run typecheck`,
+`npm run check:events` (123 types), standalone `npm run lint:unused` (Knip) and
+`npm run lint:changelog`. All ran under `nice -n 10`.
+The first lint run found two extra Markdown blank lines from the rebase; the corrected
+full run passed. No production code changed after these checks. No dependency was added.
+NOT RUN: full root suite, paid calls, hosted CI and fresh-install qualification.
+
+Logs: `/tmp/p3-6-pr2-order-red-final.log`,
+`/tmp/p3-6-pr2-order-boundary-red.log`, `/tmp/p3-6-pr2-rebased-green.log`,
+`/tmp/p3-6-pr2-admission-tests-{1,2}.log`, `/tmp/p3-6-pr2-admission-lint-final.log`,
+`/tmp/p3-6-pr2-admission-typecheck.log`, `/tmp/p3-6-pr2-admission-events.log`,
+`/tmp/p3-6-pr2-admission-knip.log` and `/tmp/p3-6-pr2-admission-changelog.log`.
