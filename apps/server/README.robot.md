@@ -2,6 +2,43 @@
 
 For people, read [README.md](README.md) first.
 
+## Welcome survey HTTP (P4-18 row 4; Part of #101)
+
+`GET /api/onboarding` reads exact personal-stream history through an incremental
+summary. It returns `state: not_started|survey|review`, survey generation,
+position, nextStep (null after step 4), authorised decrypted steps and up to 20
+recent receipts. It does not depend on a lagging read table. Each saved answer
+is checked with the event catalogue's ciphertext digest before decryption.
+
+`POST /api/onboarding/survey` accepts strict `commandId`, `generation`,
+`expectedPosition` and `operation: save_step|restart`. Save also takes typed
+`answers` including `step: 1|2|3|4`. Only a confirmed preceding step allows
+advancement. Editing drops later current answers. Restart appends the next
+survey generation; it never rewrites earlier events. Step 2 groups require
+current membership in each selected group. Content loads before the two-second
+write check, which watches member and selected group streams only. Each command
+makes one conditional append. Replies are checked against the saved event,
+including when NATS returns another device's same-id acknowledgement.
+
+`GET /api/personal/changes/:commandId` point-reads the original saved survey event.
+Missing commands remain unknown. GET never repeats a write. Replies use no-store
+and the shared member guard; writes require the configured Origin. Invalid fields
+return 422, stale or changed input 409, access refusal 401/403/425 and service
+failure 503. An uncertain append returns 503 with `status: unknown`.
+The server needs `PERSONAL_KEY_DIRECTORY`, pointing to the private directory used
+by the membership key reaction. It has no default and does not use conversation
+keys. These routes work without chat or computer configuration. Keys use existing
+`personal:<memberId>` custody; routes never prepare keys.
+No model call, computer wake or spending path is used.
+
+`test/survey-http.test.ts` covers real NATS/PostgreSQL/OpenFGA requests, reload,
+replay, edited progress, strict fields, lost replies, same-id races, two-device
+restart, slow history, unrelated activity, missing keys and removal during reads.
+Run it with the supplied `PG_TEST_URL`, `nice -n 10` and one Vitest worker.
+Persona approval events are not on main yet: active-approval preservation remains
+NOT RUN until row 6. The survey append retains all earlier personal events.
+Screens, independent review and fresh-install qualification are NOT RUN.
+
 ## Shared member guard
 
 `src/members/guard.ts` supplies `requireMember`, `MemberRefusal`, `idSchema` and
