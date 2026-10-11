@@ -52,28 +52,31 @@ export function registerOwnershipRoutes(app: FastifyInstance, config: AuthConfig
 }
 async function read(options: GroupOptions, actorId: string, commandId?: string) {
   const deadline = performance.now() + 10_000;
-  const access = commandId === undefined ? ownershipAccess : ownershipStatusAccess;
-  const membership = await access(options.store, options.binding, actorId);
-  let result;
   if (commandId) {
-    result = await readChange(options, commandId, deadline);
-  } else {
-    const ownership = await currentOwnershipMembership(
-      options.store, options.silo, actorId, deadline, membership);
-    const ownerIds = [...ownership.owners];
-    ownerIds.sort();
-    const owners = [];
-    for (const memberId of ownerIds) {
-      const rows = await history(options.store, `member-${memberId}`, options.silo, deadline);
-      const joined = rows.findLast(isJoined);
-      const fields = z.object({ displayName: z.string() }).parse(joined?.event.data);
-      owners.push({ memberId, displayName: fields.displayName, role: 'owner' as const });
-    }
-    result = { status: 'current', owners, sequence: ownership.ownership.at(-1)?.sequence ?? 0,
-      viewer: { memberId: actorId, role: membership.role },
-      ready: ownership.ownership.length > 0 };
+    const result = await readChange(options, commandId, deadline);
+    // Keep the saved step-down receipt readable under the existing status rules.
+    await ownershipStatusAccess(options.store, options.binding, actorId);
+    return result;
   }
-  return result;
+  const result = await readOwners(options, actorId, deadline);
+  // Check access after loading so a removal during the read cannot expose the result.
+  const membership = await ownershipAccess(options.store, options.binding, actorId);
+  return { ...result, viewer: { memberId: actorId, role: membership.role } };
+}
+async function readOwners(options: GroupOptions, actorId: string, deadline: number) {
+  const ownership = await currentOwnershipMembership(
+    options.store, options.silo, actorId, deadline);
+  const ownerIds = [...ownership.owners];
+  ownerIds.sort();
+  const owners = [];
+  for (const memberId of ownerIds) {
+    const rows = await history(options.store, `member-${memberId}`, options.silo, deadline);
+    const joined = rows.findLast(isJoined);
+    const fields = z.object({ displayName: z.string() }).parse(joined?.event.data);
+    owners.push({ memberId, displayName: fields.displayName, role: 'owner' as const });
+  }
+  return { status: 'current', owners, sequence: ownership.ownership.at(-1)?.sequence ?? 0,
+    ready: ownership.ownership.length > 0 };
 }
 function isJoined(row: StoredEvent) {
   return ['member.joined', 'silo.owner_bootstrapped'].includes(row.event.type);

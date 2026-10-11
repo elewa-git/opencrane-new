@@ -10,7 +10,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member access"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership and member access"]
   server -.->|checks access, refusal records, departure details, spending, memory and turn previews| libs["libs/*<br/>shared code"]
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups and member removal"]
   server -.->|checks access, refusal records, departure details, spending and memory| libs["libs/*<br/>shared code"]
@@ -46,6 +46,8 @@ flowchart LR
   Production refuses extra sign-in identities. Development can allow named identities
   from another organisation, but session routes still need a configured organisation.
 - Checks permissions before returning private information or changing data.
+- Loads group and ownership results before checking current access. Slow history
+  reads can finish, and a removal during loading prevents the reply.
 - Lists and searches a person's own memory and permitted group or assistant notes.
   Returns fact detail and checks each source separately, hiding denied references.
   Checks chat access and the latest join before looking up one source message. Describes a member statement
@@ -184,6 +186,9 @@ Switching on calls through managed providers is still unavailable.
 9. **A person watches the assistant's desktop.** The server checks their conversation
    access and desktop grant. A confirmed member removal or conversation permission denial
    ends the view straight away, even if another access read is slow.
+10. **An admin opens groups or ownership.** The server loads the records, then checks
+    current access before replying. Slow histories can finish. A removal during
+    loading denies the reply; unrelated chat activity does not interrupt it.
 
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.
