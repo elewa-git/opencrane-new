@@ -34,13 +34,7 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     next = applyCapture(next, state.catalogue, catalogue);
   }
   if (event.type === 'mcp.server_reviewed') {
-    const review = mcpServerReviewedDataSchema.parse(parsed);
-    const tools = reviewedToolChoices(state, review, Date.parse(event.time));
-    if (!tools || event.principal?.kind !== 'human' || event.principal.id !== review.reviewedBy) {
-      throw new Error('Tool review does not match the saved catalogue');
-    }
-    next.tools = tools;
-    next.published = keepsPublication(state, tools);
+    next = applyReview(next, state, event);
   }
   if (event.type === 'mcp.server_published') {
     next.published = state.startupReviewRequired !== true;
@@ -59,6 +53,17 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     next.published = keepsPublication(state, next.tools);
   }
   return toolPolicySchema.parse(next);
+}
+
+function applyReview(next: ToolPolicy, state: ToolPolicy, event: EventEnvelope): ToolPolicy {
+  const review = mcpServerReviewedDataSchema.parse(event.data);
+  const tools = reviewedToolChoices(state, review, Date.parse(event.time));
+  const principalMatchesReviewer = event.principal?.kind === 'human' &&
+    event.principal.id === review.reviewedBy;
+  if (!tools || !principalMatchesReviewer) {
+    throw new Error('Tool review does not match the saved catalogue');
+  }
+  return { ...next, tools, published: keepsPublication(state, tools) };
 }
 
 function requiresStartupReview(data: Record<string, unknown>) {
