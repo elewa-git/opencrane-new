@@ -2027,3 +2027,35 @@ unrelated read receipts. The departure route returns 200 within two seconds, wit
 a complete or explicitly incomplete review. It never reads global numbered events.
 After projection, the empty review and its revision match the original. Existing
 removal tests keep their target-history, receipt and concurrent-message assertions.
+
+## Inventory fix checks, 11 October 2026
+
+Tested source: `0fc143119f506e7a2248fd8273e4b36c8c892a95`, rebased on
+`72d8f14a0e1789de848b4f2904b1a4e06f16da36`. The rebase completed and the base is
+an ancestor of this branch. Tests were committed before implementation. The volume
+case reproduced HTTP 503; the upgrade case reproduced a falsely complete empty
+review. Both now pass. Creation tests also refuse a second audience while preserving
+normal and history-checked category retries.
+
+PASS: two final runs under `nice -n 10`, with at most two workers per suite:
+
+| Tests | Each run | First run | Second run |
+| --- | --- | --- | --- |
+| Four server files: member inventory, volume, inventory and member removal | 103 passed | 95.77 s | 74.52 s |
+| Projection rebuild and runner | 11 passed | 25.73 s | 15.56 s |
+| All event-store tests | 94 passed | 70.33 s | 53.62 s |
+
+The server fixtures used the supplied `PG_TEST_URL`. Projection fixtures used a
+throwaway PostgreSQL 17.6 container on a random port. NATS, PostgreSQL databases
+and OpenFGA were disposable fixtures, not a fresh silo installation. The throwaway
+container was removed with its volume after the tests. The volume case returns
+HTTP 200 within two seconds without reading global numbered events. After projection,
+its empty result and revision match the original. Existing removal tests pass,
+including pending and projected target history, receipts and concurrent messages.
+Both authority test files remain unchanged.
+
+PASS: full lint, workspace typecheck, event catalogue (113 types), Knip and changelog
+checks. Lint reports 15 existing warnings and no errors. Logs are
+`/tmp/p4-23-pr3-{tests,projections,event-store}-rebased-final{1,2}.log` and
+`/tmp/p4-23-pr3-{lint,typecheck,events,changelog}-rebased-final.log`.
+NOT RUN: full root suite and fresh-install qualification.

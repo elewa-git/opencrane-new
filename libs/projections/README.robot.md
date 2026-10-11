@@ -526,8 +526,9 @@ their latest conversation-worker receipts without reading the event log.
 Existing installations must rebuild members before any review can be complete:
 `npm run replay -- members`. Before replay, category maxima cannot certify the
 index, absence replies are unavailable, and removal remains disabled. Known inputs
-still check their permission receipts. Online replay compares and replaces the
-index and completed-replay marker together with member tables and receipts.
+still check their permission receipts. Online replay compares the indexed rows,
+then replaces the index and completed-replay marker together with member tables
+and receipts.
 No new worker or dependency is needed. `apps/server/test/member-inventory.test.ts` covers exact reads, pending
 empty revocations, overlap, overflow, unrelated activity and online replay using
 real NATS, PostgreSQL and OpenFGA. Fresh-install qualification: NOT RUN.
