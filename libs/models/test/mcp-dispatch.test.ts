@@ -217,7 +217,9 @@ async function refusesBlockDuringFinalAccessReads() {
       if (args[0] === 'mcp-fixture') {
         mcpReads += 1;
         // Skip the sender's earlier catalogue check and pause during its access check.
-        if (mcpReads === 2) mcpRead.resolve();
+        if (mcpReads === 2) {
+          mcpRead.resolve();
+        }
       }
       if (args[0] === 'member-alice' && !heldMember) {
         heldMember = true;

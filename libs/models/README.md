@@ -30,7 +30,7 @@ A change to the tools or their rules ends that approval.
 Configured tool servers need an atomic revision check: they compare the approved tool
 list and running instance before executing a call. The models process checks a one-use
 pass before sending the original request. Servers without this contract are refused.
-Before sending, it reads each small access stream twice and requires matching positions.
+Before sending, it reads each small access stream at least twice and requires matching positions.
 A tool rule saved while another access read is waiting refuses the call.
 
 ## What it is responsible for

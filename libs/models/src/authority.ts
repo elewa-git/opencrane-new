@@ -226,8 +226,12 @@ async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head
     let changed = false;
     while (true) {
       const current = await confirmPositions();
-      if (current.changed) changed = true;
-      if (!requireStablePositions || current.positions === previousPositions) return changed;
+      if (current.changed) {
+        changed = true;
+      }
+      if (!requireStablePositions || current.positions === previousPositions) {
+        return changed;
+      }
       // Read every watched position again after the last read. Require two matching passes
       // so a policy change during another pending read cannot authorise a send.
       // Keep the original deadline; continuing changes or slow reads must refuse the call.
