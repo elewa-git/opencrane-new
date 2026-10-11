@@ -25,7 +25,7 @@ export {
   conversations, rebuildConversationsProjection, readConversation, listConversations, listOpenConversations,
 } from './conversations.ts';
 
-export { emptyToolPolicy, applyToolPolicy } from './tool-policy.ts';
+export { emptyToolPolicy, applyToolPolicy, isToolPolicyAvailable } from './tool-policy.ts';
 export { auditTrail, readAudit } from './audit.ts';
 export { rebuildAuditProjection } from './audit-rebuild.ts';
 

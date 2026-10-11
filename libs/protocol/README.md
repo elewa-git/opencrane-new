@@ -14,7 +14,11 @@ flowchart LR
   server["apps/server<br/>back end"] -.-> protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
+  protocol -.-> events["libs/events<br/>saved tool list shapes"]
 ```
+
+Tool rule messages include saved tool lists and their check and expiry dates.
+They also identify the server and silo, and carry the rule revision used by waiting approvals.
 
 ## What it is responsible for
 

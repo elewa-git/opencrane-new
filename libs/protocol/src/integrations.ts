@@ -1,3 +1,4 @@
+import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { z } from 'zod';
 
 export const sharedStateKindSchema = z.enum([
@@ -41,9 +42,15 @@ export type IntegrationRow = z.infer<typeof integrationRowSchema>;
 export type IntegrationsResponse = z.infer<typeof integrationsResponseSchema>;
 
 export const toolPolicySchema = z.object({
+  silo: z.string().nullable().default(null), serverId: z.string().nullable().default(null),
   connectionId: z.string().nullable(), accountMode: z.enum(['none', 'personal', 'company']).nullable(),
   startupReviewRequired: z.boolean().optional(), published: z.boolean(),
   sequence: z.int().nonnegative(),
+  policyRevision: z.int().nonnegative().default(0),
+  catalogue: mcpServerDiscoveredDataSchema.nullable().default(null),
+  previousCatalogue: mcpServerDiscoveredDataSchema.nullable().default(null),
+  checkedAt: z.iso.datetime().nullable().default(null),
+  expiresAt: z.iso.datetime().nullable().default(null),
   tools: z.array(z.object({ name: z.string(), revision: z.string(), reviewed: z.boolean(),
     readOnly: z.boolean(), costCents: z.literal(0).optional(), mode: z.enum(['allow', 'ask', 'block']), suggestion: z.enum(['allow', 'ask']) })),
 });

@@ -1,13 +1,12 @@
 import { chatMembership } from './participation.ts';
 import { isComputerLifecycle, readComputerControl } from '@opencrane/auth';
 import type { Client } from 'minio/dist/esm/minio.mjs';
-import { fileDeliveredDataSchema, fileUploadedDataSchema,
-  mcpServerDiscoveredDataSchema } from '@opencrane/events';
+import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
 import type { WebSocket } from 'ws';
 import type { connectMcpCatalogue, listConversations } from '@opencrane/projections';
 import { memberAuthorisation } from '@opencrane/authz';
 import { history as modelHistory } from '@opencrane/models';
-import { applyToolPolicy, emptyToolPolicy } from '@opencrane/projections';
+import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
@@ -290,10 +289,10 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
     for (const row of rows) {
       policy = applyToolPolicy(policy, row.event, row.sequence);
     }
-    const discoveredRow = rows.findLast(isDiscoveryEvent);
-    if (!discoveredRow) return undefined;
-    const discovered = mcpServerDiscoveredDataSchema.parse(discoveredRow.event.data);
-    function discoveryTool(tool: NonNullable<typeof discovered.tools>[number]) {
+    const discovered = policy.catalogue;
+    if (!discovered || !isToolPolicyAvailable(policy)) return undefined;
+    type Catalogue = NonNullable<typeof discovered>;
+    function discoveryTool(tool: NonNullable<Catalogue['tools']>[number]) {
       return {
         name: tool.name,
         revision: tool.revision,
@@ -321,9 +320,6 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
       discoveryTools,
       policyTools,
     };
-  }
-  function isDiscoveryEvent(row: Awaited<ReturnType<typeof modelHistory>>[number]) {
-    return row.event.type === 'mcp.server_discovered';
   }
   async function canUseServer(serverId: string, subjectKind: 'person' | 'assistant',
     subjectId: string) {

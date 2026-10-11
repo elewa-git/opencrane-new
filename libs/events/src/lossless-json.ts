@@ -47,8 +47,26 @@ export function losslessJson(text: string) {
       at++;
     }
     if (text[at++] !== close) return bad();
-    return open === '{' ? { kind: 'object', value: object, canonical: `{${[...object.keys()].sort().map(k => `${quote(k)}:${object.get(k)!.canonical}`).join(',')}}` }
-      : { kind: 'array', value: array, canonical: `[${array.map(v => v.canonical).join(',')}]` };
+    if (open === '{') {
+      const keys = [...object.keys()];
+      keys.sort();
+      function field(key: string) {
+        const value = object.get(key);
+        if (!value) {
+          return bad();
+        }
+        return `${quote(key)}:${value.canonical}`;
+      }
+      const fields = keys.map(field);
+      const canonical = `{${fields.join(',')}}`;
+      return { kind: 'object', value: object, canonical };
+    }
+    function item(value: JsonValue) {
+      return value.canonical;
+    }
+    const items = array.map(item);
+    const canonical = `[${items.join(',')}]`;
+    return { kind: 'array', value: array, canonical };
   }
   const result = read(0); space();
   if (at !== text.length) return bad();

@@ -1,3 +1,4 @@
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
@@ -41,9 +42,12 @@ async function seedLiveTurn() {
   await append('conversation-chat', 'agent.turn_started', {
     conversationId: 'chat', turnId: 'turn', assistantId: 'assistant', threadId: 'thread',
   });
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
   await append('mcp-fixture', 'mcp.server_discovered', {
+    checkedAt, expiresAt,
     serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
-    schemaDigest: approvalId, toolCount: 0,
+    schemaDigest: catalogueDigest([]), toolCount: 0, tools: [],
   });
   await append('mcp-fixture', 'mcp.server_published', {
     serverId: 'fixture', publishedBy: 'alice',

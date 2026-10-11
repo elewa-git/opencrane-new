@@ -1,7 +1,9 @@
 import { expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { mcpCatalogue, ProjectionRunner } from '../src/index.ts';
+import { applyToolPolicy, emptyToolPolicy, mcpCatalogue, ProjectionRunner }
+  from '../src/index.ts';
 import { mapMcpCatalogueRows } from '../src/mcp-catalogue.ts';
 import { database } from './database.ts';
 
@@ -69,11 +71,36 @@ const legacyStates = ['published', 'rejected'];
 it.each(legacyStates)('keeps a startup %s row unavailable in the register',
   refusesStartupStatus);
 
+function reviewedMemoryPolicy() {
+  const definition = '{"inputSchema":{"type":"object"},"name":"recall"}';
+  const revisionHash = createHash('sha256');
+  revisionHash.update(definition);
+  const revision = revisionHash.digest('hex');
+  const tool = { name: 'recall', revision, definition, reviewed: true, costCents: 0 };
+  const revisions = [{ name: tool.name, revision }];
+  const catalogueHash = createHash('sha256');
+  catalogueHash.update(JSON.stringify(revisions));
+  const schemaDigest = catalogueHash.digest('hex');
+  const checkedTime = Date.now();
+  const checkedAt = new Date(checkedTime).toISOString();
+  const expiresAt = new Date(checkedTime + 300_000).toISOString();
+  const discovery = { serverId: 'memory', connectionId: 'server', accountMode: 'none',
+    toolCount: 1, schemaDigest, checkedAt, expiresAt, tools: [tool] };
+  const capture = { ...event('memory-discovery'), subject: 'mcp-memory',
+    type: 'mcp.server_discovered', data: discovery };
+  const discovered = applyToolPolicy(emptyToolPolicy(), capture, 1);
+  const publication = { serverId: 'memory', publishedBy: 'admin' };
+  const published = { ...event('memory-publication'), subject: 'mcp-memory',
+    type: 'mcp.server_published', data: publication };
+  return applyToolPolicy(discovered, published, 2);
+}
+
 function keepsExistingMemoryReady() {
   const row = { server_id: 'memory', source_kind: 'hosted' as const,
     locator: `registry.example.test/opencrane/server@sha256:${'a'.repeat(64)}`,
     catalogue_ref: null, server_name: null, server_version: null, tool_count: 1,
-    lifecycle: 'published', changed_at: '2026-10-10T00:00:00Z', modes: null };
+    lifecycle: 'published', changed_at: '2026-10-10T00:00:00Z', modes: null,
+    policy: reviewedMemoryPolicy() };
   const rows = mapMcpCatalogueRows([row]);
   expect(rows[0]?.status.kind).toBe('ready');
 }

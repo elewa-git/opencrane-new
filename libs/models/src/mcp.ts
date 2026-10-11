@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import type { IncomingHttpHeaders } from 'node:http';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { isToolCallText } from '@opencrane/events/tool-call';
 import { mcpServerDiscoveredDataSchema, memoryTextSchema,
   memoryWrittenDataSchema } from '@opencrane/events';
 import { history } from './actor.ts';
-import { losslessJson, type JsonValue } from './lossless-json.ts';
-import { readToolPolicy } from './tool-policy.ts';
+import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
+import { toolPolicyFromRows } from './tool-policy.ts';
 
 const version = '2026-07-28';
 const boundedText = z.string().max(200);
@@ -51,7 +51,10 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
       headers['mcp-method'] !== call.method || headers['mcp-name'] !== call.params.name) {
     throw new Error('MCP protocol refused');
   }
-  const policy = await readToolPolicy(store, silo, server, deadline);
+  // Use the same saved events for policy and review details. A second read spends
+  // the short access deadline again and can describe a different registration.
+  const rows = await history(store, `mcp-${server}`, silo, deadline);
+  const policy = toolPolicyFromRows(rows);
   if (!policy.published || policy.connectionId !== connection || policy.accountMode !== 'none') {
     throw new Error('MCP context unavailable');
   }
@@ -66,23 +69,23 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
   if (offeredMode === 'allow' && decision.outcome === 'ask') {
     decision = { outcome: 'deny', reason: 'policy_block' };
   }
-  const review = await reviewMetadata(store, silo, server, call.params.name, deadline);
+  const review = reviewMetadata(rows, call.params.name, policy.catalogue);
   const expectedApproval = expectedApprovalId(headers);
   return { ...decision, waitLimited: offeredMode === 'ask', expectedApproval,
     policy, revision: tool?.revision, name: call.params.name, args, ...review };
 }
-function toolDecision(tool: Awaited<ReturnType<typeof readToolPolicy>>['tools'][number] | undefined) {
+export function toolDecision(
+  tool: ReturnType<typeof toolPolicyFromRows>['tools'][number] | undefined,
+) {
   const mode = tool?.reviewed ? tool.mode : 'block';
   if (mode !== 'block' && tool?.costCents !== 0) return { outcome: 'deny', reason: 'unknown_cost' } as const;
   const outcome = mode === 'block' ? 'deny' : mode;
   const reason = mode === 'ask' ? 'approval_required' : mode === 'allow' ? 'policy_allow' : 'policy_block';
   return { outcome, reason } as const;
 }
-async function reviewMetadata(store: EventStore, silo: string, server: string,
-  name: string, deadline: number) {
-  const rows = await history(store, `mcp-${server}`, silo, deadline);
-  const discovered = rows.findLast(r => r.event.type === 'mcp.server_discovered');
-  const discovery = mcpServerDiscoveredDataSchema.parse(discovered?.event.data);
+function reviewMetadata(rows: StoredEvent[], name: string,
+  catalogue: ReturnType<typeof mcpServerDiscoveredDataSchema.parse> | null) {
+  const discovery = mcpServerDiscoveredDataSchema.parse(catalogue);
   const review = discovery.tools?.find(t => t.name === name)?.review;
   const registered = rows.find(r => r.event.type === 'mcp.server_registered');
   const { kind, locator } = z.object({ kind: z.enum(['remote', 'hosted']), locator: z.string() }).parse(registered?.event.data);

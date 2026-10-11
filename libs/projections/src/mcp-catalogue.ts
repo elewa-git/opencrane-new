@@ -1,11 +1,11 @@
-import { emptyToolPolicy, applyToolPolicy } from './tool-policy.ts';
+import { emptyToolPolicy, applyToolPolicy, isToolPolicyAvailable } from './tool-policy.ts';
 import { toolPolicySchema } from '@opencrane/protocol';
 import { getEventDefinition } from '@opencrane/events';
-import type { IntegrationRow, SharedStateKind } from '@opencrane/protocol';
+import type { IntegrationRow, SharedStateKind, ToolPolicy } from '@opencrane/protocol';
 import type { Projection } from './runner.ts';
 
 const eventTypes = new Set<string>([
-  'mcp.server_registered', 'mcp.server_discovered', 'mcp.server_rejected',
+  'mcp.catalogue_checked', 'mcp.server_registered', 'mcp.server_discovered', 'mcp.server_rejected',
   'mcp.server_published', 'mcp.server_unpublished', 'mcp.tool_mode_set', 'mcp.tools_changed',
 ]);
 type ToolMode = 'allow' | 'ask' | 'block';
@@ -92,6 +92,7 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
       const current = savedPolicy ? toolPolicySchema.parse(savedPolicy) : emptyToolPolicy();
       const policy = applyToolPolicy(current, event, position);
       await db.query(`UPDATE ${tables.catalogue} SET policy = $3 WHERE silo = $1 AND server_id = $2`, [event.silo, serverId, JSON.stringify(policy)]);
+      if (event.type === 'mcp.catalogue_checked') return;
       if (event.type === 'mcp.tool_mode_set') {
         await db.query(`INSERT INTO ${tables.toolModes} VALUES ($1, $2, $3, $4)
         ON CONFLICT (silo, server_id, tool_name) DO UPDATE SET mode = $4`,
@@ -99,7 +100,7 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
         return;
       }
       const lifecycle = catalogueLifecycle(event.type, policy.published);
-      const toolCount = event.type === 'mcp.server_discovered' ? numberField(data, 'toolCount') : null;
+      const toolCount = catalogueToolCount(event.type, data, policy);
       const info = event.type === 'mcp.server_discovered' ? serverInfo(data) : undefined;
       await db.query(`UPDATE ${tables.catalogue} SET lifecycle = $3,
       tool_count = COALESCE($4, tool_count), server_name = COALESCE($5, server_name),
@@ -189,7 +190,28 @@ export function mapMcpCatalogueRows(rows: McpCatalogueRow[]): IntegrationRow[] {
       accountModel: 'Not provided',
       toolsAllowed: total === null ? allowed : Math.min(allowed, total),
       toolsTotal: total,
-      status: catalogueRowStatus(row),
+      status: catalogueStatus(row, policy.success ? policy.data : null),
     };
   });
+}
+
+
+function catalogueStatus(row: McpCatalogueRow, policy: ToolPolicy | null): IntegrationRow['status'] {
+  // Keep the saved startup result visible when tool discovery is blocked.
+  if (policy?.startupReviewRequired === true) {
+    return catalogueRowStatus(row);
+  }
+  const missingDates = row.tool_count !== null && !policy?.checkedAt;
+  const stalePublication = row.lifecycle === 'published' &&
+    (!policy || !isToolPolicyAvailable(policy));
+  if (missingDates || stalePublication) {
+    return { kind: 'disabled', label: 'Unavailable', detail: 'No fresh tool catalogue check' };
+  }
+  return catalogueRowStatus(row);
+}
+
+
+function catalogueToolCount(type: string, data: unknown, policy: ToolPolicy) {
+  if (type === 'mcp.server_discovered') return numberField(data, 'toolCount');
+  return policy.catalogue?.toolCount ?? null;
 }

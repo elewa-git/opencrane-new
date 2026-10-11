@@ -1,3 +1,5 @@
+import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
+import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import {
   getEventDefinition,
@@ -63,7 +65,7 @@ export function validateCommand(
     return undefined;
   }
   const event = parsed.event;
-  if (!validConversationWrite(event) || !validCurrentMemoryWrite(event)) {
+  if (!validEventWrite(event)) {
     return undefined;
   }
   if (!validMigrationFence(command, event)) {
@@ -85,6 +87,16 @@ export function validateCommand(
   return event.subject.startsWith(`${getEventDefinition(event.type)?.stream}-`)
     ? event
     : undefined;
+}
+
+function validEventWrite(event: EventEnvelope): boolean {
+  if (!validConversationWrite(event)) {
+    return false;
+  }
+  if (!validCurrentMemoryWrite(event)) {
+    return false;
+  }
+  return validMcpSnapshot(event);
 }
 
 function validConversationWrite(event: EventEnvelope): boolean {
@@ -182,4 +194,37 @@ export function sameCommand(a: EventEnvelope, b: EventEnvelope): boolean {
     a.principal?.id === b.principal?.id &&
     a.principal?.kind === b.principal?.kind
   );
+}
+
+function validMcpSnapshot(event: EventEnvelope): boolean {
+  let data: unknown;
+  if (event.type === 'mcp.server_discovered') {
+    data = event.data;
+  } else if (event.type === 'mcp.tools_changed') {
+    if (typeof event.data !== 'object' || event.data === null) {
+      return false;
+    }
+    data = Reflect.get(event.data, 'catalogue');
+  } else {
+    return true;
+  }
+  if (data === undefined) {
+    return true;
+  }
+  try {
+    const catalogue = mcpServerDiscoveredDataSchema.parse(data);
+    if (event.type === 'mcp.tools_changed') {
+      if (typeof event.data !== 'object' || event.data === null ||
+          catalogue.serverId !== Reflect.get(event.data, 'serverId') ||
+          catalogue.schemaDigest !== Reflect.get(event.data, 'newSchemaDigest')) {
+        return false;
+      }
+    }
+    if (catalogue.checkedAt !== undefined) {
+      validateMcpCatalogue(catalogue);
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }

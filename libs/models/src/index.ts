@@ -17,7 +17,7 @@ export {
   isAuthorityChanged,
 } from './authority.ts';
 
-export { losslessJson } from './lossless-json.ts';
+export { losslessJson } from '@opencrane/events/lossless-json';
 
 export { readEffect, listEffects, resolveEffect, resolutionCommandSchema } from './reconciliation.ts';
 

@@ -20,6 +20,9 @@ flowchart LR
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
+Tool discovery records the exact definitions and how long the check remains valid.
+Descriptions are untrusted text. They never become instructions for the server.
+
 ## What it is responsible for
 
 - Let owners and admins save one destination rule and read its original receipt.

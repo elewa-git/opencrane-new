@@ -5,7 +5,7 @@ import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers
 import { groupMembership, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
 import { configureBudget, BudgetAccessRefused } from './budget-config.ts';
 import { approvalDecision, closesDecisionTurn, type ReviewKeys } from './approvals.ts';
-import { losslessJson } from './lossless-json.ts';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { decisionActivity } from './decision-activity.ts';

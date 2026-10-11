@@ -382,6 +382,8 @@ connections, including memory records without a startup contract, retain their
 reviewed publication. Rebuilding the catalogue applies the same checks and starts
 no process. Transport kind alone does not decide whether credentials are used at
 startup or supplied for each call.
+A per-call connection still needs complete definitions, checked hashes and current
+catalogue dates before it can run calls.
 
 The providers fold stores `managedCallsEnabled: true` on the connection carrying
 `provider.managed_calls_enabled` on `budget-<silo>`. This does not advance its configuration revision
@@ -420,3 +422,29 @@ Takeover events start history rows even with request correlation. Records retain
 computer id, generation, takeover/lease references, reviewed requester event,
 affected-turn count and recorded time. Private turn ids and text are omitted.
 Replay rebuilds the same rows without opening a writer or running work.
+
+## Dated MCP catalogue evidence
+
+The tool register keeps the before and after tool lists and their original expiry dates.
+A published server without a fresh check is shown as unavailable.
+
+`mcp.server_discovered` stores a bounded snapshot with `checkedAt` and `expiresAt`.
+`mcp.tools_changed.catalogue` stores the next snapshot; replay retains the previous one.
+`mcp.catalogue_checked` renews a matching digest or records a failed check.
+Catalogue checks leave `policyRevision` stable; policy changes advance it.
+The latest `sequence` still advances for writes.
+Expiry uses the shortest discovery/page TTL, capped at 300,000 ms. Zero expires immediately.
+Undated legacy records have no reviewed tools. A check cannot renew a list without
+complete saved definitions and matching hashes; it needs a complete new discovery.
+Descriptions, schemas and examples remain untrusted text, including in saved snapshots.
+
+This is #48 PR 1. Watch scheduling, final dispatch permits, configuration acknowledgement
+and the comparison screens belong to later rows of the accepted design.
+
+Policy replay recalculates hashes from saved tool definitions before keeping any review
+choice or renewing a check. It checks the tool count, distinct names, names inside definitions
+and copied annotation flags too. `silo` and `serverId` are taken from saved event identity;
+each following event must match both and its exact subject. `policyRevision` comes from
+stored event positions. A matching catalogue check advances only `sequence` and dates.
+`test/mcp-snapshot-security.test.ts` checks forged revisions, incomplete definitions,
+wrong-server and wrong-silo renewal, changed tools and mismatched change records.

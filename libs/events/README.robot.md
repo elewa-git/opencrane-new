@@ -6,6 +6,21 @@ This package is the typed event catalogue used by server validation and the even
 core. It defines envelopes, per-type data schemas and examples; it does not
 append, project, dispatch or replay events.
 
+## Dated MCP catalogue evidence
+
+Tool lists carry check and expiry dates; undated lists cannot authorise calls.
+Unchanged checks preserve the approval rule revision while advancing the write position.
+The [projection contract](../../libs/projections/README.robot.md#dated-mcp-catalogue-evidence)
+records snapshot and expiry rules for #48 PR 1.
+
+The Node entrypoints `@opencrane/events/lossless-json` and
+`@opencrane/events/mcp-catalogue` share the existing JSON hash format across discovery,
+append validation and policy replay. They use Node's built-in SHA-256 implementation.
+They are separate from browser event schemas, so browser builds do not load Node crypto.
+`validateMcpCatalogue` checks the complete accepted tool count, distinct names, definition
+names, schemas, annotation flags, tool revisions and the catalogue digest.
+The event parser binds every MCP event's server id to its exact subject.
+
 ## Public contract
 
 Delegation version 1 records one computer generation, root, requester, payer,

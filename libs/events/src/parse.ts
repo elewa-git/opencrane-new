@@ -45,13 +45,17 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   }
 
   let envelopeSchema = eventEnvelopeSchema(definition.dataSchema)
-    .superRefine(checkDelegationEvent).refine(validEgressRuleEvent);
+    .superRefine(checkDelegationEvent)
+    .refine(validEgressRuleEvent);
   if (definition.type === 'memory.maintenance_bound') {
     envelopeSchema = envelopeSchema.refine(validMaintenanceBinding);
   }
-  const checkedSchema = definition.stream === 'chat-state'
-    ? envelopeSchema.refine(validPreferenceIdentity)
+  const mcpSchema = definition.stream === 'mcp'
+    ? envelopeSchema.refine(validMcpIdentity)
     : envelopeSchema;
+  const checkedSchema = definition.stream === 'chat-state'
+    ? mcpSchema.refine(validPreferenceIdentity)
+    : mcpSchema;
   const schema = definition.type === 'memory.written' ? memoryWrittenEventSchema : checkedSchema;
   const result = schema.safeParse(input);
   if (!result.success) {
@@ -67,6 +71,14 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     }
   }
   return { success: true, event };
+}
+
+function validMcpIdentity(event: EventEnvelope): boolean {
+  if (typeof event.data !== 'object' || event.data === null) {
+    return false;
+  }
+  const serverId: unknown = Reflect.get(event.data, 'serverId');
+  return typeof serverId === 'string' && event.subject === `mcp-${serverId}`;
 }
 
 function validMaintenanceBinding(event: EventEnvelope) {

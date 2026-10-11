@@ -1,3 +1,4 @@
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { z } from 'zod';
 import { generateKeyPairSync } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -1148,9 +1149,11 @@ async function approvalWatcherFixture() {
     conversationId: 'alice', turnId: 'message-alice', assistantId: 'assistant', threadId: 'alice-thread',
   };
   await append('conversation-alice', 'agent.turn_started', started);
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
   const discovered = {
-    serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
-    schemaDigest: 'a'.repeat(64), toolCount: 0,
+    checkedAt, expiresAt, serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+    schemaDigest: catalogueDigest([]), toolCount: 0, tools: [],
   };
   await append('mcp-fixture', 'mcp.server_discovered', discovered);
   const published = { serverId: 'fixture', publishedBy: 'alice' };

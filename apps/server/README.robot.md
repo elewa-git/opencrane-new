@@ -2,6 +2,35 @@
 
 For people, read [README.md](README.md) first.
 
+## Dated MCP catalogue evidence
+
+Tool lists carry check and expiry dates; undated lists cannot authorise calls.
+Unchanged checks preserve the approval rule revision while advancing the write position.
+The [projection contract](../../libs/projections/README.robot.md#dated-mcp-catalogue-evidence)
+records snapshot and expiry rules for #48 PR 1.
+
+Discovery uses the shared catalogue hash format from `@opencrane/events/mcp-catalogue`.
+Append and policy replay check those hashes against the saved definitions. Catalogue
+checks renew only the exact server and silo; incomplete older lists stay unavailable.
+
+The private-turn preview tests use dated recall definitions and their calculated hashes.
+They still check empty previews, permitted facts, omissions, access changes and the
+16 KiB and 32-reference limits. An undated legacy catalogue cannot authorise preview reads.
+
+The memory fairness cases start fresh service fixtures. They do not reuse history or
+unfinished recovery records from earlier tests. Their 13-request completion check,
+1,500 ms deadlines, private refusal and database connection limits are unchanged.
+
+The nightly binding cases run before fairness cases replace the shared service fixtures.
+This keeps their event store alive for consent, retry and replay checks. Their assertions
+and time limits are unchanged.
+
+The MCP recovery cases also start fresh service fixtures. This keeps earlier grant
+and catalogue histories out of each timed write. Each case must receive HTTP 200
+and reach the simulated append failure once before checking its recovery records.
+The following cases also use fresh services because NATS stops when a test finishes.
+Memory passes still last at most two seconds.
+
 ## Memory scope and search reads
 
 `GET /api/memory/scopes?assistantId=...&groupId=...` returns the requester's own

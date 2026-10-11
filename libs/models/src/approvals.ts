@@ -7,7 +7,7 @@ import { readEvents } from '@opencrane/projections';
 import { approvalReviewSchema, type ApprovalCard } from '@opencrane/protocol';
 import { envelope, history } from './actor.ts';
 import { readToolPolicy } from './tool-policy.ts';
-import type { JsonValue } from './lossless-json.ts';
+import type { JsonValue } from '@opencrane/events/lossless-json';
 import type { mcpPolicy } from './mcp.ts';
 
 export interface ReviewKeys {
@@ -70,7 +70,7 @@ function prepareApproval(silo: string, bound: Binding,
     schemaDigest: policy.schemaDigest,
     connectionId: bound.connectionId,
     profile: 'none',
-    policySequence: policy.policy.sequence,
+    policySequence: policy.policy.policyRevision,
     digestVersion: 'lossless-json-v1' as const,
     argumentsDigest: hash(policy.args.canonical),
   };
@@ -214,7 +214,7 @@ async function invalidated(store: EventStore, silo: string, request: Request, de
 async function approvalPolicyChanged(store: EventStore, silo: string, request: Request,
   deadline: number) {
   const policy = await readToolPolicy(store, silo, request.serverId, deadline);
-  return !policy.published || policy.sequence !== request.policySequence ||
+  return !policy.published || policy.policyRevision !== request.policySequence ||
     policy.connectionId !== request.connectionId;
 }
 

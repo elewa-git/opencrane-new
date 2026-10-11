@@ -58,6 +58,9 @@ on the conversation stream, and replay reads both forms. Model decisions read bo
 closing formats through their existing conversation activity read.
 New group chats are limited to 97 people so their permission update fits in one write.
 
+Tool catalogue writes check the tool hashes against the saved definitions and require
+the same server id in the event and its subject.
+
 Private chat choices use a separate stream for each person. They require that person's human identity.
 
 ## Processes it handles

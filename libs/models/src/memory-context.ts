@@ -6,7 +6,7 @@ import { memoryScopeId } from '@opencrane/projections';
 import { assistantCreatedDataSchema, type MemoryIdentity } from '@opencrane/events';
 import { authorityFence, currentAuthority } from './authority.ts';
 import { decisionActivity } from './decision-activity.ts';
-import { mcpPolicy, parseMcpCall, parseMemoryRequest } from './mcp.ts';
+import { mcpPolicy, parseMcpCall, parseMemoryRequest, toolDecision } from './mcp.ts';
 import { closesDecisionTurn } from './approvals.ts';
 import { data } from './state.ts';
 import { groupMembership } from './paying-group.ts';
@@ -60,12 +60,15 @@ export async function memoryRights(store: EventStore, binding: Binding,
   async function check(checkDeadline = deadline) {
     const fresh = await authorityFence(store, performance.now(), [], checkDeadline);
     fresh.include('mcp-memory');
-    if (!await memoryPolicy(store, binding.silo, parsed, checkDeadline)) {
+    const policy = await memoryToolPolicy(store, binding.silo, parsed, checkDeadline);
+    if (policy.outcome !== 'allow') {
       throw new Error('Memory tool policy refused');
     }
     let canRemember = false;
     if (!parsed.input) {
-      canRemember = await memoryPolicy(store, binding.silo, parsed, checkDeadline, 'remember');
+      // Read both tool modes from the checked catalogue. Replaying the same history
+      // for remember would spend more of the recall discovery deadline.
+      canRemember = policy.policy.tools.some(allowsRemember);
     }
     const selected = await selectedMemoryScope(store, binding, claims, parsed, fresh);
     const scope = selected.scope;
@@ -194,16 +197,19 @@ function isResourceGrant(event: StoredEvent['event'], fields: Record<string, unk
   return event.type === 'grant.given' || event.type === 'grant.revoked';
 }
 
-async function memoryPolicy(store: EventStore, silo: string,
-  parsed: ReturnType<typeof parseMemoryRequest>, deadline: number,
-  toolName = parsed.input?.operation ?? 'recall') {
+function allowsRemember(tool: Awaited<ReturnType<typeof mcpPolicy>>['policy']['tools'][number]) {
+  return tool.name === 'remember' && toolDecision(tool).outcome === 'allow';
+}
+
+async function memoryToolPolicy(store: EventStore, silo: string,
+  parsed: ReturnType<typeof parseMemoryRequest>, deadline: number) {
   // Check recall for discovery. Check each write's own policy before signing its pass.
+  const toolName = parsed.input?.operation ?? 'recall';
   const request = { jsonrpc: '2.0', id: parsed.request.id, method: 'tools/call', params: {
     name: toolName, arguments: parsed.input ?? {}, _meta: parsed.request.params._meta } };
   const call = parseMcpCall(JSON.stringify(request));
   const headers = { ...parsed.headers, 'mcp-method': 'tools/call', 'mcp-name': toolName };
-  const policy = await mcpPolicy(store, silo, 'memory', 'server', call, headers, deadline);
-  return policy.outcome === 'allow';
+  return mcpPolicy(store, silo, 'memory', 'server', call, headers, deadline);
 }
 
 type ThreadIdentity = Parameters<typeof memoryRights>[2];

@@ -1,3 +1,5 @@
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { installWorker } from '../src/integrations/install-worker.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
 import { budgets, BudgetActor, readBudget, startDecision, settlementHandler, history, priceTableId } from '@opencrane/models';
@@ -167,15 +169,16 @@ it('returns the event-derived register and rebuilds to the same rows', async () 
   const body = integrationsResponseSchema.parse(response.json());
   expect(body.loadedAt).toBe('2026-10-01T09:40:00.000Z');
   expect(body.rows.map((row) => [row.serverId, row.status.kind])).toEqual([
-    ['odoo', 'ready'], ['warehouse', 'checking'], ['broken', 'failed'], ['pricing', 'needs_input'], ['review', 'needs_input'],
+    ['odoo', 'disabled'], ['warehouse', 'checking'], ['broken', 'failed'], ['pricing', 'disabled'], ['review', 'disabled'],
     ['retired', 'disabled'],
   ]);
+  expect(body.rows[0]?.status.label).toBe('Unavailable');
   expect(body.rows[0]).toMatchObject({ name: 'Odoo Accounting', version: '1.4.2', toolsAllowed: 0, toolsTotal: 14,
     source: { kind: 'catalogue', label: 'Catalogue', detail: 'catalogue:odoo' }, accountModel: 'Not provided' });
   expect(body.rows.find((row) => row.serverId === 'pricing')).toMatchObject({
     name: 'Pricing', version: 'Version not provided', source: { kind: 'remote_url' }, accountModel: 'Not provided',
   });
-  expect(body.rows.find((row) => row.serverId === 'review')?.status.detail).toBe('Pending review');
+  expect(body.rows.find((row) => row.serverId === 'review')?.status.label).toBe('Unavailable');
   expect(body.rows.some((row) => row.serverId === 'foreign')).toBe(false);
   const incremental = await catalogue.rows('test');
   await runner.rebuild(mcpCatalogue);
@@ -211,6 +214,7 @@ it('refuses another organisation and a cookie role without projected membership'
 });
 
 it('loads through the dev proxy and preserves the accessible refresh journey in Chromium', async () => {
+  await prepareReviewedOdooCatalogue();
   const remote = await remoteFixture();
   installWorker(app, nats.store, 'test', remote.network).start();
   const target = await app.listen({ host: '127.0.0.1', port: 0 });
@@ -502,19 +506,32 @@ it('restricts the model and spending read to projected owners and admins', async
   expect((await app.inject({ method: 'GET', url: '/api/org/models', headers: headers('oidc-alice', 'other') })).statusCode).toBe(403);
 });
 
-it('saves a reviewed connection revision policy through one conditional event and replays it', async () => {
-  await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDigest: 'a'.repeat(64),
-    connectionId: 'installed-odoo', accountMode: 'none', tools: [
-      { name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true, costCents: 0 },
-      { name: 'write', revision: 'b'.repeat(64), reviewed: true, readOnly: false, costCents: 0 },
-    ] });
+async function prepareReviewedOdooCatalogue() {
+  const readDefinition = losslessJson(
+    '{"name":"read","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}');
+  const writeDefinition = losslessJson('{"name":"write","inputSchema":{"type":"object"}}');
+  const tools = [
+    { name: 'read', revision: readDefinition.digest, definition: readDefinition.canonical,
+      reviewed: true, readOnly: true, costCents: 0 },
+    { name: 'write', revision: writeDefinition.digest, definition: writeDefinition.canonical,
+      reviewed: true, readOnly: false, costCents: 0 },
+  ];
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+  await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDigest: catalogueDigest(tools),
+    checkedAt, expiresAt, connectionId: 'installed-odoo', accountMode: 'none', tools });
   await runner.run(mcpCatalogue);
+  return writeDefinition.digest;
+}
+
+it('saves a reviewed connection revision policy through one conditional event and replays it', async () => {
+  const writeRevision = await prepareReviewedOdooCatalogue();
   const url = '/api/org/integrations/odoo/tools';
   const read = await app.inject({ url, headers: headers('oidc-alice') });
   expect(read.statusCode).toBe(200);
   const state = read.json<{ sequence: number; tools: { name: string; mode: string; suggestion: string }[] }>();
   expect(state.tools).toMatchObject([{ name: 'read', mode: 'block', suggestion: 'allow' }, { name: 'write', mode: 'block', suggestion: 'ask' }]);
-  const payload = { commandId: 'policy-write', expectedSequence: state.sequence, connectionId: 'installed-odoo', toolName: 'write', toolRevision: 'b'.repeat(64), mode: 'allow' };
+  const payload = { commandId: 'policy-write', expectedSequence: state.sequence, connectionId: 'installed-odoo', toolName: 'write', toolRevision: writeRevision, mode: 'allow' };
   for (const sub of ['oidc-bob', 'oidc-mallory']) expect((await app.inject({ method: 'POST', url,
     headers: { ...headers(sub), origin: new URL(config.redirectUri).origin }, payload })).statusCode).toBe(403);
   const save = () => app.inject({ method: 'POST', url, headers: { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin }, payload });

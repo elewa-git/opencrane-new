@@ -126,6 +126,15 @@ refuses incompatible configuration. Deletion/purge are disabled; payload
 forgetting needs a separate qualified design. Callers supply credential file paths
 and own connection shutdown; one connection serves one silo.
 
+## Dated MCP catalogue evidence
+
+Dated MCP snapshots are checked with `validateMcpCatalogue` before append. The saved
+accepted tool count must match the complete tool list. Each definition supplies its own
+name, annotations and SHA-256 revision. The catalogue digest is calculated from these
+checked names and revisions. A nested changed catalogue must also match its event's
+server id and new digest. Old undated records still parse; policy reads keep them blocked.
+The event parser requires the exact `mcp-<serverId>` subject for all MCP records.
+
 ## Stream summaries
 
 `readStreamSummary(store, silo, subject, kind, deadline, take)` keeps facts in
@@ -232,8 +241,6 @@ configuration and a fresh silo installation remain unqualified.
 
 `chat-state-<memberId>` maps to `ev.chat-state.<memberId>`, including category reads.
 Preference parsing binds the human principal to that member id. Access checks remain the caller's job.
-
-## Conditional provider drain writes
 
 `expectedGlobalSequence` is allowed only for `ownership.seeded` and
 `provider.managed_calls_drain_set`. A drain command captures the global position

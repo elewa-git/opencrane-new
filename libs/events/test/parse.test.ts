@@ -6,12 +6,19 @@ import { parseEventByType } from '../src/parse.ts';
 // because this file is about binding `type` to a real schema, not about
 // the envelope shape itself.
 function baseEnvelope(type: string, data: unknown): Record<string, unknown> {
+  let subject = 'test-subject';
+  if (type.startsWith('mcp.') && typeof data === 'object' && data !== null) {
+    const serverId: unknown = Reflect.get(data, 'serverId');
+    if (typeof serverId === 'string') {
+      subject = `mcp-${serverId}`;
+    }
+  }
   return {
     id: 'evt_1',
     type,
     source: 'opencrane-server',
     time: '2026-09-30T10:00:00.000Z',
-    subject: 'test-subject',
+    subject,
     silo: 'acme',
     data,
   };

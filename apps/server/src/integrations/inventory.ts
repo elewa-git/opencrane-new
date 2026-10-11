@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { Ajv } from 'ajv';
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { losslessJson } from '@opencrane/models';
+import { losslessJson } from '@opencrane/events/lossless-json';
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { version } from './remote.ts';
 
 const text = z.string().min(1).max(200);
@@ -25,10 +26,13 @@ const page = z.object({ ...cache, tools: z.array(z.unknown()).max(100), nextCurs
 
 /** Keep the exact bounded tool JSON, independent of mutable server state and human policy. */
 export async function discoverInventory(call: (method: 'server/discover' | 'tools/list', cursor?: string) => Promise<string>) {
+  const checkedAt = new Date().toISOString();
+  const startedAt = Date.parse(checkedAt);
   const discoveryJson = await call('server/discover');
   const discoverResult = discovery.parse(JSON.parse(discoveryJson));
   if (Buffer.byteLength(JSON.stringify(discoverResult)) > 64 * 1024) throw new Error('inventory_limit');
   if (!discoverResult.supportedVersions.includes(version)) throw new Error('protocol_refused');
+  let expiresAt = startedAt + Math.min(discoverResult.ttlMs, 300_000);
   const tools = [];
   const rejectedTools: { name?: string; revision: string; reason: string }[] = [];
   const names = new Set<string>(), cursors = new Set<string>();
@@ -40,6 +44,8 @@ export async function discoverInventory(call: (method: 'server/discover' | 'tool
     const definitions = parsed.value instanceof Map ? parsed.value.get('tools')?.value : undefined;
     if (!Array.isArray(definitions)) throw new Error('protocol_refused');
     const result = page.parse(JSON.parse(raw));
+    // Count TTLs from the start to avoid extending evidence while pages are read.
+    expiresAt = Math.min(expiresAt, startedAt + result.ttlMs);
     for (const [index, rawTool] of result.tools.entries()) {
       const json = losslessJson(definitions[index]!.canonical);
       bytes += Buffer.byteLength(json.canonical);
@@ -59,9 +65,16 @@ export async function discoverInventory(call: (method: 'server/discover' | 'tool
         definition: json.canonical });
     }
     cursor = result.nextCursor;
-    if (!cursor) return boundedInventory({ toolCount: tools.length, tools, rejectedTools, discoverResult: losslessJson(discoveryJson).canonical,
-      serverInfo: { name: discoverResult._meta['io.modelcontextprotocol/serverInfo'].name, version: discoverResult._meta['io.modelcontextprotocol/serverInfo'].version },
-      schemaDigest: losslessJson(JSON.stringify(tools.map(t => ({ name: t.name, revision: t.revision })).sort((a, b) => a.name < b.name ? -1 : 1))).digest });
+    if (!cursor) {
+      const identity = discoverResult._meta['io.modelcontextprotocol/serverInfo'];
+      const serverInfo = { name: identity.name, version: identity.version };
+      const snapshot = { checkedAt, expiresAt: new Date(expiresAt).toISOString(),
+        toolCount: tools.length, tools, rejectedTools,
+        discoverResult: losslessJson(discoveryJson).canonical,
+        serverInfo,
+        schemaDigest: catalogueDigest(tools) };
+      return boundedInventory(snapshot);
+    }
     if (cursors.has(cursor)) throw new Error('pagination_limit');
     cursors.add(cursor);
   }

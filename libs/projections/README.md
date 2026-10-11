@@ -32,6 +32,15 @@ flowchart LR
 
 ## What it is responsible for
 
+The tool catalogue keeps exact tool definitions and their check and expiry dates.
+It retains both lists after a change, so the earlier list can still be read.
+A server without a fresh check is shown as unavailable. Saved definitions must
+match their hashes before review choices are kept. A hash is a fixed-length value
+calculated from the definitions. Checks renew only the same server in the same silo.
+A fresh catalogue check does not approve startup credentials. Required startup review
+keeps calls blocked.
+
+- Keep dated tool snapshots and the earlier list after a change.
 - Keep current destination rules, including who revoked them and when.
 
 - Keeps hosted tool policies unpublished, including older records and replay.

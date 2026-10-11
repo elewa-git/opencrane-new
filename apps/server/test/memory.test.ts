@@ -11,6 +11,8 @@ import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memo
   pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
 import { memoryWrittenEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
+import { losslessJson } from '@opencrane/events/lossless-json';
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import type { MemoryOptions } from '../src/memory/access.ts';
 import { reconcileCommands } from '../src/memory/commands.ts';
 import * as memoryAdmission from '../src/memory/admission.ts';
@@ -168,12 +170,18 @@ async function previewSetup() {
     requesterId: 'preview', task: 'chat_turn', executionMode: 'restricted' });
   await append('mcp-memory', 'mcp.server_registered', { serverId: 'memory', kind: 'hosted',
     locator: `registry.example.test/opencrane/server@sha256:${'a'.repeat(64)}`, registeredBy: 'owner' });
-  const tool = { name: 'recall', revision: 'a'.repeat(64), reviewed: true, costCents: 0 };
+  const definition = losslessJson('{"name":"recall","inputSchema":{"type":"object"}}');
+  const tool = { name: 'recall', revision: definition.digest, definition: definition.canonical,
+    reviewed: true, costCents: 0 };
+  const tools = [tool];
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
   await append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory', connectionId: 'server',
-    accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 1, tools: [tool] });
+    accountMode: 'none', schemaDigest: catalogueDigest(tools), toolCount: 1, tools,
+    checkedAt, expiresAt });
   await append('mcp-memory', 'mcp.server_published', { serverId: 'memory', publishedBy: 'owner' });
   await append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory', connectionId: 'server',
-    toolName: 'recall', toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'owner' });
+    toolName: 'recall', toolRevision: tool.revision, mode: 'allow', setBy: 'owner' });
   await previewGrant('mcp_server', 'memory');
   for (const scope of previewScopes) await previewGrant('memory_read', scope.scopeId);
   for (const target of [projection, groups, computers]) await runner.run(target);
@@ -2155,7 +2163,15 @@ it.each(['permission history', 'OpenFGA', 'append', 'same-scope append'] as cons
     expect((await remember('bob', 'person', `after-pool-${commandStage}`)).statusCode).toBe(200);
   });
 
+async function prepareFairWriteServices() {
+  // Give each case its own services. NATS fixtures stop when their test finishes.
+  // Keep earlier histories and recovery records out of the timed flood.
+  await cleanup();
+  await setup();
+}
+
 async function fairWrites(stage: 'scope history' | 'append') {
+  await prepareFairWriteServices();
   const commandStage = stage.replaceAll(' ', '-');
   const assistantId = `fair-${commandStage}`;
   await append(`assistant-${assistantId}`, 'assistant.created',
@@ -2262,10 +2278,33 @@ async function fairWrites(stage: 'scope history' | 'append') {
   expect(saved).toMatchObject({ memoryId: otherMemoryId, text: 'A human statement' });
 }
 
+// Use the shared services before fairness cases replace them with test-scoped fixtures.
+it('requires explicit nightly cost acceptance and the consenting member themselves', explicitBinding);
+
+it('checks assistant audience and paying group membership without changing facts', bindingMatrix);
+
+it('returns the original binding receipt and conflicts on changed or stale commands', originalBinding);
+
+it('rebuilds binding status without any key, model, tool, computer or scheduler port', replayBinding);
+
+it('requires both note grants and keeps the real assistant audience', noteBinding);
+
+it('checks the original command after an accepted append loses its reply', lostBindingReply);
+
+it('refuses nightly enablement after assistant deactivation alone',
+  refusesDeactivatedBindingAssistant);
+
+it('refuses nightly enablement after payer membership removal alone', refusesRemovedBindingPayer);
+
+it('allows disable after payer or assistant loss and refuses renewed enablement', disableLostAuthority);
+
+it('refuses binding events that claim another member or another scope', invalidBindingEvent);
+
 it.each(['scope history', 'append'] as const)(
   'lets another member save while one member floods slow %s writes', fairWrites);
 
 async function fairQueueAcrossScopesAndSessions() {
+  await prepareFairWriteServices();
   const floodScopes = new Set<string>();
   const groupsToWrite: string[] = [];
   for (let index = 0; index < 8; index++) {
@@ -2420,7 +2459,6 @@ async function explicitBinding() {
   expect((await bind(path('owner'), bindingInput)).statusCode).toBe(404);
   expect(await nats.store.head()).toBe(position);
 }
-it('requires explicit nightly cost acceptance and the consenting member themselves', explicitBinding);
 
 async function bindingMatrix() {
   const refused = [
@@ -2442,7 +2480,6 @@ async function bindingMatrix() {
   const shared = { ...bindingInput, commandId: 'bind-group', assistantId: 'dream-shared' };
   expect((await bind(path('dream-sales', 'group'), shared)).statusCode).toBe(200);
 }
-it('checks assistant audience and paying group membership without changing facts', bindingMatrix);
 
 async function originalBinding() {
   const position = await nats.store.head();
@@ -2464,7 +2501,6 @@ async function originalBinding() {
   expect((await get(`${path('dreamer')}/maintenance`, 'admin')).statusCode).toBe(404);
   expect((await get(`${path('dream-sales', 'group')}/maintenance`, 'admin')).statusCode).toBe(404);
 }
-it('returns the original binding receipt and conflicts on changed or stale commands', originalBinding);
 
 async function replayBinding() {
   const before = await get(`${path('dreamer')}/maintenance`, 'dreamer');
@@ -2485,7 +2521,6 @@ async function replayBinding() {
   // Restore the shared fact tables for the rest of this file's existing tests.
   await runner.rebuild(projection);
 }
-it('rebuilds binding status without any key, model, tool, computer or scheduler port', replayBinding);
 
 async function noteBinding() {
   const scopeId = memoryScopeId('acme', 'assistant_notes', 'dream-shared');
@@ -2505,7 +2540,6 @@ async function noteBinding() {
   const noRead = { ...input, commandId: 'notes-no-read', expectedRevision: 1 };
   expect((await bind(path('dream-shared', 'assistant_notes'), noRead)).statusCode).toBe(404);
 }
-it('requires both note grants and keeps the real assistant audience', noteBinding);
 
 async function lostBindingReply() {
   const input = { ...bindingInput, commandId: 'bind-lost-reply', expectedRevision: 1 };
@@ -2530,7 +2564,6 @@ async function lostBindingReply() {
   expect((await bind(path('dreamer'), input)).statusCode).toBe(200);
   expect(await nats.store.head()).toBe(position);
 }
-it('checks the original command after an accepted append loses its reply', lostBindingReply);
 
 async function refusesDeactivatedBindingAssistant() {
   const original = { ...bindingInput, commandId: 'bind-lost-reply', expectedRevision: 1 };
@@ -2548,8 +2581,6 @@ async function refusesDeactivatedBindingAssistant() {
   }
   expect((await bind(path('dreamer'), original)).statusCode).toBe(200);
 }
-it('refuses nightly enablement after assistant deactivation alone',
-  refusesDeactivatedBindingAssistant);
 
 async function refusesRemovedBindingPayer() {
   const original = { ...bindingInput, commandId: 'bind-lost-reply', expectedRevision: 1 };
@@ -2567,7 +2598,6 @@ async function refusesRemovedBindingPayer() {
   }
   expect((await bind(path('dreamer'), original)).statusCode).toBe(200);
 }
-it('refuses nightly enablement after payer membership removal alone', refusesRemovedBindingPayer);
 
 async function disableLostAuthority() {
   await append('team-dream-sales', 'team.member_removed',
@@ -2585,7 +2615,6 @@ async function disableLostAuthority() {
   expect((await bind(path('dreamer'), enable)).statusCode).toBe(404);
   expect(await nats.store.head()).toBe(position);
 }
-it('allows disable after payer or assistant loss and refuses renewed enablement', disableLostAuthority);
 
 async function invalidBindingEvent() {
   const scopeId = memoryScopeId('acme', 'person', 'dreamer');
@@ -2608,4 +2637,3 @@ async function invalidBindingEvent() {
     status: 'rejected', reason: 'invalid_event' });
   expect(await nats.store.head()).toBe(position);
 }
-it('refuses binding events that claim another member or another scope', invalidBindingEvent);

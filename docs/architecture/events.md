@@ -344,11 +344,12 @@ Readers replay these streams; replay never forwards or releases credentials.
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `mcp.server_registered` | admin | catalogue (draft; transport kind and optional catalogue reference) | validate (SSRF / image scan) → `mcp.server_discovered` or `mcp.server_rejected` |
-| `mcp.server_discovered` | reaction | catalogue (valid tools, schema digests, optional server identity and safe per-tool rejection reasons) | — |
+| `mcp.server_discovered` | reaction | catalogue (exact tool snapshots, digests, check and expiry dates, server identity and rejection reasons; old undated records remain unavailable) | — |
+| `mcp.catalogue_checked` | reaction | catalogue (checked saved definitions for the exact server and silo, with fresh check/expiry dates or a failed check; policyRevision stays unchanged) | — |
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
-| `mcp.tools_changed` | drift check | catalogue | quarantine the server in gateway config until re-reviewed |
+| `mcp.tools_changed` | drift check | catalogue (before/after snapshots, dated new catalogue and changed policyRevision) | quarantine the server in gateway config until re-reviewed |
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade | grants | OpenFGA tuples |
 | `connection.created` | person command after private secret staging | connections (secret *reference* only) | planned cleanup verifies that an orphan cannot become current before deleting its exact UID/version |
 | `connection.refreshed` | reaction (OAuth refresh) | connections | — |
@@ -596,6 +597,13 @@ The same procedure recovers from a corrupted projection, adds a new read model, 
 remains replayable but grants no execution. Duplicate names fail closed. Discovery
 resets modes to Block; hints only suggest a choice. Drift/unpublish/rejection
 quarantines execution. A new publication cannot restore a changed tool's old mode.
+
+Dated snapshots must contain every accepted tool definition. The back end recalculates
+its tool revisions and catalogue digest from these definitions before keeping a review
+choice or renewing a check. Tool counts, names and copied annotation flags must match.
+MCP event subjects must name the same server as their data. Policy replay also checks
+the silo. `policyRevision` is derived from saved event positions, never an input field.
+An incomplete old list needs a complete discovery before it can authorise a call.
 
 Discovery may also carry `rejectedTools`: up to 1,000 excluded declarations with
 an optional safe `name`, a definition `revision` digest and a fixed `reason` code.

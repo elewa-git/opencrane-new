@@ -144,3 +144,14 @@ access by itself.
 Audit records may include computer id, generation, takeover/lease references,
 reviewed requester event and affected-turn count. These are references, never
 bearer credentials. Private affected-turn lists are not part of organisation history.
+
+## Dated MCP catalogue evidence
+
+Tool lists carry check and expiry dates; undated lists cannot authorise calls.
+Unchanged checks preserve the approval rule revision while advancing the write position.
+The [projection contract](../../libs/projections/README.robot.md#dated-mcp-catalogue-evidence)
+records snapshot and expiry rules for #48 PR 1.
+
+Tool policy replies also carry `silo` and `serverId`, taken from the saved events.
+Older projected replies default these fields to null. The back end checks them during
+replay; parsing a browser reply does not authorise a tool call.
