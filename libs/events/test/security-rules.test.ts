@@ -122,7 +122,9 @@ describe('no plaintext conversation content', () => {
     });
 
     it.each(['key:1', 'key:abc_DEF-123'])('checks "%s" against its version format', (keyId) => {
-      const expected = type === 'memory.written' ? ['keyId'] : [];
+      const digestKeyTypes = ['memory.written', 'onboarding.survey_step_saved'];
+      const requiresDigest = digestKeyTypes.includes(type);
+      const expected = requiresDigest ? ['keyId'] : [];
       expect(rejectedFields(type, { keyId })).toEqual(expected);
     });
   });

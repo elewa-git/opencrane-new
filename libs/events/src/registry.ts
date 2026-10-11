@@ -1,3 +1,4 @@
+import { surveyEvents } from './survey.ts';
 import { egressEvents } from './egress.ts';
 
 import { takeoverEvents } from './takeover.ts';
@@ -42,6 +43,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     { scopeId: memoryWrittenExample.scopeId, scopeKind: 'person', ownerId: 'alice',
       memberId: 'alice', assistantId: 'assistant_1', payingGroupId: 'team_1',
       enabled: true, acceptedCapCents: 100, revision: 1 }),
+  ...surveyEvents,
   ...providerEvents,
   ...fileEvents,
   ...identityEvents,

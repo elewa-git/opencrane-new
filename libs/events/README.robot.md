@@ -293,3 +293,14 @@ fixed reason and affected turn ids. It belongs to `computer-<assistantId>`.
 Legacy started/ended shapes remain readable; consumers treat them as unverified.
 The other transitions and modern start/end schemas remain the next split of the
 accepted [design](../../docs/specs/phase-3/p3-17-take-control.md).
+
+## Private survey contracts
+
+`onboarding.survey_step_saved` and `onboarding.survey_restarted` use `personal-<memberId>`
+(wire `ev.personal.<memberId>`). Strict version-1 schemas require the matching human
+principal, command id and `opencrane-server` source. The full event limit is 16,384 bytes.
+`surveyAnswersSchema` checks four typed steps, UTF-8 text up to 4,096 bytes,
+name/pronouns up to 200/100 characters, 16 distinct groups/tasks and the fixed style/task ids.
+It refuses controls and lone surrogates through the existing memory text check.
+Survey text stays data; no command or route is enabled. See the
+[accepted design](../../docs/specs/phase-4/p4-18-account-persona-welcome.md).

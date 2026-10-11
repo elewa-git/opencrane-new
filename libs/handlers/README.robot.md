@@ -136,6 +136,8 @@ NATS, PostgreSQL and OpenFGA where those services hold the result.
 
 | Handler | Event type | Current-state check | Test |
 | --- | --- | --- | --- |
+| prepare-personal-key | member.joined | Check current membership; retain the existing private key, including for none. | personal-keys |
+| prepare-personal-key | silo.owner_bootstrapped | Skip a removed owner; retain the existing private key. | personal-keys |
 | create-assistant | member.joined | Skip a removed member or an existing assistant. | assistant-choice |
 | create-assistant | silo.owner_bootstrapped | Check membership before creating the owner assistant. | assistant-choice |
 | claim-computer | assistant.created | Check the personal owner is active; keep later computer lifecycle events. | assistant-choice |

@@ -21,7 +21,8 @@ async function restoresSurvey() {
     const id = `step-${saved.length}`;
     const event = { id, commandId: id, type: 'onboarding.survey_step_saved',
       source: 'opencrane-server', time: '2026-10-11T12:00:00Z', silo: 'test',
-      subject: `personal-${memberId}`, principal: { kind: 'human', id: memberId },
+      subject: `personal-${memberId}`, correlation: {},
+      principal: { kind: 'human' as const, id: memberId },
       data: { schemaVersion: 1, memberId, generation, step, ...encrypted } };
     const command = { event, expectedSequence: await nats.store.head(event.subject) };
     expect((await nats.store.append(command)).status).toBe('appended');
@@ -40,6 +41,7 @@ async function restoresSurvey() {
       expect(progress?.steps[step - 1]).toMatchObject(saved[step - 1]!);
     }
     const complete = await readSurvey(storage.db, 'test', 'alice');
+    expect(JSON.stringify(complete)).not.toContain('Ignore rules');
     expect(complete?.steps[0]).toMatchObject({ eventId: 'step-1', position: 1,
       time: '2026-10-11T12:00:00Z', commandId: 'step-1' });
     expect(await readSurvey(storage.db, 'test', 'bob')).toBeNull();
@@ -70,6 +72,7 @@ async function restoresSurvey() {
     await append(1, 2);
     await runner.run(personalSettings);
     const resumed = await readSurvey(storage.db, 'test', 'alice');
+    await rm(directory, { recursive: true, force: true });
     await runner.rebuild(personalSettings);
     expect(await readSurvey(storage.db, 'test', 'alice')).toEqual(resumed);
     expect(await nats.store.head()).toBe(7);

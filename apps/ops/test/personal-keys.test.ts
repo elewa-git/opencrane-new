@@ -14,8 +14,8 @@ async function preparesOnce() {
   const directory = await mkdtemp(`${tmpdir()}/personal-keys-`);
   const keys = conversationKeys(directory);
   const handler = personalKeyHandler(nats.store, keys);
-  const joined = event('joined', 'member-alice', 'member.joined');
-  joined.data = { ...joined.data, personalAssistant: 'none' };
+  const fixture = event('joined', 'member-alice', 'member.joined');
+  const joined = { ...fixture, data: { ...fixture.data, personalAssistant: 'none' } };
   try {
     expect(dispatcherHandlerNames({ PERSONAL_KEY_DIRECTORY: directory }))
       .toContain('prepare-personal-key');
@@ -32,10 +32,12 @@ async function preparesOnce() {
     await nats.stop();
     await nats.restart();
     const reopened = conversationKeys(directory);
-    await personalKeyHandler(nats.store, reopened).handle(joined, storage.db);
+    const restartedHandler = personalKeyHandler(nats.store, reopened);
+    await restartedHandler.handle(joined, storage.db);
     expect(await readFile(filename)).toEqual(originalKey);
     expect(reopened.decrypt('test', 'personal:alice', encrypted)).toBe('private answer');
-    await lifecycleHandlers(nats.store)[0].handle(joined, storage.db);
+    const createAssistant = lifecycleHandlers(nats.store)[0];
+    await createAssistant.handle(joined, storage.db);
     expect(await nats.store.head()).toBe(1);
     const removed = event('removed', 'member-alice', 'member.removed');
     await nats.seed([removed]);

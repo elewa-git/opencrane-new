@@ -450,3 +450,14 @@ each following event must match both and its exact subject. `policyRevision` com
 stored event positions. A matching catalogue check advances only `sequence` and dates.
 `test/mcp-snapshot-security.test.ts` checks forged revisions, incomplete definitions,
 wrong-server and wrong-silo renewal, changed tools and mismatched change records.
+
+## Private survey reads
+
+`personalSettings` runs under ProjectionRunner. `personal_settings` stores one JSON
+survey per `(silo, member_id)`: generation, ordered encrypted steps, next step and
+global progress position. Each step retains ciphertext/key id and event/command/time/position.
+`readSurvey` returns this internal record or null; callers must check current membership
+and projection catch-up before serving it. No HTTP reader is exposed here.
+Edits invalidate later current answers; restart requires the next generation.
+`ProjectionRunner.rebuild(personalSettings)` restores the same progress offline with
+readers/workers stopped. It needs no keys and performs no outside actions.

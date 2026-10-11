@@ -22,7 +22,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>event, memory and destination checks"]
+  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>event, survey, memory and destination checks"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
@@ -36,6 +36,8 @@ The back end checks tool hashes against their saved definitions. A hash is a fix
 value calculated from those definitions. Older records remain readable for replay.
 
 ## What it is responsible for
+
+- Check encrypted survey records and the bounded answers for all four steps.
 
 - Define exact HTTPS destination rules for the silo, a person or an assistant.
   Refuse reserved internal names, including `home.arpa` and names beneath it.

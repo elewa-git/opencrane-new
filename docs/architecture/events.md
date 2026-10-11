@@ -65,6 +65,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `toolset-<profile>` | computer profile (an image plus Codex built-in tool settings) | changed |
 | `conversation-<id>` | conversation | creation, messages and agent activity; older closes remain readable |
 | `participation-<id>` | participation | participant additions, removals and conversation closes |
+| `personal-<memberId>` | admitted person | private account, survey, persona and welcome content |
 | `chat-state-<memberId>` | chat-state | one person’s archive and read choices, tied to a join |
 | `approval-<id>` | approval request | requested, decided, used, expired, cancelled |
 | `decision-<request>` | gateway admission attempt | allow, ask or deny before dispatch |
@@ -85,6 +86,21 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `security-<silo>` | silo | alerts |
 
 ## Catalogue
+
+### Private survey progress
+
+| Event | Emitted by | Projections (content) | Reactions (logic) |
+| --- | --- | --- | --- |
+| `onboarding.survey_step_saved` | internal contract; command not exposed yet | personal-settings: current encrypted steps and saved receipts | none |
+| `onboarding.survey_restarted` | internal contract; command not exposed yet | personal-settings: new generation with empty current steps | none |
+
+Both events require schema version 1, the member's exact personal subject, a command id,
+a matching human principal and the server source. The whole event is at most 16 KiB.
+Steps 1–4 store ciphertext and key references. Text fields are at most 4 KiB;
+name/pronouns are at most 200/100 characters and task choices at most 16.
+Editing an earlier step removes later answers from current progress. Restart advances
+one generation. Historical encrypted answers stay in the event log. These wishes grant
+no access and start no model work. Replay copies ciphertext without touching keys.
 
 ### Gateway decisions
 
@@ -121,8 +137,8 @@ the personal default.
 | `org.created` | install | org | create the budget stream with defaults; generate gateway config |
 | `member.command_refused` | command | safe audit history and original-command status | — |
 | `member.invited` | admin command | invitations, members (pending) | none; link only, no email delivery |
-| `silo.owner_bootstrapped` | authenticated installation-token claim | members, identities | OpenFGA owner/member; seed ownership; emit `assistant.created` (personal); seed model `grant.given` |
-| `member.joined` | invitation accepted | members | OpenFGA `member`; emit personal `assistant.created` unless `personalAssistant: none`; seed model `grant.given` |
+| `silo.owner_bootstrapped` | authenticated installation-token claim | members, identities | OpenFGA owner/member; seed ownership; emit `assistant.created` (personal); seed model `grant.given`; prepare private personal key |
+| `member.joined` | invitation accepted | members | OpenFGA `member`; emit personal `assistant.created` unless `personalAssistant: none`; seed model `grant.given`; prepare private personal key |
 | `member.role_changed` | non-owner role command | members | OpenFGA role tuples |
 | `member.removed` | reviewed non-owner removal command; optional `reviewRevision` for old events | members | OpenFGA delete; deny access immediately from events; departure cleanup is pending |
 | `ownership.seeded` | fenced installation migration or bootstrap reaction | current owner set | OpenFGA seed receipt after existing owner tuples converge |
@@ -579,6 +595,7 @@ events. Desktop admission additionally requires an explicit member
 | `seed-ownership` | `silo.owner_bootstrapped` |
 | `seed-provider-default` | `provider.verification_recorded`, `provider.models_selected` |
 | `seed-model-grants` | `member.joined`, `silo.owner_bootstrapped`, `assistant.created` |
+| `prepare-personal-key` | `member.joined`, `silo.owner_bootstrapped` |
 | `create-assistant` | `member.joined`, `silo.owner_bootstrapped` |
 | `claim-computer` | `assistant.created`, `computer.lost` |
 

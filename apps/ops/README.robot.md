@@ -428,3 +428,29 @@ The `members` worker also initialises and runs `egressPolicy`. It copies saved
 rules and revocations only; it opens no connection to a destination. Rebuilding this
 projection uses `ProjectionRunner.rebuild(egressPolicy)` offline with readers/workers
 stopped. The replay CLI does not yet select this table.
+
+## Private survey keys and progress
+
+The `members` worker also runs `personalSettings`. The dispatcher enables
+`prepare-personal-key` only with `PERSONAL_KEY_DIRECTORY`, a server-only secret-store
+directory separate from conversation keys. It reuses `conversationKeys` with the
+identity `personal:<memberId>`; keys are never returned to events or computers.
+Duplicate delivery retains the same key. Current membership is checked from events
+before old joins/bootstrap records prepare custody, including `personalAssistant: none`.
+The reaction appends nothing and provisions no assistant. Enable/backfill its two
+subscriptions through the existing handler upgrade procedure. Missing configuration
+leaves the reaction disabled; future survey commands must refuse unavailable custody.
+Offline survey replay uses ProjectionRunner with reactions off; no replay CLI is added.
+
+Local source evidence: the tests first failed on 11 October 2026 at `1f55453e`.
+Focused tests use disposable NATS/PostgreSQL and retained private key files.
+Fresh-install survey journeys and customer secret-store qualification are NOT RUN.
+
+Source receipt, 11 October 2026: branch `work/p4-18-pr3`, base `1a9b578d`,
+test-first commit `1f55453e`; local worktree, disposable services, no fresh install.
+PASS: clean npm ci, lint, typecheck, check:events (115 types), Knip and lint:changelog.
+PASS: eight focused/regression files, 593 tests on each of two final-source runs,
+with PostgreSQL/NATS and `nice -n 10`. PASS: independent source review, no findings.
+Logs: `/tmp/p4-18-pr3-exact-tests-{1,2}.log`, `/tmp/p4-18-pr3-lint-final.log`,
+`/tmp/p4-18-pr3-typecheck-final.log` and `/tmp/p4-18-pr3-review.md` on the builder host.
+The root test suite was not run. CI and live qualification remain separate gates.
