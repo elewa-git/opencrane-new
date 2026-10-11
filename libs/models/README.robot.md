@@ -1165,6 +1165,7 @@ Logs: `/tmp/fix-307c-restack-314-tests.log`,
 NOT RUN on this restack: another full lint or typecheck, full root suite,
 paid calls or fresh-install managed-provider qualification.
 The switch-on command and managed gateway remain unfinished.
+
 ## Private connection custody (P3-8 PR 1)
 
 `src/connection-custody.ts` stages immutable Opaque Secrets through a private loopback
