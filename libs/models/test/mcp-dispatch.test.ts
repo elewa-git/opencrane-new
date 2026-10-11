@@ -204,7 +204,8 @@ async function refusesGenerationDuringDecisionSave() {
     const append = setup.nats.store.append.bind(setup.nats.store);
     async function replaceDuringSave(command: AppendCommand) {
       const result = await append(command);
-      if (command.event.type === 'decision.recorded') {
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'decision.recorded') {
         setup.options.mcpRoutes[0]!.generation = 'instance-2';
         setup.mcpPrecondition.generation = 'instance-2';
       }
