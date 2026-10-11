@@ -38,7 +38,7 @@ flowchart LR
 
 - Defines hosted startup credential requirements and review references without secret values.
 Nightly memory setup records the consenting member, assistant, paying group and
-accepted cost cap. This record starts no work and spends no money.
+accepted cost cap of exactly 100 integer cents. This record starts no work and spends no money.
 
 - Defines shared child records with a parent message, fixed payer and named people.
 - Defines delegated task relationships and outcomes, including cancellation. Older records

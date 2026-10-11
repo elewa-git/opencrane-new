@@ -255,6 +255,7 @@ projections check its exact identity. Server commands bind each change id to its
 
 `memory.maintenance_bound` records one scope, consenting `memberId`, assistant,
 paying group, enabled choice, accepted 100-cent cap and positive config revision.
+The cap exports as integer cents with a minimum of zero and accepts only 100.
 Only a server event with a matching human principal, scope subject and command id
 is accepted. Person scope requires its own member. The record contains no fact
 text and grants no spending authority. Run and dirty-scope contracts remain deferred.
