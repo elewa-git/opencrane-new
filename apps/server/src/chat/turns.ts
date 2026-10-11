@@ -10,7 +10,6 @@ import {
   activeMember,
   currentMembership,
   providerTurnAdmission,
-  managedProviderCallsEnabled,
 } from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
