@@ -1023,3 +1023,145 @@ conflict. `test/actor.test.ts` checks retries with the projected revision, with 
 without an open hold, and after switch-on refuses a reservation.
 A decision audit uses a fresh command id and `historyChecked: true` against zero.
 No earlier event can share that new command id.
+
+## Recorded draining before managed calls
+
+P4-22 row 4d is the first split of the remaining migration work. It provides
+`GET` and `POST /api/org/providers/:providerId/drain`. POST accepts `commandId`,
+`action: start | cancel`, `expectedRevision`, `expectedProviderSequence` and
+`expectedDrainSequence`. GET supplies both positions, the current revision,
+`draining` and `enabled`. Both operations require current Owner/Admin membership,
+provider management permission and the applied provider creation receipt. POST
+also requires the trusted Origin. Status uses the existing changes GET URL.
+
+Each command makes one conditional append to `provider-*`. A same-id retry returns
+the original receipt, even after cancellation. Changed arguments or a different
+administrator conflict. A stale position or revision conflicts. Configuration
+history is read before the two-second access check. Cancel writes a new event;
+it cannot undo switch-on or return managed traffic to a deployment key.
+
+The recorded drain stops new turn admissions and is checked again after payer
+reads. Already recorded turns can renew passes, make more calls and close through
+their original path. Spending checks and settlement keep the original payer,
+model and tariff. Switch-on ends draining when its event is replayed.
+The drain has no timer and no process-local setting. Replaying
+provider events restores it. Calls do not append provider events.
+
+Migration preparation reuses separate commands: create an explicitly named
+connection; save its existing key through secret custody; select its existing
+models; record explicit silo default task bindings. Each command has its own id,
+receipt and status read. A failed step resumes by that id; it does not repeat earlier
+steps or alter grants. An automatic first-provider default is not proof of the
+old deployment key's identity. The operator must record the intended choice.
+
+Remaining work: safe switch-on must prove that all legacy admissions and turns
+have finished before saving the marker, including admission already waiting to
+append when draining began. It must also check reservations and migration choices.
+The switch-on command, managed gateway startup, fallback-key refusal and recorded
+switch-off are not built here. Retirement remains unavailable. Fresh-install
+migration and managed dispatch are NOT RUN; this is source preparation only.
+
+Source receipt, 10 October 2026: `fe7bf89d3113cdac4f446f8c6aa9bf7d9634c085`.
+Linux worktree after `npm ci`; disposable NATS, PostgreSQL and OpenFGA;
+pinned gateway with a recording upstream. This is not a fresh customer install.
+PASS: all three changed test files, twice, 42 tests each; `PG_TEST_URL` set.
+PASS: full lint, root typecheck, Knip, event catalogue and changelog checks.
+Logs: `/tmp/p4-22-pr4d-final-pass-{1,2}.log` and `/tmp/p4-22-pr4d-*.log`.
+NOT RUN: full root suite, fresh-install journey, paid calls and independent review.
+
+Drain writes also check `expectedGlobalSequence`, captured before reading history.
+This keeps switch-on on the budget stream from racing the drain append. Other new
+events cause a conflict and require a new status read. Draining remains on provider
+streams, so already running legacy calls can still hold and settle money. Switch-on
+on the spending stream always ends draining.
+
+## Restack checks after the exact-stream correction
+
+Date: 10 October 2026. Source: `1db16002b7c711172d6eeec5420985845e88bad0`.
+Replayed only the four original drain commits onto `47cd8db0` from
+`work/p4-22-pr4c`. The rebase finished. Kept both the mode and drain tests,
+alongside the merged role, group-participant and memory documentation.
+Environment: Linux, Node 22, local worktree, disposable NATS and OpenFGA,
+PostgreSQL test server at `127.0.0.1:55432`, and a recording gateway.
+This is not a fresh customer install.
+
+PASS: all three changed test files and both unchanged authority files. Also ran
+`libs/event-store/test/history-checked.test.ts`. The first six-file batch had
+65 passes and one payer-race fixture failure. Updated its trigger to wait for
+the payer read after the mode read; all 13 tests in that file then passed.
+All 66 distinct tests passed across these runs. The authority guards passed once.
+The new race test saves switch-on immediately before the drain append, gets a
+conflict and checks that only the switch-on event was saved. Running legacy calls
+still settle their original charges during drain.
+
+PASS: changed-file ESLint, root typecheck, event catalogue (101 types), Knip,
+changelog, dependency direction, Markdown and offline links. Tests set
+`PG_TEST_URL`; tests and source checks use `nice -n 10`.
+Logs: `/tmp/p4-22-pr4d-restack-tests.log`,
+`/tmp/p4-22-pr4d-restack-admission.log`,
+`/tmp/p4-22-pr4d-restack-lint.log` and
+`/tmp/p4-22-pr4d-restack-typecheck.log`.
+NOT RUN: full root suite, another full root lint on this restacked branch,
+paid calls, independent review and fresh-install migration qualification.
+The base branch's full lint passed before the restack.
+
+## Checks after the settlement correction
+
+Date: 10 October 2026. Source: `ed645fb6cd922f5421b4a0a279f02fa9d8b31bb7`.
+Replayed only this branch's seven commits from `c38546b3` onto `00da8fde`
+from `work/p4-22-pr4c`. The rebase finished. Compared the old and new commit
+ranges: the drain code is unchanged. Conflict resolutions keep main's approval
+notes, the parent's settlement tests and this branch's drain tests.
+
+The actor and its tests match the fixed parent. Both authority files match main
+and are unchanged. Holds saved before switch-on can settle, release or expire on
+the same actor. Draining still records no budget event and leaves running calls
+on their original path.
+
+Environment: Linux, Node 22.23.3, local worktree; disposable NATS and OpenFGA,
+PostgreSQL at `127.0.0.1:55432` and a recording gateway. This is not a fresh install.
+Tests set the documented test-only `PG_TEST_URL`, use `nice -n 10` and one worker.
+The event catalogue check passes with 104 types.
+PASS: one six-file batch passed all 69 tests. It ran all three changed test files,
+both unchanged authority files and `libs/event-store/test/history-checked.test.ts`.
+The 100,000-event authority guard and the switch-on settlement races passed.
+PASS: root typecheck.
+PASS: full root lint, Knip and changelog checks. Lint reports 15 existing warnings
+and no errors. No production code changed after these checks.
+
+Logs: `/tmp/p4-22-pr4d-settlement-restack-tests.log`,
+`/tmp/p4-22-pr4d-settlement-restack-lint.log`,
+`/tmp/p4-22-pr4d-settlement-restack-typecheck.log` and
+`/tmp/p4-22-pr4d-settlement-restack-events.log`.
+
+NOT RUN: full root suite, paid calls, fresh-install managed-provider qualification
+and another independent review. The switch-on command and managed gateway remain
+unfinished.
+
+## Restack after the spending-limit revision fix
+
+Date: 10 October 2026. Restacked source: `59931d5f`.
+Replayed only this branch's eight commits from `00da8fde` onto `0199abaa`
+from `work/p4-22-pr4c`. The rebase finished. README diagram conflicts retain
+main's member-access description, the parent's spending-revision description
+and this branch's draining description. Production additions and removals match
+the previous drain branch at `5e99e5d5`.
+
+The actor and its tests match the fixed parent. Both authority test files match
+main and remain unchanged. The parent's narrow money verification returned LAND.
+No new money behaviour is added by this restack.
+
+Environment: Linux, Node 22.23.3, local worktree; disposable NATS and OpenFGA,
+a recording gateway and PostgreSQL at `127.0.0.1:55432`. This is not a fresh install.
+PASS: all three changed test files, once, 48 tests. The run sets `PG_TEST_URL`,
+uses `nice -n 10` and one worker. PASS: event catalogue (105 types), changelog
+and Markdown checks. The fixed parent passed full lint, typecheck, Knip and both
+seven-file test runs, including the unchanged authority files.
+
+Logs: `/tmp/fix-307c-restack-314-tests.log`,
+`/tmp/fix-307c-restack-314-events.log`,
+`/tmp/fix-307c-restack-314-changelog.log` and
+`/tmp/fix-307c-restack-314-docs.log`.
+NOT RUN on this restack: another full lint or typecheck, full root suite,
+paid calls or fresh-install managed-provider qualification.
+The switch-on command and managed gateway remain unfinished.

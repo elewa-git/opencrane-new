@@ -40,3 +40,5 @@ export { MemoryPersonScopeOnly, memoryRights, verifyMemoryContext, type MemoryCo
 export { conversationParticipation, conversationHistoryPosition } from './conversation.ts';
 export { memoryReferences } from './memory-lineage.ts';
 export { providerTurnAdmission, managedProviderCallsEnabled } from './provider-turns.ts';
+
+export { providerDrainCommand, providerDrainStatus } from './provider-drain.ts';

@@ -157,7 +157,7 @@ export async function appendProvider(store: EventStore, silo: string, providerId
   }
   throw new Error('Provider append unavailable');
 }
-function reconcileProvider(saved: StoredEvent, attempted: EventEnvelope) {
+export function reconcileProvider(saved: StoredEvent, attempted: EventEnvelope) {
   // Compare both payloads in schema order, as the event store does when saving them.
   const parsed = parseEventByType(attempted);
   if (!parsed.success) {

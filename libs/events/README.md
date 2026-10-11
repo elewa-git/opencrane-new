@@ -25,12 +25,10 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks memory commands and records dispatch, consent, invitation refusals, participants, child chats, delegation and owner appointments| events["libs/events<br/>event and memory checks"]
   store["libs/event-store<br/>saved event log"] -.->|checks private chat choices, child records and delegated tasks| events
   projections["libs/projections<br/>read tables"] -.->|checks saved task relationships| events
-  server["apps/server<br/>back end"] -.->|checks reviewed removals and memory commands and records dispatch, consent, invitation refusals and participant facts| events["libs/events<br/>event and memory text checks"]
+  server["apps/server<br/>back end"] -.->|checks reviewed removals and memory commands and records dispatch, consent, refusals and participant facts| events["libs/events<br/>event and memory checks"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads owner, assistant and provider choices| events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices and switch-on| events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices and spending mode| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks turn and spending data| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> zod["Zod<br/>data checks"]
@@ -46,8 +44,8 @@ flowchart LR
 - Records the departure review used for a member removal. Older removals still replay.
 - Defines owner appointment requests and confirmations on member records.
 
-- Define the record that says managed provider calls were switched on.
-  Keep that record in the silo’s spending stream.
+- Define records for pausing new model turns, cancelling that pause and switching on managed calls.
+  Keep switch-on in the silo’s spending stream.
   Stop new holds while allowing existing holds to settle or be released.
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.

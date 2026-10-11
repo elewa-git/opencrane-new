@@ -10,10 +10,8 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, child joins, owner appointments and spending| models["libs/models<br/>AI rules and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices, draining, owner appointments and spending| models["libs/models<br/>AI rules, provider choice and spending"]
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices and spending| models["libs/models<br/>AI rules and provider choice"]
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices and spending revisions| models["libs/models<br/>AI rules, provider choice and spending"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth<br/>access passes"]
@@ -48,6 +46,8 @@ flowchart LR
   own pause stops new model work. No command switches this on yet, so existing installs
   keep their current path.
   Reads the personal paying group and switch-on state together, once per new spending event.
+- Pause new model turns with a saved drain command while running turns finish.
+  An administrator can cancel the drain with another saved command.
 - Choose an AI model from a fixed task table before switch-on.
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.

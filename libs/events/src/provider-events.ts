@@ -26,6 +26,10 @@ export const providerBindingSchema = z.object({ ...base,
 const managedCallsSchema = z.object({ ...base,
   expectedProviderSequence: z.int().nonnegative(),
 }).strict();
+export const providerDrainSchema = z.object({ ...base,
+  expectedProviderSequence: z.int().nonnegative(), expectedDrainSequence: z.int().nonnegative(),
+  draining: z.boolean(),
+}).strict();
 const verification = { ...base, attemptId: id, kind: z.enum(['reachability', 'model']),
   model: modelId.optional(), reservedCents: centsSchema.optional() };
 export const providerRequestedSchema = z.object(verification).strict();
@@ -53,6 +57,9 @@ export const providerEvents = [
   event('provider.model_binding_set', 'provider', 'An admin recorded a provider choice or pause.',
     providerBindingSchema, { ...baseExample(), kind: 'silo_default', dependantId: 'acme',
       task: 'chat_turn', expectedProviderSequence: 0, previousBindingSequence: 0, state: 'active', model: 'gpt-6.1-sol' }),
+  event('provider.managed_calls_drain_set', 'provider', 'An admin started or cancelled a drain.',
+    providerDrainSchema, { ...baseExample(), expectedProviderSequence: 0,
+      expectedDrainSequence: 0, draining: true }),
   event('provider.managed_calls_enabled', 'budget', 'Managed provider calls were switched on.',
     managedCallsSchema, { ...baseExample(), expectedProviderSequence: 0 }),
   event('provider.verification_requested', 'provider', 'An admin requested a revision-bound check.',

@@ -216,3 +216,8 @@ Saving switch-on advances the spending stream. A budget writer using the old
 position cannot save another hold. The actor can read past this marker to settle
 or release holds saved before it, without a restart. It still stops when another
 budget writer has saved a change. This event has no production command yet.
+
+`provider.managed_calls_drain_set` records `draining`, the expected provider-category
+position and the previous drain position with the provider's current revision.
+Starting and cancelling both use this event. It grants no access, changes no key
+or model choice and reserves no money. A drain command cannot reverse switch-on.

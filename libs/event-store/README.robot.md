@@ -84,7 +84,7 @@ new event data. These default history searches grow with the entity's history.
 `historyChecked: true` skips the search before publishing, including on retries.
 The caller must have checked every event on the event's own subject up to
 `expectedSequence` and found no earlier copy of that command. Any other supplied
-value is rejected as `invalid_event`. Three callers opt in:
+value is rejected as `invalid_event`. These callers opt in:
 
 - `BudgetActor` replays the budget stream. Ordinary commands use new random ids;
   `configure` checks caller-supplied command ids separately.
@@ -102,6 +102,8 @@ store another copy: retries keep the original expected position. The normal
 path makes one publish and no history reads. A refusal reads only later events.
 Both modes keep the same Msg-Id and conditional headers. Duplicate
 acknowledgements still check the saved event with `sameCommand`.
+Decision audits also opt in. Each uses a new command id and a new decision stream
+at position zero, so there is no earlier matching request to find.
 No separate ledger or duplicate window determines command success.
 
 `readStream(subject, fromSequence)` is a finite snapshot through the head
@@ -230,3 +232,12 @@ configuration and a fresh silo installation remain unqualified.
 
 `chat-state-<memberId>` maps to `ev.chat-state.<memberId>`, including category reads.
 Preference parsing binds the human principal to that member id. Access checks remain the caller's job.
+
+## Conditional provider drain writes
+
+`expectedGlobalSequence` is allowed only for `ownership.seeded` and
+`provider.managed_calls_drain_set`. A drain command captures the global position
+before loading provider configuration and spending mode. Its one append checks
+both that position and the provider-category position. This refuses switch-on on
+the budget stream between the command's last check and its append. Any other new
+event also causes a conflict; the administrator can reload and try again.

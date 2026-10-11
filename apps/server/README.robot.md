@@ -1531,3 +1531,40 @@ personal-payer test still requires at most two new rows after two budget changes
 There is no switch-on route in this slice. Safe migration must first stop new legacy
 admissions and drain running legacy turns. Managed dispatch remains refused until
 its gateway and provider checks are built.
+
+## Provider drain routes
+
+The drain GET and POST routes reuse provider session, Origin and error handling.
+Their contract is in [the models details](../../libs/models/README.robot.md#recorded-draining-before-managed-calls).
+Turn admission refuses an active drain before selecting a new turn's path and
+checks it again before saving the start. Replayed starts and final reports keep the
+saved turn. `test/provider-drain.test.ts` checks receipts, retry, cancellation,
+replay, stale inputs and refused callers using real NATS, PostgreSQL and OpenFGA.
+`test/provider-turn-admission.test.ts` checks admission and a drain saved during
+the final budget check. This check shares the personal payer's incremental summary.
+The models provider contract test checks repeated gateway calls and settlement
+during drain. Production switch-on is still unavailable.
+
+## Shared budget summary restack checks
+
+Date: 10 October 2026. Source: `eac1150b`.
+Rebased only this branch's nine commits from `238bf58e` onto the corrected
+provider-admission branch at `b54308cf`. The rebase finished. The provider
+summary keeps both the shared budget fold and the existing drain logic.
+The race test names now describe the final budget check and separately prove
+that the drain was saved during that check. The refused start remains refused.
+
+Environment: Linux, Node 22.23.3, local worktree, disposable NATS and OpenFGA,
+recording gateway and PostgreSQL at `127.0.0.1:55432`; not a fresh install.
+PASS: one run of all three changed test files plus the unchanged personal-payer
+regression, four files and 50 tests in 85.87 seconds. Tests set the documented
+test-only `PG_TEST_URL`, use `nice -n 10` and one worker. PASS: root lint,
+typecheck, check:events (107 types), Knip and changelog validation. Root lint
+includes Knip and `npm run lint:changelog`; it reports 15 existing warnings
+and no errors. Both authority files remain unchanged from main.
+
+Logs: `/tmp/p4-22-pr4d-budget-tests.log`, `/tmp/p4-22-pr4d-budget-lint.log`,
+`/tmp/p4-22-pr4d-budget-typecheck.log`, `/tmp/p4-22-pr4d-budget-events.log`
+and `/tmp/p4-22-pr4d-budget-restack.diff`.
+NOT RUN: full root suite, paid calls and fresh-install managed-provider qualification.
+The switch-on command and managed gateway remain unfinished.

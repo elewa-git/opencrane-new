@@ -10,7 +10,6 @@ import {
   activeMember,
   currentMembership,
   providerTurnAdmission,
-  managedProviderCallsEnabled,
 } from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -307,8 +306,8 @@ async function admitTurn(store: EventStore, context: TurnContext, conversation: 
     admission.defaultPayingGroupId);
   const deadline = payer.fresh?.deadline ?? performance.now() + 2000;
   async function confirmAdmission() {
-    const enabled = await managedProviderCallsEnabled(store, context.silo, deadline);
-    if (enabled !== admission.enabled) {
+    const current = await providerTurnAdmission(store, context.silo, context.assistantId, deadline);
+    if (current.enabled !== admission.enabled || current.draining !== admission.draining) {
       throw new TurnAdmissionRejected('Provider setup changed; try again');
     }
     await payer.fresh?.();
@@ -328,6 +327,9 @@ function addLifecycleDetails(data: { executionMode?: ExecutionMode; status?: 'co
 
 function applyProviderChoice(data: TurnBinding,
   admission: Awaited<ReturnType<typeof providerTurnAdmission>>) {
+  if (admission.draining) {
+    throw new TurnAdmissionRejected('Model work is draining; try again after the provider change');
+  }
   if (!admission.enabled) {
     return;
   }
