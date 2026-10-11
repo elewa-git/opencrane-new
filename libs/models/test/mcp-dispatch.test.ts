@@ -89,10 +89,12 @@ async function refusesChangedCall(change: typeof changes[number]) {
       path = '/dispatch/mcp/other/installed';
     } else if (change === 'silo') {
       const [encoded, signature] = value.split('.');
-      const decoded: unknown = JSON.parse(Buffer.from(encoded!, 'base64url').toString());
+      const decodedBytes = Buffer.from(encoded!, 'base64url');
+      const decoded: unknown = JSON.parse(decodedBytes.toString());
       const binding = z.record(z.string(), z.unknown()).parse(decoded);
       binding['silo'] = 'other';
-      const substituted = Buffer.from(JSON.stringify(binding)).toString('base64url');
+      const substitutedBytes = Buffer.from(JSON.stringify(binding));
+      const substituted = substitutedBytes.toString('base64url');
       value = `${substituted}.${signature}`;
     } else {
       await pause(2100);
@@ -211,7 +213,8 @@ async function refusesGenerationDuringDecisionSave() {
       }
       return result;
     }
-    const changed = vi.spyOn(setup.nats.store, 'append').mockImplementation(replaceDuringSave);
+    const changed = vi.spyOn(setup.nats.store, 'append');
+    changed.mockImplementation(replaceDuringSave);
     try {
       const request = { method: 'POST', headers, body };
       const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,

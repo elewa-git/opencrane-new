@@ -80,8 +80,11 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
       schemaDigest: policy.schemaDigest,
       toolRevision: policy.revision, toolName: policy.name, bodyDigest: digest(body), expiresAt };
     const signedBinding = { ...binding, nonce: randomUUID() };
-    const encoded = Buffer.from(JSON.stringify(signedBinding)).toString('base64url');
-    const signature = createHmac('sha256', signingKey).update(encoded).digest('base64url');
+    const bindingBytes = Buffer.from(JSON.stringify(signedBinding));
+    const encoded = bindingBytes.toString('base64url');
+    const signatureHash = createHmac('sha256', signingKey);
+    signatureHash.update(encoded);
+    const signature = signatureHash.digest('base64url');
     const token = `${encoded}.${signature}`;
     // Keep permits only in this active process. A restart cannot revive an old call.
     pending.set(token, { ...binding, confirmAccess });
