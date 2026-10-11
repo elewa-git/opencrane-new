@@ -10,9 +10,10 @@ const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0 });
 const catalogue = catalogueEvidence([tool]);
 const body = JSON.stringify(capture.body);
 
-async function prepare(setup: Fixture) {
-  const registration = { serverId: 'fixture', kind: 'remote',
-    locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' };
+async function prepare(setup: Fixture, kind: 'remote' | 'hosted' = 'remote') {
+  let locator = 'https://fixture.example.test/mcp';
+  if (kind === 'hosted') locator = `registry.example.test/fixture@sha256:${'a'.repeat(64)}`;
+  const registration = { serverId: 'fixture', kind, locator, registeredBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.server_registered', registration);
   const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
     ...catalogue };
@@ -160,3 +161,18 @@ async function refusesUpstreamChange(change: typeof upstreamChanges[number]) {
 }
 it.each(upstreamChanges)('requires the backend to atomically refuse a changed %s',
   refusesUpstreamChange);
+
+async function refusesUnadmittedImage() {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup, 'hosted');
+    const request = { method: 'POST', headers, body };
+    const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
+      request);
+    expect(response.status, await response.text()).toBe(403);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses a hosted image without recorded image admission', refusesUnadmittedImage);
