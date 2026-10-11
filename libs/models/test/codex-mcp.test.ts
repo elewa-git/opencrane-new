@@ -454,6 +454,8 @@ async function bindsHeldApproval(change: string) {
     }
     const retryHeaders = { ...headers, 'x-opencrane-approval-id': decision.approvalId };
     const retry = { ...options, headers: retryHeaders };
+    if (change === 'generation') setup.options.mcpRoutes[0]!.generation = 'instance-2';
+    if (change === 'backend') setup.options.mcpRoutes[0]!.upstream = '127.0.0.1:1';
     if (change === 'wrong-id') retryHeaders['x-opencrane-approval-id'] = 'f'.repeat(64);
     if (change === 'bytes') {
       const body = structuredClone(capture.body);
@@ -479,7 +481,8 @@ async function bindsHeldApproval(change: string) {
     expect(setup.received()).toBe(['same', 'unchanged'].includes(change) ? 1 : 0);
   } finally { await setup.close(); }
 }
-it.each(['same', 'unchanged', 'wrong-id', 'bytes', 'allow', 'timeout', 'decision-race'])(
+it.each(['same', 'unchanged', 'wrong-id', 'bytes', 'allow', 'timeout', 'decision-race',
+  'generation', 'backend'])(
   'uses only this held approval through the real gateway: %s', bindsHeldApproval, 40_000);
 
 it('keeps requester identity and the stored review digest when reading an approval', async () => {
