@@ -231,4 +231,4 @@ records require that saved form. Port defaults to 443 in commands. Wildcards, UR
 IP/numeric hosts, malformed labels and internal names are refused. DNS address checks
 belong to later admission work; no DNS lookup or network permission is added here.
 Event parsing checks the stream format, silo scope and human actor. Commands and
-projections check its exact identity. Command ids are scoped to this exact rule.
+projections check its exact identity. Server commands bind each change id to its first saved rule and arguments across the silo.

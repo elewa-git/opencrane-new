@@ -1595,8 +1595,13 @@ The existing `modelAccess` service options supply the silo, session identity, ev
 store and permissions service for these routes. Owner/Admin access is required.
 `POST /api/org/egress/destinations` accepts `commandId`, `expectedSequence`,
 `action: allow|revoke`, `scope: silo|person|assistant`, `subjectId`, `host`, and optional
-`port` (443). It saves one rule with one conditional append. Reads of policy and
-membership history finish before the two-second check of membership positions.
+`port` (443). It saves one rule with one conditional append. Each change id belongs to its first
+saved target and arguments across all destination rules in the silo. Writes read
+`egress-*` and check its latest position in that append. The caller's
+`expectedSequence` still checks the selected rule. A concurrent save on any rule
+returns 409, so the caller must reload before retrying. This serialises policy
+saves without adding another event or a separate receipt store. Reads of policy
+and membership history finish before the two-second check of membership positions.
 `GET /api/org/egress/destinations/changes/:commandId` takes the same scope/subject/
 host/port in query parameters. It returns only the original caller's saved receipt.
 Both routes use no-store; writes require the configured browser origin. Saved results

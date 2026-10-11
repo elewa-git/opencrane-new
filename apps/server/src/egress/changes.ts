@@ -30,6 +30,21 @@ async function ruleHistory(options: EgressOptions, rule: EgressRule, deadline: n
   }
   return rows;
 }
+async function destinationHistory(options: EgressOptions, deadline: number) {
+  const rows = await history(options.store, 'egress-*', options.silo, deadline);
+  const rules: StoredEvent[] = [];
+  for (const row of rows) {
+    if (!['egress.destination_allowed', 'egress.destination_revoked'].includes(row.event.type)) {
+      continue;
+    }
+    const data = egressDestinationDataSchema.parse(row.event.data);
+    if (egressGrantStream(options.silo, data) !== row.event.subject) {
+      throw new Error('Wrong rule');
+    }
+    rules.push(row);
+  }
+  return { rules, sequence: rows.at(-1)?.sequence ?? 0 };
+}
 function receipt(row: StoredEvent) {
   return { status: 'appended' as const, commandId: row.event.commandId,
     changeId: row.event.id, sequence: row.sequence, operation: row.event.type, time: row.event.time };
@@ -50,7 +65,11 @@ export async function egressCommand(options: EgressOptions, memberId: string, va
   const subject = egressGrantStream(options.silo, rule);
   // Finish long reads before starting the two-second write check.
   const deadline = performance.now() + 10_000;
-  const rows = await ruleHistory(options, rule, deadline);
+  const changes = await destinationHistory(options, deadline);
+  function matchesRule(row: StoredEvent) {
+    return row.event.subject === subject;
+  }
+  const rows = changes.rules.filter(matchesRule);
   const membership = await currentMembership(options.store, options.silo, memberId,
     undefined, deadline);
   const type = input.action === 'allow' ? 'egress.destination_allowed' : 'egress.destination_revoked';
@@ -59,7 +78,7 @@ export async function egressCommand(options: EgressOptions, memberId: string, va
   function matchesCommand(row: StoredEvent) {
     return row.event.commandId === input.commandId;
   }
-  const original = rows.find(matchesCommand);
+  const original = changes.rules.find(matchesCommand);
   if (original) {
     checkOriginal(original, type, memberId, data);
     return receipt(original);
@@ -76,8 +95,10 @@ export async function egressCommand(options: EgressOptions, memberId: string, va
   await fresh();
   let result;
   try {
-    const command = { event, expectedSequence: input.expectedSequence,
-      historyChecked: true as const, deadline: fresh.deadline };
+    // Check all destination changes so racing requests cannot reuse an id on another rule.
+    // Refuse an unrelated policy save too; the caller must reload before trying again.
+    const command = { event, expectedSequence: changes.sequence,
+      expectedSubject: 'egress-*', historyChecked: true as const, deadline: fresh.deadline };
     result = await options.store.append(command);
   } catch {
     throw new ChangeUnknown('Unknown');
