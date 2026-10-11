@@ -284,3 +284,75 @@ root suite was not started locally.
 The full root suite, paid model calls, fresh-install removal and desktop
 qualification, and the second independent review remain NOT RUN. This repair
 makes no fresh-install capability claim.
+
+## Repeated turn starts after the provider changes
+
+The 11 October 2026 repair uses the existing worktree for PR #318. Fetching and
+rebasing confirmed that `origin/main` at `5f75ec5b` is already an ancestor of
+`b6b91bf9`. Neither rebase working directory remained.
+
+Main does not contain the removed-member test. A detached worktree at `5f75ec5b`
+ran the branch's unchanged `computer-turns.test.ts` against main's production code.
+Both removal cases failed: first and repeated starts returned Alice's turn after
+`member.removed` and `member.invited`. That invitation did not record a join.
+
+On the rebased branch, the complete computer-turn file reproduced the train's
+failure: 21 tests passed and the repeated-start removal case failed. The first
+start case passed. The rebase had added `!facts.turn?.hasStart` around
+`startAuthority`, skipping its existing repeated-start membership check.
+The computer summary then returned the earlier binding without checking access.
+
+The repair calls `startAuthority` for every start. A repeated start uses
+`requireTurnMember`, reads only the member stream, and confirms its position
+before returning the saved binding. Conversation history is read before this
+two-second check. New starts keep their provider admission and payer checks.
+Repeated starts keep their saved payer, provider, model and execution mode.
+They do not select a new provider or run a new-turn drain check.
+
+| Focused check | Result |
+| --- | --- |
+| Main with the unchanged branch removal cases | FAIL: both cases returned Alice's turn instead of rejecting. |
+| Rebased branch before repair, complete computer-turn file | FAIL: one failed and 21 passed. Only repeated start after removal and invitation failed. |
+| Repaired source, complete computer-turn file | PASS: all 22 tests, including both removal cases and saved provider replay. |
+| Isolated live-view activity file | PASS: all 39 tests. The grant-revocation cleanup timeout did not recur. |
+
+The protected tests and all assertions remain unchanged. The existing failing
+computer-turn test supplies the before/after proof. The newly merged provider
+admission fixture now records Alice's join before requesting work. Without it,
+nine cases failed the existing first-start membership check before reaching
+their provider assertions. No dependency was added. Logs and the repeat
+selection are in `/tmp/pr318-membership/`. The main worktree has its own installed
+dependencies. Two pre-existing uncommitted edits were saved in a named Git stash
+before the rebase; they are also in `existing-edits.patch` beside the logs.
+
+Main then advanced with #333. The final rebase onto `d1d9c8f2` finished, with
+both the private-connection and closing-read documentation retained. Main is an
+ancestor of the rebased branch and neither rebase working directory remains.
+A comparison with the tested repair confirms that all existing server and library
+code, test files, package files and test settings are unchanged. Main adds two
+separate custody modules and their licence notice.
+
+| Repeat on the repaired source | Result |
+| --- | --- |
+| First broad selection: 32 files | PARTIAL: 617 passed, 12 failed and two optional cases skipped. Nine failures were the missing join in the provider fixture. Two gateway cases and one chat case had startup or timeout failures. |
+| Second broad selection: the same 32 files | PARTIAL: 628 passed, one failed and the same two optional cases skipped. The 147-cent gateway case received 403 instead of 200; it passed in the first run. |
+| Final focused selection after rebase, twice | PASS: seven files and 51 tests in each run. Includes both turn-removal cases, all seven earlier regressions, provider admission, queued-file refusal and membership checks. |
+| Four isolated follow-ups after rebase | PASS: the gateway continuation, daily safety cap, 147-cent reservation and chat activity cases. Their causes remain unconfirmed; no assertion or timeout changed. |
+| Browser navigation after rebase, twice | PASS: three tests in each run. |
+
+Every one of the 629 runnable cases in the broad selection has at least two
+passing results after the fixture correction and follow-ups. Both broad runs
+passed the row 7 access cases and all seven earlier regressions. The paid OpenAI
+and optional approval browser cases remain skipped. All test invocations set
+`PG_TEST_URL` and use `nice -n 10`. Root repeats use one worker and run sequentially.
+
+The final focused runner completed both 51-test runs, then its temporary follow-up
+script exited with a quoting error before starting Vitest. The corrected script
+passed the four follow-ups and both navigation repeats. This runner error did not
+change a test result. The first lint run found the duplicated closing-read section.
+Its removal retains the identical section beside decision activity. A concurrent
+lint retry was stopped to leave resources for the test repeats. Required checks
+are repeated before pushing.
+
+The full root suite, paid calls and fresh-install departure and desktop
+qualification remain NOT RUN. The merge train owns landing after GitHub CI.

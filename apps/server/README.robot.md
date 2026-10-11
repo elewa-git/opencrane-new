@@ -1534,7 +1534,10 @@ checked position. Computer-register reads use `readActiveMember` with the admin
 role. They also require the current member event and its applied permission receipt.
 
 A first personal start and every repeated start check the requester before the
-lifecycle append or returned binding. Shared admission retains its member and group
+lifecycle append or returned binding. Repeated starts use `requireTurnMember` and
+check only the requester's member stream after reading conversation history.
+They keep the saved payer, provider and model without selecting them again.
+Shared admission retains its member and group
 checks. The bridge reads private history outside the two-second access check, then
 checks membership before minting the turn token and confirms the member position
 again before releasing the token or history. Queued message/tool frames check

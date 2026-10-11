@@ -75,8 +75,9 @@ flowchart LR
   counts and dates for private history. A complete review lets admins remove access.
 - Keeps checking member access while a live connection is open.
 - Records changes as events and reads the current state from PostgreSQL.
-- Keep the original provider choice when repeating or closing a recorded turn.
-  Pass its model to the turn-token issuer and the computer that runs the turn.
+- Keeps the original provider choice when repeating or closing a recorded turn.
+  Checks current membership before repeating a start and passes the saved model
+  to the turn-token issuer and the computer that runs the turn.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
   Checks saved participation changes before returning private content.
   Checks closing events even while read tables are catching up. Keeps the last

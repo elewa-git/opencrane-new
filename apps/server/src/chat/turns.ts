@@ -14,7 +14,7 @@ import {
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
-  type StoredEvent, type SummaryKind } from '@opencrane/event-store';
+  type StoredEvent } from '@opencrane/event-store';
 import { chatMembership, participationClosed } from './participation.ts';
 import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
@@ -70,7 +70,8 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   let refusal: TurnAdmissionRejected | undefined;
   requireThreadOwner(facts, data);
   let executionMode = facts.turn?.lastStartExecutionMode;
-  if (input.status === 'started' && !facts.turn?.hasStart) {
+  // Check current membership on repeats before returning the saved turn.
+  if (input.status === 'started') {
     try {
       executionMode = startExecutionMode(facts, input);
       const admission = await startAuthority(store, context, conversation, facts, data,

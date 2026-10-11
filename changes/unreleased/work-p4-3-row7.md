@@ -7,3 +7,6 @@ conversation worker before starting the server, which checks this at startup.
 Report summaries keep their original tail-read bounds. Model decisions include closing
 events in their existing conversation activity read. Older callers can still append
 conversation-stream closes, and both closing formats replay.
+
+Repeated turn starts check current membership before returning the saved turn.
+They keep the original provider and model without selecting them again.

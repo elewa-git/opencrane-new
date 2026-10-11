@@ -27,6 +27,11 @@ async function save(subject: string, type: string, data: unknown) {
 
 async function setup() {
   nats = await natsFixture();
+  const joinedMember = {
+    memberId: 'alice', invitationId: 'invite-alice', role: 'member',
+    email: 'alice@example.test', displayName: 'Alice',
+  };
+  await save('member-alice', 'member.joined', joinedMember);
   await save('conversation-chat', 'conversation.created', {
     conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
   });
