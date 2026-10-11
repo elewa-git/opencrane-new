@@ -4,9 +4,12 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { conversations, members, computers, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { conversations, members, computers, pgDb, ProjectionRunner,
+  rebuildMemberProjection } from '@opencrane/projections';
 import { memberAccessSchema, memberDepartureSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
+import { memberInventory } from '../src/members/inventory.ts';
+import type { GroupOptions } from '../src/members/group-routes.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
@@ -19,6 +22,7 @@ let app: ReturnType<typeof buildServer>;
 let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
 let counter = 0;
+let options: GroupOptions;
 async function append(subject: string, type: string, data: unknown, apply = true) {
   const record = { ...event(`inventory-${++counter}`, subject, type), silo: 'acme', data };
   const command = { event: record, expectedSequence: await nats.store.head(subject) };
@@ -62,6 +66,7 @@ async function initialise() {
     return Promise.resolve(subject);
   }
   const memberReads = { silo: 'acme', store: nats.store, db, binding, feed: { memberId } };
+  options = memberReads;
   app = buildServer(config, { memberReads });
 }
 async function close() {
@@ -232,6 +237,108 @@ async function waitsForSharedAssistantMembership() {
 }
 it('waits for shared-assistant membership even without resource grants',
   waitsForSharedAssistantMembership);
+
+async function exactRevokedInputs() {
+  const memberId = 'exact-revoked';
+  const resourceId = 'exact-server';
+  const subject = grantStream('mcp_server', resourceId);
+  await append(subject, 'grant.given', {
+    resourceType: 'mcp_server', resourceId, granteeKind: 'member',
+    granteeId: memberId, grantedBy: 'owner',
+  });
+  const revoked = await append(subject, 'grant.revoked', {
+    resourceType: 'mcp_server', resourceId, granteeKind: 'member',
+    granteeId: memberId, revokedBy: 'owner',
+  }, false);
+  await project();
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const pending = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(pending).toMatchObject({ complete: false, rows: [], unavailableSections: ['grants'] });
+  for (const [readSubject] of reads.mock.calls) expect(readSubject).not.toContain('*');
+  reads.mockRestore();
+  await auth.handler.handle(revoked, pgDb(dbs.queue));
+  const applied = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(applied).toMatchObject({ complete: true, rows: [] });
+}
+it('reads exact indexed streams and keeps an empty revocation pending its receipt', exactRevokedInputs);
+
+async function overlappingToolGroups() {
+  const memberId = 'overlap';
+  const resourceId = 'overlap-server';
+  for (const teamId of ['overlap-one', 'overlap-two']) {
+    await append(`team-${teamId}`, 'team.created', { teamId, name: teamId, createdBy: 'owner' });
+    await append(`team-${teamId}`, 'team.member_added', { teamId, memberId, addedBy: 'owner' });
+    await append(grantStream('mcp_server', resourceId), 'grant.given', {
+      resourceType: 'mcp_server', resourceId, granteeKind: 'team',
+      granteeId: teamId, grantedBy: 'owner',
+    });
+  }
+  await project();
+  const review = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(review.complete).toBe(true);
+  expect(review.rows).toHaveLength(1);
+  expect(review.rows[0]?.sources).toHaveLength(2);
+  await append('conversation-unrelated', 'conversation.created', {
+    conversationId: 'unrelated', assistantId: 'unrelated', createdBy: 'someone-else',
+  });
+  await append('conversation-unrelated', 'message.posted', {
+    conversationId: 'unrelated', authorId: 'someone-else', authorKind: 'human',
+    ciphertext: Buffer.from('Unrelated message content').toString('base64'), keyId: 'key:unrelated', contentType: 'text',
+  });
+  expect(await review.checkCurrent(performance.now() + 10_000)).toBe(true);
+  await project();
+  const after = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(after.complete).toBe(true);
+  expect(after.reviewRevision).toBe(review.reviewRevision);
+  await rebuildMemberProjection(options.db, nats.reader, createLogger('inventory-replay'),
+    { verify: true });
+  const replayed = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(replayed.reviewRevision).toBe(review.reviewRevision);
+  expect(replayed.rows).toEqual(review.rows);
+}
+it('counts overlapping tool groups once and ignores unrelated pending and projected chat activity',
+  overlappingToolGroups);
+
+async function blocksExpandedPeople() {
+  const memberId = 'large-audience';
+  const teamId = 'large-audience-group';
+  await append(`team-${teamId}`, 'team.created', { teamId, name: teamId, createdBy: 'owner' });
+  await append(`team-${teamId}`, 'team.member_added', { teamId, memberId, addedBy: 'owner' });
+  const audience = [];
+  for (let index = 1; index < 500; index++) {
+    const data = { teamId, memberId: `audience-${index}`, addedBy: 'owner' };
+    const record = { ...event(`inventory-${++counter}`, `team-${teamId}`, 'team.member_added'),
+      silo: 'acme', data };
+    audience.push(record);
+  }
+  await nats.seed(audience);
+  await project();
+  const atLimit = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(atLimit.complete).toBe(true);
+  const extra = { ...event(`inventory-${++counter}`, `team-${teamId}`, 'team.member_added'),
+    silo: 'acme', data: { teamId, memberId: 'audience-501', addedBy: 'owner' } };
+  const extraRecords = [extra];
+  await nats.seed(extraRecords);
+  await project();
+  const overflow = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(overflow.complete).toBe(false);
+  expect(overflow.unavailableSections).toContain('inventory_limits');
+}
+it('blocks completeness at 501 distinct expanded people', blocksExpandedPeople);
+
+async function blocksTooManyGroups() {
+  const memberId = 'many-groups';
+  for (let index = 0; index < 101; index++) {
+    const teamId = `many-groups-${index}`;
+    await append(`team-${teamId}`, 'team.created', { teamId, name: teamId, createdBy: 'owner' });
+    await append(`team-${teamId}`, 'team.member_added', { teamId, memberId, addedBy: 'owner' });
+  }
+  await project();
+  const overflow = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(overflow.complete).toBe(false);
+  expect(overflow.unavailableSections).toContain('inventory_limits');
+}
+it('blocks completeness at 101 groups', blocksTooManyGroups);
 
 async function recordsSources() {
   await append('assistant-personal', 'assistant.created', {
