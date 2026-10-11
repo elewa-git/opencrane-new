@@ -105,14 +105,15 @@ export async function egressCommand(options: EgressOptions, memberId: string, va
   }
   if (result.status === 'conflict') throw new ProviderConflict('Conflict');
   if (result.status !== 'appended') throw new ChangeUnknown('Unknown');
+  let saved: StoredEvent | undefined;
   try {
-    const saved = await readEventAt(options.store, subject, result.sequence, fresh.deadline);
-    if (!saved || saved.event.commandId !== input.commandId) throw new ChangeUnknown('Unknown');
-    checkOriginal(saved, type, memberId, data);
-    return receipt(saved);
+    saved = await readEventAt(options.store, subject, result.sequence, fresh.deadline);
   } catch {
     throw new ChangeUnknown('Unknown');
   }
+  if (!saved || saved.event.commandId !== input.commandId) throw new ChangeUnknown('Unknown');
+  checkOriginal(saved, type, memberId, data);
+  return receipt(saved);
 }
 export async function egressChange(options: EgressOptions, memberId: string,
   value: EgressRule, commandId: string) {
