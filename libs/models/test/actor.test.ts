@@ -28,7 +28,7 @@ async function close() {
 beforeEach(initialise);
 afterEach(close);
 
-async function reserve(provider = false, requestId?: string) {
+async function reserve(provider = false, requestId?: string, legacy = false) {
   const call = {
     requestId, model: 'gpt-6-luna', priceTableId,
     computerId: provider ? 'provider-primary' : 'computer',
@@ -37,7 +37,18 @@ async function reserve(provider = false, requestId?: string) {
     turnId: 'attempt', threadId: 'attempt', payingGroupId: 'group',
     contextDigest: '0'.repeat(64),
   };
-  return actor.reserve(call, 1);
+  if (!legacy) {
+    return actor.reserve(call, 1);
+  }
+  const reservationId = 'legacy-reservation';
+  const payload = { reservationId, permitId: reservationId, amountCents: 1,
+    payingGroupId: 'group', assistantId: call.assistantId, modelCall: call };
+  const event = envelope('test', 'budget-test', 'budget.reserved', payload,
+    'legacy-reserved', clock);
+  await nats.store.append({ event, expectedSequence: await nats.store.head('budget-test') });
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
+  return reservationId;
 }
 
 async function expire() {
@@ -71,7 +82,7 @@ it.each([false, true])('releases an expired hold without admission (provider: %s
   releasesWithoutAdmission);
 
 async function keepsAllowedHold(provider: boolean) {
-  const reservationId = await reserve(provider, 'request');
+  const reservationId = await reserve(provider, 'request', true);
   const payload = {
     requestId: 'request', route: 'model', outcome: 'allow', reason: 'model_allowed',
     contextDigest: '0'.repeat(64), permitId: reservationId,
@@ -115,15 +126,15 @@ async function keepsDispatchedHold() {
 
 it('keeps a dispatched provider hold uncertain even without an allow decision', keepsDispatchedHold);
 
-async function keepsLegacyHold() {
-  const reservationId = await reserve(false, undefined);
+async function keepsLegacyHold(requestId: string | undefined) {
+  const reservationId = await reserve(false, requestId, true);
   await expire();
   expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1 });
   const effects = await history(nats.store, `effect-${reservationId}`, 'test');
   expect(effects[0]?.event.type).toBe('effect.uncertain');
 }
 
-it('keeps a hold from before request ids were recorded uncertain', keepsLegacyHold);
+it.each([undefined, 'request'])('keeps an old hold uncertain (request id: %s)', keepsLegacyHold);
 
 async function keepsHoldAfterUsageWithoutDecision() {
   const budget = {

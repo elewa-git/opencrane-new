@@ -43,14 +43,12 @@ and the old actor stopping without holding money.
 
 ## Recovery after store outages
 
-Expiry releases a hold at zero cents with `outcome: not_dispatched` when
-its request has no matching allow decision, no provider dispatch record and no
-record in `effect-<id>` or `security-<id>`. It reads these records before releasing
-money. Failed reads leave the hold for a later check. A matching allow decision
-or any evidence of a call keeps the hold and records `effect.uncertain` with
-`reason: settle_timeout`. A dispatch without an allow decision also raises a high
-`effect_without_permit` alert. Older holds without a request id keep the same
-uncertainty rules. A hold that may have been sent is never refunded by time.
+Model sends and provider checks use `BudgetActor.admitDispatch`. It saves one
+`budget.call_dispatch_admitted` after checking stops, capacity, the hold's binding
+and current access. It changes no cents and never counts a hold twice.
+The [event contract](../../docs/architecture/events.md#budgets-single-writer-actor-per-silo) lists its fields.
+Reachability checks need no hold. Managed model calls remain disabled.
+Tool and memory callers follow in PR 3.
 
 A retry of a provider check never sends it again. It returns the original receipt
 without writing while the first check may still be running. Recovery can finish
@@ -60,18 +58,14 @@ older than that same limit. When no dispatch exists, recovery records
 `provider.verification_recorded` with `outcome: unknown` and the original
 reservation id, if one exists. It includes settled cents only when the local
 budget actor has already settled the hold; otherwise the budget stream shows
-whether the money is still held or has been released. An allow decision still
-keeps the hold uncertain at expiry, even when a final result exists without a
-dispatch. That case needs manual resolution.
-
-The result and dispatch use conditional appends on the same provider stream.
-Gateway admission refuses a finished attempt. Ordinary model admission checks
-that its hold is still open after saving the allow decision. It checks current
-access again inside the budget queue, using the original two-second time limit.
-If that access check fails, it releases the hold at zero before returning the error.
-No permit has left the process at that point. It refuses the call
-if expiry already released the hold. A disabled budget writer must be
-replaced before expiry can release a hold that was never allowed or sent.
+whether the money is still held or has been released.
+The successful append permits one gateway send; duplicates return no permission.
+The pinned routes have no send retry policy. A lost append reply stops the actor
+and keeps the hold. Provider attempt records follow this common gate.
+New holds carry `dispatchGate: 1`. Expiry uses the same queue and conditional
+append. It releases a new hold only without admission or other call evidence.
+Failed evidence reads retain money. Older holds stay uncertain because their
+senders did not use the gate. Explicit release refuses admitted calls or evidence.
 
 When an allowed call reports an unknown result after a zero-cent release,
 `uncertain()` saves `budget.settled` with `settledCents: 0` and `outcome: unknown`.
@@ -80,23 +74,13 @@ claiming a known charge. Duplicate reports do not write another settlement, and
 replay restores the same hold. Without an allow decision, the report raises
 `effect_without_permit` and does not restore the hold.
 
-Provider admission and expiry still run separately. A dispatch can be saved after
-expiry reads the provider stream but before it releases money. Reaching this gap
-requires a clock jump of 180 seconds or more between reservation and admission.
-Later usage or uncertainty restores the hold, but a crash before either report
-can leave the zero-cent release in place. Two leaders serving together with that
-much clock skew can also allow a call before the newer leader releases its hold.
-
-`test/actor.test.ts` covers expiry, late uncertainty, repeated checks and budget replay.
-`test/hold-leadership.test.ts` covers a stale leader allowing a call during expiry
-and the same-actor refusal that prevents that ordering.
-`test/hold-recovery.test.ts` covers two consecutive store failures through
-provider checks and ordinary calls. Ordinary calls have no provider-result
-write: the corresponding case loses the reply after saving the zero-cent
-settlement. `apps/server/test/providers.test.ts` covers a same-id retry during
-a live check and expiry racing admission through the real gateway.
-The tests use disposable services and
-never send a paid model request.
+`test/dispatch.test.ts` uses real NATS and the pinned gateway with a recording
+upstream. It checks both sides of the stop boundary, lost replies, duplicate ids,
+replay and both expiry orderings. `test/hold-leadership.test.ts` checks stale writers
+and admission queued behind expiry. `test/actor.test.ts` keeps legacy holds and
+later evidence conservative. `test/hold-recovery.test.ts` covers store outages;
+`apps/server/test/providers.test.ts` checks the provider path and expiry before
+admission. These tests send no paid model request.
 
 Phase 2 #29 and Phase 3 #54. The decision process verifies the lifecycle computer and
 thread-bound turn tokens; agentgateway v1.5.0 enforces its answer and sends
@@ -1271,11 +1255,10 @@ does not change the reason shown for an already stopped turn. The real-NATS test
 in `test/budget-stop-message.test.ts` check these messages and their saved reasons,
 including zero ceilings, several causes, unrelated work and replay after recovery.
 
-`reserve` and `requireOpenReservation` check stops in the actor queue. Admin
-summaries include saved stops and known turns. Rebuild projections on upgrade.
-PR 2 owns the shared dispatch gate and admitted work without reservations.
+`reserve` and `admitDispatch` check stops in the actor queue. Admin summaries
+include saved stops and known turns. Rebuild projections on upgrade.
+The shared final gate covers model sends and provider verification checks.
 Tools, cancellation, queued messages and participant notices follow later.
-No dispatch path is enabled; existing expiry/provider ordering limits remain.
 
 `test/budget-stop.test.ts` proves isolation, lowered/zero ceilings, relevant
 recovery, unchanged edits, settlement, rollover and replay with real NATS. It also
@@ -1292,8 +1275,8 @@ arriving during authority checks, without reading the whole computer stream as a
 access subject. `approvalActivity` shares the turn and control checks for approve
 and retry. It does not read spending history or provider mode. Model and memory
 admission keep their provider-mode checks through `decisionActivity`; this split
-does not change their money checks. Explicit denial remains allowed. Final dispatch
-serialisation is separate unfinished work.
+does not change their money checks. Explicit denial remains allowed. Tool and memory
+integration with the final dispatch gate remains unfinished.
 Memory discovery checks recall once and uses the same checked catalogue to decide
 whether to list remember. `toolDecision` supplies the existing review, mode and zero-cost
 rules for both. The backend repeats its own access check; write confirmations still

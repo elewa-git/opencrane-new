@@ -80,6 +80,7 @@ export { mcpInstanceStartSchema, mcpInstanceStopSchema,
   mcpInstanceObservedSchema } from './mcp-instance.ts';
 
 export { budgetExhaustedDataSchema, budgetStopReasonSchema } from './data.ts';
+export { budgetCallDispatchAdmittedDataSchema } from './data.ts';
 export { takeoverRequestedDataSchema } from './takeover.ts';
 export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyRestartedDataSchema }
   from './survey.ts';

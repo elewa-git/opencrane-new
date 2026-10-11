@@ -630,7 +630,8 @@ it('does not duplicate exhaustion after its append succeeds but the acknowledgem
     const recovered = new BudgetActor(f.nats.store, 'test'); await recovered.start();
     await expect(recovered.reserve(f.actor.state.reservations[0]!.call, 25)).rejects.toThrow('spending cap');
     expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type))
-      .toEqual(['budget.ceiling_set', 'budget.period_started', 'budget.reserved', 'budget.exhausted', 'budget.period_started']);
+      .toEqual(['budget.ceiling_set', 'budget.period_started', 'budget.reserved',
+        'budget.call_dispatch_admitted', 'budget.exhausted', 'budget.period_started']);
     expect(await history(f.nats.store, 'security-test', 'test')).toEqual([]);
     expect(f.received()).toBe(1);
   } finally { await f.close(); }
@@ -686,7 +687,9 @@ it('leaves money reserved on settlement failure and retries the recorded effect 
 it.each([400, 401, 404, 429, 500])('releases an observed provider %i rejection without usage or consuming the cap', async status => {
   const f = await fixture(1, 1);
   try {
-    f.reject(status); expect((await f.call()).status).toBe(status);
+    f.reject(status);
+    const reply = await f.call();
+    expect(reply.status, reply.text).toBe(status);
     await f.settled();
     const r = f.actor.state.reservations[0]!;
     expect((await history(f.nats.store, `effect-${r.id}`, 'test')).map(r => ({ type: r.event.type, data: r.event.data })))

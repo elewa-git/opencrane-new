@@ -370,6 +370,18 @@ export const eventRegistry: readonly EventDefinition[] = [
     { reservationId: 'res_1', permitId: 'permit_1', amountCents: 200, payingGroupId: 'team_1', assistantId: 'asst_1' },
   ),
   event(
+    'budget.call_dispatch_admitted',
+    'budget',
+    'The budget actor admitted one call for a single gateway send.',
+    data.budgetCallDispatchAdmittedDataSchema,
+    { callId: 'call_1', decisionId: 'decision_1', bodyDigest: '0'.repeat(64),
+      reservationId: 'res_1',
+      modelCall: { model: 'gpt-6-luna', priceTableId: 'tariff', computerId: 'computer_1',
+        assistantId: 'assistant_1', requesterId: 'member_1', conversationId: 'conversation_1',
+        turnId: 'turn_1', threadId: 'thread_1', payingGroupId: 'group_1',
+        contextDigest: '0'.repeat(64) } },
+  ),
+  event(
     'budget.settled',
     'budget',
     'The budget actor settled a reservation against its observed effect.',

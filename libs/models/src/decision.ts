@@ -136,7 +136,8 @@ async function context(actor: BudgetActor, binding: Binding,
     turn.sequence, permission.allowed, authority, payingGroupId];
   const contextDigest = digestContext(facts);
   return { model: turnToken.model, payingGroupId, priceTableId,
-    computerId: computer.computer, assistantId: computer.assistant,
+    computerId: computer.computer, generation: computer.generation,
+    assistantId: computer.assistant,
     requesterId: turnToken.requester, conversationId: turnToken.conversation,
     turnId: turnToken.turn, threadId: turnToken.thread, contextDigest };
 }
@@ -259,7 +260,17 @@ export async function startDecision(
       if (result.status !== 'appended') {
         throw new Error('Decision audit unavailable');
       }
+      return event.id;
     };
+    async function allowModel(reservation: string) {
+      try {
+        return await audit('allow', 'model_allowed', reservation);
+      } catch (error) {
+        // Release only before handing permission to the gateway.
+        await actor.releaseUndispatched(reservation);
+        throw error;
+      }
+    }
     void (async () => {
       res.setHeader('content-type', 'application/json');
       if (await internalRoutes(req, res, actor, identity, binding, providers)) return;
@@ -361,14 +372,14 @@ export async function startDecision(
         'model', body.model, fresh, conversation, turn, grants);
       contextDigest = call.contextDigest;
       requireConnectedClient(req, res);
-      const reservation = await actor.reserve({ ...call, requestId }, amountCents, fresh);
-      await audit('allow', 'model_allowed', reservation).then(fresh).catch(async (error: unknown) => {
-        // No permit has left this process, so the gateway cannot have dispatched it.
-        await actor.releaseUndispatched(reservation);
-        throw error;
-      });
-      // Refuse a permit if expiry released its hold while the audit was being saved.
-      await actor.requireOpenReservation(reservation, fresh);
+      const modelCall = { ...call, requestId };
+      const reservation = await actor.reserve(modelCall, amountCents, fresh);
+      const decisionId = await allowModel(reservation);
+      const bodyHash = createHash('sha256');
+      bodyHash.update(raw);
+      const dispatch = { callId: requestId, decisionId, bodyDigest: bodyHash.digest('hex'),
+        reservationId: reservation, modelCall };
+      await actor.admitDispatch(dispatch, fresh);
       res.setHeader('x-request-id', requestId);
       res.setHeader('x-reservation-id', reservation); res.end('{}');
     })().catch(async (error: unknown) => {

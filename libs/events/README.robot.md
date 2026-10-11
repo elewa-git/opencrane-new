@@ -21,6 +21,15 @@ They are separate from browser event schemas, so browser builds do not load Node
 names, schemas, annotation flags, tool revisions and the catalogue digest.
 The event parser binds every MCP event's server id to its exact subject.
 
+## Final dispatch admission
+
+`budget.call_dispatch_admitted` records the call id, body SHA-256 hash, decision
+or provider request reference, optional reservation and the trusted model-call
+binding. New reservations carry `dispatchGate: 1`; older records remain readable.
+The models actor orders dispatch and expiry on one budget stream. This record
+changes no money. Its absence proves non-dispatch only for the new sender contract.
+The first successful append permits one gateway send; duplicates grant no send.
+
 ## Public contract
 
 Delegation version 1 records one computer generation, root, requester, payer,

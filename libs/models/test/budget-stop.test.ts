@@ -74,7 +74,9 @@ async function stopsAtConfiguration(configuration: (typeof loweredCeilings)[numb
   const before = await nats.store.head('budget-test');
   await limit('paying_group', ceilingCents);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
-  await expect(actor.requireOpenReservation(actor.state.reservations[0]!.id, fresh))
+  await expect(actor.admitDispatch({ callId: 'call', decisionId: 'decision', bodyDigest: '0'.repeat(64),
+    reservationId: actor.state.reservations[0]!.id,
+    modelCall: actor.state.reservations[0]!.call }, fresh))
     .rejects.toThrow('spending cap');
   await limit('paying_group', 50);
   await expect(actor.reserve(call('old'), 1)).rejects.toThrow('spending cap');
@@ -328,7 +330,9 @@ async function stopsAtFirstAssistantCeiling(ceilingCents: number) {
   const before = await nats.store.head('budget-test');
   await limit('assistant', ceilingCents);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
-  await expect(actor.requireOpenReservation(actor.state.reservations[0]!.id, fresh))
+  await expect(actor.admitDispatch({ callId: 'call', decisionId: 'decision', bodyDigest: '0'.repeat(64),
+    reservationId: actor.state.reservations[0]!.id,
+    modelCall: actor.state.reservations[0]!.call }, fresh))
     .rejects.toThrow('spending cap');
   const stop = actor.state.stops[0]!;
   expect(stop).toMatchObject({ position: before + 1, reasons: [{

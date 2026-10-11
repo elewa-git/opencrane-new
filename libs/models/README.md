@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks saved grants, tool rules, one-use model sends and memory passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|saves spending and instance changes; checks saved stops and reads activity, grants, closing records and spending stops| store["libs/event-store<br/>event log"]
 ```
@@ -89,7 +89,11 @@ A change to the tools or their rules ends that approval.
   Check current access again before saving the resolution.
 - List spending from the saved budget and call records, without reading chat history.
   Keep calls with an unknown outcome in the list alongside settled calls.
-- Release an expired hold at zero cents when it was never allowed or sent.
+- Save one final permission before each model send or provider check.
+  Check spending stops and access again after the call waits in the queue.
+  Return permission only once. Keep the money held if the reply is lost.
+- Release an expired new hold only when no send permission or other call evidence
+  was saved. Keep older holds for review because their senders used older rules.
 - Stop new holds after provider switch-on while settling or releasing existing holds.
   Keep those holds moving without restarting the models process.
 - Read each new usage line once and leave old lines alone while idle. Retry a line
@@ -140,7 +144,7 @@ A lost create reply without that evidence is refused, and the create is never se
 Deletion stays unresolved while the Secret exists. A later check can confirm its removal.
 This adapter grants no tool access.
 
-1. **A person sends a chat message.** The server and the computer pick the model for the task. The computer sends the AI call to agentgateway. agentgateway asks the models process, which checks the passes, permissions and budget and holds the money. If the call is allowed, agentgateway sends it to the AI provider.
+1. **A person sends a chat message.** The server and the computer pick the model for the task. The computer sends the AI call to agentgateway. agentgateway asks the models process, which checks the passes, permissions and budget and holds the money. The models process saves one final send permission. agentgateway then sends the call once to the AI provider.
 2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the full amount stays held for review. A later report of an unknown result restores money released before an allowed call was sent.
 3. **An admin or owner changes access or spending.** The change is saved as an [event](../../GLOSSARY.md#event): the server saves tool rules and grants, and the models process saves spending limits. Background workers then update OpenFGA and the spending tables.
 

@@ -46,7 +46,7 @@ function afterDecisionRead(between: () => Promise<void>) {
   let interrupted = false;
 
   async function* interruptedRead(...args: Parameters<typeof read>) {
-    const interrupt = !interrupted && args[0] === 'decision-request';
+    const interrupt = !interrupted && args[0].startsWith('effect-');
     if (interrupt) {
       interrupted = true;
     }
@@ -77,14 +77,15 @@ async function restoresHoldAfterLeaderChange() {
 
   async function admitDuringExpiry() {
     await allow(reservationId);
-    await oldLeader.requireOpenReservation(reservationId, fresh);
-    permitReturned = true;
+    await expect(oldLeader.admitDispatch({ callId: 'request', decisionId: 'decision',
+      bodyDigest: '0'.repeat(64), reservationId, modelCall: call }, fresh)).rejects.toThrow('lost its fence');
+    permitReturned = false;
   }
 
   const reader = afterDecisionRead(admitDuringExpiry);
   await newLeader.expire();
   reader.mockRestore();
-  expect(permitReturned).toBe(true);
+  expect(permitReturned).toBe(false);
   expect(totals(newLeader.state, skewedClock())).toMatchObject({ reservedCents: 0 });
   await newLeader.uncertain(reservationId, 'transport_failure');
   expect(totals(newLeader.state, skewedClock())).toMatchObject({
@@ -98,7 +99,7 @@ async function restoresHoldAfterLeaderChange() {
   expect(await history(nats.store, `security-${reservationId}`, 'test')).toEqual([]);
 }
 
-it('restores the full hold after a stale leader allows a call during expiry',
+it('refuses a stale leader during expiry and keeps late evidence held',
   restoresHoldAfterLeaderChange);
 
 async function refusesPermitOnSameActor() {
@@ -114,7 +115,8 @@ async function refusesPermitOnSameActor() {
 
   async function enqueueAdmissionDuringExpiry() {
     await allow(reservationId);
-    permit = actor.requireOpenReservation(reservationId, fresh);
+    permit = actor.admitDispatch({ callId: 'request', decisionId: 'decision',
+      bodyDigest: '0'.repeat(64), reservationId, modelCall: call }, fresh);
     // Handle the queued refusal immediately so it cannot become an unhandled rejection.
     void permit.catch(ignoreExpectedRefusal);
   }
