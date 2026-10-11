@@ -171,7 +171,9 @@ function applyChange(next: ToolPolicy, state: ToolPolicy, data: Record<string, u
     const previous = state.tools.find(matchesRevision);
     const previousDeclaration = state.catalogue?.tools?.find(matchesRevision);
     const currentDeclaration = catalogue.tools?.find(matchesRevision);
-    if (!previousDeclaration || !currentDeclaration ||
+    // Keep a review only for the connection and account it named.
+    if (state.connectionId !== changed.connectionId || state.accountMode !== changed.accountMode ||
+        !previousDeclaration || !currentDeclaration ||
         toolReviewDigest(previousDeclaration) !== toolReviewDigest(currentDeclaration)) {
       return blockTool(tool);
     }

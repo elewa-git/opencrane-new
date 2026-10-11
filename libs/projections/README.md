@@ -50,6 +50,7 @@ keeps calls blocked.
   Rebuilding this choice makes no outside calls.
 - Keeps control references and affected-turn counts in history without private turn details.
 - Keep tool discovery separate from an owner or admin’s recorded review.
+  Require a new review when the connection or account mode changes.
   Keep blocked tools blocked when rebuilding the tables.
 
 - Rebuild child participants and their recorded parent references from saved events.
