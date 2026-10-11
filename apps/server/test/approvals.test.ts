@@ -772,5 +772,36 @@ async function refusesCallsAndApprovalsDuringControl() {
     await f.close();
   }
 }
-it('refuses an old turn token and late approval during control but allows explicit denial',
+it('refuses a late approval during control but allows explicit denial',
   refusesCallsAndApprovalsDuringControl);
+
+async function refusesApprovedOldTokenDuringControl() {
+  const setup = await approvalFixture();
+  try {
+    expect((await setup.call()).status).toBe(403);
+    expect((await setup.decide()).statusCode).toBe(200);
+    expect((await setup.read()).cards[0]?.state).toBe('approved');
+    const oldHeaders = await setup.issue();
+    await expect(setup.credentials.check(oldHeaders)).resolves.toMatchObject({
+      turn: { turn: 'turn', requester: 'alice' },
+    });
+    const control = {
+      assistantId: 'assistant', computerId: 'computer', generation: 1,
+      podUid: 'fixture', conversationId: 'conversation', requesterId: 'alice',
+      requesterEventId: 'turn', takeoverId: 'control', leaseId: 'control',
+      reason: 'requester_requested', affectedTurnIds: ['turn'],
+    };
+    await setup.append('computer-assistant', 'takeover.requested', control);
+
+    await expect(setup.credentials.check(oldHeaders))
+      .rejects.toThrow('Computer control is pending');
+    await expect(setup.issue()).rejects.toThrow('Computer control is pending');
+    expect((await setup.call(undefined, oldHeaders)).status).toBe(403);
+    expect(setup.received()).toBe(0);
+    expect((await setup.read()).cards[0]?.state).toBe('approved');
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses an approved call with an old token because computer control is pending',
+  refusesApprovedOldTokenDuringControl, 40_000);

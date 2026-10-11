@@ -45,8 +45,6 @@ async function keepsIntentAndReplay() {
   expect(await requestControl(options, 'alice', input)).toEqual(first);
   await expect(requestControl(options, 'alice', { ...input, commandId: 'second-tab' }))
     .rejects.toThrow('Control conflict');
-  await expect(requestControl(options, 'bob', { ...input, commandId: 'second-controller' }))
-    .rejects.toThrow();
   const context = { silo: 'test', assistantId: 'assistant', computerId: 'desktop' };
   const start = { conversationId: 'chat', turnId: input.requesterEventId,
     threadId: 'thread', status: 'started' as const };
@@ -71,6 +69,14 @@ async function keepsIntentAndReplay() {
 }
 it('keeps one intent, replayable status and audit, and independently authorised viewing',
   keepsIntentAndReplay, 30_000);
+async function refusesAnotherRequester() {
+  const { options, input } = await setup();
+  expect(await readComputerControl(options.store, 'test', 'assistant')).toBeUndefined();
+  await expect(requestControl(options, 'bob', input)).rejects.toThrow('Requester only');
+  expect(await readComputerControl(options.store, 'test', 'assistant')).toBeUndefined();
+}
+it('refuses Bob because Alice requested the work, without another control intent',
+  refusesAnotherRequester, 30_000);
 async function racesIntent(other: 'intent' | 'turn') {
   const { options, input } = await setup();
   await fixture.append('conversation-other', 'conversation.created', {
