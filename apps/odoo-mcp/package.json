@@ -1,0 +1,17 @@
+{
+  "name": "@opencrane/odoo-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "description": "A standalone tool server that describes the Odoo draft-order tools.",
+  "scripts": {
+    "start": "node --experimental-strip-types src/main.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@opencrane/models": "0.1.0",
+    "fastify": "5.12.5",
+    "zod": "4.6.5"
+  }
+}

@@ -3,15 +3,14 @@
 ## What this is
 
 A local copy of Odoo Community filled with made-up business records for testing access
-rules. Odoo is business software for work such as sales, stock and accounts. OpenCrane's
-planned Odoo connection is not built yet. It lets us test how OpenCrane will use a company's
+rules. Odoo is business software for work such as sales, stock and accounts. The standalone
+[Odoo tool server](../../apps/odoo-mcp/README.md) describes its tools; reads are not built yet. It lets us test how OpenCrane will use a company's
 Odoo with each person's own rights, without touching real company data.
 
 ## Where it fits
 
 This is a separate test fixture in the infrastructure layer. It has its own database and
-does not connect to the development stack. A future Odoo [tool server](../../GLOSSARY.md#mcp-server-tool-server)
-is planned to use it.
+does not connect to the development stack. A future read handler in the Odoo tool server will use it.
 
 ```mermaid
 flowchart LR
@@ -19,7 +18,7 @@ flowchart LR
   lint["npm run lint<br/>boundary check"] -->|checks nothing else uses it| fixture
   fixture -->|runs| odoo["Odoo Community<br/>business software"]
   fixture -->|runs its own| database[("PostgreSQL<br/>fixture database")]
-  future["Planned Odoo tool server<br/>not built yet"] -.->|planned connection| odoo
+  adapter["apps/odoo-mcp<br/>standalone tool server"] -.->|planned reads| odoo
 ```
 
 ## What it is responsible for
@@ -29,7 +28,7 @@ flowchart LR
 - Check that Odoo allows or refuses changes for the right account.
 - Keep the service available only on the local machine.
 - Check that other code does not depend on the fixture's container images.
-- Not built yet: the OpenCrane connection to Odoo.
+- Not built yet: the product chat connection to Odoo.
 
 ## Processes it handles
 
