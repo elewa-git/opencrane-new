@@ -106,6 +106,11 @@ async function refusesReaders() {
 }
 it('requires current Owner/Admin events and available OpenFGA despite an elevated cookie', refusesReaders);
 
+async function readDeparture(memberId: string) {
+  const body = await readInventory('departure', memberId);
+  return memberDepartureSchema.parse(body);
+}
+
 async function refusesUnrebuiltUpgrade(revoked: boolean) {
   const memberId = revoked ? 'upgrade-revoked' : 'upgrade-granted';
   const resourceId = memberId;
@@ -134,20 +139,20 @@ async function refusesUnrebuiltUpgrade(revoked: boolean) {
       granteeId: 'someone-else', grantedBy: 'owner',
     });
     await project();
-    const review = await readInventory('departure', memberId);
+    const review = await readDeparture(memberId);
     expect(review.complete).toBe(false);
     expect(review.unavailableSections).toContain('inventory_index');
     expect(review.permissions.remove).toBe(false);
     expect(review.routines.status).toBe('unavailable');
 
     await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, createLogger('upgrade-rebuild'));
-    const rebuilt = await readInventory('departure', memberId);
+    const rebuilt = await readDeparture(memberId);
     if (pendingRevocation) {
       expect(rebuilt.complete).toBe(false);
       expect(rebuilt.unavailableSections).toContain('grants');
       expect(rebuilt.accessLost).toEqual([]);
       await auth.handler.handle(pendingRevocation, pgDb(dbs.queue));
-      expect(await readInventory('departure', memberId))
+      expect(await readDeparture(memberId))
         .toMatchObject({ complete: true, accessLost: [] });
     } else {
       expect(rebuilt).toMatchObject({ complete: true, accessLost: [{ resourceId }] });
@@ -161,36 +166,50 @@ it.each([false, true])('refuses an unrebuilt upgrade index: pending revocation %
   refusesUnrebuiltUpgrade);
 
 async function ignoresLargeUnrelatedHistoryTail() {
+  const creation = await append('conversation-unrelated-volume', 'conversation.created', {
+    conversationId: 'unrelated-volume', assistantId: 'unrelated-volume',
+    createdBy: 'someone-else',
+  });
+  const message = await append('conversation-unrelated-volume', 'message.posted', {
+    conversationId: 'unrelated-volume', authorId: 'someone-else', authorKind: 'human',
+    ciphertext: Buffer.from('Unrelated volume fixture').toString('base64'),
+    keyId: 'key:unrelated-volume', contentType: 'text',
+  });
+  const messagePosition = await nats.store.head('conversation-unrelated-volume');
   await project();
-  const before = await readInventory('departure', 'bob');
+  const before = await readDeparture('bob');
   expect(before).toMatchObject({ complete: true, accessLost: [], retainedHistory: { count: 0 } });
   const records = [];
   for (let index = 0; index < 10_001; index++) {
     const data = { conversationId: 'unrelated-volume', memberId: 'someone-else',
-      joinEventId: 'unrelated-join', throughPosition: 1, throughEventId: 'unrelated-message' };
+      joinEventId: creation.id, throughPosition: messagePosition, throughEventId: message.id };
     const record = { ...event(`inventory-${++counter}`, 'chat-state-someone-else',
-      'conversation.read_advanced'), silo: 'acme', data };
+      'conversation.read_advanced'), silo: 'acme',
+      principal: { kind: 'human' as const, id: 'someone-else' }, data };
     records.push(record);
   }
   await nats.seed(records);
   const globalReads = vi.spyOn(nats.store, 'readEvent');
-  const started = performance.now();
-  const response = await request('departure');
-  expect(response.statusCode, response.body).toBe(200);
-  expect(performance.now() - started).toBeLessThan(2_000);
-  const pending = memberDepartureSchema.parse(response.json());
-  expect(pending.accessLost).toEqual([]);
-  if (pending.complete) {
-    expect(pending.retainedHistory).toEqual(before.retainedHistory);
-    expect(pending.reviewRevision).toBe(before.reviewRevision);
-  } else {
-    expect(pending.permissions.remove).toBe(false);
-    expect(pending.unavailableSections.length).toBeGreaterThan(0);
+  try {
+    const started = performance.now();
+    const response = await request('departure');
+    expect(response.statusCode, response.body).toBe(200);
+    expect(performance.now() - started).toBeLessThan(2_000);
+    const pending = memberDepartureSchema.parse(response.json());
+    expect(pending.accessLost).toEqual([]);
+    if (pending.complete) {
+      expect(pending.retainedHistory).toEqual(before.retainedHistory);
+      expect(pending.reviewRevision).toBe(before.reviewRevision);
+    } else {
+      expect(pending.permissions.remove).toBe(false);
+      expect(pending.unavailableSections.length).toBeGreaterThan(0);
+    }
+    expect(globalReads).not.toHaveBeenCalled();
+  } finally {
+    globalReads.mockRestore();
+    await project();
   }
-  expect(globalReads).not.toHaveBeenCalled();
-  globalReads.mockRestore();
-  await project();
-  const after = await readInventory('departure', 'bob');
+  const after = await readDeparture('bob');
   expect(after).toMatchObject({ complete: true, accessLost: [], retainedHistory: { count: 0 } });
   expect(after.reviewRevision).toBe(before.reviewRevision);
 }

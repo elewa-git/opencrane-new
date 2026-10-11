@@ -43,7 +43,7 @@ it.skipIf(!process.env["PG_TEST_URL"])(
       expect(
         (
           await storage.db.query<{ table_name: string }>(
-            "SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%_replay'",
+            "SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%_replay' OR table_name LIKE '%_replay_backfill'",
           )
         ).rows,
       ).toEqual([]);
@@ -115,7 +115,7 @@ it.skipIf(!process.env["PG_TEST_URL"])(
       await admin.query(`CREATE ROLE ${reader}`);
       await admin.query(`GRANT ${operator}, ${reader} TO CURRENT_USER`);
       await admin.query(`GRANT USAGE, CREATE ON SCHEMA public TO ${operator}`);
-      for (const table of ["members", "member_identities", "member_changes", "silo_ownership", "inventory_inputs", "projection_checkpoints", "projection_events", "projection_generations"]) {
+      for (const table of ["members", "member_identities", "member_changes", "silo_ownership", "inventory_inputs", "inventory_inputs_backfill", "projection_checkpoints", "projection_events", "projection_generations"]) {
         await admin.query(`ALTER TABLE ${table} OWNER TO ${operator}`);
       }
       await admin.query(`GRANT SELECT ON members, member_identities, member_changes TO ${reader}`);
