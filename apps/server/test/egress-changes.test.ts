@@ -7,6 +7,7 @@ import { testAuthConfig } from './support/test-auth-config.ts';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
+import type { EgressRule } from '@opencrane/events';
 import { pgDb, egressGrantStream } from '@opencrane/projections';
 import { egressCommand, egressChange } from '../src/egress/changes.ts';
 
@@ -138,6 +139,92 @@ async function httpCommandsAndStatus() {
 }
 it('serves authenticated commands and read-only saved status with safe validation',
   httpCommandsAndStatus);
+
+function authenticatedServer() {
+  const config = testAuthConfig({ expectedOrgId: 'org-test' });
+  function memberId() {
+    return Promise.resolve('alice');
+  }
+  const modelAccess = { ...options(), db: pgDb(dbs.queue), feed: { memberId } };
+  const app = buildServer(config, { modelAccess });
+  const session = { sub: 'alice', orgId: 'org-test', roles: [],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { origin: 'https://app.example.test',
+    cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  return { app, headers };
+}
+
+const changedTargets: { field: string; patch: Partial<EgressRule> }[] = [
+  { field: 'host', patch: { host: 'github.com' } },
+  { field: 'port', patch: { port: 8443 } },
+  { field: 'scope', patch: { scope: 'assistant' } },
+  { field: 'subjectId', patch: { subjectId: 'bob' } },
+];
+async function changedTargetConflicts({ field, patch }: typeof changedTargets[number]) {
+  const { app, headers } = authenticatedServer();
+  const originalRule = { ...rule, host: `target-${field}.npmjs.org` };
+  const command = { ...input, ...originalRule, commandId: `target-${field}` };
+  const changedRule = { ...originalRule, ...patch };
+  try {
+    const saveRequest = { method: 'POST' as const, headers,
+      url: '/api/org/egress/destinations', payload: command };
+    const saved = await app.inject(saveRequest);
+    expect(saved.statusCode).toBe(200);
+    await delay(150);
+    const position = await nats.store.head();
+    const changedRequest = { ...saveRequest, payload: { ...command, ...changedRule } };
+    const refused = await app.inject(changedRequest);
+    expect(refused.statusCode).toBe(409);
+    expect(await nats.store.head()).toBe(position);
+    expect(await egressChange(options(), 'alice', changedRule, command.commandId))
+      .toEqual({ status: 'unknown' });
+    const repeated = await app.inject(saveRequest);
+    expect(repeated.statusCode).toBe(200);
+    expect(repeated.json()).toEqual(saved.json());
+  } finally {
+    await app.close();
+  }
+}
+it.each(changedTargets)('refuses a reused change id with a different $field across rule streams',
+  changedTargetConflicts);
+
+async function concurrentCommands(first: typeof input, second: typeof input) {
+  const { app, headers } = authenticatedServer();
+  const append = nats.store.append.bind(nats.store);
+  const bothReady = Promise.withResolvers<void>();
+  let readyCount = 0;
+  nats.store.append = async function waitForBoth(command) {
+    readyCount += 1;
+    if (readyCount === 2) bothReady.resolve();
+    await bothReady.promise;
+    return append(command);
+  };
+  try {
+    const firstRequest = { method: 'POST' as const, headers,
+      url: '/api/org/egress/destinations', payload: first };
+    const secondRequest = { ...firstRequest, payload: second };
+    const pending = [app.inject(firstRequest), app.inject(secondRequest)];
+    return await Promise.all(pending);
+  } finally {
+    nats.store.append = append;
+    await app.close();
+  }
+}
+async function concurrentChangedTargetConflicts() {
+  const first = { ...input, commandId: 'racing-target', host: 'racing-target.npmjs.org' };
+  const second = { ...first, host: 'racing-target.github.com' };
+  const position = await nats.store.head();
+  const responses = await concurrentCommands(first, second);
+  function statusCode(response: typeof responses[number]) {
+    return response.statusCode;
+  }
+  const statuses = responses.map(statusCode);
+  statuses.sort();
+  expect(statuses).toEqual([200, 409]);
+  expect(await nats.store.head()).toBe(position + 1);
+}
+it('saves only one target when two requests race with the same change id',
+  concurrentChangedTargetConflicts);
 
 async function crossSiloAndRemovedReadersRefuse() {
   const foreign = { ...options(), silo: 'other' };
