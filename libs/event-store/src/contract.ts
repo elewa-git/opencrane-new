@@ -65,8 +65,7 @@ export function validateCommand(
     return undefined;
   }
   const event = parsed.event;
-  if (!validConversationWrite(event) || !validCurrentMemoryWrite(event) ||
-      !validMcpSnapshot(event)) {
+  if (!validEventWrite(event)) {
     return undefined;
   }
   if (!validMigrationFence(command, event)) {
@@ -88,6 +87,16 @@ export function validateCommand(
   return event.subject.startsWith(`${getEventDefinition(event.type)?.stream}-`)
     ? event
     : undefined;
+}
+
+function validEventWrite(event: EventEnvelope): boolean {
+  if (!validConversationWrite(event)) {
+    return false;
+  }
+  if (!validCurrentMemoryWrite(event)) {
+    return false;
+  }
+  return validMcpSnapshot(event);
 }
 
 function validConversationWrite(event: EventEnvelope): boolean {
