@@ -1,6 +1,7 @@
+import type { AppendCommand } from '@opencrane/event-store';
 import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
 import { catalogueEvidence, fixture, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
@@ -195,3 +196,33 @@ async function refusesChangeDuringLeaderCheck() {
   }
 }
 it('refuses catalogue changes while the leadership check waits', refusesChangeDuringLeaderCheck);
+
+async function refusesGenerationDuringDecisionSave() {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    async function replaceDuringSave(command: AppendCommand) {
+      const result = await append(command);
+      if (command.event.type === 'decision.recorded') {
+        setup.options.mcpRoutes[0]!.generation = 'instance-2';
+        setup.mcpPrecondition.generation = 'instance-2';
+      }
+      return result;
+    }
+    const changed = vi.spyOn(setup.nats.store, 'append').mockImplementation(replaceDuringSave);
+    try {
+      const request = { method: 'POST', headers, body };
+      const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
+        request);
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      expect(setup.received()).toBe(0);
+    } finally {
+      changed.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses a replacement generation while saving the allow decision',
+  refusesGenerationDuringDecisionSave);
