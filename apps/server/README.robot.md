@@ -1705,3 +1705,9 @@ small. No allowance is allocated and nothing can spend. The cap records consent.
 `test/memory.test.ts` covers HTTP consent, scope/assistant/payer refusal, retries,
 conflicts, status privacy and equal binding tables after offline replay without
 external ports. Fresh-install qualification and independent review: NOT RUN.
+
+## Budget stop
+
+Owner/Admin budget reads and commands include saved stop reasons and known turns.
+Rebuild budget projections on upgrade. The integration test checks PostgreSQL
+replay and member refusal; dispatch and cancellation follow later.

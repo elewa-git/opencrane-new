@@ -259,3 +259,13 @@ The cap exports as integer cents with a minimum of zero and accepts only 100.
 Only a server event with a matching human principal, scope subject and command id
 is accepted. Person scope requires its own member. The record contains no fact
 text and grants no spending authority. Run and dirty-scope contracts remain deferred.
+
+## Budget stop
+
+`budget.exhausted` keeps legacy scope-only replay and adds typed integer-cent
+reasons. A later refusal uses the strict `{ stopId, work }` shape, with a non-empty
+stop id and conversation/turn ids. It cannot mix that reference with reasons or a
+legacy scope. The fold checks that the referenced stop already exists.
+`test/budget-refusal.test.ts` checks the reference shape and rejects incomplete,
+mixed and undeclared fields. The [catalogue](../../docs/architecture/events.md) owns the contract;
+the [accepted design](../../docs/specs/phase-3/p3-14-p3-15-budget-stop.md) records later work.

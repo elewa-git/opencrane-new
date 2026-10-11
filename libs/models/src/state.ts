@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { parseEventByType, optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
+import { parseEventByType, budgetExhaustedDataSchema, budgetStopReasonSchema,
+  optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
 import type { Projection, Query } from '@opencrane/projections';
 
 // Pinned standard USD prices, 2 October 2026, at the existing EUR 95/100 planning FX.
@@ -95,16 +96,24 @@ export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
   call: callSchema, settledCents: z.int().nonnegative().optional(), outcomeUnknown: z.boolean().optional() });
 const ceilingsSchema = z.array(z.object({ scope: z.enum(['paying_group', 'assistant']), scopeId: z.string(), ceilingCents: z.int().nonnegative() }));
+const stopSchema = z.object({ id: z.string(), position: z.int().nonnegative(),
+  reasons: z.array(budgetStopReasonSchema) });
+const stoppedWorkSchema = z.object({ conversationId: z.string(), turnId: z.string(),
+  stopId: z.string() });
 const stateSchema = z.object({ dailyCeilingCents: z.int().nonnegative(), ceilingCents: z.int().nonnegative(),
   periodStart: z.string().optional(), defaultPayingGroupId: z.string().optional(), ceilings: ceilingsSchema.default([]), sequence: z.int().nonnegative().default(0),
-  reservations: z.array(reservationSchema) });
+  reservations: z.array(reservationSchema), limits: z.array(budgetStopReasonSchema).default([]),
+  stops: z.array(stopSchema).default([]), stoppedWork: z.array(stoppedWorkSchema).default([]) });
 export type BudgetState = z.infer<typeof stateSchema>;
-export const emptyBudget = (): BudgetState => ({ dailyCeilingCents: 0, ceilingCents: 0, ceilings: [], sequence: 0, reservations: [] });
+export const emptyBudget = (): BudgetState => ({ dailyCeilingCents: 0, ceilingCents: 0, ceilings: [], sequence: 0, reservations: [], limits: [], stops: [], stoppedWork: [] });
 export function applyBudget(state: BudgetState, event: EventEnvelope, sequence = state.sequence): void {
   if (!event.type.startsWith('budget.')) return;
   state.sequence = sequence;
   const d = data(event);
-  if (event.type === 'budget.ceiling_set') applyCeiling(state, d);
+  if (event.type === 'budget.ceiling_set') {
+    applyStopConfiguration(state, event);
+    applyCeiling(state, d);
+  } else if (event.type === 'budget.exhausted') applyExhaustion(state, event);
   else if (event.type === 'budget.period_started') state.periodStart = z.string().parse(d['periodStart']);
   else if (event.type === 'budget.reserved') {
     // Older calls did not repeat the group in modelCall; the envelope already bound it.
@@ -152,8 +161,225 @@ function safeTotal(value: bigint) {
   return result;
 }
 export function budgetSummary(state: BudgetState, now = new Date()) {
-  return { ...totals(state, now), sequence: state.sequence, defaultPayingGroupId: state.defaultPayingGroupId ?? null,
-    periodStart: state.periodStart ?? null, ceilings: state.ceilings.map(c => ({ ...c, ...totals(state, now, c) })) };
+  function ceilingSummary(ceiling: BudgetState['ceilings'][number]) {
+    return { ...ceiling, ...totals(state, now, ceiling) };
+  }
+  const ceilings = state.ceilings.map(ceilingSummary);
+  return { ...totals(state, now), stops: state.stops, stoppedWork: state.stoppedWork,
+    sequence: state.sequence, defaultPayingGroupId: state.defaultPayingGroupId ?? null,
+    periodStart: state.periodStart ?? null, ceilings };
+}
+type StopReason = z.infer<typeof budgetStopReasonSchema>;
+function matchesScope(reason: StopReason, call: Pick<ModelCall, 'payingGroupId' | 'assistantId'>) {
+  if (reason.scope === 'global') {
+    return true;
+  }
+  if (reason.scope === 'paying_group') {
+    return reason.scopeId === call.payingGroupId;
+  }
+  return reason.scopeId === call.assistantId;
+}
+function capMessage(reason: StopReason): string {
+  if (reason.scope === 'global') {
+    return `Silo spending cap reached (${reason.kind})`;
+  }
+  if (reason.scope === 'paying_group') {
+    return 'Paying group spending cap reached';
+  }
+  return 'Assistant spending cap reached';
+}
+export function budgetStopMessage(state: BudgetState, call: ModelCall, stopId: string): string {
+  function matchesStop(stop: BudgetState['stops'][number]) {
+    return stop.id === stopId;
+  }
+  const stop = state.stops.find(matchesStop);
+  if (!stop) {
+    throw new Error('Unknown budget stop');
+  }
+  const messages: string[] = [];
+  // Keep the saved cause after recovery, but omit caps belonging to other work.
+  for (const reason of stop.reasons) {
+    if (matchesScope(reason, call)) {
+      messages.push(capMessage(reason));
+    }
+  }
+  return messages.join('; ') +
+    '; ask an Owner or Admin or wait for the next UTC budget period';
+}
+function sameLimit(left: StopReason, right: StopReason) {
+  if (left.scope !== right.scope || left.kind !== right.kind) {
+    return false;
+  }
+  if (left.scope === 'global' || right.scope === 'global') {
+    return true;
+  }
+  return left.scopeId === right.scopeId;
+}
+function periodDates(kind: StopReason['kind'], now: Date) {
+  const reset = new Date(now);
+  let periodStart: string;
+  if (kind === 'daily') {
+    periodStart = `${now.toISOString().slice(0, 10)}T00:00:00.000Z`;
+    reset.setUTCDate(reset.getUTCDate() + 1);
+  } else {
+    periodStart = `${now.toISOString().slice(0, 7)}-01T00:00:00.000Z`;
+    reset.setUTCDate(1);
+    reset.setUTCMonth(reset.getUTCMonth() + 1);
+  }
+  reset.setUTCHours(0, 0, 0, 0);
+  return { periodStart, resetAt: reset.toISOString() };
+}
+function reasonTotals(state: BudgetState, limit: StopReason, now: Date,
+  attemptedBoundCents = 0): StopReason {
+  const scope = limit.scope === 'global' ? undefined : limit;
+  const usage = totals(state, now, scope);
+  const settledCents = limit.kind === 'daily' ? usage.todayCents : usage.monthCents;
+  return { ...limit, ...periodDates(limit.kind, now), settledCents,
+    reservedCents: usage.reservedCents, attemptedBoundCents };
+}
+function stopWork(state: BudgetState, work: Pick<ModelCall, 'conversationId' | 'turnId'>,
+  stopId: string) {
+  function matchesWork(saved: BudgetState['stoppedWork'][number]) {
+    return saved.conversationId === work.conversationId && saved.turnId === work.turnId;
+  }
+  if (!state.stoppedWork.some(matchesWork)) {
+    state.stoppedWork.push({ conversationId: work.conversationId, turnId: work.turnId, stopId });
+  }
+}
+function recordStop(state: BudgetState, event: EventEnvelope, reasons: StopReason[]) {
+  state.stops.push({ id: event.id, position: state.sequence, reasons });
+  for (const reservation of state.reservations) {
+    for (const reason of reasons) {
+      if (matchesScope(reason, reservation.call)) {
+        stopWork(state, reservation.call, event.id);
+        break;
+      }
+    }
+  }
+}
+function applyStopConfiguration(state: BudgetState, event: EventEnvelope) {
+  const payload = data(event);
+  const now = new Date(event.time);
+  const reasons: StopReason[] = [];
+  const kinds = payload['scope'] === 'global' ? ['monthly', 'daily'] as const : ['monthly'] as const;
+  for (const kind of kinds) {
+    let value = payload[kind === 'daily' ? 'dailyCeilingCents' : 'ceilingCents'];
+    if (value === undefined) {
+      function isDaily(limit: StopReason) {
+        return limit.scope === 'global' && limit.kind === 'daily';
+      }
+      if (state.limits.some(isDaily)) {
+        continue;
+      }
+      // Keep the original zero daily limit when older initial settings omit it.
+      value = state.dailyCeilingCents;
+    }
+    const candidateData = { scope: payload['scope'],
+      ...(payload['scopeId'] === undefined ? {} : { scopeId: payload['scopeId'] }),
+      kind, reason: 'bound_refused', ...periodDates(kind, now), ceilingCents: value,
+      settledCents: 0, reservedCents: 0, attemptedBoundCents: 0, configurationId: event.id };
+    const candidate = budgetStopReasonSchema.parse(candidateData);
+    function isLimit(limit: StopReason) {
+      return sameLimit(limit, candidate);
+    }
+    const prior = state.limits.find(isLimit);
+    // Keep an unchanged ceiling's reference so another edit cannot act as Resume.
+    if (prior?.ceilingCents === candidate.ceilingCents) {
+      continue;
+    }
+    function otherLimit(limit: StopReason) {
+      return !isLimit(limit);
+    }
+    state.limits = state.limits.filter(otherLimit);
+    state.limits.push(candidate);
+    const reason = reasonTotals(state, candidate, now);
+    const capacity = BigInt(reason.settledCents) + BigInt(reason.reservedCents);
+    // Treat a first scoped ceiling as a reduction from having no limit.
+    const lowered = prior === undefined || candidate.ceilingCents < prior.ceilingCents;
+    if (candidate.ceilingCents === 0 || (lowered && capacity >= BigInt(candidate.ceilingCents))) {
+      reason.reason = candidate.ceilingCents === 0 ? 'zero_ceiling' : 'ceiling_lowered';
+      reasons.push(reason);
+    }
+  }
+  if (reasons.length) {
+    recordStop(state, event, reasons);
+  }
+}
+function applyExhaustion(state: BudgetState, event: EventEnvelope) {
+  const payload = budgetExhaustedDataSchema.parse(event.data);
+  if ('stopId' in payload) {
+    const stopId = payload.stopId;
+    function matchesStop(stop: BudgetState['stops'][number]) {
+      return stop.id === stopId;
+    }
+    if (!state.stops.some(matchesStop)) {
+      throw new Error('Unknown budget stop');
+    }
+    stopWork(state, payload.work, stopId);
+    return;
+  }
+  let reasons: StopReason[];
+  if ('reasons' in payload) {
+    reasons = payload.reasons;
+  } else {
+    reasons = [];
+    for (const limit of state.limits) {
+      if (limit.scope !== payload.scope) {
+        continue;
+      }
+      if (limit.scope !== 'global' && 'scopeId' in payload && limit.scopeId !== payload.scopeId) {
+        continue;
+      }
+      const reason = reasonTotals(state, limit, new Date(event.time));
+      reason.reason = 'legacy_exhaustion';
+      reasons.push(reason);
+    }
+  }
+  recordStop(state, event, reasons);
+  if ('work' in payload && payload.work) {
+    stopWork(state, payload.work, event.id);
+  }
+}
+export function budgetStopId(state: BudgetState, call: ModelCall, now: Date): string | undefined {
+  for (const work of state.stoppedWork) {
+    if (work.conversationId === call.conversationId && work.turnId === call.turnId) {
+      return work.stopId;
+    }
+  }
+  // Keep zero ceilings binding after their first period resets.
+  for (const limit of state.limits) {
+    if (matchesScope(limit, call) && limit.ceilingCents === 0) {
+      return limit.configurationId;
+    }
+  }
+  for (const stop of state.stops) {
+    for (const reason of stop.reasons) {
+      if (!matchesScope(reason, call) || now.toISOString() >= reason.resetAt) {
+        continue;
+      }
+      for (const limit of state.limits) {
+        if (sameLimit(limit, reason) && limit.configurationId === reason.configurationId) {
+          return stop.id;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+export function exceededReasons(state: BudgetState, call: ModelCall, now: Date,
+  attemptedBoundCents: number): StopReason[] {
+  const reasons: StopReason[] = [];
+  for (const limit of state.limits) {
+    if (!matchesScope(limit, call)) {
+      continue;
+    }
+    const reason = reasonTotals(state, limit, now, attemptedBoundCents);
+    const capacity = BigInt(reason.settledCents) + BigInt(reason.reservedCents);
+    if (capacity + BigInt(attemptedBoundCents) > BigInt(reason.ceilingCents)) {
+      reasons.push(reason);
+    }
+  }
+  return reasons;
 }
 export async function readBudget(db: Query, silo: string): Promise<BudgetState> {
   const result = await db.query<{ state: unknown }>('SELECT state FROM model_budgets WHERE silo = $1', [silo]);

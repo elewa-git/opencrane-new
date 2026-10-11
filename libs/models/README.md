@@ -13,14 +13,14 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices, draining, owner appointments and spending| models["libs/models<br/>AI rules, provider choice and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approvals, child joins, owner appointments, provider choices and spending stops| models["libs/models<br/>AI rules, provider choice and spending"]
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves spending changes and reads activity, grants and closing records| store["libs/event-store<br/>event log"]
+  models -->|saves spending changes and reads activity, grants, closing records and spending stops| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -60,6 +60,11 @@ flowchart LR
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
   Keep the revision shown to admins valid after switch-on when no spending change
   was saved, so they can retry a refused edit without releasing a hold first.
+- Keep a saved stop when a spending limit is exhausted. A changed limit or new
+  budget period can allow new work, while previously stopped work stays stopped.
+  Name the cap that stopped the turn in its refusal, using the saved reasons.
+  Save each refused turn before replying, including turns refused by an existing
+  stop. Applying the stop to every tool and running computer is still planned.
 - Hold money before an AI call and settle the charge when usage is reported.
   Keep the budget state in memory after replay, so saving each change does not
   read all the old spending events again.

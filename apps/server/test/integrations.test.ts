@@ -1,6 +1,6 @@
 import { installWorker } from '../src/integrations/install-worker.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
-import { budgets, BudgetActor, readBudget, startDecision, settlementHandler, history } from '@opencrane/models';
+import { budgets, BudgetActor, readBudget, startDecision, settlementHandler, history, priceTableId } from '@opencrane/models';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -1077,6 +1077,33 @@ async function refusesResolutionWithoutOpenFgaAdminPermission() {
 }
 it('refuses a resolution when the saved admin role has no OpenFGA admin permission',
   refusesResolutionWithoutOpenFgaAdminPermission);
+
+async function readsConfiguredBudgetStop() {
+  const url = '/api/org/models';
+  const payload = { commandId: 'zero-budget', expectedSequence: actor.state.sequence,
+    scope: 'global', ceilingCents: 0 };
+  const requestHeaders = { ...headers('oidc-alice'),
+    origin: new URL(config.redirectUri).origin };
+  const before = await nats.store.head();
+  const response = await app.inject({ method: 'POST', url, headers: requestHeaders, payload });
+  expect(response.statusCode).toBe(200);
+  expect(await nats.store.head('budget-test')).toBe(before + 1);
+  const refusedCall = { model: 'gpt-6-luna', priceTableId,
+    computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
+    conversationId: 'conversation', turnId: 'refused', threadId: 'thread',
+    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64) };
+  await expect(actor.reserve(refusedCall, 1)).rejects.toThrow('spending cap');
+  expect(await nats.store.head('budget-test')).toBe(before + 2);
+  await runner.rebuild(budgets);
+  const read = await app.inject({ url, headers: headers('oidc-amina') });
+  expect(read.json()).toMatchObject({ budget: { stops: [ { reasons: [ {
+    scope: 'global', kind: 'monthly', reason: 'zero_ceiling', ceilingCents: 0,
+  } ] } ], stoppedWork: [{ conversationId: 'conversation', turnId: 'refused',
+    stopId: actor.state.stops[0]!.id }] } });
+  expect((await app.inject({ url, headers: headers('oidc-bob') })).statusCode).toBe(403);
+  expect(await readBudget(pgDb(dbs.queue), 'test')).toEqual(actor.state);
+}
+it('returns saved zero-ceiling stops to admins after budget replay', readsConfiguredBudgetStop);
 
 async function refusesRemovedComputerAdministrator() {
   const request = { url: '/api/org/computers', headers: headers('oidc-amina') };

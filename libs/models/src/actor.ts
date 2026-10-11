@@ -5,7 +5,8 @@ import { budgetCeilingSetDataSchema, effectResolvedDataSchema, effectUncertainDa
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { registerHandler } from '@opencrane/handlers';
-import { applyBudget, costCents, data, emptyBudget, models, totals, type BudgetState, type ModelCall } from './state.ts';
+import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budgetStopMessage,
+  exceededReasons, type BudgetState, type ModelCall } from './state.ts';
 
 type ModelUsage = {
   inputTokens: number;
@@ -65,7 +66,6 @@ export class BudgetActor {
   private failed = false;
   private reservationsStopped = false;
   private readonly timedOut = new Set<string>();
-  private readonly exhausted = new Set<string>();
   readonly store: EventStore;
   readonly silo: string;
   readonly now: () => Date;
@@ -137,13 +137,8 @@ export class BudgetActor {
       this.reservationsStopped = true;
     }
     applyBudget(this.state, event, this.sequence);
-    // Keep refusals across leadership changes; a ceiling change permits a fresh notice.
-    if (event.type === 'budget.ceiling_set') this.exhausted.clear();
-    if (event.type === 'budget.exhausted') {
-      const d = data(event);
-      this.exhausted.add(`${event.time.slice(0, 10)}:${String(d['scope'])}:${z.string().optional().parse(d['scopeId']) ?? ''}`);
-    }
   }
+
   configure(raw: unknown, commandId: string = randomUUID(), expectedSequence?: number, fresh?: () => Promise<void>) {
     return this.serial(async () => {
       const payload = budgetCeilingSetDataSchema.parse(raw);
@@ -163,19 +158,18 @@ export class BudgetActor {
       z.int().positive().parse(amountCents);
       if (!models.some(row => row.id === call.model && row.priceTableId === call.priceTableId && !row.retired)) throw new Error('Unknown model tariff');
       if (!call.payingGroupId) throw new Error('Paying group unavailable');
-      const applicable = [{ scope: 'global' as const, scopeId: '', ...totals(this.state, this.now()) },
-        ...this.state.ceilings.filter(c => (c.scope === 'paying_group' ? call.payingGroupId : call.assistantId) === c.scopeId)
-          .map(c => ({ ...c, ...totals(this.state, this.now(), c) }))];
-      // Compare cents as integers and include unsettled reservations to prevent concurrent overspend.
-      const exceeded = applicable.find(t =>
-        (t.scope === 'global' && BigInt(t.todayCents) + BigInt(t.reservedCents) + BigInt(amountCents) > BigInt(t.dailyCeilingCents)) ||
-        BigInt(t.monthCents) + BigInt(t.reservedCents) + BigInt(amountCents) > BigInt(t.ceilingCents!));
-      if (exceeded) {
-        const key = `${this.now().toISOString().slice(0, 10)}:${exceeded.scope}:${exceeded.scopeId}`;
-        if (!this.exhausted.has(key)) await this.append('budget.exhausted', { scope: exceeded.scope,
-          ...(exceeded.scope === 'global' ? {} : { scopeId: exceeded.scopeId }) });
-        const label = exceeded.scope === 'global' ? 'Silo' : exceeded.scope === 'paying_group' ? 'Paying group' : 'Assistant';
-        throw new BudgetRefused(`${label} spending cap reached; ask an Owner or Admin or wait for the next UTC budget period`);
+      const stopId = budgetStopId(this.state, call, this.now());
+      if (stopId !== undefined) {
+        await this.recordRefusedWork(call, stopId, fresh);
+        this.requireBudget(call);
+      }
+      const reasons = exceededReasons(this.state, call, this.now(), amountCents);
+      if (reasons.length) {
+        const work = { conversationId: call.conversationId, turnId: call.turnId };
+        const exhaustion = { reasons, work };
+        await fresh?.();
+        await this.append('budget.exhausted', exhaustion);
+        this.requireBudget(call);
       }
       await fresh?.();
       const id = randomUUID();
@@ -184,9 +178,30 @@ export class BudgetActor {
       return id;
     });
   }
+  private async recordRefusedWork(call: ModelCall, stopId: string, fresh?: () => Promise<void>) {
+    function matchesWork(work: BudgetState['stoppedWork'][number]) {
+      return work.conversationId === call.conversationId && work.turnId === call.turnId;
+    }
+    if (this.state.stoppedWork.some(matchesWork)) {
+      return;
+    }
+    const work = { conversationId: call.conversationId, turnId: call.turnId };
+    const refusal = { stopId, work };
+    // Save the refused turn before replying so a later limit change cannot reopen it.
+    await fresh?.();
+    await this.append('budget.exhausted', refusal);
+  }
+  private requireBudget(call: ModelCall) {
+    const stopId = budgetStopId(this.state, call, this.now());
+    if (stopId !== undefined) {
+      const message = budgetStopMessage(this.state, call, stopId);
+      throw new BudgetRefused(message);
+    }
+  }
   requireOpenReservation(reservationId: string, fresh: () => Promise<void>) {
     const appendNotDispatched = this.appendNotDispatched.bind(this);
     const state = this.state;
+    const requireBudget = this.requireBudget.bind(this);
     function matchesReservation(reservation: BudgetState['reservations'][number]) {
       return reservation.id === reservationId;
     }
@@ -195,6 +210,7 @@ export class BudgetActor {
       if (!reservation || reservation.settledCents !== undefined) {
         throw new Error('Reservation is no longer open');
       }
+      requireBudget(reservation.call);
       // Recheck access after waiting in the queue, within the original time limit.
       try {
         await fresh();

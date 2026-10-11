@@ -546,10 +546,31 @@ export const budgetPeriodStartedDataSchema = z
   .object({ periodStart: z.iso.datetime({ offset: true }) })
   .strict();
 
-export const budgetExhaustedDataSchema = z.discriminatedUnion('scope', [
+const stopFields = {
+  kind: z.enum(['daily', 'monthly']),
+  reason: z.enum(['bound_refused', 'zero_ceiling', 'ceiling_lowered', 'legacy_exhaustion']),
+  periodStart: z.iso.datetime({ offset: true }), resetAt: z.iso.datetime({ offset: true }),
+  ceilingCents: centsSchema, settledCents: centsSchema, reservedCents: centsSchema,
+  attemptedBoundCents: centsSchema, configurationId: id,
+};
+export const budgetStopReasonSchema = z.discriminatedUnion('scope', [
+  z.object({ scope: z.literal('global'), ...stopFields }).strict(),
+  z.object({ scope: z.literal('paying_group'), scopeId: id, ...stopFields,
+    kind: z.literal('monthly') }).strict(),
+  z.object({ scope: z.literal('assistant'), scopeId: id, ...stopFields,
+    kind: z.literal('monthly') }).strict(),
+]);
+const legacyBudgetExhaustedSchema = z.discriminatedUnion('scope', [
   z.object({ scope: z.literal('global') }).strict(),
   z.object({ scope: z.literal('paying_group'), scopeId: id }).strict(),
   z.object({ scope: z.literal('assistant'), scopeId: id }).strict(),
+]);
+const budgetStoppedWorkSchema = z.object({ conversationId: id, turnId: id }).strict();
+export const budgetExhaustedDataSchema = z.union([
+  legacyBudgetExhaustedSchema,
+  z.object({ reasons: z.array(budgetStopReasonSchema).min(1).max(4),
+    work: budgetStoppedWorkSchema.optional() }).strict(),
+  z.object({ stopId: id, work: budgetStoppedWorkSchema }).strict(),
 ]);
 
 // --- Company brain -------------------------------------------------------
