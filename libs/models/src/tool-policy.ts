@@ -1,15 +1,19 @@
 import { authorityFence } from './authority.ts';
 import { currentMembership } from './ownership.ts';
 import { z } from 'zod';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { envelope, history } from './actor.ts';
 
 export async function readToolPolicy(store: EventStore, silo: string, serverId: string,
   deadline = Infinity) {
-  let policy = emptyToolPolicy();
   const rows = await history(store, `mcp-${serverId}`, silo, deadline);
+  return toolPolicyFromRows(rows);
+}
+
+export function toolPolicyFromRows(rows: StoredEvent[]) {
+  let policy = emptyToolPolicy();
   for (const row of rows) {
     policy = applyToolPolicy(policy, row.event, row.sequence);
   }

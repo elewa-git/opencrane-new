@@ -32,6 +32,8 @@ A change to the tools or their rules ends that approval.
   operation, contents, unique identity (UID) and version before recovery or deletion.
   Keep private repair records so a restart cannot accept a replacement Secret.
   Confirm that the Secret is absent before reporting deletion.
+- Read each saved tool history once for its rules and review details.
+  Memory discovery can still list recall when remember is blocked.
 
 - Refuse model, tool and memory calls while computer control is pending.
   Recheck turn and control changes before saving a human approval decision.
