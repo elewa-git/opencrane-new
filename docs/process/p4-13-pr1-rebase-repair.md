@@ -212,3 +212,66 @@ PASS: documentation lint, offline links and changelog validation after the recei
 was updated. Logs: `final-docs.log`, `final-links.log` and `final-changelog.log`.
 NOT RUN: local full root suite, deployment, fresh-install qualification or another
 independent review. The PR comment records the pushed head and GitHub CI result.
+
+## Final checks at low load
+
+Date: 11 October 2026. Tested source: `eb619200b311081ee7559217452e683875ca014f`.
+Fetched main: `f4b829cecfb0faea6376f6f111b686d4c04aa293`.
+Logs are in `/tmp/pr323-last-round/` on the shared development host.
+The services and PostgreSQL endpoint are the same as described above.
+This was not a fresh installation.
+
+The newest PR comment reported HTTP 503 in the stale-grant MCP case and the
+known slow-append fairness failure during merge train 13. The host had been
+heavily loaded. Before this repair, its one-minute load was 0.28, below the
+requested limit of 16.
+
+PASS: fetched origin and rebased the eight existing PR commits onto main.
+The rebase finished, the rebase directory is absent and fetched main is an
+ancestor of the branch. The commit comparison accounts for all eight commits.
+The conflicts kept both sets of memory tests with every assertion intact.
+The command code keeps main's refusal when a fact write reuses the id of a
+nightly binding command. The guides keep main's new behaviour alongside the
+memory checks. Two small punctuation and spacing repairs follow the rebase.
+
+PASS: the unchanged `apps/server/test/memory-mcp.test.ts` passed three times
+alone on the rebased branch: 64 tests each, in 97.38, 82.16 and 83.15 seconds.
+PASS: the same file on fetched main passed all 63 tests in 87.82 seconds.
+The stale-grant case passed in all four runs. Observed one-minute loads during
+these runs ranged from 1.16 to 2.66. The reported 503 never returned, so this
+round treats it as a load failure, as requested. No production fix was added.
+These runs do not establish which timed operation failed in the overloaded run.
+Logs are `mcp-branch-1.log`, `mcp-branch-2.log`, `mcp-branch-3.log` and `mcp-main.log`.
+
+The MCP test matches the merge-train checkout at `b938a914` exactly. The two
+protected authority test files match fetched main. No access, money or memory
+check, assertion, deadline or read limit was weakened.
+
+The five-file command above ran twice under `nice -n 10`, with the requested
+`PG_TEST_URL` and one worker. These runs include main's new nightly binding
+and pending-control tests.
+
+FAIL: the first run passed 250 of 251 tests in 239.83 seconds. The notes-writer
+case received HTTP 503 on its initial save at `memory.test.ts:1662`.
+The original stale-grant case and the known fairness case both passed.
+The caught error was not recorded, so the cause of this separate failure is
+unproved. It is not classified as the known fairness flake.
+Log: `changed-tests-1.log`.
+
+PASS: the second run passed all 251 tests in 248.17 seconds.
+Log: `changed-tests-2.log`.
+PASS: the unchanged complete server memory file then passed all 129 tests alone
+in 146.73 seconds, including the notes-writer case and fairness.
+Log: `memory-isolated.log`.
+Every changed case has two passing results. The first batch remains FAIL.
+No assertion, deadline, fixture or production behaviour changed between runs.
+
+PASS: lint, including Knip and `npm run lint:changelog`. ESLint reported 15
+existing warnings and no errors. PASS: typecheck across all workspaces.
+PASS: `check:events`, with 112 event types matching the catalogue.
+All checks ran under `nice -n 10`. Logs are `lint.log`, `typecheck.log` and `events.log`.
+PASS: Markdown, offline links and changelog checks after the final receipt update.
+
+NOT RUN: local full root suite, deployment, fresh-install qualification and a new
+independent review. The PR comment records the pushed commit and GitHub CI result.
+The merge train owns landing.
