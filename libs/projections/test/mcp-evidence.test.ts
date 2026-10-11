@@ -59,14 +59,17 @@ async function rebuildsEvidence() {
     const change = record('mcp.tools_changed', { serverId: 'fixture',
       previousSchemaDigest: discovery.schemaDigest, newSchemaDigest: catalogue.schemaDigest,
       catalogue });
-    await nats.seed([registration, capture, change]);
+    const admission = record('mcp.dispatch_admitted', { serverId: 'fixture',
+      connectionId: 'installed', requestId: 'call-1', toolName: 'read',
+      toolRevision: revision, schemaDigest, generation: 'instance-1' });
+    await nats.seed([registration, capture, change, admission]);
     const runner = new ProjectionRunner(storage.db, nats.reader, logger);
     await runner.initialise(mcpCatalogue);
     await runner.run(mcpCatalogue);
     const before = await storage.db.query('SELECT policy FROM mcp_catalogue');
     expect(before.rows[0]?.['policy']).toMatchObject({ checkedAt, expiresAt,
       catalogue: { ...discovery, schemaDigest: emptyDigest, toolCount: 0, tools: [] },
-      previousCatalogue: discovery });
+      previousCatalogue: discovery, sequence: 4, policyRevision: 3 });
     await storage.reopen();
     await rebuildMcpCatalogueProjection(storage.db, nats.reader, logger, { verify: true });
     expect((await storage.db.query('SELECT policy FROM mcp_catalogue')).rows).toEqual(before.rows);
@@ -98,3 +101,14 @@ function discoveryCannotReview() {
   expect(applyToolPolicy(emptyToolPolicy(), capture, 1).tools).toEqual(changed.tools);
 }
 it('keeps discovery claims and legacy mode choices blocked during replay', discoveryCannotReview);
+
+function retainsPolicyAfterAdmission() {
+  const before = discovered();
+  const admission = record('mcp.dispatch_admitted', { serverId: 'fixture',
+    connectionId: 'installed', requestId: 'call-1', toolName: 'read',
+    toolRevision: revision, schemaDigest, generation: 'instance-1' });
+  const after = applyToolPolicy(before, admission, 2);
+  expect(after).toEqual({ ...before, sequence: 2 });
+}
+it('advances the write position without changing tool policy after send admission',
+  retainsPolicyAfterAdmission);

@@ -200,59 +200,117 @@ async function refusesChangeDuringLeaderCheck() {
 }
 it('refuses catalogue changes while the leadership check waits', refusesChangeDuringLeaderCheck);
 
-async function refusesBlockDuringFinalAccessReads() {
+const blockPoints = ['first policy read', 'access read', 'terminating read or admission'] as const;
+async function refusesBlockDuringFinalAccessReads(point: typeof blockPoints[number]) {
   const setup = await fixture();
   try {
     const headers = await prepare(setup);
     const value = await permit(setup, headers);
     const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
     const head = setup.nats.store.head.bind(setup.nats.store);
-    const mcpRead = Promise.withResolvers<void>();
-    const memberRead = Promise.withResolvers<void>();
-    const releaseMember = Promise.withResolvers<void>();
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    let memberReads = 0;
     let mcpReads = 0;
-    let heldMember = false;
-    async function holdFinalAccessRead(...args: Parameters<typeof head>) {
-      const position = await head(...args);
-      if (args[0] === 'mcp-fixture') {
-        mcpReads += 1;
-        // Skip the sender's earlier catalogue check and pause during its access check.
-        if (mcpReads === 2) {
-          mcpRead.resolve();
-        }
-      }
-      if (args[0] === 'member-alice' && !heldMember) {
-        heldMember = true;
-        memberRead.resolve();
-        await releaseMember.promise;
-      }
-      return position;
-    }
-    const delayed = vi.spyOn(setup.nats.store, 'head');
-    delayed.mockImplementation(holdFinalAccessRead);
-    const response = send(setup, value);
-    try {
-      await Promise.all([mcpRead.promise, memberRead.promise]);
+    const policyRead = Promise.withResolvers<void>();
+    let blocked = false;
+    async function saveBlock() {
+      if (blocked) return;
+      blocked = true;
       const command = { commandId: 'block-during-dispatch', expectedSequence: policy.sequence,
         connectionId: 'installed', toolName: 'write', toolRevision: tool.revision, mode: 'block' };
       const result = await setToolPolicy(setup.nats.store, setup.binding, 'alice',
         'fixture', command);
       expect(result.status).toBe('appended');
-      releaseMember.resolve();
-      const reply = await response;
+    }
+    async function blockDuringRead(...args: Parameters<typeof head>) {
+      const position = await head(...args);
+      if (args[0] === 'mcp-fixture') {
+        mcpReads += 1;
+        const target = point === 'terminating read or admission' ? 3 : 2;
+        if (mcpReads === target) policyRead.resolve();
+      }
+      if (blocked) return position;
+      if (point === 'first policy read' && args[0] === 'mcp-fixture') {
+        await saveBlock();
+      }
+      if (args[0] === 'member-alice') {
+        memberReads += 1;
+        if (point === 'access read' && memberReads === 1) {
+          await policyRead.promise;
+          await saveBlock();
+        }
+        // Pause the old final pass. After its removal, pause the admission append instead.
+        if (point === 'terminating read or admission' && memberReads === 2) {
+          await policyRead.promise;
+          await saveBlock();
+        }
+      }
+      return position;
+    }
+    async function blockBeforeAdmission(command: AppendCommand) {
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'mcp.dispatch_admitted') await saveBlock();
+      return append(command);
+    }
+    const delayedRead = vi.spyOn(setup.nats.store, 'head');
+    const delayedAppend = vi.spyOn(setup.nats.store, 'append');
+    delayedRead.mockImplementation(blockDuringRead);
+    delayedAppend.mockImplementation(blockBeforeAdmission);
+    try {
+      const reply = await send(setup, value);
       await reply.text();
+      expect(blocked).toBe(true);
       expect(setup.received()).toBe(0);
       expect(reply.status).toBe(403);
     } finally {
-      releaseMember.resolve();
-      await response;
+      delayedRead.mockRestore();
+      delayedAppend.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it.each(blockPoints)('refuses a Block saved during the %s', refusesBlockDuringFinalAccessReads);
+
+async function allowsConcurrentCalls() {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const firstPermit = await permit(setup, headers);
+    const secondPermit = await permit(setup, headers);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    const bothReady = Promise.withResolvers<void>();
+    let admissionAttempts = 0;
+    async function overlapAdmissions(command: AppendCommand) {
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'mcp.dispatch_admitted') {
+        admissionAttempts += 1;
+        if (admissionAttempts === 2) bothReady.resolve();
+        await bothReady.promise;
+      }
+      return append(command);
+    }
+    const delayed = vi.spyOn(setup.nats.store, 'append');
+    delayed.mockImplementation(overlapAdmissions);
+    try {
+      const responses = await Promise.all([send(setup, firstPermit), send(setup, secondPermit)]);
+      for (const response of responses) {
+        expect(response.status, await response.text()).toBe(200);
+      }
+      expect(setup.received()).toBe(2);
+      const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+      expect(policy.policyRevision).toBe(before.policyRevision);
+      expect(policy.tools[0]?.mode).toBe('allow');
+    } finally {
+      bothReady.resolve();
       delayed.mockRestore();
     }
   } finally {
     await setup.close();
   }
 }
-it('refuses a Block saved between the final access reads', refusesBlockDuringFinalAccessReads);
+it('allows two concurrent calls on the same tool', allowsConcurrentCalls);
 
 async function refusesGenerationDuringDecisionSave() {
   const setup = await fixture();
