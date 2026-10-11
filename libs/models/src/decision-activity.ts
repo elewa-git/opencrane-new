@@ -4,6 +4,7 @@ import { computerSummary, type ComputerSummary } from '@opencrane/auth';
 import { closesDecisionTurn, invalidatesApproval } from './approvals.ts';
 import { outputReportTypes } from './authority.ts';
 import { data } from './state.ts';
+import { managedProviderCallsEnabled } from './provider-turns.ts';
 import { decisionChatSummary } from './decision-summary.ts';
 
 const harmlessConversationTypes = [
@@ -14,6 +15,7 @@ const harmlessConversationTypes = [
 export async function decisionActivity(store: EventStore, silo: string, assistantId: string,
   conversationId: string, turnId: string, deadline: number) {
   const head = await store.head(undefined, deadline);
+  const managedCallsEnabled = await managedProviderCallsEnabled(store, silo, deadline);
   const conversationSubject = `conversation-${conversationId}`;
   const computerSubject = `computer-${assistantId}`;
   function capturedBeforeCheck(row: StoredEvent) {
@@ -48,6 +50,10 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
   async function confirm(deadline: number, needsApproval: boolean) {
     // Read only activity saved since the histories above. Never replay a long chat
     // inside the short access check. Keep these positions within this request only.
+    const enabledNow = await managedProviderCallsEnabled(store, silo, deadline);
+    if (enabledNow !== managedCallsEnabled) {
+      throw new Error('Provider setup changed');
+    }
     let foundNewRows = false;
     for (const subject of subjects) {
       const from = (positions.get(subject) ?? head) + 1;
@@ -63,7 +69,7 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
     }
     return foundNewRows;
   }
-  return { conversation, computer, confirm };
+  return { conversation, computer, confirm, managedCallsEnabled };
 }
 
 function changesDecisionActivity(event: EventEnvelope, turnId: string, needsApproval: boolean) {

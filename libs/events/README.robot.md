@@ -199,3 +199,20 @@ additions require `joinKind: explicit_child`. They grant no parent rights. No em
 `reviewRevision`, a 64-character lowercase SHA-256 value. Older events omit it;
 new removal routes require it. It identifies the departure inventory the admin
 reviewed. It contains no private history or credentials.
+
+`provider.managed_calls_enabled` records the silo's managed-call mode on `budget-<silo>`.
+Other subjects are rejected. Its data names the reviewed provider, its unchanged revision,
+the changer and the reviewed provider-category position. It carries no key and grants no access.
+The switch-on command is not built yet. It must drain running legacy turns before saving this
+event; schema validation alone cannot prove that condition.
+
+Saving switch-on advances the spending stream. A budget writer using the old position cannot
+save another hold. Safe activation must replace that writer after reading the marker. This event
+has no production command yet.
+The switch-on command is not built yet. It must drain running legacy turns before
+saving this event; schema validation alone cannot prove that condition.
+
+Saving switch-on advances the spending stream. A budget writer using the old
+position cannot save another hold. The actor can read past this marker to settle
+or release holds saved before it, without a restart. It still stops when another
+budget writer has saved a change. This event has no production command yet.

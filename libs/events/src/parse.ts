@@ -54,5 +54,12 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   }
 
   const event: EventEnvelope = result.data;
+  if (event.type === 'provider.managed_calls_enabled') {
+    const subjectSchema = z.literal(`budget-${event.silo}`);
+    const subject = subjectSchema.safeParse(event.subject);
+    if (!subject.success) {
+      return { success: false, reason: 'invalid_event', error: subject.error };
+    }
+  }
   return { success: true, event };
 }

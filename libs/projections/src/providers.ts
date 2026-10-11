@@ -28,6 +28,7 @@ export interface ProviderState {
   lastModelAnswer?: ProviderFact | undefined;
   enabledModels: string[];
   modelsChanged?: ProviderFact;
+  managedCallsEnabled?: true;
 }
 export function applyProvider(state: ProviderState | undefined,
   event: EventEnvelope, position: number): ProviderState {
@@ -36,9 +37,7 @@ export function applyProvider(state: ProviderState | undefined,
   }
   const data = z.record(z.string(), z.unknown()).parse(event.data);
   const providerId = z.string().parse(data['providerId']);
-  if (event.subject !== `provider-${providerId}`) {
-    throw new Error('Provider subject mismatch');
-  }
+  requireProviderSubject(event, providerId);
   const revision = z.int().positive().parse(data['revision']);
   if (event.type === 'provider.created') {
     if (state || revision !== 1) {
@@ -50,9 +49,7 @@ export function applyProvider(state: ProviderState | undefined,
   if (!state || state.providerId !== providerId) {
     throw new Error('Missing provider');
   }
-  if (event.type === 'provider.model_binding_set') {
-    checkBindingRevision(revision, state.revision);
-    state.position = position;
+  if (applyRoutingChange(state, event.type, revision, position)) {
     return state;
   }
   const fact: ProviderFact = { changeId: event.id, time: event.time, revision,
@@ -79,6 +76,15 @@ export function applyProvider(state: ProviderState | undefined,
   }
   state.position = position;
   return state;
+}
+function requireProviderSubject(event: EventEnvelope, providerId: string) {
+  let expectedSubject = `provider-${providerId}`;
+  if (event.type === 'provider.managed_calls_enabled') {
+    expectedSubject = `budget-${event.silo}`;
+  }
+  if (event.subject !== expectedSubject) {
+    throw new Error('Provider subject mismatch');
+  }
 }
 function applyVerification(state: ProviderState, data: Record<string, unknown>,
   fact: ProviderFact) {
@@ -164,6 +170,20 @@ export async function readProviders(db: Query, silo: string, providerId?: string
   return result.rows.map(publicState);
 }
 
-function checkBindingRevision(revision: number, current: number) {
-  if (revision !== current) throw new Error('Invalid binding configuration revision');
+function applyRoutingChange(state: ProviderState, type: string, revision: number,
+  position: number) {
+  const routingTypes = ['provider.model_binding_set', 'provider.managed_calls_enabled'];
+  if (!routingTypes.includes(type)) {
+    return false;
+  }
+  if (revision !== state.revision) {
+    throw new Error('Invalid binding configuration revision');
+  }
+  if (type === 'provider.managed_calls_enabled') {
+    state.managedCallsEnabled = true;
+    // Keep the provider position on its own stream for later configuration commands.
+    return true;
+  }
+  state.position = position;
+  return true;
 }

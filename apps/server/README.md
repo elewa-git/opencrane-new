@@ -38,6 +38,9 @@ flowchart LR
 - Serves personal facts, the bound assistant's notes and its group facts after checking
   the gateway pass, saved grants, current permissions and the recorded turn mode.
   Saves an agent's facts only in the requester's own memory, from references recalled by that thread.
+- After managed calls are switched on, records the assistant's provider choice or the
+  silo default for each new turn. A turn keeps that model when its pass is renewed.
+  No command to switch this on is built yet.
 - Signs people in and keeps their browser session.
 - Uses the shared organisation check for session routes and WebSocket connections.
   Production refuses extra sign-in identities. Development can allow named identities
@@ -81,7 +84,7 @@ flowchart LR
   then checks access, so a longer read does not use up the write access time limit.
   Resolving a hold also reads its history first and rechecks access before saving.
 - Starts personal turns using the latest default paying group. It keeps a small
-  summary and reads only new spending events after the first use.
+  summary with the provider switch-on state and reads each new spending event once.
 - Records tool starts and finishes as events and returns them in the conversation feed.
 - Tells a computer whether it supports approval messages and when a waiting
   approval has been decided or ended. A changed tool policy also ends a waiting approval.

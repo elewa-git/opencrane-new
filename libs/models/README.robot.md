@@ -904,9 +904,8 @@ both fields and any recorded model with the first `computer.turn_started`.
 Ordinary model calls with provider claims are refused before any hold, including
 when they match the recorded turn. The gateway still uses the deployment key.
 
-Remaining work: select the assistant or silo default binding at turn admission,
-send the selected model to the computer, migrate with separate resumable commands,
-and record a switch-on event that cannot strand running turns. Managed dispatch
+Remaining work: migrate with separate resumable commands and build a switch-on
+command that cannot strand running turns. Managed dispatch
 also needs the real gateway proof and provider/key checks from row 5. There is no
 switch-on command or retirement in this first change.
 
@@ -975,3 +974,52 @@ join for other chats. Authority still uses the current join. Neither helper read
 ## Memory reference validity
 
 `memoryReferences(rows, silo, scopeId, custody)` checks metadata and key status without reading fact text. It keeps the first metadata for an equal revision, as the projection does. It walks historical dependencies, refuses cycles and keeps legacy corrections or tombstones unusable. Missing or damaged custody raises an error. Private turn previews omit references that cannot be checked.
+
+## Turn admission after the recorded switch-on event
+
+`provider-turn-routing` keeps the current binding for each dependant and task,
+while `provider-call-mode` keeps the silo's switch-on marker and latest personal
+paying group from `budget-<silo>`. Admission uses both facts from the same
+incremental read. Its final mode check reads only later budget rows, so an ordinary
+personal start reads each new budget row once. It never reads the whole budget
+stream or uses a wildcard for budget facts.
+The routing summary reads new provider events before new-turn admission;
+it does not retain the full history. Turn admission reads it before the short
+payer check. An own binding, including a pause, takes precedence over the default.
+Before the marker exists, saved choices do not alter ordinary traffic.
+The decision service requires both provider claims after the marker exists.
+It rechecks mode before reserving money and returning a permit. Other provider
+configuration changes do not invalidate unrelated calls. Provider-bound model
+calls still refuse on the deployment-key route, so they cannot spend on its key.
+The managed-only gateway, startup fallback-key refusal and safe switch-on command
+are not built in this slice. This marker has no production command or reaction.
+`apps/server/test/provider-turn-admission.test.ts` checks selection, pause precedence,
+missing choices and original choices on replay and closure. The provider contract
+test checks old-token refusal through the real gateway before any hold or send.
+Fresh-install migration and managed dispatch remain NOT RUN.
+
+## Exact streams during model decisions
+
+Model decisions read mode from the exact silo budget stream. They never read the
+provider category. They load chat, computer and mode history before starting the
+short access check, then read only new activity before reserving and returning a
+permit. A provider-bound pass must match its recorded turn and still refuses on
+the deployment-key route before holding money. Switching on advances the budget
+stream, so an old budget writer cannot append a reservation across that change.
+If only switch-on records followed its last position, the actor moves past them
+and retries a settlement or another budget change once. It refuses new holds,
+including after replay, without stopping releases, expiry or later settlements.
+Any change from another budget writer still stops the old actor. It reads only
+events after its saved position when checking an append conflict.
+Retrying a spending-limit change checks the caller's access again within its
+original deadline. A refused change does not stop settlement of existing holds.
+The actor compares the client's expected revision with `state.sequence`, the last
+budget event shown in replies and the projection. Its private `sequence` includes
+switch-on records and is used for conditional appends. Skipping a marker changes
+only that writer position. An access-expired limit change or a refused reservation
+therefore leaves the reported revision valid for the next spending-limit change.
+A saved budget event advances both positions and makes an older client revision
+conflict. `test/actor.test.ts` checks retries with the projected revision, with and
+without an open hold, and after switch-on refuses a reservation.
+A decision audit uses a fresh command id and `historyChecked: true` against zero.
+No earlier event can share that new command id.

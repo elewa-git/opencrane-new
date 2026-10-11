@@ -372,3 +372,8 @@ It checks late token/tool/terminal reports, completed messages, repeated closes,
 upgrade refusal and equality of live and rebuilt metadata and feed rows. Run with `PG_TEST_URL`
 set: `nice -n 10 npx vitest run libs/projections/test/conversation-activity.test.ts`.
 Fresh-install lifecycle journeys remain NOT RUN.
+
+The providers fold stores `managedCallsEnabled: true` on the connection carrying
+`provider.managed_calls_enabled` on `budget-<silo>`. This does not advance its configuration revision
+or replace key verification. Replay restores the marker through the same fold.
+The marker applies to the silo, including after its default choice moves.

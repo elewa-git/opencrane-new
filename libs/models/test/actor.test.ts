@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { countReads, expectNoWholeReads, lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
-import { BudgetActor, envelope, history, priceTableId, totals } from '../src/index.ts';
+import { databases } from '@opencrane/authz/testing';
+import { createLogger } from '@opencrane/observability';
+import { pgDb, ProjectionRunner } from '@opencrane/projections';
+import { BudgetActor, budgets, budgetSummary, envelope, history, priceTableId,
+  readBudget, totals } from '../src/index.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let actor: BudgetActor;
@@ -279,6 +283,143 @@ async function stopsAfterAnotherLeaderWrites() {
 }
 it('stops the old actor after another leader writes without holding money',
   stopsAfterAnotherLeaderWrites);
+
+async function saveSwitchOn() {
+  const payload = {
+    providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+  };
+  const marker = envelope('test', 'budget-test', 'provider.managed_calls_enabled', payload);
+  const expectedSequence = await nats.store.head('budget-test');
+  const command = { event: marker, expectedSequence };
+  expect((await nats.store.append(command)).status).toBe('appended');
+}
+
+async function refusesHoldButKeepsReleaseAfterSwitchOn() {
+  const releaseId = await reserve(false, 'unsent-release');
+  const expiryId = await reserve(false, 'unsent-expiry');
+  await saveSwitchOn();
+  await expect(reserve()).rejects.toThrow('Provider setup changed');
+  await expect(reserve()).rejects.toThrow('Provider setup changed');
+  expect(actor.state.reservations).toHaveLength(2);
+  await actor.releaseUndispatched(releaseId);
+  await expire();
+  expect(actor.state.reservations[1]).toMatchObject({ id: expiryId, settledCents: 0 });
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 0, monthCents: 0 });
+  const recovered = new BudgetActor(nats.store, 'test', now);
+  await recovered.start();
+  await expect(recovered.reserve(actor.state.reservations[0]!.call, 1))
+    .rejects.toThrow('Provider setup changed');
+}
+it('refuses new holds after switch-on without stopping releases and expiry on the same actor',
+  refusesHoldButKeepsReleaseAfterSwitchOn);
+
+async function stopsSettlementAfterSwitchOnAndAnotherLeader() {
+  const reservationId = await reserve(false, 'unsent-release');
+  await saveSwitchOn();
+  const replacement = new BudgetActor(nats.store, 'test', now);
+  await replacement.start();
+  const before = await nats.store.head();
+  await expect(actor.releaseUndispatched(reservationId))
+    .rejects.toThrow('Budget writer lost its fence');
+  await expect(actor.releaseUndispatched(reservationId))
+    .rejects.toThrow('Budget writer unavailable');
+  expect(await nats.store.head()).toBe(before);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+  await replacement.releaseUndispatched(reservationId);
+  expect(totals(replacement.state, clock)).toMatchObject({ reservedCents: 0, monthCents: 0 });
+}
+it('keeps the old actor stopped when another budget writer follows switch-on',
+  stopsSettlementAfterSwitchOnAndAnotherLeader);
+
+async function projectedBudgetSummary() {
+  const storage = await databases();
+  const db = pgDb(storage.queue);
+  const logger = createLogger('test', { level: 'silent' });
+  const runner = new ProjectionRunner(db, nats.store, logger);
+  try {
+    await runner.initialise(budgets);
+    await runner.run(budgets);
+    const state = await readBudget(db, 'test');
+    return budgetSummary(state, clock);
+  } finally {
+    await storage.close();
+  }
+}
+
+async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
+  if (withHold) {
+    await reserve(false, 'unsent-release');
+  }
+  const expectedSequence = actor.state.sequence;
+  await saveSwitchOn();
+  const before = await nats.store.head('budget-test');
+  let checks = 0;
+  function checkAccess() {
+    checks++;
+    if (checks === 2) {
+      const error = new Error('Access expired');
+      return Promise.reject(error);
+    }
+    return Promise.resolve();
+  }
+  const payload = {
+    scope: 'global', dailyCeilingCents: 200, ceilingCents: 200, setBy: 'alice',
+  };
+  const refused = actor.configure(payload, 'configure-switch', expectedSequence, checkAccess);
+  await expect(refused).rejects.toThrow('Access expired');
+  expect(checks).toBe(2);
+  expect(actor.state.ceilingCents).toBe(100);
+  expect(await nats.store.head('budget-test')).toBe(before);
+  const projected = await projectedBudgetSummary();
+  const returned = budgetSummary(actor.state, clock);
+  expect(returned.sequence).toBe(expectedSequence);
+  expect(projected.sequence).toBe(returned.sequence);
+  const retry = await actor.configure(payload, 'configure-switch', projected.sequence, checkAccess);
+  expect(retry).toEqual({ status: 'appended' });
+  expect(checks).toBe(3);
+  expect(await nats.store.head('budget-test')).toBe(before + 1);
+  expect(actor.state.sequence).toBe(before + 1);
+  expect(actor.state.ceilingCents).toBe(200);
+  const after = await projectedBudgetSummary();
+  expect(after).toEqual(budgetSummary(actor.state, clock));
+  const stale = await actor.configure(payload, 'configure-stale', expectedSequence, checkAccess);
+  expect(stale).toEqual({ status: 'conflict' });
+  expect(checks).toBe(3);
+  expect(await nats.store.head('budget-test')).toBe(before + 1);
+  let reservedCents = 0;
+  if (withHold) {
+    reservedCents = 1;
+  }
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents, monthCents: 0 });
+}
+it.each([false, true])(
+  'retries an access-expired spending-limit change with its projected revision (hold: %s)',
+  rechecksAccessBeforeRetryingConfiguration);
+
+async function configuresAfterRefusingReservationPastSwitchOn() {
+  const expectedSequence = actor.state.sequence;
+  await saveSwitchOn();
+  const before = await nats.store.head('budget-test');
+  await expect(reserve()).rejects.toThrow('Provider setup changed');
+  expect(await nats.store.head('budget-test')).toBe(before);
+  const projected = await projectedBudgetSummary();
+  expect(projected.sequence).toBe(expectedSequence);
+  expect(budgetSummary(actor.state, clock).sequence).toBe(projected.sequence);
+  const payload = {
+    scope: 'global', dailyCeilingCents: 200, ceilingCents: 200, setBy: 'alice',
+  };
+  const result = await actor.configure(payload, 'configure-after-refusal', projected.sequence);
+  expect(result).toEqual({ status: 'appended' });
+  expect(await nats.store.head('budget-test')).toBe(before + 1);
+  expect(actor.state.sequence).toBe(before + 1);
+  const after = await projectedBudgetSummary();
+  expect(after).toEqual(budgetSummary(actor.state, clock));
+  await expect(reserve()).rejects.toThrow('Provider setup changed');
+  expect(await nats.store.head('budget-test')).toBe(before + 1);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 0, monthCents: 0 });
+}
+it('changes spending limits with the projected revision after switch-on refuses a reservation',
+  configuresAfterRefusingReservationPastSwitchOn);
 
 async function advancesAfterLostReservationReply() {
   const faulty = await lostReplyStore(nats.connection);

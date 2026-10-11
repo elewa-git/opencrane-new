@@ -52,6 +52,7 @@ export class BudgetActor {
   private sequence = 0;
   private queue = Promise.resolve();
   private failed = false;
+  private reservationsStopped = false;
   private readonly timedOut = new Set<string>();
   private readonly exhausted = new Set<string>();
   readonly store: EventStore;
@@ -75,16 +76,55 @@ export class BudgetActor {
     this.queue = result.then(() => undefined, () => undefined);
     return result;
   }
-  private async append(type: string, payload: unknown, id: string = randomUUID()) {
+  private async append(type: string, payload: unknown, id: string = randomUUID(),
+    confirmAccess?: () => Promise<void>) {
+    this.requireReservationWrites(type);
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
     // Reuse replayed history; configure checks its caller's command id before this append.
     const command = { event, expectedSequence: this.sequence, historyChecked: true as const };
-    const result = await this.store.append(command);
-    if (result.status !== 'appended') { this.failed = true; throw new Error('Budget writer lost its fence'); }
+    let result = await this.store.append(command);
+    if (result.status === 'conflict' && await this.advancePastSwitchOn()) {
+      this.requireReservationWrites(type);
+      // Keep the caller's original access deadline when a spending-limit write retries.
+      await confirmAccess?.();
+      // Retry this saved hold's progress once, using the position after switch-on.
+      command.expectedSequence = this.sequence;
+      result = await this.store.append(command);
+    }
+    if (result.status !== 'appended') {
+      this.failed = true;
+      throw new Error('Budget writer lost its fence');
+    }
     this.sequence = result.sequence;
     this.apply(event);
   }
+  private requireReservationWrites(type: string) {
+    if (type === 'budget.reserved' && this.reservationsStopped) {
+      throw new Error('Provider setup changed');
+    }
+  }
+  private async advancePastSwitchOn() {
+    const subject = `budget-${this.silo}`;
+    let position = this.sequence;
+    for await (const row of this.store.readStream(subject, this.sequence + 1)) {
+      // Refuse another budget writer's changes. Only switch-on leaves money untouched.
+      if (row.event.silo !== this.silo || row.event.subject !== subject ||
+          row.event.type !== 'provider.managed_calls_enabled') {
+        return false;
+      }
+      position = row.sequence;
+    }
+    if (position === this.sequence) {
+      return false;
+    }
+    this.sequence = position;
+    this.reservationsStopped = true;
+    return true;
+  }
   private apply(event: EventEnvelope) {
+    if (event.type === 'provider.managed_calls_enabled') {
+      this.reservationsStopped = true;
+    }
     applyBudget(this.state, event, this.sequence);
     // Keep refusals across leadership changes; a ceiling change permits a fresh notice.
     if (event.type === 'budget.ceiling_set') this.exhausted.clear();
@@ -98,9 +138,12 @@ export class BudgetActor {
       const payload = budgetCeilingSetDataSchema.parse(raw);
       const prior = (await history(this.store, `budget-${this.silo}`, this.silo)).find(r => r.event.commandId === commandId);
       if (prior) return { status: JSON.stringify(prior.event.data) === JSON.stringify(payload) ? 'appended' : 'conflict' };
-      if (expectedSequence !== undefined && expectedSequence !== this.sequence) return { status: 'conflict' };
+      // Compare the client's revision with budget events; switch-on only moves the writer.
+      if (expectedSequence !== undefined && expectedSequence !== this.state.sequence) {
+        return { status: 'conflict' };
+      }
       await fresh?.();
-      await this.append('budget.ceiling_set', payload, commandId);
+      await this.append('budget.ceiling_set', payload, commandId, fresh);
       return { status: 'appended' };
     });
   }

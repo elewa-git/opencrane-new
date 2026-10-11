@@ -48,6 +48,12 @@ function parseTurnToken(raw: unknown) {
   }
   return token;
 }
+function requireManagedTurnClaims(raw: unknown, enabled: boolean) {
+  if (enabled) {
+    turnSchema.parse(raw);
+  }
+}
+
 const textContent = z.object({ type: z.enum(['input_text', 'output_text']), text: z.string() }).strict();
 const message = z.object({ type: z.literal('message').optional(), id: z.string().nullable().optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
   content: z.union([z.string(), z.array(textContent)]), phase: z.enum(['commentary', 'final_answer']).nullable().optional() }).strict();
@@ -247,7 +253,11 @@ export async function startDecision(
         ...(permitId ? { permitId } : {}),
       });
       if (approvalId) event.correlation.approval = approvalId;
-      if ((await actor.store.append({ event, expectedSequence: 0 })).status !== 'appended') throw new Error('Decision audit unavailable');
+      const command = { event, expectedSequence: 0, historyChecked: true as const };
+      const result = await actor.store.append(command);
+      if (result.status !== 'appended') {
+        throw new Error('Decision audit unavailable');
+      }
     };
     void (async () => {
       res.setHeader('content-type', 'application/json');
@@ -261,6 +271,7 @@ export async function startDecision(
       // Read new activity before watching the small streams that decide access.
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, decisionDeadline);
+      requireManagedTurnClaims(checked.turn, activity.managedCallsEnabled);
       const conversation = activity.conversation;
       requireActiveConversationTurn(conversation, turnToken.turn);
       const turn = activeTurn(turnToken, activity.computer, checked.sequence);

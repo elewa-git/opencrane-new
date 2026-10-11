@@ -23,6 +23,9 @@ export const providerBindingSchema = z.object({ ...base,
   previousBindingSequence: z.int().nonnegative(), state: z.enum(['active', 'paused']),
   model: modelId, reason: z.literal('Paused by an administrator').optional(),
 }).strict();
+const managedCallsSchema = z.object({ ...base,
+  expectedProviderSequence: z.int().nonnegative(),
+}).strict();
 const verification = { ...base, attemptId: id, kind: z.enum(['reachability', 'model']),
   model: modelId.optional(), reservedCents: centsSchema.optional() };
 export const providerRequestedSchema = z.object(verification).strict();
@@ -50,6 +53,8 @@ export const providerEvents = [
   event('provider.model_binding_set', 'provider', 'An admin recorded a provider choice or pause.',
     providerBindingSchema, { ...baseExample(), kind: 'silo_default', dependantId: 'acme',
       task: 'chat_turn', expectedProviderSequence: 0, previousBindingSequence: 0, state: 'active', model: 'gpt-6.1-sol' }),
+  event('provider.managed_calls_enabled', 'budget', 'Managed provider calls were switched on.',
+    managedCallsSchema, { ...baseExample(), expectedProviderSequence: 0 }),
   event('provider.verification_requested', 'provider', 'An admin requested a revision-bound check.',
     providerRequestedSchema, verificationExample),
   event('provider.verification_dispatched', 'provider', 'A check consumed its single dispatch.',

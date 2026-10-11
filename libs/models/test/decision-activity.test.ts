@@ -4,6 +4,7 @@ import { readStreamSummary, type StoredEvent } from '@opencrane/event-store';
 import { decisionChatSummary } from '../src/decision-summary.ts';
 import { outputReportTypes } from '../src/authority.ts';
 import { decisionActivity } from '../src/decision-activity.ts';
+import { envelope } from '../src/actor.ts';
 
 function activityEvent(id: string, subject: string, type: string) {
   const fixtureEvent = event(id, subject, type);
@@ -22,6 +23,9 @@ async function readsOnlyNewActivity() {
       events.push(activityEvent(`start-${index}`, 'computer-assistant', 'computer.turn_started'));
       events.push(activityEvent(`close-${index}`, 'computer-assistant', 'computer.turn_closed'));
     }
+    const budget = { ...event('budget', 'budget-test'), type: 'budget.ceiling_set',
+      data: { scope: 'global', ceilingCents: 20000, setBy: 'alice' } };
+    events.push(budget);
     await nats.seed(events);
     await decisionActivity(nats.store, 'test', 'assistant', 'chat', 'turn', Infinity);
     const reads = countReads(nats.store);
@@ -93,6 +97,26 @@ async function honoursCapturedPositionAndConfirmsLaterChanges() {
 }
 it('cuts chat facts at the captured position and refuses a later close',
   honoursCapturedPositionAndConfirmsLaterChanges);
+
+async function refusesSwitchOnDuringActivityCheck() {
+  const nats = await natsFixture();
+  try {
+    const activity = await decisionActivity(nats.store, 'test', 'assistant', 'chat', 'turn',
+      Infinity);
+    expect(activity.managedCallsEnabled).toBe(false);
+    const payload = {
+      providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+    };
+    const marker = envelope('test', 'budget-test', 'provider.managed_calls_enabled', payload);
+    const command = { event: marker, expectedSequence: 0 };
+    expect((await nats.store.append(command)).status).toBe('appended');
+    await expect(activity.confirm(Infinity, false)).rejects.toThrow('Provider setup changed');
+  } finally {
+    await nats.close();
+  }
+}
+it('refuses a mode change during the activity check without attempting a budget write',
+  refusesSwitchOnDuringActivityCheck);
 
 async function keepsLongChatsWarm() {
   const nats = await natsFixture();

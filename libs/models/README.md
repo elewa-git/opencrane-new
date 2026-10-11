@@ -12,12 +12,15 @@ This shared library is used by the server, background workers and personal compu
 flowchart LR
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, child joins, owner appointments and spending| models["libs/models<br/>AI rules and spending"]
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices and spending| models["libs/models<br/>AI rules and provider choice"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices and spending revisions| models["libs/models<br/>AI rules, provider choice and spending"]
+  ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves changes and spending, reads new activity and grant facts| store["libs/event-store<br/>event log"]
+  models -->|saves holds and settlements, reads activity, grants, payer and switch-on| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -40,9 +43,16 @@ flowchart LR
   A thread can read the person's own facts, its assistant's notes and that assistant's group facts.
   It can save facts only in the requester’s own memory, with a separate write grant.
   These calls need saved grants, current permissions and an explicitly recorded private turn.
-- Choose an AI model for each task from a fixed routing table.
+- After managed calls are switched on, uses the assistant's saved provider choice or the
+  silo default for each new turn. A running turn keeps its original choice. An assistant's
+  own pause stops new model work. No command switches this on yet, so existing installs
+  keep their current path.
+  Reads the personal paying group and switch-on state together, once per new spending event.
+- Choose an AI model from a fixed task table before switch-on.
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
+  Keep the revision shown to admins valid after switch-on when no spending change
+  was saved, so they can retry a refused edit without releasing a hold first.
 - Hold money before an AI call and settle the charge when usage is reported.
   Keep the budget state in memory after replay, so saving each change does not
   read all the old spending events again.
@@ -52,12 +62,15 @@ flowchart LR
 - List spending from the saved budget and call records, without reading chat history.
   Keep calls with an unknown outcome in the list alongside settled calls.
 - Release an expired hold at zero cents when it was never allowed or sent.
+- Stop new holds after provider switch-on while settling or releasing existing holds.
+  Keep those holds moving without restarting the models process.
 - Read each new usage line once and leave old lines alone while idle. Retry a line
   if its event could not be saved.
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.
   Keep approval lists within the caller’s current period of participation.
   Reuse checked approval facts and read only later chat changes before a decision.
 - Refuse provider-bound model passes on the deployment-key gateway before holding money.
+  Read switch-on from the silo’s spending stream before checking access.
   Calls through saved provider choices are not available yet.
 - Refuse native child model calls before holding money. Older delegation records
   grant no call authority either.

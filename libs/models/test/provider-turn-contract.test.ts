@@ -1,7 +1,9 @@
-import { expect, it } from 'vitest';
-import { getEventDefinition, computerTurnStartedDataSchema } from '@opencrane/events';
-import { BudgetActor, history } from '../src/actor.ts';
-import { priceTableId } from '../src/state.ts';
+import { expect, it, vi } from 'vitest';
+import { getEventDefinition, computerTurnStartedDataSchema, parseEventByType } from '@opencrane/events';
+import { BudgetActor, envelope, history } from '../src/actor.ts';
+import { priceTableId, totals } from '../src/state.ts';
+import { managedProviderCallsEnabled } from '../src/provider-turns.ts';
+import { ingestUsage, startDecision } from '../src/index.ts';
 import { fixture } from './fixture.ts';
 
 const budgetReservedDataSchema = getEventDefinition('budget.reserved')!.dataSchema;
@@ -148,3 +150,217 @@ async function refusesRecordedChoiceOnStaticRoute() {
 }
 it('refuses even a matching recorded provider choice on the static-key route without holding money',
   refusesRecordedChoiceOnStaticRoute);
+
+async function refusesLegacyTrafficAfterSwitch() {
+  const setup = await fixture();
+  try {
+    await setup.append('provider-primary', 'provider.created', {
+      providerId: 'primary', provider: 'openai', name: 'Primary', revision: 1, changedBy: 'alice',
+    });
+    await setup.append('budget-test', 'provider.managed_calls_enabled', {
+      providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+    });
+    expect((await setup.call()).status).toBe(403);
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses old tokens after switch-on before holding money or contacting a provider',
+  refusesLegacyTrafficAfterSwitch);
+
+
+async function refusesModeChangeBeforeReservation() {
+  const setup = await fixture();
+  const reserve = setup.actor.reserve.bind(setup.actor);
+  async function switchBeforeReserve(...args: Parameters<typeof reserve>) {
+    await setup.append('provider-primary', 'provider.created', {
+      providerId: 'primary', provider: 'openai', name: 'Primary', revision: 1, changedBy: 'alice',
+    });
+    await setup.append('budget-test', 'provider.managed_calls_enabled', {
+      providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+    });
+    return reserve(...args);
+  }
+  const reserving = vi.spyOn(setup.actor, 'reserve').mockImplementation(switchBeforeReserve);
+  try {
+    expect((await setup.call()).status).toBe(403);
+    expect(reserving).toHaveBeenCalledOnce();
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    reserving.mockRestore();
+    await setup.close();
+  }
+}
+it('refuses switch-on racing the budget queue without holding money',
+  refusesModeChangeBeforeReservation);
+
+function requiresSiloSpendingStreamForSwitchOn() {
+  const payload = {
+    providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+  };
+  const switched = envelope('test', 'budget-test', 'provider.managed_calls_enabled', payload);
+  expect(getEventDefinition(switched.type)?.stream).toBe('budget');
+  expect(parseEventByType(switched).success).toBe(true);
+  const providerSubject = { ...switched, subject: 'provider-primary' };
+  const otherSilo = { ...switched, subject: 'budget-other' };
+  expect(parseEventByType(providerSubject).success).toBe(false);
+  expect(parseEventByType(otherSilo).success).toBe(false);
+}
+it('requires switch-on to use the exact silo spending stream',
+  requiresSiloSpendingStreamForSwitchOn);
+
+async function keepsModeAfterBudgetReplay() {
+  const setup = await fixture();
+  try {
+    await setup.append('provider-primary', 'provider.created', {
+      providerId: 'primary', provider: 'openai', name: 'Primary', revision: 1, changedBy: 'alice',
+    });
+    await setup.append('budget-test', 'provider.managed_calls_enabled', {
+      providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+    });
+    const replay = new BudgetActor(setup.nats.store, 'test');
+    await replay.start();
+    const decision = await startDecision(replay, setup.identity, setup.binding, 0, setup.keys);
+    const enabled = await managedProviderCallsEnabled(setup.nats.store, 'test', Infinity);
+    expect(enabled).toBe(true);
+    expect(replay.state.reservations).toHaveLength(0);
+    const reads = vi.spyOn(setup.nats.store, 'readStream');
+    const reservations = vi.spyOn(replay, 'reserve');
+    try {
+      const body = { model: call.model, input: 'OK', max_output_tokens: 128, stream: true };
+      const request = { method: 'POST', headers: setup.headers, body: JSON.stringify(body) };
+      const response = await fetch(`${decision.url}/authorize`, request);
+      expect(response.status).toBe(403);
+      expect(reservations).not.toHaveBeenCalled();
+      function readsProviderCategory(args: Parameters<typeof setup.nats.store.readStream>) {
+        return args[0].includes('*');
+      }
+      expect(reads.mock.calls.some(readsProviderCategory)).toBe(false);
+    } finally {
+      reads.mockRestore();
+      reservations.mockRestore();
+      await decision.close();
+    }
+    expect(setup.received()).toBe(0);
+    expect(replay.state.reservations).toHaveLength(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('keeps switch-on after spending replay without scanning provider connections',
+  keepsModeAfterBudgetReplay);
+
+type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+async function switchOn(setup: Fixture) {
+  const payload = {
+    providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
+  };
+  await setup.append('budget-test', 'provider.managed_calls_enabled', payload);
+}
+
+async function releasesAfterReservedSwitchOn(stage: 'allow audit' | 'permit queue') {
+  const setup = await fixture();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const requireOpen = setup.actor.requireOpenReservation.bind(setup.actor);
+  let switched = false;
+  async function switchDuringAudit(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    const parsed = parseEventByType(command.event);
+    if (stage === 'allow audit' && parsed.success &&
+        parsed.event.type === 'decision.recorded' && !switched) {
+      expect(setup.actor.state.reservations).toHaveLength(1);
+      switched = true;
+      await switchOn(setup);
+    }
+    return result;
+  }
+  async function switchBeforePermit(...args: Parameters<typeof requireOpen>) {
+    if (stage === 'permit queue') {
+      switched = true;
+      await switchOn(setup);
+    }
+    return requireOpen(...args);
+  }
+  const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(switchDuringAudit);
+  const permits = vi.spyOn(setup.actor, 'requireOpenReservation');
+  permits.mockImplementation(switchBeforePermit);
+  try {
+    const response = await setup.call();
+    expect(switched).toBe(true);
+    expect(response.status).toBe(503);
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBe(0);
+    expect(totals(setup.actor.state)).toMatchObject({ reservedCents: 0, monthCents: 0 });
+    const rows = await history(setup.nats.store, 'budget-test', 'test');
+    function isSettlement(row: (typeof rows)[number]) {
+      return row.event.type === 'budget.settled';
+    }
+    const settlements = rows.filter(isSettlement);
+    expect(settlements).toHaveLength(1);
+    expect(settlements[0]?.event.data).toMatchObject({
+      settledCents: 0, outcome: 'not_dispatched',
+    });
+    // Check the same actor again so a saved release cannot hide a stopped writer.
+    setup.advance();
+    await setup.actor.expire();
+    await setup.actor.period();
+  } finally {
+    appends.mockRestore();
+    permits.mockRestore();
+    await setup.close();
+  }
+}
+it.each(['allow audit', 'permit queue'] as const)(
+  'releases a refused decision at zero when switch-on follows reservation during the %s',
+  releasesAfterReservedSwitchOn);
+
+async function settlesLateUsageWithoutRestart() {
+  const setup = await fixture();
+  try {
+    await setup.stopDispatch();
+    expect((await setup.call()).status).toBe(200);
+    expect((await setup.call()).status).toBe(200);
+    expect(setup.received()).toBe(2);
+    const releaseCall = { ...call, requestId: 'unsent-release' };
+    const expiryCall = { ...call, requestId: 'unsent-expiry' };
+    const releaseId = await setup.actor.reserve(releaseCall, 12);
+    const expiryId = await setup.actor.reserve(expiryCall, 12);
+    await switchOn(setup);
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    const dispatched = setup.actor.state.reservations.slice(0, 2);
+    for (const reservation of dispatched) {
+      const effects = await history(setup.nats.store, `effect-${reservation.id}`, 'test');
+      expect(effects).toHaveLength(1);
+      await setup.actor.settleRecorded(reservation.id, effects[0]!.event.id);
+      expect(reservation.settledCents).toBe(1);
+      await setup.actor.settleRecorded(reservation.id, effects[0]!.event.id);
+    }
+    await setup.actor.releaseUndispatched(releaseId);
+    setup.advance();
+    await setup.actor.expire();
+    await setup.actor.expire();
+    expect(setup.actor.state.reservations[3]).toMatchObject({ id: expiryId, settledCents: 0 });
+    expect(totals(setup.actor.state)).toMatchObject({ reservedCents: 0, monthCents: 2 });
+    const rows = await history(setup.nats.store, 'budget-test', 'test');
+    function isSettlement(row: (typeof rows)[number]) {
+      return row.event.type === 'budget.settled';
+    }
+    const settlements = rows.filter(isSettlement);
+    expect(settlements).toHaveLength(4);
+    await expect(setup.actor.reserve(call, 12)).rejects.toThrow('Provider setup changed');
+    await setup.actor.period();
+    const firstId = dispatched[0]!.id;
+    const firstEffects = await history(setup.nats.store, `effect-${firstId}`, 'test');
+    await setup.actor.settleRecorded(firstId, firstEffects[0]!.event.id);
+    expect(totals(setup.actor.state)).toMatchObject({ reservedCents: 0, monthCents: 2 });
+  } finally {
+    await setup.close();
+  }
+}
+it('settles dispatched usage once after switch-on and keeps later settlement, release and expiry working',
+  settlesLateUsageWithoutRestart);
