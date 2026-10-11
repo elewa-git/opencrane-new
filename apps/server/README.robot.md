@@ -1728,6 +1728,11 @@ control. Explicit stops still reach the bridge. Reports and explicit approval de
 remain available. Viewer transport and its access leases are unchanged.
 Upload delivery checks control before each object read, after the bytes are ready,
 and after the sender reads delivery history, immediately before file transmission.
+The watcher gets pending control from its existing computer snapshot. Every delivery
+check reads the computer stream position again. An unchanged position reuses the
+snapshot without reading any events. A changed position reloads history before
+sending a new turn or file, including after tool preparation and delivery-history
+reads. Direct bridge callers retain the shared control-summary check.
 Intent saved during preparation holds that file and the remaining batch without
 recording a delivery receipt. A file already being transmitted can finish.
 `test/bridge-control.test.ts` covers stops, both slow reads and remaining batch files

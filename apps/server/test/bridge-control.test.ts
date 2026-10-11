@@ -7,6 +7,8 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { fileUploadedDataSchema } from '@opencrane/events';
+import { createLogger } from '@opencrane/observability';
+import { assistantProcessor } from '../src/chat/bridge-poll.ts';
 import { chatHistory } from '../src/chat/commands.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { assistantSnapshot, processConversation, type AgentSession }
@@ -27,7 +29,7 @@ async function cleanup() {
 }
 afterEach(cleanup);
 
-async function bridgeFixture() {
+async function bridgeFixture(cachedControl = false) {
   const view = await viewFixture(noDesktop);
   view.keys.provision('test', 'chat');
   const encrypted = view.keys.encrypt('test', 'chat', 'Keep working');
@@ -75,15 +77,23 @@ async function bridgeFixture() {
   function connection() {
     return Promise.resolve(link);
   }
+  function connectionId() {
+    return link.connectionId;
+  }
+  // Use the already-ready computer; neither path issues a resume token.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- No token is read here.
+  const tokens = {} as never;
+  const watchOptions = { ...options, objects };
+  const logger = createLogger('bridge-control-test');
+  const processor = assistantProcessor(watchOptions, tokens, new Set(),
+    connection, connectionId, logger);
   async function process() {
+    if (cachedControl) return processor.processAssistant([conversation]);
     const lifecycle = [];
     for await (const row of options.store.readStream('computer-assistant')) {
       lifecycle.push(row);
     }
     const assistant = assistantSnapshot(lifecycle, 'personal', 'test');
-    // Use the already-ready computer; this path never issues a resume token.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- No token is read here.
-    const tokens = {} as never;
     return processConversation({ ...options, objects }, tokens, conversation,
       assistant, new Set(), connection);
   }
@@ -121,8 +131,8 @@ async function bridgeFixture() {
     intendControl, upload, flushFrames, close };
 }
 
-async function deliversStopAfterIntent() {
-  fixture = await bridgeFixture();
+async function deliversStopAfterIntent(cachedControl: boolean) {
+  fixture = await bridgeFixture(cachedControl);
   const turn = {
     conversationId: 'chat', assistantId: 'assistant', turnId: fixture.message.id,
     threadId: 'thread',
@@ -145,14 +155,15 @@ async function deliversStopAfterIntent() {
   });
   expect(fixture.frames.filter(isTurnOrFile)).toEqual([]);
 }
-it('delivers a saved stop to the bridge after control intent', deliversStopAfterIntent, 30_000);
+it.each([false, true])('delivers a saved stop after control intent with cached control: %s',
+  deliversStopAfterIntent, 30_000);
 
 function isTurnOrFile(frame: Record<string, unknown>) {
   return frame['type'] === 'turn' || String(frame['type']).startsWith('file_');
 }
 
-async function holdsUploadsDuringObjectRead() {
-  fixture = await bridgeFixture();
+async function holdsUploadsDuringObjectRead(cachedControl: boolean) {
+  fixture = await bridgeFixture(cachedControl);
   const test = fixture;
   await test.upload('first');
   await test.upload('second');
@@ -179,15 +190,15 @@ async function holdsUploadsDuringObjectRead() {
   const rows = await chatHistory(test.store, 'test', 'chat');
   expect(rows.some(isDelivered)).toBe(false);
 }
-it('delivers zero file bytes when intent is saved during an object read',
+it.each([false, true])('holds files when intent arrives during object reads with cached control: %s',
   holdsUploadsDuringObjectRead, 30_000);
 
 function isDelivered(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
   return row.event.type === 'file.delivered';
 }
 
-async function holdsUploadAfterDeliveryHistoryRead() {
-  fixture = await bridgeFixture();
+async function holdsUploadAfterDeliveryHistoryRead(cachedControl: boolean) {
+  fixture = await bridgeFixture(cachedControl);
   const test = fixture;
   await test.upload('first');
   function readObject() {
@@ -223,11 +234,11 @@ async function holdsUploadAfterDeliveryHistoryRead() {
   const rows = await chatHistory(test.store, 'test', 'chat');
   expect(rows.some(isDelivered)).toBe(false);
 }
-it('holds an upload when intent is saved during the sender history read',
+it.each([false, true])('holds files after delivery history reads with cached control: %s',
   holdsUploadAfterDeliveryHistoryRead, 30_000);
 
-async function holdsRestOfUploadBatch() {
-  fixture = await bridgeFixture();
+async function holdsRestOfUploadBatch(cachedControl: boolean) {
+  fixture = await bridgeFixture(cachedControl);
   const test = fixture;
   await test.upload('first');
   await test.upload('second');
@@ -259,9 +270,34 @@ async function holdsRestOfUploadBatch() {
   expect(receipts).toHaveLength(1);
   expect(receipts[0]?.event.data).toMatchObject({ fileId: 'first' });
 }
-it('holds remaining files when intent is saved after the first file acknowledgement',
+it.each([false, true])('holds the remaining upload batch with cached control: %s',
   holdsRestOfUploadBatch, 30_000);
 
 function isFileBegin(frame: Record<string, unknown>) {
   return frame['type'] === 'file_begin';
 }
+
+async function holdsTurnAfterSnapshot(subject: string) {
+  fixture = await bridgeFixture(true);
+  const test = fixture;
+  const readStream = test.store.readStream.bind(test.store);
+  let changed = false;
+  async function* readBeforeIntent(...args: Parameters<typeof readStream>) {
+    yield* readStream(...args);
+    // Save intent during preparation, after the watcher has cached the ready computer.
+    if (args[0] === subject && !changed) {
+      changed = true;
+      await test.intendControl();
+    }
+  }
+  vi.spyOn(test.store, 'readStream').mockImplementation(readBeforeIntent);
+
+  await test.process();
+  await test.flushFrames();
+
+  expect(changed).toBe(true);
+  expect(test.frames.filter(isTurnOrFile)).toEqual([]);
+}
+it.each(['conversation-chat', 'member-alice'])(
+  'holds a new turn when intent arrives after the cached snapshot during %s reads',
+  holdsTurnAfterSnapshot, 30_000);

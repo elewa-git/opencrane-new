@@ -133,7 +133,7 @@ async function privateContextFor(options: BridgeOptions,
 }
 
 async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: WebSocket,
-  delivered: Set<string>, file: Upload, bytes: Buffer) {
+  delivered: Set<string>, file: Upload, bytes: Buffer, checkControl?: () => Promise<boolean>) {
   if (delivered.has(file.fileId)) return;
   const rows = await chatHistory(options.store, options.silo, file.conversationId);
   function wasDelivered(row: ChatRows[number]) {
@@ -152,7 +152,13 @@ async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: W
   }
   await ownConversation(options.store, options.silo, file.conversationId, file.uploadedBy, true);
   // Check after waiting for earlier transfers and reading delivery history.
-  const control = await readComputerControl(options.store, options.silo, input.assistantId);
+  let control: boolean;
+  if (checkControl) {
+    control = await checkControl();
+  } else {
+    const savedControl = await readComputerControl(options.store, options.silo, input.assistantId);
+    control = savedControl !== undefined;
+  }
   if (control) return;
   const outcome = await sendFile(socket, file, bytes);
   const data = { conversationId: file.conversationId, fileId: file.fileId,
@@ -251,9 +257,9 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   socket.send(JSON.stringify(resume));
   const delivered = new Set<string>();
   let transfers = Promise.resolve();
-  function deliver(file: Upload, bytes: Buffer) {
+  function deliver(file: Upload, bytes: Buffer, checkControl?: () => Promise<boolean>) {
     async function transferFile() {
-      await deliverFile(options, input, socket, delivered, file, bytes);
+      await deliverFile(options, input, socket, delivered, file, bytes, checkControl);
     }
     const work = transfers.then(transferFile);
     transfers = work.catch(terminateSocket);

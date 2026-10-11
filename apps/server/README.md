@@ -175,6 +175,8 @@ unavailable.
    that have been reviewed, cost nothing and are available to both the person and assistant.
    Ask tools also need a review describing the action the person will approve.
    Private team turns stay restricted and do not receive tools.
+   The watcher reuses computer history while it is unchanged. It checks for changes
+   again before sending a turn or file, so new control intent holds waiting work.
    Open chat pages repeat permission checks when silo or team membership changes.
    Removing someone from a team closes their private chat with that team's assistant
    within two seconds. If OpenFGA takes too long to apply another change, the page

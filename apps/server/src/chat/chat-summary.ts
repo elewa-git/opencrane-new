@@ -14,6 +14,7 @@ type ChatSummary = {
   reportCount: number;
 };
 export type ChatFacts = {
+  conversationClosed: boolean;
   latestHuman?: { id: string; authorId: unknown } | undefined;
   created: Record<string, unknown> | undefined;
   message: Message | undefined;
@@ -30,7 +31,6 @@ function emptyChat(): ChatSummary {
 }
 function addChat(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
-  if (event.type === 'conversation.closed') summary.conversationClosed = true;
   let data: Record<string, unknown> | undefined;
   if (event.type === 'conversation.created' || event.type === 'message.posted') {
     data = z.record(z.string(), z.unknown()).parse(event.data);
