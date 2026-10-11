@@ -3,6 +3,7 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
+import { readToolPolicy, setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 
@@ -198,6 +199,58 @@ async function refusesChangeDuringLeaderCheck() {
   }
 }
 it('refuses catalogue changes while the leadership check waits', refusesChangeDuringLeaderCheck);
+
+async function refusesBlockDuringFinalAccessReads() {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const head = setup.nats.store.head.bind(setup.nats.store);
+    const mcpRead = Promise.withResolvers<void>();
+    const memberRead = Promise.withResolvers<void>();
+    const releaseMember = Promise.withResolvers<void>();
+    let mcpReads = 0;
+    let heldMember = false;
+    async function holdFinalAccessRead(...args: Parameters<typeof head>) {
+      const position = await head(...args);
+      if (args[0] === 'mcp-fixture') {
+        mcpReads += 1;
+        // Skip the sender's earlier catalogue check and pause during its access check.
+        if (mcpReads === 2) mcpRead.resolve();
+      }
+      if (args[0] === 'member-alice' && !heldMember) {
+        heldMember = true;
+        memberRead.resolve();
+        await releaseMember.promise;
+      }
+      return position;
+    }
+    const delayed = vi.spyOn(setup.nats.store, 'head');
+    delayed.mockImplementation(holdFinalAccessRead);
+    const response = send(setup, value);
+    try {
+      await Promise.all([mcpRead.promise, memberRead.promise]);
+      const command = { commandId: 'block-during-dispatch', expectedSequence: policy.sequence,
+        connectionId: 'installed', toolName: 'write', toolRevision: tool.revision, mode: 'block' };
+      const result = await setToolPolicy(setup.nats.store, setup.binding, 'alice',
+        'fixture', command);
+      expect(result.status).toBe('appended');
+      releaseMember.resolve();
+      const reply = await response;
+      await reply.text();
+      expect(setup.received()).toBe(0);
+      expect(reply.status).toBe(403);
+    } finally {
+      releaseMember.resolve();
+      await response;
+      delayed.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses a Block saved between the final access reads', refusesBlockDuringFinalAccessReads);
 
 async function refusesGenerationDuringDecisionSave() {
   const setup = await fixture();
