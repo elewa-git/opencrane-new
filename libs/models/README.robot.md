@@ -1259,5 +1259,8 @@ both configuration/reservation orderings and the first assistant ceiling boundar
 `decisionActivity` includes a copied control summary. Initial model, tool and memory
 admission refuses pending control. Its bounded activity check detects intent
 arriving during authority checks, without reading the whole computer stream as an
-access subject. The server uses this separate check for approve and retry; explicit
-denial remains allowed. Final dispatch serialisation is separate unfinished work.
+access subject. `approvalActivity` shares the turn and control checks for approve
+and retry. It does not read spending history or provider mode. Model and memory
+admission keep their provider-mode checks through `decisionActivity`; this split
+does not change their money checks. Explicit denial remains allowed. Final dispatch
+serialisation is separate unfinished work.

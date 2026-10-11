@@ -1734,6 +1734,10 @@ recording a delivery receipt. A file already being transmitted can finish.
 with saved events and a real socket. The approved old-token test checks refusal
 without an outstanding approval blocking the call. The Bob test has no prior intent
 and requires the requester refusal.
+Approval decisions use `approvalActivity` to check turn and control changes without
+reading unrelated spending history. The tests keep the exact allowed-stream assertion,
+refuse intent saved during permission checks and allow decisions when budget history
+cannot be read. Model and memory decisions keep their provider-mode checks.
 
 This is the first split of P3-17 row 1. HTTP request/status routes, chat/realtime
 control status, remaining transition schemas and strict modern started/ended data

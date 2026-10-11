@@ -43,4 +43,4 @@ export { providerTurnAdmission, managedProviderCallsEnabled } from './provider-t
 
 export { providerDrainCommand, providerDrainStatus } from './provider-drain.ts';
 
-export { decisionActivity } from './decision-activity.ts';
+export { approvalActivity } from './decision-activity.ts';

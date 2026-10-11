@@ -3,7 +3,7 @@ import { createHash, createHmac } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
-import { approvalCards, readApproval, decideApproval, currentAuthority, decisionActivity }
+import { approvalCards, readApproval, decideApproval, currentAuthority, approvalActivity }
   from '@opencrane/models';
 import { chatAccess, writeChatAccess, isChatRefused, conversationParticipation, ChatAccessApplying } from './access.ts';
 import { sessionFor } from '../members/routes.ts';
@@ -68,7 +68,7 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
   approvalReviewSchema.parse(JSON.parse(text));
   const reviewDigest = createHash('sha256').update(text).digest('hex');
   if (reviewDigest !== request.reviewDigest) throw new Error('Review unavailable');
-  const activity = await decisionActivity(options.store, options.silo, request.assistantId,
+  const activity = await approvalActivity(options.store, options.silo, request.assistantId,
     conversationId, request.turnId, performance.now() + 10_000);
   if (input.decision !== 'rejected' && activity.computer.control) {
     return reply.code(409).send({ status: 'conflict' });
