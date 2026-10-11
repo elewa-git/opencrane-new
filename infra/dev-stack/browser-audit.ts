@@ -77,7 +77,7 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
     await owner.setViewportSize({ width, height: 900 });
     await owner.goto(`${origin}/org/history`);
     await owner.getByRole('heading', { name: 'Change history', exact: true }).waitFor();
-    await owner.getByText('mcp.server_published', { exact: true }).first().waitFor();
+    await waitForPublishedEvent(owner);
     await capture(owner, `${output}/${run}-change-${width}.png`);
     await members[0]!.setViewportSize({ width, height: 900 });
     await members[0]!.goto(`${origin}/org/history`);
@@ -103,6 +103,19 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
     await page.goto(url);
     await page.getByRole('textbox', { name: 'Message your agent' }).waitFor();
   }
+}
+
+async function waitForPublishedEvent(page: Page): Promise<void> {
+  const deadline = Date.now() + 60_000;
+  const event = page.getByText('mcp.server_published', { exact: true }).first();
+  while (Date.now() < deadline) {
+    if (await event.count()) return;
+    const olderHistory = page.getByRole('button', { name: 'Older history', exact: true });
+    if (await olderHistory.count() === 0) break;
+    await olderHistory.click();
+    await delay(100);
+  }
+  await event.waitFor({ state: 'visible', timeout: 1_000 });
 }
 
 async function captureHistoryFailure(page: Page, error: unknown): Promise<never> {
