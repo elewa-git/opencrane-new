@@ -401,6 +401,7 @@ export const toolApprovalRequestedDataSchema = z.object({
   approvalId: id, conversationId: id, turnId: id, assistantId: id, requesterId: id,
   tool: id, serverId: id, toolRevision: digestSchema, schemaDigest: digestSchema,
   connectionId: id, profile: id, policySequence: z.int().nonnegative(),
+  dispatchBinding: digestSchema.optional(),
   digestVersion: z.literal('lossless-json-v1'), argumentsDigest: digestSchema,
   expiresAt: z.iso.datetime(), stepUp: z.boolean(),
   missingFields: z.array(z.string().regex(/^[a-zA-Z][\w-]{0,63}$/u)).max(20).optional(),

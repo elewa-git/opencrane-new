@@ -317,16 +317,38 @@ projection replays the same fold. Org settings links each register row to its
 Tools & access screen, using the authenticated GET/POST
 `/api/org/integrations/:serverId/tools` interface with Origin checks on writes.
 
-`startGateway({ ..., mcpRoutes: [{ serverId, connectionId, upstream }] })` adds a
-fixed, operator-reviewed fixture route `/mcp/:serverId/:connectionId`. This is
-not an installer or arbitrary remote-URL interface. ext_authz accepts only bounded
-MCP `tools/call` for 2026-07-28 with matching method/tool/version headers and
-required `params._meta` version, thread id, call id and bounded client capabilities.
-The tool-name header is `mcp-name`. The route strips caller
-headers and never injects an invented credential. Only explicitly credential-free,
-non-metered reviewed fixtures priced at zero can run until the credential/budget tickets land.
-Ask records `approval_required` without dispatch; approval creation/consumption
-belongs to P3-2. Lossless approval argument binding belongs there too.
+`startGateway` adds fixed, operator-reviewed `/mcp/:serverId/:connectionId` routes.
+The gateway sends installed tool calls to the models process at `/dispatch/mcp/...`.
+Only explicitly credential-free, reviewed tools priced at zero can run. Discovery
+and descriptions cannot declare a transport safe. The original JSON bytes stay intact.
+
+`mcpDispatchRouteSchema` accepts `serverId`, `connectionId`, `upstream` (host:port),
+`generation` and `revisionHeader: 'x-opencrane-mcp-revision'`. Missing generation or
+revision contract denies calls. The operator must qualify that backend: it must compare
+both `x-opencrane-mcp-revision` (catalogue digest) and `x-opencrane-mcp-generation`
+(exact running instance identity) atomically before tool execution. HTTP 409 never retries.
+A declaration in an untrusted tool description is not a qualification.
+
+The final send consumes a signed, process-bound permit. Its request id links to the saved
+allow decision and its requester, assistant, conversation, turn and call id. It also binds
+silo, exact body digest, policy/tool/catalogue revisions, connection and backend generation.
+It expires within two seconds or at catalogue expiry, whichever comes first. The saved
+access callback retains the original two-second deadline. Pending permits are bounded to
+1,024; expired entries are dropped before issuing another. Restart drops them all.
+
+The final check compares the MCP stream position with the approved snapshot, confirms
+the existing leadership connection, rechecks access and checks expiry before sending.
+Any newer MCP event refuses the permit, including an unchanged freshness check.
+Waiting approvals retain their stable policy revision and can obtain a fresh permit.
+The final check reads no complete catalogue or conversation history. Only reviewed transport headers leave this
+process; permits and caller credentials do not. A substituted backend or generation fails.
+The built-in memory route retains its separate signed-context checks at its backend.
+Approvals include `dispatchBinding`, the route hash, in their id. A replaced backend or
+generation cannot use an old approval, including a late approval decision.
+Hosted image admission, recorded lifecycle generations, configuration acknowledgement and
+automatic card cancellation on lifecycle changes remain later design rows. These fixed routes
+provide no image admission or installer. The P3-14 shared send gate is not merged; this small
+permit check adds no spending gate and can move behind it later.
 
 Model and MCP admission share `currentAuthority`: current member/role, team
 membership, assistant activation, conversation participation, requester and

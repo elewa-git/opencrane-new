@@ -404,3 +404,11 @@ budget stream and closes the hold to new send permission. It changes no cents
 and grants no access. The budget actor saves it before expiry uncertainty.
 The actor and spending projection restore the closed hold on replay; later usage
 can still settle its cost. The event catalogue and registry name the same event.
+
+## MCP approval transport binding
+
+`tool.approval_requested.dispatchBinding` is an optional SHA-256 digest of the reviewed
+transport route, including server, connection, backend address and instance generation.
+It participates in the approval id. Missing fields remain readable for replay.
+A gateway call with a different current transport binding cannot use that old approval.
+

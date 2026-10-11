@@ -49,3 +49,5 @@ export { mcpInstanceCommand, mcpInstanceStatus, mcpInstanceChange, McpInstanceRe
   from './mcp-instance.ts';
 
 export { admitDescendant, descendantId } from './descendant-admission.ts';
+
+export { mcpDispatchRouteSchema } from './mcp-dispatch.ts';

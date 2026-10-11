@@ -47,8 +47,9 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
   const segment = z.string().regex(/^[\w-]{1,200}$/u);
   segment.parse(route.serverId); segment.parse(route.connectionId);
   const path = `/mcp/${route.serverId}/${route.connectionId}`;
-  const responseHeaders = ['x-request-id'];
-  const upstreamHeaders = [...MCP_UPSTREAM_HEADERS];
+  const responseHeaders = ['x-request-id', 'x-opencrane-mcp-permit'];
+  const upstreamHeaders = [...MCP_UPSTREAM_HEADERS,
+    '"x-opencrane-mcp-permit":request.headers["x-opencrane-mcp-permit"]'];
   if (path === '/mcp/memory/server') {
     responseHeaders.push('x-memory-context');
     upstreamHeaders.push('"x-memory-context":request.headers["x-memory-context"]');
@@ -72,9 +73,13 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
           metadata: { toolRequestId: 'response.headers["x-request-id"]' } } },
         failureMode: { denyWithStatus: 503 } },
       transformations: { request: { replace: `{${upstreamHeaders.join(', ')}}` } },
-    }, backends: [{ host: route.upstream, policies: {
-      // Strip this only from tool replies. An authorisation refusal never reaches the backend.
-      responseHeaderModifier: { remove: ['x-opencrane-decision'] },
+      ...(path === '/mcp/memory/server' ? {} :
+        { urlRewrite: { path: { full: `/dispatch${path}` } } }),
+    }, backends: [{ host: path === '/mcp/memory/server' ? route.upstream :
+      new URL(decisionUrl).host, policies: {
+      // Keep refusals from the checked sender. Remove forged markers from memory replies.
+      responseHeaderModifier: { remove: path === '/mcp/memory/server' ?
+        ['x-opencrane-decision'] : [] },
     } }] };
 }
 function gatewayConfig(

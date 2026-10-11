@@ -349,7 +349,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `tool.approval_requested` | decision service (mode Ask) | approvals | notify the requester; approval card |
+| `tool.approval_requested` | decision service (mode Ask) | approvals (optional dispatchBinding hash binds the reviewed backend and instance generation) | notify the requester; approval card |
 | `approval.decided` | requester | approvals | deliver the decision to the computer (wake it) |
 | `approval.expired` | timer | approvals | tell the computer |
 | `approval.cancelled` | decision service / approval reader | approvals | close the card when its logical turn or binding changes |

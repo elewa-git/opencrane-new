@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { connectProjectionDb } from '@opencrane/projections';
 import { providerSecrets, BudgetActor, startDecision, startGateway,
-  ingestUsage } from '@opencrane/models';
+  ingestUsage, mcpDispatchRouteSchema } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import type { JSONWebKeySet } from 'jose';
@@ -68,17 +68,23 @@ try {
         gatewayUrl: `http://127.0.0.1:${required('MODEL_GATEWAY_PORT')}`,
       };
     }
+    const mcpRoutes = z.array(mcpDispatchRouteSchema)
+      .parse(JSON.parse(process.env['MODEL_MCP_ROUTES'] ?? '[]'));
+    async function requireDispatchLeader() {
+      if (stop.signal.aborted) throw new Error('Models process stopped');
+      await locked.query('SELECT 1');
+    }
+    const dispatchOptions = { routes: mcpRoutes, requireLeader: requireDispatchLeader };
     const decisionPort = Number(required('MODEL_DECISION_PORT'));
     const decision = await startDecision(actor, identity, binding, decisionPort,
-      keys, verification);
+      keys, verification, dispatchOptions);
     let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
     try {
       gateway = await startGateway({ binary: required('AGENTGATEWAY_BINARY'), configFile: `${directory}/gateway.json`,
         usageFile: `${directory}/usage.jsonl`, keyFile: process.env['MODEL_KEY_FILE'] ?? resolve(import.meta.dirname, '../../../.keys/.openai-key'), port: Number(required('MODEL_GATEWAY_PORT')),
         readinessPort: Number(required('MODEL_READINESS_PORT')), decisionUrl: decision.url, issuer: required('TOKEN_ISSUER'),
         ...(process.env['MODEL_UPSTREAM'] ? { upstream: process.env['MODEL_UPSTREAM'] } : {}),
-        mcpRoutes: z.array(z.object({ serverId: z.string(), connectionId: z.string(), upstream: z.string() }).strict())
-          .parse(JSON.parse(process.env['MODEL_MCP_ROUTES'] ?? '[]')),
+        mcpRoutes,
       });
       const usageCursor = { offset: 0 };
       let eventStoreUnavailableSince: number | undefined;

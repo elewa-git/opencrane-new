@@ -2172,3 +2172,17 @@ checks. Lint reports 15 existing warnings and no errors. Logs are
 `/tmp/p4-23-pr3-{tests,projections,event-store}-latest{1,2}.log` and
 `/tmp/p4-23-pr3-{lint,typecheck,events,changelog}-latest.log`.
 NOT RUN: full root suite and fresh-install qualification.
+
+## Final configured MCP sends
+
+`MODEL_MCP_ROUTES` uses the shared `mcpDispatchRouteSchema` from `libs/models`.
+Routes without a generation and the reviewed atomic revision header remain unavailable.
+All installed servers use this path, including Odoo; no adapter chooses a weaker rule.
+The models process reuses its silo leadership lock. It checks that connection immediately
+before forwarding, through a callback supplied to `startDecision`. A dead connection
+refuses the send. A new process cannot accept the old process's permits.
+
+The [library contract](../../libs/models/README.robot.md#per-tool-policy-p3-1)
+describes the required backend preconditions. Hosted startup and image admission remain
+unavailable; a configured route does not qualify either. The built-in memory backend
+continues to check its signed context. No new budget gate or database business rule is added.

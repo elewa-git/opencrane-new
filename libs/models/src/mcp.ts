@@ -89,7 +89,9 @@ function reviewMetadata(rows: StoredEvent[], name: string,
   const review = discovery.tools?.find(t => t.name === name)?.review;
   const registered = rows.find(r => r.event.type === 'mcp.server_registered');
   const { kind, locator } = z.object({ kind: z.enum(['remote', 'hosted']), locator: z.string() }).parse(registered?.event.data);
-  return { schemaDigest: discovery.schemaDigest, review, destination: kind === 'remote' ? new URL(locator).origin : `Hosted: ${locator}` };
+  // Refuse hosted calls until saved image checks and instance records can authorise them.
+  if (kind === 'hosted') throw new Error('Hosted image admission unavailable');
+  return { schemaDigest: discovery.schemaDigest, review, destination: new URL(locator).origin };
 }
 
 function plain(node: JsonValue): unknown {
