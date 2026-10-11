@@ -11,6 +11,8 @@ import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memo
   pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
 import { memoryWrittenEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
+import { losslessJson } from '@opencrane/events/lossless-json';
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import type { MemoryOptions } from '../src/memory/access.ts';
 import { reconcileCommands } from '../src/memory/commands.ts';
 import * as memoryAdmission from '../src/memory/admission.ts';
@@ -168,12 +170,18 @@ async function previewSetup() {
     requesterId: 'preview', task: 'chat_turn', executionMode: 'restricted' });
   await append('mcp-memory', 'mcp.server_registered', { serverId: 'memory', kind: 'hosted',
     locator: `registry.example.test/opencrane/server@sha256:${'a'.repeat(64)}`, registeredBy: 'owner' });
-  const tool = { name: 'recall', revision: 'a'.repeat(64), reviewed: true, costCents: 0 };
+  const definition = losslessJson('{"name":"recall","inputSchema":{"type":"object"}}');
+  const tool = { name: 'recall', revision: definition.digest, definition: definition.canonical,
+    reviewed: true, costCents: 0 };
+  const tools = [tool];
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
   await append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory', connectionId: 'server',
-    accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 1, tools: [tool] });
+    accountMode: 'none', schemaDigest: catalogueDigest(tools), toolCount: 1, tools,
+    checkedAt, expiresAt });
   await append('mcp-memory', 'mcp.server_published', { serverId: 'memory', publishedBy: 'owner' });
   await append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory', connectionId: 'server',
-    toolName: 'recall', toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'owner' });
+    toolName: 'recall', toolRevision: tool.revision, mode: 'allow', setBy: 'owner' });
   await previewGrant('mcp_server', 'memory');
   for (const scope of previewScopes) await previewGrant('memory_read', scope.scopeId);
   for (const target of [projection, groups, computers]) await runner.run(target);

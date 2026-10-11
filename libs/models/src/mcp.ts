@@ -74,7 +74,7 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
   return { ...decision, waitLimited: offeredMode === 'ask', expectedApproval,
     policy, revision: tool?.revision, name: call.params.name, args, ...review };
 }
-function toolDecision(
+export function toolDecision(
   tool: ReturnType<typeof toolPolicyFromRows>['tools'][number] | undefined,
 ) {
   const mode = tool?.reviewed ? tool.mode : 'block';
