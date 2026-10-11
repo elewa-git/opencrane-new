@@ -680,8 +680,10 @@ restart and persistence failures before any hosted startup becomes callable.
 The install worker records `mcp.server_rejected` with
 `lasting_startup_secret_required` for lasting, environment-only or raw-bearer
 requirements, and `startup_contract_unverified` for missing or incompatible evidence.
-Legacy registrations without a contract remain closed. Compatible contracts stay
-pending review. Hosted per-call contracts remain for the separate hosted installer.
-All hosted records remain unpublished in the tool policy, even if older discovery
-claims `accountMode: none` or a publication event follows. No hosted process starts,
-credential release, Connect flow or ordinary tool call is enabled by this contract.
+New hosted installs without a contract remain closed. Compatible startup contracts
+stay pending review. Hosted per-call contracts remain for the separate hosted installer.
+The tool policy blocks publication for declared startup contracts and saved startup
+refusals. Existing per-call connections, including reviewed memory registrations
+without a startup contract, keep their existing publication and access checks.
+No startup process, credential release, Connect flow or ordinary startup tool call
+is enabled by this contract.

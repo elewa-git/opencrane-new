@@ -26,7 +26,8 @@ flowchart LR
   A change reference keeps its original rule and arguments when a request is repeated.
 
 - Checks hosted startup credential requirements before offering a connection.
-  Compatible records stay available for review; hosted processes cannot run yet.
+  Compatible records stay available for review; startup processes cannot run yet.
+  Existing memory calls keep their usual access checks.
 - Preview bounded facts for a saved private turn without sending text to a computer.
   Facts with expired or unusable supporting facts are left out.
 - Read recorded child participants without reading the whole conversation.

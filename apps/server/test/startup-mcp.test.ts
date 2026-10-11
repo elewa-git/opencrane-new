@@ -114,16 +114,26 @@ it('accepts the compatible synthetic contract for review without starting a call
 
 async function keepsHostedClosed(credentialContract?: unknown) {
   const fixture = await setup(credentialContract);
+  await fixture.worker.discover('startup');
+  const registrationPosition = await fixture.store.head('mcp-startup');
   const discovered = { serverId: 'startup', toolCount: 0, schemaDigest: imageDigest,
     connectionId: 'forged-connection', accountMode: 'none', tools: [] };
   const discovery = envelope('test', 'mcp-startup', 'mcp.server_discovered', discovered, 'discover');
-  const discoveredResult = await fixture.store.append({ event: discovery, expectedSequence: 1 });
+  const discoveredResult = await fixture.store.append({ event: discovery,
+    expectedSequence: registrationPosition });
   expect(discoveredResult.status).toBe('appended');
   const publication = envelope('test', 'mcp-startup', 'mcp.server_published',
     { serverId: 'startup', publishedBy: 'admin' }, 'publish');
-  const publishedResult = await fixture.store.append({ event: publication, expectedSequence: 2 });
+  const publicationPosition = await fixture.store.head('mcp-startup');
+  const publishedResult = await fixture.store.append({ event: publication,
+    expectedSequence: publicationPosition });
   expect(publishedResult.status).toBe('appended');
   expect(await readToolPolicy(fixture.store, 'test', 'startup')).toMatchObject({ published: false });
+  if (credentialContract === undefined) {
+    expect(await discoveryStatus(fixture.store, 'test', 'startup')).toMatchObject({
+      state: 'failed', reason: 'startup_contract_unverified',
+    });
+  }
 }
 async function keepsLegacyClosed() {
   const fixture = await setup();

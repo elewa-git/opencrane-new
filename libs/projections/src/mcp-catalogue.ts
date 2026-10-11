@@ -1,6 +1,6 @@
 import { emptyToolPolicy, applyToolPolicy } from './tool-policy.ts';
 import { toolPolicySchema } from '@opencrane/protocol';
-import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
+import { getEventDefinition } from '@opencrane/events';
 import type { IntegrationRow, SharedStateKind } from '@opencrane/protocol';
 import type { Projection } from './runner.ts';
 
@@ -85,10 +85,12 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
           event.time, position, JSON.stringify(applyToolPolicy(emptyToolPolicy(), event, position))]);
         return;
       }
-      const existing = await db.query(`SELECT server_id, source_kind, policy FROM ${tables.catalogue} WHERE silo = $1 AND server_id = $2`,
+      const existing = await db.query(`SELECT server_id, policy FROM ${tables.catalogue} WHERE silo = $1 AND server_id = $2`,
         [event.silo, serverId]);
       if (!existing.rows.length) throw new Error('MCP event requires a registered server');
-      const policy = cataloguePolicy(existing.rows[0]!, event, position);
+      const savedPolicy = existing.rows[0]?.['policy'];
+      const current = savedPolicy ? toolPolicySchema.parse(savedPolicy) : emptyToolPolicy();
+      const policy = applyToolPolicy(current, event, position);
       await db.query(`UPDATE ${tables.catalogue} SET policy = $3 WHERE silo = $1 AND server_id = $2`, [event.silo, serverId, JSON.stringify(policy)]);
       if (event.type === 'mcp.tool_mode_set') {
         await db.query(`INSERT INTO ${tables.toolModes} VALUES ($1, $2, $3, $4)
@@ -106,13 +108,6 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
       [event.silo, serverId, lifecycle, toolCount, info?.name ?? null, info?.version ?? null, event.time, position, optionalField(data, 'reason')]);
     },
   };
-}
-
-function cataloguePolicy(row: Record<string, unknown>, event: EventEnvelope, position: number) {
-  const saved = row['policy'] ? toolPolicySchema.parse(row['policy']) : emptyToolPolicy();
-  // Read the saved transport kind too, because older table rows lack the hosted flag.
-  const current = { ...saved, hosted: row['source_kind'] === 'hosted' };
-  return applyToolPolicy(current, event, position);
 }
 
 function catalogueLifecycle(type: string, published: boolean) {
@@ -167,7 +162,9 @@ function status(lifecycle: string, changedAt: string): IntegrationRow['status'] 
 }
 
 function catalogueRowStatus(row: McpCatalogueRow): IntegrationRow['status'] {
-  if (row.source_kind === 'hosted' && row.lifecycle === 'published') {
+  const policy = toolPolicySchema.safeParse(row['policy']);
+  if (policy.success && policy.data.startupReviewRequired === true &&
+      row.lifecycle === 'published') {
     return status('discovered', row.changed_at);
   }
   if (row.source_kind === 'remote' && row['rejection_reason'] === 'connection_required' &&

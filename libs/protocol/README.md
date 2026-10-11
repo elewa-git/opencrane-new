@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, groups, invitations, departure reviews, hosted tool status and settings messages"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, groups, invitations, departure reviews, startup review and settings messages"]
   server["apps/server<br/>back end"] -.-> protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -18,7 +18,7 @@ flowchart LR
 
 ## What it is responsible for
 
-- Carries whether a tool server is hosted so review data cannot enable its calls.
+- Carries whether a hosted tool server needs startup review before calls can run.
 - Checks linked dispatch records, native consent refusals and separate approval actions.
 
 - Define the messages exchanged over the live browser connection.

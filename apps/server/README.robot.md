@@ -1586,13 +1586,18 @@ or missing or incompatible evidence (`startup_contract_unverified`). The status 
 makes the same check before offering Needs input. It never suggests Connect for
 these refusals. Compatible contracts show `pending_review` without a process,
 credential release, discovery request or normal call. Hosted per-call contracts
-remain for the separate hosted installer and stay unavailable here.
+remain for the separate hosted installer. Existing reviewed per-call connections,
+including memory records without startup evidence, keep their inventory and calls.
+New hosted registrations without evidence are still refused before discovery.
 
 The [accepted design](../../docs/specs/phase-3/p3-10-startup-mcps.md) defines the later
 qualification, delivery and lifecycle work. Contract fields are review inputs, not
 proof that expiry, renewal or persistence checks passed. No qualification is claimed.
 `test/startup-mcp.test.ts` uses real NATS for saved refusals and forged publication
-claims. The projection test also checks older PostgreSQL policies and catalogue replay.
+claims. The projection test checks startup and per-call policies through PostgreSQL updates
+and catalogue replay. `test/memory-startup.test.ts` checks completed memory review
+and a real gateway/backend recall with both older and declared per-call contracts,
+alongside refusal of a lasting startup contract.
 Existing remote discovery tests remain regressions. Fresh-install startup
 qualification and framed refusal screens are NOT RUN.
 

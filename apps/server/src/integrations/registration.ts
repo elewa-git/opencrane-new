@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { envelope, history } from '@opencrane/models';
-import { getEventDefinition } from '@opencrane/events';
+import { getEventDefinition, hostedCredentialContractSchema } from '@opencrane/events';
 
 export function remoteReference(silo: string, locator: string) {
   const url = remoteEndpoint(locator);
@@ -36,6 +36,11 @@ export async function discoveryStatus(store: EventStore, silo: string, serverId:
   const registered = z.object({ kind: z.string(), locator: z.string(),
     credentialContract: z.unknown().optional() }).parse(registration.event.data);
   if (registered.kind === 'hosted') {
+    // Keep a saved startup refusal closed even if a later discovery claims success.
+    const startupRefusal = rows.findLast(isStartupRefusal);
+    if (startupRefusal && startupRefusal.sequence > registration.sequence) {
+      last = startupRefusal;
+    }
     const status = hostedDiscoveryStatus(registered.locator, registered.credentialContract, last);
     return { serverId, changeRef: registration.event.commandId, ...status };
   }
@@ -50,7 +55,22 @@ function isDiscoveryOutcome(row: StoredEvent) {
   return row.event.type === 'mcp.server_discovered' || row.event.type === 'mcp.server_rejected';
 }
 
+function isStartupRefusal(row: StoredEvent) {
+  if (row.event.type !== 'mcp.server_rejected') return false;
+  const data = z.object({ reason: z.string() }).parse(row.event.data);
+  return data.reason === 'startup_contract_unverified' ||
+    data.reason === 'lasting_startup_secret_required';
+}
+
 function hostedDiscoveryStatus(locator: string, contract: unknown, last?: StoredEvent) {
+  const declared = hostedCredentialContractSchema.safeParse(contract);
+  if (declared.success && declared.data.credentialMode === 'per_call') {
+    return remoteDiscoveryStatus(last);
+  }
+  // Keep completed per-call reviews readable when older registrations lack a contract.
+  if (contract === undefined && last?.event.type === 'mcp.server_discovered') {
+    return remoteDiscoveryStatus(last);
+  }
   const refusal = startupContractRejection(locator, contract);
   if (refusal) return { state: 'failed', reason: refusal, inventory: undefined };
   if (last?.event.type === 'mcp.server_rejected') {

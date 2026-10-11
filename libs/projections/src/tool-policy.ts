@@ -1,4 +1,5 @@
-import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
+import { getEventDefinition, hostedCredentialContractSchema, type EventEnvelope }
+  from '@opencrane/events';
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
 
@@ -10,7 +11,8 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   const d = z.record(z.string(), z.unknown()).parse(getEventDefinition(event.type)?.dataSchema.parse(event.data));
   let next = { ...state, sequence };
   if (event.type === 'mcp.server_registered') {
-    next = { ...emptyToolPolicy(), sequence, hosted: d['kind'] === 'hosted' };
+    const startupReviewRequired = requiresStartupReview(d);
+    next = { ...emptyToolPolicy(), sequence, startupReviewRequired };
   }
   if (event.type === 'mcp.server_discovered') {
     const tools = z.array(z.object({ name: z.string(), revision: z.string(), reviewed: z.boolean(),
@@ -22,12 +24,28 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
         suggestion: t.readOnly === true && t.destructive !== true ? 'allow' : 'ask' })) };
     next.accountMode = z.enum(['none', 'personal', 'company']).nullable().parse(d['accountMode'] ?? null);
   }
-  // Keep every hosted process closed until its runtime can enforce reviewed credentials.
-  if (event.type === 'mcp.server_published') next.published = state.hosted !== true;
+  // Keep startup processes closed without blocking existing per-call connections.
+  if (event.type === 'mcp.server_published') {
+    next.published = state.startupReviewRequired !== true;
+  }
+  if (event.type === 'mcp.server_rejected' && isStartupRefusal(d)) {
+    next.startupReviewRequired = true;
+  }
   if (['mcp.server_unpublished', 'mcp.server_rejected', 'mcp.tools_changed'].includes(event.type)) next.published = false;
   if (event.type === 'mcp.tools_changed') next.tools = state.tools.map(t => ({ ...t, reviewed: false, mode: 'block' }));
   if (event.type === 'mcp.tool_mode_set') next.tools = applyMode(state, d);
   return toolPolicySchema.parse(next);
+}
+
+function requiresStartupReview(data: Record<string, unknown>) {
+  const contract = hostedCredentialContractSchema.safeParse(data['credentialContract']);
+  return data['kind'] === 'hosted' && contract.success &&
+    contract.data.credentialMode !== 'per_call';
+}
+
+function isStartupRefusal(data: Record<string, unknown>) {
+  return data['reason'] === 'startup_contract_unverified' ||
+    data['reason'] === 'lasting_startup_secret_required';
 }
 
 function applyMode(state: ToolPolicy, d: Record<string, unknown>): ToolPolicy['tools'] {

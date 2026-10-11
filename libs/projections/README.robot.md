@@ -375,12 +375,13 @@ Fresh-install lifecycle journeys remain NOT RUN.
 
 ## Hosted tool review
 
-`applyToolPolicy` records the registration's hosted transport and refuses to mark
-it published. Later discovery cannot remove that flag. The catalogue uses the same
-fold at registration and reads its stored transport kind when an older policy lacks
-the flag. Refused hosted publication stays Pending review rather than Ready.
-Rebuilding the catalogue applies the same checks and starts no process.
-Older catalogue rows cannot report hosted publication as Ready or offer Connect.
+`applyToolPolicy` records whether a hosted registration declares a startup contract
+or has a saved startup refusal. Later discovery cannot remove that restriction.
+Startup publication stays Pending review rather than Ready. Existing per-call
+connections, including memory records without a startup contract, retain their
+reviewed publication. Rebuilding the catalogue applies the same checks and starts
+no process. Transport kind alone does not decide whether credentials are used at
+startup or supplied for each call.
 
 The providers fold stores `managedCallsEnabled: true` on the connection carrying
 `provider.managed_calls_enabled` on `budget-<silo>`. This does not advance its configuration revision

@@ -132,7 +132,9 @@ review of an active non-owner. The removal route still checks the review again.
 
 ## Hosted tool policy
 
-`toolPolicySchema.hosted` is optional for older stored policies and browser replies.
-The event fold derives it from registration. Hosted policies remain unpublished
-while hosted execution is unavailable. A table reader also uses the stored transport
-kind when an older policy lacks the flag. The field grants no authority by itself.
+`toolPolicySchema.startupReviewRequired` is optional for older stored policies and
+browser replies. The event fold derives it from a declared hosted startup contract
+or a saved startup refusal. Startup policies remain unpublished while their runtime
+is unavailable. Existing per-call policies, including memory registrations without
+a startup contract, keep their existing publication checks. The field grants no
+access by itself.
