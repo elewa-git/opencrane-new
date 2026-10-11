@@ -373,6 +373,16 @@ upgrade refusal and equality of live and rebuilt metadata and feed rows. Run wit
 set: `nice -n 10 npx vitest run libs/projections/test/conversation-activity.test.ts`.
 Fresh-install lifecycle journeys remain NOT RUN.
 
+## Hosted tool review
+
+`applyToolPolicy` records whether a hosted registration declares a startup contract
+or has a saved startup refusal. Later discovery cannot remove that restriction.
+Startup publication stays Pending review rather than Ready. Existing per-call
+connections, including memory records without a startup contract, retain their
+reviewed publication. Rebuilding the catalogue applies the same checks and starts
+no process. Transport kind alone does not decide whether credentials are used at
+startup or supplied for each call.
+
 The providers fold stores `managedCallsEnabled: true` on the connection carrying
 `provider.managed_calls_enabled` on `budget-<silo>`. This does not advance its configuration revision
 or replace key verification. Replay restores the marker through the same fold.

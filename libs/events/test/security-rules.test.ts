@@ -360,10 +360,38 @@ const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'sec
 // net for accidents, not proof: a field with an innocent name still passes by
 // name, and is held by the shape rules above and the structural check below.
 function riskyFieldNames(jsonSchema: unknown): string[] {
-  return [...propertyNames(jsonSchema)].filter((name) => {
-    const spelled = name.replace(/([a-z\d])([A-Z])/g, '$1_$2').toLowerCase();
-    return RISKY_FIELD_NAME.test(spelled) && !APPROVED_FIELD_NAMES.has(name) && !name.endsWith('Digest');
-  });
+  const found = new Set<string>();
+  function visit(node: unknown) {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+    } else if (typeof node === 'object' && node !== null) {
+      for (const [key, value] of Object.entries(asRecord(node))) {
+        if (key === 'properties' && typeof value === 'object' && value !== null) {
+          for (const [name, schema] of Object.entries(asRecord(value))) {
+            const spelled = name.replace(/([a-z\d])([A-Z])/g, '$1_$2').toLowerCase();
+            if (RISKY_FIELD_NAME.test(spelled) && !APPROVED_FIELD_NAMES.has(name) &&
+                !name.endsWith('Digest') && !isCredentialRequirement(name, schema)) {
+              found.add(name);
+            }
+          }
+        }
+        visit(value);
+      }
+    }
+  }
+  visit(jsonSchema);
+  return [...found];
+}
+
+function isCredentialRequirement(name: string, raw: unknown) {
+  if (typeof raw !== 'object' || raw === null) return false;
+  const schema = asRecord(raw);
+  // Allow a closed requirements object, but still inspect every field inside it.
+  if (name === 'credentialContract') {
+    return schema['type'] === 'object' && schema['additionalProperties'] === false;
+  }
+  const modes = ['per_call', 'startup_short_lived', 'startup_lasting', 'unknown'];
+  return name === 'credentialMode' && JSON.stringify(schema['enum']) === JSON.stringify(modes);
 }
 
 // Where a schema is not fully pinned down: every object must be closed
@@ -433,7 +461,8 @@ describe('the registry-wide guards catch a bad field added to a real event type'
 
   it.each([
     'accessToken', 'refreshToken', 'access_token', 'TOKEN', 'apiToken', 'bearerToken', 'clientSecret',
-    'secretValue', 'Password', 'passwd', 'credential', 'credentials', 'authorization', 'cookie', 'privateKey', 'headers',
+    'secretValue', 'Password', 'passwd', 'credential', 'credentials',
+    'credentialContract', 'credentialMode', 'authorization', 'cookie', 'privateKey', 'headers',
   ])('connection.refreshed refuses a "%s" field by name', (name) => {
     expect(riskyFieldNames(acceptedShape(withField('connection.refreshed', name, text)))).toEqual([name]);
   });

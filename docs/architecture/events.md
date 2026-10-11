@@ -660,3 +660,30 @@ Every newly discovered tool is unreviewed and blocked. Discovery does not create
 an installed connection, publish a route or grant access. Rejection reason
 `connection_required` projects Needs input, awaiting P3-9's scoped validation
 connection; other rejection reasons project Failed.
+
+### Hosted startup credential review
+
+Hosted `mcp.server_registered` data may include a `credentialContract`. It records
+requirements and review references, never credential values. Supported startup
+contracts use `credentialMode: startup_short_lived`, memory IPC delivery, enforced
+upstream expiry and identity binding, and renewable material. A `startup_capability`
+is a separate renewable capability with at most 30 seconds of validity; a
+`per_call_lease` cannot supply it. OAuth access material has at most 600 seconds
+remaining. Refresh tokens and lasting raw bearers never enter the process.
+
+The review names the image, launcher, dependency, configuration and upstream-binding
+SHA-256 digests and an opaque `evidence:` reference. The image digest must match the
+registered locator. These fields permit review; their presence alone is not proof
+of qualification. A later qualification harness must exercise expiry, renewal,
+restart and persistence failures before any hosted startup becomes callable.
+
+The install worker records `mcp.server_rejected` with
+`lasting_startup_secret_required` for lasting, environment-only or raw-bearer
+requirements, and `startup_contract_unverified` for missing or incompatible evidence.
+New hosted installs without a contract remain closed. Compatible startup contracts
+stay pending review. Hosted per-call contracts remain for the separate hosted installer.
+The tool policy blocks publication for declared startup contracts and saved startup
+refusals. Existing per-call connections, including reviewed memory registrations
+without a startup contract, keep their existing publication and access checks.
+No startup process, credential release, Connect flow or ordinary startup tool call
+is enabled by this contract.

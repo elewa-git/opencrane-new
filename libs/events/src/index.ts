@@ -72,3 +72,5 @@ export { delegationStartedDataSchema, delegationCompletedDataSchema } from './de
 
 export { egressDestinationSchema, egressRuleSchema, egressCommandSchema,
   egressDestinationDataSchema, type EgressRule } from './egress.ts';
+export { hostedCredentialContractSchema, startupCredentialContractSchema,
+  type StartupCredentialContract } from './startup-credentials.ts';

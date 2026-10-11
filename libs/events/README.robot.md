@@ -202,6 +202,20 @@ additions require `joinKind: explicit_child`. They grant no parent rights. No em
 new removal routes require it. It identifies the departure inventory the admin
 reviewed. It contains no private history or credentials.
 
+## Hosted startup credential contracts
+
+Hosted registration data accepts an optional `credentialContract` declaration.
+`hostedCredentialContractSchema` keeps supported and unsupported requirements
+readable for refusal. `startupCredentialContractSchema` and its separate
+`StartupCredentialContract` type accept only short-lived startup material:
+renewable startup capabilities (at most 30 seconds, using a memory provider),
+or OAuth access material (at most 600 seconds, renewed in memory or replaced by
+restart). Both require memory IPC, enforced expiry and binding, five SHA-256 digests
+and an opaque `evidence:` reference. Per-call leases are excluded. No token value,
+refresh token or client secret fits either strict contract. These shapes permit
+review only; the server checks image binding and later work must qualify evidence.
+Legacy events still parse, but do not gain hosted execution.
+
 `provider.managed_calls_enabled` records the silo's managed-call mode on `budget-<silo>`.
 Other subjects are rejected. Its data names the reviewed provider, its unchanged revision,
 the changer and the reviewed provider-category position. It carries no key and grants no access.

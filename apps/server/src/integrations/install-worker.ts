@@ -1,8 +1,9 @@
+import { startupContractRejection } from './startup-credentials.ts';
 import { discoverInventory } from './inventory.ts';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { envelope, history, losslessJson } from '@opencrane/models';
 import { remoteRequest, type RemoteNetwork } from './remote.ts';
 
@@ -37,6 +38,11 @@ export function installWorker(app: FastifyInstance, store: EventStore, silo: str
   async function discover(serverId: string) {
     const rows = await history(store, `mcp-${serverId}`, silo);
     if (rows.length !== 1 || rows[0]?.event.type !== 'mcp.server_registered') return;
+    const registration = z.object({ kind: z.string() }).parse(rows[0].event.data);
+    if (registration.kind === 'hosted') {
+      await reviewHostedRegistration(store, silo, serverId, rows[0]);
+      return;
+    }
     const authorization = `Bearer ${randomBytes(32).toString('hex')}`;
     const controller = new AbortController();
     leases.set(authorization, { serverId, signal: controller.signal });
@@ -69,7 +75,7 @@ export function installWorker(app: FastifyInstance, store: EventStore, silo: str
         if (stopped) return;
         if (row.event.silo === silo && row.event.type === 'mcp.server_registered') {
           const data = z.object({ serverId: z.string(), kind: z.string() }).parse(row.event.data);
-          if (data.kind === 'remote') await discover(data.serverId);
+          if (data.kind === 'remote' || data.kind === 'hosted') await discover(data.serverId);
         }
       }
     };
@@ -80,4 +86,19 @@ export function installWorker(app: FastifyInstance, store: EventStore, silo: str
     app.addHook('onClose', async () => { stopped = true; clearInterval(timer); await active; });
   }
   return { discover, start };
+}
+
+async function reviewHostedRegistration(store: EventStore, silo: string, serverId: string,
+  row: StoredEvent) {
+  const registration = z.object({ locator: z.string(),
+    credentialContract: z.unknown().optional() }).parse(row.event.data);
+  const reason = startupContractRejection(registration.locator, registration.credentialContract);
+  // Leave compatible contracts for review without scheduling or releasing material.
+  if (!reason) return;
+  const event = envelope(silo, `mcp-${serverId}`, 'mcp.server_rejected',
+    { serverId, reason }, `${row.event.id}-discovery`);
+  const result = await store.append({ event, expectedSequence: row.sequence });
+  if (result.status !== 'appended' && result.status !== 'conflict') {
+    throw new Error('Discovery append unavailable');
+  }
 }

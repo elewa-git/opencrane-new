@@ -11,8 +11,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership, member access and destination rules"]
-  server -.->|checks access, departures, spending, memory, tool reviews and turn previews| libs["libs/*<br/>shared code"]
-  server -->|records changes, memory facts, grants, roles, participants, computers, provider choices, drains and tool catalogues| nats["NATS<br/>event log"]
+  server -.->|checks startup requirements, access, departures, spending, memory, tool reviews and turn previews| libs["libs/*<br/>shared code"]
+  server -->|records changes, memory facts, grants, roles, participants, chats, computers, provider choices, drains and tool catalogues| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chats, closing records, joins, facts, models and tools| postgres
@@ -25,6 +25,9 @@ flowchart LR
 - Let owners and admins save one destination rule and read its original receipt.
   A change reference keeps its original rule and arguments when a request is repeated.
 
+- Checks hosted startup credential requirements before offering a connection.
+  Compatible records stay available for review; startup processes cannot run yet.
+  Existing memory calls keep their usual access checks.
 - Preview bounded facts for a saved private turn without sending text to a computer.
   Facts with expired or unusable supporting facts are left out.
 - Read recorded child participants without reading the whole conversation.

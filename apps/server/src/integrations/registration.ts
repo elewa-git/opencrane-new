@@ -1,9 +1,10 @@
+import { startupContractRejection } from './startup-credentials.ts';
 import { remoteEndpoint } from './address-policy.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { envelope, history } from '@opencrane/models';
-import { getEventDefinition } from '@opencrane/events';
+import { getEventDefinition, hostedCredentialContractSchema } from '@opencrane/events';
 
 export function remoteReference(silo: string, locator: string) {
   const url = remoteEndpoint(locator);
@@ -28,11 +29,67 @@ export async function registerRemote(store: EventStore, silo: string, memberId: 
 
 export async function discoveryStatus(store: EventStore, silo: string, serverId: string) {
   const rows = await history(store, `mcp-${serverId}`, silo);
-  const registration = rows.find(r => r.event.type === 'mcp.server_registered');
+  const registration = rows.findLast(isRegistration);
   if (!registration) return null;
-  const last = rows.filter(r => ['mcp.server_discovered', 'mcp.server_rejected'].includes(r.event.type)).at(-1);
+  let last = rows.findLast(isDiscoveryOutcome);
+  if (last && last.sequence < registration.sequence) last = undefined;
+  const registered = z.object({ kind: z.string(), locator: z.string(),
+    credentialContract: z.unknown().optional() }).parse(registration.event.data);
+  if (registered.kind === 'hosted') {
+    // Keep a saved startup refusal closed even if a later discovery claims success.
+    const startupRefusal = rows.findLast(isStartupRefusal);
+    if (startupRefusal && startupRefusal.sequence > registration.sequence) {
+      last = startupRefusal;
+    }
+    const status = hostedDiscoveryStatus(registered.locator, registered.credentialContract, last);
+    return { serverId, changeRef: registration.event.commandId, ...status };
+  }
+  return { serverId, changeRef: registration.event.commandId, ...remoteDiscoveryStatus(last) };
+}
+
+function isRegistration(row: StoredEvent) {
+  return row.event.type === 'mcp.server_registered';
+}
+
+function isDiscoveryOutcome(row: StoredEvent) {
+  return row.event.type === 'mcp.server_discovered' || row.event.type === 'mcp.server_rejected';
+}
+
+function isStartupRefusal(row: StoredEvent) {
+  if (row.event.type !== 'mcp.server_rejected') return false;
+  const data = z.object({ reason: z.string() }).parse(row.event.data);
+  return data.reason === 'startup_contract_unverified' ||
+    data.reason === 'lasting_startup_secret_required';
+}
+
+function hostedDiscoveryStatus(locator: string, contract: unknown, last?: StoredEvent) {
+  const declared = hostedCredentialContractSchema.safeParse(contract);
+  if (declared.success && declared.data.credentialMode === 'per_call') {
+    return remoteDiscoveryStatus(last);
+  }
+  // Keep completed per-call reviews readable when older registrations lack a contract.
+  if (contract === undefined && last?.event.type === 'mcp.server_discovered') {
+    return remoteDiscoveryStatus(last);
+  }
+  const refusal = startupContractRejection(locator, contract);
+  if (refusal) return { state: 'failed', reason: refusal, inventory: undefined };
+  if (last?.event.type === 'mcp.server_rejected') {
+    const data = z.object({ reason: z.string() }).parse(last.event.data);
+    // Refuse an older discovery request for credentials rather than offering Connect.
+    const reason = data.reason === 'connection_required' ? 'startup_contract_unverified' : data.reason;
+    return { state: 'failed', reason, inventory: undefined };
+  }
+  return { state: 'needs_input', reason: 'pending_review', inventory: undefined };
+}
+
+function remoteDiscoveryStatus(last?: StoredEvent) {
   const data = z.record(z.string(), z.unknown()).parse(last?.event.data ?? {});
-  return { serverId, changeRef: registration.event.commandId,
-    state: last?.event.type === 'mcp.server_discovered' ? 'needs_input' : data['reason'] === 'connection_required' ? 'needs_input' : last ? 'failed' : 'checking',
-    reason: data['reason'] ?? (last ? 'pending_review' : undefined), inventory: last?.event.type === 'mcp.server_discovered' ? data : undefined };
+  let state = 'checking';
+  if (last?.event.type === 'mcp.server_discovered' || data['reason'] === 'connection_required') {
+    state = 'needs_input';
+  } else if (last) {
+    state = 'failed';
+  }
+  return { state, reason: data['reason'] ?? (last ? 'pending_review' : undefined),
+    inventory: last?.event.type === 'mcp.server_discovered' ? data : undefined };
 }

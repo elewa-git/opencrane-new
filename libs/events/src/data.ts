@@ -1,3 +1,4 @@
+import { hostedCredentialContractSchema } from './startup-credentials.ts';
 import { optionalProviderTurnBindingSchema } from './turn-binding.ts';
 import { groupConversationSchema, sharedChildConversationSchema,
   childParticipantAddedSchema, childParticipantRemovedSchema } from './conversation.ts';
@@ -437,7 +438,9 @@ export const effectResolvedDataSchema = z.object({
 const mcpServerRegisteredFields = { serverId: id, registeredBy: id, catalogueRef: id.optional() };
 export const mcpServerRegisteredDataSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('remote'), locator: remoteLocatorSchema, ...mcpServerRegisteredFields }).strict(),
-  z.object({ kind: z.literal('hosted'), locator: hostedLocatorSchema, ...mcpServerRegisteredFields }).strict(),
+  z.object({ kind: z.literal('hosted'), locator: hostedLocatorSchema,
+    credentialContract: hostedCredentialContractSchema.optional(),
+    ...mcpServerRegisteredFields }).strict(),
 ]);
 
 export const mcpServerDiscoveredDataSchema = z

@@ -129,3 +129,12 @@ person/assistant permissions and unavailable use readiness. Departure revisions 
 the actual checked inputs. Missing permission evidence makes the review incomplete.
 `permissions.remove` is a boolean. The server enables it only for a complete
 review of an active non-owner. The removal route still checks the review again.
+
+## Hosted tool policy
+
+`toolPolicySchema.startupReviewRequired` is optional for older stored policies and
+browser replies. The event fold derives it from a declared hosted startup contract
+or a saved startup refusal. Startup policies remain unpublished while their runtime
+is unavailable. Existing per-call policies, including memory registrations without
+a startup contract, keep their existing publication checks. The field grants no
+access by itself.
