@@ -86,16 +86,17 @@ async function longHistoryPrecedesSmallChecks() {
   const store = nats.store;
   const read = store.readStream.bind(store);
   const subject = egressGrantStream('test', rule);
+  const historySubject = 'egress-*';
   let finished = false;
   store.readStream = async function* slowHistory(name, from, deadline) {
-    if (name === subject && (from ?? 1) === 1) {
+    if (name === historySubject && (from ?? 1) === 1) {
       expect((deadline ?? 0) - performance.now()).toBeGreaterThan(2000);
       await delay(2100);
     } else if ((deadline ?? Infinity) - performance.now() <= 2000) {
       expect(finished).toBe(true);
     }
     yield* read(name, from, deadline);
-    if (name === subject && (from ?? 1) === 1) finished = true;
+    if (name === historySubject && (from ?? 1) === 1) finished = true;
   };
   try {
     const expectedSequence = await store.head(subject);
@@ -225,6 +226,21 @@ async function concurrentChangedTargetConflicts() {
 }
 it('saves only one target when two requests race with the same change id',
   concurrentChangedTargetConflicts);
+
+async function savesAfterLegacyObservation() {
+  const observation = { ...event('old-observation', 'egress-old-observation', 'egress.observed'),
+    data: { requestId: 'request', permitId: 'permit', channel: 'command',
+      destinationDigest: '0'.repeat(64), outcome: 'success' } };
+  const appendRequest = { event: observation, expectedSequence: 0 };
+  expect((await nats.store.append(appendRequest)).status).toBe('appended');
+  const command = { ...input, host: 'after-observation.npmjs.org',
+    commandId: 'after-observation' };
+  const saved = await egressCommand(options(), 'alice', command);
+  expect(saved.status).toBe('appended');
+  expect(await egressCommand(options(), 'alice', command)).toEqual(saved);
+}
+it('saves destination rules when the category also contains older observations',
+  savesAfterLegacyObservation);
 
 async function crossSiloAndRemovedReadersRefuse() {
   const foreign = { ...options(), silo: 'other' };
