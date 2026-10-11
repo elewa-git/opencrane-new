@@ -413,6 +413,7 @@ Binding preparation never decrypts a fact or calls any execution service. Offlin
 memory rebuild restores these rows with readers and workers stopped. Existing
 installations create the added table on worker startup. Dirty batches and run
 history are not stored yet.
+
 ## Control audit fields
 
 Takeover events start history rows even with request correlation. Records retain
