@@ -1711,3 +1711,166 @@ external ports. Fresh-install qualification and independent review: NOT RUN.
 Owner/Admin budget reads and commands include saved stop reasons and known turns.
 Rebuild budget projections on upgrade. The integration test checks PostgreSQL
 replay and member refusal; dispatch and cancellation follow later.
+
+## Internal control intent
+
+`src/computers/takeover.ts` checks the latest accepted human request, its reviewed
+id, the current generation and Pod, membership, participation, assistant rights
+and applied desktop grants. `requestControl` records one `takeover.requested` with
+one conditional append to the computer stream. A racing turn or intent cannot
+both use the same checked position. Retries check current access and the original
+request fields. Conflicting command ids return no saved success.
+
+Chat history loads before the short write check. Later human messages and closure
+are checked with a bounded tail read. Only small access streams enter that check.
+Turn admission, new message delivery, credential issuance and decisions refuse pending
+control. Explicit stops still reach the bridge. Reports and explicit approval denial
+remain available. Viewer transport and its access leases are unchanged.
+Upload delivery checks control before each object read, after the bytes are ready,
+and after the sender reads delivery history, immediately before file transmission.
+The watcher gets pending control from its existing computer snapshot. Every delivery
+check reads the computer stream position again. An unchanged position reuses the
+snapshot without reading any events. A changed position reloads history before
+sending a new turn or file, including after tool preparation and delivery-history
+reads. Direct bridge callers retain the shared control-summary check.
+Intent saved during preparation holds that file and the remaining batch without
+recording a delivery receipt. A file already being transmitted can finish.
+`test/bridge-control.test.ts` covers stops, both slow reads and remaining batch files
+with saved events and a real socket. The approved old-token test checks refusal
+without an outstanding approval blocking the call. The Bob test has no prior intent
+and requires the requester refusal.
+Approval decisions use `approvalActivity` to check turn and control changes without
+reading unrelated spending history. The tests keep the exact allowed-stream assertion,
+refuse intent saved during permission checks and allow decisions when budget history
+cannot be read. Model and memory decisions keep their provider-mode checks.
+
+This is the first split of P3-17 row 1. HTTP request/status routes, chat/realtime
+control status, remaining transition schemas and strict modern started/ended data
+are deferred. There is no route that can trigger intent, pause reaction, local gate,
+writer or input path. Supervisor proof, dispatch ordering and recovery remain later
+work. The accepted [design](../../docs/specs/phase-3/p3-17-take-control.md) owns that scope.
+
+## Source check receipt — 10 October 2026
+
+Source `4c8baa19`; Linux, Node 22.23.3 and disposable NATS, PostgreSQL, OpenFGA
+and the pinned gateway. This was not a fresh silo.
+PASS: clean `npm ci`, lint, workspace typecheck, check:events (107 types), Knip
+and lint:changelog. Final server typecheck and focused lint also passed.
+PASS: two five-file changed-test runs, each with 101 passes and one browser skip.
+Both used `nice -n 10`, the supplied `PG_TEST_URL` and one Vitest worker.
+The earlier nine-file run had 184 passes, one skip and one existing viewer timeout.
+That viewer case passed in both clean runs. Its timeout and access limits were unchanged.
+NOT RUN: optional 390px approval browser test, full root suite, independent review
+and fresh-install control journey. Takeover remains an internal first split.
+
+## Review fixes and source checks — 11 October 2026
+
+Source: `935882c3`. Rebased onto `origin/main` at `5f75ec5b`; the rebase finished.
+Kept main's provider, memory-preview and member-removal changes alongside control intent.
+Environment: Linux, Node 22.23.3, disposable NATS and OpenFGA, PostgreSQL at
+`127.0.0.1:55432`, a real bridge socket and the pinned gateway with a recording upstream.
+This was not a fresh silo. No paid model calls were made.
+
+Tests were committed first: `b4e39876` before the bridge fix in `530cd296`, and
+`0720cbfd` before the approval fix in `935882c3`. All four bridge regressions failed
+before the fix. The unchanged approval-stream assertion exposed unrelated budget reads
+introduced by the rebase. That assertion and the new unavailable-budget test failed
+before approval activity was separated from provider-mode checking.
+
+PASS: two final runs of all six changed test files, each with 109 passes and one
+optional browser skip. They took 396.10 s and 457.67 s. Both used `nice -n 10`,
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and one worker.
+The files were `bridge-control`, `takeover`, `approvals`, `live-view-activity`,
+`computer-summary` and `memory-rights`.
+PASS: 25 provider/activity regressions and the existing stop/reconnect regression.
+PASS: lint, workspace typecheck and check:events (109 types). Lint includes Knip
+and lint:changelog; it reports 15 existing warnings and no errors.
+The two authority test files remain unchanged.
+
+Logs: `/tmp/p3-17-pr1-tests-final-1.log`, `/tmp/p3-17-pr1-tests-final-2.log`,
+`/tmp/p3-17-pr1-provider-regressions.log`, `/tmp/p3-17-pr1-stop-reconnect.log`,
+`/tmp/p3-17-pr1-lint-complete.log`, `/tmp/p3-17-pr1-typecheck-complete.log` and
+`/tmp/p3-17-pr1-events-final.log`. Failing-first logs are
+`/tmp/p3-17-pr1-red-final.log` and `/tmp/p3-17-pr1-approval-red.log`.
+
+NOT RUN: optional approval browser test, full root suite and fresh-install control journey.
+The orchestrator's narrow verification and hosted CI are still pending.
+Remaining individual guard tests are recorded in issue #302.
+
+## Final load checks — 11 October 2026
+
+Fetched origin and rebased onto `origin/main` at `55336ff8`, which includes the
+group and ownership read changes. The rebase finished. The tested branch source
+is `717e64ad`. Conflict resolutions keep both destination rules and control
+records in exports, audit fields and documentation.
+
+The merge train reported that both concurrent approved requests returned HTTP 503.
+That failure did not return in three isolated approvals runs on the branch or
+one on main. Under the requested rerun rule, this was a load failure. No runtime
+fix was needed. Access deadlines and all test assertions stay unchanged.
+
+| Source | Isolated run | One-minute load before starting | Result | Seconds |
+| --- | --- | --- | --- | --- |
+| `717e64ad` | Branch 1 | 11.18 | 42 passed, 1 optional skip | 338.91 |
+| `717e64ad` | Branch 2 | 15.67 | 42 passed, 1 optional skip | 277.29 |
+| `717e64ad` | Branch 3 | 9.71 | 42 passed, 1 optional skip | 305.04 |
+| `55336ff8` | Main | 11.02 | 38 passed, 1 optional skip | 286.86 |
+
+PASS: all six changed test files twice, with 109 passes and one optional browser
+skip each, in 494.26 s and 484.42 s. These runs include stop delivery after intent,
+uploads held during preparation, approval and old-token refusals, viewer access
+and memory rights. Both use the supplied `PG_TEST_URL`, `nice -n 10` and one worker.
+The three protected files, `approvals.test.ts`, `authority.test.ts` and
+`authority-volume.test.ts`, were not edited during this round.
+
+PASS: full lint, workspace typecheck, event catalogue (111 types), Knip and
+changelog validation. Lint reports 15 existing warnings and no errors.
+Logs are in `/tmp/pr335-last-round/`: `approvals-head-{1,2,3}.log`,
+`approvals-main.log`, `changed-tests-{1,2}.log`, `lint.log`, `typecheck.log`,
+`check-events.log`, `lint-unused.log` and `lint-changelog.log`.
+
+This used disposable NATS and OpenFGA, local PostgreSQL and a recording upstream.
+NOT RUN: optional browser test, full root suite and fresh-install control journey.
+The final PR comment records hosted CI after pushing this receipt. The merge train
+owns landing; this round does not merge the PR or request another review.
+
+## Computer history reuse checks — 11 October 2026
+
+Runtime source: `c1f47186`, the rebase of `ed6c5b4b`. The branch contains main
+`1327e7e9`, and the rebase finished. Later commits only correct Markdown spacing
+and record these results. The watcher gets pending control from its existing
+computer history and checks the stream position again before sending new work.
+An unchanged position opens no new event read. A changed position reloads history.
+The final file check shares this behaviour after ownership and delivery-history
+reads. Direct bridge callers retain the shared control-summary check.
+
+Before: both reported replay tests failed at exact head `7d4f0092` in 20.12 s.
+The personal/private-team test counted computer reads on passes 2, 3 and 4.
+The posted-turn test counted two computer reads where at most one is allowed.
+After: both unchanged assertions passed together in 34.72 s. The focused control
+and tool tests passed 19 tests in 51.30 s. Cached checks also hold intent saved
+after the first snapshot, during chat and membership reads. Both direct and
+cached checks keep saved stops available and hold late uploads.
+
+PASS: two eight-file runs, each with 153 passed tests and one optional browser
+skip. Run 1 took 724.16 s; run 2 took 561.26 s. The six PR files are
+`approvals`, `bridge-control`, `live-view-activity`, `takeover`, `computer-summary`
+and `memory-rights`. The set also includes all `bridge-replay` and
+`bridge-turn-tools` tests. Both runs use the supplied `PG_TEST_URL`, `nice -n 10`
+and one worker. An earlier batch was interrupted when another process rebased
+the worktree. It is excluded from the evidence.
+
+PASS: full lint, workspace typecheck, event catalogue (112 types), Knip and
+changelog validation. Lint reports 15 warnings and no errors. The rebase dropped
+blank lines before two README headings. They were restored, then lint passed.
+No protected test was edited by this fix. The rebase retains main's membership
+fixtures and participation-stream correction. No assertion or access, money or
+memory check was weakened.
+
+Logs are in `/tmp/pr335-computer-cache/`: `before-7d4f0092.log`,
+`after-focused.log`, `control-focused.log`, `rebased-tests-{1,2}.log`,
+`rebased-lint-final.log`, `rebased-typecheck.log`, `rebased-check-events.log`,
+`rebased-knip.log` and `rebased-lint-changelog.log`.
+Tests use disposable NATS and OpenFGA, local PostgreSQL and real bridge sockets.
+NOT RUN: optional browser test, full root suite and fresh-install control journey.
+The PR comment records hosted CI on the pushed head. The merge train owns landing.

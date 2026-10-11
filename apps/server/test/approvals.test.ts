@@ -436,6 +436,7 @@ it('decides an approval using only its bound authority streams', async () => {
 async function permissionResponseProxy(
   setup: Awaited<ReturnType<typeof approvalFixture>>,
   afterAnswer: () => Promise<void>,
+  relation = 'read',
 ) {
   const originalUrl = setup.binding.apiUrl;
   let answered = false;
@@ -454,7 +455,7 @@ async function permissionResponseProxy(
     if (request.url?.endsWith('/check') && !answered) {
       const check = z.object({ tuple_key: z.object({ relation: z.string() }) }).parse(
         JSON.parse(body));
-      if (check.tuple_key.relation === 'read') {
+      if (check.tuple_key.relation === relation) {
         answered = true;
         await afterAnswer();
       }
@@ -755,3 +756,120 @@ async function refusesRetryAfterBindingEnds(change: string) {
 }
 it.each(['expiry', 'turn', 'grant'])('refuses a verified retry after %s changes',
   refusesRetryAfterBindingEnds, 40_000);
+
+async function refusesCallsAndApprovalsDuringControl() {
+  const f = await approvalFixture();
+  try {
+    expect((await f.call()).status).toBe(403);
+    const data = { assistantId: 'assistant', computerId: 'computer', generation: 1,
+      podUid: 'fixture', conversationId: 'conversation', requesterId: 'alice',
+      requesterEventId: 'turn', takeoverId: 'control', leaseId: 'control',
+      reason: 'requester_requested', affectedTurnIds: ['turn'] };
+    await f.append('computer-assistant', 'takeover.requested', data);
+    expect((await f.decide()).statusCode).toBe(409);
+    expect((await f.call()).status).toBe(403);
+    expect((await f.decide('rejected')).statusCode).toBe(200);
+  } finally {
+    await f.close();
+  }
+}
+it('refuses a late approval during control but allows explicit denial',
+  refusesCallsAndApprovalsDuringControl);
+
+async function refusesApprovedOldTokenDuringControl() {
+  const setup = await approvalFixture();
+  try {
+    expect((await setup.call()).status).toBe(403);
+    expect((await setup.decide()).statusCode).toBe(200);
+    expect((await setup.read()).cards[0]?.state).toBe('approved');
+    const oldHeaders = await setup.issue();
+    await expect(setup.credentials.check(oldHeaders)).resolves.toMatchObject({
+      turn: { turn: 'turn', requester: 'alice' },
+    });
+    const control = {
+      assistantId: 'assistant', computerId: 'computer', generation: 1,
+      podUid: 'fixture', conversationId: 'conversation', requesterId: 'alice',
+      requesterEventId: 'turn', takeoverId: 'control', leaseId: 'control',
+      reason: 'requester_requested', affectedTurnIds: ['turn'],
+    };
+    await setup.append('computer-assistant', 'takeover.requested', control);
+
+    await expect(setup.credentials.check(oldHeaders))
+      .rejects.toThrow('Computer control is pending');
+    await expect(setup.issue()).rejects.toThrow('Computer control is pending');
+    expect((await setup.call(undefined, oldHeaders)).status).toBe(403);
+    expect(setup.received()).toBe(0);
+    expect((await setup.read()).cards[0]?.state).toBe('approved');
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses an approved call with an old token because computer control is pending',
+  refusesApprovedOldTokenDuringControl, 40_000);
+
+async function decidesWithoutBudgetHistory() {
+  const setup = await approvalFixture();
+  try {
+    expect((await setup.call()).status).toBe(403);
+    const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+    let budgetReads = 0;
+    async function* readApprovalStreams(...args: Parameters<typeof readStream>) {
+      if (args[0] === 'budget-test') {
+        budgetReads++;
+        throw new Error('Unrelated budget history is unavailable');
+      }
+      yield* readStream(...args);
+    }
+    const reading = vi.spyOn(setup.nats.store, 'readStream');
+    reading.mockImplementation(readApprovalStreams);
+    try {
+      expect((await setup.decide()).statusCode).toBe(200);
+      expect(budgetReads).toBe(0);
+    } finally {
+      reading.mockRestore();
+    }
+    expect((await setup.read()).cards[0]?.state).toBe('approved');
+    expect((await setup.call()).status).toBe(200);
+    expect(setup.received()).toBe(1);
+  } finally {
+    await setup.close();
+  }
+}
+it('decides an approval without reading unrelated budget history',
+  decidesWithoutBudgetHistory, 40_000);
+
+async function refusesIntentDuringApprovalChecks() {
+  const setup = await approvalFixture();
+  try {
+    expect((await setup.call()).status).toBe(403);
+    let intended = false;
+    async function intendAfterPermission() {
+      await setup.append('computer-assistant', 'takeover.requested', {
+        assistantId: 'assistant', computerId: 'computer', generation: 1,
+        podUid: 'fixture', conversationId: 'conversation', requesterId: 'alice',
+        requesterEventId: 'turn', takeoverId: 'control', leaseId: 'control',
+        reason: 'requester_requested', affectedTurnIds: ['turn'],
+      });
+      intended = true;
+    }
+    const proxy = await permissionResponseProxy(setup, intendAfterPermission, 'use');
+    try {
+      expect((await setup.decide()).statusCode).toBe(503);
+      expect(intended).toBe(true);
+      expect((await setup.read()).cards[0]?.state).toBe('requested');
+      expect(setup.received()).toBe(0);
+      const rows = await history(setup.nats.store, 'approval-' +
+        (await setup.read()).cards[0]!.approvalId, 'test');
+      function isDecision(row: typeof rows[number]) {
+        return row.event.type === 'approval.decided';
+      }
+      expect(rows.some(isDecision)).toBe(false);
+    } finally {
+      await proxy.close();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses intent saved during approval permission checks before saving a decision',
+  refusesIntentDuringApprovalChecks, 40_000);

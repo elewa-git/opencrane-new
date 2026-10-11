@@ -14,11 +14,13 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.->|signs memory passes| auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
-  auth -->|updates saved computer facts from new events| events["Event log<br/>saved events"]
+  auth -->|updates readiness and control facts from new events| events["Event log<br/>saved events"]
   auth -.->|checks chat turns and refuses native task passes| catalogue["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for
+
+- Keep control intent separate from computer readiness. Refuse work passes while control is pending.
 
 - Sign brief passes for memory requests checked by the AI gateway.
 - Send a person to Zitadel and check the sign-in response using OIDC, a standard sign-in method.

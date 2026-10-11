@@ -235,6 +235,7 @@ async function liveMemoryTurn(store: EventStore, binding: Binding, claims: Threa
 
 function requireLiveComputer(activity: Awaited<ReturnType<typeof decisionActivity>>,
   claims: ThreadIdentity) {
+  if (activity.computer.control) throw new Error('Computer control is pending');
   const lifecycle = z.object({ computerId: identifier, generation: z.int() })
     .parse(activity.computer.lifecycle?.event.data);
   const start = activity.computer.firstStart;

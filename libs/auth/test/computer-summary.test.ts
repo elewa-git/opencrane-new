@@ -108,3 +108,27 @@ function ignoresNativeAuthority() {
   expect(summary).toEqual(computerSummary.empty());
 }
 it('keeps native records out of turn and thread authority', ignoresNativeAuthority);
+
+async function keepsControlAcrossReplacement() {
+  nats = await natsFixture();
+  const intent = { ...identity, podUid: 'old-pod', conversationId: 'chat',
+    requesterId: 'alice', requesterEventId: 'message', takeoverId: 'control',
+    leaseId: 'control', reason: 'requester_requested', affectedTurnIds: [] };
+  await nats.seed([rowEvent('ready', 'computer.ready', identity),
+    rowEvent('intent', 'takeover.requested', intent)]);
+  const requested = await facts();
+  expect(requested.lifecycle?.event.id).toBe('ready');
+  expect(requested.control).toMatchObject({ phase: 'requested', position: 2,
+    takeoverId: 'control' });
+  const replacement = { ...identity, generation: 2, podUid: 'new-pod' };
+  await nats.seed([rowEvent('replacement', 'computer.ready', replacement)]);
+  const replaced = await facts();
+  expect(replaced.control).toEqual(requested.control);
+  const rebuilt = computerSummary.empty();
+  for await (const row of nats.reader.readStream('computer-assistant')) {
+    computerSummary.add(rebuilt, row);
+  }
+  expect(replaced).toEqual(rebuilt);
+}
+it('keeps control separate from readiness and paused across generation replacement',
+  keepsControlAcrossReplacement);

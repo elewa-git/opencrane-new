@@ -88,11 +88,21 @@ function auditSource(event: EventEnvelope): AuditRecord['source'] {
   if (event.type.startsWith('agent.')) return 'computer';
   return 'authoritative';
 }
+function takeoverMetadata(event: EventEnvelope, data: Record<string, unknown>) {
+  if (!event.type.startsWith('takeover.')) return {};
+  const turns = z.array(identifier).safeParse(data['affectedTurnIds']).data;
+  const generation = z.int().positive().safeParse(data['generation']).data;
+  return { computerId: safeId(data['computerId']), generation,
+    takeoverId: safeId(data['takeoverId']), leaseId: safeId(data['leaseId']),
+    requesterEventId: safeId(data['requesterEventId']), affectedTurnCount: turns?.length,
+    recordedAt: event.time };
+}
 function metadata(event: EventEnvelope, d: Record<string, unknown>, position: number): AuditRecord {
   const status = z.enum(['allow', 'ask', 'deny', 'success', 'error', 'unknown', 'not_dispatched']).safeParse(d['outcome']).data;
   const reason = typeof d['reason'] === 'string' ? Object.entries(auditReasons).find(([code]) => code === d['reason'])?.[1] ?? 'Recorded reason withheld' : undefined;
   const cents = amount(d['amountCents'] ?? d['settledCents']);
-  return { ...invitationMetadata(event, d), eventId: event.id, type: event.type, position,
+  return { ...invitationMetadata(event, d), ...takeoverMetadata(event, d),
+    eventId: event.id, type: event.type, position,
     source: auditSource(event),
     status: event.type === 'effect.uncertain' ? 'unknown' : status ?? 'recorded',
     ...(reason ? { reason } : {}), ...(cents !== undefined ? { amountCents: cents } : {}) };
@@ -133,6 +143,7 @@ function isAnchor(event: EventEnvelope, request: string | undefined, permit: str
   approval: string | undefined): boolean {
   // Decisions and alerts always start rows; correlated records attach to their action.
   // Uncorrelated effects stay evidence, while a gateway observation without a permit needs a row.
+  if (event.type.startsWith('takeover.')) return true;
   if (event.type === 'security.alert_raised') {
     return true;
   }

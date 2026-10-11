@@ -42,3 +42,5 @@ export { memoryReferences } from './memory-lineage.ts';
 export { providerTurnAdmission, managedProviderCallsEnabled } from './provider-turns.ts';
 
 export { providerDrainCommand, providerDrainStatus } from './provider-drain.ts';
+
+export { approvalActivity } from './decision-activity.ts';

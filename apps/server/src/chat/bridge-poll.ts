@@ -69,7 +69,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
   }
 
   async function process(conversation: AgentSession, assistant: Snapshot,
-    computerHistoryUnavailable = false) {
+    computerHistoryUnavailable = false, checkControl?: () => Promise<boolean>) {
     try {
       const conversationId = conversation.conversationId;
       const head = await options.store.head(`conversation-${conversationId}`);
@@ -84,7 +84,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
         return previous.pending;
       }
       const result = await processConversation(options, tokens, conversation,
-        assistant, refused, connection, computerHistoryUnavailable);
+        assistant, refused, connection, computerHistoryUnavailable, checkControl);
       const progress = { ...result, head, computerEventId, kind: assistant.kind };
       seen.set(conversationId, progress);
       return result.pending;
@@ -107,8 +107,13 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       // Read the chats to find waiting messages, without sending to an unknown computer.
       assistant = assistantSnapshot([], kinds.get(assistantId), options.silo);
     }
+    async function checkControl() {
+      // Check the position again after slow reads; reuse history until the computer changes.
+      const current = await snapshot(assistantId);
+      return current.controlPending;
+    }
     function processSession(conversation: AgentSession) {
-      return process(conversation, assistant, computerHistoryUnavailable);
+      return process(conversation, assistant, computerHistoryUnavailable, checkControl);
     }
     const processing = sessions.map(processSession);
     const results = await Promise.all(processing);

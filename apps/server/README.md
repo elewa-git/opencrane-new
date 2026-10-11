@@ -12,11 +12,11 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership, member access and destination rules"]
   server -.->|checks startup, access, departures, spending stops, memory setup, tool reviews and turn previews| libs["libs/*<br/>shared code"]
-  server -->|records changes, memory facts and choices, grants, roles, participants, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -->|records changes, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chats, closing records, joins, facts, models and tools| postgres
-  server -->|sends turns, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
+  server -->|sends turns, files, stops, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -34,6 +34,10 @@ flowchart LR
   its status. Nightly execution remains disabled.
 - Preview bounded facts for a saved private turn without sending text to a computer.
   Facts with expired or unusable supporting facts are left out.
+
+- Record internal control intent for the current requester. Refuse new work while it is pending.
+  Keep authorised viewing, explicit stops and approval denial available.
+
 - Read recorded child participants without reading the whole conversation.
 
 - Returns missing approval details and accepts requester retries after verified non-dispatch.
@@ -171,6 +175,8 @@ unavailable.
    that have been reviewed, cost nothing and are available to both the person and assistant.
    Ask tools also need a review describing the action the person will approve.
    Private team turns stay restricted and do not receive tools.
+   The watcher reuses computer history while it is unchanged. It checks for changes
+   again before sending a turn or file, so new control intent holds waiting work.
    Open chat pages repeat permission checks when silo or team membership changes.
    Removing someone from a team closes their private chat with that team's assistant
    within two seconds. If OpenFGA takes too long to apply another change, the page

@@ -782,3 +782,13 @@ async function refusesRemovedMemberTickets() {
 }
 it('refuses new tickets and old ticket upgrades after removal followed by an invitation',
   refusesRemovedMemberTickets, 30_000);
+async function keepsViewerDuringControlIntent() {
+  const data = { assistantId: 'assistant', computerId: 'desktop', generation: 1,
+    podUid: 'fixture', conversationId: 'chat', requesterId: 'alice',
+    requesterEventId: 'message', takeoverId: 'control', leaseId: 'control',
+    reason: 'requester_requested', affectedTurnIds: [] };
+  const injection = eventInjection('computer-assistant', 'takeover.requested', data, false);
+  await keepsViewerOpen(injection, 'last access read');
+}
+it('keeps viewer delivery open when control intent arrives during access',
+  keepsViewerDuringControlIntent, 30_000);

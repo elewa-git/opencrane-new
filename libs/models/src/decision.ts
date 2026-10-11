@@ -150,6 +150,7 @@ function digestContext(facts: unknown) {
 function activeTurn(turnToken: z.infer<typeof legacyTurnSchema>,
   facts: Awaited<ReturnType<typeof decisionActivity>>['computer'],
   computerSequence: number) {
+  if (facts.control) throw new Error('Computer control is pending');
   requireTurnDelegation(turnToken);
   requireCurrentComputer(facts.lifecycle, computerSequence);
   return requireRecordedActiveTurn(turnToken, facts.firstStart, facts.firstClose);

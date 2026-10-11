@@ -161,7 +161,7 @@ Hosted MCP servers never run inside the gateway.
 ### Live view and takeover
 
 - **The stream never leaves the Pod directly.** The KasmVNC stream reaches people only through the OpenCrane server's authenticated proxy.
-- **Permissions:** viewing is for conversation participants; control is for the requester or whoever they grant it to.
+- **Permissions:** viewing is for conversation participants; control is for the current requester only. Delegated control is not supported.
 - **Takeover pauses the agent** and is audited as a human action. Browser sessions made during a takeover stay in the computer's profile on its encrypted volume, so the volume is sensitive data.
 
 ## Event-driven core

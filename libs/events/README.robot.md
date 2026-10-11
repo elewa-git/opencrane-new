@@ -269,3 +269,12 @@ legacy scope. The fold checks that the referenced stop already exists.
 `test/budget-refusal.test.ts` checks the reference shape and rejects incomplete,
 mixed and undeclared fields. The [catalogue](../../docs/architecture/events.md) owns the contract;
 the [accepted design](../../docs/specs/phase-3/p3-14-p3-15-budget-stop.md) records later work.
+
+## Control intent
+
+`takeover.requested` is strict. It requires the computer, generation, Pod,
+conversation, requester, reviewed human event, takeover and lease references,
+fixed reason and affected turn ids. It belongs to `computer-<assistantId>`.
+Legacy started/ended shapes remain readable; consumers treat them as unverified.
+The other transitions and modern start/end schemas remain the next split of the
+accepted [design](../../docs/specs/phase-3/p3-17-take-control.md).

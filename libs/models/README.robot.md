@@ -1253,3 +1253,14 @@ checks refusal persistence without reads, access rechecks, stale-writer conflict
 both configuration/reservation orderings and the first assistant ceiling boundary.
 `libs/events/test/budget-refusal.test.ts` checks the strict stop-reference shape.
 `apps/server/test/integrations.test.ts` checks its PostgreSQL rebuild and admin read.
+
+## Pending computer control
+
+`decisionActivity` includes a copied control summary. Initial model, tool and memory
+admission refuses pending control. Its bounded activity check detects intent
+arriving during authority checks, without reading the whole computer stream as an
+access subject. `approvalActivity` shares the turn and control checks for approve
+and retry. It does not read spending history or provider mode. Model and memory
+admission keep their provider-mode checks through `decisionActivity`; this split
+does not change their money checks. Explicit denial remains allowed. Final dispatch
+serialisation is separate unfinished work.

@@ -138,6 +138,7 @@ async function saveTurn(store: EventStore, facts: ComputerFacts,
 }
 
 type ComputerFacts = {
+  control: ComputerSummary['control'];
   lifecycle: StoredEvent | undefined;
   turn: TurnSummary | undefined;
   threads: Map<string, ThreadSummary>;
@@ -163,7 +164,7 @@ async function computerFacts(store: EventStore, silo: string, assistantId: strin
       const thread = summary.threads.get(threadId);
       if (thread) threads.set(threadId, copyThread(thread));
     }
-    return { lifecycle: summary.lifecycle, turn, threads, sequence };
+    return { control: summary.control, lifecycle: summary.lifecycle, turn, threads, sequence };
   }
   try {
     return await readStreamSummary(store, silo, `computer-${assistantId}`,
@@ -199,6 +200,10 @@ function isRefusedAdmission(turn: TurnSummary | undefined,
     input.status === 'started' && !conversation.closed;
 }
 
+function requireNoControl(facts: ComputerFacts) {
+  if (facts.control) throw new TurnAdmissionRejected('Computer control is pending');
+}
+
 function decideTurn(facts: ComputerFacts, conversation: ChatFacts, input: TurnInput,
   computerId: string, requesterId: string) {
   const turn = facts.turn;
@@ -221,6 +226,7 @@ function decideTurn(facts: ComputerFacts, conversation: ChatFacts, input: TurnIn
     data = binding.parse({ ...input, requesterId, task: 'chat_turn' });
   }
   if (input.status === 'started') {
+    requireNoControl(facts);
     if (!input.threadId || input.threadId !== data.threadId) {
       throw new ReportRejected('Thread mismatch');
     }

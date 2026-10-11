@@ -1,4 +1,5 @@
 import { chatMembership } from './participation.ts';
+import { isComputerLifecycle, readComputerControl } from '@opencrane/auth';
 import type { Client } from 'minio/dist/esm/minio.mjs';
 import { fileDeliveredDataSchema, fileUploadedDataSchema,
   mcpServerDiscoveredDataSchema } from '@opencrane/events';
@@ -33,8 +34,9 @@ type BridgeLink = {
   socket: WebSocket;
   delivered: Set<string>;
   sentTurns: Map<string, TurnDelivery>;
-  deliver: (file: Upload, bytes: Buffer) => Promise<void>;
+  deliver: (file: Upload, bytes: Buffer, controlPending?: ControlCheck) => Promise<void>;
 };
+type ControlCheck = () => Promise<boolean>;
 type Connection = (computerId: string, assistantId: string) => Promise<BridgeLink>;
 export type ConversationProgress = {
   pending: boolean;
@@ -109,13 +111,19 @@ export function turnMessage(options: WatchOptions, conversation: AgentSession,
   return turn;
 }
 
-async function deliverUploads(objects: Client | undefined,
-  link: BridgeLink, uploads: Upload[]) {
+async function deliverUploads(options: WatchOptions, link: BridgeLink, uploads: Upload[],
+  controlPending: ControlCheck) {
+  const objects = options.objects;
   if (!objects) return;
   for (const file of uploads) {
     if (link.delivered.has(file.fileId)) continue;
+    const controlBeforeRead = await controlPending();
+    if (controlBeforeRead) return;
     const bytes = await promotedBytes(objects, file);
-    await link.deliver(file, bytes);
+    // Refuse delivery if control was requested while the object store prepared the file.
+    const controlBeforeDelivery = await controlPending();
+    if (controlBeforeDelivery) return;
+    await link.deliver(file, bytes, controlPending);
   }
 }
 
@@ -123,9 +131,14 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
   let current: ChatRows[number]['event'] | undefined;
   const closed = new Set<string>();
   const started = new Set<string>();
+  let controlPending = false;
   for (const row of lifecycle) {
-    if (!row.event.type.startsWith('computer.turn_')) current = row.event;
-    if (row.event.silo !== silo) continue;
+    if (row.event.silo !== silo) throw new Error('Computer silo mismatch');
+    if (isComputerLifecycle(row.event.type)) current = row.event;
+    // Keep both saved intent and old unverified control records paused.
+    if (['takeover.requested', 'takeover.started', 'takeover.ended'].includes(row.event.type)) {
+      controlPending = true;
+    }
     if (row.event.type === 'computer.turn_closed') {
       closed.add(turnIdData.parse(row.event.data).turnId);
     }
@@ -133,13 +146,18 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
       started.add(turnIdData.parse(row.event.data).turnId);
     }
   }
-  return { current, kind, closed, started };
+  return { current, kind, closed, started, controlPending };
 }
 
 export async function processConversation(options: WatchOptions, tokens: Tokens,
   conversation: AgentSession, assistant: ReturnType<typeof assistantSnapshot>,
   refused: Set<string>, connection: Connection,
-  computerHistoryUnavailable = false): Promise<ConversationProgress> {
+  computerHistoryUnavailable = false, checkControl?: ControlCheck): Promise<ConversationProgress> {
+  async function controlPending() {
+    if (checkControl) return checkControl();
+    const control = await readComputerControl(options.store, options.silo, conversation.assistantId);
+    return control !== undefined;
+  }
   const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
   agentSession(rows);
   const message = pendingMessage(rows);
@@ -167,11 +185,17 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
     return { pending: true, retry: true };
   }
   const link = await connection(computer.computerId, conversation.assistantId);
-  await deliverUploads(options.objects, link, uploads);
+  const control = await controlPending();
+  if (control) {
+    // Keep explicit stops available while control holds new turns and uploads.
+    sendStop(link.socket, rows, message, conversation.conversationId);
+    return { pending: true, retry: true, connectionId: link.connectionId };
+  }
+  await deliverUploads(options, link, uploads, controlPending);
   if (message) {
     await sendWaitingTurn(options, link, conversation, rows, allUploads, message,
-      assistant.kind, assistant.started);
-    sendStop(link.socket, rows, message.event.id, conversation.conversationId);
+      assistant.kind, assistant.started, controlPending);
+    sendStop(link.socket, rows, message, conversation.conversationId);
   }
   const unacceptedMessage = message !== undefined && !assistant.started.has(message.event.id);
   const retry = uploads.length > 0 || unacceptedMessage;
@@ -180,7 +204,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
 
 async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   conversation: AgentSession, rows: ChatRows, uploads: Upload[],
-  message: ChatRows[number], kind: string, started: Set<string>) {
+  message: ChatRows[number], kind: string, started: Set<string>, controlPending: ControlCheck) {
   const requested = z.object({ executionMode: z.literal('memory_free').optional() })
     .parse(message.event.data);
   const mode = requiredExecutionMode(kind, requested.executionMode);
@@ -206,6 +230,8 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   }
   const active = await chatMembership(options.store, options.silo, turn.requesterId);
   if (!active) throw new TurnAdmissionRejected('Active silo membership required');
+  const control = await controlPending();
+  if (control) return;
   link.socket.send(JSON.stringify(turn));
 }
 
@@ -336,7 +362,10 @@ function conversationUploads(rows: ChatRows, assistantKind: string) {
   return uploads.map(uploadedFile);
 }
 
-function sendStop(socket: WebSocket, rows: ChatRows, turnId: string, conversationId: string) {
+function sendStop(socket: WebSocket, rows: ChatRows,
+  message: ChatRows[number] | undefined, conversationId: string) {
+  if (!message) return;
+  const turnId = message.event.id;
   function isStopRequest(row: ChatRows[number]) {
     return row.event.type === 'agent.turn_stop_requested' &&
       turnIdData.parse(row.event.data).turnId === turnId;

@@ -16,6 +16,27 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
   conversationId: string, turnId: string, deadline: number) {
   const head = await store.head(undefined, deadline);
   const managedCallsEnabled = await managedProviderCallsEnabled(store, silo, deadline);
+  const activity = await readTurnActivity(store, silo, assistantId, conversationId,
+    turnId, deadline, head);
+  async function confirm(deadline: number, needsApproval: boolean) {
+    const enabledNow = await managedProviderCallsEnabled(store, silo, deadline);
+    if (enabledNow !== managedCallsEnabled) {
+      throw new Error('Provider setup changed');
+    }
+    return activity.confirm(deadline, needsApproval);
+  }
+  return { ...activity, confirm, managedCallsEnabled };
+}
+
+export async function approvalActivity(store: EventStore, silo: string, assistantId: string,
+  conversationId: string, turnId: string, deadline: number) {
+  const head = await store.head(undefined, deadline);
+  // Check turn and control changes without tying a human decision to unrelated spending history.
+  return readTurnActivity(store, silo, assistantId, conversationId, turnId, deadline, head);
+}
+
+async function readTurnActivity(store: EventStore, silo: string, assistantId: string,
+  conversationId: string, turnId: string, deadline: number, head: number) {
   const conversationSubject = `conversation-${conversationId}`;
   const computerSubject = `computer-${assistantId}`;
   function capturedBeforeCheck(row: StoredEvent) {
@@ -28,7 +49,8 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
   function takeComputer(summary: ComputerSummary, sequence: number) {
     const turn = summary.turns.get(turnId);
     const firstClose = turn?.firstClose;
-    return { sequence, lifecycle: summary.lifecycle, firstStart: turn?.firstStart,
+    return { sequence, control: structuredClone(summary.control), lifecycle: summary.lifecycle,
+      firstStart: turn?.firstStart,
       firstClose: firstClose === undefined ? undefined : { ...firstClose } };
   }
   const conversationRead = readStreamSummary(store, silo, conversationSubject,
@@ -50,10 +72,6 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
   async function confirm(deadline: number, needsApproval: boolean) {
     // Read only activity saved since the histories above. Never replay a long chat
     // inside the short access check. Keep these positions within this request only.
-    const enabledNow = await managedProviderCallsEnabled(store, silo, deadline);
-    if (enabledNow !== managedCallsEnabled) {
-      throw new Error('Provider setup changed');
-    }
     let foundNewRows = false;
     for (const subject of subjects) {
       const from = (positions.get(subject) ?? head) + 1;
@@ -70,7 +88,7 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
     }
     return foundNewRows;
   }
-  return { conversation, computer, confirm, managedCallsEnabled };
+  return { conversation, computer, confirm };
 }
 
 function changesDecisionActivity(event: EventEnvelope, turnId: string, needsApproval: boolean) {
