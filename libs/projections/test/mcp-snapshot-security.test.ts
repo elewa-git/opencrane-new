@@ -214,7 +214,7 @@ function clearsChangedCostReview() {
 it('clears review when cost evidence changes even with the same definition', clearsChangedCostReview);
 
 function clearsChangedReviewBinding(binding: 'connection' | 'account') {
-  let snapshot = catalogue;
+  let snapshot: typeof catalogue;
   if (binding === 'connection') {
     snapshot = { ...catalogue, connectionId: 'another-connection' };
   } else {
