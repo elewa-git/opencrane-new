@@ -369,6 +369,9 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
 | `mcp.tools_changed` | drift check | catalogue (before/after snapshots, dated new catalogue and changed policyRevision) | quarantine the server in gateway config until re-reviewed |
+| `mcp.instance_start_requested` | reserved lifecycle command; wake is refused for now | exact personal instance identity, installed image, run and original change; 20-second deadline | none; no workload or release handler |
+| `mcp.instance_observed` | reserved lifecycle worker | matching run, Pod UID and checked workload; starting, failed, stopping, absent or unknown; no callable state | none |
+| `mcp.instance_stop_requested` | current owner command | close the exact run with its original start and stop references | none; no workload handler |
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade | grants | OpenFGA tuples |
 | `connection.created` | person command after private secret staging | connections (secret *reference* only) | planned cleanup verifies that an orphan cannot become current before deleting its exact UID/version |
 | `connection.refreshed` | reaction (OAuth refresh) | connections | — |

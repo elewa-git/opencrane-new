@@ -4,6 +4,7 @@ import { validPreferenceIdentity } from './conversation.ts';
 import { memoryWrittenEventSchema } from './memory.ts';
 import { checkDelegationEvent } from './delegation.ts';
 import { checkRoutineEvent } from './routines.ts';
+import { validMcpInstanceEvent } from './mcp-instance.ts';
 // Parses a raw event by binding its `type` field to the registry, so
 // `data` is checked against that type's own schema instead of the generic
 // `z.unknown()` placeholder. This is what should sit in front of every
@@ -53,6 +54,9 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   envelopeSchema = envelopeSchema.superRefine(checkRoutineEvent);
   if (definition.type === 'memory.maintenance_bound') {
     envelopeSchema = envelopeSchema.refine(validMaintenanceBinding);
+  }
+  if (definition.stream === 'mcp-instance') {
+    envelopeSchema = envelopeSchema.refine(validMcpInstanceEvent);
   }
   const mcpSchema = definition.stream === 'mcp'
     ? envelopeSchema.refine(validMcpIdentity)

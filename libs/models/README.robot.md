@@ -1304,3 +1304,20 @@ read current policy. The slow-read regression keeps the original two-second life
 `reviewToolPolicy` accepts one exact catalogue and all tool choices. It reads the server
 history once before the two-second membership check. It conditionally appends one
 `mcp.server_reviewed` event. Saved retries compare the event type, actor and full input.
+
+## Personal instance commands and reads (P3-10 PR 2, first part)
+
+`mcpInstanceCommand`, `mcpInstanceStatus` and `mcpInstanceChange` take the checked
+binding/member separately from an exact instance/profile/server reference.
+They read only that instance before checking current membership. Reads use
+`readActiveMember`; writes use `authorityFence` over small membership streams and
+one conditional append to the instance. No conversation history is read or watched.
+Stop binds the expected sequence, run and original start. An unchanged retry returns
+its original receipt even after a later run. Changed payloads conflict.
+Change reads report applied intent for that original reference, never current readiness.
+A missing change is unknown. Missing instance history is refused without terminal proof.
+Status excludes workload addresses, Pod ids and credential material; expired waking
+intent reads as unavailable. Wake always refuses `profile_or_admission_unavailable`.
+There are no HTTP routes, observation commands, live workers or credential actions yet.
+HTTP wiring and authenticated worker commands are the remaining part of design row 2.
+Every MCP continues to use the shared hosted installation path.

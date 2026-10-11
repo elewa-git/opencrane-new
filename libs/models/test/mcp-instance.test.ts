@@ -2,9 +2,10 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { getEventDefinition, mcpInstanceId } from '@opencrane/events';
+import { getEventDefinition } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
-import { applyMcpInstance, mcpInstances, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { applyMcpInstance, mcpInstanceId, mcpInstances, pgDb, ProjectionRunner }
+  from '@opencrane/projections';
 import { envelope, history, mcpInstanceCommand, mcpInstanceStatus,
   mcpInstanceChange } from '../src/index.ts';
 
@@ -13,7 +14,6 @@ let fga: Awaited<ReturnType<typeof openfga>>;
 let storage: Awaited<ReturnType<typeof databases>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
 let counter = 0;
-const now = '2026-10-11T12:00:00.000Z';
 const key = { siloId: 'test', userId: 'alice', profileId: 'profile-id', serverId: 'server-id',
   credentialGeneration: 1 };
 
@@ -44,10 +44,12 @@ async function start() {
   const identity = { ...key, profileId: `profile-${counter}` };
   const instanceId = mcpInstanceId(identity);
   const reference = { instanceId, profileId: identity.profileId, serverId: identity.serverId };
+  const requestedAt = new Date().toISOString();
+  const deadline = new Date(Date.parse(requestedAt) + 20_000).toISOString();
   const data = { ...identity, instanceId, connectionId: 'connection-id',
     imageDigest: 'a'.repeat(64), installGeneration: 1, upstreamBindingDigest: 'b'.repeat(64),
     workloadSpecDigest: 'c'.repeat(64), runGeneration: 1, changeRef: `start-${counter}`,
-    requestedAt: now, deadline: '2026-10-11T12:00:20.000Z' };
+    requestedAt, deadline };
   const event = envelope('test', `mcp-instance-${instanceId}`,
     'mcp.instance_start_requested', data);
   const result = await nats.store.append({ event, expectedSequence: 0 });
@@ -93,6 +95,13 @@ it('refuses stale revisions and runs without saving an event', refusesStale);
 
 async function bindsOriginalPayload() {
   const fixture = await start();
+  const observation = { instanceId: fixture.reference.instanceId, runGeneration: 1,
+    startChangeRef: fixture.data.changeRef, podUid: 'original-pod',
+    workloadSpecDigest: fixture.data.workloadSpecDigest, state: 'starting' };
+  const started = envelope('test', fixture.event.subject, 'mcp.instance_observed', observation);
+  const observed = await nats.store.append({ event: started, expectedSequence: fixture.sequence });
+  if (observed.status !== 'appended') throw new Error('Observation fixture failed');
+  fixture.stop.expectedSequence = observed.sequence;
   const receipt = await mcpInstanceCommand(nats.store, binding, 'alice',
     fixture.reference, fixture.stop);
   expect(receipt.status).toBe('applied');
@@ -101,13 +110,23 @@ async function bindsOriginalPayload() {
   const changed = { ...fixture.stop, expectedSequence: receipt.sequence };
   await expect(mcpInstanceCommand(nats.store, binding, 'alice', fixture.reference, changed))
     .rejects.toThrow();
+  const absent = envelope('test', fixture.event.subject, 'mcp.instance_observed',
+    { ...observation, state: 'absent' });
+  const stopped = await nats.store.append({ event: absent, expectedSequence: receipt.sequence });
+  if (stopped.status !== 'appended') throw new Error('Absence fixture failed');
+  const next = envelope('test', fixture.event.subject, 'mcp.instance_start_requested',
+    { ...fixture.data, runGeneration: 2, changeRef: 'next-run' });
+  expect((await nats.store.append({ event: next, expectedSequence: stopped.sequence })).status)
+    .toBe('appended');
+  expect(await mcpInstanceCommand(nats.store, binding, 'alice', fixture.reference, fixture.stop))
+    .toEqual(receipt);
   expect(await mcpInstanceChange(nats.store, binding, 'alice', fixture.reference,
     fixture.stop.changeRef)).toEqual(receipt);
   const original = await mcpInstanceChange(nats.store, binding, 'alice', fixture.reference,
     fixture.data.changeRef);
   expect(original).toMatchObject({ status: 'applied', operation: 'mcp.instance_start_requested',
     sequence: fixture.sequence, runGeneration: 1 });
-  expect(await history(nats.store, fixture.event.subject, 'test')).toHaveLength(2);
+  expect(await history(nats.store, fixture.event.subject, 'test')).toHaveLength(5);
 }
 it('retains the original operation and refuses duplicate ids with changed payloads',
   bindsOriginalPayload);
@@ -115,6 +134,7 @@ it('retains the original operation and refuses duplicate ids with changed payloa
 async function replayAndReadsHaveNoEffects() {
   const fixture = await start();
   const append = vi.spyOn(nats.store, 'append');
+  const clock = vi.spyOn(Date, 'now');
   const runner = new ProjectionRunner(pgDb(storage.queue), nats.reader,
     createLogger('instances', { level: 'silent' }));
   try {
@@ -123,15 +143,20 @@ async function replayAndReadsHaveNoEffects() {
     await runner.rebuild(mcpInstances);
     const status = await mcpInstanceStatus(nats.store, binding, 'alice', fixture.reference);
     expect(status).toMatchObject({ state: 'waking', runGeneration: 1 });
+    clock.mockReturnValue(Date.parse(fixture.data.deadline) + 1);
+    expect(await mcpInstanceStatus(nats.store, binding, 'alice', fixture.reference))
+      .toMatchObject({ state: 'unavailable', reason: 'wake_deadline_exceeded' });
     const missing = await mcpInstanceChange(nats.store, binding, 'alice',
       fixture.reference, 'missing-change');
     expect(missing).toEqual({ status: 'unknown' });
-    const rows = await storage.queue.query('SELECT state FROM mcp_instances WHERE instance_id=$1',
+    const rows = await storage.queue.query<{ state: unknown }>(
+      'SELECT state FROM mcp_instances WHERE instance_id=$1',
       [fixture.reference.instanceId]);
     expect(rows.rows[0]?.['state']).toMatchObject({ phase: 'waking' });
     expect(append).not.toHaveBeenCalled();
   } finally {
     append.mockRestore();
+    clock.mockRestore();
   }
 }
 it('replay and own status reads cannot wake, release material or make a 404 terminal',
@@ -149,6 +174,8 @@ it('refuses wake while usable profiles and hosted admission are missing', refuse
 async function rejectsUnmatchedObservations() {
   const fixture = await start();
   const current = applyMcpInstance(undefined, fixture.event, fixture.sequence)!;
+  const foreignKey = { ...fixture.event, data: { ...fixture.data, userId: 'bob' } };
+  expect(() => applyMcpInstance(undefined, foreignKey, fixture.sequence)).toThrow();
   const data = { instanceId: fixture.reference.instanceId, runGeneration: 1,
     startChangeRef: fixture.data.changeRef, podUid: 'pod-uid',
     workloadSpecDigest: fixture.data.workloadSpecDigest, state: 'starting' };

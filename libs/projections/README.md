@@ -25,12 +25,15 @@ flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child and destination tables| projections["libs/projections<br/>read tables, survey progress with hashes and keys"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
-  store["libs/event-store<br/>saved events"] -->|events in order| projections
+  store["libs/event-store<br/>saved events"] -->|events and private instance records in order| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
 ```
 
 ## What it is responsible for
+
+The optional private tool-instance table keeps each recorded run and its status.
+Rebuilding it starts no process and releases no credentials. Its worker is not enabled yet.
 
 The tool catalogue keeps exact tool definitions and their check and expiry dates.
 It retains both lists after a change, so the earlier list can still be read.
