@@ -128,7 +128,9 @@ The full encrypted event size is checked before a revision key is created. Chang
 inputs return 409. Lost replies return `outcome: "unknown"`; clients check
 `GET /api/memory/:scopeId/changes/:commandId` instead of resending. Status returns only
 this principal's original command, after projection catch-up, including for a notes writer
-without a read grant. Receipts contain references and audience, never text.
+without a read grant. Receipts contain references and audience, never text. An unusable
+consumed command keeps its accepted receipt and adds `contentStatus`: erased, superseded or invalid. It never
+compares old text, provisions a replacement key or appends again. Missing custody returns 503.
 
 The existing 0700 key directory also holds temporary command records. Their fingerprint
 leaves text out. A resolved record is deleted. Each new record stores the expected scope
@@ -1523,7 +1525,16 @@ It binds the silo, requester, assistant, computer generation, conversation, turn
 content class and selected scope. It contains no fact text and needs no saved permit table.
 Proof bytes count towards the 16 KiB reply limit. Page-limit placeholders are excluded.
 Remember requires this proof, non-empty same-scope `dependsOn`, and empty `sources`.
-The command also checks that dependency revisions still exist, decrypt and have not expired.
+The command checks current key status, expiry and all historical dependencies before using text.
+The exposed remember tool is refused and omitted from discovery because a selective proof
+cannot establish every reference loaded into a turn. Internal command recovery remains tested.
+`test/memory-recall-proof.test.ts` checks each refusal reason separately, including a
+valid selective proof's complete-evidence refusal. The MCP tests also check proof
+validation independently of the generic HTTP 403 response. A separate endpoint test
+checks that a valid selective proof makes no append. Removing the HMAC comparison must
+fail the signature test even while the complete-evidence refusal remains. Proof errors
+stay internal; the endpoint response does not include them. The MCP fixture renews
+its two-minute turn token before each test so slow runs do not use expired credentials.
 An agent cannot claim a human statement. This proof checks references, not whether the
 model's wording follows logically from them.
 
@@ -1903,3 +1914,10 @@ Logs are in `/tmp/pr335-computer-cache/`: `before-7d4f0092.log`,
 Tests use disposable NATS and OpenFGA, local PostgreSQL and real bridge sockets.
 NOT RUN: optional browser test, full root suite and fresh-install control journey.
 The PR comment records hosted CI on the pushed head. The merge train owns landing.
+
+## Memory input rebase checks
+
+The [rebase receipt](../../docs/process/p4-13-pr1-rebase-repair.md) records the
+branch repair, focused fairness comparisons, failed checks and subsequent runs.
+It records the same fairness failure on main and the slow history reads under load.
+It makes no live qualification claim.

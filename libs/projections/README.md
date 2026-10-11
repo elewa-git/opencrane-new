@@ -24,7 +24,7 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child and destination tables| projections["libs/projections<br/>read tables, message lookups and keys"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
-  projections -->|saves chat activity, closing details, control references, private choices, confirmed owners and startup review| pg
+  projections -->|saves chat activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
@@ -53,6 +53,7 @@ keeps calls blocked.
 
 - Rebuild child participants and their recorded parent references from saved events.
 - Keep an index for reading initial memory in a stable order.
+- Keep each saved fact’s earlier links to the facts it came from.
 - Keeps delegated task relationships and outcomes in read tables. Rebuilding these
   tables starts no tasks and changes no permissions or spending.
 - Copies recorded tool dispatch evidence into conversation feeds without calling a tool.

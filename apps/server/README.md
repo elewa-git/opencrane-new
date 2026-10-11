@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership, member access and destination rules"]
-  server -.->|checks startup, access, departures, spending stops, memory setup, tool reviews and turn previews| libs["libs/*<br/>shared code"]
+  server -.->|checks startup, access, departures, spending stops, memory setup, fact links, tool reviews and turn previews| libs["libs/*<br/>shared code"]
   server -->|records changes, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -52,7 +52,7 @@ Descriptions are untrusted text. They never become instructions for the server.
   as saved. Ordinary calls keep their existing setup.
 - Serves personal facts, the bound assistant's notes and its group facts after checking
   the gateway pass, saved grants, current permissions and the recorded turn mode.
-  Saves an agent's facts only in the requester's own memory, from references recalled by that thread.
+  Refuses agent writes until saved records cover every fact loaded into the turn.
 - After managed calls are switched on, records the assistant's provider choice or the
   silo default for each new turn. A turn keeps that model when its pass is renewed.
   No command to switch this on is built yet.
