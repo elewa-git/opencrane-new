@@ -1,4 +1,5 @@
-import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
+import { conversationCreatedDataSchema,
+  type EventEnvelope } from '@opencrane/events';
 import type { Query } from './db.ts';
 
 export const inventoryCategories = [
@@ -12,9 +13,14 @@ export async function createInventoryInputs(db: Query, table: string) {
     position BIGINT NOT NULL, event_id TEXT NOT NULL,
     PRIMARY KEY (silo, subject, link_kind, link_id))`);
   await db.query(`CREATE TABLE IF NOT EXISTS ${table}_backfill (
-    version INTEGER PRIMARY KEY)`);
+    version INTEGER PRIMARY KEY, completed BOOLEAN NOT NULL,
+    subject_count BIGINT NOT NULL, participation_position BIGINT NOT NULL)`);
+  await db.query(`INSERT INTO ${table}_backfill VALUES (1, false, 0, 0)
+    ON CONFLICT DO NOTHING`);
   await db.query(`CREATE INDEX IF NOT EXISTS ${table}_links
     ON ${table} (silo, category, link_kind, link_id, subject)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS ${table}_history
+    ON ${table} (silo, link_id, subject) WHERE link_kind = 'history'`);
 }
 
 function field(data: unknown, name: string) {
@@ -32,6 +38,20 @@ function links(event: EventEnvelope): [string, string][] {
   const data = event.data;
   if (typeof data !== 'object' || data === null) {
     throw new Error('Inventory data unavailable');
+  }
+  if (event.type === 'conversation.created') {
+    const created = conversationCreatedDataSchema.parse(data);
+    let participants = [created.createdBy];
+    if (created.mode === 'group') {
+      participants = created.participantIds;
+    }
+    function historyLink(memberId: string): [string, string] {
+      return ['history', memberId];
+    }
+    return participants.map(historyLink);
+  }
+  if (event.type === 'participant.added' || event.type === 'participant.removed') {
+    return [['history', field(data, 'participantId')]];
   }
   if (event.type.startsWith('team.member_')) {
     return [['member', field(data, 'memberId')]];
@@ -60,12 +80,27 @@ function links(event: EventEnvelope): [string, string][] {
 
 export async function applyInventoryInput(db: Query, table: string,
   event: EventEnvelope, position: number) {
-  const category = getEventDefinition(event.type)?.stream;
-  if (!category || !inventoryCategories.includes(category)) {
-    return;
+  let category = event.subject.slice(0, event.subject.indexOf('-'));
+  if (event.subject.startsWith('chat-state-')) {
+    category = 'chat-state';
+  }
+  // Count each saved subject once. Ordinary messages do not change this count.
+  const inserted = await db.query(`INSERT INTO ${table}
+    VALUES ($1, $2, $3, 'stream', '', $4, $5, $6)
+    ON CONFLICT DO NOTHING RETURNING subject`,
+  [event.silo, event.subject, category, event.type, position, event.id]);
+  if (inserted.rows.length > 0) {
+    await db.query(`UPDATE ${table}_backfill SET subject_count = subject_count + 1
+      WHERE version = 1`);
+  }
+  if (category === 'participation') {
+    await db.query(`UPDATE ${table}_backfill SET participation_position = $1 WHERE version = 1`,
+      [position]);
   }
   const recordedLinks = links(event);
-  recordedLinks.push(['stream', '']);
+  if (inventoryCategories.includes(category)) {
+    recordedLinks.push(['stream', '']);
+  }
   for (const [kind, id] of recordedLinks) {
     await db.query(`INSERT INTO ${table} VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (silo, subject, link_kind, link_id) DO UPDATE
@@ -166,23 +201,35 @@ export async function readInventoryReferences(db: Query, silo: string, memberId:
 }
 
 export async function inventoryIndexState(db: Query) {
-  const result = await db.query<{ generation: string; backfilled: boolean }>(`SELECT g.generation,
-    EXISTS (SELECT 1 FROM inventory_inputs_backfill WHERE version = 1) AS backfilled
+  const result = await db.query<{ generation: string; backfilled: boolean;
+    subject_count: string; participation_position: string }>(`SELECT g.generation,
+    b.completed AS backfilled, b.subject_count, b.participation_position
     FROM projection_generations g JOIN projection_checkpoints c ON c.name = g.name
+    JOIN inventory_inputs_backfill b ON b.version = 1
     WHERE g.name = 'members'`);
   const metadata = result.rows[0];
   if (!metadata) {
     throw new Error('Inventory checkpoint unavailable');
   }
-  return { generation: Number(metadata.generation), backfilled: metadata.backfilled };
+  return { generation: Number(metadata.generation), backfilled: metadata.backfilled,
+    subjectCount: Number(metadata.subject_count),
+    participationPosition: Number(metadata.participation_position) };
 }
 
 export async function inventoryCategoryPositions(db: Query, silo: string) {
   const metadata = await inventoryIndexState(db);
   const result = await db.query<{ category: string; position: string }>(`SELECT category,
     max(position) AS position FROM inventory_inputs WHERE silo = $1 AND link_kind = 'stream'
-    GROUP BY category ORDER BY category`, [silo]);
+      AND category = ANY($2::text[])
+    GROUP BY category ORDER BY category`, [silo, inventoryCategories]);
   const positions: Record<string, number> = {};
   for (const row of result.rows) positions[`${row.category}-*`] = Number(row.position);
   return { positions, ...metadata };
+}
+
+export async function inventoryHistoryInputs(db: Query, silo: string, memberId: string) {
+  const result = await db.query<{ event_id: string; position: string }>(`SELECT event_id, position
+    FROM inventory_inputs WHERE silo = $1 AND link_kind = 'history' AND link_id = $2
+    ORDER BY subject LIMIT 10001`, [silo, memberId]);
+  return result.rows;
 }

@@ -1,5 +1,6 @@
 import { conversationCreatedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
+import { inventoryHistoryInputs, inventoryIndexState } from '@opencrane/projections';
 import type { GroupOptions } from './group-routes.ts';
 
 type Inputs = { rows: StoredEvent[]; positions: Record<string, number> };
@@ -8,7 +9,6 @@ type ContentPositions = {
   creation: string;
   participation: string;
 };
-type HistoryPositions = { sequence: number };
 
 async function contentPositions(options: GroupOptions, memberId: string) {
   const result = await options.db.query<ContentPositions>(`SELECT
@@ -62,50 +62,87 @@ function changesHistory(row: StoredEvent, memberId: string) {
   return false;
 }
 
-async function historyInputs(options: GroupOptions, memberId: string,
-  previousPositions: HistoryPositions, deadline: number) {
-  const eventIds: string[] = [];
-  const position = await options.store.head(undefined, deadline);
-  const positions = { sequence: position };
-  const previous = previousPositions.sequence;
-  if (position - previous > 10_000) throw new Error('History cannot be checked completely');
-  for (let sequence = previous + 1; sequence <= position; sequence++) {
-    const row = await options.store.readEvent(sequence, deadline);
-    if (row.event.silo !== options.silo) throw new Error('History belongs to another silo');
-    if (changesHistory(row, memberId)) eventIds.push(row.event.id);
+async function historyApplied(options: GroupOptions, memberId: string) {
+  const references = await inventoryHistoryInputs(options.db, options.silo, memberId);
+  if (references.length > 10_000) {
+    return false;
   }
-  return { eventIds, positions };
-}
-
-async function historyApplied(options: GroupOptions, memberId: string, deadline: number) {
-  const checkpoint = await options.db.query<{ sequence: string }>(
-    "SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'");
-  const sequence = checkpoint.rows[0]?.sequence;
-  if (sequence === undefined) return { current: false, positions: undefined };
-  // Use the worker's position only to skip events it has already processed.
-  // Check pending creation and participation events for this member, ignoring messages.
-  const previous = { sequence: Number(sequence) };
-  const inputs = await historyInputs(options, memberId, previous, deadline);
+  function eventId(reference: typeof references[number]) {
+    return reference.event_id;
+  }
+  const eventIds = references.map(eventId);
   const applied = await options.db.query<{ count: string }>(`SELECT count(*) AS count
     FROM projection_events WHERE projection = 'conversations' AND event_id = ANY($1::text[])`,
-  [inputs.eventIds]);
-  return { current: Number(applied.rows[0]?.count) === inputs.eventIds.length,
-    positions: inputs.positions };
+  [eventIds]);
+  return Number(applied.rows[0]?.count) === eventIds.length;
+}
+
+async function firstEvent(options: GroupOptions, subject: string, from: number, deadline: number) {
+  for await (const row of options.store.readStream(subject, from, deadline)) {
+    return row;
+  }
+  return undefined;
+}
+
+async function unrelatedNewConversation(options: GroupOptions, memberId: string,
+  deadline: number) {
+  const position = await options.store.head('conversation-*', deadline);
+  if (position === 0) {
+    return false;
+  }
+  const latest = await firstEvent(options, 'conversation-*', position, deadline);
+  if (!latest || latest.event.silo !== options.silo) {
+    return false;
+  }
+  const subject = latest.event.subject;
+  const indexed = await options.db.query(`SELECT subject FROM inventory_inputs
+    WHERE silo = $1 AND subject = $2 AND link_kind = 'stream' AND link_id = ''`,
+  [options.silo, subject]);
+  if (indexed.rows.length > 0) {
+    return false;
+  }
+  // Read just the first event. Creation can only append to an empty conversation stream.
+  const created = await firstEvent(options, subject, 1, deadline);
+  return created?.event.type === 'conversation.created' &&
+    created.event.silo === options.silo && !changesHistory(created, memberId);
 }
 
 export async function retainedContent(options: GroupOptions, memberId: string,
   inputs: Inputs, deadline: number) {
+  const indexed = await inventoryIndexState(options.db);
   const before = await contentPositions(options, memberId);
-  let historyPositions: HistoryPositions | undefined;
-  async function checkCurrent(checkDeadline: number) {
+  let subjectCount = indexed.subjectCount;
+  let participationPosition = indexed.participationPosition;
+  async function checkCurrent(checkDeadline: number, allowPendingRead = true) {
     if (performance.now() >= checkDeadline) throw new Error('Inventory deadline exceeded');
-    const after = await contentPositions(options, memberId);
-    if (historyPositions) {
-      // Read only events saved since the inventory finished, never the full chat history.
-      const pending = await historyInputs(options, memberId, historyPositions, checkDeadline);
-      if (pending.eventIds.length > 0) return false;
-      historyPositions = pending.positions;
+    const metadata = await inventoryIndexState(options.db);
+    if (!metadata.backfilled || metadata.generation !== indexed.generation) {
+      return false;
     }
+    const liveSubjects = await options.store.subjectCount(checkDeadline);
+    const liveParticipation = await options.store.head('participation-*', checkDeadline);
+    const indexCaughtUp = metadata.subjectCount === liveSubjects &&
+      metadata.participationPosition === liveParticipation;
+    if (indexCaughtUp) {
+      subjectCount = liveSubjects;
+      participationPosition = liveParticipation;
+    } else if (liveSubjects !== subjectCount || liveParticipation !== participationPosition) {
+      // Resolve at most one new conversation outside the short write access check.
+      // More new subjects or pending participation make the review explicitly incomplete.
+      if (!allowPendingRead || liveSubjects !== subjectCount + 1 ||
+          liveParticipation !== participationPosition) {
+        return false;
+      }
+      const unrelated = await unrelatedNewConversation(options, memberId, checkDeadline);
+      if (!unrelated || await options.store.subjectCount(checkDeadline) !== liveSubjects) {
+        return false;
+      }
+      subjectCount = liveSubjects;
+    }
+    if (!await historyApplied(options, memberId)) {
+      return false;
+    }
+    const after = await contentPositions(options, memberId);
     return samePositions(before, after);
   }
   if (!await appliedInputs(options, inputs)) {
@@ -123,10 +160,8 @@ export async function retainedContent(options: GroupOptions, memberId: string,
       AND EXISTS (SELECT 1 FROM conversation_participants p WHERE p.silo = f.silo
         AND p.conversation_id = f.conversation_id AND p.participant_id = $2)`,
     [options.silo, memberId]);
-  const caughtUp = await historyApplied(options, memberId, deadline);
-  historyPositions = caughtUp.positions;
   const unchanged = await checkCurrent(deadline);
-  if (!caughtUp.current || !unchanged) {
+  if (!unchanged) {
     return { current: false, computers: [], history: null, checkCurrent };
   }
   const total = history.rows[0];

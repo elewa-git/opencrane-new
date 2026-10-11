@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, destination, inventory and survey tables| projections["libs/projections<br/>read tables, rebuilt inventory inputs and survey progress"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, destination, inventory and survey tables| projections["libs/projections<br/>read tables, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|events and private instance records in order| projections
@@ -51,7 +51,9 @@ The members worker keeps an index of the saved streams used in access and depart
 reviews. The index retains removed memberships and revoked grants, so an empty list
 cannot hide permission updates that are still pending. Member replay rebuilds it
 without changing permissions or making outside calls. An upgraded installation
-keeps reviews incomplete until a full rebuild has finished.
+keeps reviews incomplete until a full rebuild has finished. The index also records
+which saved history changes affect each person. A small saved count of stream names
+lets removal checks detect new history without reading unrelated events.
 
 - Keep current destination rules, including who revoked them and when.
 

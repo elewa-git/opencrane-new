@@ -90,7 +90,7 @@ export async function removalCommand(options: GroupOptions, actor: string,
 }
 async function requireCurrentInventory(inventory: Awaited<ReturnType<typeof memberInventory>>,
   deadline: number) {
-  if (!await inventory.checkCurrent(deadline)) {
+  if (!await inventory.checkCurrent(deadline, false)) {
     throw new RemovalConflict('stale_review');
   }
 }

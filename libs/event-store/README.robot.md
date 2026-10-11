@@ -269,3 +269,20 @@ An unrelated entity with the same id can advance that position, but cannot suppl
 activity or access facts. The activity reader filters these rows before making a decision.
 Model decisions use this path for both their initial history and later changes.
 They do not start another participation-stream read.
+
+## Conversation creation and stream counts
+
+`conversation.created` requires an empty exact conversation stream. An exact
+conditional append must expect position zero. A category conditional append also
+checks that the exact stream is empty before its category append; the category
+condition refuses any intervening creation. Normal retries still return their
+original result. A history-checked category retry reads only the first event to
+recover a lost creation reply. Existing events remain readable and replayable.
+
+`subjectCount(deadline)` reads `StreamInfo.state.num_subjects`. It does not request
+a subject list or read events. Missing counts on a populated stream are refused.
+The EVENTS retention checks disallow deletion, expiry and subject transformation,
+so the count never drops and one saved logical subject corresponds to one NATS
+subject. Member inventory compares this count with its rebuilt index to detect
+new history before the worker processes it. `test/conversation-command.test.ts`
+checks empty-stream creation, category checks and retries.

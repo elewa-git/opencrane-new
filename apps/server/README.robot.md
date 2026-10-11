@@ -1532,8 +1532,8 @@ Owner-role invitation remains invited; the active owner remains an owner.
 The Owner/Admin GETs `/api/members/:memberId/access` and `/api/members/:memberId/departure`
 check events and OpenFGA once. They stop after ten seconds or 10,000 inventory records.
 The members projection indexes the exact streams for groups, assistants, grants,
-computers and unsupported routine/connection history. Inventory loading reads no
-wildcard streams. Category positions check index freshness and prevent new links
+computers and unsupported routine/connection history. Grant and group inventory
+loading reads exact streams. Category positions check index freshness and prevent new links
 from being missed. Reviews include at most 100 recorded groups and 500 distinct
 expanded people; overflow adds `inventory_limits` and keeps removal disabled.
 Missing or behind index data adds `inventory_index`. Rebuild members on upgrade.
@@ -1543,9 +1543,20 @@ the target's retained rows form the review revision. Processing receipts show th
 both table workers have processed the latest reviewed events on exact streams. The inventory
 compares positions in the target's computer and history rows before and after the
 SQL reads. Messages and table updates for another member do not change these positions.
-The conversation worker's checkpoint is only a starting point for checking pending
-events by their exact saved positions, with at most 10,000 records per tail read. Only the target's conversation creation and participation events must have
-been processed. Checkpoint movement never makes the review stale or incomplete.
+The index also keeps the latest creation and participation changes for the target.
+Their conversation-worker receipts are required even when the displayed history
+is empty. No review reads the global tail. The index counts all saved stream names
+and records the participation-category position. These small saved values are
+compared with NATS metadata to detect history not yet indexed. Known streams can
+keep receiving messages and read receipts without changing these values.
+
+Outside the write access check, one new unindexed conversation may be checked by
+reading its latest event and its first event only. Creation requires an empty
+conversation stream. If the first event excludes the target, that single new
+stream cannot add their history. More unindexed streams, an unknown stream of
+another kind, or pending participation changes make the review incomplete.
+The final removal check disables this extra read. It checks only saved metadata,
+category positions, target rows and indexed receipts within the access deadline.
 Behind tables and unsupported ownership, routines or connections block completion.
 The latest grant changes include revocations for each member, group or assistant.
 The latest group removals are kept even when no access rows remain. Both reads
@@ -2004,15 +2015,15 @@ NOT RUN: full root suite, independent review and fresh-install qualification.
 
 ## Inventory upgrade guard
 
-A departure or access review requires `inventory_inputs_backfill.version = 1`
-before reporting complete. A category's latest position cannot replace this check.
-Online member replay replaces the marker and index in the same transaction.
-The final removal check reads only member generation and the marker for this part;
-it does not aggregate category maxima again. Permission receipts remain required.
+A departure or access review requires `inventory_inputs_backfill.completed = true`
+for version 1 before reporting complete. A category's latest position cannot
+replace this check. Online member replay replaces the marker and index in the
+same transaction. The final removal check reads member generation and small index
+metadata; it does not aggregate category maxima again. Permission receipts remain
+required. An interrupted first replay must be fully rebuilt before completion.
 
-The unrelated global history tail in `src/members/retained-content.ts` still needs
-replacement. The new 10,001-event regression remains failing. Removal's existing
-pending-history and concurrent-message tests are retained, with their assertions
-unchanged. A PostgreSQL index alone cannot discover a new conversation before its
-worker receives the event. The event log currently puts creation events and messages
-on the same NATS subjects, so a lookup for history changes needs a further design choice.
+`test/member-inventory-volume.test.ts` pauses projection while saving 10,001 valid
+unrelated read receipts. The departure route returns 200 within two seconds, with
+a complete or explicitly incomplete review. It never reads global numbered events.
+After projection, the empty review and its revision match the original. Existing
+removal tests keep their target-history, receipt and concurrent-message assertions.

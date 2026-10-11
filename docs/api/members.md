@@ -351,9 +351,13 @@ have a completed-backfill marker. Creating an empty index during an upgrade does
 not add that marker. A full member replay is required before reviews can be complete.
 Each saved history read stops at ten seconds or 10,000 records.
 
-The retained-history check still reads every new event since the conversation
-worker's saved position. More than 10,000 unrelated pending events can therefore
-make a review return 503. This defect remains unresolved.
+Retained history uses bounded indexed creation and participation links for the
+target and requires their conversation-worker receipts. The review compares
+saved stream counts and participation positions with event-store metadata. A
+new stream or participation change that cannot be checked makes the result
+incomplete. Unrelated read receipts never cause a global history scan or a 503
+because of their volume. The final removal check reads no conversation history
+and does not aggregate the whole index.
 
 Reviews stop at 100 groups, 100 grant streams, 100 assistants and 500 distinct
 expanded people. Overlap counts once. Overflow reports `complete: false` and

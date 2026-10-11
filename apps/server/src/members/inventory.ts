@@ -266,7 +266,7 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   recordUnavailablePermissions(rows, unavailable);
   const content = await retainedContent(options, memberId, inputs, deadline);
   if (!content.current) unavailable.add('retained_content');
-  async function checkCurrent(checkDeadline: number) {
+  async function checkCurrent(checkDeadline: number, allowPendingRead = true) {
     const indexed = await inventoryIndexState(options.db);
     if (!indexed.backfilled || indexed.generation !== inputs.generation) {
       return false;
@@ -277,7 +277,7 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
         return false;
       }
     }
-    return content.checkCurrent(checkDeadline);
+    return content.checkCurrent(checkDeadline, allowPendingRead);
   }
   const unchanged = await checkCurrent(deadline);
   if (!unchanged) {

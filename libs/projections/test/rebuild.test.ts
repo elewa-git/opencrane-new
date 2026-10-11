@@ -178,7 +178,8 @@ async function inventoryBackfilled(db: Pick<ReturnType<typeof pgDb>, 'query'>) {
   const table = await db.query<{ name: string | null }>(
     "SELECT to_regclass('inventory_inputs_backfill')::text AS name");
   if (!table.rows[0]?.name) return false;
-  const marker = await db.query('SELECT version FROM inventory_inputs_backfill WHERE version = 1');
+  const marker = await db.query(`SELECT version FROM inventory_inputs_backfill
+    WHERE version = 1 AND completed = true`);
   return marker.rows.length === 1;
 }
 

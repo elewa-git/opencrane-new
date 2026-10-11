@@ -53,4 +53,4 @@ export { egressPolicy, readEgressRule, egressRulesAllow, egressGrantStream } fro
 
 export { personalSettings, readSurvey } from './personal-settings.ts';
 export { readInventoryReferences, inventoryCategoryPositions, inventoryIndexState,
-  inventoryCategories } from './inventory-inputs.ts';
+  inventoryHistoryInputs, inventoryCategories } from './inventory-inputs.ts';

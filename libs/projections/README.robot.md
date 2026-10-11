@@ -494,8 +494,11 @@ The ops worker and replay CLI do not register this projection yet.
 
 The members worker fills `inventory_inputs` in the same transaction as its event
 receipt and checkpoint. Rows contain silo, exact stream name, category, recorded
-link kind/id, latest event type/id and position. A separate stream row records
-category presence, including routine and connection history that is unsupported.
+link kind/id, latest event type/id and position. Every saved subject has one
+stream row, including subjects outside the inventory categories. Only inventory
+category stream rows advance on every event. Creation and participation changes
+keep history links for each affected member. Routine and connection stream rows
+record history that is unsupported.
 Membership removals and grant revocations replace link rows without deleting them.
 Legacy revocations retain member, group and assistant targets.
 
@@ -508,13 +511,17 @@ without reading category histories. Exact stream histories have a separate
 10-second/10,000-record ceiling. The 20/50 browsing and 100 candidate limits remain
 unchanged; this read is a complete review rather than a browsing page.
 
-`inventory_inputs_backfill` holds the index's completed-replay marker, version 1.
-Creating the table does not add the marker. A runner writes it only after reading
-from position one through the chosen end without a gap or failed event. An
+`inventory_inputs_backfill` holds version 1, its `completed` flag, a saved subject
+count and the participation-category position. Creation sets `completed` false.
+Event processing updates the count and position in its existing transaction.
+Only a runner that reads from position one through the chosen end without a gap
+or failed event sets `completed` true. An
 interrupted first run followed by a restart leaves the index incomplete until a
-full rebuild succeeds. Ordinary updates never add the marker to an upgrade index.
+full rebuild succeeds. Ordinary updates never set the completion flag on an upgrade index.
 `inventoryIndexState` reads the marker and member generation without aggregating
-all inventory rows. The final removal check uses this small metadata read.
+all inventory rows. The final removal check uses this small metadata read. `inventoryHistoryInputs`
+reads at most 10,001 indexed history links for one member, so the server can check
+their latest conversation-worker receipts without reading the event log.
 
 Existing installations must rebuild members before any review can be complete:
 `npm run replay -- members`. Before replay, category maxima cannot certify the
