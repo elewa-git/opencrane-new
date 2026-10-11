@@ -1321,3 +1321,13 @@ intent reads as unavailable. Wake always refuses `profile_or_admission_unavailab
 There are no HTTP routes, observation commands, live workers or credential actions yet.
 HTTP wiring and authenticated worker commands are the remaining part of design row 2.
 Every MCP continues to use the shared hosted installation path.
+
+Source checks, 11 October 2026: `03e136e4f8080b154bee7b35fd2e45bafbd2cd88`.
+Environment: Linux worktree after `npm ci`; disposable NATS, PostgreSQL and OpenFGA.
+This was not a fresh install. Tests-first commit `07a944f6` failed all ten new tests.
+PASS: both final focused runs, 277 tests each; `PG_TEST_URL` set, one worker, `nice -n 10`.
+PASS: full lint, typecheck, event catalogue (116 types), Knip and changelog checks.
+Both authority test files are unchanged. No full root suite ran.
+Logs: `/tmp/p3-10-pr2-final-tests-{1,2}.log`, `/tmp/p3-10-pr2-lint.log`,
+`/tmp/p3-10-pr2-final-typecheck.log`, `/tmp/p3-10-pr2-events.log`.
+NOT RUN: independent review, HTTP journeys, live Kubernetes and fresh-install qualification.
