@@ -64,7 +64,7 @@ The checked dispatch step runs in the existing server/worker deployment and rout
 in contracts, but no lasting secret in environment, arguments, Pod spec or filesystem.
 \#49 owns per-call credential leases; #50 adds OAuth state/PKCE, scoped discovery profiles
 and generation-safe refresh. Do not add OAuth or a company fallback in this work.
-\#51 extends instance identity to silo/user/profile/server/credential generation and wakes
+\#51 extends instance identity to silo/user/profile/server/startup access generation and wakes
 on demand, stops after five idle minutes and fences the old generation before rotation.
 It must mount only renewable short-lived memory-held material. Reject lasting startup
 secrets now. Do not reserve idle per-user Pods or add unused autoscaling infrastructure.

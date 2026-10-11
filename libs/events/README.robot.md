@@ -332,3 +332,18 @@ Survey text stays data; no command or route is enabled. See the
 `mcp.server_reviewed` records exact catalogue and review digests, connection/account mode,
 all tool choices, the existing policy revision checked and the human reviewer.
 The resulting policy revision comes from the saved event position.
+
+## Personal instance records
+
+`mcp.instance_start_requested`, `mcp.instance_observed` and
+`mcp.instance_stop_requested` use `mcp-instance-<instanceId>` subjects.
+Start binds the silo, user, opaque profile, server and startup access generation,
+plus installed connection, image/install generation, upstream and workload digests.
+`startupAccessGeneration` counts versions of the profile's startup access material.
+It is a positive integer, contains no secret value and is separate from `runGeneration`.
+Malformed instance data returns `invalid_event` rather than throwing from the identity check.
+The deadline is positive and at most 20 seconds after the requested time.
+Observations bind the original start, run, Pod UID and workload digest.
+A `not_found` reason requires `unknown`; callable claims and secret fields are refused.
+Stop records require a human principal matching `requestedBy`.
+These events have no registered reaction and grant no permission or credential release.

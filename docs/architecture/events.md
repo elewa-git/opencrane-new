@@ -71,6 +71,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `decision-<request>` | gateway admission attempt | allow, ask or deny before dispatch |
 | `effect-<permit>` | gateway-observed external call | observed, uncertain, resolved |
 | `mcp-<server>` | MCP server in the catalogue | registered, discovered, tool modes, published, tools changed |
+| `mcp-instance-<instanceId>` | private MCP instance | start requested, observed, stop requested |
 | `credential-<lease>` | request-bound credential release | released |
 | `egress-grant-<subjectDigest>-<destinationDigest>` | one silo, subject and HTTPS destination | destination allowed or revoked |
 | `egress-<request>` | observed egress | observed |
@@ -369,10 +370,18 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
 | `mcp.tools_changed` | drift check | catalogue (before/after snapshots, dated new catalogue and changed policyRevision) | quarantine the server in gateway config until re-reviewed |
+| `mcp.instance_start_requested` | reserved lifecycle command; wake is refused for now | exact personal instance identity, installed image, run and original change; 20-second deadline | none; no workload or release handler |
+| `mcp.instance_observed` | reserved lifecycle worker | matching run, Pod UID and checked workload; starting, failed, stopping, absent or unknown; no callable state | none |
+| `mcp.instance_stop_requested` | current owner command | close the exact run with its original start and stop references | none; no workload handler |
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade | grants | OpenFGA tuples |
 | `connection.created` | person command after private secret staging | connections (secret *reference* only) | planned cleanup verifies that an orphan cannot become current before deleting its exact UID/version |
 | `connection.refreshed` | reaction (OAuth refresh) | connections | — |
 | `connection.revoked` | person, admin or reaction | connections | delete the secret |
+
+Private instance starts identify the silo, user, opaque profile, server and
+`startupAccessGeneration`. This positive integer counts versions of the profile's
+startup access material; it contains no secret value. The separate `runGeneration`
+counts process starts for that fixed identity.
 
 ### Budgets (single-writer actor per silo)
 

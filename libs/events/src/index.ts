@@ -76,6 +76,8 @@ export { hostedCredentialContractSchema, startupCredentialContractSchema,
   type StartupCredentialContract } from './startup-credentials.ts';
 
 export { memoryMaintenanceBoundDataSchema } from './memory.ts';
+export { mcpInstanceStartSchema, mcpInstanceStopSchema,
+  mcpInstanceObservedSchema } from './mcp-instance.ts';
 
 export { budgetExhaustedDataSchema, budgetStopReasonSchema } from './data.ts';
 export { takeoverRequestedDataSchema } from './takeover.ts';

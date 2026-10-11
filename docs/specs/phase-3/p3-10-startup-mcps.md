@@ -42,7 +42,9 @@ harness checks the startup contract. Unknown behaviour refuses admission.
 Recheck at review/publication and digest/launcher/dependency/config changes. Legacy records
 without evidence stay unavailable. Refuse lasting-secret requirements before the first call.
 
-The immutable instance key is `(siloId, userId, profileId, serverId, credentialGeneration)`.
+The immutable instance key is `(siloId, userId, profileId, serverId, startupAccessGeneration)`.
+`startupAccessGeneration` counts versions of the profile’s startup access material.
+It contains no secret value and is separate from the process’s `runGeneration`.
 Also bind the installed `connectionId`, image/install generation and upstream digest.
 Use #49 opaque ids, never labels/email/arguments/URLs. Keep increasing `runGeneration`
 and actual workload/Pod UIDs: idle wake/Pod loss does not invent credential rotation.
@@ -64,7 +66,7 @@ Support two material forms; a timer cannot make a lasting bearer short-lived:
 
 - A D16 startup-purpose capability supplied by the P3-8 broker, renewable within a
   maximum 30-second validity. Extend its strict purpose union for instance start/renewal.
-  Bind it to this user/profile/upstream, credential/run generation, Pod UID and release id.
+  Bind it to this user/profile/upstream, startup access/run generation, Pod UID and release id.
   The receiving upstream must enforce expiry and these bindings. The ordinary D15
   single-request tool lease remains single-use; never cache it for five minutes or release
   the lasting raw bearer it normally wraps. A bearer-only upstream without delegation
@@ -230,7 +232,7 @@ Before ANY new-generation material release, require confirmed old Pod absence, o
 verified upstream revocation plus effective ingress/egress isolation of that exact old run.
 Default to Pod absence: a routing change alone cannot stop a process using retained
 upstream material. If absence/containment cannot be proved, leave new generation unavailable.
-This also applies to ordinary OAuth refresh when it advances credentialGeneration.
+This also applies to ordinary OAuth refresh when it advances startupAccessGeneration.
 An expiry/old-generation/foreign-user/foreign-silo call reaches no MCP tool; no fallback.
 Already sent external work may finish or be uncertain; stopping a Pod cannot undo it.
 

@@ -1304,3 +1304,35 @@ read current policy. The slow-read regression keeps the original two-second life
 `reviewToolPolicy` accepts one exact catalogue and all tool choices. It reads the server
 history once before the two-second membership check. It conditionally appends one
 `mcp.server_reviewed` event. Saved retries compare the event type, actor and full input.
+
+## Personal instance commands and reads (P3-10 PR 2, first part)
+
+`mcpInstanceCommand`, `mcpInstanceStatus` and `mcpInstanceChange` take the checked
+binding/member separately from an exact instance/profile/server reference.
+Saved starts use `startupAccessGeneration`, the positive integer version of the
+profile's startup access material. The fold checks it as part of the fixed instance id.
+They read only that instance before checking current membership. Reads use
+`readActiveMember`; writes use `authorityFence` over small membership streams and
+one conditional append to the instance. No conversation history is read or watched.
+Stop binds the expected sequence, run and original start. An unchanged retry returns
+its original receipt even after a later run. Changed payloads conflict.
+After an append, the command reads the returned position and checks the saved silo,
+subject, command id, event type, principal and exact stop payload before returning a receipt.
+This also applies when concurrent duplicate recovery returns another request's position.
+Change reads report applied intent for that original reference, never current readiness.
+A missing change is unknown. Missing instance history is refused without terminal proof.
+Status excludes workload addresses, Pod ids and credential material; expired waking
+intent reads as unavailable. Wake always refuses `profile_or_admission_unavailable`.
+There are no HTTP routes, observation commands, live workers or credential actions yet.
+HTTP wiring and authenticated worker commands are the remaining part of design row 2.
+Every MCP continues to use the shared hosted installation path.
+
+Source checks, 11 October 2026: `03e136e4f8080b154bee7b35fd2e45bafbd2cd88`.
+Environment: Linux worktree after `npm ci`; disposable NATS, PostgreSQL and OpenFGA.
+This was not a fresh install. Tests-first commit `07a944f6` failed all ten new tests.
+PASS: both final focused runs, 277 tests each; `PG_TEST_URL` set, one worker, `nice -n 10`.
+PASS: full lint, typecheck, event catalogue (116 types), Knip and changelog checks.
+Both authority test files are unchanged. No full root suite ran.
+Logs: `/tmp/p3-10-pr2-final-tests-{1,2}.log`, `/tmp/p3-10-pr2-lint.log`,
+`/tmp/p3-10-pr2-final-typecheck.log`, `/tmp/p3-10-pr2-events.log`.
+NOT RUN: independent review, HTTP journeys, live Kubernetes and fresh-install qualification.

@@ -12,6 +12,7 @@ import { ownershipEvents } from './ownership-events.ts';
 import { providerEvents } from './provider-events.ts';
 import { auditEvents } from './audit-events.ts';
 import { mcpEvents } from './mcp-events.ts';
+import { mcpInstanceEvents } from './mcp-instance.ts';
 import { decisionEvents } from './decision-events.ts';
 import { fileEvents } from './file-events.ts';
 // The event-type registry: every event type named in
@@ -351,6 +352,7 @@ export const eventRegistry: readonly EventDefinition[] = [
   ),
 
   ...mcpEvents,
+  ...mcpInstanceEvents,
 
   // Budgets
   event(

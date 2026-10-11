@@ -24,7 +24,7 @@ the hash of encrypted survey bytes.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks survey hashes and routine replay<br/>ignores duplicate records"]
-  store["libs/event-store<br/>saved event log"] -.-> events
+  store["libs/event-store<br/>saved event log"] -.->|checks instance records| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks control, turns, spending limits, stop reasons and UTC resets| events
@@ -42,6 +42,9 @@ value calculated from those definitions. Older records remain readable for repla
   Check each saved answer’s hash without reading a private key. A hash is a
   fixed-length value calculated from the encrypted bytes.
 
+- Define private tool-instance starts, observations and owner stop requests.
+  These records contain identity and timing details, with no credentials or callable status.
+  A counter names the version of startup access material, separately from process starts.
 - Define exact HTTPS destination rules for the silo, a person or an assistant.
   Refuse reserved internal names, including `home.arpa` and names beneath it.
 

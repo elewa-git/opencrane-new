@@ -475,3 +475,17 @@ when the tool definitions, costs and approval details stay the same. A later leg
 publication does not restore those reviews. The snapshot security tests cover both
 binding changes. Their invalid mode cases start from Block and request Allow, so
 connection, revision and review checks each cause a visible refusal on their own.
+
+## Personal instance table
+
+`mcpInstances` is an optional projection with one `mcp_instances` JSON row per silo/id.
+`applyMcpInstance` is its shared TypeScript fold. `mcpInstanceId` hashes the fixed tuple
+of silo, user, opaque profile, server and startup access generation, in that order.
+`startupAccessGeneration` counts versions of the profile's startup access material.
+Renaming this field preserves the tuple order and the calculated instance id.
+The fold checks that id, exact stream, start deadline, installed bindings and every run.
+A replacement run requires recorded absence of the original stopped Pod and increments
+the run generation by one. Changed UID/spec or late old-run records refuse replay.
+No phase grants callable access. A late starting observation cannot undo a stop.
+`ProjectionRunner.rebuild(mcpInstances)` rebuilds this table without external work.
+The ops worker and replay CLI do not register this projection yet.

@@ -14,6 +14,8 @@ export {
   type EventSource,
 } from "./runner.ts";
 export { members } from "./members.ts";
+export { mcpInstances, mcpInstanceId, applyMcpInstance,
+  type McpInstanceState } from './mcp-instances.ts';
 export { mcpCatalogue } from "./mcp-catalogue.ts";
 export { computers, mapComputerRows, type ComputerDbRow } from './computers.ts';
 export {
