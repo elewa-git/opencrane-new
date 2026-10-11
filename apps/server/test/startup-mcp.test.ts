@@ -25,14 +25,18 @@ afterEach(closeFixtures);
 
 async function setup(credentialContract?: unknown) {
   const nats = await natsFixture();
-  cleanups.push(nats.close);
+  async function closeNats() {
+    await nats.close();
+  }
+  cleanups.push(closeNats);
   const app = Fastify();
   async function closeApp() {
     await app.close();
   }
   cleanups.push(closeApp);
   let networkRequests = 0;
-  function refuseNetwork() {
+  async function refuseNetwork(): Promise<never> {
+    await Promise.resolve();
     networkRequests += 1;
     throw new Error('Hosted review must not contact an upstream');
   }
@@ -42,7 +46,8 @@ async function setup(credentialContract?: unknown) {
   const schema = getEventDefinition('mcp.server_registered')!.dataSchema;
   const registration = schema.parse(data);
   const event = envelope('test', 'mcp-startup', 'mcp.server_registered', registration, 'register');
-  await nats.store.append({ event, expectedSequence: 0 });
+  const registered = await nats.store.append({ event, expectedSequence: 0 });
+  expect(registered.status).toBe('appended');
   function requests() {
     return networkRequests;
   }
@@ -66,6 +71,14 @@ const refusedContracts = [
     reason: 'startup_contract_unverified' },
   { name: 'unenforced expiry', value: { ...contract, upstreamEnforcesExpiry: false },
     reason: 'startup_contract_unverified' },
+  { name: 'unbound upstream', value: { ...contract, upstreamEnforcesBinding: false },
+    reason: 'startup_contract_unverified' },
+  { name: 'missing dependencies', value: { ...contract, dependencyDigest: undefined },
+    reason: 'startup_contract_unverified' },
+  { name: 'launch-only capability', value: { ...contract, renewal: 'controlled_restart' },
+    reason: 'startup_contract_unverified' },
+  { name: 'long OAuth access', value: { ...contract, materialKind: 'oauth_access',
+    maxLifetimeSeconds: 601 }, reason: 'startup_contract_unverified' },
   { name: 'unbounded lifetime', value: { ...contract, maxLifetimeSeconds: 31 },
     reason: 'startup_contract_unverified' },
 ];
@@ -104,10 +117,12 @@ async function keepsHostedClosed(credentialContract?: unknown) {
   const discovered = { serverId: 'startup', toolCount: 0, schemaDigest: imageDigest,
     connectionId: 'forged-connection', accountMode: 'none', tools: [] };
   const discovery = envelope('test', 'mcp-startup', 'mcp.server_discovered', discovered, 'discover');
-  await fixture.store.append({ event: discovery, expectedSequence: 1 });
+  const discoveredResult = await fixture.store.append({ event: discovery, expectedSequence: 1 });
+  expect(discoveredResult.status).toBe('appended');
   const publication = envelope('test', 'mcp-startup', 'mcp.server_published',
     { serverId: 'startup', publishedBy: 'admin' }, 'publish');
-  await fixture.store.append({ event: publication, expectedSequence: 2 });
+  const publishedResult = await fixture.store.append({ event: publication, expectedSequence: 2 });
+  expect(publishedResult.status).toBe('appended');
   expect(await readToolPolicy(fixture.store, 'test', 'startup')).toMatchObject({ published: false });
 }
 async function keepsLegacyClosed() {
@@ -132,3 +147,36 @@ function rejectsMaterial(field: string) {
   expect(getEventDefinition('mcp.server_registered')!.dataSchema.safeParse(data).success).toBe(false);
 }
 it.each(rawFields)('refuses raw %s material in the saved contract', rejectsMaterial);
+
+async function acceptsBoundedOAuth() {
+  const oauth = { ...contract, materialKind: 'oauth_access', maxLifetimeSeconds: 600 };
+  const fixture = await setup(oauth);
+  await fixture.worker.discover('startup');
+  expect(await discoveryStatus(fixture.store, 'test', 'startup')).toMatchObject({
+    state: 'needs_input', reason: 'pending_review',
+  });
+  expect(fixture.requests()).toBe(0);
+}
+it('accepts bounded OAuth access for review without delivering material', acceptsBoundedOAuth);
+
+async function leavesPerCallHostedReviewClosed() {
+  const fixture = await setup({ credentialMode: 'per_call' });
+  await fixture.worker.discover('startup');
+  expect(await history(fixture.store, 'mcp-startup', 'test')).toHaveLength(1);
+  expect(await readToolPolicy(fixture.store, 'test', 'startup')).toMatchObject({ published: false });
+}
+it('leaves hosted per-call review to the hosted installer without enabling it',
+  leavesPerCallHostedReviewClosed);
+
+async function refusesLegacyConnectionRequest() {
+  const fixture = await setup();
+  const rejection = envelope('test', 'mcp-startup', 'mcp.server_rejected',
+    { serverId: 'startup', reason: 'connection_required' }, 'old-discovery');
+  const rejected = await fixture.store.append({ event: rejection, expectedSequence: 1 });
+  expect(rejected.status).toBe('appended');
+  expect(await discoveryStatus(fixture.store, 'test', 'startup')).toMatchObject({
+    state: 'failed', reason: 'startup_contract_unverified',
+  });
+}
+it('refuses an older hosted request for Connect without startup evidence',
+  refusesLegacyConnectionRequest);

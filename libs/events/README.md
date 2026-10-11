@@ -22,7 +22,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks memory and removal rules and records access changes, tool decisions and dispatch| events["libs/events<br/>event and memory checks"]
+  server["apps/server<br/>back end"] -.->|checks startup, memory and removal rules and records access changes, tool decisions and dispatch| events["libs/events<br/>event, memory and destination checks"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
@@ -36,6 +36,7 @@ flowchart LR
 - Define exact HTTPS destination rules for the silo, a person or an assistant.
   Refuse reserved internal names, including `home.arpa` and names beneath it.
 
+- Defines hosted startup credential requirements and review references without secret values.
 - Defines shared child records with a parent message, fixed payer and named people.
 - Defines delegated task relationships and outcomes, including cancellation. Older records
   remain readable. These records grant no permission to run a task.

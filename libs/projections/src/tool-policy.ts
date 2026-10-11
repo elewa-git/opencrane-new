@@ -9,7 +9,9 @@ export function emptyToolPolicy(): ToolPolicy {
 export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequence: number): ToolPolicy {
   const d = z.record(z.string(), z.unknown()).parse(getEventDefinition(event.type)?.dataSchema.parse(event.data));
   let next = { ...state, sequence };
-  if (event.type === 'mcp.server_registered') next = { ...emptyToolPolicy(), sequence };
+  if (event.type === 'mcp.server_registered') {
+    next = { ...emptyToolPolicy(), sequence, hosted: d['kind'] === 'hosted' };
+  }
   if (event.type === 'mcp.server_discovered') {
     const tools = z.array(z.object({ name: z.string(), revision: z.string(), reviewed: z.boolean(),
       readOnly: z.boolean().optional(), destructive: z.boolean().optional(), costCents: z.literal(0).optional() })).parse(d['tools'] ?? []);
@@ -20,7 +22,8 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
         suggestion: t.readOnly === true && t.destructive !== true ? 'allow' : 'ask' })) };
     next.accountMode = z.enum(['none', 'personal', 'company']).nullable().parse(d['accountMode'] ?? null);
   }
-  if (event.type === 'mcp.server_published') next.published = true;
+  // Keep every hosted process closed until its runtime can enforce reviewed credentials.
+  if (event.type === 'mcp.server_published') next.published = state.hosted !== true;
   if (['mcp.server_unpublished', 'mcp.server_rejected', 'mcp.tools_changed'].includes(event.type)) next.published = false;
   if (event.type === 'mcp.tools_changed') next.tools = state.tools.map(t => ({ ...t, reviewed: false, mode: 'block' }));
   if (event.type === 'mcp.tool_mode_set') next.tools = applyMode(state, d);

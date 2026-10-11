@@ -1,6 +1,6 @@
 import { emptyToolPolicy, applyToolPolicy } from './tool-policy.ts';
 import { toolPolicySchema } from '@opencrane/protocol';
-import { getEventDefinition } from '@opencrane/events';
+import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import type { IntegrationRow, SharedStateKind } from '@opencrane/protocol';
 import type { Projection } from './runner.ts';
 
@@ -82,13 +82,13 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
         catalogue_ref = $5, server_name = NULL, server_version = NULL,
         tool_count = NULL, policy = $8, lifecycle = 'registered', changed_at = $6, position = $7`,
         [event.silo, serverId, field(data, 'kind'), field(data, 'locator'), optionalField(data, 'catalogueRef'),
-          event.time, position, JSON.stringify({ ...emptyToolPolicy(), sequence: position })]);
+          event.time, position, JSON.stringify(applyToolPolicy(emptyToolPolicy(), event, position))]);
         return;
       }
-      const existing = await db.query(`SELECT server_id, policy FROM ${tables.catalogue} WHERE silo = $1 AND server_id = $2`,
+      const existing = await db.query(`SELECT server_id, source_kind, policy FROM ${tables.catalogue} WHERE silo = $1 AND server_id = $2`,
         [event.silo, serverId]);
       if (!existing.rows.length) throw new Error('MCP event requires a registered server');
-      const policy = applyToolPolicy(existing.rows[0]?.['policy'] ? toolPolicySchema.parse(existing.rows[0]['policy']) : emptyToolPolicy(), event, position);
+      const policy = cataloguePolicy(existing.rows[0]!, event, position);
       await db.query(`UPDATE ${tables.catalogue} SET policy = $3 WHERE silo = $1 AND server_id = $2`, [event.silo, serverId, JSON.stringify(policy)]);
       if (event.type === 'mcp.tool_mode_set') {
         await db.query(`INSERT INTO ${tables.toolModes} VALUES ($1, $2, $3, $4)
@@ -96,7 +96,7 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
         [event.silo, serverId, field(data, 'toolName'), field(data, 'mode')]);
         return;
       }
-      const lifecycle = event.type.slice('mcp.'.length).replace('server_', '');
+      const lifecycle = catalogueLifecycle(event.type, policy.published);
       const toolCount = event.type === 'mcp.server_discovered' ? numberField(data, 'toolCount') : null;
       const info = event.type === 'mcp.server_discovered' ? serverInfo(data) : undefined;
       await db.query(`UPDATE ${tables.catalogue} SET lifecycle = $3,
@@ -106,6 +106,18 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
       [event.silo, serverId, lifecycle, toolCount, info?.name ?? null, info?.version ?? null, event.time, position, optionalField(data, 'reason')]);
     },
   };
+}
+
+function cataloguePolicy(row: Record<string, unknown>, event: EventEnvelope, position: number) {
+  const saved = row['policy'] ? toolPolicySchema.parse(row['policy']) : emptyToolPolicy();
+  // Read the saved transport kind too, because older table rows lack the hosted flag.
+  const current = { ...saved, hosted: row['source_kind'] === 'hosted' };
+  return applyToolPolicy(current, event, position);
+}
+
+function catalogueLifecycle(type: string, published: boolean) {
+  if (type === 'mcp.server_published' && !published) return 'discovered';
+  return type.slice('mcp.'.length).replace('server_', '');
 }
 
 export const mcpCatalogue = mcpCatalogueProjection('mcp catalogue', live);
@@ -154,6 +166,18 @@ function status(lifecycle: string, changedAt: string): IntegrationRow['status'] 
   return { kind, label, detail, ...(safeToRetry !== undefined && { safeToRetry }) };
 }
 
+function catalogueRowStatus(row: McpCatalogueRow): IntegrationRow['status'] {
+  if (row.source_kind === 'hosted' && row.lifecycle === 'published') {
+    return status('discovered', row.changed_at);
+  }
+  if (row.source_kind === 'remote' && row['rejection_reason'] === 'connection_required' &&
+      row.lifecycle === 'rejected') {
+    return { kind: 'needs_input', label: 'Needs input',
+      detail: 'A scoped validation connection is required. Protected discovery is not available yet.' };
+  }
+  return status(row.lifecycle, row.changed_at);
+}
+
 export function mapMcpCatalogueRows(rows: McpCatalogueRow[]): IntegrationRow[] {
   return rows.map((row) => {
     const total = row.tool_count === null ? null : Number(row.tool_count);
@@ -168,9 +192,7 @@ export function mapMcpCatalogueRows(rows: McpCatalogueRow[]): IntegrationRow[] {
       accountModel: 'Not provided',
       toolsAllowed: total === null ? allowed : Math.min(allowed, total),
       toolsTotal: total,
-      status: row['rejection_reason'] === 'connection_required' && row.lifecycle === 'rejected'
-        ? { kind: 'needs_input', label: 'Needs input', detail: 'A scoped validation connection is required. Protected discovery is not available yet.' }
-        : status(row.lifecycle, row.changed_at),
+      status: catalogueRowStatus(row),
     };
   });
 }

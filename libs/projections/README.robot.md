@@ -373,6 +373,15 @@ upgrade refusal and equality of live and rebuilt metadata and feed rows. Run wit
 set: `nice -n 10 npx vitest run libs/projections/test/conversation-activity.test.ts`.
 Fresh-install lifecycle journeys remain NOT RUN.
 
+## Hosted tool review
+
+`applyToolPolicy` records the registration's hosted transport and refuses to mark
+it published. Later discovery cannot remove that flag. The catalogue uses the same
+fold at registration and reads its stored transport kind when an older policy lacks
+the flag. Refused hosted publication stays Pending review rather than Ready.
+Rebuilding the catalogue applies the same checks and starts no process.
+Older catalogue rows cannot report hosted publication as Ready or offer Connect.
+
 The providers fold stores `managedCallsEnabled: true` on the connection carrying
 `provider.managed_calls_enabled` on `budget-<silo>`. This does not advance its configuration revision
 or replace key verification. Replay restores the marker through the same fold.

@@ -42,7 +42,7 @@ export type IntegrationsResponse = z.infer<typeof integrationsResponseSchema>;
 
 export const toolPolicySchema = z.object({
   connectionId: z.string().nullable(), accountMode: z.enum(['none', 'personal', 'company']).nullable(),
-  published: z.boolean(), sequence: z.int().nonnegative(),
+  hosted: z.boolean().optional(), published: z.boolean(), sequence: z.int().nonnegative(),
   tools: z.array(z.object({ name: z.string(), revision: z.string(), reviewed: z.boolean(),
     readOnly: z.boolean(), costCents: z.literal(0).optional(), mode: z.enum(['allow', 'ask', 'block']), suggestion: z.enum(['allow', 'ask']) })),
 });

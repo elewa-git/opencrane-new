@@ -1577,6 +1577,25 @@ The socket and desktop tests remove through HTTP with slow content reads.
 while IAM is delayed.
 Fresh-install qualification and browser canvas clearing remain NOT RUN.
 
+## Hosted startup credential review
+
+The install worker checks optional hosted registration `credentialContract` data
+before creating any discovery identity. It records `mcp.server_rejected` for lasting,
+environment-only or raw-bearer requirements (`lasting_startup_secret_required`),
+or missing or incompatible evidence (`startup_contract_unverified`). The status read
+makes the same check before offering Needs input. It never suggests Connect for
+these refusals. Compatible contracts show `pending_review` without a process,
+credential release, discovery request or normal call. Hosted per-call contracts
+remain for the separate hosted installer and stay unavailable here.
+
+The [accepted design](../../docs/specs/phase-3/p3-10-startup-mcps.md) defines the later
+qualification, delivery and lifecycle work. Contract fields are review inputs, not
+proof that expiry, renewal or persistence checks passed. No qualification is claimed.
+`test/startup-mcp.test.ts` uses real NATS for saved refusals and forged publication
+claims. The projection test also checks older PostgreSQL policies and catalogue replay.
+Existing remote discovery tests remain regressions. Fresh-install startup
+qualification and framed refusal screens are NOT RUN.
+
 ## Provider choices at new-turn admission
 
 After `provider.managed_calls_enabled`, a new turn selects the assistant's own

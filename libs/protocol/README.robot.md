@@ -129,3 +129,10 @@ person/assistant permissions and unavailable use readiness. Departure revisions 
 the actual checked inputs. Missing permission evidence makes the review incomplete.
 `permissions.remove` is a boolean. The server enables it only for a complete
 review of an active non-owner. The removal route still checks the review again.
+
+## Hosted tool policy
+
+`toolPolicySchema.hosted` is optional for older stored policies and browser replies.
+The event fold derives it from registration. Hosted policies remain unpublished
+while hosted execution is unavailable. A table reader also uses the stored transport
+kind when an older policy lacks the flag. The field grants no authority by itself.
