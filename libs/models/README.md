@@ -15,19 +15,12 @@ to handle AI calls.
 flowchart LR
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, approval changes, provider choices, draining, owner appointments and spending| models["libs/models<br/>AI rules, provider choice and spending"]
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
-  ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks saved grants, tool rules, calls and read and personal write passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-<<<<<<< HEAD
-  models -->|saves holds and settlements, reads activity, grants, payer and switch-on| store["libs/event-store<br/>event log"]
-
-models -->|saves changes and spending, reads activity, grants and access changes| store["libs/event-store<br/>event log"]
-=======
-  models -->|saves changes and spending, reads activity, grants and access changes| store["libs/event-store<br/>event log and closing activity"]
->>>>>>> ee799ef5 (🔒 Read closing activity once and preserve legacy close writes)
+  models -->|saves spending changes and reads activity, grants and closing records| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for

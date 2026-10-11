@@ -21,16 +21,8 @@ with `libs/events`.
 
 ```mermaid
 flowchart LR
-<<<<<<< HEAD
-  server["apps/server<br/>back end"] -->|saves changes within the caller time limit| store["libs/event-store<br/>checked events and memory key references"]
-  models["libs/models<br/>AI rules and budgets"] -->|saves changes and checks migration positions| store
-
-server["apps/server<br/>back end"] -->|saves changes within the caller time limit| store["libs/event-store<br/>checked event writes and stream ownership"]
-  models["libs/models<br/>AI rules and budgets"] -->|saves changes and updates saved facts| store
-=======
   server["apps/server<br/>back end"] -->|saves changes within the caller time limit| store["libs/event-store<br/>checked event writes and stream ownership"]
-  models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity with closes| store
->>>>>>> ee799ef5 (🔒 Read closing activity once and preserve legacy close writes)
+  models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes and migration positions| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams and finds numbered events| nats["NATS JetStream<br/>event service"]
   store -.->|checks private chat choices| events["libs/events<br/>event definitions"]
