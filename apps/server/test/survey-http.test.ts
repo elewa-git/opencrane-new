@@ -62,7 +62,7 @@ async function close() {
 }
 beforeEach(start, 120_000);
 afterEach(close);
-function post(payload: unknown, requestHeaders = headers) {
+function post(payload: object, requestHeaders = headers) {
   return app.inject({ method: 'POST', url: '/api/onboarding/survey',
     headers: requestHeaders, payload });
 }
@@ -109,9 +109,14 @@ async function invalidSteps() {
     { ...initial, memberId: 'bob' },
     { ...initial, answers: { ...answers[0], step: 5 } },
     { ...initial, answers: { ...answers[0], preferredName: 'a'.repeat(201) } },
+    { ...initial, answers: { ...answers[0], preferredName: 'a'.repeat(17000) } },
     { ...initial, answers: { ...answers[0], pronouns: '\u0000' } },
   ];
-  for (const payload of forged) expect((await post(payload)).statusCode).toBe(422);
+  for (const payload of forged) {
+    const refused = await post(payload);
+    expect(refused.statusCode).toBe(422);
+    expect(refused.headers['cache-control']).toBe('no-store');
+  }
   expect((await save(1, 0, 'wrong-generation', 2)).statusCode).toBe(409);
   expect(await nats.store.head('personal-alice')).toBe(0);
   expect((await save(1, 0)).statusCode).toBe(200);
@@ -171,7 +176,9 @@ async function restartRace() {
   };
   const responses = await Promise.all([post(first), post(second)]);
   nats.store.append = append;
-  function statusCode(response: typeof responses[number]) { return response.statusCode; }
+  function statusCode(response: typeof responses[number]) {
+    return response.statusCode;
+  }
   const statuses = responses.map(statusCode);
   statuses.sort();
   expect(statuses).toEqual([200, 409]);
@@ -182,14 +189,12 @@ it('conditionally restarts once when two devices use the same confirmed progress
 
 async function slowHistory() {
   const read = nats.store.readStream.bind(nats.store);
-  let shortCheck = false;
+  const shortChecks: { subject: string | undefined; historyFinished: boolean }[] = [];
   let historyFinished = false;
   const head = nats.store.head.bind(nats.store);
   nats.store.head = async function checkedHead(subject, deadline) {
     if ((deadline ?? Infinity) - performance.now() <= 2000) {
-      shortCheck = true;
-      expect(historyFinished).toBe(true);
-      expect(subject).toBe('member-alice');
+      shortChecks.push({ subject, historyFinished });
     }
     return head(subject, deadline);
   };
@@ -207,7 +212,12 @@ async function slowHistory() {
   expect((await save(1, 0)).statusCode).toBe(200);
   nats.store.readStream = read;
   nats.store.head = head;
-  expect(shortCheck).toBe(true);
+  expect(shortChecks.length).toBeGreaterThan(1);
+  expect(shortChecks[0]).toEqual({ subject: undefined, historyFinished: true });
+  const watchedSubjects = shortChecks.slice(1);
+  for (const check of watchedSubjects) {
+    expect(check).toEqual({ subject: 'member-alice', historyFinished: true });
+  }
 }
 it('loads slow history before opening the small write access check', slowHistory);
 
@@ -245,10 +255,38 @@ async function reusedIdRace() {
   };
   const responses = await Promise.all([post(first), post(second)]);
   nats.store.append = append;
-  function statusCode(response: typeof responses[number]) { return response.statusCode; }
+  function statusCode(response: typeof responses[number]) {
+    return response.statusCode;
+  }
   const statuses = responses.map(statusCode);
   statuses.sort();
   expect(statuses).toEqual([200, 409]);
   expect(await nats.store.head('personal-alice')).toBe(2);
 }
 it('refuses changed answers racing under the same command id', reusedIdRace);
+
+async function removalDuringHistory(method: 'GET' | 'POST') {
+  const read = nats.store.readStream.bind(nats.store);
+  let removed = false;
+  nats.store.readStream = async function* removeDuringLoad(subject, from, deadline, closes) {
+    yield* read(subject, from, deadline, closes);
+    if (subject === 'personal-alice' && !removed) {
+      removed = true;
+      const removal = { ...event('removed', 'member-alice', 'member.removed'),
+        data: { memberId: 'alice', removedBy: 'owner' } };
+      const command = { event: removal, expectedSequence: 1 };
+      expect((await nats.store.append(command)).status).toBe('appended');
+    }
+  };
+  const payload = { operation: 'save_step', commandId: 'after-removal', generation: 1,
+    expectedPosition: 0, answers: answers[0] };
+  let url = '/api/onboarding';
+  if (method === 'POST') url = '/api/onboarding/survey';
+  const response = await app.inject({ method, url, headers, payload });
+  nats.store.readStream = read;
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(await nats.store.head('personal-alice')).toBe(0);
+}
+it.each(['GET', 'POST'] as const)('refuses %s when membership is removed during history loading',
+  removalDuringHistory);
