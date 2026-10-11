@@ -1409,6 +1409,8 @@ async function recoveryCleanup(stage: 'prepared' | 'unknown' | 'legacy') {
   let response;
   try {
     response = await backendRemember(body);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(append).toHaveBeenCalledTimes(1);
   } finally {
     append.mockRestore();
   }
