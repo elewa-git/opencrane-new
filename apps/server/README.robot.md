@@ -28,6 +28,8 @@ checks a silo/binding mismatch with otherwise-valid membership and separate Orig
 refusals for POST messages and participants. Each write succeeds from the website
 with the same cookie and body. Removing the silo comparison or write Origin check
 makes these cases fail with HTTP 200 instead of 403. The
+organisation audit follows calls to `requireMember` and requires the guard to call
+`isOrganisationSession`. Removing either call still fails the audit. The
 first test commit fails 22 cases before the guard is added: 16 setup statuses and
 six missing cache headers. Existing route tests cover allowed requests, removals,
 conversation access, Origin and slow histories. The required changed-route checks
