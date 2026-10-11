@@ -12,7 +12,7 @@ import { chatMessageSchema } from '@opencrane/protocol';
 import { attachWebSocketServer } from '../src/websocket.ts';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers, deleteStoreById } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -1279,18 +1279,19 @@ async function boundsDeniedListScan() {
       await seedListChat(fixture, `denied-${index}`, false);
     }
     await fixture.runner.run(conversations);
-    const first = await listPage(fixture);
-    expect(first.rows).toEqual([]);
-    expect(first.nextCursor).toBeTruthy();
-    expect(first.nextCursor).not.toContain('denied');
-    const second = await listPage(fixture, `?cursor=${first.nextCursor}`);
-    expect(second.rows.map(conversationIdOf)).toEqual(['allowed']);
-    expect(second.nextCursor).toBeNull();
+    const reads = vi.spyOn(fixture.options.store, 'readStream');
+    const response = await fixture.app.inject({
+      url: '/api/conversations', headers: fixture.headers('bob'),
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'list_incomplete' });
+    expect(reads.mock.calls.length).toBeLessThanOrEqual(202);
+    reads.mockRestore();
   } finally {
     await fixture.close();
   }
 }
-it('bounds denied candidates and returns an honest empty continuation', boundsDeniedListScan, 120_000);
+it('bounds denied candidates without returning their positions or an empty continuation', boundsDeniedListScan, 120_000);
 
 async function resetsChangedListPages() {
   const fixture = await directFixture();
@@ -1368,3 +1369,88 @@ async function capsListPages() {
   }
 }
 it('caps default and maximum pages and refuses invalid list queries', capsListPages, 120_000);
+
+async function keepsPrivateActivityOutOfListRevision() {
+  const fixture = await directFixture();
+  try {
+    await seedListChat(fixture, 'first');
+    await seedListChat(fixture, 'second');
+    await seedListChat(fixture, 'denied', false);
+    await fixture.runner.run(conversations);
+    const original = await listPage(fixture, '?limit=1');
+    const queries = vi.spyOn(fixture.options.db, 'query');
+    await seedListChat(fixture, 'private', true, ['alice', 'carol']);
+    await seedListMessage(fixture, 'private', 'Private activity');
+    await seedListMessage(fixture, 'denied', 'Denied activity');
+    await fixture.runner.run(conversations);
+    const after = await listPage(fixture, '?limit=1');
+    expect(after).toEqual(original);
+    const next = await listPage(fixture, `?limit=1&cursor=${original.nextCursor}`);
+    expect(next.rows.map(conversationIdOf)).toEqual(['first']);
+    for (const [sql] of queries.mock.calls) {
+      expect(sql).not.toMatch(/SELECT max\((latest_activity|join_position|end_position)/u);
+    }
+    queries.mockRestore();
+  } finally {
+    await fixture.close();
+  }
+}
+it('keeps private and IAM-denied activity out of cursors without silo-wide revision scans',
+  keepsPrivateActivityOutOfListRevision);
+
+async function putsOnlyVisiblePositionsInCursor() {
+  const fixture = await directFixture();
+  try {
+    await seedListChat(fixture, 'denied-old', false);
+    await seedListChat(fixture, 'first');
+    await seedListChat(fixture, 'second');
+    await seedListChat(fixture, 'denied', false);
+    await fixture.runner.run(conversations);
+    const page = await listPage(fixture, '?limit=1');
+    expect(page.rows.map(conversationIdOf)).toEqual(['second']);
+    expect(page.nextCursor).toBeTruthy();
+    const encoded = page.nextCursor!.split('.')[0]!;
+    const payload: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString());
+    const visible = await fixture.options.db.query<{ latest_activity: string;
+      join_position: string }>(`SELECT latest_activity, join_position
+      FROM conversation_participants WHERE conversation_id='second' AND participant_id='bob'`);
+    const row = visible.rows[0]!;
+    expect(payload).toEqual([expect.any(String), Number(row.latest_activity),
+      Number(row.join_position)]);
+    const last = await listPage(fixture, `?limit=1&cursor=${page.nextCursor}`);
+    expect(last.rows.map(conversationIdOf)).toEqual(['first']);
+    expect(last.nextCursor).toBeNull();
+  } finally {
+    await fixture.close();
+  }
+}
+it('uses only visible rows for continuation positions and page existence',
+  putsOnlyVisiblePositionsInCursor);
+
+async function hidesPreJoinCreationTime() {
+  const fixture = await directFixture();
+  try {
+    const createdAt = new Date('2026-10-05T10:00:00.000Z');
+    const joinedAt = new Date('2026-10-09T10:00:00.000Z');
+    const created = envelope('test', 'conversation-late-time', 'conversation.created', {
+      conversationId: 'late-time', mode: 'group', createdBy: 'alice',
+      participantIds: ['alice', 'carol'],
+    }, 'created-late-time', createdAt);
+    const joined = envelope('test', 'participation-late-time', 'participant.added', {
+      conversationId: 'late-time', participantId: 'bob', addedBy: 'alice',
+    }, 'joined-late-time', joinedAt);
+    await fixture.nats.seed([created, joined]);
+    await fixture.auth.handler.handle(created, fixture.options.db);
+    await fixture.auth.handler.handle(joined, fixture.options.db);
+    await fixture.runner.run(conversations);
+    const page = await listPage(fixture);
+    expect(page.rows).toHaveLength(1);
+    expect(page.rows[0]).toMatchObject({ conversationId: 'late-time',
+      createdAt: joinedAt.toISOString() });
+    expect(JSON.stringify(page)).not.toContain(createdAt.toISOString());
+  } finally {
+    await fixture.close();
+  }
+}
+it('shows the join time to ordinary late joiners instead of the original creation time',
+  hidesPreJoinCreationTime);
