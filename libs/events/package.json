@@ -10,7 +10,8 @@
     ".": "./src/index.ts",
     "./tool-call": "./src/tool-call.ts",
     "./lossless-json": "./src/lossless-json.ts",
-    "./mcp-catalogue": "./src/mcp-catalogue.ts"
+    "./mcp-catalogue": "./src/mcp-catalogue.ts",
+    "./routine-schedule": "./src/routine-schedule.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
