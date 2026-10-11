@@ -6,6 +6,7 @@ import { sessionFor } from '../members/routes.ts';
 import { scopeAccess, resolveScope, memoryAccessChecks, MemoryRefused,
   type MemoryOptions } from './access.ts';
 import { remember, readCommand, changeParams, reconcileCommands } from './commands.ts';
+import { bindMaintenance } from './maintenance.ts';
 import { MemoryBusy } from './admission.ts';
 import { MemoryConflict, readParams } from './reads.ts';
 
@@ -30,6 +31,7 @@ export function registerMemoryCommands(app: FastifyInstance, config: AuthConfig,
   app.get('/api/memory/:scopeId/changes/:commandId', handle);
   const postOptions = { bodyLimit: 16384, errorHandler: invalidCommandBody };
   app.post('/api/memory/:scopeId/facts', postOptions, handle);
+  app.post('/api/memory/:scopeId/maintenance/binding', postOptions, handle);
 
   async function handle(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
@@ -82,7 +84,12 @@ async function handleCommand(request: FastifyRequest, options: MemoryOptions, re
   const path = readParams.strip().parse(request.params);
   const scope = await resolveScope(options, requester, path.scopeId);
   if (request.method === 'POST') {
-    const result = await remember(options, requester, scope, request.body);
+    let result;
+    if (request.routeOptions.url?.endsWith('/maintenance/binding')) {
+      result = await bindMaintenance(options, requester, scope, request.body);
+    } else {
+      result = await remember(options, requester, scope, request.body);
+    }
     if (result.outcome === 'conflict' || result.outcome === 'failed') {
       return { status: 409, body: result };
     }

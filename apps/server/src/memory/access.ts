@@ -159,7 +159,7 @@ async function notesAccess(options: MemoryOptions, requester: string, scope: Sco
     canRead, canWrite };
 }
 
-async function readAssistant(options: MemoryOptions, assistantId: string) {
+export async function readAssistant(options: MemoryOptions, assistantId: string) {
   const rows = await history(options.store, `assistant-${assistantId}`, options.silo,
     performance.now() + 10_000);
   const created = rows[0]?.event;

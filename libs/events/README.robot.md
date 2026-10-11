@@ -250,3 +250,12 @@ The checks use whole DNS labels after IDNA conversion. DNS address checks
 belong to later admission work; no DNS lookup or network permission is added here.
 Event parsing checks the stream format, silo scope and human actor. Commands and
 projections check its exact identity. Server commands bind each change id to its first saved rule and arguments across the silo.
+
+## Nightly binding contract
+
+`memory.maintenance_bound` records one scope, consenting `memberId`, assistant,
+paying group, enabled choice, accepted 100-cent cap and positive config revision.
+The cap exports as integer cents with a minimum of zero and accepts only 100.
+Only a server event with a matching human principal, scope subject and command id
+is accepted. Person scope requires its own member. The record contains no fact
+text and grants no spending authority. Run and dirty-scope contracts remain deferred.

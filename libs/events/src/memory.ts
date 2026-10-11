@@ -111,3 +111,15 @@ export const memoryWrittenExample = {
   kind: 'fact' as const, pinned: false, expiresAt: null, sources: [], dependsOn: [],
   ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', keyId: `key:${'a'.repeat(64)}`,
 };
+
+function acceptsNightlyCap(acceptedCapCents: number): boolean {
+  return acceptedCapCents === 100;
+}
+const integerCents = z.int().nonnegative();
+const acceptedNightlyCap = integerCents.refine(acceptsNightlyCap, 'Accept exactly 100 cents');
+
+export const memoryMaintenanceBoundDataSchema = z.strictObject({
+  scopeId: digest, scopeKind, ownerId: identifier, memberId: identifier,
+  assistantId: identifier, payingGroupId: identifier, enabled: z.boolean(),
+  acceptedCapCents: acceptedNightlyCap, revision,
+});
