@@ -1,4 +1,6 @@
 import { surveyEvents } from './survey.ts';
+import { routineEvents, modernRoutineExamples } from './routine-events.ts';
+import * as routines from './routines.ts';
 import { egressEvents } from './egress.ts';
 
 import { takeoverEvents } from './takeover.ts';
@@ -436,44 +438,45 @@ export const eventRegistry: readonly EventDefinition[] = [
     'routine.created',
     'routine',
     'A person created a scheduled routine.',
-    data.routineCreatedDataSchema,
-    { routineId: 'routine_1', assistantId: 'asst_1', schedule: '0 9 * * MON-FRI', createdBy: 'mem_1' },
+    routines.routineCreatedSchema,
+    modernRoutineExamples.saved,
   ),
   event(
     'routine.updated',
     'routine',
     'A person changed a scheduled routine.',
-    data.routineUpdatedDataSchema,
-    { routineId: 'routine_1', schedule: '0 8 * * MON-FRI', updatedBy: 'mem_1' },
+    routines.routineUpdatedSchema,
+    modernRoutineExamples.saved,
   ),
   event(
     'routine.paused',
     'routine',
     'A person paused a scheduled routine.',
-    data.routinePausedDataSchema,
-    { routineId: 'routine_1', pausedBy: 'mem_1' },
+    routines.routinePausedSchema,
+    modernRoutineExamples.control,
   ),
   event(
     'routine.resumed',
     'routine',
     'A person resumed a paused routine.',
-    data.routineResumedDataSchema,
-    { routineId: 'routine_1', resumedBy: 'mem_1' },
+    routines.routineResumedSchema,
+    modernRoutineExamples.control,
   ),
   event(
     'routine.retired',
     'routine',
     'A person retired a scheduled routine.',
-    data.routineRetiredDataSchema,
-    { routineId: 'routine_1', retiredBy: 'mem_1' },
+    routines.routineRetiredSchema,
+    modernRoutineExamples.control,
   ),
   event(
     'routine.due',
     'routine',
-    'The scheduler fired a routine; exactly one firing is emitted.',
-    data.routineDueDataSchema,
-    { routineId: 'routine_1', firedAt: '2026-10-01T09:00:00.000Z' },
+    'The server recorded a frozen occurrence; no work is started.',
+    routines.routineDueDataSchema,
+    modernRoutineExamples.due,
   ),
+  ...routineEvents,
   event(
     'delegation.started',
     'delegation',
