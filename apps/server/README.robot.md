@@ -1723,9 +1723,17 @@ request fields. Conflicting command ids return no saved success.
 
 Chat history loads before the short write check. Later human messages and closure
 are checked with a bounded tail read. Only small access streams enter that check.
-Turn admission, message delivery, credential issuance and decisions refuse pending
-control. Reports and explicit approval denial remain available. Viewer transport
-and its access leases are unchanged.
+Turn admission, new message delivery, credential issuance and decisions refuse pending
+control. Explicit stops still reach the bridge. Reports and explicit approval denial
+remain available. Viewer transport and its access leases are unchanged.
+Upload delivery checks control before each object read, after the bytes are ready,
+and after the sender reads delivery history, immediately before file transmission.
+Intent saved during preparation holds that file and the remaining batch without
+recording a delivery receipt. A file already being transmitted can finish.
+`test/bridge-control.test.ts` covers stops, both slow reads and remaining batch files
+with saved events and a real socket. The approved old-token test checks refusal
+without an outstanding approval blocking the call. The Bob test has no prior intent
+and requires the requester refusal.
 
 This is the first split of P3-17 row 1. HTTP request/status routes, chat/realtime
 control status, remaining transition schemas and strict modern started/ended data

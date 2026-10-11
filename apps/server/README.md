@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, chats, closing records, joins, facts, models and tools| postgres
-  server -->|sends turns, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
+  server -->|sends turns, files, stops, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -36,7 +36,7 @@ flowchart LR
   Facts with expired or unusable supporting facts are left out.
 
 - Record internal control intent for the current requester. Refuse new work while it is pending.
-  Keep independently authorised viewing and explicit approval denial available.
+  Keep authorised viewing, explicit stops and approval denial available.
 
 - Read recorded child participants without reading the whole conversation.
 

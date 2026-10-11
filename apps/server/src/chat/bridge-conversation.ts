@@ -110,12 +110,18 @@ export function turnMessage(options: WatchOptions, conversation: AgentSession,
   return turn;
 }
 
-async function deliverUploads(objects: Client | undefined,
+async function deliverUploads(options: WatchOptions, assistantId: string,
   link: BridgeLink, uploads: Upload[]) {
+  const objects = options.objects;
   if (!objects) return;
   for (const file of uploads) {
     if (link.delivered.has(file.fileId)) continue;
+    const controlBeforeRead = await readComputerControl(options.store, options.silo, assistantId);
+    if (controlBeforeRead) return;
     const bytes = await promotedBytes(objects, file);
+    // Refuse delivery if control was requested while the object store prepared the file.
+    const controlBeforeDelivery = await readComputerControl(options.store, options.silo, assistantId);
+    if (controlBeforeDelivery) return;
     await link.deliver(file, bytes);
   }
 }
@@ -167,14 +173,18 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   if (current.type !== 'computer.ready' || refused.has(computer.computerId)) {
     return { pending: true, retry: true };
   }
-  const control = await readComputerControl(options.store, options.silo, conversation.assistantId);
-  if (control) return { pending: true, retry: true };
   const link = await connection(computer.computerId, conversation.assistantId);
-  await deliverUploads(options.objects, link, uploads);
+  const control = await readComputerControl(options.store, options.silo, conversation.assistantId);
+  if (control) {
+    // Keep explicit stops available while control holds new turns and uploads.
+    sendStop(link.socket, rows, message, conversation.conversationId);
+    return { pending: true, retry: true, connectionId: link.connectionId };
+  }
+  await deliverUploads(options, conversation.assistantId, link, uploads);
   if (message) {
     await sendWaitingTurn(options, link, conversation, rows, allUploads, message,
       assistant.kind, assistant.started);
-    sendStop(link.socket, rows, message.event.id, conversation.conversationId);
+    sendStop(link.socket, rows, message, conversation.conversationId);
   }
   const unacceptedMessage = message !== undefined && !assistant.started.has(message.event.id);
   const retry = uploads.length > 0 || unacceptedMessage;
@@ -341,7 +351,10 @@ function conversationUploads(rows: ChatRows, assistantKind: string) {
   return uploads.map(uploadedFile);
 }
 
-function sendStop(socket: WebSocket, rows: ChatRows, turnId: string, conversationId: string) {
+function sendStop(socket: WebSocket, rows: ChatRows,
+  message: ChatRows[number] | undefined, conversationId: string) {
+  if (!message) return;
+  const turnId = message.event.id;
   function isStopRequest(row: ChatRows[number]) {
     return row.event.type === 'agent.turn_stop_requested' &&
       turnIdData.parse(row.event.data).turnId === turnId;

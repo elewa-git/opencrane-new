@@ -5,7 +5,7 @@ import { ownConversation, fileCommand } from '../files/commands.ts';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, type RawData } from 'ws';
-import { computerCredentials, type tokenIssuer } from '@opencrane/auth';
+import { computerCredentials, readComputerControl, type tokenIssuer } from '@opencrane/auth';
 import { modelForTask } from '@opencrane/models/routing';
 import type { WatchOptions, AgentSession } from './bridge-conversation.ts';
 import type { TurnDelivery } from './turn-tools.ts';
@@ -151,6 +151,9 @@ async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: W
     throw new Error('Stored file digest mismatch');
   }
   await ownConversation(options.store, options.silo, file.conversationId, file.uploadedBy, true);
+  // Check after waiting for earlier transfers and reading delivery history.
+  const control = await readComputerControl(options.store, options.silo, input.assistantId);
+  if (control) return;
   const outcome = await sendFile(socket, file, bytes);
   const data = { conversationId: file.conversationId, fileId: file.fileId,
     computerId: input.computerId, sha256: file.sha256, outcome };
