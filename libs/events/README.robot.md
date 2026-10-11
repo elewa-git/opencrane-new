@@ -322,10 +322,45 @@ delivery order. Duplicate ids return the existing state after schema and stream 
 after later controls or retirement. Legacy records add no facts or applied ids. A failed fold
 leaves its input and its applied ids unchanged. Migration requires a complete paused update.
 An unfinished run stays recorded across controls; completion checks its ids and keeps the first
-result. Schedule calculation,
-custody and live membership/grant/profile checks belong to later PRs. There are no routine
+result. Custody and live membership/grant/profile checks belong to later PRs. There are no routine
 subscriptions, scheduler, worker, routes, new dependencies or money ledger.
 Tests: `nice -n 10 npx vitest run libs/events/test/routines.test.ts libs/events/test/routine-fold.test.ts`.
+
+### Routine occurrence calculation
+
+PR row 2 exports `calculateRoutineOccurrence` and `previewRoutineOccurrences` at
+`@opencrane/events/routine-schedule`. Both accept unknown input and check it strictly.
+They reuse the record schedule schema: daily or weekly, local `HH:mm`, named IANA
+zone and ISO weekday 1–7 for weekly. The runtime's `Intl` supplies zone rules;
+invalid and offset-only zones refuse. No dependency or clock read was added.
+
+Calculation takes `silo`, `routineId`, `scheduleRevision`, `schedule` and `localDate`.
+It refuses a weekly date on another weekday. The result includes those local fields,
+`occurrenceId`, `status`, `at`, `offsetMinutes`, `repeated` and `checkAt`.
+A scheduled slot chooses the earliest UTC instant and sets `checkAt` to that instant.
+A `dst_skip` has null instant/offset and sets `checkAt` to the clock-change boundary.
+Offsets must use whole minutes, matching the saved slot contract. Historical zones
+with second-based offsets refuse. Offsets are sampled every six hours within two days
+of the local slot and candidate instants are checked against all intended local fields.
+
+Preview takes the same identity and schedule, plus `now`, `effectiveAt`, optional
+`afterLocalDate` and `count` (default 5, maximum 50). Count includes skipped slots.
+Every returned `checkAt` is strictly after both supplied times. Dates advance on the
+local calendar. The caller passes the last consumed local date as `afterLocalDate`
+to prevent a backwards clock from revisiting it. These functions save no cursor;
+later event commands still have to claim each occurrence once.
+
+The id is lower-case SHA-256 of UTF-8 JSON
+`[silo, routineId, scheduleRevision, localDate, localTime, zone]`, using the stored
+zone spelling. Repeats and skips retain their intended local identity. Delivery
+time and definition revision do not enter the hash. Saved claimed timestamps
+must be reused rather than recalculated after a runtime time-zone update.
+Manual ids, schedulers, routes and firing remain later work.
+
+Focused tests: `nice -n 10 npx vitest run libs/events/test/routine-schedule.test.ts`.
+They cover Brussels daily/weekly repeat and skip, Lord Howe half-hour changes,
+Kolkata without DST, leap dates, invalid input, future-only preview, a backwards
+caller clock and fixed expected hashes. Changing the process clock changes no result.
 
 ## Private survey contracts
 

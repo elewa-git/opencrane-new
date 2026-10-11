@@ -133,6 +133,8 @@ it('does not revisit a consumed local date when the caller clock moves backwards
 function deterministicIds() {
   const input = { ...identity, schedule: daily, localDate: '2026-10-25' };
   const original = calculateRoutineOccurrence(input);
+  expect(original.occurrenceId).toBe(
+    '3ea01d8738f88bbb3692a6d0d51140d6947ddbbef772ca15e3af12277f03bf13');
   const preview = { ...request, now: '2026-10-24T12:00:00Z', count: 1 };
   expect(previewRoutineOccurrences(preview)[0]?.occurrenceId).toBe(original.occurrenceId);
   const changedInputs = [
@@ -146,7 +148,8 @@ function deterministicIds() {
   }
   const skipInput = { ...input, localDate: '2027-03-28' };
   const skipped = calculateRoutineOccurrence(skipInput);
-  expect(skipped.occurrenceId).toMatch(/^[a-f0-9]{64}$/u);
+  expect(skipped.occurrenceId).toBe(
+    'e03cd0049aab624dda0bb6b299d5b2499460ade2c6418937ae9463ef73553e06');
   expect(calculateRoutineOccurrence(skipInput).occurrenceId).toBe(skipped.occurrenceId);
 }
 it('derives stable ids from the local identity, including slots with no instant', deterministicIds);
