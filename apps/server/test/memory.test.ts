@@ -2298,6 +2298,14 @@ it('allows disable after payer or assistant loss and refuses renewed enablement'
 
 it('refuses binding events that claim another member or another scope', invalidBindingEvent);
 
+// Keep these history checks on shared services before fairness tests replace them.
+it.each(['destroyed', 'missing'] as const)(
+  'checks a %s ancestor before accepting a derived fact', ancestor);
+it('keeps an earlier dependency after a later write omits it', history);
+it('returns safe status for an erased consumed command without decrypting it', erased);
+it('keeps the first revision expiry when a repeated write removes it', repeatedExpiry);
+it('refuses a superseded input and keeps its consumed command', superseded);
+
 it.each(['scope history', 'append'] as const)(
   'lets another member save while one member floods slow %s writes', fairWrites);
 
@@ -2635,7 +2643,6 @@ async function invalidBindingEvent() {
     status: 'rejected', reason: 'invalid_event' });
   expect(await nats.store.head()).toBe(position);
 }
-it('refuses binding events that claim another member or another scope', invalidBindingEvent);
 async function lineageFact(memoryId: string, dependsOn: { scopeId: string;
   memoryId: string; revision: number }[]) {
   const record = await write('bob', 'person', memoryId);
@@ -2724,9 +2731,3 @@ async function repeatedExpiry() {
     vi.useRealTimers();
   }
 }
-it.each(['destroyed', 'missing'] as const)(
-  'checks a %s ancestor before accepting a derived fact', ancestor);
-it('keeps an earlier dependency after a later write omits it', history);
-it('returns safe status for an erased consumed command without decrypting it', erased);
-it('keeps the first revision expiry when a repeated write removes it', repeatedExpiry);
-it('refuses a superseded input and keeps its consumed command', superseded);
