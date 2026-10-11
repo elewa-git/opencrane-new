@@ -6,7 +6,11 @@ import { HandlerRuntime, registerHandler, dispatch, upgradeHandlers } from "../s
 import { effect, logger } from "./helpers.ts";
 
 const mode = process.env["CRASH_MODE"] ?? "";
-const pool = new Pool({ connectionString: process.env["PG_TEST_URL"] });
+const poolOptions = {
+  connectionString: process.env["PG_TEST_URL"],
+  application_name: `handlers-crash-${mode}`,
+};
+const pool = new Pool(poolOptions);
 const base = pgDb(pool);
 async function barrier() {
   process.send?.("at-crash-boundary");
