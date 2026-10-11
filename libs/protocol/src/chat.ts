@@ -106,7 +106,7 @@ export const chatListSchema = z.object({ rows: z.array(z.union([
     ...conversationDisplay, mode: z.literal('group'), participantIds: z.array(z.string()),
     groupId: z.string().optional(), groupSnapshotPosition: z.int().nonnegative().optional(),
   }).strict(),
-])) });
+])), nextCursor: z.string().max(2000).nullable().optional() });
 export const chatColleaguesSchema = z.object({
   rows: z.array(z.object({ memberId: z.string(), displayName: z.string().nullable() }).strict()),
   next: z.string().nullable(),

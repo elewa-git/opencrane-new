@@ -38,9 +38,12 @@ async function activityFixture() {
   async function assertRebuildEquality() {
     const before = await metadata();
     const feed = await readConversation(storage.db, 'test', 'chat');
+    const participants = await storage.db.query('SELECT * FROM conversation_participants');
     const head = await nats.store.head();
     await rebuild();
     expect(await metadata()).toEqual(before);
+    expect((await storage.db.query('SELECT * FROM conversation_participants')).rows)
+      .toEqual(participants.rows);
     const rebuilt = await readConversation(storage.db, 'test', 'chat');
     expect(rebuilt.rows).toEqual(feed.rows);
     expect(rebuilt.generation).toBe(feed.generation + 1);
@@ -85,6 +88,9 @@ async function keepsVisibleActivityAfterClose() {
     const firstClose = await fixture.append('conversation.closed', { closedBy: 'alice' });
     for (const report of lateReports) {
       const saved = await fixture.append(report.type, report.fields);
+      const participant = await fixture.storage.db.query(
+        'SELECT latest_activity FROM conversation_participants WHERE participant_id = $1', ['alice']);
+      expect(participant.rows[0]).toEqual({ latest_activity: String(firstClose.position) });
       expect(await fixture.metadata()).toMatchObject({
         latest_activity: String(firstClose.position), closed: true, position: String(saved.position),
       });

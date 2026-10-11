@@ -539,6 +539,7 @@ No new worker or dependency is needed. `apps/server/test/member-inventory.test.t
 empty revocations, overlap, overflow, unrelated activity and online replay using
 real NATS, PostgreSQL and OpenFGA. Fresh-install qualification: NOT RUN.
 
+<<<<<<< HEAD
 ## Tombstone replay split
 
 P4-13 PR 2 is split to respect the 600-line ceiling. This first part supports safe
@@ -565,3 +566,19 @@ Logs are on the builder host: `/tmp/p4-13-merged-lint.log`,
 `/tmp/p4-13-merged-typecheck.log`, `/tmp/p4-13-merged-events.log`,
 `/tmp/p4-13-merged-tests.log` and `/tmp/p4-13-merged-changed-{1,2}.log`.
 Hosted CI could not be read with the current repository token. Live qualification is NOT RUN.
+=======
+## Bounded conversation candidates
+
+`conversationListCandidates` reads up to 100 current participation rows, ordered by
+`conversation_participants.latest_activity` descending, then join position descending.
+TypeScript folds this activity from creation, visible posted/completed messages and the
+first close. Ordinary late joins start at zero; shared-child joins retain their released
+history. An index supports the ordered member query. The server authorises each candidate
+before displaying metadata, applying private choices or searching decrypted titles.
+`conversationListRevision` reads generation and the latest activity, join, removal and
+archive positions in the silo. Read markers and internal reports leave these unchanged.
+Existing installations must stop conversation readers and workers, then run
+`npm run replay -- conversations --confirm-conversations-stopped` to fill participant
+activity. Startup refuses the old table shape. Replay restores activity and private
+choices without appending events or running reactions.
+>>>>>>> 2b52aff7 (🔎 Add bounded authorised conversation lists)

@@ -162,3 +162,8 @@ Departure routines and personal connections carry `absent_on_version` only after
 a complete check. Known unsupported records carry `unsupported_history`. Missing,
 changed or over-limit inventory inputs carry `unavailable`, with removal disabled.
 The member inventory integration tests check overflow and the shared reply schema.
+
+`chatListSchema` accepts optional nullable `nextCursor` alongside the existing rows.
+New list replies include it; older replies remain valid. A non-null value requests the
+next bounded scan, even if rows is empty. See the
+[server list contract](../../apps/server/README.robot.md#chat-ui-reads-and-stop).

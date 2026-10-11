@@ -1190,11 +1190,14 @@ async function listPage(fixture: ListFixture, query = '', memberId = 'bob') {
   const continuation = response.json<{ nextCursor: string | null }>();
   return { rows: parsed.rows, nextCursor: continuation.nextCursor };
 }
-async function archiveListChat(fixture: ListFixture, conversationId: string, joinEventId: string) {
-  const data = { conversationId, memberId: 'bob', joinEventId, archived: true };
+async function seedListPreference(fixture: ListFixture, conversationId: string,
+  joinEventId: string, fields: object = { archived: true }) {
+  const data = { conversationId, memberId: 'bob', joinEventId, ...fields };
+  let type = 'conversation.archive_set';
+  if (!('archived' in fields)) type = 'conversation.read_advanced';
   const base = envelope('test', `conversation-${conversationId}`, 'conversation.closed',
     { conversationId, closedBy: 'bob' });
-  const event = { ...base, subject: 'chat-state-bob', type: 'conversation.archive_set', data,
+  const event = { ...base, subject: 'chat-state-bob', type, data,
     principal: { kind: 'human' as const, id: 'bob' } };
   await fixture.nats.seed([event]);
   await fixture.runner.run(conversations);
@@ -1244,7 +1247,7 @@ async function protectsListMetadata() {
     await seedListChat(fixture, 'denied', false);
     await seedListMessage(fixture, 'denied', 'Denied title');
     await fixture.runner.run(conversations);
-    await archiveListChat(fixture, 'archived', archived.id);
+    await seedListPreference(fixture, 'archived', archived.id);
     const recent = await listPage(fixture);
     expect(recent.rows.map(conversationIdOf)).toEqual(['visible', 'late']);
     expect(JSON.stringify(recent)).not.toMatch(/Secret|Denied|Archived/u);
@@ -1252,6 +1255,16 @@ async function protectsListMetadata() {
     const saved = await listPage(fixture, '?section=archived&q=ARCHIVED');
     expect(saved.rows.map(conversationIdOf)).toEqual(['archived']);
     expect((await listPage(fixture, '?q=visible')).rows.map(conversationIdOf)).toEqual(['visible']);
+    await fixture.append('participation-archived', 'participant.removed', {
+      conversationId: 'archived', participantId: 'bob', removedBy: 'alice',
+    });
+    await fixture.append('participation-archived', 'participant.added', {
+      conversationId: 'archived', participantId: 'bob', addedBy: 'alice',
+    });
+    await fixture.runner.run(conversations);
+    expect((await listPage(fixture, '?section=archived')).rows).toEqual([]);
+    const rejoined = await listPage(fixture, '?q=Archived');
+    expect(rejoined.rows).toEqual([]);
   } finally {
     await fixture.close();
   }
@@ -1302,12 +1315,24 @@ async function resetsChangedListPages() {
     await refused(original, '&section=archived');
     await refused(original, '', 'alice');
     await refused(`${original}x`);
+    const throughPosition = await fixture.nats.store.head('conversation-first');
+    await seedListPreference(fixture, 'first', firstJoin.id, {
+      throughPosition, throughEventId: firstJoin.id,
+    });
+    const afterRead = await listPage(fixture, `?limit=1&cursor=${original}`);
+    expect(afterRead.rows.map(conversationIdOf)).toEqual(['second']);
     await seedListMessage(fixture, 'first', 'Ordering changed');
     await fixture.runner.run(conversations);
     await refused(original);
     const beforeArchive = await cursor();
-    await archiveListChat(fixture, 'first', firstJoin.id);
+    await seedListPreference(fixture, 'first', firstJoin.id);
     await refused(beforeArchive);
+    const beforeParticipation = await cursor();
+    await fixture.append('participation-second', 'participant.added', {
+      conversationId: 'second', participantId: 'carol', addedBy: 'alice',
+    });
+    await fixture.runner.run(conversations);
+    await refused(beforeParticipation);
     const beforeRebuild = await cursor();
     await fixture.runner.rebuild(conversations);
     await refused(beforeRebuild);
@@ -1317,3 +1342,29 @@ async function resetsChangedListPages() {
 }
 it('resets pages after changes or rebuild and binds cursors to the caller and filters',
   resetsChangedListPages);
+
+async function capsListPages() {
+  const fixture = await directFixture();
+  try {
+    for (let index = 0; index < 51; index++) {
+      await seedListChat(fixture, `chat-${index}`);
+    }
+    await fixture.runner.run(conversations);
+    expect((await listPage(fixture)).rows).toHaveLength(20);
+    const maximum = await listPage(fixture, '?limit=50');
+    expect(maximum.rows).toHaveLength(50);
+    const last = await listPage(fixture, `?limit=50&cursor=${maximum.nextCursor}`);
+    expect(last.rows.map(conversationIdOf)).toEqual(['chat-0']);
+    expect(last.nextCursor).toBeNull();
+    const invalidQueries = ['limit=0', 'limit=51', 'section=other', 'extra=1', `q=${'a'.repeat(101)}`];
+    for (const query of invalidQueries) {
+      const response = await fixture.app.inject({
+        url: `/api/conversations?${query}`, headers: fixture.headers('bob'),
+      });
+      expect(response.statusCode).toBe(400);
+    }
+  } finally {
+    await fixture.close();
+  }
+}
+it('caps default and maximum pages and refuses invalid list queries', capsListPages, 120_000);

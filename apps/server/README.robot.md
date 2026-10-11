@@ -602,6 +602,24 @@ recorded report refusal stops automatic recovery.
 
 ### Chat UI reads and Stop
 
+`GET /api/conversations` accepts `section=recent|archived` (default recent), `q`
+(up to 100 characters), `limit` (default 20, maximum 50), and `cursor`.
+It keeps the existing `rows` fields and adds `nextCursor`: null means exhausted.
+Each request checks at most 100 candidates in batches of eight. An empty page
+can have a continuation. Search matches a case-insensitive substring of the visible
+first-message title, after access checks and decryption. No hidden totals are returned.
+Saved archive choices apply only to the current join. Ordinary late joins start without
+pre-join activity. The list orders by each participant's visible activity position,
+then their join position to break ties. Closed activity stays at the first close.
+Signed cursors contain a hashed binding and two scan positions, with no conversation ids or text.
+They use the cookie secret with the `conversation-list` signing purpose and bind silo,
+requester, section, query, limit, projection generation and list revision.
+Activity, participation or archive changes reset pages with 409 `list_changed`, including
+changes during the request. Read markers and token deltas do not reset pages.
+Readers check access once per candidate; they never watch conversation content for access.
+The existing website still parses the rows and loads only the first page until its update.
+Upgrades require the offline conversation replay before restarting readers and workers.
+
 The [direct chat API](../../docs/api/direct-chats.md) supplies two-person creation,
 messages, history, status and live updates. Direct messages never start assistant work.
 Direct reads and posts return 425 `access_applying` when a recorded participant is

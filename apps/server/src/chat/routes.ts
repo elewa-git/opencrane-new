@@ -3,12 +3,14 @@ import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { creationEvent, privateSessionReader, sharedAssistantAuthority,
   writePrivateSession } from './private-session.ts';
 import { sessionSlug } from '@opencrane/protocol';
+import { conversationListQuery, conversationListCursor, ConversationListChanged }
+  from './list-cursor.ts';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import {
-  listConversations, readConversation,
+  conversationListCandidates, conversationListRevision, readConversation,
 } from '@opencrane/projections';
 import {
   chatAccess,
@@ -121,7 +123,8 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
         if (conversationId && commandId) {
           result = await chatChange(configured, conversationId, commandId, access.joinPosition);
         } else {
-          result = await read(request, configured, memberId, conversationId, access);
+          result = await read(request, configured, memberId, conversationId,
+            access, config.cookieSecret);
         }
         if ('status' in result && result.status === 'not_found') reply.code(404);
         return reply.send(result);
@@ -152,7 +155,7 @@ async function participantReply(request: FastifyRequest, reply: FastifyReply,
 
 async function read(
   request: FastifyRequest, options: ChatOptions, memberId: string,
-  conversationId: string | undefined, access: Access,
+  conversationId: string | undefined, access: Access, secret: string,
 ) {
   if (request.routeOptions.url === '/api/chat/colleagues') {
     return colleagues(options, memberId, request.query);
@@ -171,20 +174,36 @@ async function read(
     const mode = recordedChatMode(access);
     return chatRows(options, conversationId, mode, since, access.joinPosition);
   }
-  return conversationList(options, memberId);
+  return conversationList(options, memberId, request.query, secret);
 }
 
-async function conversationList(options: ChatOptions, memberId: string) {
-  const conversations = await listConversations(options.db, options.silo, memberId);
+async function conversationList(options: ChatOptions, memberId: string,
+  input: unknown, secret: string) {
+  const query = conversationListQuery.parse(input);
+  const revision = await conversationListRevision(options.db, options.silo);
+  const identity = [options.silo, memberId, query.section, query.q, query.limit, revision];
+  const cursor = conversationListCursor(secret, identity, query.cursor);
+  const candidates = await conversationListCandidates(options.db, options.silo,
+    memberId, cursor.before);
   const readPrivate = privateSessionReader(options, memberId);
   const readParticipation = conversationParticipationReader(options, memberId);
-  async function authorisedSummary(row: (typeof conversations)[number]) {
+  async function authorisedSummary(candidate: (typeof candidates)[number]) {
+    const row = candidate.conversation;
     try {
       const access = await readParticipation(row.conversationId);
+      if (access.joinEventId !== candidate.joinEventId) throw new ConversationListChanged();
       if (row.mode === 'agent_session') {
         await readPrivate(row.conversationId, access.creation.event);
       }
-      const display = await summary(options, row.conversationId, row.mode, access.joinPosition);
+      const state = z.object({ archived: z.boolean() }).nullable().parse(candidate.state);
+      const archived = state?.archived ?? false;
+      if (archived !== (query.section === 'archived')) return undefined;
+      const display = await summary(options, row.conversationId, row.mode, access.historyPosition);
+      const normalisedSearch = query.q.normalize('NFC');
+      const search = normalisedSearch.toLowerCase();
+      const normalisedTitle = display.title.normalize('NFC');
+      const searchableTitle = normalisedTitle.toLowerCase();
+      if (!searchableTitle.includes(search)) return undefined;
       if (row.mode !== 'agent_session') {
         return { ...row, participantIds: access.participantIds, ...display };
       }
@@ -195,15 +214,27 @@ async function conversationList(options: ChatOptions, memberId: string) {
     }
   }
   const rows = [];
-  for (let offset = 0; offset < conversations.length; offset += 16) {
-    const batch = conversations.slice(offset, offset + 16);
+  let scanned = 0;
+  for (let offset = 0; offset < candidates.length && rows.length < query.limit; offset += 8) {
+    const batch = candidates.slice(offset, offset + 8);
     const checks = batch.map(authorisedSummary);
     const summaries = await Promise.all(checks);
     for (const row of summaries) {
+      scanned++;
       if (row) rows.push(row);
+      if (rows.length === query.limit) break;
     }
   }
-  return { rows };
+  const currentRevision = await conversationListRevision(options.db, options.silo);
+  if (currentRevision !== revision) throw new ConversationListChanged();
+  // Continue even after an empty scan; denied candidates do not prove the list has ended.
+  let nextCursor: string | null = null;
+  if (scanned < candidates.length || candidates.length === 100) {
+    const lastScanned = candidates[scanned - 1];
+    if (!lastScanned) throw new Error('Conversation scan unavailable');
+    nextCursor = cursor.next(lastScanned.scanPosition);
+  }
+  return { rows, nextCursor };
 }
 
 async function personalContext(options: ChatOptions, memberId: string) {
@@ -395,6 +426,9 @@ async function assistantCreationDetails(options: ChatOptions, memberId: string,
 function chatRefusal(request: FastifyRequest, reply: FastifyReply, error: unknown) {
   if (error instanceof MemberRefusal) {
     return reply.code(error.statusCode).send({ status: error.status });
+  }
+  if (error instanceof ConversationListChanged) {
+    return reply.code(409).send({ status: 'list_changed' });
   }
   if (error instanceof ChatAccessApplying) {
     return reply.code(425).send({ status: 'access_applying' });

@@ -15,7 +15,7 @@ flowchart LR
   server -->|records changes, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, invitations, chats, closing records, joins, facts, models and tools| postgres
+  server -->|reads members, invitations, bounded chat lists, closing records, joins, facts, models and tools| postgres
   server -->|sends turns, files, stops, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -233,6 +233,10 @@ unavailable.
 11. **A member continues the welcome survey.** The server checks their current
     membership and saves one step. Reloading returns confirmed answers. Editing
     an earlier answer clears later current steps. Restarting keeps encrypted history.
+12. **A person opens their conversation list.** The server returns a small page ordered
+    by activity they can see. Recent and Archived follow the person's saved choice.
+    Search checks only visible titles. A page can be empty and still have more
+    candidates to check. The website loads the first page; paging controls are planned.
 
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.

@@ -22,8 +22,8 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory, provider, spending, child, destination, inventory and survey tables| projections["libs/projections<br/>read tables, memory and indexed member history"]
-  server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, destination, inventory and survey tables| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
+  server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|events and private instance records in order| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
@@ -102,6 +102,8 @@ lets removal checks detect new history without reading unrelated events.
 Memory encryption and searchable text stay on the server. The memory rebuild command
 runs with readers and workers stopped. Customer deployment and backup recovery still need testing.
 
+Conversation lists select at most 100 candidates ordered by each person’s visible activity.
+Late joins start without earlier activity; later visible messages advance their order.
 Conversation lists can first select a person's current participation rows. The server
 checks saved events and permissions before returning any candidate.
 Conversation tables keep each person's join and removal positions, so replay can
