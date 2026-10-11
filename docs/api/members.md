@@ -345,18 +345,22 @@ learns the result from that 403. Cleanup remains unavailable.
 ## Access and departure inventory
 
 Owner/Admin GETs `/api/members/:memberId/access` and
-`/api/members/:memberId/departure` read indexed stream names and exact saved events.
-The index must be current for each recorded category; no category history or whole
-conversation is loaded. The retained-history check reads only saved positions
-since its worker checkpoint, then only positions saved since inventory loading.
-Each history read stops at ten seconds or 10,000 records.
+`/api/members/:memberId/departure` read grant, group and assistant history through
+indexed stream names. The index must be current for each recorded category and
+have a completed-backfill marker. Creating an empty index during an upgrade does
+not add that marker. A full member replay is required before reviews can be complete.
+Each saved history read stops at ten seconds or 10,000 records.
+
+The retained-history check still reads every new event since the conversation
+worker's saved position. More than 10,000 unrelated pending events can therefore
+make a review return 503. This defect remains unresolved.
 
 Reviews stop at 100 groups, 100 grant streams, 100 assistants and 500 distinct
 expanded people. Overlap counts once. Overflow reports `complete: false` and
 `inventory_limits`; behind indexing reports `inventory_index`. Both block removal.
 Removed memberships and revoked grants remain incomplete until their IAM receipts
-arrive, even when no visible access rows remain. Unrelated chat activity does not
-change the review revision.
+arrive, even when no visible access rows remain. Ordinary projected chat messages
+do not change the review revision.
 
 Routine and connection history reports `absent_on_version` only after a complete
 check. Known unsupported records report `unsupported_history`; incomplete reads

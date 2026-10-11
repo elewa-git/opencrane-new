@@ -10,6 +10,8 @@ export interface Projection {
   apply(db: Query, event: EventEnvelope, position: number): Promise<void>;
   /** Read outside dependencies before opening the transaction; return only database work. */
   prepare?(event: EventEnvelope): Promise<Projection['apply']>;
+  /** Record completion only after all events from position one have been applied. */
+  completeRebuild?(db: Query): Promise<void>;
 }
 export interface EventSource {
   head(): Promise<number>;
@@ -140,12 +142,16 @@ export class ProjectionRunner {
     }: { signal?: AbortSignal; attempt?: number; toSequence?: number } = {},
   ): Promise<void> {
     let checkpoint = await this.checkpoint(projection);
+    const startedFromBeginning = checkpoint === 0;
     const sourceHead = await this.source.head();
     const head = toSequence ?? sourceHead;
     if (!Number.isSafeInteger(head) || head < 0 || head > sourceHead) {
       throw new Error("Invalid replay head");
     }
     if (checkpoint >= head) {
+      if (startedFromBeginning) {
+        await this.completeRebuild(projection);
+      }
       return;
     }
     for await (const stored of readEvents(this.source, checkpoint + 1, head, signal)) {
@@ -155,7 +161,27 @@ export class ProjectionRunner {
             this.apply(db, projection, stored, attempt),
           )
         : await this.apply(this.db, projection, stored, attempt);
-      if (checkpoint >= head) return;
+      if (checkpoint >= head) {
+        break;
+      }
+    }
+    if (startedFromBeginning) {
+      await this.completeRebuild(projection);
+    }
+  }
+
+  private async completeRebuild(projection: Projection): Promise<void> {
+    if (!projection.completeRebuild) {
+      return;
+    }
+    const complete = projection.completeRebuild.bind(projection);
+    async function recordCompletion(db: Db): Promise<void> {
+      await db.transaction(complete);
+    }
+    if (this.db.lock) {
+      await this.db.lock(projection.name, recordCompletion);
+    } else {
+      await recordCompletion(this.db);
     }
   }
 

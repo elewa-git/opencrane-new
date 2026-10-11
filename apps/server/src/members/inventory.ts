@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { assistantCreatedDataSchema, grantGivenDataSchema, grantRevokedDataSchema,
   teamCreatedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
-import { readInventoryReferences, inventoryCategoryPositions, inventoryCategories }
-  from '@opencrane/projections';
+import { readInventoryReferences, inventoryCategoryPositions,
+  inventoryIndexState, inventoryCategories } from '@opencrane/projections';
 import { memberAuthorisation } from '@opencrane/authz';
 import type { MemberAccessRow } from '@opencrane/protocol';
 import type { GroupOptions } from './group-routes.ts';
@@ -21,7 +21,7 @@ type GrantFact = {
 async function recordedInputs(options: GroupOptions, memberId: string, deadline: number) {
   const indexedPositions = await inventoryCategoryPositions(options.db, options.silo);
   const categoryPositions: Record<string, number> = {};
-  let current = true;
+  let current = indexedPositions.backfilled;
   for (const category of inventoryCategories) {
     const subject = `${category}-*`;
     const position = await options.store.head(subject, deadline);
@@ -267,8 +267,8 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   const content = await retainedContent(options, memberId, inputs, deadline);
   if (!content.current) unavailable.add('retained_content');
   async function checkCurrent(checkDeadline: number) {
-    const indexed = await inventoryCategoryPositions(options.db, options.silo);
-    if (indexed.generation !== inputs.generation) {
+    const indexed = await inventoryIndexState(options.db);
+    if (!indexed.backfilled || indexed.generation !== inputs.generation) {
       return false;
     }
     for (const [subject, position] of Object.entries(inputs.categoryPositions)) {

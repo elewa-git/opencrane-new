@@ -46,7 +46,8 @@ function request() {
 async function readDeparture() {
   const response = await request();
   expect(response.statusCode, response.body).toBe(200);
-  return memberDepartureSchema.parse(response.json());
+  const body: unknown = response.json();
+  return memberDepartureSchema.parse(body);
 }
 
 async function initialise() {
@@ -97,7 +98,9 @@ async function projectVolumeFixtures(records: EventEnvelope[], firstPosition: nu
       // Apply these fixtures together so cleanup does not commit every unrelated read receipt.
       for (let index = 0; index < records.length; index++) {
         const record = records[index];
-        if (!record) throw new Error('Volume fixture missing');
+        if (!record) {
+          throw new Error('Volume fixture missing');
+        }
         await projection.apply(transaction, record, firstPosition + index);
       }
       await transaction.query(`INSERT INTO projection_events

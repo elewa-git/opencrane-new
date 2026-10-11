@@ -11,6 +11,8 @@ export async function createInventoryInputs(db: Query, table: string) {
     link_kind TEXT NOT NULL, link_id TEXT NOT NULL, event_type TEXT NOT NULL,
     position BIGINT NOT NULL, event_id TEXT NOT NULL,
     PRIMARY KEY (silo, subject, link_kind, link_id))`);
+  await db.query(`CREATE TABLE IF NOT EXISTS ${table}_backfill (
+    version INTEGER PRIMARY KEY)`);
   await db.query(`CREATE INDEX IF NOT EXISTS ${table}_links
     ON ${table} (silo, category, link_kind, link_id, subject)`);
 }
@@ -163,18 +165,24 @@ export async function readInventoryReferences(db: Query, silo: string, memberId:
   return { references, complete: true };
 }
 
-export async function inventoryCategoryPositions(db: Query, silo: string) {
-  const metadata = await db.query<{ generation: string }>(`SELECT g.generation
+export async function inventoryIndexState(db: Query) {
+  const result = await db.query<{ generation: string; backfilled: boolean }>(`SELECT g.generation,
+    EXISTS (SELECT 1 FROM inventory_inputs_backfill WHERE version = 1) AS backfilled
     FROM projection_generations g JOIN projection_checkpoints c ON c.name = g.name
     WHERE g.name = 'members'`);
-  const generation = metadata.rows[0]?.generation;
-  if (generation === undefined) {
+  const metadata = result.rows[0];
+  if (!metadata) {
     throw new Error('Inventory checkpoint unavailable');
   }
+  return { generation: Number(metadata.generation), backfilled: metadata.backfilled };
+}
+
+export async function inventoryCategoryPositions(db: Query, silo: string) {
+  const metadata = await inventoryIndexState(db);
   const result = await db.query<{ category: string; position: string }>(`SELECT category,
     max(position) AS position FROM inventory_inputs WHERE silo = $1 AND link_kind = 'stream'
     GROUP BY category ORDER BY category`, [silo]);
   const positions: Record<string, number> = {};
   for (const row of result.rows) positions[`${row.category}-*`] = Number(row.position);
-  return { positions, generation: Number(generation) };
+  return { positions, ...metadata };
 }

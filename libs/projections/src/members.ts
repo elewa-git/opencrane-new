@@ -198,11 +198,17 @@ function memberProjection(name: string, tables: MemberTables): Projection {
         PRIMARY KEY (silo, position))`);
     },
     async drop(db) {
+      await db.query(`DROP TABLE IF EXISTS ${tables.inventory}_backfill`);
       await db.query(`DROP TABLE IF EXISTS ${tables.inventory}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.ownership}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.changes}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.identities}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.members}`);
+    },
+    async completeRebuild(db) {
+      // Mark the index complete only after the runner has read every event from the start.
+      await db.query(`INSERT INTO ${tables.inventory}_backfill VALUES (1)
+        ON CONFLICT DO NOTHING`);
     },
     async apply(db, event, position) {
       await applyInventoryInput(db, tables.inventory, event, position);

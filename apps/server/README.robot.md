@@ -2001,3 +2001,18 @@ Logs are `/tmp/p4-23-pr3-tests-final-{7,8}.log`,
 `/tmp/p4-23-pr3-knip.log`, `/tmp/p4-23-pr3-changelog.log` and
 `/tmp/p4-23-pr3-lint-complete.log`.
 NOT RUN: full root suite, independent review and fresh-install qualification.
+
+## Inventory upgrade guard
+
+A departure or access review requires `inventory_inputs_backfill.version = 1`
+before reporting complete. A category's latest position cannot replace this check.
+Online member replay replaces the marker and index in the same transaction.
+The final removal check reads only member generation and the marker for this part;
+it does not aggregate category maxima again. Permission receipts remain required.
+
+The unrelated global history tail in `src/members/retained-content.ts` still needs
+replacement. The new 10,001-event regression remains failing. Removal's existing
+pending-history and concurrent-message tests are retained, with their assertions
+unchanged. A PostgreSQL index alone cannot discover a new conversation before its
+worker receives the event. The event log currently puts creation events and messages
+on the same NATS subjects, so a lookup for history changes needs a further design choice.
