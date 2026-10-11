@@ -1833,3 +1833,44 @@ This used disposable NATS and OpenFGA, local PostgreSQL and a recording upstream
 NOT RUN: optional browser test, full root suite and fresh-install control journey.
 The final PR comment records hosted CI after pushing this receipt. The merge train
 owns landing; this round does not merge the PR or request another review.
+
+## Computer history reuse checks — 11 October 2026
+
+Runtime source: `c1f47186`, the rebase of `ed6c5b4b`. The branch contains main
+`1327e7e9`, and the rebase finished. Later commits only correct Markdown spacing
+and record these results. The watcher gets pending control from its existing
+computer history and checks the stream position again before sending new work.
+An unchanged position opens no new event read. A changed position reloads history.
+The final file check shares this behaviour after ownership and delivery-history
+reads. Direct bridge callers retain the shared control-summary check.
+
+Before: both reported replay tests failed at exact head `7d4f0092` in 20.12 s.
+The personal/private-team test counted computer reads on passes 2, 3 and 4.
+The posted-turn test counted two computer reads where at most one is allowed.
+After: both unchanged assertions passed together in 34.72 s. The focused control
+and tool tests passed 19 tests in 51.30 s. Cached checks also hold intent saved
+after the first snapshot, during chat and membership reads. Both direct and
+cached checks keep saved stops available and hold late uploads.
+
+PASS: two eight-file runs, each with 153 passed tests and one optional browser
+skip. Run 1 took 724.16 s; run 2 took 561.26 s. The six PR files are
+`approvals`, `bridge-control`, `live-view-activity`, `takeover`, `computer-summary`
+and `memory-rights`. The set also includes all `bridge-replay` and
+`bridge-turn-tools` tests. Both runs use the supplied `PG_TEST_URL`, `nice -n 10`
+and one worker. An earlier batch was interrupted when another process rebased
+the worktree. It is excluded from the evidence.
+
+PASS: full lint, workspace typecheck, event catalogue (112 types), Knip and
+changelog validation. Lint reports 15 warnings and no errors. The rebase dropped
+blank lines before two README headings. They were restored, then lint passed.
+No protected test was edited by this fix. The rebase retains main's membership
+fixtures and participation-stream correction. No assertion or access, money or
+memory check was weakened.
+
+Logs are in `/tmp/pr335-computer-cache/`: `before-7d4f0092.log`,
+`after-focused.log`, `control-focused.log`, `rebased-tests-{1,2}.log`,
+`rebased-lint-final.log`, `rebased-typecheck.log`, `rebased-check-events.log`,
+`rebased-knip.log` and `rebased-lint-changelog.log`.
+Tests use disposable NATS and OpenFGA, local PostgreSQL and real bridge sockets.
+NOT RUN: optional browser test, full root suite and fresh-install control journey.
+The PR comment records hosted CI on the pushed head. The merge train owns landing.
