@@ -1135,6 +1135,36 @@ async function refusesRememberPolicy(policy: 'ask' | 'block') {
 it.each(['ask', 'block'] as const)('refuses remember policy %s without an approval',
   refusesRememberPolicy);
 
+
+async function listsRecallWithSlowCatalogueReads() {
+  const fields = { serverId: 'memory', connectionId: 'server', toolName: 'remember',
+    toolRevision: rememberTool.revision, mode: 'block', setBy: 'alice' };
+  await setup.append('mcp-memory', 'mcp.tool_mode_set', fields);
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  async function* delayedCatalogueRead(...args: Parameters<typeof originalRead>) {
+    if (args[0] === 'mcp-memory' && args[1] === 1) {
+      await pause(300);
+    }
+    yield* originalRead(...args);
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(delayedCatalogueRead);
+  try {
+    const discovery = { jsonrpc: '2.0', id: 1, method: 'tools/list',
+      params: { _meta: metadata } };
+    const listHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
+    const response = await setup.call(listHeaders, discovery, route);
+    expect(response.status, response.text).toBe(200);
+    expect(response.text).toContain('recall');
+    expect(response.text).not.toContain('remember');
+  } finally {
+    reads.mockRestore();
+    const allowed = { ...fields, mode: 'allow' };
+    await setup.append('mcp-memory', 'mcp.tool_mode_set', allowed);
+  }
+}
+it('lists recall with blocked remember and slow catalogue reads', listsRecallWithSlowCatalogueReads);
+
 it('refuses a valid recalled reference after its revision key is destroyed',
   async function destroyedDependency() {
     const body = await recalledRemember('destroyed-dependency');
