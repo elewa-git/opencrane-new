@@ -172,9 +172,11 @@ it.each(['serverId', 'previousSchemaDigest', 'newSchemaDigest'] as const)(
   'refuses a changed snapshot with a mismatched %s', refusesMismatchedChange);
 
 function refusesInvalidModeChoice(kind: 'connection' | 'revision' | 'review') {
-  const before = reviewedPolicy();
+  const reviewed = reviewedPolicy();
+  const before = { ...reviewed,
+    tools: [{ ...reviewed.tools[0]!, mode: 'block' as const }] };
   const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'read',
-    toolRevision: revision, mode: 'ask', setBy: 'admin' };
+    toolRevision: revision, mode: 'allow', setBy: 'admin' };
   let saved = before;
   if (kind === 'connection') mode.connectionId = 'another-connection';
   else if (kind === 'revision') mode.toolRevision = 'f'.repeat(64);
@@ -210,3 +212,36 @@ function clearsChangedCostReview() {
   expect(state.tools).toMatchObject([{ reviewed: false, mode: 'block' }]);
 }
 it('clears review when cost evidence changes even with the same definition', clearsChangedCostReview);
+
+function clearsChangedReviewBinding(binding: 'connection' | 'account') {
+  let snapshot = catalogue;
+  if (binding === 'connection') {
+    snapshot = { ...catalogue, connectionId: 'another-connection' };
+  } else {
+    snapshot = { ...catalogue, accountMode: 'company' };
+  }
+  const change = record('mcp.tools_changed', { serverId: 'fixture',
+    previousSchemaDigest: schemaDigest, newSchemaDigest: schemaDigest, catalogue: snapshot });
+  const reviewed = reviewedPolicy();
+  const state = applyToolPolicy(reviewed, change, 3);
+  expect(state.connectionId).toBe(snapshot.connectionId);
+  expect(state.accountMode).toBe(snapshot.accountMode);
+  expect(state.tools).toMatchObject([{ name: 'read', reviewed: false, mode: 'block' }]);
+  expect(state.published).toBe(false);
+  const publication = record('mcp.server_published', { serverId: 'fixture', publishedBy: 'admin' });
+  const published = applyToolPolicy(state, publication, 4);
+  expect(published.tools).toMatchObject([{ reviewed: false, mode: 'block' }]);
+}
+it.each(['connection', 'account'] as const)(
+  'clears the review when the %s binding changes with the same tool', clearsChangedReviewBinding);
+
+function appliesValidModeChoice() {
+  const reviewed = reviewedPolicy();
+  const before = { ...reviewed,
+    tools: [{ ...reviewed.tools[0]!, mode: 'block' as const }] };
+  const mode = record('mcp.tool_mode_set', { serverId: 'fixture', connectionId: 'installed',
+    toolName: 'read', toolRevision: revision, mode: 'allow', setBy: 'admin' });
+  const after = applyToolPolicy(before, mode, 3);
+  expect(after.tools).toMatchObject([{ reviewed: true, mode: 'allow' }]);
+}
+it('applies Allow when the connection, revision and review all match', appliesValidModeChoice);
