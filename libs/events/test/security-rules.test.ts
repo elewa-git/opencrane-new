@@ -35,21 +35,33 @@ function rejectedFields(type: string, patch: Record<string, unknown>): string[] 
   const { dataSchema, example } = definitionFor(type);
   // The unpatched example must be valid, so any failure below is the patch's.
   expect(dataSchema.safeParse(example).success).toBe(true);
-  const patchedData = { ...asRecord(example), ...patch };
+  let patchedData = { ...asRecord(example), ...patch };
   if (type === 'onboarding.survey_step_saved' && typeof patch['ciphertext'] === 'string') {
     // Keep the digest valid so these tests still isolate the ciphertext format checks.
     const hash = createHash('sha256');
     hash.update(Buffer.from(patch['ciphertext'], 'base64'));
     patchedData['ciphertextDigest'] = hash.digest('hex');
   }
+  if (type.startsWith('routine.') && ('ciphertext' in patch || 'keyId' in patch)) {
+    const definition = asRecord(asRecord(example)['definition']);
+    const instructions = { ...asRecord(definition['instructions']), ...patch };
+    patchedData = { ...asRecord(example), definition: { ...definition, instructions } };
+  }
   const result = dataSchema.safeParse(patchedData);
   if (result.success) {
     return [];
   }
-  const names = result.error.issues.flatMap((issue) =>
-    issue.code === 'unrecognized_keys' ? issue.keys : [String(issue.path[0])],
-  );
+  const names = result.error.issues.flatMap(rejectedIssueFields);
   return [...new Set(names)].sort();
+}
+
+function rejectedIssueFields(issue: z.core.$ZodIssue): string[] {
+  if (issue.code === 'invalid_union') {
+    const modernIssues = issue.errors[0];
+    if (modernIssues) return modernIssues.flatMap(rejectedIssueFields);
+  }
+  if (issue.code === 'unrecognized_keys') return issue.keys;
+  return [String(issue.path.at(-1))];
 }
 
 // Every property name a JSON Schema document declares, at any depth.
