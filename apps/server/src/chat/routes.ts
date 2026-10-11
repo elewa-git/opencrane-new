@@ -1,4 +1,3 @@
-import { chatIdSchema } from '@opencrane/events';
 import { participantCommand, participantList } from './participants.ts';
 import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { creationEvent, privateSessionReader, sharedAssistantAuthority,
@@ -6,7 +5,7 @@ import { creationEvent, privateSessionReader, sharedAssistantAuthority,
 import { sessionSlug } from '@opencrane/protocol';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
+import type { AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import {
   listConversations, readConversation,
@@ -22,7 +21,7 @@ import {
   conversationParticipationReader,
   type ChatOptions,
 } from './access.ts';
-import { sessionFor } from '../members/routes.ts';
+import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import { colleagues, chatChange } from './reads.ts';
 import { chatCommand, chatInput, ChatConflict } from './commands.ts';
 import { chatGroups, chatGroupSnapshot, reviewedGroup, GroupSnapshotTooLarge } from './groups.ts';
@@ -31,7 +30,7 @@ import { memoryAdmission } from './memory-admission.ts';
 export type { ChatOptions } from './access.ts';
 type Access = Awaited<ReturnType<typeof chatAccess>>;
 type Fresh = Awaited<ReturnType<typeof writeChatAccess>>;
-const id = chatIdSchema;
+const id = idSchema;
 const assistantDetails = z.object({
   kind: z.string(), payingGroupId: z.string().optional(),
 });
@@ -101,35 +100,33 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
   app.route(participantsRoute);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
-    const session = sessionFor(request, config, new Date());
-    if (!session) return reply.code(401).send({ status: 'refused' });
-    if (!options) return reply.code(503).send({ status: 'unavailable' });
-    if (!trustedRequest(request, config, options, session)) {
-      return reply.code(403).send({ status: 'refused' });
-    }
     try {
-      const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
-      if (!memberId) throw new ChatRefused('Membership required');
       const { conversationId, commandId } = parameters.parse(request.params);
-      if (request.routeOptions.url === participantsRoute.url) {
-        const participantConversationId = chatIdSchema.parse(conversationId);
-        return await participantReply(request, reply, options, memberId, participantConversationId);
+      const participants = request.routeOptions.url === participantsRoute.url;
+      let accessConversationId = conversationId;
+      // Keep participant access in its existing read and command functions.
+      if (participants) accessConversationId = undefined;
+      const checks = { write: request.method === 'POST', conversationId: accessConversationId,
+        allowApplying: commandId !== undefined };
+      const context = await requireMember(request, reply, config, options, checks);
+      const { memberId, access } = context;
+      const configured = context.options;
+      if (participants) {
+        const participantConversationId = idSchema.parse(conversationId);
+        return await participantReply(request, reply, configured, memberId,
+          participantConversationId);
       }
-      const relation: 'post' | 'read' = request.method === 'POST' ? 'post' : 'read';
-      const allowApplying = commandId !== undefined;
-      const accessRequest = { memberId, conversationId, relation, allowApplying };
-      const access = await chatAccess(options, accessRequest);
       if (request.method === 'GET') {
         let result;
         if (conversationId && commandId) {
-          result = await chatChange(options, conversationId, commandId, access.joinPosition);
+          result = await chatChange(configured, conversationId, commandId, access.joinPosition);
         } else {
-          result = await read(request, options, memberId, conversationId, access);
+          result = await read(request, configured, memberId, conversationId, access);
         }
         if ('status' in result && result.status === 'not_found') reply.code(404);
         return reply.send(result);
       }
-      const result = await write(request, options, memberId, conversationId);
+      const result = await write(request, configured, memberId, conversationId);
       const code = appendStatusCode(result);
       let response: unknown = { status: result.status };
       if (result.status === 'appended') response = result;
@@ -151,16 +148,6 @@ async function participantReply(request: FastifyRequest, reply: FastifyReply,
   let response: unknown = { status: result.status };
   if (result.status === 'appended') response = result;
   return reply.code(code).send(response);
-}
-
-function trustedRequest(
-  request: FastifyRequest, config: AuthConfig, options: ChatOptions,
-  session: { sub: string; orgId: string },
-) {
-  if (!isOrganisationSession(config, session)) return false;
-  if (options.silo !== options.binding.silo) return false;
-  if (request.method !== 'POST') return true;
-  return request.headers.origin === new URL(config.redirectUri).origin;
 }
 
 async function read(
@@ -406,6 +393,9 @@ async function assistantCreationDetails(options: ChatOptions, memberId: string,
 }
 
 function chatRefusal(request: FastifyRequest, reply: FastifyReply, error: unknown) {
+  if (error instanceof MemberRefusal) {
+    return reply.code(error.statusCode).send({ status: error.status });
+  }
   if (error instanceof ChatAccessApplying) {
     return reply.code(425).send({ status: 'access_applying' });
   }

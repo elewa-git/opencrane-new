@@ -2,26 +2,27 @@ import { approvalReviewSchema } from '@opencrane/protocol';
 import { createHash, createHmac } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
+import type { AuthConfig, SessionData } from '@opencrane/auth';
 import { approvalCards, readApproval, decideApproval, currentAuthority, approvalActivity }
   from '@opencrane/models';
-import { chatAccess, writeChatAccess, isChatRefused, conversationParticipation, ChatAccessApplying } from './access.ts';
-import { sessionFor } from '../members/routes.ts';
+import { writeChatAccess, isChatRefused, conversationParticipation, ChatAccessApplying } from './access.ts';
+import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import type { ChatOptions } from './routes.ts';
 
+const conversationParameters = z.object({ conversationId: idSchema.regex(/^[\w-]{1,200}$/u) });
+
 export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
-  app.route({ method: ['GET', 'POST'], url: '/api/conversations/:conversationId/approvals', handler: async (req, reply) => {
+  const route = { method: ['GET', 'POST'] as ('GET' | 'POST')[],
+    url: '/api/conversations/:conversationId/approvals', handler };
+  app.route(route);
+  async function handler(req: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
-    const session = sessionFor(req, config, new Date());
-    if (!session) return reply.code(401).send({ status: 'refused' });
-    if (!options) return reply.code(503).send({ status: 'unavailable' });
-    if (!isOrganisationSession(config, session) || options.binding.silo !== options.silo) return reply.code(403).send({ status: 'refused' });
     try {
-      const { conversationId } = z.object({ conversationId: z.string().regex(/^[\w-]{1,200}$/u) }).parse(req.params);
-      const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
-      if (!memberId) return reply.code(403).send({ status: 'refused' });
-      const accessRequest = { memberId, conversationId };
-      const access = await chatAccess(options, accessRequest);
+      const { conversationId } = conversationParameters.parse(req.params);
+      const checks = { write: req.method === 'POST', conversationId };
+      const context = await requireMember(req, reply, config, options, checks);
+      const { session, memberId, access } = context;
+      const configured = context.options;
       // The token covers the whole Cookie header and conversation, blocking reuse across either.
       const csrf = createHmac('sha256', config.cookieSecret)
         .update(JSON.stringify(['approval', req.headers.cookie, conversationId]))
@@ -30,24 +31,27 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
         const readOptions = { deadline: performance.now() + 10_000,
           fromSequence: access.joinPosition };
         const cards = await approvalCards(
-          options.store, options.silo, conversationId, memberId, options.keys,
+          configured.store, configured.silo, conversationId, memberId, configured.keys,
           readOptions);
         return reply.send({ cards, csrf });
       }
-      if (!isApprovalCsrfValid(req, config, csrf)) {
+      if (!isApprovalCsrfValid(req, csrf)) {
         return reply.code(403).send({ status: 'refused' });
       }
-      return await decide(req, reply, options, session, memberId, conversationId,
+      return await decide(req, reply, configured, session, memberId, conversationId,
         access.joinPosition);
 
     } catch (error) {
+      if (error instanceof MemberRefusal) {
+        return reply.code(error.statusCode).send({ status: error.status });
+      }
       if (error instanceof ChatAccessApplying) {
         return reply.code(425).send({ status: 'access_applying' });
       }
       if (isChatRefused(error)) return reply.code(403).send({ status: 'refused' });
       return reply.code(error instanceof z.ZodError ? 400 : 503).send({ status: 'unavailable' });
     }
-  } });
+  }
 }
 
 async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOptions,
@@ -118,11 +122,9 @@ function isRecentStepUp(session: SessionData, approvalId: string): boolean {
   return Date.now() / 1000 - session.authTime <= APPROVAL_STEP_UP_MAX_AGE_SECONDS;
 }
 
-// Origin blocks cross-site posts; the token blocks reuse across sessions or conversations.
+// Bind the token to this session and conversation after the guard checks Origin.
 // Replays within the same session and conversation remain valid.
-function isApprovalCsrfValid(req: FastifyRequest, config: AuthConfig, expectedToken: string): boolean {
-  const expectedOrigin = new URL(config.redirectUri).origin;
-  const submittedOrigin = req.headers.origin;
+function isApprovalCsrfValid(req: FastifyRequest, expectedToken: string): boolean {
   const submittedToken = req.headers['x-csrf-token'];
-  return submittedOrigin === expectedOrigin && submittedToken === expectedToken;
+  return submittedToken === expectedToken;
 }

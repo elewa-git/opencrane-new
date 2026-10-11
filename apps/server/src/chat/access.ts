@@ -31,7 +31,7 @@ interface AccessRequest {
 }
 
 // Check access once. Content reads have their own time limit.
-export async function chatAccess(options: ChatOptions, request: AccessRequest) {
+export async function chatAccess(options: ParticipationOptions, request: AccessRequest) {
   const deadline = request.deadline ?? performance.now() + 2000;
   await activeChatMember(options, request.memberId);
   return conversationAccess(options, request, deadline);
@@ -103,10 +103,12 @@ export async function writeChatAccess(options: ChatOptions, request: AccessReque
   return Object.assign(fresh, context);
 }
 
-async function conversationAccess(options: ChatOptions, request: AccessRequest, deadline: number) {
+async function conversationAccess(options: ParticipationOptions,
+  request: AccessRequest, deadline: number) {
   const { memberId, conversationId, relation = 'read', allowApplying = false } = request;
   let mode: 'agent_session' | 'direct' | 'group' | undefined;
   let colleagueId: string | undefined;
+  let createdBy: string | undefined;
   let joinPosition = 0;
   let participantIds: string[] = [];
   let accessPosition = 0;
@@ -114,6 +116,7 @@ async function conversationAccess(options: ChatOptions, request: AccessRequest, 
     const access = await conversationParticipation(options, memberId, conversationId,
       deadline, relation, allowApplying);
     const created = access.created;
+    createdBy = created.createdBy;
     mode = created.mode;
     joinPosition = access.joinPosition;
     participantIds = access.participantIds;
@@ -126,7 +129,7 @@ async function conversationAccess(options: ChatOptions, request: AccessRequest, 
     }
     if (mode === 'agent_session') await readPrivateSession(options, memberId, conversationId);
   }
-  return { mode, colleagueId, joinPosition, participantIds, accessPosition };
+  return { mode, colleagueId, joinPosition, participantIds, accessPosition, createdBy };
 }
 
 type ParticipationOptions = Pick<ChatOptions, 'store' | 'db' | 'silo' | 'binding'>;
@@ -188,7 +191,7 @@ export function conversationParticipationReader(options: ParticipationOptions, m
 /** Check current membership without waiting for role or owner changes to reach OpenFGA.
  * Read removals from the member stream at once, and confirm joins through OpenFGA.
  */
-export async function activeChatMember(options: ChatOptions, memberId: string,
+export async function activeChatMember(options: ParticipationOptions, memberId: string,
   fresh?: Fence) {
   fresh?.include(`member-${memberId}`);
   const membership = await chatMembership(options.store, options.silo, memberId, fresh?.deadline);

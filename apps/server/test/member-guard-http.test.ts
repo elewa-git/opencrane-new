@@ -4,6 +4,7 @@ import { fixture } from '@opencrane/models/testing';
 import { Client } from 'minio/dist/esm/minio.mjs';
 import { beforeAll, afterAll, expect, it } from 'vitest';
 import { buildServer } from '../src/server.ts';
+import { sameOrigin } from '../src/members/guard.ts';
 
 const routes = [
   ['GET', '/api/chat'],
@@ -92,3 +93,12 @@ it.each(routes)('refuses a session from another issuer on %s %s',
       await app.close();
     }
   });
+
+it('compares Origin with the configured website origin', function checkOrigin() {
+  const config = testAuthConfig();
+  const accepted = { headers: { origin: 'https://app.example.test' } };
+  const refused = { headers: { origin: 'https://other.test' } };
+  expect(sameOrigin(accepted, config)).toBe(true);
+  expect(sameOrigin(refused, config)).toBe(false);
+  expect(sameOrigin({ headers: {} }, config)).toBe(false);
+});
