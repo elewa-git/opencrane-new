@@ -15,6 +15,7 @@ Discovery/listing are complete public results with zero cache lifetime and no ne
 Sessions, cursors, batches, initialise, resources, GET and unknown arguments are refused.
 The catalogue is fixed for the process's lifetime. Both declared tools cost zero integer euro cents.
 Requests are limited to 16 KiB and replies to 64 KiB. Invalid UTF-8 and duplicate JSON keys refuse.
+Input and snapshot notes are limited to 2,048 UTF-8 bytes (2 KiB), without trimming.
 `read_draft_order` and `update_draft_order_note` always refuse execution after argument checks.
 There is no Odoo client, upstream configuration, credential registry or product route.
 

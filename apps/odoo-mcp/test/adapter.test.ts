@@ -154,7 +154,8 @@ async function postDiscoveryBody(body: Buffer) {
     'mcp-protocol-version': version,
     'mcp-method': 'server/discover',
   };
-  const options = { method: 'POST', headers, body };
+  const bytes = new Uint8Array(body);
+  const options = { method: 'POST', headers, body: bytes };
   return fetch(endpoint, options);
 }
 

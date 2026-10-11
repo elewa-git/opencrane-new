@@ -1,15 +1,22 @@
 import { z } from 'zod';
 
+function hasBoundedNoteBytes(note: string) {
+  return Buffer.byteLength(note, 'utf8') <= 2048;
+}
+
+const noteDescription = 'At most 2,048 UTF-8 bytes (2 KiB). The note is not trimmed.';
+const noteSchema = z.string().refine(hasBoundedNoteBytes).describe(noteDescription);
+
 const snapshotSchema = z.object({
   id: z.int().positive(), name: z.string().max(2048), state: z.literal('draft'),
-  note: z.union([z.string().max(2048), z.literal(false)]),
+  note: z.union([noteSchema, z.literal(false)]),
   write_uid: z.tuple([z.int().positive(), z.string().max(2048)]), write_date: z.string(),
   lines: z.array(z.object({ id: z.int().positive(), description: z.string(),
     quantity: z.string().max(64) }).strict()).max(20),
 }).strict();
 const orderId = z.int().positive();
 const readArguments = z.object({ orderId }).strict();
-const writeArguments = readArguments.extend({ note: z.string().max(2048),
+const writeArguments = readArguments.extend({ note: noteSchema,
   expectedVersion: z.string().regex(/^[a-f0-9]{64}$/u) }).strict();
 const displayLine = z.object({ id: orderId, description: z.string(), quantity: z.string() });
 const readOutput = z.object({ snapshot: snapshotSchema,

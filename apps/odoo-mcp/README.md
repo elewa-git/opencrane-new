@@ -26,6 +26,7 @@ flowchart LR
 - Describe the two tools without contacting Odoo or needing a credential.
 - Return complete protocol, argument and result definitions.
 - Check that request headers and metadata agree.
+- Check note sizes in UTF-8 bytes without shortening the text.
 - Refuse tool execution until each handler is ready.
 
 ## Processes it handles
