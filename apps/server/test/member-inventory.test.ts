@@ -290,7 +290,7 @@ async function overlappingToolGroups() {
   const after = await memberInventory(options, memberId, performance.now() + 10_000);
   expect(after.complete).toBe(true);
   expect(after.reviewRevision).toBe(review.reviewRevision);
-  await rebuildMemberProjection(options.db, nats.reader, createLogger('inventory-replay'),
+  await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, createLogger('inventory-replay'),
     { verify: true });
   const replayed = await memberInventory(options, memberId, performance.now() + 10_000);
   expect(replayed.reviewRevision).toBe(review.reviewRevision);
@@ -302,8 +302,15 @@ it('counts overlapping tool groups once and ignores unrelated pending and projec
 async function blocksExpandedPeople() {
   const memberId = 'large-audience';
   const teamId = 'large-audience-group';
-  await append(`team-${teamId}`, 'team.created', { teamId, name: teamId, createdBy: 'owner' });
-  await append(`team-${teamId}`, 'team.member_added', { teamId, memberId, addedBy: 'owner' });
+  const teamIds = [teamId, 'large-audience-overlap'];
+  for (const groupId of teamIds) {
+    await append(`team-${groupId}`, 'team.created', {
+      teamId: groupId, name: groupId, createdBy: 'owner',
+    });
+    await append(`team-${groupId}`, 'team.member_added', {
+      teamId: groupId, memberId, addedBy: 'owner',
+    });
+  }
   const audience = [];
   for (let index = 1; index < 500; index++) {
     const data = { teamId, memberId: `audience-${index}`, addedBy: 'owner' };
@@ -323,8 +330,10 @@ async function blocksExpandedPeople() {
   const overflow = await memberInventory(options, memberId, performance.now() + 10_000);
   expect(overflow.complete).toBe(false);
   expect(overflow.unavailableSections).toContain('inventory_limits');
+  expect(overflow.routines.status).toBe('unavailable');
+  expect(overflow.personalConnections.status).toBe('unavailable');
 }
-it('blocks completeness at 501 distinct expanded people', blocksExpandedPeople);
+it('counts 500 overlapping people once and blocks completeness at 501', blocksExpandedPeople);
 
 async function blocksTooManyGroups() {
   const memberId = 'many-groups';
