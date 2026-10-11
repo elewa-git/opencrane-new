@@ -82,7 +82,8 @@ The [upstream policy](upstream-policy.json) records these exact allowed addresse
 and the future workload name. Docker's local administrator remains trusted. This network name does not itself
 verify a container identity. P3-12 must bind the approved workload and fixed
 upstream policy before making it usable; arbitrary remote URL registration must
-never use this path. No MCP service is deployed by this ticket.
+never use this path. No MCP service is deployed by this fixture. Standalone discovery tests live in
+[apps/odoo-mcp](../../apps/odoo-mcp/README.robot.md); the product route remains unavailable.
 
 ## Pins, licences and evidence
 
