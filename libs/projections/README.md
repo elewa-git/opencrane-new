@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, drain, child, participant, tool and destination tables| projections["libs/projections<br/>read tables, message lookups and keys"]
+  ops["apps/ops<br/>workers"] -->|fills read tables| projections["libs/projections<br/>read tables and content keys"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners and startup review| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
