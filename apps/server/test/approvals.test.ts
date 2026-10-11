@@ -886,3 +886,37 @@ async function refusesIntentDuringApprovalChecks() {
 }
 it('refuses intent saved during approval permission checks before saving a decision',
   refusesIntentDuringApprovalChecks, 40_000);
+
+it('returns the same refusal for missing and inaccessible approvals to one authorised caller',
+  async function hidesApprovalExistence() {
+    const setup = await approvalFixture();
+    try {
+      await setup.call();
+      const session = setup.headers();
+      const { cards, csrf } = await setup.read(session);
+      expect(cards).toHaveLength(1);
+      const current = await readApproval(setup.nats.store, 'test', cards[0]!.approvalId);
+      const requesterApprovalId = 'b'.repeat(64);
+      const conversationApprovalId = 'c'.repeat(64);
+      const foreignRequester = { ...current.request, approvalId: requesterApprovalId,
+        requesterId: 'bob' };
+      const foreignConversation = { ...current.request, approvalId: conversationApprovalId,
+        conversationId: 'other-conversation' };
+      await setup.append('approval-' + requesterApprovalId, 'tool.approval_requested',
+        foreignRequester);
+      await setup.append('approval-' + conversationApprovalId, 'tool.approval_requested',
+        foreignConversation);
+      const approvalIds = [requesterApprovalId, conversationApprovalId, 'a'.repeat(64)];
+      for (const approvalId of approvalIds) {
+        const request = { method: 'POST' as const,
+          url: '/api/conversations/conversation/approvals',
+          headers: { ...session, 'x-csrf-token': csrf },
+          payload: { approvalId, decision: 'rejected' } };
+        const response = await setup.app.inject(request);
+        expect(response.statusCode, approvalId).toBe(403);
+        expect(response.json(), approvalId).toEqual({ status: 'refused' });
+      }
+    } finally {
+      await setup.close();
+    }
+  });

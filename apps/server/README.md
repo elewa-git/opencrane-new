@@ -60,6 +60,10 @@ Descriptions are untrusted text. They never become instructions for the server.
 - Uses the shared organisation check for session routes and WebSocket connections.
   Production refuses extra sign-in identities. Development can allow named identities
   from another organisation, but session routes still need a configured organisation.
+- Uses one member check for chat, approval and file requests. It checks the signed-in
+  identity, current membership and chat access. Writes must come from this website.
+  These replies tell browsers and caches not to save them. Missing approvals and
+  approvals the person cannot access receive the same refusal.
 - Checks permissions before returning private information or changing data.
 - Loads group and ownership results before checking current access. Slow history
   reads can finish, and a removal during loading prevents the reply.

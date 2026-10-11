@@ -2,6 +2,40 @@
 
 For people, read [README.md](README.md) first.
 
+## Shared member guard
+
+`src/members/guard.ts` supplies `requireMember`, `MemberRefusal`, `idSchema` and
+`sameOrigin`. Chat, approval and file routes use it. Other member routes,
+screenshots, live view and integrations still use their existing checks; their
+migration is the remaining part of #121.
+
+The guard returns the verified session, member id, configured options and chat
+access result. It checks the issuer-bound cookie, configured organisation and silo,
+exact identity exceptions, Origin for writes, current event-log membership,
+OpenFGA membership and conversation access. Refusals carry HTTP 401, 403, 425 or
+503 and their response status. Missing organisation setup returns 503. Each guarded
+reply uses `Cache-Control: no-store`, including refusals. File parser refusals do too.
+The identity exceptions already worked in these routes before this change.
+
+The guard calls the existing read access check. It never opens a write check or
+reads a whole conversation history. Commands still load their history before
+starting the two-second write check. File and approval ids keep their existing
+word-character restrictions; chat ids keep the wider event-catalogue format.
+
+`test/member-guard-http.test.ts` checks all 16 migrated HTTP operations for missing
+organisation setup, an unlisted identity and a cookie from another issuer. It also
+checks a silo/binding mismatch with otherwise-valid membership and separate Origin
+refusals for POST messages and participants. Each write succeeds from the website
+with the same cookie and body. Removing the silo comparison or write Origin check
+makes these cases fail with HTTP 200 instead of 403. The
+organisation audit follows calls to `requireMember` and requires the guard to call
+`isOrganisationSession`. Removing either call still fails the audit. The
+first test commit fails 22 cases before the guard is added: 16 setup statuses and
+six missing cache headers. Existing route tests cover allowed requests, removals,
+conversation access, Origin and slow histories. The required changed-route checks
+run with `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` under
+`nice -n 10`. Full root tests and a fresh-install journey are NOT RUN for this part.
+
 ## Dated MCP catalogue evidence
 
 Tool lists carry check and expiry dates; undated lists cannot authorise calls.
@@ -620,6 +654,10 @@ The P3-2 approval endpoint is `GET|POST /api/conversations/:conversationId/appro
 GET restores safe decrypted cards and a session/conversation-bound CSRF token; POST
 accepts only `approvalId` and `decision` (`approved` or `rejected`). It requires the
 requester's authenticated session, current authority, exact Origin and `x-csrf-token`.
+Missing and inaccessible approval ids both return HTTP 403 `{status: 'refused'}`.
+Invalid decision input still returns 400; unavailable dependencies still return 503.
+The approval privacy test uses the same authorised caller for missing ids, another
+requester's approval and an approval from another conversation.
 409 means the decision lost its conditional append; 428 requires step-up; uncertain
 transport or persistence needs Check status, never an automatic repeat of an effect.
 A required step-up uses `/auth/login?approval=<id>&returnTo=<local-path>`, OIDC

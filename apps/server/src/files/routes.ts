@@ -11,13 +11,13 @@ import type { Client } from 'minio/dist/esm/minio.mjs';
 import { z } from 'zod';
 import { fileUploadedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
-import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { readPrivateSession } from '../chat/private-session.ts';
+import type { AuthConfig } from '@opencrane/auth';
 import { conversationClosed } from '../chat/participation.ts';
-import { conversationParticipation, isChatRefused } from '../chat/access.ts';
+import { isChatRefused } from '../chat/access.ts';
 import { listFiles } from '@opencrane/projections';
 import type { ChatOptions } from '../chat/routes.ts';
 import { sessionFor } from '../members/routes.ts';
+import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import { fileCommand, ownConversation } from './commands.ts';
 import {
   FileRefusal,
@@ -32,7 +32,7 @@ export interface FileOptions extends Omit<ChatOptions, 'keys'> {
   scan(bytes: Buffer): Promise<'clean' | 'infected'>;
 }
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = idSchema.regex(/^[\w-]{1,200}$/u);
 const limit = 20 * 1024 * 1024;
 const conversationParams = z.object({ conversationId: id });
 const viewQuery = z.object({ path: z.string(), preview: z.string().optional() });
@@ -92,6 +92,7 @@ const parseFileBody: FastifyBodyParser<Buffer> = function parseFileBody(_request
 };
 
 function handleParserError(error: FastifyError, _request: FastifyRequest, reply: FastifyReply) {
+  reply.header('cache-control', 'no-store');
   if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
     const cause = { cause: error };
     const refusal = new FileRefusal('file_too_large', cause);
@@ -109,13 +110,15 @@ async function handleFileView(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
+  reply.header('cache-control', 'no-store');
   if (!options) {
     const response = { status: 'unavailable' };
     reply.code(503);
     return reply.send(response);
   }
   try {
-    const { memberId, conversationId, joinPosition, createdBy } = await authorise(options, config, request);
+    const context = await authorise(options, config, request, reply);
+    const { memberId, conversationId, joinPosition, createdBy } = context;
     const { path, preview } = parseFileInput(viewQuery, request.query);
     const file = await findFileAtPath(options, conversationId, path, joinPosition);
     if (!file) {
@@ -179,13 +182,15 @@ async function handleFileRequest(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
+  reply.header('cache-control', 'no-store');
   if (!options) {
     const response = { status: 'unavailable' };
     reply.code(503);
     return reply.send(response);
   }
   try {
-    const { memberId, conversationId, joinPosition, createdBy } = await authorise(options, config, request);
+    const context = await authorise(options, config, request, reply);
+    const { memberId, conversationId, joinPosition, createdBy } = context;
     if (request.method === 'GET') {
       const rows = await visibleFiles(options, conversationId, memberId, joinPosition, createdBy);
       const response = { rows };
@@ -217,35 +222,18 @@ async function visibleFiles(options: FileOptions, conversationId: string, member
   return visible;
 }
 
-async function authorise(options: FileOptions, config: AuthConfig, request: FastifyRequest) {
-  const session = sessionFor(request, config, new Date());
-  if (!session) {
-    throw new FileRefusal('unauthenticated');
-  }
-  const wrongOrganisation = !isOrganisationSession(config, session);
-  const wrongSilo = options.silo !== options.binding.silo;
-  const appOrigin = new URL(config.redirectUri).origin;
-  const wrongOrigin = request.method === 'POST' && request.headers.origin !== appOrigin;
-  if (wrongOrganisation || wrongSilo || wrongOrigin) {
-    throw new FileRefusal('conversation_refused');
-  }
+async function authorise(options: FileOptions, config: AuthConfig,
+  request: FastifyRequest, reply: FastifyReply) {
   const { conversationId } = parseFileInput(conversationParams, request.params);
-  const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
-  if (!memberId) {
+  const checks = { write: request.method === 'POST', conversationId };
+  const context = await requireMember(request, reply, config, options, checks);
+  const { memberId, access } = context;
+  const { joinPosition, createdBy } = access;
+  if (access.mode !== 'agent_session' || !createdBy) {
     throw new FileRefusal('conversation_refused');
   }
-  let action: 'post' | 'read' = 'read';
-  if (request.method === 'POST') action = 'post';
-  let joinPosition: number;
-  let createdBy: string;
   try {
-    const access = await conversationParticipation(options, memberId, conversationId,
-      undefined, action);
-    joinPosition = access.joinPosition;
-    createdBy = access.created.createdBy;
-    if (access.created.mode !== 'agent_session') throw new FileRefusal('conversation_refused');
     if (request.method === 'GET') {
-      await readPrivateSession(options, memberId, conversationId);
       const closed = await conversationClosed(options.store, options.db, options.silo,
         conversationId, performance.now() + 2000);
       if (closed) throw new FileRefusal('conversation_refused');
@@ -276,6 +264,18 @@ function uploadStatus(status: UploadStatus) {
 }
 
 function refuse(reply: FastifyReply, error: unknown) {
+  // Keep the file API's existing refusal messages.
+  if (error instanceof MemberRefusal) {
+    if (error.statusCode === 401) {
+      const refusal = new FileRefusal('unauthenticated');
+      return refuse(reply, refusal);
+    }
+    if (error.statusCode === 403) {
+      const refusal = new FileRefusal('conversation_refused');
+      return refuse(reply, refusal);
+    }
+    return reply.code(error.statusCode).send({ status: error.status });
+  }
   if (error instanceof FileRefusal) {
     const response = { status: 'refused', error: error.message };
     reply.code(error.statusCode);

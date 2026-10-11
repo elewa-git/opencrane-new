@@ -90,7 +90,21 @@ async function limitsSignInCheckToAuthRoutes(): Promise<void> {
   expect(offenders).toEqual([]);
 }
 
+// Follow the member guard so removing its organisation check still fails this audit.
+function checksSessionOrganisation(routeChecks: SourceChecks, guardChecks: SourceChecks): boolean {
+  if (routeChecks.calls.has('isOrganisationSession')) {
+    return true;
+  }
+  if (!routeChecks.calls.has('requireMember')) {
+    return false;
+  }
+  return guardChecks.calls.has('isOrganisationSession');
+}
+
 async function checksApiRouteFiles(): Promise<void> {
+  const guardFile = join(source, 'members', 'guard.ts');
+  const guardText = await readFile(guardFile, 'utf8');
+  const guardChecks = inspectSource(guardFile, guardText);
   const offenders: string[] = [];
   const files = await sourceFiles(source);
   for (const file of files) {
@@ -98,7 +112,8 @@ async function checksApiRouteFiles(): Promise<void> {
     if (apiRouteExceptions.includes(name)) continue;
     const text = await readFile(file, 'utf8');
     const checks = inspectSource(file, text);
-    if (checks.hasApiPath && checks.registersRoute && !checks.calls.has('isOrganisationSession')) {
+    const checksOrganisation = checksSessionOrganisation(checks, guardChecks);
+    if (checks.hasApiPath && checks.registersRoute && !checksOrganisation) {
       offenders.push(name);
     }
   }
