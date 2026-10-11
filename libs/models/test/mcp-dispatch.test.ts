@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
 import { readToolPolicy, setToolPolicy } from '../src/index.ts';
-import { catalogueEvidence, fixture, toolEvidence } from './fixture.ts';
+import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -20,11 +20,12 @@ async function prepare(setup: Fixture, kind: 'remote' | 'hosted' = 'remote') {
   const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
     ...catalogue };
   await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
+  await reviewCatalogue(setup);
   const publication = { serverId: 'fixture', publishedBy: 'alice' };
-  await setup.append('mcp-fixture', 'mcp.server_published', publication);
   const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
     toolRevision: tool.revision, mode: 'allow', setBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+  await setup.append('mcp-fixture', 'mcp.server_published', publication);
   for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
     const grant = { resourceType: 'mcp_server', resourceId: 'fixture',
       granteeId, granteeKind, grantedBy: 'alice' };
