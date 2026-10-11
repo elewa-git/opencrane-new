@@ -183,19 +183,30 @@ it('conditionally restarts once when two devices use the same confirmed progress
 async function slowHistory() {
   const read = nats.store.readStream.bind(nats.store);
   let shortCheck = false;
+  let historyFinished = false;
+  const head = nats.store.head.bind(nats.store);
+  nats.store.head = async function checkedHead(subject, deadline) {
+    if ((deadline ?? Infinity) - performance.now() <= 2000) {
+      shortCheck = true;
+      expect(historyFinished).toBe(true);
+      expect(subject).toBe('member-alice');
+    }
+    return head(subject, deadline);
+  };
   nats.store.readStream = async function* slow(subject, from, deadline, closes) {
     if (subject === 'personal-alice' && from === 1) {
       expect((deadline ?? 0) - performance.now()).toBeGreaterThan(2000);
       await delay(2100);
     }
     if ((deadline ?? Infinity) - performance.now() <= 2000) {
-      shortCheck = true;
       expect(subject).toBe('member-alice');
     }
     yield* read(subject, from, deadline, closes);
+    if (subject === 'personal-alice') historyFinished = true;
   };
   expect((await save(1, 0)).statusCode).toBe(200);
   nats.store.readStream = read;
+  nats.store.head = head;
   expect(shortCheck).toBe(true);
 }
 it('loads slow history before opening the small write access check', slowHistory);
@@ -218,3 +229,26 @@ async function unrelatedChurn() {
   expect((await save(2, 2, 'missing-key')).statusCode).toBe(503);
 }
 it('ignores unrelated turn and file streams, checks Origin and refuses missing custody', unrelatedChurn);
+
+async function reusedIdRace() {
+  const first = { operation: 'save_step', commandId: 'same-id', generation: 1,
+    expectedPosition: 0, answers: answers[0] };
+  const second = { ...first, answers: { ...answers[0], preferredName: 'Other device' } };
+  const append = nats.store.append.bind(nats.store);
+  const bothReady = Promise.withResolvers<void>();
+  let count = 0;
+  nats.store.append = async function waitForBoth(command) {
+    count += 1;
+    if (count === 2) bothReady.resolve();
+    await bothReady.promise;
+    return append(command);
+  };
+  const responses = await Promise.all([post(first), post(second)]);
+  nats.store.append = append;
+  function statusCode(response: typeof responses[number]) { return response.statusCode; }
+  const statuses = responses.map(statusCode);
+  statuses.sort();
+  expect(statuses).toEqual([200, 409]);
+  expect(await nats.store.head('personal-alice')).toBe(2);
+}
+it('refuses changed answers racing under the same command id', reusedIdRace);
