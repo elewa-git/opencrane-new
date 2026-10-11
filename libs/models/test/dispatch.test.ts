@@ -133,3 +133,128 @@ async function ordersExpiry(first: 'expiry' | 'dispatch') {
   }
 }
 it.each(['expiry', 'dispatch'] as const)('orders %s before the other operation', ordersExpiry);
+
+async function refusesUnknownReservation() {
+  const nats = await natsFixture();
+  const close = nats.close.bind(nats);
+  onTestFinished(close);
+  const actor = new BudgetActor(nats.store, 'test');
+  await actor.start(10, 10, 'group');
+  await expect(actor.admitDispatch(admission('missing'), fresh))
+    .rejects.toThrow('no longer open');
+  expect(actor.state.dispatches).toEqual([]);
+  expect(actor.state.reservations).toEqual([]);
+}
+it('refuses an unknown reservation without needing a settled hold', refusesUnknownReservation);
+
+async function refusesIndependentDuplicate(key: 'call' | 'hold') {
+  const nats = await natsFixture();
+  const close = nats.close.bind(nats);
+  onTestFinished(close);
+  const actor = new BudgetActor(nats.store, 'test');
+  await actor.start(10, 10, 'group');
+  const modelCall = { ...call, requestId: undefined };
+  const firstHold = await actor.reserve(modelCall, 1);
+  const first = { ...admission(firstHold), modelCall };
+  await actor.admitDispatch(first, fresh);
+  let duplicate = { ...first, callId: 'different-call' };
+  if (key === 'call') {
+    const secondHold = await actor.reserve(modelCall, 1);
+    duplicate = { ...first, reservationId: secondHold };
+  }
+  await expect(actor.admitDispatch(duplicate, fresh)).rejects.toThrow('already admitted');
+  expect(actor.state.dispatches).toHaveLength(1);
+}
+it.each(['call', 'hold'] as const)('refuses the duplicate %s key independently',
+  refusesIndependentDuplicate);
+
+async function refusesCurrentCapacity(accessRevoked: boolean) {
+  const nats = await natsFixture();
+  const close = nats.close.bind(nats);
+  onTestFinished(close);
+  const actor = new BudgetActor(nats.store, 'test');
+  await actor.start(10, 10, 'group');
+  const held = await actor.reserve(call, 4);
+  const otherCall = { ...call, requestId: undefined, turnId: 'other-turn' };
+  const charged = await actor.reserve(otherCall, 1);
+  await actor.effect(charged, { inputTokens: 1_000_000, outputTokens: 0 });
+  const effects = await history(nats.store, `effect-${charged}`, 'test');
+  await actor.settleRecorded(charged, effects[0]!.event.id);
+  expect(totals(actor.state)).toMatchObject({ reservedCents: 4, monthCents: 19 });
+  expect(actor.state.stops).toEqual([]);
+  const before = await nats.store.head('budget-test');
+  let accessChecked = false;
+  async function currentAccess() {
+    accessChecked = true;
+    if (accessRevoked) {
+      throw new Error('Access revoked');
+    }
+  }
+  let reason = 'spending cap';
+  if (accessRevoked) {
+    reason = 'Access revoked';
+  }
+  await expect(actor.admitDispatch(admission(held), currentAccess)).rejects.toThrow(reason);
+  expect(accessChecked).toBe(true);
+  expect(actor.state.dispatches).toEqual([]);
+  expect(totals(actor.state)).toMatchObject({ reservedCents: 4, monthCents: 19 });
+  if (accessRevoked) {
+    expect(await nats.store.head('budget-test')).toBe(before);
+    expect(actor.state.stops).toEqual([]);
+  } else {
+    expect(actor.state.stops).toHaveLength(1);
+    expect(actor.state.stoppedWork).toEqual([
+      { conversationId: 'conversation', turnId: 'turn', stopId: actor.state.stops[0]!.id },
+      { conversationId: 'conversation', turnId: 'other-turn',
+        stopId: actor.state.stops[0]!.id },
+    ]);
+  }
+}
+it.each([false, true])('checks capacity before admission without a saved stop (revoked: %s)',
+  refusesCurrentCapacity);
+
+async function closesExpiredLegacyModelHold() {
+  const setup = await fixture();
+  const close = setup.close.bind(setup);
+  onTestFinished(close);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let expired = false;
+  async function expireLegacyAfterAudit(command: Parameters<typeof append>[0]) {
+    const parsed = parseEventByType(command.event);
+    if (parsed.success && parsed.event.type === 'budget.reserved') {
+      const legacy = { ...parsed.event.data };
+      delete legacy.dispatchGate;
+      command.event.data = legacy;
+    }
+    const result = await append(command);
+    if (parsed.success && parsed.event.type === 'decision.recorded' && !expired) {
+      expired = true;
+      expect(setup.actor.state.reservations[0]?.dispatchGate).toBeUndefined();
+      setup.advance();
+      await setup.actor.expire();
+    }
+    return result;
+  }
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  writer.mockImplementation(expireLegacyAfterAudit);
+  expect((await setup.call()).status).toBe(503);
+  expect(expired).toBe(true);
+  expect(setup.received()).toBe(0);
+  writer.mockRestore();
+  const reservation = setup.actor.state.reservations[0]!;
+  expect(reservation.settledCents).toBeUndefined();
+  const beforeExpiry = new Date(reservation.time);
+  function replayClock() {
+    return beforeExpiry;
+  }
+  const recovered = new BudgetActor(setup.nats.store, 'test', replayClock);
+  await recovered.start();
+  const input = { ...admission(reservation.id), callId: reservation.call.requestId!,
+    modelCall: reservation.call };
+  await expect(recovered.admitDispatch(input, fresh)).rejects.toThrow('no longer open');
+  expect(totals(recovered.state, replayClock()).reservedCents).toBe(reservation.amountCents);
+  expect(recovered.state.dispatches).toEqual([]);
+  expect(setup.received()).toBe(0);
+}
+it('closes an expired legacy model hold before admission and after replay with an earlier clock',
+  closesExpiredLegacyModelHold);

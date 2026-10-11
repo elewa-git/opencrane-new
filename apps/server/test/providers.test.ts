@@ -1083,16 +1083,21 @@ async function keepsLiveVerificationRunning() {
 it('a same-id retry during a live check writes nothing and lets the first check pass',
   keepsLiveVerificationRunning);
 
-async function expiresBeforeProviderAdmission() {
-  const providerId = 'expiry-before-admission';
+async function expiresBeforeProviderAdmission(legacy: boolean) {
+  const providerId = `expiry-before-admission-${legacy}`;
   await preparesVerificationProvider(providerId);
   const input = verificationInput(`check-${providerId}`, 'test');
   const append = nats.store.append.bind(nats.store);
   const beforeRequests = upstreamCount;
   let expired = false;
   async function expireAfterAudit(command: Parameters<typeof append>[0]) {
-    const result = await append(command);
     const parsed = parseEventByType(command.event);
+    if (legacy && parsed.success && parsed.event.type === 'budget.reserved') {
+      const payload = { ...parsed.event.data };
+      delete payload.dispatchGate;
+      command.event.data = payload;
+    }
+    const result = await append(command);
     if (parsed.success && parsed.event.type === 'decision.recorded' && !expired) {
       expired = true;
       const reservationTime = Date.parse(actor.state.reservations.at(-1)!.time);
@@ -1113,12 +1118,30 @@ async function expiresBeforeProviderAdmission() {
     expect(response.statusCode).toBe(200);
     expect(expired).toBe(true);
     expect(upstreamCount).toBe(beforeRequests);
-    expect(actor.state.reservations.at(-1)?.settledCents).toBe(0);
+    const reservation = actor.state.reservations.at(-1)!;
+    if (legacy) {
+      expect(reservation.dispatchGate).toBeUndefined();
+      expect(reservation.settledCents).toBeUndefined();
+      function earlierClock() {
+        return new Date(reservation.time);
+      }
+      const recovered = new BudgetActor(nats.store, 'acme', earlierClock);
+      await recovered.start();
+      const dispatch = { callId: reservation.call.requestId!,
+        decisionId: `${reservation.call.requestId}:allow`, bodyDigest: '0'.repeat(64),
+        reservationId: reservation.id, modelCall: reservation.call };
+      async function fresh() {}
+      await expect(recovered.admitDispatch(dispatch, fresh)).rejects.toThrow('no longer open');
+      expect(recovered.state.reservations.at(-1)?.settledCents).toBeUndefined();
+    } else {
+      expect(reservation.settledCents).toBe(0);
+    }
+    expect(upstreamCount).toBe(beforeRequests);
   } finally {
     writer.mockRestore();
   }
 }
-it('expiry before provider admission sends nothing and releases only the unsent hold',
+it.each([false, true])('expiry before provider admission sends nothing (legacy hold: %s)',
   expiresBeforeProviderAdmission);
 
 async function deniesRevokedRoleBeforeIamCatchesUp() {
