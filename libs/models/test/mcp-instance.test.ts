@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
+import type { AppendCommand } from '@opencrane/event-store';
 import { getEventDefinition } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { applyMcpInstance, mcpInstanceId, mcpInstances, pgDb, ProjectionRunner }
@@ -130,6 +131,45 @@ async function bindsOriginalPayload() {
 }
 it('retains the original operation and refuses duplicate ids with changed payloads',
   bindsOriginalPayload);
+
+async function refusesConcurrentChangedPayload() {
+  const fixture = await start();
+  const originalAppend = nats.store.append.bind(nats.store);
+  let competingSequence: number | undefined;
+  async function saveCompetingStop(command: AppendCommand) {
+    // Advance the instance after the first stop reads it, then save the same id at that position.
+    const observation = envelope('test', fixture.event.subject, 'mcp.instance_observed', {
+      instanceId: fixture.reference.instanceId, runGeneration: 1,
+      startChangeRef: fixture.data.changeRef, podUid: 'original-pod',
+      workloadSpecDigest: fixture.data.workloadSpecDigest, state: 'starting',
+    });
+    const observed = await originalAppend({ event: observation,
+      expectedSequence: fixture.sequence });
+    if (observed.status !== 'appended') throw new Error('Observation fixture failed');
+    const changed = { ...fixture.stop, expectedSequence: observed.sequence };
+    const competing = await mcpInstanceCommand(nats.store, binding, 'alice',
+      fixture.reference, changed);
+    competingSequence = competing.sequence;
+    const recovered = await originalAppend(command);
+    expect(recovered).toEqual({ status: 'appended', sequence: competingSequence });
+    return recovered;
+  }
+  const append = vi.spyOn(nats.store, 'append');
+  append.mockImplementationOnce(saveCompetingStop);
+  try {
+    await expect(mcpInstanceCommand(nats.store, binding, 'alice',
+      fixture.reference, fixture.stop)).rejects.toThrow('Instance change payload mismatch');
+    const rows = await history(nats.store, fixture.event.subject, 'test');
+    expect(rows).toHaveLength(3);
+    expect(rows[2]?.sequence).toBe(competingSequence);
+    expect(rows[2]?.event.commandId).toBe(fixture.stop.changeRef);
+    expect(rows[2]?.event.data).toMatchObject({ expectedSequence: rows[1]?.sequence });
+    expect(rows[2]?.event.data).not.toMatchObject({ expectedSequence: fixture.sequence });
+  } finally {
+    append.mockRestore();
+  }
+}
+it('refuses concurrent duplicate recovery with a changed payload', refusesConcurrentChangedPayload);
 
 async function replayAndReadsHaveNoEffects() {
   const fixture = await start();
