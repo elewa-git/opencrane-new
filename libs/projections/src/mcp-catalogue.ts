@@ -203,10 +203,6 @@ function catalogueStatus(row: McpCatalogueRow, policy: ToolPolicy | null): Integ
   if (missingDates || stalePublication) {
     return { kind: 'disabled', label: 'Unavailable', detail: 'No fresh tool catalogue check' };
   }
-  if (row['rejection_reason'] === 'connection_required' && row.lifecycle === 'rejected') {
-    return { kind: 'needs_input', label: 'Needs input',
-      detail: 'A scoped validation connection is required. Protected discovery is not available yet.' };
-  }
   return catalogueRowStatus(row);
 }
 
