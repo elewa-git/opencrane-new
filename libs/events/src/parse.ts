@@ -1,3 +1,4 @@
+import { validSurveyEvent } from './survey.ts';
 import { validEgressRuleEvent } from './egress.ts';
 import { validPreferenceIdentity } from './conversation.ts';
 import { memoryWrittenEventSchema } from './memory.ts';
@@ -44,9 +45,10 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     return { success: false, reason: 'unknown_event_type', type: typeField.data.type };
   }
 
-  let envelopeSchema = eventEnvelopeSchema(definition.dataSchema)
-    .superRefine(checkDelegationEvent)
-    .refine(validEgressRuleEvent);
+  let envelopeSchema = eventEnvelopeSchema(definition.dataSchema);
+  envelopeSchema = envelopeSchema.superRefine(checkDelegationEvent);
+  envelopeSchema = envelopeSchema.refine(validEgressRuleEvent);
+  envelopeSchema = envelopeSchema.refine(validSurveyEvent);
   if (definition.type === 'memory.maintenance_bound') {
     envelopeSchema = envelopeSchema.refine(validMaintenanceBinding);
   }

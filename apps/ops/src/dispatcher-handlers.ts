@@ -4,6 +4,9 @@ import type { HandlerName } from "@opencrane/events";
 export function dispatcherHandlerNames(env: NodeJS.ProcessEnv): HandlerName[] {
   const names: HandlerName[] = ["update-openfga", "seed-ownership", "confirm-ownership", "seed-model-grants",
     "seed-provider-default", "create-assistant", "claim-computer"];
+  if (env["PERSONAL_KEY_DIRECTORY"]?.trim()) {
+    names.push("prepare-personal-key");
+  }
   if (env["MODEL_DECISION_URL"]) {
     names.push("settle-budget");
   }

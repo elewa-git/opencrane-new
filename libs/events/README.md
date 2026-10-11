@@ -18,17 +18,18 @@ This is shared code in the event core. The event store, background reactions,
 read-table builders and `apps/server` use its event definitions and checks.
 `libs/models`, `libs/auth` and `libs/authz` also use these definitions for AI rules and
 permissions. `apps/ops` uses them in its background workers. The event registry
-also uses Zod, a library that checks data shapes.
+also uses Zod, a library that checks data shapes, and `@noble/hashes` to check
+the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>event, memory and destination checks"]
+  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>event, survey hash, memory and destination checks"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks control, turns, spending limits, stop reasons and UTC resets| events
   computer["apps/computer<br/>report text check"] -.-> events
-  events -.-> zod["Zod<br/>data checks"]
+  events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
 ```
 
 Tool catalogue records keep exact definitions and the dates of successful or failed checks.
@@ -36,6 +37,10 @@ The back end checks tool hashes against their saved definitions. A hash is a fix
 value calculated from those definitions. Older records remain readable for replay.
 
 ## What it is responsible for
+
+- Check encrypted survey records and the bounded answers for all four steps.
+  Check each saved answer’s hash without reading a private key. A hash is a
+  fixed-length value calculated from the encrypted bytes.
 
 - Define exact HTTPS destination rules for the silo, a person or an assistant.
   Refuse reserved internal names, including `home.arpa` and names beneath it.

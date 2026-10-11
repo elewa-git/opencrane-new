@@ -11,7 +11,7 @@ This is the background workers layer. `apps/server` records events, and these wo
 ```mermaid
 flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
-  nats -->|new events and owner appointments| ops["apps/ops<br/>workers and table rebuilds and destination rules"]
+  nats -->|new events and owner appointments| ops["apps/ops<br/>workers, table rebuilds and private keys"]
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|updates tables, task relationships, jobs and configured memory| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
@@ -39,6 +39,11 @@ flowchart LR
 - Runs one-off upgrades for model access, the default budget group and handler subscriptions.
 
 ## Processes it handles
+
+A member joins. When private key storage is configured, the dispatcher prepares one
+key for their private answers, including members without an assistant. It checks
+current membership before acting on an old join. The member worker copies encrypted
+survey progress into read tables. Rebuilding those tables changes no keys.
 
 1. **A change is recorded.** A worker reads the event and updates the matching PostgreSQL table, including model grants. Replaying the events can rebuild that table.
 2. **A member joins.** The [dispatcher](../../GLOSSARY.md#dispatcher) is the background

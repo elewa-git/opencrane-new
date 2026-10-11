@@ -79,3 +79,6 @@ export { memoryMaintenanceBoundDataSchema } from './memory.ts';
 
 export { budgetExhaustedDataSchema, budgetStopReasonSchema } from './data.ts';
 export { takeoverRequestedDataSchema } from './takeover.ts';
+
+export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyRestartedDataSchema }
+  from './survey.ts';

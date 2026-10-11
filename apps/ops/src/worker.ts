@@ -5,7 +5,8 @@ import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
 import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
   mcpCatalogue, computers, modelAccess, egressPolicy, delegations,
-  conversations, files, memoryKeys, memoryProjection, type Projection, type Db,
+  conversations, files, personalSettings, conversationKeys, memoryKeys, memoryProjection,
+  type Projection, type Db,
 } from '@opencrane/projections';
 import { dispatch, HandlerRuntime } from '@opencrane/handlers';
 import { memberAuthorisation } from '@opencrane/authz';
@@ -13,6 +14,7 @@ import { tokenIssuer } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
 import { SandboxClient } from './kubernetes.ts';
 import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
+import { personalKeyHandler } from './personal-keys.ts';
 import { dispatcherHandlerNames } from './dispatcher-handlers.ts';
 import type { Handler } from '@opencrane/handlers';
 import type { HandlerName } from '@opencrane/events';
@@ -73,6 +75,7 @@ async function runProjectionWorker(projection: Projection) {
   await db.db.lock!('initialise', initialiseProjection);
   async function initialiseGroups(locked: Db) {
     const groupRunner = new ProjectionRunner(locked, store, logger);
+    await groupRunner.initialise(personalSettings);
     await groupRunner.initialise(groups);
     await groupRunner.initialise(providers);
     await groupRunner.initialise(modelAccess);
@@ -87,6 +90,7 @@ async function runProjectionWorker(projection: Projection) {
   while (!stop.signal.aborted) {
     await runner.run(projection, { signal: stop.signal });
     if (mode === 'members') {
+      await runner.run(personalSettings, { signal: stop.signal });
       await runner.run(groups, { signal: stop.signal });
       await runner.run(providers, { signal: stop.signal });
       await runner.run(modelAccess, { signal: stop.signal });
@@ -112,6 +116,11 @@ try {
       ownershipConfirmationHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
       ...lifecycleHandlers(commands.store)];
+    const personalDirectory = process.env['PERSONAL_KEY_DIRECTORY']?.trim();
+    if (personalDirectory) {
+      const keys = conversationKeys(personalDirectory);
+      available.push(personalKeyHandler(commands.store, keys));
+    }
     const decisionUrl = process.env['MODEL_DECISION_URL'];
     if (decisionUrl) {
       available.push(settlementHandler(decisionUrl));

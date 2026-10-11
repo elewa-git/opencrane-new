@@ -48,3 +48,5 @@ export { memoryProjection, readMemoryFactIds } from './memory.ts';
 export { delegations } from './delegations.ts';
 
 export { egressPolicy, readEgressRule, egressRulesAllow, egressGrantStream } from './egress-policy.ts';
+
+export { personalSettings, readSurvey } from './personal-settings.ts';
