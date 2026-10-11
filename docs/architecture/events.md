@@ -389,6 +389,7 @@ counts process starts for that fixed identity.
 | --- | --- | --- | --- |
 | `budget.ceiling_set` | admin | budgets | — |
 | `budget.reserved` | budget actor (inside `ext_authz`) | budgets | — |
+| `budget.reservation_expired` | budget actor at expiry | budgets | — |
 | `budget.call_dispatch_admitted` | budget actor at the final gateway check | budgets | — |
 | `budget.settled` | budget actor (on `effect.observed` or admission rejected before dispatch) | budgets, usage | — |
 | `budget.period_started` | timer (00:00 UTC on the 1st) | budgets | — |
@@ -442,7 +443,11 @@ a duplicate or lost reply cannot return it again. An admitted call may reach the
 provider after a later stop. Its hold remains until usage or resolution proves
 the cost. Expiry releases a new hold only when there is no admission, provider
 dispatch, effect or security evidence. Older holds remain uncertain because their
-senders did not require this record. Model and provider admission cannot race
+senders did not require this record. Before recording their uncertainty, expiry saves
+`budget.reservation_expired` with the reservation id on the budget stream. This
+closes the hold to new admission without changing held or spent cents. Replay
+keeps it closed even if the clock moves backwards. Later usage can still settle
+its original cost. Model and provider admission cannot race
 expiry into releasing a potentially dispatched hold.
 `settle-budget` retries a recorded
 observation or operator resolution through the decision process; duplicate settlement is a no-op.

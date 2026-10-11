@@ -65,7 +65,12 @@ and keeps the hold. Provider attempt records follow this common gate.
 New holds carry `dispatchGate: 1`. Expiry uses the same queue and conditional
 append. It releases a new hold only without admission or other call evidence.
 Failed evidence reads retain money. Older holds stay uncertain because their
-senders did not use the gate. Explicit release refuses admitted calls or evidence.
+senders did not use the gate. Expiry first saves `budget.reservation_expired`
+with the reservation id in the budget queue. The shared fold marks that hold
+`expired: true`; admission refuses it without changing its held cents.
+Replay restores the refusal even with an earlier clock. Later usage still settles
+the original hold. Provider gateway failures release only holds made under the
+new gate; older holds stay uncertain. Explicit release refuses admitted calls or evidence.
 
 When an allowed call reports an unknown result after a zero-cent release,
 `uncertain()` saves `budget.settled` with `settledCents: 0` and `outcome: unknown`.
@@ -76,7 +81,10 @@ replay restores the same hold. Without an allow decision, the report raises
 
 `test/dispatch.test.ts` uses real NATS and the pinned gateway with a recording
 upstream. It checks both sides of the stop boundary, lost replies, duplicate ids,
-replay and both expiry orderings. `test/hold-leadership.test.ts` checks stale writers
+replay and both expiry orderings. Legacy expiry tests assert zero upstream
+requests and refusal after replay with an earlier clock. Separate tests cover
+unknown holds, each duplicate key, capacity without a saved stop and revoked access
+before recording exhaustion. `test/hold-leadership.test.ts` checks stale writers
 and admission queued behind expiry. `test/actor.test.ts` keeps legacy holds and
 later evidence conservative. `test/hold-recovery.test.ts` covers store outages;
 `apps/server/test/providers.test.ts` checks the provider path and expiry before

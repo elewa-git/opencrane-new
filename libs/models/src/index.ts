@@ -1,4 +1,5 @@
-export { BudgetActor, envelope, history, settlementHandler, migrateBudgetDefault } from './actor.ts';
+export { settlementHandler } from './settlement-handler.ts';
+export { BudgetActor, envelope, history, migrateBudgetDefault } from './actor.ts';
 export { startDecision } from './decision.ts';
 export { startGateway, ingestUsage, gatewayUsage } from './gateway.ts';
 export { budgets, readBudget, budgetSummary, totals, models, priceTableId, costCents, reservationCents, requestReservationCents, shortContextTokens } from './state.ts';

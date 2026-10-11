@@ -567,6 +567,8 @@ export const budgetReservedDataSchema = z.object({
   dispatchGate: z.literal(1).optional(),
 }).strict();
 
+export const budgetReservationExpiredDataSchema = z.object({ reservationId: id }).strict();
+
 export const budgetCallDispatchAdmittedDataSchema = z.object({
   callId: id, decisionId: id, bodyDigest: digestSchema, reservationId: id.optional(),
   modelCall: reservedModelCallDataSchema.safeExtend({ payingGroupId: id }),

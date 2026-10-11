@@ -370,6 +370,13 @@ export const eventRegistry: readonly EventDefinition[] = [
     { reservationId: 'res_1', permitId: 'permit_1', amountCents: 200, payingGroupId: 'team_1', assistantId: 'asst_1' },
   ),
   event(
+    'budget.reservation_expired',
+    'budget',
+    'The budget actor closed an expired reservation to new sends without releasing money.',
+    data.budgetReservationExpiredDataSchema,
+    { reservationId: 'res_1' },
+  ),
+  event(
     'budget.call_dispatch_admitted',
     'budget',
     'The budget actor admitted one call for a single gateway send.',

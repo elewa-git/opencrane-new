@@ -438,8 +438,12 @@ async function gatewayFailure(actor: BudgetActor, silo: string, input: Verificat
   const keyRejected = responseStatus === 401 || responseStatus === 403;
   const definiteRejection = keyRejected || responseStatus === 429;
   if (reservationId) {
-    if (!dispatched && !admitted) {
-      // The gateway never released the key, so no provider cost can exist.
+    function matchesReservation(reservation: (typeof actor.state.reservations)[number]) {
+      return reservation.id === reservationId;
+    }
+    const reservation = actor.state.reservations.find(matchesReservation);
+    if (!dispatched && !admitted && reservation?.dispatchGate === 1) {
+      // Release only holds whose senders had to save a final admission before sending.
       await actor.releaseUndispatched(reservationId);
       return { outcome: 'unknown', settledCents: 0 };
     }

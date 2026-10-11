@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|checks saved grants, tool rules, one-use model sends and memory passes| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks saved grants, tool rules, one-use model sends, expired holds and memory passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|saves spending and instance changes; checks saved stops and reads activity, grants, closing records and spending stops| store["libs/event-store<br/>event log"]
 ```
@@ -135,6 +135,10 @@ A change to the tools or their rules ends that approval.
 A tool offered in Allow mode is refused if its policy changes to Ask during that
 turn. A waiting Ask call can use only its own approval, once. Approvals opened by
 a waiting computer expire after 15 minutes, even while the chat turn stays open.
+
+Expired holds cannot receive a new send permission, including after a restart.
+Older holds keep their money because their senders used older rules.
+Later confirmed usage can still settle their cost.
 
 ## Processes it handles
 

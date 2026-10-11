@@ -5,7 +5,6 @@ import { budgetCeilingSetDataSchema, budgetCallDispatchAdmittedDataSchema,
   effectResolvedDataSchema, effectUncertainDataSchema,
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
-import { registerHandler } from '@opencrane/handlers';
 import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budgetStopMessage,
   exceededReasons, requireDispatchReservation, type BudgetState, type ModelCall } from './state.ts';
 
@@ -400,6 +399,7 @@ export class BudgetActor {
     }
     // Keep older holds: those senders did not use the recorded one-use gate.
     if (reservation.dispatchGate === undefined) {
+      await this.closeExpiredReservation(reservation);
       await this.recordEffectEvidence(reservation, undefined, 'success', 'settle_timeout');
       return;
     }
@@ -414,7 +414,15 @@ export class BudgetActor {
     if (dispatched) {
       await this.alert(reservation.id);
     }
+    await this.closeExpiredReservation(reservation);
     await this.recordEffectEvidence(reservation, undefined, 'success', 'settle_timeout');
+  }
+  private async closeExpiredReservation(reservation: BudgetState['reservations'][number]) {
+    if (reservation.expired) {
+      return;
+    }
+    // Save refusal before uncertainty so replay and an earlier clock cannot reopen the call.
+    await this.append('budget.reservation_expired', { reservationId: reservation.id });
   }
   private async appendNotDispatched(reservationId: string) {
     function matchesReservation(saved: BudgetState['reservations'][number]) {
@@ -501,15 +509,6 @@ export class BudgetActor {
     if (!row) throw new Error('Effect not recorded');
     await this.settle(row.event);
   }
-}
-export function settlementHandler(decisionUrl: string) {
-  return registerHandler('settle-budget', async event => {
-    const d = data(event);
-    const lost = event.type === 'computer.lost';
-    const response = await fetch(`${decisionUrl}/${lost ? 'computer-lost' : 'settle'}`, { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(lost ? { subject: event.subject, eventId: event.id } : { permitId: d['permitId'], eventId: event.id }), signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) throw new Error('Budget settlement unavailable');
-  });
 }
 
 function observedPayload(r: BudgetState['reservations'][number], usage: { inputTokens: number; outputTokens: number;

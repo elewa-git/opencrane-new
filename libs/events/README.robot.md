@@ -361,3 +361,11 @@ Observations bind the original start, run, Pod UID and workload digest.
 A `not_found` reason requires `unknown`; callable claims and secret fields are refused.
 Stop records require a human principal matching `requestedBy`.
 These events have no registered reaction and grant no permission or credential release.
+
+## Expired spending holds
+
+`budget.reservation_expired` contains only `reservationId`. It belongs to the
+budget stream and closes the hold to new send permission. It changes no cents
+and grants no access. The budget actor saves it before expiry uncertainty.
+The actor and spending projection restore the closed hold on replay; later usage
+can still settle its cost. The event catalogue and registry name the same event.

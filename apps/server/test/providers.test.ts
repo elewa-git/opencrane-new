@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { decisionRecordedDataSchema, parseEventByType, providerDispatchedSchema, type EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createHash } from 'node:crypto';
@@ -1093,9 +1094,12 @@ async function expiresBeforeProviderAdmission(legacy: boolean) {
   async function expireAfterAudit(command: Parameters<typeof append>[0]) {
     const parsed = parseEventByType(command.event);
     if (legacy && parsed.success && parsed.event.type === 'budget.reserved') {
-      const payload = { ...parsed.event.data };
-      delete payload.dispatchGate;
-      command.event.data = payload;
+      const payload = z.record(z.string(), z.unknown()).parse(parsed.event.data);
+      delete payload['dispatchGate'];
+      if (typeof command.event !== 'object' || command.event === null) {
+        throw new Error('Missing reservation event fixture');
+      }
+      Reflect.set(command.event, 'data', payload);
     }
     const result = await append(command);
     if (parsed.success && parsed.event.type === 'decision.recorded' && !expired) {

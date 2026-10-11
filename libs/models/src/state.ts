@@ -98,6 +98,7 @@ const callSchema = optionalProviderTurnBindingSchema.safeExtend({
 export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
   call: callSchema, dispatchGate: z.literal(1).optional(),
+  expired: z.literal(true).optional(),
   settledCents: z.int().nonnegative().optional(), outcomeUnknown: z.boolean().optional() });
 const ceilingsSchema = z.array(z.object({ scope: z.enum(['paying_group', 'assistant']), scopeId: z.string(), ceilingCents: z.int().nonnegative() }));
 const stopSchema = z.object({ id: z.string(), position: z.int().nonnegative(),
@@ -122,7 +123,7 @@ export function requireDispatchReservation(state: BudgetState,
     return saved.id === input.reservationId;
   }
   const reservation = state.reservations.find(matchesReservation);
-  if (!reservation || reservation.settledCents !== undefined) {
+  if (!reservation || reservation.settledCents !== undefined || reservation.expired) {
     throw new Error('Reservation is no longer open');
   }
   if (!isDeepStrictEqual(reservation.call, input.modelCall) ||
@@ -146,6 +147,16 @@ export function applyBudget(state: BudgetState, event: EventEnvelope, sequence =
       amountCents: z.int().nonnegative().parse(d['amountCents']),
       dispatchGate: z.literal(1).optional().parse(d['dispatchGate']),
       call: callSchema.parse({ ...data({ ...event, data: d['modelCall'] }), payingGroupId: d['payingGroupId'] }) });
+  } else if (event.type === 'budget.reservation_expired') {
+    function matchesReservation(reservation: BudgetState['reservations'][number]) {
+      return reservation.id === d['reservationId'];
+    }
+    const reservation = state.reservations.find(matchesReservation);
+    if (!reservation) {
+      throw new Error('Unknown reservation');
+    }
+    // Keep the hold and later settlement separate from permission to send this call.
+    reservation.expired = true;
   } else if (event.type === 'budget.call_dispatch_admitted') {
     state.dispatches.push(budgetCallDispatchAdmittedDataSchema.parse(event.data));
   } else if (event.type === 'budget.settled') {

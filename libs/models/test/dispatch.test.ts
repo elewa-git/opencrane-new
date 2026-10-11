@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -184,11 +185,12 @@ async function refusesCurrentCapacity(accessRevoked: boolean) {
   expect(actor.state.stops).toEqual([]);
   const before = await nats.store.head('budget-test');
   let accessChecked = false;
-  async function currentAccess() {
+  function currentAccess() {
     accessChecked = true;
     if (accessRevoked) {
-      throw new Error('Access revoked');
+      return Promise.reject(new Error('Access revoked'));
     }
+    return Promise.resolve();
   }
   let reason = 'spending cap';
   if (accessRevoked) {
@@ -222,9 +224,12 @@ async function closesExpiredLegacyModelHold() {
   async function expireLegacyAfterAudit(command: Parameters<typeof append>[0]) {
     const parsed = parseEventByType(command.event);
     if (parsed.success && parsed.event.type === 'budget.reserved') {
-      const legacy = { ...parsed.event.data };
-      delete legacy.dispatchGate;
-      command.event.data = legacy;
+      const legacy = z.record(z.string(), z.unknown()).parse(parsed.event.data);
+      delete legacy['dispatchGate'];
+      if (typeof command.event !== 'object' || command.event === null) {
+        throw new Error('Missing reservation event fixture');
+      }
+      Reflect.set(command.event, 'data', legacy);
     }
     const result = await append(command);
     if (parsed.success && parsed.event.type === 'decision.recorded' && !expired) {
