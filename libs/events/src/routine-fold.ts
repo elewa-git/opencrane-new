@@ -15,6 +15,7 @@ export interface RoutineState {
   readonly lastRun: FinishedRecord | null;
   readonly activation: z.infer<typeof schemas.routineActivationSchema> | null;
   readonly stopRequested: boolean;
+  readonly appliedEventIds: readonly string[];
   // Keep saved facts separate from admission: no routine record grants execution permission.
   readonly executionAvailable: false;
 }
@@ -121,6 +122,24 @@ function requireRoutineStream(previous: RoutineState | undefined,
     throw new Error('Routine history belongs to another stream');
   }
 }
+function applyModernEvent(state: RoutineState, event: EventEnvelope,
+  hasHistory: boolean): RoutineState {
+  switch (event.type) {
+    case 'routine.created':
+    case 'routine.updated':
+      return saveDefinition(state, event, hasHistory);
+    case 'routine.paused':
+    case 'routine.resumed':
+    case 'routine.retired':
+      return saveControl(state, event);
+    case 'routine.due':
+      return saveRun(state, event);
+    case 'routine.run_finished':
+      return finishRun(state, event);
+    default:
+      return saveOtherFact(state, event);
+  }
+}
 /** Rebuild routine facts without I/O, clock reads, permissions or execution. */
 export function foldRoutine(previous: RoutineState | undefined,
   input: EventEnvelope): RoutineState {
@@ -133,18 +152,15 @@ export function foldRoutine(previous: RoutineState | undefined,
   requireRoutineStream(previous, event, data.routineId);
   const state: RoutineState = previous ?? { silo: event.silo, routineId: data.routineId,
     status: 'legacy-needs-migration', definition: null, activeRun: null, lastRun: null,
-    activation: null, stopRequested: false, executionAvailable: false };
+    activation: null, stopRequested: false, appliedEventIds: [], executionAvailable: false };
   if (!data.version) {
     return state;
   }
-  switch (event.type) {
-    case 'routine.created':
-    case 'routine.updated': return saveDefinition(state, event, previous !== undefined);
-    case 'routine.paused':
-    case 'routine.resumed':
-    case 'routine.retired': return saveControl(state, event);
-    case 'routine.due': return saveRun(state, event);
-    case 'routine.run_finished': return finishRun(state, event);
-    default: return saveOtherFact(state, event);
+  // Keep every modern event id so an older delivery cannot replace newer saved facts.
+  if (state.appliedEventIds.includes(event.id)) {
+    return state;
   }
+  const appliedEventIds = [...state.appliedEventIds, event.id];
+  const stateWithEvent = { ...state, appliedEventIds };
+  return applyModernEvent(stateWithEvent, event, previous !== undefined);
 }

@@ -23,7 +23,7 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>event checks, survey hashes and saved routine facts"]
+  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks survey hashes and routine replay<br/>ignores duplicate records"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
@@ -109,7 +109,8 @@ Archive and read choices name one person and their join. They contain no chat te
    catalogue match.
 
 3. **Saved routine records are read again.** `foldRoutine` rebuilds their definition
-   and run facts. It grants no access and starts no work.
+   and run facts. It remembers each modern event's id and ignores that event if it
+   arrives again, even after later changes. It grants no access and starts no work.
 
 ## How to run or test it
 

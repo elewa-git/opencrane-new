@@ -303,8 +303,12 @@ Design [p4-24-routines.md](../../docs/specs/phase-4/p4-24-routines.md), PR row 1
 The [catalogue](../../docs/architecture/events.md#routines-and-delegation) describes the fields.
 Envelope checks bind stream, server source, actor and command id; they do not prove live rights.
 `foldRoutine` is pure and always returns `executionAvailable: false`. Legacy state has no modern
-request or run. Migration requires a complete paused update. An unfinished run stays recorded
-across controls; completion checks its ids and keeps the first result. Schedule calculation,
+request or run. `RoutineState.appliedEventIds` retains every accepted modern event id in first
+delivery order. Duplicate ids return the existing state after schema and stream checks, even
+after later controls or retirement. Legacy records add no facts or applied ids. A failed fold
+leaves its input and its applied ids unchanged. Migration requires a complete paused update.
+An unfinished run stays recorded across controls; completion checks its ids and keeps the first
+result. Schedule calculation,
 custody and live membership/grant/profile checks belong to later PRs. There are no routine
 subscriptions, scheduler, worker, routes, new dependencies or money ledger.
 Tests: `nice -n 10 npx vitest run libs/events/test/routines.test.ts libs/events/test/routine-fold.test.ts`.
