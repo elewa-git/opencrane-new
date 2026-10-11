@@ -53,6 +53,22 @@ async function restoresSurvey() {
     const edited = await append(2);
     await runner.run(personalSettings);
     expect((await readSurvey(storage.db, 'test', 'alice'))?.nextStep).toBe(3);
+    const beforeRefusal = await readSurvey(storage.db, 'test', 'alice');
+    const missingData = { ...edited.data };
+    Reflect.deleteProperty(missingData, 'ciphertextDigest');
+    const missingDigest = { ...edited, data: missingData };
+    const malformedDigest = { ...edited,
+      data: { ...edited.data, ciphertextDigest: 'not-a-digest' } };
+    const mismatchedDigest = { ...edited,
+      data: { ...edited.data, ciphertextDigest: 'a'.repeat(64) } };
+    const replacement = edited.data.ciphertext[0] === 'A' ? 'B' : 'A';
+    const changedCiphertext = `${replacement}${edited.data.ciphertext.slice(1)}`;
+    const tampered = { ...edited, data: { ...edited.data, ciphertext: changedCiphertext } };
+    for (const refused of [missingDigest, malformedDigest, mismatchedDigest, tampered]) {
+      await expect(personalSettings.apply(storage.db, refused, 6))
+        .rejects.toThrow('Invalid survey event');
+      expect(await readSurvey(storage.db, 'test', 'alice')).toEqual(beforeRefusal);
+    }
     const wrongIdentity = { ...edited, subject: 'personal-bob' };
     await expect(personalSettings.apply(storage.db, wrongIdentity, 6)).rejects.toThrow();
     const skipped = { ...edited, data: { ...edited.data, step: 4 } };
