@@ -2532,6 +2532,43 @@ async function lostBindingReply() {
 }
 it('checks the original command after an accepted append loses its reply', lostBindingReply);
 
+async function refusesDeactivatedBindingAssistant() {
+  const original = { ...bindingInput, commandId: 'bind-lost-reply', expectedRevision: 1 };
+  expect((await bind(path('dreamer'), original)).statusCode).toBe(200);
+  await append('assistant-dream-personal', 'assistant.settings_changed', {
+    assistantId: 'dream-personal', changedBy: 'owner', active: false, changedFields: ['active'] });
+  try {
+    const position = await nats.store.head();
+    const input = { ...bindingInput, commandId: 'inactive-assistant', expectedRevision: 2 };
+    expect((await bind(path('dreamer'), input)).statusCode).toBe(404);
+    expect(await nats.store.head()).toBe(position);
+  } finally {
+    await append('assistant-dream-personal', 'assistant.settings_changed', {
+      assistantId: 'dream-personal', changedBy: 'owner', active: true, changedFields: ['active'] });
+  }
+  expect((await bind(path('dreamer'), original)).statusCode).toBe(200);
+}
+it('refuses nightly enablement after assistant deactivation alone',
+  refusesDeactivatedBindingAssistant);
+
+async function refusesRemovedBindingPayer() {
+  const original = { ...bindingInput, commandId: 'bind-lost-reply', expectedRevision: 1 };
+  expect((await bind(path('dreamer'), original)).statusCode).toBe(200);
+  await append('team-dream-sales', 'team.member_removed',
+    { teamId: 'dream-sales', memberId: 'dreamer', removedBy: 'owner' });
+  try {
+    const position = await nats.store.head();
+    const input = { ...bindingInput, commandId: 'removed-payer', expectedRevision: 2 };
+    expect((await bind(path('dreamer'), input)).statusCode).toBe(404);
+    expect(await nats.store.head()).toBe(position);
+  } finally {
+    await append('team-dream-sales', 'team.member_added',
+      { teamId: 'dream-sales', memberId: 'dreamer', addedBy: 'owner' });
+  }
+  expect((await bind(path('dreamer'), original)).statusCode).toBe(200);
+}
+it('refuses nightly enablement after payer membership removal alone', refusesRemovedBindingPayer);
+
 async function disableLostAuthority() {
   await append('team-dream-sales', 'team.member_removed',
     { teamId: 'dream-sales', memberId: 'dreamer', removedBy: 'owner' });
