@@ -27,7 +27,8 @@ function upgradeTests() {
   afterEach(close);
 
   async function prepare(poolOptions: { max?: number } = {}) {
-    const options = { idleTimeoutMillis: 50, ...poolOptions };
+    // Keep connections until the test closes them, so a timer cannot replace the upgrade's client.
+    const options = { idleTimeoutMillis: 0, ...poolOptions };
     current = await fixture(options);
     await current.append("joined");
     await current.append("role", "member-alice", "member.role_changed");
@@ -62,7 +63,7 @@ function upgradeTests() {
   async function command(...args: string[]) {
     if (!args.includes("--dry-run")) {
       await preparedRuntime.stop();
-      await delay(150);
+      await current.closeIdleConnections();
     }
     const env = { ...process.env, ...current.nats.env("projection"),
       DATABASE_URL: current.connectionString, SILO_ID: "test", MODEL_DECISION_URL: "http://unused" };
@@ -276,7 +277,6 @@ function upgradeTests() {
     await runtime.stop();
     await current.waitForConnectionsClosed();
     const original = current.nats.store.subscribe.bind(current.nats.store);
-    await delay(150);
     await current.crash('upgrade-after-chunk');
     const progress = await current.db.query('SELECT sequence FROM handler_upgrade');
     expect(Number(progress.rows[0]?.['sequence'])).toBe(256);

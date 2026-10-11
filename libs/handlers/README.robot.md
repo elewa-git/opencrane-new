@@ -190,6 +190,13 @@ The selected database is only a control database and the role needs `CREATEDB`:
 each test creates and drops an isolated, randomly named database, so test files
 can run in parallel. `pretest` fetches real NATS; PostgreSQL tests skip without
 the URL and are then NOT RUN. See [evidence](evidence.md) for results and limits.
+Upgrade tests keep pool connections open until they close idle clients themselves.
+They wait for those clients' PostgreSQL backend PIDs to disappear before starting
+an exclusive upgrade. Deliberately checked-out clients stay open for refusal tests.
+The fixture pool uses `application_name = handlers-test-fixture`. Crash children use
+`handlers-crash-<mode>`; the parent waits for their connections to disappear after
+SIGKILL. The checks use the separate control database and stop after 15 seconds.
+
 Fresh Kubernetes/R3 failover, PostgreSQL failover, external effects, OpenFGA,
 operator UI/alert routing and durable log export remain NOT RUN.
 

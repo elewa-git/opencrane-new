@@ -37,7 +37,12 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
   await admin.query(`CREATE DATABASE ${name}`);
   url.pathname = `/${name}`;
   const connectionString = url.href;
-  const pool = new Pool({ connectionString, ...options });
+  const poolOptions = {
+    connectionString,
+    application_name: "handlers-test-fixture",
+    ...options,
+  };
+  const pool = new Pool(poolOptions);
   const db = pgDb(pool);
   await db.query(`CREATE TABLE handler_effects (
     ordinal SERIAL, handler TEXT, event_id TEXT, stream TEXT)`);
@@ -49,10 +54,36 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
   const children: ChildProcess[] = [];
   const dispatchers: { controller: AbortController; task: Promise<void> }[] =
     [];
+  async function closeIdleConnections() {
+    const backendPids: number[] = [];
+    while (pool.idleCount > 0) {
+      const client = await pool.connect();
+      try {
+        const identity = await client.query<{ pid: number }>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+        backendPids.push(identity.rows[0]!.pid);
+      } finally {
+        client.release(true);
+      }
+    }
+    async function idleConnectionsClosed() {
+      const connections = await admin.query(
+        "SELECT pid FROM pg_stat_activity WHERE pid = ANY($1::int[])",
+        [backendPids],
+      );
+      return connections.rows.length === 0;
+    }
+    // Wait for PostgreSQL to finish closing the clients before another process starts an upgrade.
+    await until(idleConnectionsClosed);
+  }
   async function waitForConnectionsClosed() {
+    await closeIdleConnections();
     async function closed() {
       const connections = await admin.query(
-        'SELECT pid FROM pg_stat_activity WHERE datname = $1', [name]);
+        "SELECT pid FROM pg_stat_activity WHERE datname = $1",
+        [name],
+      );
       return connections.rows.length === 0;
     }
     await until(closed);
@@ -63,6 +94,7 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
     nats,
     connectionString,
     waitForConnectionsClosed,
+    closeIdleConnections,
     async runtime(
       handlers: Handler[],
       options: { retryLimit?: number; expireInSeconds?: number } = {},
@@ -156,6 +188,15 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
       const exited = once(child, "exit");
       child.kill("SIGKILL");
       await exited;
+      async function childConnectionsClosed() {
+        const connections = await admin.query(
+          "SELECT pid FROM pg_stat_activity WHERE datname = $1 AND application_name = $2",
+          [name, `handlers-crash-${mode}`],
+        );
+        return connections.rows.length === 0;
+      }
+      // Wait for the killed child's transactions to end before checking or rebuilding their work.
+      await until(childConnectionsClosed);
     },
     async close() {
       for (const child of children) {
