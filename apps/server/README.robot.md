@@ -1791,3 +1791,40 @@ Logs: `/tmp/p3-17-pr1-tests-final-1.log`, `/tmp/p3-17-pr1-tests-final-2.log`,
 NOT RUN: optional approval browser test, full root suite and fresh-install control journey.
 The orchestrator's narrow verification and hosted CI are still pending.
 Remaining individual guard tests are recorded in issue #302.
+
+## Final load checks — 11 October 2026
+
+Fetched origin and rebased onto `origin/main` at `55336ff8`, which includes the
+group and ownership read changes. The rebase finished. The tested branch source
+is `717e64ad`. Conflict resolutions keep both destination rules and control
+records in exports, audit fields and documentation.
+
+The merge train reported that both concurrent approved requests returned HTTP 503.
+That failure did not return in three isolated approvals runs on the branch or
+one on main. Under the requested rerun rule, this was a load failure. No runtime
+fix was needed. Access deadlines and all test assertions stay unchanged.
+
+| Source | Isolated run | One-minute load before starting | Result | Seconds |
+| --- | --- | --- | --- | --- |
+| `717e64ad` | Branch 1 | 11.18 | 42 passed, 1 optional skip | 338.91 |
+| `717e64ad` | Branch 2 | 15.67 | 42 passed, 1 optional skip | 277.29 |
+| `717e64ad` | Branch 3 | 9.71 | 42 passed, 1 optional skip | 305.04 |
+| `55336ff8` | Main | 11.02 | 38 passed, 1 optional skip | 286.86 |
+
+PASS: all six changed test files twice, with 109 passes and one optional browser
+skip each, in 494.26 s and 484.42 s. These runs include stop delivery after intent,
+uploads held during preparation, approval and old-token refusals, viewer access
+and memory rights. Both use the supplied `PG_TEST_URL`, `nice -n 10` and one worker.
+The three protected files, `approvals.test.ts`, `authority.test.ts` and
+`authority-volume.test.ts`, were not edited during this round.
+
+PASS: full lint, workspace typecheck, event catalogue (111 types), Knip and
+changelog validation. Lint reports 15 existing warnings and no errors.
+Logs are in `/tmp/pr335-last-round/`: `approvals-head-{1,2,3}.log`,
+`approvals-main.log`, `changed-tests-{1,2}.log`, `lint.log`, `typecheck.log`,
+`check-events.log`, `lint-unused.log` and `lint-changelog.log`.
+
+This used disposable NATS and OpenFGA, local PostgreSQL and a recording upstream.
+NOT RUN: optional browser test, full root suite and fresh-install control journey.
+The final PR comment records hosted CI after pushing this receipt. The merge train
+owns landing; this round does not merge the PR or request another review.
