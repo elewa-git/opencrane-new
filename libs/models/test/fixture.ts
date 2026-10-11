@@ -149,6 +149,17 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   }[] = [];
   // S0.1c's scripted Responses stream, reduced to the final usage-bearing event.
   const stub = createServer((req, res) => {
+    if (req.url?.startsWith('/mcp/')) {
+      const revision = req.headers['x-opencrane-mcp-revision'];
+      const generation = req.headers['x-opencrane-mcp-generation'];
+      const revisionMatches = typeof revision === 'string' && /^[a-f0-9]{64}$/u.test(revision) &&
+        (mcpPrecondition.revision === undefined || revision === mcpPrecondition.revision);
+      if (!revisionMatches || generation !== mcpPrecondition.generation) {
+        res.writeHead(409);
+        res.end('{}');
+        return;
+      }
+    }
     const requestId = String(req.headers['x-request-id']);
     observations.push(history(nats.store, `decision-${requestId}`, 'test').then(rows => {
       if (rows.some(r => r.event.type === 'decision.recorded' && z.object({ outcome: z.literal('allow') }).safeParse(r.event.data).success)) admitted.push(requestId);
@@ -196,7 +207,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     await once(stub, 'listening');
   }
   const mcpRoutes: { serverId: string; connectionId: string; upstream: string;
-    generation: string; revisionHeader?: 'x-opencrane-mcp-revision' }[] = [{ serverId: 'fixture', connectionId: 'installed',
+    generation?: string; revisionHeader?: 'x-opencrane-mcp-revision' }[] = [{ serverId: 'fixture', connectionId: 'installed',
     upstream: `127.0.0.1:${address.port}`, generation: 'instance-1',
     revisionHeader: 'x-opencrane-mcp-revision' as const }];
   const dispatchOptions = { routes: mcpRoutes, requireLeader: async function requireLeader() {} };
@@ -235,7 +246,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   };
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { mcpPrecondition, tokens, keys, stopDispatch, closeUpstream, resumeUpstream,
+  return { dispatchOptions, mcpPrecondition, tokens, keys, stopDispatch, closeUpstream, resumeUpstream,
     upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,

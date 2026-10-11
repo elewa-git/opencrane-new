@@ -176,3 +176,22 @@ async function refusesUnadmittedImage() {
   }
 }
 it('refuses a hosted image without recorded image admission', refusesUnadmittedImage);
+
+async function refusesChangeDuringLeaderCheck() {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    async function changeBeforeSend() {
+      const data = { serverId: 'fixture', previousSchemaDigest: catalogue.schemaDigest,
+        newSchemaDigest: 'a'.repeat(64) };
+      await setup.append('mcp-fixture', 'mcp.tools_changed', data);
+    }
+    setup.dispatchOptions.requireLeader = changeBeforeSend;
+    expect((await send(setup, value)).status).toBe(403);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses catalogue changes while the leadership check waits', refusesChangeDuringLeaderCheck);
