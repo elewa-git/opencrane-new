@@ -560,7 +560,7 @@ PASS: changed files twice after merging main, 28 tests each; related run, 27 fil
 PASS: the standalone `apps/server/test/memory.test.ts` rerun before merging main, 129 tests.
 Its log is `/tmp/p4-13-memory-alone.log`.
 Vitest, lint and typecheck used `nice -n 10`. The full root suite was not run.
-The second independent review verified the late-dependency fix and reported no blockers.
+Builder check: the late-dependency regression failed before the fix and passed afterwards.
 Logs are on the builder host: `/tmp/p4-13-merged-lint.log`,
 `/tmp/p4-13-merged-typecheck.log`, `/tmp/p4-13-merged-events.log`,
 `/tmp/p4-13-merged-tests.log` and `/tmp/p4-13-merged-changed-{1,2}.log`.
