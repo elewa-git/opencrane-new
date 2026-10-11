@@ -2030,8 +2030,8 @@ removal tests keep their target-history, receipt and concurrent-message assertio
 
 ## Inventory fix checks, 11 October 2026
 
-Tested source: `0fc143119f506e7a2248fd8273e4b36c8c892a95`, rebased on
-`72d8f14a0e1789de848b4f2904b1a4e06f16da36`. The rebase completed and the base is
+Tested source: `c90e7160b61f48a6b4710753a4ca9f48cc049144`, rebased on
+`897e42d3591b4cfa0ab96e5427a7b01963d0a01c`. The rebase completed and the base is
 an ancestor of this branch. Tests were committed before implementation. The volume
 case reproduced HTTP 503; the upgrade case reproduced a falsely complete empty
 review. Both now pass. Creation tests also refuse a second audience while preserving
@@ -2041,9 +2041,9 @@ PASS: two final runs under `nice -n 10`, with at most two workers per suite:
 
 | Tests | Each run | First run | Second run |
 | --- | --- | --- | --- |
-| Four server files: member inventory, volume, inventory and member removal | 103 passed | 95.77 s | 74.52 s |
-| Projection rebuild and runner | 11 passed | 25.73 s | 15.56 s |
-| All event-store tests | 94 passed | 70.33 s | 53.62 s |
+| Four server files: member inventory, volume, inventory and member removal | 103 passed | 152.89 s | 109.19 s |
+| Projection rebuild and runner | 11 passed | 34.19 s | 28.54 s |
+| All event-store tests | 94 passed | 84.74 s | 79.51 s |
 
 The server fixtures used the supplied `PG_TEST_URL`. Projection fixtures used a
 throwaway PostgreSQL 17.6 container on a random port. NATS, PostgreSQL databases
@@ -2056,6 +2056,6 @@ Both authority test files remain unchanged.
 
 PASS: full lint, workspace typecheck, event catalogue (113 types), Knip and changelog
 checks. Lint reports 15 existing warnings and no errors. Logs are
-`/tmp/p4-23-pr3-{tests,projections,event-store}-rebased-final{1,2}.log` and
-`/tmp/p4-23-pr3-{lint,typecheck,events,changelog}-rebased-final.log`.
+`/tmp/p4-23-pr3-{tests,projections,event-store}-latest{1,2}.log` and
+`/tmp/p4-23-pr3-{lint,typecheck,events,changelog}-latest.log`.
 NOT RUN: full root suite and fresh-install qualification.

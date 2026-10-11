@@ -223,7 +223,9 @@ export async function inventoryCategoryPositions(db: Query, silo: string) {
       AND category = ANY($2::text[])
     GROUP BY category ORDER BY category`, [silo, inventoryCategories]);
   const positions: Record<string, number> = {};
-  for (const row of result.rows) positions[`${row.category}-*`] = Number(row.position);
+  for (const row of result.rows) {
+    positions[`${row.category}-*`] = Number(row.position);
+  }
   return { positions, ...metadata };
 }
 
