@@ -1,3 +1,4 @@
+import { memoryContextRecordedEventSchema } from './memory-context.ts';
 import { validSurveyEvent } from './survey.ts';
 import { validEgressRuleEvent } from './egress.ts';
 import { validPreferenceIdentity } from './conversation.ts';
@@ -69,6 +70,9 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     ? mcpSchema.refine(validPreferenceIdentity)
     : mcpSchema;
   let schema: z.ZodType<EventEnvelope> = checkedSchema;
+  if (definition.type === 'agent.memory_context_recorded') {
+    schema = memoryContextRecordedEventSchema;
+  }
   if (definition.type === 'memory.written') {
     schema = memoryWrittenEventSchema;
   }

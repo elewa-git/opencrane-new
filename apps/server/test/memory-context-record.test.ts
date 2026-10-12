@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
+import { natsFixture } from '@opencrane/event-store/testing';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 
 const type = 'agent.memory_context_recorded';
@@ -8,7 +9,7 @@ const personal = { scopeId: 'a'.repeat(64), memoryId: 'personal', revision: 1 };
 const shared = { scopeId: 'b'.repeat(64), memoryId: 'shared', revision: 1 };
 const identity = { conversationId: 'chat', turnId: 'turn', requesterId: 'alice',
   assistantId: 'assistant', computerId: 'computer', generation: 1, threadId: 'thread',
-  contentGeneration: 'context' };
+  inputGeneration: 'context' };
 const prepared = { ...identity, action: 'prepared', delivery: null, callDigest: null,
   dispatchDigest: null, additions: [], scopePositions: [], projectionGeneration: 'projection',
   byteCount: 0, hasOmissions: false, reason: 'none' };
@@ -16,16 +17,22 @@ const loaded = { ...prepared, action: 'loaded', delivery: 'recall',
   callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64), additions: [personal],
   scopePositions: [{ scopeId: personal.scopeId, position: 1 }], byteCount: 100 };
 function event(id: string, data: object, patch: Partial<EventEnvelope> = {}): EventEnvelope {
-  return { id, type, source: 'opencrane-server', subject: 'conversation-chat', silo: 'test',
+  return { id, commandId: id, principal: { kind: 'system', id: 'server' }, type,
+    source: 'opencrane-server', subject: 'conversation-chat', silo: 'test',
     time: '2026-10-12T00:00:00Z', correlation: {}, data, ...patch };
 }
 function fixture(events: EventEnvelope[]) {
   const rows: StoredEvent[] = [];
-  for (const saved of events) rows.push({ event: saved, sequence: rows.length + 1 });
+  for (const saved of events) {
+    const row = { event: saved, sequence: rows.length + 1 };
+    rows.push(row);
+  }
   async function* readStream(_subject: string, from = 1) {
     await Promise.resolve();
     for (const row of rows) {
-      if (row.sequence >= from) yield row;
+      if (row.sequence >= from) {
+        yield row;
+      }
     }
   }
   const store = { readStream };
@@ -76,7 +83,7 @@ async function separatesScopes() {
 it('keeps personal and shared references distinct and confined to their turn', separatesScopes);
 
 const changes = [{ requesterId: 'bob' }, { assistantId: 'other' }, { computerId: 'other' },
-  { generation: 2 }, { threadId: 'other' }, { contentGeneration: 'other' },
+  { generation: 2 }, { threadId: 'other' }, { inputGeneration: 'other' },
   { projectionGeneration: 'replacement' }];
 async function changedIdentity(patch: object) {
   const changed = { ...loaded, ...patch };
@@ -151,3 +158,85 @@ function untrusted(patch: Partial<EventEnvelope>) {
 it.each([{ source: 'computer-bridge' }, { subject: 'conversation-other' },
   { report: { computerId: 'computer', sequence: 1, digest: 'a'.repeat(64) } }])(
   'refuses computer reports and a mismatched stream: %j', untrusted);
+
+async function needsPreparation() {
+  await expect(fixture([event('loaded', loaded)]).read()).rejects.toThrow();
+  const events = [event('prepared', prepared), event('again', prepared)];
+  await expect(fixture(events).read()).rejects.toThrow();
+}
+it('requires exactly one preparation before any load', needsPreparation);
+
+const invalidRecords = [
+  { additions: Array(21).fill(personal) }, { byteCount: 16385 },
+  { byteCount: 1.5 }, { reason: 'private words' },
+  { callDigest: null }, { dispatchDigest: null },
+  { additions: [{ ...personal, revision: 0 }] },
+  { scopePositions: [{ scopeId: personal.scopeId, position: -1 }] },
+  { additions: [{ ...personal, text: 'private-canary' }] },
+];
+function invalidRecord(patch: object) {
+  expect(parseEventByType(event('valid', loaded)).success).toBe(true);
+  expect(parseEventByType(event('invalid', { ...loaded, ...patch })).success).toBe(false);
+}
+it.each(invalidRecords)('refuses malformed evidence: %j', invalidRecord);
+
+async function changedReference() {
+  const next = { ...loaded, callDigest: 'e'.repeat(64), dispatchDigest: 'f'.repeat(64),
+    additions: [{ ...personal, revision: 2 }] };
+  const events = [event('prepared', prepared), event('loaded', loaded), event('changed', next)];
+  await expect(fixture(events).read()).rejects.toThrow();
+}
+it('refuses replacing an already loaded revision', changedReference);
+
+async function concurrentReads() {
+  const saved = fixture([event('prepared', prepared), event('loaded', loaded)]);
+  const results = await Promise.all([saved.read(), saved.read()]);
+  expect(results[0]).toEqual(results[1]);
+  expect(results[0]).toMatchObject({ memoryContext: { recallCalls: 1, references: [personal] } });
+}
+it('does not count a call twice when two summary reads race', concurrentReads);
+
+function oversizedRecord() {
+  expect(parseEventByType(event('x'.repeat(16384), loaded)).success).toBe(false);
+}
+it('refuses a complete evidence event above the byte limit', oversizedRecord);
+
+async function turnClosed() {
+  const closed = event('closed', { conversationId: 'chat', turnId: 'turn' },
+    { type: 'agent.turn_completed' });
+  const events = [event('prepared', prepared), event('loaded', loaded), closed];
+  expect(await fixture(events).read()).toMatchObject({ closed: true, memoryContext: {
+    status: 'ended', references: [personal], executionAvailable: false } });
+  events.push(event('late', { ...loaded, callDigest: 'e'.repeat(64) }));
+  await expect(fixture(events).read()).rejects.toThrow();
+}
+it('keeps references when the turn closes and refuses later load records', turnClosed);
+
+async function savedAppendRace() {
+  const nats = await natsFixture();
+  try {
+    const first = { event: event('prepared', prepared), expectedSequence: 0 };
+    const saved = await nats.store.append(first);
+    expect(saved.status).toBe('appended');
+    if (saved.status !== 'appended') {
+      throw new Error('Preparation was not saved');
+    }
+    const firstLoad = { event: event('loaded', loaded), expectedSequence: saved.sequence };
+    const secondLoad = { event: event('racing', loaded), expectedSequence: saved.sequence };
+    const appends = [nats.store.append(firstLoad), nats.store.append(secondLoad)];
+    const results = await Promise.all(appends);
+    function status(result: typeof results[number]) {
+      return result.status;
+    }
+    const statuses = results.map(status);
+    expect(statuses.sort()).toEqual(['appended', 'conflict']);
+    // Discard the successful reply and rebuild from the event store alone.
+    const coldStore = { readStream: nats.store.readStream.bind(nats.store) };
+    const facts = await readChatFacts(coldStore, 'test', 'chat', 'turn');
+    expect(facts).toMatchObject({ memoryContext: { recallCalls: 1, references: [personal],
+      executionAvailable: false } });
+  } finally {
+    await nats.close();
+  }
+}
+it('keeps one durable load when conditional appends race and the reply is lost', savedAppendRace);

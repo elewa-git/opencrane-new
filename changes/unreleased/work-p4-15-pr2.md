@@ -1,0 +1,1 @@
+- Turn summaries can rebuild bounded memory reference records without saving fact text or restarting work. Recall delivery is not connected to these records yet; native memory and derived writes remain disabled.

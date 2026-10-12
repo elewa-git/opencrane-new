@@ -2374,3 +2374,27 @@ HTTP/approval/file/status refusal, list filtering and 100,000-message activity. 
 large-child case also reads approvals and change status and keeps a child socket open.
 Checks and fresh-install qualification are recorded in the draft PR. Fresh-install
 qualification: NOT RUN. This is backend access support, not a complete child journey.
+
+## Saved turn memory accounting (P4-15 PR 2, first part)
+
+`readChatFacts` now returns an internal `memoryContext` rebuilt from trusted
+`agent.memory_context_recorded` events. It keeps up to 32 unique scope/id/revision
+references, one initial load and four recall replies totalling at most 64 KiB.
+Empty recalls count. Each reply is at most 16 KiB. Initial input may contain
+32 references; each recall may add at most 20. References are never evicted.
+The summary binds requester, assistant, computer, computer generation, conversation,
+turn, thread, input generation and projection generation. Scope positions cannot go
+backwards. Call and dispatch digests cannot be reused. Repeated identical event ids
+are harmless; conflicting data is refused. Invalidated and ended contexts retain
+references. Closing the turn also ends its context. Replay creates no execution permission.
+The summary copies its result and counts retained evidence against its existing RAM cap.
+
+The first test commit failed 25 tests before implementation. The focused tests cover
+schema refusals, mixed-scope accounting, generation changes, recall/reference bounds,
+terminal expiry metadata, concurrent summary reads and real NATS conditional append
+races with a discarded reply. They do not prove append-before-delivery or live expiry.
+Remaining row 2 work: the production writer, append reconciliation before delivery,
+generation-bound recall proofs, complete derived-write checks and validation before
+every dispatch. Those must reuse the existing one-use pass. Native memory remains
+disabled and selective-proof writes remain refused. No public feed response changes.
+Fresh-install qualification and real model/tool calls: NOT RUN.

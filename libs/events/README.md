@@ -7,6 +7,8 @@ An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened
 This package says which event types exist and what information each one carries.
 It checks new memory text and still accepts older encrypted events for replay.
 It checks event data, but it does not save events or decide whether a person may act.
+It defines server records of which memory references a private turn loaded.
+These records contain ids, counts and fixed reasons, with no saved fact text.
 It also previews routine dates from a supplied time, without starting work.
 
 ## Where it fits
@@ -24,7 +26,7 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
+  server["apps/server<br/>back end"] -.->|checks startup, saved turn references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance records and revisions| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode; checks nightly memory records| events["libs/events<br/>checks records<br/>previews dates"]

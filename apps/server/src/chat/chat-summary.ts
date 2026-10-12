@@ -1,3 +1,4 @@
+import { foldMemoryContext, type MemoryContextState } from './memory-context-fold.ts';
 import { readStreamSummary, WrongSiloError, type EventStore,
   type StoredEvent, type SummaryKind } from '@opencrane/event-store';
 import { z } from 'zod';
@@ -12,6 +13,7 @@ type ChatSummary = {
   closedTurnIds: Set<string>;
   reports: Map<string, ComputerReports>;
   reportCount: number;
+  memoryContexts: Map<string, MemoryContextState>;
 };
 export type ChatFacts = {
   conversationClosed: boolean;
@@ -22,15 +24,25 @@ export type ChatFacts = {
   lastReportSequence: number;
   reportPosition: number | undefined;
   sequence: number;
+  memoryContext: MemoryContextState | undefined;
 };
 const closedTurn = z.object({ turnId: z.string() });
 
 function emptyChat(): ChatSummary {
   return { created: undefined, conversationClosed: false, messages: new Map(), closedTurnIds: new Set(),
-    reports: new Map(), reportCount: 0 };
+    reports: new Map(), reportCount: 0, memoryContexts: new Map() };
 }
 function addChat(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
+  if (event.type === 'agent.memory_context_recorded') {
+    const turnId = closedTurn.parse(event.data).turnId;
+    if (summary.conversationClosed || summary.closedTurnIds.has(turnId)) {
+      throw new Error('Memory evidence arrived after the turn closed');
+    }
+    const previous = summary.memoryContexts.get(turnId);
+    const context = foldMemoryContext(previous, event);
+    summary.memoryContexts.set(turnId, context);
+  }
   let data: Record<string, unknown> | undefined;
   if (event.type === 'conversation.created' || event.type === 'message.posted') {
     data = z.record(z.string(), z.unknown()).parse(event.data);
@@ -48,7 +60,23 @@ function addChat(summary: ChatSummary, row: StoredEvent) {
   }
   addRequester(summary, row, data);
   if (closedTurnId !== undefined) summary.closedTurnIds.add(closedTurnId);
+  closeMemoryContexts(summary, closedTurnId);
   if (event.report) addReport(summary, event.report, row.sequence);
+}
+function closeMemoryContexts(summary: ChatSummary, turnId: string | undefined) {
+  if (turnId !== undefined) {
+    const context = summary.memoryContexts.get(turnId);
+    if (context) {
+      context.status = 'ended';
+      context.reason = 'ended';
+    }
+  }
+  if (summary.conversationClosed) {
+    for (const context of summary.memoryContexts.values()) {
+      context.status = 'ended';
+      context.reason = 'ended';
+    }
+  }
 }
 function addRequester(summary: ChatSummary, row: StoredEvent,
   data: Record<string, unknown> | undefined) {
@@ -77,7 +105,17 @@ const chat: SummaryKind<ChatSummary> = {
 function chatSize(summary: ChatSummary) {
   // Count compact replay positions separately so many reply chunks can stay warm.
   return summary.messages.size * 256 + summary.closedTurnIds.size * 128 +
-    summary.reports.size * 256 + summary.reportCount * 64;
+    summary.reports.size * 256 + summary.reportCount * 64 + memorySize(summary);
+}
+function memorySize(summary: ChatSummary) {
+  let bytes = 0;
+  for (const context of summary.memoryContexts.values()) {
+    bytes += 2048 + context.references.length * 1024;
+    for (const saved of context.events.values()) {
+      bytes += saved.length * 2 + 256;
+    }
+  }
+  return bytes;
 }
 
 export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo: string,
@@ -95,6 +133,7 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
       conversationClosed: summary.conversationClosed,
       lastReportSequence: reports?.lastSequence ?? 0,
       reportPosition, sequence,
+      memoryContext: structuredClone(summary.memoryContexts.get(turnId)),
     };
   }
   try {
