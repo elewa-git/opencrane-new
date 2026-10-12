@@ -406,3 +406,43 @@ async function allowsAdmissionBeforeBlock() {
   }
 }
 it('allows an admitted call while a later Block refuses later calls', allowsAdmissionBeforeBlock);
+
+async function refusesPublicationAfterDrift(recapture: boolean) {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const snapshot = before.catalogue!;
+    // Keep this tool unchanged to prove that the whole server stays held.
+    const added = toolEvidence({ name: 'another', reviewed: false, costCents: 0 });
+    const evidence = catalogueEvidence([tool, added]);
+    const changed = { ...snapshot, ...evidence };
+    const data = { serverId: 'fixture', previousSchemaDigest: snapshot.schemaDigest,
+      newSchemaDigest: changed.schemaDigest, catalogue: changed };
+    await setup.append('mcp-fixture', 'mcp.tools_changed', data);
+    if (recapture) {
+      await setup.append('mcp-fixture', 'mcp.server_discovered', changed);
+    }
+    await reviewCatalogue(setup);
+    const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
+      toolRevision: tool.revision, mode: 'allow', setBy: 'alice' };
+    await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+    const publication = { serverId: 'fixture', publishedBy: 'alice' };
+    await setup.append('mcp-fixture', 'mcp.server_published', publication);
+    await setup.restart();
+    expect((await send(setup, value)).status).toBe(403);
+    const request = { method: 'POST', headers, body };
+    const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+      request);
+    expect(response.status, await response.text()).toBe(403);
+    expect(setup.received()).toBe(0);
+    const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    expect(policy.tools[0]).toMatchObject({ reviewed: true, mode: 'allow' });
+    expect(policy.published).toBe(false);
+  } finally {
+    await setup.close();
+  }
+}
+it.each([false, true])('keeps reviewed tools held through publication and gateway restart (recapture %s)',
+  refusesPublicationAfterDrift);

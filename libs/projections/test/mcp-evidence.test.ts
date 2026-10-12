@@ -62,14 +62,16 @@ async function rebuildsEvidence() {
     const admission = record('mcp.dispatch_admitted', { serverId: 'fixture',
       connectionId: 'installed', requestId: 'call-1', toolName: 'read',
       toolRevision: revision, schemaDigest, generation: 'instance-1' });
-    await nats.seed([registration, capture, change, admission]);
+    const publication = record('mcp.server_published', { serverId: 'fixture',
+      publishedBy: 'admin' });
+    await nats.seed([registration, capture, change, admission, publication]);
     const runner = new ProjectionRunner(storage.db, nats.reader, logger);
     await runner.initialise(mcpCatalogue);
     await runner.run(mcpCatalogue);
     const before = await storage.db.query('SELECT policy FROM mcp_catalogue');
     expect(before.rows[0]?.['policy']).toMatchObject({ checkedAt, expiresAt,
       catalogue: { ...discovery, schemaDigest: emptyDigest, toolCount: 0, tools: [] },
-      previousCatalogue: discovery, sequence: 4, policyRevision: 3 });
+      previousCatalogue: discovery, sequence: 5, policyRevision: 5, published: false });
     await storage.reopen();
     await rebuildMcpCatalogueProjection(storage.db, nats.reader, logger, { verify: true });
     expect((await storage.db.query('SELECT policy FROM mcp_catalogue')).rows).toEqual(before.rows);
@@ -112,3 +114,28 @@ function retainsPolicyAfterAdmission() {
 }
 it('advances the write position without changing tool policy after send admission',
   retainsPolicyAfterAdmission);
+
+const laterEvents = ['renewal', 'discovery', 'registration'] as const;
+function retainsDriftHold(laterEvent: typeof laterEvents[number]) {
+  const before = discovered();
+  const change = record('mcp.tools_changed', { serverId: 'fixture',
+    previousSchemaDigest: schemaDigest, newSchemaDigest: schemaDigest, catalogue: discovery });
+  let held = applyToolPolicy(before, change, 2);
+  let later;
+  if (laterEvent === 'renewal') {
+    later = record('mcp.catalogue_checked', { serverId: 'fixture', outcome: 'unchanged',
+      schemaDigest, checkedAt, expiresAt });
+  } else if (laterEvent === 'discovery') {
+    later = record('mcp.server_discovered', discovery);
+  } else {
+    later = record('mcp.server_registered', { serverId: 'fixture', kind: 'remote',
+      locator: 'https://fixture.example.test', registeredBy: 'admin' });
+  }
+  held = applyToolPolicy(held, later, 3);
+  const publication = record('mcp.server_published', { serverId: 'fixture',
+    publishedBy: 'admin' });
+  const published = applyToolPolicy(held, publication, 4);
+  expect(published.published).toBe(false);
+  expect(isToolPolicyAvailable(published, Date.parse(checkedAt))).toBe(false);
+}
+it.each(laterEvents)('keeps drift held after %s and a late publication', retainsDriftHold);
