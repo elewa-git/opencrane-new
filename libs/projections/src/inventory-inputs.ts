@@ -5,6 +5,14 @@ import type { Query } from './db.ts';
 export const inventoryCategories = [
   'team', 'assistant', 'grant', 'routine', 'connection', 'computer',
 ];
+const computerLifecycleEvents = new Set([
+  'computer.claimed',
+  'computer.ready',
+  'computer.suspended',
+  'computer.resumed',
+  'computer.lost',
+  'computer.retired',
+]);
 
 export async function createInventoryInputs(db: Query, table: string) {
   await db.query(`CREATE TABLE IF NOT EXISTS ${table} (
@@ -72,7 +80,7 @@ function links(event: EventEnvelope): [string, string][] {
     // Keep all old revoke targets until their permission receipts have arrived.
     return [['member', granteeId], ['team', granteeId], ['assistant', granteeId]];
   }
-  if (event.type.startsWith('computer.')) {
+  if (computerLifecycleEvents.has(event.type)) {
     return [['assistant', field(data, 'assistantId')]];
   }
   return [];

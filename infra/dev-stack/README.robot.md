@@ -19,6 +19,10 @@ from nothing. The `zitadel-*` files and `zitadel.json` are retained: cloud ident
 Plain `up` reuses data and running processes; owner `down` retains data and credentials.
 Secondary `down --id` deletes that stack’s volumes, namespaces, admission policies
 and generated directory, releasing its claim. Failed starts retain the claim for diagnosis.
+Fresh secondary startup clears only this worktree's `apps/web/.angular/cache`, after
+stopping its website. The daily checkout keeps installed packages when the lock file
+is unchanged, but local workspace exports can change between commits. Reusing Vite's
+saved dependency bundles can otherwise leave the sign-in page blank with a missing export.
 These scripts do not touch `pg-test` or the `ocn` registry/MinIO; on `ocn` they
 own the `opencrane-<silo>` computer and `opencrane-<silo>-gateway` relay namespaces.
 Run at most three stacks per host: the stable owner and secondary ids `1` and `2`.
@@ -483,8 +487,19 @@ the [audit receipt](../../docs/process/p3-19-audit-evidence.md) records qualific
 Every journey also configures the credential-free `approval-journey` MCP route
 against the local recording stub. Calls use `mcp-name` and `params._meta` with
 camelCase version/capability keys, the signed thread id and a stable call id.
-It seeds reviewed Ask policy, grants and an active
-tool turn through events, then calls the running gateway with lifecycle credentials.
+It seeds saved tool definitions with matching digests, a fresh five-minute catalogue,
+grants and an active tool turn through events. Discovery must leave every tool blocked
+and unreviewed. The fixture reads the saved events for the current review revision.
+The signed-in owner saves the exact Ask review through
+`POST /api/org/integrations/:serverId/review` before publication.
+The later integration-list check uses the same path to save Allow for its read tool
+and Block for its write tool. The gateway is called with lifecycle credentials.
+The stack gives the recording stub a new `MODEL_STUB_MCP_GENERATION` and the saved
+catalogue digest at startup. It puts the same generation in the configured MCP route,
+with `revisionHeader: 'x-opencrane-mcp-revision'`. The stub checks both values just
+before recording the call. Its digest comes from the same saved test definition as
+the journey. Missing or changed headers return 409 with no recorded effect. Run the focused check with
+`nice -n 10 node --experimental-strip-types --test infra/dev-stack/model-stub.test.ts`.
 The signed-in requester sees the 8g card, approves in the browser and retries the tool once.
 A refused or ambiguous decision submission uses Check status before a safe retry,
 with at most three submissions and three status reads per submission; the journey

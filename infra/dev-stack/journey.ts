@@ -16,6 +16,7 @@ import { connectProjectionDb, readEvents } from '@opencrane/projections';
 import { history as modelHistory, models } from '@opencrane/models';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
 import { approvalJourney } from './approval-journey.ts';
+import { journeyTool, reviewJourneyTools } from './journey-tool-policy.ts';
 import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.ts';
 import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
@@ -473,8 +474,13 @@ try {
       throw error;
     } finally { page.off('requestfailed', failed); }
   }
-  if (browser) await approvalJourney(browser.memberPages, events.store, authz, append, { silo, origin, requesterId: member,
-    assistantId: computer!.assistant_id, computerId: computer!.computer_id, generation: Number(computer!.generation) });
+  if (browser) {
+    const approvalInput = { silo, origin, requesterId: member,
+      assistantId: computer!.assistant_id, computerId: computer!.computer_id,
+      generation: Number(computer!.generation) };
+    await approvalJourney(browser.ownerPage, browser.memberPages, events.store, authz,
+      append, approvalInput);
+  }
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();
   await chat.reconnect();
@@ -519,9 +525,12 @@ try {
   console.log(`PASS assistant/computer lifecycle: join→Ready ${joinReadyMs} ms; resume ${resumeMs} ms; Pod replacement kept disk`);
   const serverId = `journey-${id}`;
   await append('mcp.server_registered', `mcp-${serverId}`, { serverId, kind: 'remote', locator: 'https://mcp.example.test/mcp', catalogueRef: 'catalogue:dev' });
-  await append('mcp.server_discovered', `mcp-${serverId}`, { serverId, toolCount: 2, schemaDigest: 'a'.repeat(64), serverInfo: { name: 'Journey MCP', version: '1.0.0' } });
-  await append('mcp.tool_mode_set', `mcp-${serverId}`, { serverId, toolName: 'read', mode: 'allow', setBy: admin });
-  await append('mcp.server_published', `mcp-${serverId}`, { serverId, publishedBy: admin });
+  assert(browser, 'The integration journey needs the signed-in owner');
+  const readTool = journeyTool('read', true);
+  const writeTool = journeyTool('write', false);
+  const serverInfo = { name: 'Journey MCP', version: '1.0.0' };
+  await reviewJourneyTools(browser.ownerPage, events.store, silo, origin, append, serverId,
+    [readTool, writeTool], ['allow', 'block'], serverInfo);
   await until(async () => {
     const response = await fetch(`${server}/api/org/integrations`, { headers: headers(admin), signal: AbortSignal.timeout(5000) });
     assert.equal(response.status, 200);

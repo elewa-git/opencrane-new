@@ -3,6 +3,10 @@ import { appendFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+const approvalRevision = process.env['MODEL_STUB_MCP_REVISION'];
+if (!approvalRevision) throw new Error('Approval stub revision is missing');
+const approvalGeneration = process.env['MODEL_STUB_MCP_GENERATION'];
+if (!approvalGeneration) throw new Error('Approval stub generation is missing');
 const calls: Array<{ body: string; requestId: string }> = [];
 let modelRequests = 0;
 const server = createServer((req, res) => {
@@ -20,6 +24,13 @@ const server = createServer((req, res) => {
       for await (const chunk of req) {
         body += String(chunk);
         if (body.length > 1_048_576) { res.writeHead(413); res.end(); return; }
+      }
+      // Check both headers immediately before recording the effect, without another asynchronous step.
+      if (req.headers['x-opencrane-mcp-revision'] !== approvalRevision ||
+          req.headers['x-opencrane-mcp-generation'] !== approvalGeneration) {
+        res.writeHead(409);
+        res.end('{"error":"Approval stub revision or generation changed"}');
+        return;
       }
       calls.push({ body, requestId: String(req.headers['x-request-id']) });
       res.writeHead(200, { 'content-type': 'application/json' });
