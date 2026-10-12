@@ -21,6 +21,17 @@ function memberId() {
   return Promise.resolve('alice');
 }
 
+function requirePrivateMemoryHeaders(request: import('fastify').FastifyRequest,
+  _reply: import('fastify').FastifyReply, done: () => void) {
+  const privateHeaders = ['authorization', 'x-turn-token', 'session-id',
+    'x-opencrane-mcp-permit'];
+  for (const name of privateHeaders) {
+    expect(request.headers[name]).toBeUndefined();
+  }
+  expect(request.headers['x-memory-context']).toEqual(expect.any(String));
+  done();
+}
+
 async function reviewMemory(setup: Awaited<ReturnType<typeof fixture>>,
   credentialContract: (typeof contracts)[number]) {
   const registration = { serverId: 'memory', kind: 'hosted', locator: memoryLocator,
@@ -59,6 +70,7 @@ async function keepsMemoryCallable(credentialContract: (typeof contracts)[number
   const authConfig = testAuthConfig();
   const serverOptions = { memory };
   const app = buildServer(authConfig, serverOptions);
+  app.addHook('preHandler', requirePrivateMemoryHeaders);
   const worker = installWorker(app, setup.nats.store, 'test');
   try {
     await setup.stopDispatch();
