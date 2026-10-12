@@ -23,6 +23,7 @@ type FreshAuthority = (() => Promise<void>) & { deadline?: number };
 interface ApprovalReadOptions {
   requesterOnly?: boolean;
   fromSequence?: number;
+  approvalRows?: StoredEvent[];
   now?: Date;
   deadline?: number;
   conversationRows?: StoredEvent[] | undefined;
@@ -308,14 +309,20 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   const deadline = options.deadline ?? Infinity;
   const readOptions = { now, deadline };
   const ids: string[] = [];
-  // ponytail: replay the captured head; add an indexed projection when approval history grows.
-  const head = await store.head(undefined, deadline);
-  let signal: AbortSignal | undefined;
-  if (Number.isFinite(deadline)) {
-    const remaining = Math.max(0, Math.ceil(deadline - performance.now()));
-    signal = AbortSignal.timeout(remaining);
+  let rows: Iterable<StoredEvent> | AsyncIterable<StoredEvent>;
+  if (options.approvalRows) {
+    rows = options.approvalRows;
+  } else {
+    // Capture one head so new requests cannot change this read while it is running.
+    const head = await store.head(undefined, deadline);
+    let signal: AbortSignal | undefined;
+    if (Number.isFinite(deadline)) {
+      const remaining = Math.max(0, Math.ceil(deadline - performance.now()));
+      signal = AbortSignal.timeout(remaining);
+    }
+    rows = readEvents(store, options.fromSequence ?? 1, head, signal);
   }
-  for await (const { event } of readEvents(store, options.fromSequence ?? 1, head, signal)) {
+  for await (const { event } of rows) {
     if (event.silo !== silo || event.type !== 'tool.approval_requested') continue;
     const request = toolApprovalRequestedDataSchema.parse(event.data);
     // Keep other people's reviews encrypted when reading a shared child.

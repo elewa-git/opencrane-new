@@ -1,10 +1,13 @@
 import { approvalReviewSchema } from '@opencrane/protocol';
+import { toolApprovalRequestedDataSchema } from '@opencrane/events';
+import type { StoredEvent } from '@opencrane/event-store';
 import { createHash, createHmac } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AuthConfig, SessionData } from '@opencrane/auth';
 import { approvalCards, readApproval, decideApproval, currentAuthority, approvalActivity }
   from '@opencrane/models';
+import { readEvents } from '@opencrane/projections';
 import { writeChatAccess, isChatRefused, conversationParticipation, ChatAccessApplying } from './access.ts';
 import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import type { ChatOptions } from './routes.ts';
@@ -28,8 +31,11 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
         .update(JSON.stringify(['approval', req.headers.cookie, conversationId]))
         .digest('hex');
       if (req.method === 'GET') {
-        const readOptions = { deadline: performance.now() + 10_000,
-          fromSequence: access.historyPosition, requesterOnly: access.contextKind === 'shared_child' };
+        const deadline = performance.now() + 10_000;
+        const approvalRows = await approvalRequestEvents(configured, conversationId,
+          access.historyPosition, deadline);
+        const readOptions = { deadline, fromSequence: access.historyPosition, approvalRows,
+          requesterOnly: access.contextKind === 'shared_child' };
         const cards = await approvalCards(
           configured.store, configured.silo, conversationId, memberId, configured.keys,
           readOptions);
@@ -51,6 +57,70 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
       if (isChatRefused(error)) return reply.code(403).send({ status: 'refused' });
       return reply.code(error instanceof z.ZodError ? 400 : 503).send({ status: 'unavailable' });
     }
+  }
+}
+
+async function approvalRequestEvents(options: ChatOptions, conversationId: string,
+  historyPosition: number, deadline: number) {
+  const head = await options.store.head(undefined, deadline);
+  const checkpoint = await options.db.query<{ sequence: string }>(
+    `SELECT sequence FROM projection_checkpoints WHERE name = 'audit'`);
+  const projectedSequence = Number(checkpoint.rows[0]?.sequence);
+  if (!Number.isSafeInteger(projectedSequence) || projectedSequence < 0) {
+    throw new Error('Audit projection position is unavailable');
+  }
+  const indexedEvents = await indexedApprovalEvents(options, conversationId,
+    historyPosition, Math.min(projectedSequence, head), deadline);
+  const tailStart = Math.max(historyPosition, projectedSequence + 1);
+  const unprojectedEvents = await unprojectedApprovalEvents(options, conversationId,
+    tailStart, head, deadline);
+  return [...indexedEvents, ...unprojectedEvents];
+}
+
+async function indexedApprovalEvents(options: ChatOptions, conversationId: string,
+  historyPosition: number, projectedHead: number, deadline: number) {
+  const indexed = await options.db.query<{ position: string; event_id: string }>(
+    `SELECT position, event_id FROM audit_entries
+      WHERE silo = $1 AND conversation_id = $2 AND metadata->>'type' = $3
+        AND position >= $4 AND position <= $5 ORDER BY position`,
+    [options.silo, conversationId, 'tool.approval_requested', historyPosition,
+      projectedHead]);
+  const events: StoredEvent[] = [];
+  for (const reference of indexed.rows) {
+    const event = await options.store.readEvent(Number(reference.position), deadline);
+    requireApprovalRequestEvent(event, options.silo, conversationId, reference.event_id);
+    events.push(event);
+  }
+  return events;
+}
+
+async function unprojectedApprovalEvents(options: ChatOptions, conversationId: string,
+  tailStart: number, head: number, deadline: number) {
+  const remaining = Math.max(0, Math.ceil(deadline - performance.now()));
+  const signal = AbortSignal.timeout(remaining);
+  const events: StoredEvent[] = [];
+  for await (const event of readEvents(options.store, tailStart, head, signal)) {
+    if (!isApprovalRequestFor(event, options.silo, conversationId)) continue;
+    events.push(event);
+  }
+  return events;
+}
+
+function isApprovalRequestFor(event: StoredEvent, silo: string, conversationId: string) {
+  if (event.event.silo !== silo || event.event.type !== 'tool.approval_requested') return false;
+  const request = toolApprovalRequestedDataSchema.parse(event.event.data);
+  return request.conversationId === conversationId &&
+    event.event.subject === `approval-${request.approvalId}`;
+}
+
+function requireApprovalRequestEvent(event: StoredEvent, silo: string,
+  conversationId: string, eventId: string) {
+  const request = toolApprovalRequestedDataSchema.parse(event.event.data);
+  if (event.event.id !== eventId || event.event.silo !== silo ||
+      event.event.subject !== `approval-${request.approvalId}` ||
+      event.event.type !== 'tool.approval_requested' ||
+      request.conversationId !== conversationId) {
+    throw new Error('Approval history changed');
   }
 }
 

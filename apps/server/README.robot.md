@@ -2331,6 +2331,9 @@ A valid explicit child join does not depend on parent or creator membership.
 Retained shared history starts at child creation; access still uses the current join.
 File reads keep their separate file restrictions and do not grant parent file access.
 Child approval reads omit other requesters before loading or decrypting their reviews.
+They use checked approval event positions from the audit projection and read the
+short unprojected tail from the event log. This keeps long chat history out of the approval
+request scan while retaining new requests that have not reached PostgreSQL yet.
 
 Sockets watch member and child participation streams. Inherited sockets also watch
 parent participation and creator membership. Their existing independent 100 ms poll
@@ -2347,6 +2350,7 @@ creation, invitation, origin or summary API in this change.
 
 `test/chat-access-regression.test.ts` covers stale IAM parent removal, creator parent
 and silo departure, removal/rejoin, explicit child history, blocked socket delivery,
-HTTP/approval/file/status refusal, list filtering and 100,000-message activity.
+HTTP/approval/file/status refusal, list filtering and 100,000-message activity. The
+large-child case also reads approvals and change status and keeps a child socket open.
 Checks and fresh-install qualification are recorded in the draft PR. Fresh-install
 qualification: NOT RUN. This is backend access support, not a complete child journey.

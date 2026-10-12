@@ -18,6 +18,8 @@ async function approvalFixture(stepUp = false) {
   const f = await fixture();
   await f.runner.initialise(conversations);
   await f.runner.run(conversations);
+  await f.runner.initialise(auditTrail);
+  await f.runner.run(auditTrail);
   const config = testAuthConfig({ expectedOrgId: 'org-test' });
   const app = buildServer(config, { chat: { silo: 'test', store: f.nats.store, db: f.db, keys: f.keys, binding: f.binding,
     feed: { memberId: (_silo, _issuer, sub) => Promise.resolve(sub) } } });

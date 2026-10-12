@@ -15,7 +15,7 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { wireSubject, type AppendCommand, type AppendResult } from '@opencrane/event-store';
 import {
-  members, computers, conversations, files, pgDb, ProjectionRunner, connectMemberFeed,
+  auditTrail, members, computers, conversations, files, pgDb, ProjectionRunner, connectMemberFeed,
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { envelope } from '@opencrane/models';
@@ -114,7 +114,7 @@ async function fixture(countChecks = false) {
   await append('assistant-assistant', 'assistant.created', {
     assistantId: 'assistant', ownerId: 'alice', kind: 'personal',
   });
-  for (const projection of [members, conversations, computers, files]) {
+  for (const projection of [members, conversations, computers, files, auditTrail]) {
     await runner.initialise(projection);
     await runner.run(projection);
   }
@@ -1387,8 +1387,10 @@ async function participationVolume(sharedChild = false) {
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
     let creation: Awaited<ReturnType<typeof childSession>> | undefined;
+    let screenshotPath: string | undefined;
     if (sharedChild) {
       creation = await childSession(context, 'volume');
+      screenshotPath = await seedReadableScreenshot(context, 'volume');
       client = await openChatSocket(context, 'volume', true, 'bob');
     } else {
       await context.agentSession('volume');
@@ -1428,6 +1430,8 @@ async function participationVolume(sharedChild = false) {
       " WHERE name = 'conversations'";
     await context.db.query(checkpointSql,
       [previousHead + 100_000]);
+    await context.db.query(`UPDATE projection_checkpoints SET sequence = $1
+      WHERE name = 'audit'`, [previousHead + 100_000]);
     async function stream() {
       while (!stopped) {
         await context.append('conversation-volume', 'agent.turn_started', {
@@ -1437,10 +1441,12 @@ async function participationVolume(sharedChild = false) {
       }
     }
     streaming = stream();
+    let readerId = 'alice';
+    if (sharedChild) readerId = 'bob';
     for (let attempt = 0; attempt < 3; attempt++) {
       const started = performance.now();
       const response = await context.app.inject({
-        url: '/api/conversations/volume/messages', headers: context.headers(),
+        url: '/api/conversations/volume/messages', headers: context.headers(readerId),
       });
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).toContain('Hello');
@@ -1450,10 +1456,20 @@ async function participationVolume(sharedChild = false) {
           computerId: 'desktop',
         });
       }
-      const fileRead = { url: '/api/conversations/volume/files', headers: context.headers() };
+      const fileRead = { url: '/api/conversations/volume/files',
+        headers: context.headers(readerId) };
       const fileResponse = await context.app.inject(fileRead);
       expect(fileResponse.statusCode, fileResponse.body).toBe(200);
       if (sharedChild) {
+        const files = fileResponse.json<{ rows: { path: string }[] }>().rows;
+        expect(files).toContainEqual(expect.objectContaining({
+          path: 'uploads/volume/bob-readable/shared.png',
+        }));
+        const fileDownload = await context.app.inject({
+          url: `/api/conversations/volume/${screenshotPath}`,
+          headers: context.headers('bob'),
+        });
+        expect(fileDownload.statusCode, fileDownload.body).toBe(200);
         const childCreation = creation;
         if (!childCreation) throw new Error('Child creation is missing');
         const approvals = await context.app.inject({
@@ -2057,20 +2073,20 @@ async function removeParentPerson(context: Fixture, memberId: string) {
   return context.append('participation-parent', 'participant.removed', removal, false);
 }
 
-async function seedReadableChildScreenshot(context: Fixture) {
+async function seedReadableScreenshot(context: Fixture, conversationId = 'child') {
   const screenshot = { computerId: 'desktop', generation: 1, width: 2, height: 2,
     capturedAt: '2026-10-12T00:00:00.000Z' };
-  const file = { conversationId: 'child', fileId: 'bob-readable', uploadedBy: 'alice',
+  const file = { conversationId, fileId: 'bob-readable', uploadedBy: 'alice',
     name: 'shared.png', size: 4, sha256: 'a'.repeat(64), mime: 'image/png',
-    objectKey: 'test/child/bob-readable', screenshot };
-  await context.append('conversation-child', 'file.uploaded', file, false);
+    objectKey: `test/${conversationId}/bob-readable`, screenshot };
+  await context.append(`conversation-${conversationId}`, 'file.uploaded', file, false);
   await context.runner.run(files);
-  async function downloadScreenshot() {
-    return Readable.from([Buffer.from('PNG!')]);
+  function downloadScreenshot() {
+    return Promise.resolve(Readable.from([Buffer.from('PNG!')]));
   }
   vi.spyOn(context.objects, 'getObject').mockImplementation(downloadScreenshot);
   return `files/view?path=${encodeURIComponent(
-    'uploads/child/bob-readable/shared.png')}`;
+    `uploads/${conversationId}/bob-readable/shared.png`)}`;
 }
 
 async function deniesInheritedChild(removal: string) {
@@ -2079,7 +2095,7 @@ async function deniesInheritedChild(removal: string) {
   let pause: ReturnType<typeof pauseFirstHistoryRead> | undefined;
   try {
     const creation = await childSession(context);
-    const downloadPath = await seedReadableChildScreenshot(context);
+    const downloadPath = await seedReadableScreenshot(context);
     const bobFiles = await childRead(context, 'files');
     expect(bobFiles.statusCode, bobFiles.body).toBe(200);
     expect(bobFiles.json<{ rows: { path: string }[] }>().rows).toContainEqual(
@@ -2111,7 +2127,7 @@ async function deniesInheritedChild(removal: string) {
     } else {
       await removeParentPerson(context, removal);
     }
-    const blockedAt = performance.now();
+    const blockedAt = started;
     function closed() {
       return client?.socket.readyState === WebSocket.CLOSED;
     }
@@ -2159,7 +2175,7 @@ async function explicitChildJoin() {
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
     const creation = await childSession(context);
-    const downloadPath = await seedReadableChildScreenshot(context);
+    const downloadPath = await seedReadableScreenshot(context);
     const childRemoval = { conversationId: 'child', participantId: 'bob', removedBy: 'alice',
       contextKind: 'shared_child', reviewPosition: 1 };
     await context.append('participation-child', 'participant.removed', childRemoval);
@@ -2186,7 +2202,7 @@ async function explicitChildJoin() {
     const originalSubscribe = context.nats.store.subscribe.bind(context.nats.store);
     const subscribe = vi.spyOn(context.nats.store, 'subscribe');
     subscribe.mockImplementation((...args) => {
-      approvalStarts.push(args[0]);
+      approvalStarts.push(args[0] ?? 1);
       return originalSubscribe(...args);
     });
     client = await openChatSocket(context, 'child', true, 'bob');
@@ -2334,6 +2350,7 @@ async function hidesOtherRequesterReview() {
     const otherReader = await childRead(context, 'approvals');
     expect(otherReader.statusCode, otherReader.body).toBe(200);
     expect(otherReader.json()).toMatchObject({ cards: [] });
+    await context.runner.run(auditTrail);
     const requester = await childRead(context, 'approvals', 'alice');
     expect(requester.statusCode, requester.body).toBe(200);
     expect(requester.body).toContain('private-arguments');
