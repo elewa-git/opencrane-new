@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { once } from 'node:events';
 import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
 import { expect, it, vi } from 'vitest';
@@ -146,7 +147,7 @@ async function fixture(countChecks = false) {
     await rm(directory, { recursive: true, force: true });
   }
   return { app, nats, db, keys, runner, headers, append, agentSession, close,
-    config, options, feed, fgaProxy, auth };
+    config, options, objects, feed, fgaProxy, auth };
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -1383,9 +1384,12 @@ async function participationVolume(sharedChild = false) {
   const context = await fixture();
   let stopped = false;
   let streaming: Promise<void> | undefined;
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
+    let creation: Awaited<ReturnType<typeof childSession>> | undefined;
     if (sharedChild) {
-      await childSession(context, 'volume');
+      creation = await childSession(context, 'volume');
+      client = await openChatSocket(context, 'volume', true, 'bob');
     } else {
       await context.agentSession('volume');
     }
@@ -1449,10 +1453,25 @@ async function participationVolume(sharedChild = false) {
       const fileRead = { url: '/api/conversations/volume/files', headers: context.headers() };
       const fileResponse = await context.app.inject(fileRead);
       expect(fileResponse.statusCode, fileResponse.body).toBe(200);
+      if (sharedChild) {
+        const childCreation = creation;
+        if (!childCreation) throw new Error('Child creation is missing');
+        const approvals = await context.app.inject({
+          url: '/api/conversations/volume/approvals', headers: context.headers('bob'),
+        });
+        expect(approvals.statusCode, approvals.body).toBe(200);
+        const status = await context.app.inject({
+          url: `/api/conversations/volume/changes/${childCreation.id}`,
+          headers: context.headers('bob'),
+        });
+        expect(status.statusCode, status.body).toBe(200);
+        expect(client?.socket.readyState).toBe(WebSocket.OPEN);
+      }
     }
   } finally {
     stopped = true;
     await streaming;
+    await client?.close();
     await context.close();
   }
 }
@@ -2038,12 +2057,36 @@ async function removeParentPerson(context: Fixture, memberId: string) {
   return context.append('participation-parent', 'participant.removed', removal, false);
 }
 
+async function seedReadableChildScreenshot(context: Fixture) {
+  const screenshot = { computerId: 'desktop', generation: 1, width: 2, height: 2,
+    capturedAt: '2026-10-12T00:00:00.000Z' };
+  const file = { conversationId: 'child', fileId: 'bob-readable', uploadedBy: 'alice',
+    name: 'shared.png', size: 4, sha256: 'a'.repeat(64), mime: 'image/png',
+    objectKey: 'test/child/bob-readable', screenshot };
+  await context.append('conversation-child', 'file.uploaded', file, false);
+  await context.runner.run(files);
+  async function downloadScreenshot() {
+    return Readable.from([Buffer.from('PNG!')]);
+  }
+  vi.spyOn(context.objects, 'getObject').mockImplementation(downloadScreenshot);
+  return `files/view?path=${encodeURIComponent(
+    'uploads/child/bob-readable/shared.png')}`;
+}
+
 async function deniesInheritedChild(removal: string) {
   const context = await fixture();
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   let pause: ReturnType<typeof pauseFirstHistoryRead> | undefined;
   try {
     const creation = await childSession(context);
+    const downloadPath = await seedReadableChildScreenshot(context);
+    const bobFiles = await childRead(context, 'files');
+    expect(bobFiles.statusCode, bobFiles.body).toBe(200);
+    expect(bobFiles.json<{ rows: { path: string }[] }>().rows).toContainEqual(
+      expect.objectContaining({ path: 'uploads/child/bob-readable/shared.png' }));
+    const bobDownload = await childRead(context, downloadPath);
+    expect(bobDownload.statusCode, bobDownload.body).toBe(200);
+    expect(bobDownload.body).toBe('PNG!');
     const statusPath = `changes/${creation.id}`;
     const status = await childRead(context, statusPath);
     expect(status.statusCode, status.body).toBe(200);
@@ -2068,6 +2111,7 @@ async function deniesInheritedChild(removal: string) {
     } else {
       await removeParentPerson(context, removal);
     }
+    const blockedAt = performance.now();
     function closed() {
       return client?.socket.readyState === WebSocket.CLOSED;
     }
@@ -2077,13 +2121,17 @@ async function deniesInheritedChild(removal: string) {
     expect(JSON.stringify(client.received)).not.toContain('Never deliver child content');
     // Leave OpenFGA unchanged so its old answer cannot restore inherited access.
     expect((await context.auth.conversation('bob', 'child', 'read')).allowed).toBe(true);
-    const readPaths = [...childReadPaths, statusPath];
+    const readPaths = [...childReadPaths, statusPath, downloadPath];
     for (const path of readPaths) {
+      const readStarted = performance.now();
       const response = await childRead(context, path);
       expect(response.statusCode, response.body).toBe(403);
+      expect(performance.now() - readStarted).toBeLessThan(2000);
+      expect(performance.now() - blockedAt).toBeLessThan(2000);
     }
     if (removal !== 'bob') {
-      expect((await childRead(context, 'files', 'alice')).statusCode).toBe(403);
+      const creatorFileRead = await childRead(context, 'files', 'alice');
+      expect(creatorFileRead.statusCode).toBe(403);
     }
     await context.runner.run(conversations);
     const listRequest = { url: '/api/conversations', headers: context.headers('bob') };
@@ -2110,7 +2158,8 @@ async function explicitChildJoin() {
   const context = await fixture();
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
-    await childSession(context);
+    const creation = await childSession(context);
+    const downloadPath = await seedReadableChildScreenshot(context);
     const childRemoval = { conversationId: 'child', participantId: 'bob', removedBy: 'alice',
       contextKind: 'shared_child', reviewPosition: 1 };
     await context.append('participation-child', 'participant.removed', childRemoval);
@@ -2118,6 +2167,28 @@ async function explicitChildJoin() {
       contextKind: 'shared_child', joinKind: 'explicit_child', reviewPosition: 1 };
     await context.append('participation-child', 'participant.added', childAddition);
     await context.runner.run(conversations);
+    const selectionStarts: { kind: string; position: number }[] = [];
+    const originalQuery = context.db.query.bind(context.db);
+    async function recordSelection(sql: string, values: unknown[] = []) {
+      if (sql.includes('FROM conversation_feed') && sql.includes('position > $3')) {
+        selectionStarts.push({ kind: 'messages', position: Number(values[2]) });
+      }
+      if (sql.includes('FROM conversation_files') && sql.includes('position >= $3')) {
+        selectionStarts.push({ kind: 'files', position: Number(values[2]) });
+      }
+      if (sql.includes('event_id = $3 AND position >= $4')) {
+        selectionStarts.push({ kind: 'changes', position: Number(values[3]) });
+      }
+      return originalQuery(sql, values);
+    }
+    vi.spyOn(context.db, 'query').mockImplementation(recordSelection);
+    const approvalStarts: number[] = [];
+    const originalSubscribe = context.nats.store.subscribe.bind(context.nats.store);
+    const subscribe = vi.spyOn(context.nats.store, 'subscribe');
+    subscribe.mockImplementation((...args) => {
+      approvalStarts.push(args[0]);
+      return originalSubscribe(...args);
+    });
     client = await openChatSocket(context, 'child', true, 'bob');
     await removeParentPerson(context, 'bob');
     await removeParentPerson(context, 'alice');
@@ -2136,9 +2207,27 @@ async function explicitChildJoin() {
     expect(list.body).toContain('hello-shared-history');
     expect(list.body).not.toContain('origin');
     expect(list.body).not.toContain('initialJoins');
-    expect((await childRead(context, 'approvals')).statusCode).toBe(200);
+    const approvals = await childRead(context, 'approvals');
+    expect(approvals.statusCode, approvals.body).toBe(200);
+    const files = await childRead(context, 'files', 'bob');
+    expect(files.statusCode, files.body).toBe(200);
+    expect(files.json<{ rows: { path: string }[] }>().rows).toContainEqual(
+      expect.objectContaining({ path: 'uploads/child/bob-readable/shared.png' }));
+    const download = await childRead(context, downloadPath);
+    expect(download.statusCode, download.body).toBe(200);
+    const receipt = await childRead(context, `changes/${creation.id}`);
+    expect(receipt.statusCode, receipt.body).toBe(200);
     await delay(300);
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    const creationPosition = await originalQuery<{ position: string }>(
+      `SELECT position FROM conversation_feed
+        WHERE silo = $1 AND conversation_id = $2 AND event_id = $3`,
+      ['test', 'child', creation.id]);
+    const creationSequence = Number(creationPosition.rows[0]?.position);
+    expect(selectionStarts).toContainEqual({ kind: 'messages', position: creationSequence - 1 });
+    expect(selectionStarts).toContainEqual({ kind: 'files', position: creationSequence });
+    expect(selectionStarts).toContainEqual({ kind: 'changes', position: creationSequence });
+    expect(approvalStarts.some((position) => position >= creationSequence)).toBe(true);
     expect(JSON.stringify(client.received)).not.toContain('hidden-source');
   } finally {
     await client?.close();
