@@ -476,6 +476,30 @@ function upgradeTests() {
     expect(await current.effects()).toEqual(before);
     const jobs = await current.db.query("SELECT state FROM pgboss.job WHERE start_after = 'infinity'");
     expect(jobs.rows).toHaveLength(7);
+    const sessions = await current.db.query(
+      "SELECT application_name, backend_start, state, query " +
+        "FROM pg_stat_activity WHERE datname = current_database() " +
+        "AND pid <> pg_backend_pid()",
+    );
+    function belongsToTestWorker(session: typeof sessions.rows[number]) {
+      return session['application_name'] === 'handlers-test-fixture';
+    }
+    const workerSessions = sessions.rows.filter(belongsToTestWorker);
+    expect(workerSessions.length).toBeGreaterThan(0);
+    console.info(JSON.stringify({ otherDatabaseSessions: sessions.rows }));
+    await expect(upgradeHandlers(runtime, current.nats.store))
+      .rejects.toThrow('other database sessions');
+    const stillParked = await current.db.query(
+      "SELECT state FROM pgboss.job WHERE start_after = 'infinity'",
+    );
+    expect(stillParked.rows).toHaveLength(7);
+    await runtime.stop();
+    await current.waitForConnectionsClosed();
+    await upgradeHandlers(runtime, current.nats.store);
+    const released = await current.db.query(
+      "SELECT id FROM pgboss.job WHERE start_after = 'infinity'",
+    );
+    expect(released.rows).toEqual([]);
   }
   it('keeps a partial upgrade parked even when a worker starts too early', parkedJobsCannotRun);
 

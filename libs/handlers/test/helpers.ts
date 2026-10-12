@@ -179,10 +179,18 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
           clearTimeout(timer);
           resolve();
         });
-        child.once("exit", () => {
+        function childExited() {
           clearTimeout(timer);
-          reject(new Error(`Child exited: ${stderr}`));
-        });
+          function diagnosticFailed(error: unknown) {
+            if (error instanceof Error) {
+              reject(error);
+              return;
+            }
+            reject(new Error(String(error)));
+          }
+          void reportChildExit().then(reject, diagnosticFailed);
+        }
+        child.once("exit", childExited);
         child.once("error", reject);
       });
       const exited = once(child, "exit");
@@ -197,6 +205,16 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
       }
       // Wait for the killed child's transactions to end before checking or rebuilding their work.
       await until(childConnectionsClosed);
+
+      async function reportChildExit() {
+        const sessions = await admin.query(
+          "SELECT application_name, backend_start, state, query " +
+            "FROM pg_stat_activity WHERE datname = $1 ORDER BY backend_start",
+          [name],
+        );
+        const details = JSON.stringify(sessions.rows);
+        return new Error(`Child exited: ${stderr}\nOther database sessions: ${details}`);
+      }
     },
     async close() {
       for (const child of children) {
