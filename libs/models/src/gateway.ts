@@ -47,12 +47,14 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
   const segment = z.string().regex(/^[\w-]{1,200}$/u);
   segment.parse(route.serverId); segment.parse(route.connectionId);
   const path = `/mcp/${route.serverId}/${route.connectionId}`;
-  const responseHeaders = ['x-request-id', 'x-opencrane-mcp-permit'];
-  const upstreamHeaders = [...MCP_UPSTREAM_HEADERS,
-    '"x-opencrane-mcp-permit":request.headers["x-opencrane-mcp-permit"]'];
+  const responseHeaders = ['x-request-id'];
+  const upstreamHeaders = [...MCP_UPSTREAM_HEADERS];
   if (path === '/mcp/memory/server') {
     responseHeaders.push('x-memory-context');
     upstreamHeaders.push('"x-memory-context":request.headers["x-memory-context"]');
+  } else {
+    responseHeaders.push('x-opencrane-mcp-permit');
+    upstreamHeaders.push('"x-opencrane-mcp-permit":request.headers["x-opencrane-mcp-permit"]');
   }
   return { name: `mcp-${route.serverId}-${route.connectionId}`, gateways: 'default', matches: [{ path: { exact: path }, method: 'POST' }],
     policies: {
