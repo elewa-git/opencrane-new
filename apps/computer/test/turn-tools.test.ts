@@ -30,3 +30,14 @@ function parsesBoundedTools() {
   expect(() => parseTurn({ ...frame, tools: [unicodeServer] })).toThrow();
 }
 it('accepts only a strict tool list within the server and UTF-8 byte limits', parsesBoundedTools);
+
+function acceptsOnlyTheSharedClassOnRestrictedTurns() {
+  const shared = parseTurn({ ...frame, executionMode: 'restricted',
+    contextClass: 'shared_only' });
+  expect(shared.contextClass).toBe('shared_only');
+  expect(() => parseTurn({ ...frame, contextClass: 'shared_only' })).toThrow();
+  expect(() => parseTurn({ ...frame, executionMode: 'memory_free',
+    contextClass: 'shared_only' })).toThrow();
+}
+it('accepts the shared-only class only on restricted turns',
+  acceptsOnlyTheSharedClassOnRestrictedTurns);
