@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 
-const originalReadDirectory = fs.readdirSync;
 const waitForHandoff = `
 import pathlib
 import sys
@@ -20,35 +19,48 @@ while True:
         raise RuntimeError('Detached process did not hand work to a child')
     time.sleep(0.005)
 `;
+interface SupervisorModule {
+  supervisorStop: () => unknown;
+}
 
-function parentIsLive(pid) {
+function isSupervisorModule(value: unknown): value is SupervisorModule {
+  return value !== null && typeof value === 'object' && 'supervisorStop' in value
+    && typeof value.supervisorStop === 'function';
+}
+
+function parentIsLive(pid: string) {
   try {
     const status = fs.readFileSync(`/proc/${pid}/status`, 'utf8');
     return !/State:\s+[ZX]/u.test(status);
   } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+    if (!error || typeof error !== 'object' || !('code' in error)
+      || error.code !== 'ENOENT') throw error;
     return false;
   }
 }
 
-function readDirectoryThenFork(path, options) {
-  const names = originalReadDirectory(path, options);
-  if (path !== '/proc') return names;
+function readDirectoryThenFork(target: typeof fs.readdirSync,
+  receiver: unknown, argumentsList: unknown[]): unknown {
+  const names: unknown = Reflect.apply(target, receiver, argumentsList);
+  if (argumentsList[0] !== '/proc' || !Array.isArray(names)) return names;
+  const processNames: unknown[] = names;
   const pid = fs.readFileSync('/workspace/handoff-pid', 'utf8');
-  if (!names.includes(pid) || !parentIsLive(pid)) return names;
+  if (!processNames.includes(pid) || !parentIsLive(pid)) return processNames;
   // Force a real fork after the PID list was captured and before status is read.
   fs.rmSync('/workspace/handoff-done', { force: true });
   fs.writeFileSync('/workspace/handoff-now', 'fork');
   execFileSync('/usr/bin/python3', ['-I', '-c', waitForHandoff, pid]);
-  return names;
+  return processNames;
 }
 
-fs.readdirSync = readDirectoryThenFork;
+const directoryObserver = { apply: readDirectoryThenFork };
+fs.readdirSync = new Proxy(fs.readdirSync, directoryObserver);
 syncBuiltinESMExports();
 const supervisorModule = new URL('file:///app/src/supervisor-stop.ts');
-const { supervisorStop } = await import(supervisorModule.href);
+const stopModule: unknown = await import(supervisorModule.href);
+if (!isSupervisorModule(stopModule)) throw new Error('Supervisor module unavailable');
 fs.rmSync('/run/executor/supervisor/control.sock');
-supervisorStop();
+stopModule.supervisorStop();
 
 function ready() {
   fs.writeFileSync('/workspace/fork-observer-ready', 'ready');

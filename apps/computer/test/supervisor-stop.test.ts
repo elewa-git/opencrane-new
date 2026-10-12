@@ -186,12 +186,12 @@ while True:
     }
     expect(await computer.read('/workspace/handoff-pid')).not.toBe(firstPid);
     expect(await inventory(computer)).not.toBe('[]');
-    const fixturePath = new URL('./fixtures/supervisor-fork-race.mjs', import.meta.url);
+    const fixturePath = new URL('./fixtures/supervisor-fork-race.ts', import.meta.url);
     const observer = await readFile(fixturePath, 'utf8');
-    await computer.write('/workspace/fork-observer.mjs', observer);
+    await computer.write('/workspace/fork-observer.ts', observer);
     const startObserver = `
 import { spawn } from 'node:child_process';
-const child = spawn('node', ['--experimental-strip-types', '/workspace/fork-observer.mjs'], {
+const child = spawn('node', ['--experimental-strip-types', '/workspace/fork-observer.ts'], {
   detached: true, stdio: 'ignore',
 });
 child.unref();
