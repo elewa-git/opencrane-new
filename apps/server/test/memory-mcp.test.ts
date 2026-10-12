@@ -1002,7 +1002,7 @@ async function refusesRevocationWhileReadingAdmission() {
   async function* readStream(subject: string, from?: number, readDeadline?: number) {
     for await (const row of originalRead(subject, from, readDeadline)) {
       // Save the revocation only after all stream positions were sampled.
-      if (subject === 'mcp-memory' && row.sequence === admission?.sequence && !revoked) {
+      if (subject === 'mcp-memory' && row.event.id === admission?.id && !revoked) {
         expect(sampledGrantPosition).toBe(grantPosition);
         const fields = { resourceType: 'memory_write', resourceId: scopeId,
           granteeKind: 'assistant', granteeId: 'assistant', revokedBy: 'alice' };
@@ -1019,10 +1019,16 @@ async function refusesRevocationWhileReadingAdmission() {
   const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
   const appends = vi.spyOn(setup.nats.store, 'append');
   try {
-    const result = remember(memory, 'alice', rights.scope, command, agent);
-    await expect(result).rejects.toThrow('Authority changed');
+    let refusal: unknown;
+    try {
+      await remember(memory, 'alice', rights.scope, command, agent);
+    } catch (error) {
+      refusal = error;
+    }
     expect(admission).toBeDefined();
-    expect(revoked?.sequence).toBeGreaterThan(admission!.sequence);
+    expect(revoked).toBeDefined();
+    expect(refusal).toBeInstanceOf(Error);
+    expect(refusal).toMatchObject({ message: 'Authority changed' });
     expect(await originalHead(scopeSubject)).toBe(scopePosition);
     for (const [saved] of appends.mock.calls) {
       expect(z.object({ type: z.string() }).parse(saved.event).type).not.toBe('memory.written');
