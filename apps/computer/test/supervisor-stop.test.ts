@@ -33,9 +33,14 @@ const found = [];
 for (const name of readdirSync('/proc')) {
   if (!/^\\d+$/.test(name)) continue;
   try {
-    const status = readFileSync('/proc/' + name + '/status', 'utf8');
-    if (!/Uid:\\s+(1001|1003)\\s/.test(status) || /State:\\s+Z/.test(status)) continue;
-    found.push(readFileSync('/proc/' + name + '/cmdline', 'utf8'));
+    for (const thread of readdirSync('/proc/' + name + '/task')) {
+      try {
+        const path = '/proc/' + name + '/task/' + thread;
+        const status = readFileSync(path + '/status', 'utf8');
+        if (!/Uid:\\s+(1001|1003)\\s/.test(status) || /State:\\s+[ZX]/.test(status)) continue;
+        found.push(path + ' ' + readFileSync(path + '/cmdline', 'utf8'));
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
 }
 console.log(JSON.stringify(found));
@@ -55,6 +60,97 @@ while (!existsSync(process.argv[1])) {
 `;
   await computer.exec('node', '--input-type=module', '-e', script, path);
 }
+
+async function launchTool(computer: Computer, source: string, uid = 1001) {
+  await computer.write('/workspace/stop-fixture.py', source);
+  const launcher = `
+import subprocess
+child = subprocess.Popen(['/usr/bin/python3', '-I', '/workspace/stop-fixture.py'],
+    user=${uid}, group=${uid}, extra_groups=[], start_new_session=True,
+    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+print(child.pid)
+`;
+  return computer.exec('/usr/bin/python3', '-I', '-c', launcher);
+}
+
+async function expectAdmissionClosed(computer: Computer) {
+  const script = `
+import { connect } from 'node:net';
+process.setgroups([]);
+process.setgid(1000);
+process.setuid(1000);
+const socket = connect('/run/executor/exec.sock');
+socket.on('data', () => { throw new Error('Executor admitted after stop'); });
+socket.on('close', () => process.stdout.write('closed'));
+socket.on('error', error => { throw error; });
+`;
+  expect(await computer.exec('node', '--input-type=module', '-e', script)).toBe('closed');
+}
+
+async function stopsZombieWorker(helperUnavailable: boolean) {
+  const computer = await uploadComputer();
+  try {
+    const source = `
+import ctypes
+import os
+import threading
+import time
+
+def change_files():
+    descriptor = os.open('/workspace/worker-writes', os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    while True:
+        os.write(descriptor, b'x')
+        time.sleep(0.005)
+
+threading.Thread(target=change_files).start()
+ctypes.CDLL(None).pthread_exit(None)
+`;
+    const pid = await launchTool(computer, source);
+    await waitForFile(computer, '/workspace/worker-writes');
+    const ready = `
+import pathlib
+import time
+deadline = time.monotonic() + 5
+while True:
+    status = pathlib.Path('/proc/${pid}/status').read_text()
+    if 'State:\\tZ' in status:
+        break
+    if time.monotonic() >= deadline:
+        raise RuntimeError('Leader did not become a zombie')
+    time.sleep(0.01)
+before = pathlib.Path('/workspace/worker-writes').stat().st_size
+while pathlib.Path('/workspace/worker-writes').stat().st_size <= before:
+    if time.monotonic() >= deadline:
+        raise RuntimeError('Worker did not keep writing')
+    time.sleep(0.01)
+print('zombie leader with live worker')
+`;
+    expect(await computer.exec('/usr/bin/python3', '-I', '-c', ready))
+      .toBe('zombie leader with live worker');
+    expect(await inventory(computer)).not.toBe('[]');
+    if (helperUnavailable) {
+      // Simulate a helper that returns without stopping an otherwise endless worker.
+      await computer.exec('ln', '-sf', '/bin/true', '/usr/bin/python3');
+    }
+    const result = await control(computer);
+    expect(result).toContain('"controlEnabled":false');
+    if (helperUnavailable) {
+      expect(result).toContain('400\n');
+      expect(result).not.toContain('"executionQuiet":true');
+      expect(await inventory(computer)).not.toBe('[]');
+    } else {
+      expect(result).toContain('200\n');
+      expect(result).toContain('"executionQuiet":true');
+      expect(await inventory(computer)).toBe('[]');
+    }
+    await expectAdmissionClosed(computer);
+  } finally {
+    await computer.close();
+  }
+}
+it.each([false, true])(
+  'stops a live worker under a zombie leader or refuses proof if it never exits: %s',
+  stopsZombieWorker, 60_000);
 
 async function stopsRealExecutors(failure: boolean) {
   const computer = await uploadComputer();
