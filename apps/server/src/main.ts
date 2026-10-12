@@ -122,6 +122,10 @@ const app = buildServer(authConfig, {
     feed: realtime.feed, binding: realtime.binding,
   } } : {}),
   ...(membership ? { membership } : {}),
+  ...(realtime && events && modelDb ? { mcpInstances: {
+    silo: realtime.binding.silo, store: events.store, db: modelDb.db,
+    feed: realtime.feed, binding: realtime.binding,
+  } } : {}),
   ...(realtime && catalogue ? { integrations: { silo: realtime.binding.silo, feed: realtime.feed,
     catalogue, discovery: {}, ...(budget ? { budget } : {}), ...(events ? { store: events.store } : {}), ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),
   ...(realtime && computers && events ? { computers: { store: events.store, silo: realtime.binding.silo, feed: realtime.feed,

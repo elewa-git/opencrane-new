@@ -13,17 +13,35 @@ const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const referenceSchema = z.strictObject({ instanceId: z.string().regex(/^[a-f0-9]{64}$/u),
   profileId: id, serverId: id });
 const commandSchema = z.strictObject({ action: z.enum(['wake', 'stop']), changeRef: id,
-  expectedSequence: z.int().nonnegative(), runGeneration: z.int().positive() });
+  expectedSequence: z.int().nonnegative(), runGeneration: z.int().positive().optional() });
+
+export class McpInstanceRefused extends Error {
+  readonly reason: 'reference' | 'conflict' | 'profile_or_admission_unavailable';
+
+  constructor(reason: McpInstanceRefused['reason'], message: string) {
+    super(message);
+    this.reason = reason;
+  }
+}
 
 async function ownInstance(store: EventStore, binding: Binding, memberId: string, raw: unknown) {
   const reference = referenceSchema.parse(raw);
-  const rows = await history(store, `mcp-instance-${reference.instanceId}`, binding.silo,
-    performance.now() + 10_000);
+  let rows: StoredEvent[];
+  try {
+    rows = await history(store, `mcp-instance-${reference.instanceId}`, binding.silo,
+      performance.now() + 10_000);
+  } catch (error) {
+    // Hide another silo's stream in the same way as a missing instance.
+    if (error instanceof Error && error.message === 'Wrong silo') {
+      throw new McpInstanceRefused('reference', 'Instance silo mismatch');
+    }
+    throw error;
+  }
   let state: McpInstanceState | undefined;
   for (const row of rows) state = applyMcpInstance(state, row.event, row.sequence);
   if (!state || state.start.userId !== memberId || state.start.siloId !== binding.silo ||
       state.start.profileId !== reference.profileId || state.start.serverId !== reference.serverId) {
-    throw new Error('Instance owner or reference mismatch');
+    throw new McpInstanceRefused('reference', 'Instance owner or reference mismatch');
   }
   return { rows, state };
 }
@@ -66,12 +84,12 @@ function reconcileStop(saved: StoredEvent, attempted: EventEnvelope) {
       event.commandId !== attempted.commandId || event.type !== attempted.type ||
       event.principal?.kind !== attempted.principal?.kind ||
       event.principal?.id !== attempted.principal?.id) {
-    throw new Error('Instance change payload mismatch');
+    throw new McpInstanceRefused('conflict', 'Instance change payload mismatch');
   }
   const savedPayload = mcpInstanceStopSchema.parse(event.data);
   const attemptedPayload = mcpInstanceStopSchema.parse(attempted.data);
   if (JSON.stringify(savedPayload) !== JSON.stringify(attemptedPayload)) {
-    throw new Error('Instance change payload mismatch');
+    throw new McpInstanceRefused('conflict', 'Instance change payload mismatch');
   }
 }
 
@@ -96,8 +114,12 @@ export async function mcpInstanceCommand(store: EventStore, binding: Binding,
   const authority = { requiredRole: 'member' as const, fresh };
   await activeMember(store, binding, memberId, authority);
   // Keep all installation on the shared hosted path until its admission and profiles are usable.
-  if (input.action === 'wake') throw new Error('profile_or_admission_unavailable');
-  const data = { instanceId: current.state.start.instanceId, runGeneration: input.runGeneration,
+  if (input.action === 'wake') {
+    throw new McpInstanceRefused('profile_or_admission_unavailable',
+      'profile_or_admission_unavailable');
+  }
+  const runGeneration = input.runGeneration ?? current.state.start.runGeneration;
+  const data = { instanceId: current.state.start.instanceId, runGeneration,
     startChangeRef: current.state.start.changeRef, changeRef: input.changeRef,
     expectedSequence: input.expectedSequence, requestedBy: memberId, reason: 'owner_stop' as const };
   function originalChange(row: StoredEvent) {
@@ -106,20 +128,24 @@ export async function mcpInstanceCommand(store: EventStore, binding: Binding,
   const original = current.rows.find(originalChange);
   if (original) {
     if (original.event.type !== 'mcp.instance_stop_requested') {
-      throw new Error('Instance change payload mismatch');
+      throw new McpInstanceRefused('conflict', 'Instance change payload mismatch');
     }
     const saved = mcpInstanceStopSchema.parse(original.event.data);
     data.startChangeRef = saved.startChangeRef;
+    // Derive browser retries from their saved run, even after a later run has started.
+    if (input.runGeneration === undefined) {
+      data.runGeneration = saved.runGeneration;
+    }
     if (JSON.stringify(saved) !== JSON.stringify(mcpInstanceStopSchema.parse(data))) {
-      throw new Error('Instance change payload mismatch');
+      throw new McpInstanceRefused('conflict', 'Instance change payload mismatch');
     }
     await fresh();
     return receipt(original);
   }
   if (input.expectedSequence !== current.state.sequence ||
-      input.runGeneration !== current.state.start.runGeneration ||
+      runGeneration !== current.state.start.runGeneration ||
       current.state.phase === 'sleeping' || current.state.phase === 'stopping') {
-    throw new Error('Instance revision or run mismatch');
+    throw new McpInstanceRefused('conflict', 'Instance revision or run mismatch');
   }
   const subject = `mcp-instance-${current.state.start.instanceId}`;
   const event = { id: randomUUID(), commandId: input.changeRef,

@@ -42,7 +42,7 @@ Screens, independent review and fresh-install qualification are NOT RUN.
 ## Shared member guard
 
 `src/members/guard.ts` supplies `requireMember`, `MemberRefusal`, `idSchema` and
-`sameOrigin`. Chat, approval and file routes use it. Other member routes,
+`sameOrigin`. Chat, approval, file and personal tool-instance routes use it. Other member routes,
 screenshots, live view and integrations still use their existing checks; their
 migration is the remaining part of #121.
 
@@ -72,6 +72,52 @@ six missing cache headers. Existing route tests cover allowed requests, removals
 conversation access, Origin and slow histories. The required changed-route checks
 run with `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` under
 `nice -n 10`. Full root tests and a fresh-install journey are NOT RUN for this part.
+
+## Personal tool-instance HTTP routes
+
+`GET /api/my/tools/:serverId/profiles/:profileId/instance?instanceId=…` returns
+the current owner's safe status. Its `/stop` and `/wake` POST routes take only
+`changeRef` and `expectedSequence`. The server derives the run; extra identity,
+generation or action fields are invalid. Wake always refuses with
+`profile_or_admission_unavailable`. Stop records intent only; no worker runs it yet.
+`GET /api/my/tools/changes/:changeRef?instanceId=…&profileId=…&serverId=…` reads
+the owner's original receipt, including after a later run starts.
+The exact instance reference identifies saved history. It grants no access.
+These query fields are needed until usable personal profile lookup is available.
+
+`requireMember` checks the session, organisation, silo and mapped member.
+Its `sameOrigin` check protects writes. All ids use `idSchema` with the event
+contract's restrictions. The library loads instance history before its final
+membership check or short write check. No conversation stream is read or watched.
+Replies use `Cache-Control: no-store`, including malformed or oversized POST bodies.
+Missing or foreign instances return 404 with `status: unknown`; a missing change
+on an owned instance returns 200 with `status: unknown`. Neither is terminal proof.
+Invalid input returns 400, changed retries and stale revisions return 409,
+and unavailable dependencies return 503 without internal response details.
+
+This is the HTTP part of #51 design row 2, split to keep this change under 600 lines.
+Authenticated observation, admin commands and worker registration remain next.
+There is no worker, wake, credential release, callable instance or new installer.
+Every MCP still installs through the shared hosted path.
+
+### Source checks, 12 October 2026
+
+Runtime source: `ab3fade6`, based on main `f46d7721`. Linux worktree after `npm ci`;
+NATS and Lychee use the requested local tool links. HTTP uses Fastify request injection
+with real disposable NATS, OpenFGA and PostgreSQL databases. This was not a fresh silo.
+Test-first commits: `a1fce8bf` failed all ten initial HTTP cases; `40b777bf` failed
+three cases requiring server-derived runs; `4114ac8d` records the parser-cache refusal
+after that case failed. The fixes keep every refusal and original-receipt assertion.
+PASS: two focused batches, 497 tests each in 27.14 s and 29.63 s, one worker,
+`nice -n 10` and `PG_TEST_URL`. Earlier checks used the supplied port 55432;
+final batches used a throwaway PostgreSQL container, removed with its volume afterwards.
+PASS: workspace typecheck, event catalogue (125 types), standalone Knip and changelog checks.
+PASS: full lint. Logs: `/tmp/p3-10-pr2b-lint.log`.
+Both authority test files are unchanged. No full root suite ran.
+PARTIAL: design row 2. Observation/admin commands and worker registration remain unbuilt.
+NOT RUN: their refusal tests, live Kubernetes and fresh-install qualification.
+Logs: `/tmp/p3-10-pr2b-tests-final-{1,2}.log`, `/tmp/p3-10-pr2b-typecheck-final.log`,
+`/tmp/p3-10-pr2b-events.log`, `/tmp/p3-10-pr2b-knip.log`, `/tmp/p3-10-pr2b-changelog.log`.
 
 ## Dated MCP catalogue evidence
 

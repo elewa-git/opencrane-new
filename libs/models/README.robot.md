@@ -1319,8 +1319,13 @@ Change reads report applied intent for that original reference, never current re
 A missing change is unknown. Missing instance history is refused without terminal proof.
 Status excludes workload addresses, Pod ids and credential material; expired waking
 intent reads as unavailable. Wake always refuses `profile_or_admission_unavailable`.
-There are no HTTP routes, observation commands, live workers or credential actions yet.
-HTTP wiring and authenticated worker commands are the remaining part of design row 2.
+The server now exposes these commands through member HTTP routes.
+Commands may omit `runGeneration`; a new command uses the current run and an
+unchanged retry uses its saved original run. Explicit runs remain checked for internal callers.
+`McpInstanceRefused` distinguishes foreign or missing references, conflicting input
+and unavailable profile/admission prerequisites. Unexpected dependency errors stay unavailable.
+Observation commands, admin commands, worker registration and credential actions remain
+the next part of design row 2. No worker runs a saved stop yet.
 Every MCP continues to use the shared hosted installation path.
 
 Source checks, 11 October 2026: `03e136e4f8080b154bee7b35fd2e45bafbd2cd88`.

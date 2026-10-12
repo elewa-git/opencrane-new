@@ -12,7 +12,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs and destination rules"]
   server -.->|checks startup, access, indexed departures, spending stops, memory setup, fact links, tool reviews and turn previews| libs["libs/*<br/>shared code"]
-  server -->|records changes, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -->|records changes, instance stops, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, bounded visible chat lists, closing records, join times, facts, models and tools| postgres
@@ -35,6 +35,8 @@ have not been checked. Unrelated read receipts do not require reading the event 
 
 - Saves a member's welcome survey answers as encrypted records. Resumes confirmed
   progress, checks restarts and returns original saved receipts. Calls no model.
+- Lets members read their own private tool-instance status and original change results.
+  Saves an explicit owner stop request. Starting an instance remains unavailable.
 
 - Let owners and admins save one destination rule and read its original receipt.
   A change reference keeps its original rule and arguments when a request is repeated.
@@ -219,6 +221,8 @@ unavailable.
    answer from the permissions service.
 7. **An admin adds a tool server.** The server checks the remote address, lists its
    tools and leaves them blocked until an admin reviews them.
+   A member can read their own private instance and request its stop through HTTP.
+   Reading status never starts it or releases credentials. A missing result stays unknown.
 8. **An assistant asks an AI model for help.** The request goes through agentgateway, the
    AI gateway. The gateway asks the models process whether the budget allows it, and only
    then sends it on to the model provider.

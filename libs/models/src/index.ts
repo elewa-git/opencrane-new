@@ -45,4 +45,5 @@ export { providerTurnAdmission, managedProviderCallsEnabled } from './provider-t
 export { providerDrainCommand, providerDrainStatus } from './provider-drain.ts';
 
 export { approvalActivity } from './decision-activity.ts';
-export { mcpInstanceCommand, mcpInstanceStatus, mcpInstanceChange } from './mcp-instance.ts';
+export { mcpInstanceCommand, mcpInstanceStatus, mcpInstanceChange, McpInstanceRefused }
+  from './mcp-instance.ts';

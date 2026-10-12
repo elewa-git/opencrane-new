@@ -31,6 +31,7 @@ A change to the tools or their rules ends that approval.
 - Read private tool-instance status and original changes for their current member owner.
   Save an owner stop request with one event. Wake stays refused until hosted admission
   and personal profiles are available. No instance starts or credentials are released.
+  Derive the run for browser commands and keep retries tied to their original run.
   Check the saved stop before returning its receipt, so a concurrent retry cannot
   claim success for different details under the same request id.
 - Stage private credentials in immutable Kubernetes Secrets. Check their owner, profile,

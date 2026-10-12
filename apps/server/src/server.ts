@@ -24,6 +24,8 @@ import { registerAuthRoutes } from './auth/routes.ts';
 import { createServerLogger } from './logging.ts';
 import { registerMemberRoutes, type MembershipOptions } from './members/routes.ts';
 import { registerIntegrationRoutes, type IntegrationOptions } from './integrations/routes.ts';
+import { registerMcpInstanceRoutes, type McpInstanceOptions }
+  from './integrations/instance-routes.ts';
 import { registerComputerRoutes, type ComputerOptions } from './computers/routes.ts';
 
 import { registerAuditRoutes, type AuditOptions } from './audit/routes.ts';
@@ -48,6 +50,7 @@ export interface BuildServerOptions {
   onboarding?: ChatOptions;
   files?: FileOptions;
   integrations?: IntegrationOptions;
+  mcpInstances?: McpInstanceOptions;
   computers?: ComputerOptions;
   liveView?: LiveViewOptions;
   /** The process entrypoint owns bounded cleanup; embedded servers close telemetry here. */
@@ -94,6 +97,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
 
   registerBootstrapRoutes(app, authConfig, options.membership);
   registerIntegrationRoutes(app, authConfig, options.integrations);
+  registerMcpInstanceRoutes(app, authConfig, options.mcpInstances);
   registerEffectRoutes(app, authConfig, options.integrations);
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
