@@ -150,6 +150,22 @@ No process registers a live workload worker yet. Pod creation and confirmation a
 Kubernetes remain design row 3. Reports cannot wake, release material or claim callable
 readiness. Admin commands and their refusal tests remain the next split of row 2.
 
+### Worker observation source checks, 12 October 2026
+
+Source `144ddd5c`; base `326eaeae`. Linux worktree, disposable NATS/OpenFGA and
+private PostgreSQL test databases; not a fresh silo. The pinned gateway was fetched
+before the final runs. PASS: `npm ci` and the requested NATS/Lychee links.
+Tests-first commits: `20454674`, `20d4aff1`, `2bfed203`. Failing checks covered missing
+worker behaviour, stale observation revisions, member cookies and retired workers.
+PASS: two seven-file batches, 467 tests each, in 84.17 s and 72.08 s. Both used
+`nice -n 10`, one worker and `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+Both authority test files are unchanged. PASS: lint, workspace typecheck, check:events
+(127 types), standalone Knip and lint:changelog. Lint has 15 existing warnings.
+Logs: `/tmp/p3-10-pr2c-tests-final-{1,2}.log` and
+`/tmp/p3-10-pr2c-{lint,typecheck,events,knip,changelog}.log`.
+PARTIAL: design row 2; admin commands and their refusal cases remain next.
+NOT RUN: full root suite, live Kubernetes and fresh-install qualification.
+
 ### Source checks, 12 October 2026
 
 Runtime source: `ab3fade6`, based on main `f46d7721`. Linux worktree after `npm ci`;
