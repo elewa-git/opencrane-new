@@ -370,6 +370,7 @@ async function realFault(turn) {
     return !paths.some(function parent(other) { return other !== path && path.startsWith(other + '/'); });
   }
   const roots = paths.filter(topLevel);
+  const corePattern = await podExec(`console.log((await import('node:fs')).readFileSync('/proc/sys/kernel/core_pattern','utf8'))`);
   const beforeGuest = await guestInventory({ paths: roots });
   const beforeNode = await nodeInventory();
   const args = ['-n', namespace, 'exec', '-i', 'private', '--',
@@ -384,7 +385,7 @@ async function realFault(turn) {
     ...newDumpFiles(beforeNode.files, afterNode.files)];
   const sameConditions = JSON.stringify(fault.target) === JSON.stringify(fault.helper);
   const passed = fault.signal === 'SIGSEGV' && fault.code === null && sameConditions && dumps.length === 0;
-  measurement('realFault', passed, { fault, sameConditions, dumps, census,
+  measurement('realFault', passed, { fault, sameConditions, dumps, census, corePattern,
     beforeGuest, afterGuest, beforeNode, afterNode,
     scope: 'Native helper in the same Pod and private RAM home. Codex SIGSEGV handler is not executed.' });
   check('J4 real memory fault without a new dump', passed, { signal: fault.signal, sameConditions, dumps });
@@ -455,6 +456,7 @@ evidence.conditions.F2 = { result: 'ACCEPTED (dev box, owner 12 Oct, #366)',
 acceptedMeasurement('hostCorePattern', hostCorePattern,
   'Host apport crash dumps are accepted on this dev box for the MVP; see #366.');
 try {
+  evidence.sourceCommit = await command('git', ['rev-parse', 'HEAD']);
   if (await command('kubectl', ['config', 'current-context']) !== 'k3d-ocn') throw new Error('k3d-ocn unavailable');
   if (await k('get', 'ns', namespace, '--ignore-not-found')) throw new Error('Probe namespace already exists');
   mkdirSync('apps/computer/.state', { recursive: true });
