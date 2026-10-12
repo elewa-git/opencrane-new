@@ -173,3 +173,38 @@ async function readsClosingActivityWithoutAnotherStreamRead() {
 }
 it('includes current closes in one conversation activity read without unrelated records',
   readsClosingActivityWithoutAnotherStreamRead);
+
+async function createsOnlyEmptyConversations() {
+  const nats = await natsFixture();
+  try {
+    const created = { ...event('first-chat', 'conversation-chat', 'conversation.created'),
+      data: { conversationId: 'chat', mode: 'agent_session',
+        assistantId: 'assistant', createdBy: 'alice' } };
+    const first = await nats.store.append({ event: created, expectedSequence: 0 });
+    expect(first.status).toBe('appended');
+    const position = await nats.store.head(created.subject);
+    const replacement = { ...created, id: 'replacement', commandId: 'replacement',
+      data: { ...created.data, createdBy: 'bob' } };
+    const duplicateCreation = { event: replacement, expectedSequence: position };
+    expect(await nats.store.append(duplicateCreation)).toEqual({ status: 'conflict' });
+    const categoryCreation = { ...duplicateCreation, expectedSubject: 'conversation-*' };
+    expect(await nats.store.append(categoryCreation)).toEqual({ status: 'conflict' });
+    const retry = { event: created, expectedSequence: position };
+    expect(await nats.store.append(retry)).toEqual(first);
+    const next = { ...created, id: 'second-chat', commandId: 'second-chat',
+      subject: 'conversation-second', data: { ...created.data, conversationId: 'second' } };
+    const newConversation = { event: next, expectedSequence: position,
+      expectedSubject: 'conversation-*' };
+    const second = await nats.store.append(newConversation);
+    expect(second.status).toBe('appended');
+    const checkedRetry = { ...newConversation, historyChecked: true as const };
+    expect(await nats.store.append(checkedRetry)).toEqual(second);
+    const records = await Array.fromAsync(nats.store.readStream(created.subject));
+    expect(records).toHaveLength(1);
+    expect(records[0]?.event.data).toEqual(created.data);
+  } finally {
+    await nats.close();
+  }
+}
+it('creates conversations only on empty streams and keeps retries and category checks',
+  createsOnlyEmptyConversations);

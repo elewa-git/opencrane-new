@@ -489,3 +489,46 @@ the run generation by one. Changed UID/spec or late old-run records refuse repla
 No phase grants callable access. A late starting observation cannot undo a stop.
 `ProjectionRunner.rebuild(mcpInstances)` rebuilds this table without external work.
 The ops worker and replay CLI do not register this projection yet.
+
+## Member inventory inputs
+
+The members worker fills `inventory_inputs` in the same transaction as its event
+receipt and checkpoint. Rows contain silo, exact stream name, category, recorded
+link kind/id, latest event type/id and position. Every saved subject has one
+stream row, including subjects outside the inventory categories. Only inventory
+category stream rows advance on every event. Creation and participation changes
+keep history links for each affected member. Routine and connection stream rows
+record history that is unsupported.
+Membership removals and grant revocations replace link rows without deleting them.
+Legacy revocations retain member, group and assistant targets.
+
+`readInventoryReferences` finds a member's recorded groups, their distinct current
+people, owned assistants, grant streams and computers. Every query filters the
+silo. It reads bounded rows and counts distinct people in TypeScript. It stops at
+100 groups, 500 distinct people, 100 streams per category or 10,000 indexed links. Overflow returns `complete: false`; no exact total is claimed.
+`inventoryCategoryPositions` lets the server check that category indexing is current
+without reading category histories. Exact stream histories have a separate
+10-second/10,000-record ceiling. The 20/50 browsing and 100 candidate limits remain
+unchanged; this read is a complete review rather than a browsing page.
+
+`inventory_inputs_backfill` holds version 1, its `completed` flag, a saved subject
+count and the participation-category position. Creation sets `completed` false.
+Event processing updates the count and position in its existing transaction.
+Only a runner that reads from position one through the chosen end without a gap
+or failed event sets `completed` true. An
+interrupted first run followed by a restart leaves the index incomplete until a
+full rebuild succeeds. Ordinary updates never set the completion flag on an upgrade index.
+`inventoryIndexState` reads the marker and member generation without aggregating
+all inventory rows. The final removal check uses this small metadata read. `inventoryHistoryInputs`
+reads at most 10,001 indexed history links for one member, so the server can check
+their latest conversation-worker receipts without reading the event log.
+
+Existing installations must rebuild members before any review can be complete:
+`npm run replay -- members`. Before replay, category maxima cannot certify the
+index, absence replies are unavailable, and removal remains disabled. Known inputs
+still check their permission receipts. Online replay compares the indexed rows,
+then replaces the index and completed-replay marker together with member tables
+and receipts.
+No new worker or dependency is needed. `apps/server/test/member-inventory.test.ts` covers exact reads, pending
+empty revocations, overlap, overflow, unrelated activity and online replay using
+real NATS, PostgreSQL and OpenFGA. Fresh-install qualification: NOT RUN.

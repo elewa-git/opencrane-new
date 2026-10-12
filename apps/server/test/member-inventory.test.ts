@@ -4,9 +4,12 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { conversations, members, computers, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { conversations, members, computers, pgDb, ProjectionRunner,
+  rebuildMemberProjection } from '@opencrane/projections';
 import { memberAccessSchema, memberDepartureSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
+import { memberInventory } from '../src/members/inventory.ts';
+import type { GroupOptions } from '../src/members/group-routes.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
@@ -19,6 +22,7 @@ let app: ReturnType<typeof buildServer>;
 let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
 let counter = 0;
+let options: GroupOptions;
 async function append(subject: string, type: string, data: unknown, apply = true) {
   const record = { ...event(`inventory-${++counter}`, subject, type), silo: 'acme', data };
   const command = { event: record, expectedSequence: await nats.store.head(subject) };
@@ -62,6 +66,7 @@ async function initialise() {
     return Promise.resolve(subject);
   }
   const memberReads = { silo: 'acme', store: nats.store, db, binding, feed: { memberId } };
+  options = memberReads;
   app = buildServer(config, { memberReads });
 }
 async function close() {
@@ -100,6 +105,65 @@ async function refusesReaders() {
   }
 }
 it('requires current Owner/Admin events and available OpenFGA despite an elevated cookie', refusesReaders);
+
+async function readDeparture(memberId: string) {
+  const body = await readInventory('departure', memberId);
+  return memberDepartureSchema.parse(body);
+}
+
+async function refusesUnrebuiltUpgrade(revoked: boolean) {
+  const memberId = revoked ? 'upgrade-revoked' : 'upgrade-granted';
+  const resourceId = memberId;
+  await append(`member-${memberId}`, 'member.joined', {
+    memberId, role: 'member', email: `${memberId}@example.test`, displayName: memberId,
+  });
+  await append(grantStream('model', resourceId), 'grant.given', {
+    resourceType: 'model', resourceId, granteeKind: 'member',
+    granteeId: memberId, grantedBy: 'owner',
+  });
+  let pendingRevocation;
+  if (revoked) {
+    pendingRevocation = await append(grantStream('model', resourceId), 'grant.revoked', {
+      resourceType: 'model', resourceId, granteeKind: 'member',
+      granteeId: memberId, revokedBy: 'owner',
+    }, false);
+  }
+  await project();
+  // Preserve the old worker checkpoint, as an upgrade does when adding an empty index.
+  await options.db.query('DROP TABLE inventory_inputs');
+  await options.db.query('DROP TABLE IF EXISTS inventory_inputs_backfill');
+  await runner.initialise(members);
+  try {
+    await append(grantStream('model', `unrelated-${memberId}`), 'grant.given', {
+      resourceType: 'model', resourceId: `unrelated-${memberId}`, granteeKind: 'member',
+      granteeId: 'someone-else', grantedBy: 'owner',
+    });
+    await project();
+    const review = await readDeparture(memberId);
+    expect(review.complete).toBe(false);
+    expect(review.unavailableSections).toContain('inventory_index');
+    expect(review.permissions.remove).toBe(false);
+    expect(review.routines.status).toBe('unavailable');
+
+    await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, createLogger('upgrade-rebuild'));
+    const rebuilt = await readDeparture(memberId);
+    if (pendingRevocation) {
+      expect(rebuilt.complete).toBe(false);
+      expect(rebuilt.unavailableSections).toContain('grants');
+      expect(rebuilt.accessLost).toEqual([]);
+      await auth.handler.handle(pendingRevocation, pgDb(dbs.queue));
+      expect(await readDeparture(memberId))
+        .toMatchObject({ complete: true, accessLost: [] });
+    } else {
+      expect(rebuilt).toMatchObject({ complete: true, accessLost: [{ resourceId }] });
+    }
+  } finally {
+    await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, createLogger('upgrade-cleanup'));
+    if (pendingRevocation) await auth.handler.handle(pendingRevocation, pgDb(dbs.queue));
+  }
+}
+it.each([false, true])('refuses an unrebuilt upgrade index: pending revocation %s',
+  refusesUnrebuiltUpgrade);
 
 async function waitsForGrantRevocation() {
   const memberId = 'revoked-grant';
@@ -232,6 +296,119 @@ async function waitsForSharedAssistantMembership() {
 }
 it('waits for shared-assistant membership even without resource grants',
   waitsForSharedAssistantMembership);
+
+async function exactRevokedInputs() {
+  const memberId = 'exact-revoked';
+  const resourceId = 'exact-server';
+  const subject = grantStream('mcp_server', resourceId);
+  const grant = { resourceType: 'mcp_server', resourceId, granteeKind: 'member',
+    granteeId: memberId, grantedBy: 'owner' };
+  await append(subject, 'grant.given', grant);
+  const revocation = { resourceType: 'mcp_server', resourceId, granteeKind: 'member',
+    granteeId: memberId, revokedBy: 'owner' };
+  const revoked = await append(subject, 'grant.revoked', revocation, false);
+  await project();
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const pending = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(pending).toMatchObject({ complete: false, rows: [], unavailableSections: ['grants'] });
+  expect(reads.mock.calls).toHaveLength(1);
+  expect(reads.mock.calls[0]?.[0]).toBe(subject);
+  for (const [readSubject] of reads.mock.calls) expect(readSubject).not.toContain('*');
+  reads.mockRestore();
+  await auth.handler.handle(revoked, pgDb(dbs.queue));
+  const applied = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(applied).toMatchObject({ complete: true, rows: [] });
+}
+it('reads exact indexed streams and keeps an empty revocation pending its receipt', exactRevokedInputs);
+
+async function overlappingToolGroups() {
+  const memberId = 'overlap';
+  const resourceId = 'overlap-server';
+  for (const teamId of ['overlap-one', 'overlap-two']) {
+    const group = { teamId, name: teamId, createdBy: 'owner' };
+    const membership = { teamId, memberId, addedBy: 'owner' };
+    await append(`team-${teamId}`, 'team.created', group);
+    await append(`team-${teamId}`, 'team.member_added', membership);
+    const grant = { resourceType: 'mcp_server', resourceId, granteeKind: 'team',
+      granteeId: teamId, grantedBy: 'owner' };
+    await append(grantStream('mcp_server', resourceId), 'grant.given', grant);
+  }
+  await project();
+  const review = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(review.complete).toBe(true);
+  expect(review.rows).toHaveLength(1);
+  expect(review.rows[0]?.sources).toHaveLength(2);
+  const conversation = { conversationId: 'unrelated', assistantId: 'unrelated',
+    createdBy: 'someone-else' };
+  await append('conversation-unrelated', 'conversation.created', conversation);
+  const ciphertext = Buffer.from('Unrelated message content').toString('base64');
+  const message = { conversationId: 'unrelated', authorId: 'someone-else',
+    authorKind: 'human', ciphertext, keyId: 'key:unrelated', contentType: 'text' };
+  await append('conversation-unrelated', 'message.posted', message);
+  expect(await review.checkCurrent(performance.now() + 10_000)).toBe(true);
+  await project();
+  const after = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(after.complete).toBe(true);
+  expect(after.reviewRevision).toBe(review.reviewRevision);
+  const replayLogger = createLogger('inventory-replay');
+  const replayOptions = { verify: true };
+  await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, replayLogger, replayOptions);
+  const replayed = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(replayed.reviewRevision).toBe(review.reviewRevision);
+  expect(replayed.rows).toEqual(review.rows);
+}
+it('counts overlapping tool groups once and ignores unrelated pending and projected chat activity',
+  overlappingToolGroups);
+
+async function blocksExpandedPeople() {
+  const memberId = 'large-audience';
+  const teamId = 'large-audience-group';
+  const teamIds = [teamId, 'large-audience-overlap'];
+  for (const groupId of teamIds) {
+    const group = { teamId: groupId, name: groupId, createdBy: 'owner' };
+    const membership = { teamId: groupId, memberId, addedBy: 'owner' };
+    await append(`team-${groupId}`, 'team.created', group);
+    await append(`team-${groupId}`, 'team.member_added', membership);
+  }
+  const audience = [];
+  for (let index = 1; index < 500; index++) {
+    const data = { teamId, memberId: `audience-${index}`, addedBy: 'owner' };
+    const record = { ...event(`inventory-${++counter}`, `team-${teamId}`, 'team.member_added'),
+      silo: 'acme', data };
+    audience.push(record);
+  }
+  await nats.seed(audience);
+  await project();
+  const atLimit = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(atLimit.complete).toBe(true);
+  const extra = { ...event(`inventory-${++counter}`, `team-${teamId}`, 'team.member_added'),
+    silo: 'acme', data: { teamId, memberId: 'audience-501', addedBy: 'owner' } };
+  const extraRecords = [extra];
+  await nats.seed(extraRecords);
+  await project();
+  const overflow = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(overflow.complete).toBe(false);
+  expect(overflow.unavailableSections).toContain('inventory_limits');
+  expect(overflow.routines.status).toBe('unavailable');
+  expect(overflow.personalConnections.status).toBe('unavailable');
+}
+it('counts 500 overlapping people once and blocks completeness at 501', blocksExpandedPeople);
+
+async function blocksTooManyGroups() {
+  const memberId = 'many-groups';
+  for (let index = 0; index < 101; index++) {
+    const teamId = `many-groups-${index}`;
+    const group = { teamId, name: teamId, createdBy: 'owner' };
+    const membership = { teamId, memberId, addedBy: 'owner' };
+    await append(`team-${teamId}`, 'team.created', group);
+    await append(`team-${teamId}`, 'team.member_added', membership);
+  }
+  await project();
+  const overflow = await memberInventory(options, memberId, performance.now() + 10_000);
+  expect(overflow.complete).toBe(false);
+  expect(overflow.unavailableSections).toContain('inventory_limits');
+}
+it('blocks completeness at 101 groups', blocksTooManyGroups);
 
 async function recordsSources() {
   await append('assistant-personal', 'assistant.created', {

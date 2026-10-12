@@ -654,6 +654,11 @@ async function closesRemovedMemberBeforeSlowDesktopRead(laterInvitation: boolean
     await desktopReadStarted.promise;
     const revokedAt = performance.now();
     await remove();
+    const removalSequence = await current.nats.reader.head('member-alice');
+    const removal = await current.nats.reader.readEvent(removalSequence);
+    expect(removal.event).toMatchObject({
+      type: 'member.removed', subject: 'member-alice', data: { memberId: 'alice' },
+    });
     if (laterInvitation) {
       const invitation = {
         memberId: 'alice', invitationId: 'later-invite', email: 'a@example.test',

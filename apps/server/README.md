@@ -10,8 +10,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership, member access and destination rules"]
-  server -.->|checks startup, access, departures, spending stops, memory setup, fact links, tool reviews and turn previews| libs["libs/*<br/>shared code"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership, member access, inventory inputs and destination rules"]
+  server -.->|checks startup, access, indexed departures, spending stops, memory setup, fact links, tool reviews and turn previews| libs["libs/*<br/>shared code"]
   server -->|records changes, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -24,6 +24,14 @@ Tool discovery records the exact definitions and how long the check remains vali
 Descriptions are untrusted text. They never become instructions for the server.
 
 ## What it is responsible for
+
+Member access and departure reviews use indexed stream names to read saved grants,
+groups and assistants. Removed access stays incomplete until permission receipts
+arrive. Reviews stop above 100 groups or 500 distinct people. After an upgrade,
+reviews stay incomplete until the inventory index has been rebuilt.
+
+Reviews use indexed history changes and report incomplete results when new streams
+have not been checked. Unrelated read receipts do not require reading the event log.
 
 - Let owners and admins save one destination rule and read its original receipt.
   A change reference keeps its original rule and arguments when a request is repeated.

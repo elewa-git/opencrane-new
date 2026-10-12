@@ -1531,14 +1531,32 @@ Owner-role invitation remains invited; the active owner remains an owner.
 
 The Owner/Admin GETs `/api/members/:memberId/access` and `/api/members/:memberId/departure`
 check events and OpenFGA once. They stop after ten seconds or 10,000 inventory records.
+The members projection indexes the exact streams for groups, assistants, grants,
+computers and unsupported routine/connection history. Grant and group inventory
+loading reads exact streams. Category positions check index freshness and prevent new links
+from being missed. Reviews include at most 100 recorded groups and 500 distinct
+expanded people; overflow adds `inventory_limits` and keeps removal disabled.
+Missing or behind index data adds `inventory_index`. Rebuild members on upgrade.
+The existing 20/50 browsing and 100 candidate limits are unchanged.
 Checked inventory event positions, computer rows, history totals and positions in
 the target's retained rows form the review revision. Processing receipts show that
-both table workers have processed the reviewed category events. The inventory
+both table workers have processed the latest reviewed events on exact streams. The inventory
 compares positions in the target's computer and history rows before and after the
 SQL reads. Messages and table updates for another member do not change these positions.
-The conversation worker's checkpoint is only a starting point for checking pending
-events. Only the target's conversation creation and participation events must have
-been processed. Checkpoint movement never makes the review stale or incomplete.
+The index also keeps the latest creation and participation changes for the target.
+Their conversation-worker receipts are required even when the displayed history
+is empty. No review reads the global tail. The index counts all saved stream names
+and records the participation-category position. These small saved values are
+compared with NATS metadata to detect history not yet indexed. Known streams can
+keep receiving messages and read receipts without changing these values.
+
+Outside the write access check, one new unindexed conversation may be checked by
+reading its latest event and its first event only. Creation requires an empty
+conversation stream. If the first event excludes the target, that single new
+stream cannot add their history. More unindexed streams, an unknown stream of
+another kind, or pending participation changes make the review incomplete.
+The final removal check disables this extra read. It checks only saved metadata,
+category positions, target rows and indexed receipts within the access deadline.
 Behind tables and unsupported ownership, routines or connections block completion.
 The latest grant changes include revocations for each member, group or assistant.
 The latest group removals are kept even when no access rows remain. Both reads
@@ -1973,3 +1991,71 @@ before enabling tools. The review names the saved catalogue, connection, account
 mode, cost and approval details. Fixtures publish after choosing a wider mode.
 Memory Ask fixtures include complete review details. The bridge fixture includes
 the saved `stepUp: false` field when calculating its review digest.
+
+## Exact inventory source checks — 11 October 2026
+
+The tests were committed before the fix. They first failed on wildcard reads,
+501 expanded people and 101 groups. A second failing test required unknown routine
+and connection history when overflow prevents a complete read.
+
+PASS: the two changed test files ran twice with the supplied PostgreSQL URL,
+`nice -n 10` and one worker. The three-file run passed 31 tests in 66.71 seconds,
+including unchanged member-removal regressions. The second run passed all 18 tests
+in the two changed files in 53.85 seconds. Both used real NATS, PostgreSQL and
+OpenFGA. Online member replay rebuilt the index without changing permissions.
+The two authority test files remain unchanged.
+
+PASS: full lint, workspace typecheck, event catalogue (112 types), Knip and changelog checks.
+Lint reports 15 existing warnings and no errors.
+Logs are `/tmp/p4-23-pr3-tests-final-{7,8}.log`,
+`/tmp/p4-23-pr3-typecheck-final.log`, `/tmp/p4-23-pr3-events.log`,
+`/tmp/p4-23-pr3-knip.log`, `/tmp/p4-23-pr3-changelog.log` and
+`/tmp/p4-23-pr3-lint-complete.log`.
+NOT RUN: full root suite, independent review and fresh-install qualification.
+
+## Inventory upgrade guard
+
+A departure or access review requires `inventory_inputs_backfill.completed = true`
+for version 1 before reporting complete. A category's latest position cannot
+replace this check. Online member replay replaces the marker and index in the
+same transaction. The final removal check reads member generation and small index
+metadata; it does not aggregate category maxima again. Permission receipts remain
+required. An interrupted first replay must be fully rebuilt before completion.
+
+`test/member-inventory-volume.test.ts` pauses projection while saving 10,001 valid
+unrelated read receipts. The departure route returns 200 within two seconds, with
+a complete or explicitly incomplete review. It never reads global numbered events.
+After projection, the empty review and its revision match the original. Existing
+removal tests keep their target-history, receipt and concurrent-message assertions.
+
+## Inventory fix checks, 11 October 2026
+
+Tested source: `c90e7160b61f48a6b4710753a4ca9f48cc049144`, rebased on
+`897e42d3591b4cfa0ab96e5427a7b01963d0a01c`. The rebase completed and the base is
+an ancestor of this branch. Tests were committed before implementation. The volume
+case reproduced HTTP 503; the upgrade case reproduced a falsely complete empty
+review. Both now pass. Creation tests also refuse a second audience while preserving
+normal and history-checked category retries.
+
+PASS: two final runs under `nice -n 10`, with at most two workers per suite:
+
+| Tests | Each run | First run | Second run |
+| --- | --- | --- | --- |
+| Four server files: member inventory, volume, inventory and member removal | 103 passed | 152.89 s | 109.19 s |
+| Projection rebuild and runner | 11 passed | 34.19 s | 28.54 s |
+| All event-store tests | 94 passed | 84.74 s | 79.51 s |
+
+The server fixtures used the supplied `PG_TEST_URL`. Projection fixtures used a
+throwaway PostgreSQL 17.6 container on a random port. NATS, PostgreSQL databases
+and OpenFGA were disposable fixtures, not a fresh silo installation. The throwaway
+container was removed with its volume after the tests. The volume case returns
+HTTP 200 within two seconds without reading global numbered events. After projection,
+its empty result and revision match the original. Existing removal tests pass,
+including pending and projected target history, receipts and concurrent messages.
+Both authority test files remain unchanged.
+
+PASS: full lint, workspace typecheck, event catalogue (113 types), Knip and changelog
+checks. Lint reports 15 existing warnings and no errors. Logs are
+`/tmp/p4-23-pr3-{tests,projections,event-store}-latest{1,2}.log` and
+`/tmp/p4-23-pr3-{lint,typecheck,events,changelog}-latest.log`.
+NOT RUN: full root suite and fresh-install qualification.

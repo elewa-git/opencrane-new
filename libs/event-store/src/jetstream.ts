@@ -336,6 +336,29 @@ export class EventStore {
     if (performance.now() >= deadline) {
       throw new TimeoutError();
     }
+    if (event.type === 'conversation.created') {
+      // Keep creation as the first event so a new audience always adds a new subject.
+      if (expectedSubject === 'conversation-*') {
+        const existing = await this.head(event.subject, deadline);
+        if (existing !== 0) {
+          return await this.previousCreation(event, deadline) ?? { status: 'conflict' };
+        }
+      } else if (expectedSequence !== 0) {
+        return { status: 'conflict' };
+      }
+    }
+    return this.publishConditional(event, expectedSequence, deadline, expectedSubject,
+      expectedGlobalSequence, historyChecked);
+  }
+
+  private async publishConditional(
+    event: EventEnvelope,
+    expectedSequence: number,
+    deadline: number,
+    expectedSubject?: string,
+    expectedGlobalSequence?: number,
+    historyChecked?: true,
+  ): Promise<AppendResult> {
     const subject = wireSubject(event.subject);
     try {
       const ack = await this.client.publish(subject, JSON.stringify(event), {
@@ -369,6 +392,17 @@ export class EventStore {
       }
       throw error;
     }
+  }
+
+  private async previousCreation(event: EventEnvelope, deadline: number) {
+    // Check one event for a lost creation reply, even when the category has moved.
+    for await (const stored of this.readStream(event.subject, 1, deadline)) {
+      if (sameCommand(stored.event, event)) {
+        return { status: 'appended' as const, sequence: stored.sequence };
+      }
+      break;
+    }
+    return undefined;
   }
 
   /** Read one saved event at its global position without scanning its neighbours. */
@@ -414,13 +448,28 @@ export class EventStore {
     return retryRead(read, deadline, signal);
   }
 
-  private async readHead(deadline = Infinity, signal?: AbortSignal) {
+  private readInfo(deadline = Infinity, signal?: AbortSignal) {
     const manager = this.manager;
-    function readGlobalHead() {
+    function readStreamInfo() {
       return manager.streams.info(streamName);
     }
-    const info = await retryRead(readGlobalHead, deadline, signal);
+    return retryRead(readStreamInfo, deadline, signal);
+  }
+
+  private async readHead(deadline = Infinity, signal?: AbortSignal) {
+    const info = await this.readInfo(deadline, signal);
     return info.state.last_seq;
+  }
+
+  /** Read the number of saved subjects without listing subjects or reading events. */
+  async subjectCount(deadline = Infinity): Promise<number> {
+    const info = await this.readInfo(deadline);
+    const count = info.state.num_subjects ?? 0;
+    if (!Number.isSafeInteger(count) || count < 0 ||
+        (info.state.messages > 0 && count === 0)) {
+      throw new Error('Event subject count unavailable');
+    }
+    return count;
   }
 
   /** Read from the caller's SQL checkpoint; NATS does not keep a cursor across restarts. */

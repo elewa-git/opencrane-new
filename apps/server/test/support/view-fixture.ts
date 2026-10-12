@@ -5,6 +5,7 @@ import type { LiveViewOptions } from '../../src/computers/view.ts';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { createEventStore } from '@opencrane/event-store';
 import { envelope } from '@opencrane/models';
 import { pgDb, connectMemberFeed, members, conversations, computers, ProjectionRunner } from '@opencrane/projections';
 import type { LogDestination } from '@opencrane/observability';
@@ -19,6 +20,8 @@ export async function viewFixture(
   logDestination?: LogDestination,
 ) {
   const nats = await natsFixture(), dbs = await databases(), fga = await openfga();
+  // Keep a blocked viewer read from also blocking the member-removal HTTP request.
+  const memberStore = await createEventStore(nats.connection);
   const config = { ...testAuthConfig(), expectedOrgId: 'org-test', ...(redirectUri ? { redirectUri } : {}) };
   const binding = await createStore(fga.apiUrl, 'test'), auth = memberAuthorisation(binding), db = pgDb(dbs.queue);
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
@@ -36,7 +39,7 @@ export async function viewFixture(
     ...(logDestination ? { logDestination } : {}),
     chat: { silo: 'test', store: nats.store, binding, feed, db, keys },
     liveView: { silo: 'test', store: nats.store, binding, feed, db, open },
-    memberReads: { silo: 'test', store: nats.store, binding, feed, db },
+    memberReads: { silo: 'test', store: memberStore, binding, feed, db },
   };
   const app = buildServer(config, serverOptions);
     await append('member-alice', 'member.invited', { memberId: 'alice', invitationId: 'invite', email: 'a@example.test', role: 'member', invitedBy: 'owner', invitedIdentity: { issuer: config.issuerUrl, sub: 'alice' } });

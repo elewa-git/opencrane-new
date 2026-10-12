@@ -43,7 +43,7 @@ it.skipIf(!process.env["PG_TEST_URL"])(
       expect(
         (
           await storage.db.query<{ table_name: string }>(
-            "SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%_replay'",
+            "SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%_replay' OR table_name LIKE '%_replay_backfill'",
           )
         ).rows,
       ).toEqual([]);
@@ -115,7 +115,7 @@ it.skipIf(!process.env["PG_TEST_URL"])(
       await admin.query(`CREATE ROLE ${reader}`);
       await admin.query(`GRANT ${operator}, ${reader} TO CURRENT_USER`);
       await admin.query(`GRANT USAGE, CREATE ON SCHEMA public TO ${operator}`);
-      for (const table of ["members", "member_identities", "member_changes", "silo_ownership", "projection_checkpoints", "projection_events", "projection_generations"]) {
+      for (const table of ["members", "member_identities", "member_changes", "silo_ownership", "inventory_inputs", "inventory_inputs_backfill", "projection_checkpoints", "projection_events", "projection_generations"]) {
         await admin.query(`ALTER TABLE ${table} OWNER TO ${operator}`);
       }
       await admin.query(`GRANT SELECT ON members, member_identities, member_changes TO ${reader}`);
@@ -173,3 +173,49 @@ it.skipIf(!process.env["PG_TEST_URL"])(
   },
   30_000,
 );
+
+async function inventoryBackfilled(db: Pick<ReturnType<typeof pgDb>, 'query'>) {
+  const table = await db.query<{ name: string | null }>(
+    "SELECT to_regclass('inventory_inputs_backfill')::text AS name");
+  if (!table.rows[0]?.name) return false;
+  const marker = await db.query(`SELECT version FROM inventory_inputs_backfill
+    WHERE version = 1 AND completed = true`);
+  return marker.rows.length === 1;
+}
+
+async function completesOnlyFullInventoryReplay() {
+  const nats = await natsFixture();
+  const storage = await database('pg');
+  const logger = createLogger('inventory-backfill', { level: 'silent' });
+  try {
+    await nats.seed([event('backfill-one'), event('backfill-two', 'member-bob')]);
+    const runner = new ProjectionRunner(storage.db, nats.reader, logger);
+    await runner.initialise(members);
+    expect(await inventoryBackfilled(storage.db)).toBe(false);
+    const incomplete: EventSource = {
+      head: nats.reader.head.bind(nats.reader),
+      async *subscribe() {
+        for await (const stored of nats.reader.subscribe(1)) {
+          yield stored;
+          break;
+        }
+      },
+    };
+    const broken = new ProjectionRunner(storage.db, incomplete, logger);
+    await expect(broken.run(members)).rejects.toThrow('incomplete');
+    expect(await inventoryBackfilled(storage.db)).toBe(false);
+    expect(await runner.checkpoint(members)).toBe(1);
+    await runner.run(members);
+    expect(await inventoryBackfilled(storage.db)).toBe(false);
+    await rebuildMemberProjection(storage.db, nats.reader, logger);
+    expect(await inventoryBackfilled(storage.db)).toBe(true);
+    await runner.rebuild(members);
+    expect(await inventoryBackfilled(storage.db)).toBe(true);
+  } finally {
+    await storage.close();
+    await nats.close();
+  }
+}
+it.skipIf(!process.env['PG_TEST_URL'])(
+  'requires a complete inventory rebuild after an interrupted first replay',
+  completesOnlyFullInventoryReplay);
