@@ -1,19 +1,24 @@
 import { createHash } from 'node:crypto';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { PgBoss, TestClock, type Db } from 'pg-boss';
+import { scheduleNightly } from '../../../libs/handlers/src/queue.ts';
 import { event } from '@opencrane/event-store/testing';
 import { memoryMaintenanceRecordedDataSchema } from '@opencrane/events';
 import { memoryWrittenExample } from '../../../libs/events/src/memory.ts';
 import { memoryProjection, memoryScopeId, ProjectionRunner } from '@opencrane/projections';
-import { fixture, logger } from '../../../libs/handlers/test/helpers.ts';
+import { fixture, logger, until } from '../../../libs/handlers/test/helpers.ts';
 import { scanNightlyMemory } from '../src/nightly-memory.ts';
 
 let services: Awaited<ReturnType<typeof fixture>>;
 const scopeId = memoryScopeId('test', 'person', 'alice');
 const projection = memoryProjection({ decrypt });
 function decrypt() { return null; }
-afterEach(async function close() { await services?.close(); });
+afterEach(async function close() {
+  vi.useRealTimers();
+  await services?.close();
+});
 async function append(type: string, data: unknown, time = '2026-10-12T01:00:00Z') {
   const id = `${type.replaceAll('.', '-')}-${await services.nats.store.head()}`;
   const record = { ...event(id, `scope-${scopeId}`, type), silo: 'test', source: 'opencrane-server', time, data,
@@ -125,5 +130,124 @@ it('two scheduler processes claim the same scope, date and input key once',
       for (const child of children) {
         if (child.exitCode === null) child.kill('SIGKILL');
       }
+    }
+  }, 30_000);
+
+
+it('records the actual selection time when history crosses the window end',
+  async function slowHistory() {
+    await setup();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime('2026-10-12T02:14:59Z');
+    const store = services.nats.store;
+    const originalReadStream = store.readStream.bind(store);
+    async function* delayedHistory(subject: string, after?: number) {
+      yield* originalReadStream(subject, after);
+      vi.setSystemTime('2026-10-12T02:15:05Z');
+    }
+    store.readStream = delayedHistory;
+    const startedAt = new Date();
+    await scanNightlyMemory(services.db, store, 'test', startedAt);
+    store.readStream = originalReadStream;
+    const saved = await records();
+    const expected = {
+      action: 'missed',
+      reason: 'window_missed',
+      intendedAt: '2026-10-12T02:00:00.000Z',
+      selectedAt: '2026-10-12T02:15:05.000Z',
+    };
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject(expected);
+  }, 30_000);
+
+it('recovers an exhausted trigger as a missed night and leaves its inputs dirty',
+  async function exhaustedTrigger() {
+    await setup();
+    const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
+    const before = await services.db.query('SELECT * FROM memory_facts');
+    // Leave the worker paused with a new event waiting before the night begins.
+    await append('memory.written', written('paused-fact'));
+    const clock = new TestClock('2026-10-12T02:00:00Z');
+    let sessionStatements: string[] = [];
+    function setSessionStatements(statements: string[]) {
+      sessionStatements = statements;
+      return Promise.resolve();
+    }
+    async function executeSql(sql: string, values?: unknown[]) {
+      const client = await services.pool.connect();
+      try {
+        for (const statement of sessionStatements) {
+          await client.query(statement);
+        }
+        return await client.query(sql, values);
+      } finally {
+        client.release();
+      }
+    }
+    const adapter: Db = { executeSql, setSessionStatements };
+    const options = { db: adapter, clock, schedule: false };
+    const boss = new PgBoss(options);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    async function scanTrigger(occurrence?: Date) {
+      const selectedAt = new Date(clock.now());
+      vi.setSystemTime(selectedAt);
+      const intendedAt = occurrence ?? selectedAt;
+      await scanNightlyMemory(services.db, services.nats.store, 'test', intendedAt);
+    }
+    async function exhausted() {
+      await clock.tick(1000);
+      const jobs = await boss.findJobs('dream-nightly');
+      for (const job of jobs) {
+        if (job.state === 'failed' && job.retryCount === 5) {
+          return true;
+        }
+      }
+      return false;
+    }
+    async function recovered() {
+      await clock.tick(1000);
+      const saved = await records();
+      for (const record of saved) {
+        const parsed = memoryMaintenanceRecordedDataSchema.parse(record);
+        if (parsed.date === '2026-10-12' && parsed.action === 'missed') {
+          return true;
+        }
+      }
+      return false;
+    }
+    try {
+      await boss.start();
+      await scheduleNightly(boss, 'test', scanTrigger);
+      const payload = { silo: 'test' };
+      await boss.send('dream-nightly', payload);
+      await until(exhausted);
+      const failed = await boss.findJobs('dream-nightly');
+      expect(failed).toHaveLength(1);
+      expect(failed[0]?.state).toBe('failed');
+      const absent = await records();
+      expect(absent).toEqual([]);
+      await clock.setTime('2026-10-12T03:00:00Z');
+      await runner.run(projection);
+      await clock.setTime('2026-10-13T02:00:00Z');
+      await boss.send('dream-nightly', payload);
+      await until(recovered, 5000);
+      const saved = await records();
+      const missedNight = {
+        date: '2026-10-12',
+        action: 'missed',
+        reason: 'window_missed',
+        intendedAt: '2026-10-12T02:00:00.000Z',
+      };
+      const matchingNight = expect.objectContaining(missedNight);
+      const expectedHistory = expect.arrayContaining([matchingNight]);
+      expect(saved).toEqual(expectedHistory);
+      await runner.run(projection);
+      const after = await services.db.query('SELECT * FROM memory_facts');
+      expect(after.rows).toHaveLength(before.rows.length + 1);
+      const oldFact = expect.objectContaining(before.rows[0] as Record<string, unknown>);
+      const expectedFacts = expect.arrayContaining([oldFact]);
+      expect(after.rows).toEqual(expectedFacts);
+    } finally {
+      await boss.stop();
     }
   }, 30_000);
