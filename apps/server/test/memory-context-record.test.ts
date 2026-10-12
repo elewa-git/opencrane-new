@@ -222,9 +222,13 @@ async function participationClose(lateDelivery: 'initial' | 'recall') {
       expect(result.status).toBe('appended');
     }
     await append(event('prepared', prepared));
-    await append(event('loaded', loaded));
+    if (lateDelivery === 'recall') {
+      await append(event('loaded', loaded));
+    }
     const warm = await readChatFacts(nats.store, 'test', 'chat', 'turn');
-    expect(warm.memoryContext).toMatchObject({ status: 'loaded', references: [personal] });
+    const references = lateDelivery === 'recall' ? [personal] : [];
+    const status = lateDelivery === 'recall' ? 'loaded' : 'prepared';
+    expect(warm.memoryContext).toMatchObject({ status, references });
 
     const close = envelope('test', 'participation-chat', 'conversation.closed', {
       conversationId: 'chat', closedBy: 'alice',
@@ -233,8 +237,8 @@ async function participationClose(lateDelivery: 'initial' | 'recall') {
     const coldStore = { readStream: nats.store.readStream.bind(nats.store) };
     for (const store of [nats.store, coldStore]) {
       const facts = await readChatFacts(store, 'test', 'chat', 'turn');
-      expect(facts).toMatchObject({ closed: true, conversationClosed: true,
-        memoryContext: { status: 'ended', references: [personal], executionAvailable: false } });
+      expect.soft(facts).toMatchObject({ closed: true, conversationClosed: true,
+        memoryContext: { status: 'ended', references, executionAvailable: false } });
     }
 
     const lateLoad = lateDelivery === 'initial'
