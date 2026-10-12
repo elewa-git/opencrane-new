@@ -1,10 +1,35 @@
 import { expect, it } from 'vitest';
 import { turnTokenAudience } from '@opencrane/auth';
-import { fixture } from './fixture.ts';
+import { grantStream } from '@opencrane/authz';
+import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
+
+async function allowFixtureTool(setup: Awaited<ReturnType<typeof fixture>>) {
+  const tool = toolEvidence({ name: 'read', reviewed: true, costCents: 0 });
+  const catalogue = catalogueEvidence([tool]);
+  const registration = { serverId: 'fixture', kind: 'remote',
+    locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.server_registered', registration);
+  const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+    ...catalogue };
+  await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
+  await reviewCatalogue(setup);
+  const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'read',
+    toolRevision: tool.revision, mode: 'allow', setBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+  const publication = { serverId: 'fixture', publishedBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.server_published', publication);
+  for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
+    const grant = { resourceType: 'mcp_server', resourceId: 'fixture',
+      granteeId, granteeKind, grantedBy: 'alice' };
+    const event = await setup.append(grantStream('mcp_server', 'fixture'), 'grant.given', grant);
+    await setup.auth.handler.handle(event, setup.db);
+  }
+}
 
 async function signsAndRenewsSharedPass() {
   const setup = await fixture();
   try {
+    await allowFixtureTool(setup);
     const created = { conversationId: 'child', createdBy: 'alice', mode: 'agent_session',
       contextKind: 'shared_child', assistantId: 'assistant', payingGroupId: 'sales',
       initialJoins: [{ participantId: 'alice', parentJoinEventId: 'join', parentJoinPosition: 1 }],
@@ -33,7 +58,12 @@ async function signsAndRenewsSharedPass() {
         'session-id': 'shared-thread' };
       const checked = await setup.credentials.check(headers);
       expect(checked.turn['contextClass']).toBe('shared_only');
-      const request = { method: 'POST', headers, body: '{}' };
+      const toolHeaders = { ...headers, 'mcp-protocol-version': '2026-07-28',
+        'mcp-method': 'tools/call', 'mcp-name': 'read' };
+      const body = { jsonrpc: '2.0', id: 1, method: 'tools/call',
+        params: { name: 'read', arguments: {},
+          _meta: { threadId: 'shared-thread', callId: `shared-${attempt}` } } };
+      const request = { method: 'POST', headers: toolHeaders, body: JSON.stringify(body) };
       const reservationsBeforeTools = setup.actor.state.reservations.length;
       for (const path of ['/authorize/mcp/fixture/installed', '/authorize/mcp/memory/server']) {
         const response = await fetch(`${setup.options.decisionUrl}${path}`, request);
