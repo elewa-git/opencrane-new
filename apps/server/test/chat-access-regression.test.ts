@@ -2072,6 +2072,7 @@ async function deniesInheritedChild(removal: string) {
       const response = await childRead(context, path);
       expect(response.statusCode, response.body).toBe(403);
     }
+    await context.runner.run(conversations);
     const list = await context.app.inject({ url: '/api/conversations',
       headers: context.headers('bob') });
     expect(list.statusCode, list.body).toBe(200);
@@ -2095,6 +2096,7 @@ it.each(['bob', 'alice', 'creator membership'])(
 
 async function explicitChildJoin() {
   const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
     await childSession(context);
     await context.append('participation-child', 'participant.removed', {
@@ -2105,6 +2107,8 @@ async function explicitChildJoin() {
       conversationId: 'child', participantId: 'bob', addedBy: 'alice',
       contextKind: 'shared_child', joinKind: 'explicit_child', reviewPosition: 1,
     });
+    await context.runner.run(conversations);
+    client = await openChatSocket(context, 'child', true, 'bob');
     await removeParentPerson(context, 'bob');
     await removeParentPerson(context, 'alice');
     await context.append('member-alice', 'member.removed', {
@@ -2124,7 +2128,11 @@ async function explicitChildJoin() {
     expect(list.body).not.toContain('origin');
     expect(list.body).not.toContain('initialJoins');
     expect((await childRead(context, 'approvals')).statusCode).toBe(200);
+    await delay(300);
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    expect(JSON.stringify(client.received)).not.toContain('hidden-source');
   } finally {
+    await client?.close();
     await context.close();
   }
 }
@@ -2157,3 +2165,50 @@ async function refusesStaleInheritedAccess() {
 }
 it('refuses stale IAM inherited child permission after the parent join ends',
   refusesStaleInheritedAccess, 120_000);
+
+
+async function removesParentDuringChildPermission() {
+  const context = await fixture();
+  const originalHead = context.nats.store.head.bind(context.nats.store);
+  try {
+    await childSession(context);
+    let checked = 0;
+    async function removeAfterPermission(subject?: string, deadline?: number) {
+      if (subject === 'participation-child') {
+        checked++;
+        if (checked === 2) await removeParentPerson(context, 'bob');
+      }
+      return originalHead(subject, deadline);
+    }
+    context.nats.store.head = removeAfterPermission;
+    const response = await childRead(context, 'approvals');
+    expect(response.statusCode, response.body).toBe(403);
+    expect(checked).toBe(2);
+  } finally {
+    context.nats.store.head = originalHead;
+    await context.close();
+  }
+}
+it('denies a parent removal saved while OpenFGA checks child read permission',
+  removesParentDuringChildPermission, 120_000);
+
+async function refusesUnrecognisedDisplayEvent() {
+  const context = await fixture();
+  try {
+    await childSession(context);
+    const position = await context.nats.store.head();
+    const data = { conversationId: 'parent', childConversationId: 'hidden-child',
+      requestId: 'hidden-request', text: 'Private child question' };
+    await context.db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      ['test', 'parent', position + 1, 'hidden-intent-id', 'conversation.child_requested',
+        JSON.stringify(data), new Date().toISOString()]);
+    const response = await context.app.inject({ url: '/api/conversations/parent/messages',
+      headers: context.headers('bob') });
+    expect(response.statusCode, response.body).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+  } finally {
+    await context.close();
+  }
+}
+it('withholds an unrecognised display event from a parent reader',
+  refusesUnrecognisedDisplayEvent, 120_000);
