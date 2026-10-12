@@ -135,5 +135,6 @@ reopen it. These two streams do not form one transaction.
 
 List continuations use only visible matches. An empty successful list has no continuation.
 A scan that reaches 100 candidates returns 503 `list_incomplete` without rows or a cursor.
-Ordinary late group joiners receive their join time and current participants. Their list
-row omits the original creator and group snapshot details.
+Ordinary late joiners receive their join time, including in personal sessions.
+Group list rows also show current participants and omit the original creator and group
+snapshot details. Personal-session rows keep the assistant and creator identifiers.

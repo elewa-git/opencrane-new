@@ -207,15 +207,20 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
       const normalisedTitle = display.title.normalize('NFC');
       const searchableTitle = normalisedTitle.toLowerCase();
       if (!searchableTitle.includes(search)) return undefined;
+      // Use the current join time when this person cannot read earlier history.
+      let createdAt = row.createdAt;
+      if (access.historyPosition > access.creation.sequence) {
+        createdAt = candidate.joinedAt;
+      }
       if (row.mode !== 'agent_session') {
         // Return current people and join time without details from an earlier creation.
         if (access.historyPosition > access.creation.sequence) {
           return { conversationId: row.conversationId, mode: row.mode,
-            createdAt: candidate.joinedAt, participantIds: access.participantIds, ...display };
+            createdAt, participantIds: access.participantIds, ...display };
         }
         return { ...row, participantIds: access.participantIds, ...display };
       }
-      return { ...row, ...display };
+      return { ...row, createdAt, ...display };
     } catch (error) {
       if (isChatRefused(error) || error instanceof ChatAccessApplying) return undefined;
       throw error;

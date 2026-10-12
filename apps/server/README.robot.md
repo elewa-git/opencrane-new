@@ -612,8 +612,10 @@ until it fits within the limit. Complete scans choose pages only from allowed ma
 Empty successful pages always have a null cursor. Search matches a case-insensitive substring of the visible
 first-message title, after access checks and decryption. No hidden totals are returned.
 Saved archive choices apply only to the current join. Ordinary late joins start without
-pre-join activity. Their `createdAt` is their current join time. Their reply omits
-`createdBy`, `groupId` and `groupSnapshotPosition` from the original creation.
+pre-join activity. Their `createdAt` is their current join time, including in personal
+sessions. Personal-session rows keep the assistant and creator identifiers required
+by the reply schema. Group replies omit `createdBy`, `groupId` and
+`groupSnapshotPosition` from the original creation.
 Initial and explicit shared-child participants keep their allowed creation details.
 The list orders by each participant's visible activity position,
 then their join position to break ties. Closed activity stays at the first close.

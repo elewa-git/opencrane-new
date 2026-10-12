@@ -237,9 +237,9 @@ unavailable.
     by activity they can see. Recent and Archived follow the person's saved choice.
     Search checks only visible titles. Continuations refer only to visible chats.
     Lists that reach the fixed scan limit return an incomplete reply so hidden chats
-    cannot create extra pages. Late joiners see their join time and current participants,
-    without earlier creation details. The website loads the first page; paging controls
-    are planned.
+    cannot create extra pages. Ordinary late joiners see their join time, including in
+    personal sessions. Group lists also show current participants without earlier
+    creation details. The website loads the first page; paging controls are planned.
 
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.
