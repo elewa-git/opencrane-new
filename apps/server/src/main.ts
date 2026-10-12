@@ -55,6 +55,12 @@ if (databaseUrl) {
   computers = connectComputers(databaseUrl);
   modelDb = connectProjectionDb(databaseUrl, () => undefined);
 }
+const personalKeyDirectory = process.env['PERSONAL_KEY_DIRECTORY']?.trim();
+let onboarding: ChatOptions | undefined;
+if (realtime && events && modelDb && personalKeyDirectory) {
+  onboarding = { silo: realtime.binding.silo, store: events.store, db: modelDb.db,
+    feed: realtime.feed, binding: realtime.binding, keys: conversationKeys(personalKeyDirectory) };
+}
 const keyDirectory = process.env['CONVERSATION_KEYS_DIR'];
 const chat: ChatOptions | undefined = realtime && events && modelDb && keyDirectory ? { silo: realtime.binding.silo, store: events.store,
   db: modelDb.db, feed: realtime.feed, binding: realtime.binding, keys: conversationKeys(keyDirectory) } : undefined;
@@ -79,6 +85,7 @@ const membership = events && silo ? {
 } : undefined;
 const app = buildServer(authConfig, {
   processOwnsTelemetry: true,
+  ...(onboarding ? { onboarding } : {}),
   ...(chat ? { chat, liveView: { ...chat, open: desktopConnection(process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!) } } : {}),
   ...(realtime && events && modelDb ? { audit: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
   ...(files ? { files } : {}),

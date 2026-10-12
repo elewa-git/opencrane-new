@@ -1,3 +1,4 @@
+import { registerSurveyRoutes } from './onboarding/routes.ts';
 import { registerRoleRoutes } from './members/role-routes.ts';
 import { registerInvitationEmail,
   type InvitationEmailOptions } from './members/invitation-email.ts';
@@ -44,6 +45,7 @@ export interface BuildServerOptions {
   memory?: import('./memory/access.ts').MemoryOptions;
   audit?: AuditOptions;
   chat?: ChatOptions;
+  onboarding?: ChatOptions;
   files?: FileOptions;
   integrations?: IntegrationOptions;
   computers?: ComputerOptions;
@@ -95,6 +97,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerEffectRoutes(app, authConfig, options.integrations);
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
+  registerSurveyRoutes(app, authConfig, options.onboarding);
   registerAssistantRoutes(app, authConfig, options.chat);
   registerAuditRoutes(app, authConfig, options.audit);
   registerLiveView(app, authConfig, options.liveView);

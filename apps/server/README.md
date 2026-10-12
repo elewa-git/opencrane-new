@@ -10,7 +10,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, invitations, chats, groups, ownership, member access, inventory inputs and destination rules"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs and destination rules"]
   server -.->|checks startup, access, indexed departures, spending stops, memory setup, fact links, tool reviews and turn previews| libs["libs/*<br/>shared code"]
   server -->|records changes, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
@@ -32,6 +32,9 @@ reviews stay incomplete until the inventory index has been rebuilt.
 
 Reviews use indexed history changes and report incomplete results when new streams
 have not been checked. Unrelated read receipts do not require reading the event log.
+
+- Saves a member's welcome survey answers as encrypted records. Resumes confirmed
+  progress, checks restarts and returns original saved receipts. Calls no model.
 
 - Let owners and admins save one destination rule and read its original receipt.
   A change reference keeps its original rule and arguments when a request is repeated.
@@ -226,6 +229,10 @@ unavailable.
 10. **An admin opens groups or ownership.** The server loads the records, then checks
     current access before replying. Slow histories can finish. A removal during
     loading denies the reply; unrelated chat activity does not interrupt it.
+
+11. **A member continues the welcome survey.** The server checks their current
+    membership and saves one step. Reloading returns confirmed answers. Editing
+    an earlier answer clears later current steps. Restarting keeps encrypted history.
 
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.
