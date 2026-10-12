@@ -210,6 +210,18 @@ child.unref();
 it('stops a detached process handing work to fresh children, including a fork during scan',
   stopsForkDuringScan, 60_000);
 
+async function refusesRootHelper() {
+  const computer = await uploadComputer();
+  try {
+    const args = ['/usr/bin/python3', '-I', '/app/src/stop-processes.py', '[]'];
+    await expect(computer.exec(...args))
+      .rejects.toThrow('Executor user required');
+  } finally {
+    await computer.close();
+  }
+}
+it('refuses to run the termination helper as root', refusesRootHelper, 60_000);
+
 async function stopsRealExecutors(failure: boolean) {
   const computer = await uploadComputer();
   let socket: WebSocket | undefined;

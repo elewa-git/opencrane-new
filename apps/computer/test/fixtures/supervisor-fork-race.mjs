@@ -45,7 +45,8 @@ function readDirectoryThenFork(path, options) {
 
 fs.readdirSync = readDirectoryThenFork;
 syncBuiltinESMExports();
-const { supervisorStop } = await import('/app/src/supervisor-stop.ts');
+const supervisorModule = new URL('file:///app/src/supervisor-stop.ts');
+const { supervisorStop } = await import(supervisorModule.href);
 fs.rmSync('/run/executor/supervisor/control.sock');
 supervisorStop();
 
