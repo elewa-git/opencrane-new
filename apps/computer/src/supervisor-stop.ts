@@ -55,6 +55,30 @@ function readStopRequest(value: unknown): StopRequest {
   return { generation, podUid, takeoverId, affectedTurnIds };
 }
 
+function ignoreExitedTask(error: unknown) {
+  // Ignore only an exit during observation. Missing permissions are not quiet proof.
+  if (!error || typeof error !== 'object' || !('code' in error)
+    || error.code !== 'ENOENT') throw error;
+}
+
+function hasLiveExecutionThread(pid: string) {
+  for (const thread of readdirSync(`/proc/${pid}/task`)) {
+    try {
+      const status = readFileSync(`/proc/${pid}/task/${thread}/status`, 'utf8');
+      const uid = Number(/^Uid:\s+(\d+)/mu.exec(status)?.[1]);
+      if (!Number.isSafeInteger(uid)) throw new Error('Task identity unavailable');
+      if (!EXECUTION_UIDS.includes(uid)) continue;
+      const state = /^State:\s+(\S)/mu.exec(status)?.[1];
+      if (!state) throw new Error('Task state unavailable');
+      // Check workers even when their main thread is a zombie.
+      if (state !== 'Z' && state !== 'X') return true;
+    } catch (error) {
+      ignoreExitedTask(error);
+    }
+  }
+  return false;
+}
+
 function executionInventory() {
   const inventory: ProcessIdentity[] = [];
   for (const name of readdirSync('/proc')) {
@@ -63,18 +87,14 @@ function executionInventory() {
       const status = readFileSync(`/proc/${name}/status`, 'utf8');
       const uid = Number(/^Uid:\s+(\d+)/mu.exec(status)?.[1]);
       if (!Number.isSafeInteger(uid)) throw new Error('Process identity unavailable');
-      if (!EXECUTION_UIDS.includes(uid)) continue;
+      if (!hasLiveExecutionThread(name)) continue;
       const stat = readFileSync(`/proc/${name}/stat`, 'utf8');
       const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-      // Exclude zombies because they can no longer execute or hold connections.
-      if (fields[0] === 'Z') continue;
       const startTime = fields[19];
       if (!startTime || !/^\d+$/u.test(startTime)) throw new Error('Process start unavailable');
       inventory.push({ pid: Number(name), uid, startTime });
     } catch (error) {
-      // Ignore only an exit during observation. Missing permissions are not quiet proof.
-      if (!error || typeof error !== 'object' || !('code' in error)
-        || error.code !== 'ENOENT') throw error;
+      ignoreExitedTask(error);
     }
   }
   return inventory;
