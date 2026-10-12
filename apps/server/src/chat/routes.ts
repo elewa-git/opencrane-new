@@ -3,12 +3,15 @@ import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { creationEvent, privateSessionReader, sharedAssistantAuthority,
   writePrivateSession } from './private-session.ts';
 import { sessionSlug } from '@opencrane/protocol';
+import { conversationListQuery, conversationListCursor, ConversationListChanged,
+  ConversationListIncomplete }
+  from './list-cursor.ts';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import {
-  listConversations, readConversation,
+  conversationListCandidates, conversationListRevision, readConversation,
 } from '@opencrane/projections';
 import {
   chatAccess,
@@ -121,7 +124,8 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
         if (conversationId && commandId) {
           result = await chatChange(configured, conversationId, commandId, access.joinPosition);
         } else {
-          result = await read(request, configured, memberId, conversationId, access);
+          result = await read(request, configured, memberId, conversationId,
+            access, config.cookieSecret);
         }
         if ('status' in result && result.status === 'not_found') reply.code(404);
         return reply.send(result);
@@ -152,7 +156,7 @@ async function participantReply(request: FastifyRequest, reply: FastifyReply,
 
 async function read(
   request: FastifyRequest, options: ChatOptions, memberId: string,
-  conversationId: string | undefined, access: Access,
+  conversationId: string | undefined, access: Access, secret: string,
 ) {
   if (request.routeOptions.url === '/api/chat/colleagues') {
     return colleagues(options, memberId, request.query);
@@ -171,39 +175,112 @@ async function read(
     const mode = recordedChatMode(access);
     return chatRows(options, conversationId, mode, since, access.joinPosition);
   }
-  return conversationList(options, memberId);
+  return conversationList(options, memberId, request.query, secret);
 }
 
-async function conversationList(options: ChatOptions, memberId: string) {
-  const conversations = await listConversations(options.db, options.silo, memberId);
+type ListQuery = z.infer<typeof conversationListQuery>;
+type ListCandidate = Awaited<ReturnType<typeof conversationListCandidates>>[number];
+
+async function visibleListMatches(options: ChatOptions, memberId: string,
+  query: ListQuery, candidates: ListCandidate[]) {
+  const visibleCandidates: typeof candidates = [];
   const readPrivate = privateSessionReader(options, memberId);
   const readParticipation = conversationParticipationReader(options, memberId);
-  async function authorisedSummary(row: (typeof conversations)[number]) {
+  async function authorisedSummary(candidate: (typeof candidates)[number]) {
+    const row = candidate.conversation;
     try {
       const access = await readParticipation(row.conversationId);
+      if (access.joinEventId !== candidate.joinEventId) throw new ConversationListChanged();
       if (row.mode === 'agent_session') {
         await readPrivate(row.conversationId, access.creation.event);
       }
-      const display = await summary(options, row.conversationId, row.mode, access.joinPosition);
+      if (access.accessPosition !== candidate.participationPosition) {
+        throw new ConversationListChanged();
+      }
+      visibleCandidates.push(candidate);
+      const state = z.object({ archived: z.boolean() }).nullable().parse(candidate.state);
+      const archived = state?.archived ?? false;
+      if (archived !== (query.section === 'archived')) return undefined;
+      const display = await summary(options, row.conversationId, row.mode, access.historyPosition);
+      const normalisedSearch = query.q.normalize('NFC');
+      const search = normalisedSearch.toLowerCase();
+      const normalisedTitle = display.title.normalize('NFC');
+      const searchableTitle = normalisedTitle.toLowerCase();
+      if (!searchableTitle.includes(search)) return undefined;
+      // Use the current join time when this person cannot read earlier history.
+      let createdAt = row.createdAt;
+      if (access.historyPosition > access.creation.sequence) {
+        createdAt = candidate.joinedAt;
+      }
       if (row.mode !== 'agent_session') {
+        // Return current people and join time without details from an earlier creation.
+        if (access.historyPosition > access.creation.sequence) {
+          return { conversationId: row.conversationId, mode: row.mode,
+            createdAt, participantIds: access.participantIds, ...display };
+        }
         return { ...row, participantIds: access.participantIds, ...display };
       }
-      return { ...row, ...display };
+      return { ...row, createdAt, ...display };
     } catch (error) {
       if (isChatRefused(error) || error instanceof ChatAccessApplying) return undefined;
       throw error;
     }
   }
-  const rows = [];
-  for (let offset = 0; offset < conversations.length; offset += 16) {
-    const batch = conversations.slice(offset, offset + 16);
+  const matches = [];
+  for (let offset = 0; offset < candidates.length; offset += 8) {
+    const batch = candidates.slice(offset, offset + 8);
     const checks = batch.map(authorisedSummary);
     const summaries = await Promise.all(checks);
-    for (const row of summaries) {
-      if (row) rows.push(row);
+    for (let index = 0; index < summaries.length; index++) {
+      const row = summaries[index];
+      const candidate = batch[index];
+      if (row && candidate) matches.push({ row, position: candidate.scanPosition });
     }
   }
-  return { rows };
+  // Restore activity order after concurrent access checks finish in a different order.
+  const visibleIds = new Set<string>();
+  for (const candidate of visibleCandidates) visibleIds.add(candidate.conversation.conversationId);
+  function isVisible(candidate: (typeof candidates)[number]) {
+    return visibleIds.has(candidate.conversation.conversationId);
+  }
+  const authorised = candidates.filter(isVisible);
+  return { matches, authorised, isVisible };
+}
+
+async function conversationList(options: ChatOptions, memberId: string,
+  input: unknown, secret: string) {
+  const query = conversationListQuery.parse(input);
+  const candidates = await conversationListCandidates(options.db, options.silo, memberId);
+  // Refuse a partial scan without returning rows or positions from denied chats.
+  if (candidates.length === 100) throw new ConversationListIncomplete();
+  const visible = await visibleListMatches(options, memberId, query, candidates);
+  const { matches, authorised, isVisible } = visible;
+  const revision = await conversationListRevision(options.db, authorised);
+  const identity = [options.silo, memberId, query.section, query.q, query.limit, revision];
+  const cursor = conversationListCursor(secret, identity, query.cursor);
+  const currentCandidates = await conversationListCandidates(options.db, options.silo, memberId);
+  if (currentCandidates.length === 100) throw new ConversationListIncomplete();
+  const currentVisible = currentCandidates.filter(isVisible);
+  const currentRevision = await conversationListRevision(options.db, currentVisible);
+  if (currentRevision !== revision) throw new ConversationListChanged();
+  function beforeCursor(match: (typeof matches)[number]) {
+    const [activity, joined] = match.position;
+    const [beforeActivity, beforeJoined] = cursor.before;
+    return activity < beforeActivity || (activity === beforeActivity && joined < beforeJoined);
+  }
+  const remaining = matches.filter(beforeCursor);
+  const page = remaining.slice(0, query.limit);
+  function summaryRow(match: (typeof matches)[number]) {
+    return match.row;
+  }
+  const rows = page.map(summaryRow);
+  let nextCursor: string | null = null;
+  if (remaining.length > page.length) {
+    const lastVisible = page.at(-1);
+    if (!lastVisible) throw new Error('Conversation page unavailable');
+    nextCursor = cursor.next(lastVisible.position);
+  }
+  return { rows, nextCursor };
 }
 
 async function personalContext(options: ChatOptions, memberId: string) {
@@ -395,6 +472,12 @@ async function assistantCreationDetails(options: ChatOptions, memberId: string,
 function chatRefusal(request: FastifyRequest, reply: FastifyReply, error: unknown) {
   if (error instanceof MemberRefusal) {
     return reply.code(error.statusCode).send({ status: error.status });
+  }
+  if (error instanceof ConversationListIncomplete) {
+    return reply.code(503).send({ status: 'list_incomplete' });
+  }
+  if (error instanceof ConversationListChanged) {
+    return reply.code(409).send({ status: 'list_changed' });
   }
   if (error instanceof ChatAccessApplying) {
     return reply.code(425).send({ status: 'access_applying' });

@@ -15,7 +15,7 @@ An Owner/Admin gains no access to another person's direct conversation.
 | `GET /api/chat/colleagues` | Optional `q` (display-name substring, ≤100 characters), `after` (member id), `limit` (1–50, default 20) | `{ rows: [{ memberId, displayName }], next }`. Active members of this silo, excluding the caller. Name may be null; no invented fallback or email. `next` is null or the next page's `after`. |
 | `POST /api/conversations` | `{ id, conversationId, mode: "direct", colleagueId }` | `{ status: "appended", sequence }`. Exactly caller plus the selected active colleague. Refuses self, assistant, payer, explicit audience or identity fields. |
 | `POST /api/conversations/:conversationId/messages` | `{ id, text }` | Same append response. Trimmed non-empty text, ≤32,000 characters. Only the two current silo members may send. Plain `@agent` remains text. |
-| `GET /api/conversations` | No body | Authorised rows with `conversationId`, `createdBy`, immutable `mode`, `participantIds`, `createdAt`, derived `title` and `status`. Direct rows have no `assistantId`; ordinary activity remains `open`. |
+| `GET /api/conversations` | Optional section, q, limit and cursor; see [list paging](../../apps/server/README.robot.md#chat-ui-reads-and-stop) | `{ rows, nextCursor }`. Authorised rows with `conversationId`, `createdBy`, immutable `mode`, `participantIds`, `createdAt`, derived `title` and `status`. Direct rows have no `assistantId`; ordinary activity remains `open`. |
 | `GET /api/conversations/:conversationId/messages` | Optional `since` (non-negative position, default 0) | `{ rows, position, generation, computerState, computerRecovered }`. Up to 100 events after `since`, ordered by position. Direct `computerState` is `not_applicable` and `computerRecovered` is false. Message rows expose decrypted text and recorded author. |
 | `GET /api/conversations/:conversationId/changes/:commandId` | The original send `id`, or a persisted creation `id` to inspect projection progress | `{ status: "appended", conversationId, commandId, type, sequence, projection: { content, iam } }`, where each projection is `current` or `applying`. Current participants can check a creation before OpenFGA applies its permissions. No text or new append. |
 | WebSocket `/ws` | `{ type: "subscribe", topic: "conversation", conversationId, since, generation? }` | Existing version-1 `event`, `ready`, `resync`, `refused` envelopes. Cookie and configured Origin required. Direct `ready` reports `computerState: "not_applicable"` and `computerRecovered: false`. |
@@ -132,3 +132,9 @@ computer or approvals. The browser must clear protected content and ignore late
 HTTP responses on refusal. Participant admission checks closure immediately before
 append; an already admitted edit can finish during a concurrent close, but cannot
 reopen it. These two streams do not form one transaction.
+
+List continuations use only visible matches. An empty successful list has no continuation.
+A scan that reaches 100 candidates returns 503 `list_incomplete` without rows or a cursor.
+Ordinary late joiners receive their join time, including in personal sessions.
+Group list rows also show current participants and omit the original creator and group
+snapshot details. Personal-session rows keep the assistant and creator identifiers.

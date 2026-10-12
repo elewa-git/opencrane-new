@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, groups, invitations, departure reviews, history availability, control history, startup review and settings messages"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>visible chat pages, groups, invitations, departure reviews, history availability, control history, startup review and settings messages"]
   server["apps/server<br/>back end"] -.-> protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -46,6 +46,9 @@ They also identify the server and silo, and carry the rule revision used by wait
 
 1. **A browser sends a live message.** The server checks the message against the shared schema before handling it. The browser checks server replies before showing them.
 2. **A person opens a conversation or settings page.** The server returns data in a shared shape, and the browser checks that shape before drawing the page.
+   Conversation lists include a continuation for loading another visible page.
+   Ordinary late joiners receive their join time and current participants, without
+   earlier creation details. Older replies still load.
    Group participant requests carry the last access position so stale edits can be refused.
 3. **A person reviews the history of changes.** The server filters the response, then both sides use the same shapes for the request and result.
 

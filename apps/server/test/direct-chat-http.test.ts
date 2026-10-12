@@ -12,7 +12,7 @@ import { chatMessageSchema } from '@opencrane/protocol';
 import { attachWebSocketServer } from '../src/websocket.ts';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers, deleteStoreById } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -1167,3 +1167,349 @@ async function refusesGroupChangeDuringWriteCheck() {
 }
 it('refuses a group change after its position was read during the write check',
   refusesGroupChangeDuringWriteCheck, 120_000);
+
+type ListFixture = Awaited<ReturnType<typeof directFixture>>;
+async function seedListChat(fixture: ListFixture, conversationId: string, iam = true,
+  participantIds = ['alice', 'bob']) {
+  fixture.options.keys.provision('test', conversationId);
+  const data = { conversationId, mode: 'group', createdBy: 'alice', participantIds };
+  return fixture.append(`conversation-${conversationId}`, 'conversation.created', data, iam);
+}
+async function seedListMessage(fixture: ListFixture, conversationId: string, text: string) {
+  const encrypted = fixture.options.keys.encrypt('test', conversationId, text);
+  const data = { conversationId, authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...encrypted };
+  await fixture.append(`conversation-${conversationId}`, 'message.posted', data, false);
+}
+async function listPage(fixture: ListFixture, query = '', memberId = 'bob') {
+  const response = await fixture.app.inject({
+    url: `/api/conversations${query}`, headers: fixture.headers(memberId),
+  });
+  expect(response.statusCode).toBe(200);
+  const parsed = chatListSchema.parse(response.json());
+  const continuation = response.json<{ nextCursor: string | null }>();
+  return { rows: parsed.rows, nextCursor: continuation.nextCursor };
+}
+async function seedListPreference(fixture: ListFixture, conversationId: string,
+  joinEventId: string, fields: object = { archived: true }) {
+  const data = { conversationId, memberId: 'bob', joinEventId, ...fields };
+  let type = 'conversation.archive_set';
+  if (!('archived' in fields)) type = 'conversation.read_advanced';
+  const base = envelope('test', `conversation-${conversationId}`, 'conversation.closed',
+    { conversationId, closedBy: 'bob' });
+  const event = { ...base, subject: 'chat-state-bob', type, data,
+    principal: { kind: 'human' as const, id: 'bob' } };
+  await fixture.nats.seed([event]);
+  await fixture.runner.run(conversations);
+}
+
+async function ordersVisibleListActivity() {
+  const fixture = await directFixture();
+  try {
+    await seedListChat(fixture, 'older');
+    await seedListMessage(fixture, 'older', 'Older visible title');
+    await seedListChat(fixture, 'newer');
+    await seedListMessage(fixture, 'older', 'Recent message');
+    await fixture.runner.run(conversations);
+    const page = await listPage(fixture, '?limit=1');
+    expect(page.rows.map(conversationIdOf)).toEqual(['older']);
+    expect(page.nextCursor).toBeTruthy();
+    const next = await listPage(fixture, `?limit=1&cursor=${page.nextCursor}`);
+    expect(next.rows.map(conversationIdOf)).toEqual(['newer']);
+    await fixture.append('conversation-personal', 'conversation.created', {
+      conversationId: 'personal', mode: 'agent_session', createdBy: 'alice',
+      assistantId: 'assistant',
+    });
+    await fixture.runner.run(conversations);
+    const personal = await listPage(fixture, '', 'alice');
+    expect(personal.rows[0]).toMatchObject({ conversationId: 'personal', mode: 'agent_session' });
+  } finally {
+    await fixture.close();
+  }
+}
+it('pages by visible activity and keeps personal sessions in the list', ordersVisibleListActivity);
+
+function conversationIdOf(row: { conversationId: string }) {
+  return row.conversationId;
+}
+async function protectsListMetadata() {
+  const fixture = await directFixture();
+  try {
+    const archived = await seedListChat(fixture, 'archived');
+    await seedListMessage(fixture, 'archived', 'Archived title');
+    await seedListChat(fixture, 'late', true, ['alice', 'carol']);
+    await seedListMessage(fixture, 'late', 'Secret before joining');
+    await seedListChat(fixture, 'visible');
+    await seedListMessage(fixture, 'visible', 'Visible title');
+    await fixture.append('participation-late', 'participant.added', {
+      conversationId: 'late', participantId: 'bob', addedBy: 'alice',
+    });
+    await seedListChat(fixture, 'denied', false);
+    await seedListMessage(fixture, 'denied', 'Denied title');
+    await fixture.runner.run(conversations);
+    await seedListPreference(fixture, 'archived', archived.id);
+    const recent = await listPage(fixture);
+    expect(recent.rows.map(conversationIdOf)).toEqual(['visible', 'late']);
+    expect(JSON.stringify(recent)).not.toMatch(/Secret|Denied|Archived/u);
+    expect(await listPage(fixture, '?q=secret')).toMatchObject({ rows: [], nextCursor: null });
+    const saved = await listPage(fixture, '?section=archived&q=ARCHIVED');
+    expect(saved.rows.map(conversationIdOf)).toEqual(['archived']);
+    expect((await listPage(fixture, '?q=visible')).rows.map(conversationIdOf)).toEqual(['visible']);
+    await fixture.append('participation-archived', 'participant.removed', {
+      conversationId: 'archived', participantId: 'bob', removedBy: 'alice',
+    });
+    await fixture.append('participation-archived', 'participant.added', {
+      conversationId: 'archived', participantId: 'bob', addedBy: 'alice',
+    });
+    await fixture.runner.run(conversations);
+    expect((await listPage(fixture, '?section=archived')).rows).toEqual([]);
+    const rejoined = await listPage(fixture, '?q=Archived');
+    expect(rejoined.rows).toEqual([]);
+  } finally {
+    await fixture.close();
+  }
+}
+it('searches only authorised visible titles and separates archived choices', protectsListMetadata);
+
+async function boundsDeniedListScan() {
+  const fixture = await directFixture();
+  try {
+    await seedListChat(fixture, 'allowed');
+    for (let index = 0; index < 101; index++) {
+      await seedListChat(fixture, `denied-${index}`, false);
+    }
+    await fixture.runner.run(conversations);
+    const reads = vi.spyOn(fixture.options.store, 'readStream');
+    const response = await fixture.app.inject({
+      url: '/api/conversations', headers: fixture.headers('bob'),
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'list_incomplete' });
+    expect(reads.mock.calls.length).toBeLessThanOrEqual(202);
+    reads.mockRestore();
+  } finally {
+    await fixture.close();
+  }
+}
+it('bounds denied candidates without returning their positions or an empty continuation', boundsDeniedListScan, 120_000);
+
+async function resetsChangedListPages() {
+  const fixture = await directFixture();
+  try {
+    const firstJoin = await seedListChat(fixture, 'first');
+    await seedListChat(fixture, 'second');
+    await seedListChat(fixture, 'third');
+    await fixture.runner.run(conversations);
+    async function cursor() {
+      return (await listPage(fixture, '?limit=1')).nextCursor;
+    }
+    async function refused(saved: string | null, suffix = '', memberId = 'bob') {
+      const response = await fixture.app.inject({
+        url: `/api/conversations?limit=1&cursor=${saved}${suffix}`,
+        headers: fixture.headers(memberId),
+      });
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ status: 'list_changed' });
+    }
+    const original = await cursor();
+    await refused(original, '&q=changed');
+    await refused(original, '&section=archived');
+    await refused(original, '', 'alice');
+    await refused(`${original}x`);
+    const throughPosition = await fixture.nats.store.head('conversation-first');
+    await seedListPreference(fixture, 'first', firstJoin.id, {
+      throughPosition, throughEventId: firstJoin.id,
+    });
+    const afterRead = await listPage(fixture, `?limit=1&cursor=${original}`);
+    expect(afterRead.rows.map(conversationIdOf)).toEqual(['second']);
+    await seedListMessage(fixture, 'first', 'Ordering changed');
+    await fixture.runner.run(conversations);
+    await refused(original);
+    const beforeArchive = await cursor();
+    await seedListPreference(fixture, 'first', firstJoin.id);
+    await refused(beforeArchive);
+    const beforeParticipation = await cursor();
+    await fixture.append('participation-second', 'participant.added', {
+      conversationId: 'second', participantId: 'carol', addedBy: 'alice',
+    });
+    await fixture.runner.run(conversations);
+    await refused(beforeParticipation);
+    const beforeRebuild = await cursor();
+    await fixture.runner.rebuild(conversations);
+    await refused(beforeRebuild);
+  } finally {
+    await fixture.close();
+  }
+}
+it('resets pages after changes or rebuild and binds cursors to the caller and filters',
+  resetsChangedListPages);
+
+async function capsListPages() {
+  const fixture = await directFixture();
+  try {
+    for (let index = 0; index < 51; index++) {
+      await seedListChat(fixture, `chat-${index}`);
+    }
+    await fixture.runner.run(conversations);
+    expect((await listPage(fixture)).rows).toHaveLength(20);
+    const maximum = await listPage(fixture, '?limit=50');
+    expect(maximum.rows).toHaveLength(50);
+    const last = await listPage(fixture, `?limit=50&cursor=${maximum.nextCursor}`);
+    expect(last.rows.map(conversationIdOf)).toEqual(['chat-0']);
+    expect(last.nextCursor).toBeNull();
+    const invalidQueries = ['limit=0', 'limit=51', 'section=other', 'extra=1', `q=${'a'.repeat(101)}`];
+    for (const query of invalidQueries) {
+      const response = await fixture.app.inject({
+        url: `/api/conversations?${query}`, headers: fixture.headers('bob'),
+      });
+      expect(response.statusCode).toBe(400);
+    }
+  } finally {
+    await fixture.close();
+  }
+}
+it('caps default and maximum pages and refuses invalid list queries', capsListPages, 120_000);
+
+async function keepsPrivateActivityOutOfListRevision() {
+  const fixture = await directFixture();
+  try {
+    await seedListChat(fixture, 'first');
+    await seedListChat(fixture, 'second');
+    await seedListChat(fixture, 'denied', false);
+    await fixture.runner.run(conversations);
+    const original = await listPage(fixture, '?limit=1');
+    const queries = vi.spyOn(fixture.options.db, 'query');
+    await seedListChat(fixture, 'private', true, ['alice', 'carol']);
+    await seedListMessage(fixture, 'private', 'Private activity');
+    await seedListMessage(fixture, 'denied', 'Denied activity');
+    await fixture.runner.run(conversations);
+    const after = await listPage(fixture, '?limit=1');
+    expect(after).toEqual(original);
+    const next = await listPage(fixture, `?limit=1&cursor=${original.nextCursor}`);
+    expect(next.rows.map(conversationIdOf)).toEqual(['first']);
+    for (const [sql] of queries.mock.calls) {
+      expect(sql).not.toMatch(/SELECT max\((latest_activity|join_position|end_position)/u);
+    }
+    queries.mockRestore();
+  } finally {
+    await fixture.close();
+  }
+}
+it('keeps private and IAM-denied activity out of cursors without silo-wide revision scans',
+  keepsPrivateActivityOutOfListRevision);
+
+async function putsOnlyVisiblePositionsInCursor() {
+  const fixture = await directFixture();
+  try {
+    await seedListChat(fixture, 'denied-old', false);
+    await seedListChat(fixture, 'first');
+    await seedListChat(fixture, 'second');
+    await seedListChat(fixture, 'denied', false);
+    await fixture.runner.run(conversations);
+    const page = await listPage(fixture, '?limit=1');
+    expect(page.rows.map(conversationIdOf)).toEqual(['second']);
+    expect(page.nextCursor).toBeTruthy();
+    const encoded = page.nextCursor!.split('.')[0]!;
+    const payload: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString());
+    const visible = await fixture.options.db.query<{ latest_activity: string;
+      join_position: string }>(`SELECT latest_activity, join_position
+      FROM conversation_participants WHERE conversation_id='second' AND participant_id='bob'`);
+    const row = visible.rows[0]!;
+    expect(payload).toEqual([expect.any(String), Number(row.latest_activity),
+      Number(row.join_position)]);
+    const last = await listPage(fixture, `?limit=1&cursor=${page.nextCursor}`);
+    expect(last.rows.map(conversationIdOf)).toEqual(['first']);
+    expect(last.nextCursor).toBeNull();
+  } finally {
+    await fixture.close();
+  }
+}
+it('uses only visible rows for continuation positions and page existence',
+  putsOnlyVisiblePositionsInCursor);
+
+async function hidesPreJoinCreationTime() {
+  const fixture = await directFixture();
+  try {
+    const createdAt = new Date('2026-10-05T10:00:00.000Z');
+    const joinedAt = new Date('2026-10-09T10:00:00.000Z');
+    const created = envelope('test', 'conversation-late-time', 'conversation.created', {
+      conversationId: 'late-time', mode: 'group', createdBy: 'alice',
+      participantIds: ['alice', 'carol'], groupId: 'original-team',
+      groupSnapshotPosition: 1,
+    }, 'created-late-time', createdAt);
+    const joined = envelope('test', 'participation-late-time', 'participant.added', {
+      conversationId: 'late-time', participantId: 'bob', addedBy: 'alice',
+    }, 'joined-late-time', joinedAt);
+    await fixture.nats.seed([created, joined]);
+    await fixture.auth.handler.handle(created, fixture.options.db);
+    await fixture.auth.handler.handle(joined, fixture.options.db);
+    await fixture.runner.run(conversations);
+    const page = await listPage(fixture);
+    expect(page.rows).toHaveLength(1);
+    expect(page.rows[0]).toMatchObject({ conversationId: 'late-time',
+      createdAt: joinedAt.toISOString() });
+    expect(JSON.stringify(page)).not.toContain(createdAt.toISOString());
+    expect(page.rows[0]).not.toHaveProperty('createdBy');
+    expect(page.rows[0]).not.toHaveProperty('groupId');
+    expect(page.rows[0]).not.toHaveProperty('groupSnapshotPosition');
+    const original = await listPage(fixture, '', 'alice');
+    expect(original.rows[0]).toMatchObject({ createdBy: 'alice',
+      createdAt: createdAt.toISOString(), groupId: 'original-team', groupSnapshotPosition: 1 });
+  } finally {
+    await fixture.close();
+  }
+}
+it('shows the join time to ordinary late joiners instead of the original creation time',
+  hidesPreJoinCreationTime);
+
+async function hidesPersonalSessionHistoryBeforeJoin() {
+  const fixture = await directFixture();
+  try {
+    const createdAt = new Date('2026-10-05T10:00:00.000Z');
+    const messageAt = new Date('2026-10-06T10:00:00.000Z');
+    const joinedAt = new Date('2026-10-09T10:00:00.000Z');
+    const conversationId = 'personal-late-time';
+    fixture.options.keys.provision('test', conversationId);
+    const created = envelope('test', `conversation-${conversationId}`, 'conversation.created', {
+      conversationId, mode: 'agent_session', createdBy: 'alice', assistantId: 'assistant',
+    }, 'created-personal-late-time', createdAt);
+    const encrypted = fixture.options.keys.encrypt('test', conversationId, 'Secret before joining');
+    const message = envelope('test', `conversation-${conversationId}`, 'message.posted', {
+      conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted,
+    }, 'message-personal-late-time', messageAt);
+    const joined = envelope('test', `participation-${conversationId}`, 'participant.added', {
+      conversationId, participantId: 'bob', addedBy: 'alice',
+    }, 'joined-personal-late-time', joinedAt);
+    await fixture.nats.seed([created, message, joined]);
+    await fixture.auth.handler.handle(created, fixture.options.db);
+    await fixture.auth.handler.handle(joined, fixture.options.db);
+    await fixture.runner.run(conversations);
+
+    const request = { url: '/api/conversations', headers: fixture.headers('bob') };
+    const response = await fixture.app.inject(request);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ rows: [{
+      conversationId, mode: 'agent_session', createdBy: 'alice', assistantId: 'assistant',
+      assistantKind: 'personal',
+      createdAt: joinedAt.toISOString(), title: 'New session', status: 'open',
+    }], nextCursor: null });
+    expect(response.body).not.toContain(createdAt.toISOString());
+    expect(response.body).not.toContain(messageAt.toISOString());
+    expect(response.body).not.toMatch(/secret|count|snippet/iu);
+    expect(await listPage(fixture, '?q=secret')).toEqual({ rows: [], nextCursor: null });
+
+    await seedListMessage(fixture, conversationId, 'Visible after joining');
+    await fixture.runner.run(conversations);
+    const later = await listPage(fixture);
+    expect(later.rows[0]).toMatchObject({ createdAt: joinedAt.toISOString(),
+      title: 'visible-after-joining' });
+    expect(JSON.stringify(later)).not.toContain(createdAt.toISOString());
+    const original = await listPage(fixture, '', 'alice');
+    expect(original.rows[0]).toMatchObject({ createdAt: createdAt.toISOString(),
+      title: 'secret-before-joining' });
+  } finally {
+    await fixture.close();
+  }
+}
+it('hides pre-join timestamps, counts and snippets from ordinary personal-session participants',
+  hidesPersonalSessionHistoryBeforeJoin);

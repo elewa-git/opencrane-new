@@ -580,17 +580,34 @@ async function listsSixtyTeamSessions() {
   await runner.run(conversations);
   const reads = vi.spyOn(nats.store, 'readStream');
   try {
-    const started = performance.now();
-    const response = await request('GET', '/api/conversations', undefined, 'alice');
-    const elapsed = performance.now() - started;
-    expect(response.statusCode, response.body).toBe(200);
-    const result = response.json<{ rows: { conversationId: string }[] }>();
-    function isTeamList(row: typeof result.rows[number]) {
+    const rows: { conversationId: string }[] = [];
+    let nextCursor: string | null = null;
+    do {
+      reads.mockClear();
+      const started = performance.now();
+      let url = '/api/conversations';
+      if (nextCursor) url += `?cursor=${encodeURIComponent(nextCursor)}`;
+      const response = await request('GET', url, undefined, 'alice');
+      const elapsed = performance.now() - started;
+      expect(response.statusCode, response.body).toBe(200);
+      const result = response.json<{ rows: { conversationId: string }[];
+        nextCursor: string | null }>();
+      expect(result.rows.length).toBeLessThanOrEqual(20);
+      rows.push(...result.rows);
+      nextCursor = result.nextCursor;
+      expect(elapsed).toBeLessThan(3000);
+      expect(reads.mock.calls.length).toBeLessThan(140);
+    } while (nextCursor);
+    function isTeamList(row: typeof rows[number]) {
       return row.conversationId.startsWith('team-list-');
     }
-    expect(result.rows.filter(isTeamList)).toHaveLength(60);
-    expect(elapsed).toBeLessThan(3000);
-    expect(reads.mock.calls.length).toBeLessThan(140);
+    const teamRows = rows.filter(isTeamList);
+    expect(teamRows).toHaveLength(60);
+    function conversationId(row: typeof rows[number]) {
+      return row.conversationId;
+    }
+    const conversationIds = teamRows.map(conversationId);
+    expect(new Set(conversationIds).size).toBe(60);
   } finally {
     reads.mockRestore();
   }
@@ -614,7 +631,7 @@ async function refusesRevokedOwnerGroupBeforeIamCatchesUp() {
     .statusCode).toBe(403);
   const list = await request('GET', '/api/conversations', undefined, 'bob');
   expect(list.statusCode).toBe(200);
-  expect(list.json()).toEqual({ rows: [] });
+  expect(list.json()).toEqual({ rows: [], nextCursor: null });
 }
 it('refuses a revoked assistant audience even with a different authorised payer and stale IAM',
   refusesRevokedOwnerGroupBeforeIamCatchesUp);

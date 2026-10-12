@@ -47,7 +47,10 @@ async function requireActivityReplay(db: Query): Promise<void> {
   const columns = await db.query<{ attname: string }>(`SELECT attname FROM pg_attribute
     WHERE attrelid = 'conversations'::regclass AND NOT attisdropped
       AND attname IN ('closed_event_id', 'closed_position', 'closed_by', 'closed_at')`);
-  if (columns.rows.length !== 4) {
+  const participantColumns = await db.query(`SELECT attname FROM pg_attribute
+    WHERE attrelid = to_regclass('conversation_participants') AND NOT attisdropped
+      AND attname = 'latest_activity'`);
+  if (columns.rows.length !== 4 || participantColumns.rows.length !== 1) {
     throw new Error('Conversation tables need rebuilding. Stop conversation readers and workers, '
       + 'then run npm run replay -- conversations --confirm-conversations-stopped');
   }
@@ -108,11 +111,15 @@ export async function rebuildConversationsProjection(db: Db, source: EventSource
   if (!db.lock) {
     throw new Error('Conversations replay requires projection locking');
   }
-  // Allow replay to initialise empty upgrade tables that the normal worker must refuse.
+  // Initialise runner records before rebuilding old tables and creating new indexes.
+  async function initialiseReplay() {
+    // Leave old tables intact until rebuild drops them and creates the new shape.
+  }
+  const initialProjection: Projection = { ...conversations, create: initialiseReplay };
   const replayProjection: Projection = { ...conversations, create: createConversationTables };
   async function rebuild(locked: Db): Promise<number> {
     const runner = new ProjectionRunner(locked, source, logger);
-    await runner.initialise(replayProjection);
+    await runner.initialise(initialProjection);
     await runner.rebuild(replayProjection);
     return runner.checkpoint(replayProjection);
   }
@@ -227,10 +234,13 @@ async function createParticipationTables(db: Query) {
   await db.query(`CREATE TABLE IF NOT EXISTS conversation_participants (
     silo TEXT NOT NULL, conversation_id TEXT NOT NULL, participant_id TEXT NOT NULL,
     join_position BIGINT NOT NULL, join_event_id TEXT NOT NULL,
-    end_position BIGINT, end_event_id TEXT,
+    end_position BIGINT, end_event_id TEXT, latest_activity BIGINT NOT NULL,
     PRIMARY KEY (silo, conversation_id, participant_id, join_position))`);
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS conversation_participants_current
     ON conversation_participants (silo, conversation_id, participant_id)
+    WHERE end_position IS NULL`);
+  await db.query(`CREATE INDEX IF NOT EXISTS conversation_participants_activity
+    ON conversation_participants (silo, participant_id, latest_activity DESC, join_position DESC)
     WHERE end_position IS NULL`);
 }
 
@@ -267,6 +277,11 @@ async function foldConversation(db: Query, event: EventEnvelope,
   }
   if (!conversation) return;
   foldActivity(conversation, event, position);
+  if (conversation.latest_activity === String(position)) {
+    await db.query(`UPDATE conversation_participants SET latest_activity = $3
+      WHERE silo = $1 AND conversation_id = $2 AND end_position IS NULL`,
+    [event.silo, conversationId, position]);
+  }
   const values = [event.silo, conversationId, conversation.closed, position,
     conversation.latest_activity, conversation.closed_event_id, conversation.closed_position,
     conversation.closed_by, conversation.closed_at];
@@ -306,8 +321,18 @@ function foldActivity(state: ConversationActivity, event: EventEnvelope, positio
 
 async function startParticipant(db: Query, event: EventEnvelope,
   conversationId: string, participantId: string, position: number) {
-  await db.query('INSERT INTO conversation_participants VALUES ($1,$2,$3,$4,$5,NULL,NULL)',
-    [event.silo, conversationId, participantId, position, event.id]);
+  // Start ordinary late joins without activity from before they could read the chat.
+  let latestActivity = 0;
+  if (event.type === 'conversation.created') latestActivity = position;
+  if (typeof event.data === 'object' && event.data !== null && 'contextKind' in event.data) {
+    const result = await db.query<{ latest_activity: string }>(
+      'SELECT latest_activity FROM conversations WHERE silo = $1 AND conversation_id = $2',
+      [event.silo, conversationId]);
+    latestActivity = Number(result.rows[0]?.latest_activity ?? position);
+  }
+  await db.query(`INSERT INTO conversation_participants
+    VALUES ($1,$2,$3,$4,$5,NULL,NULL,$6)`,
+    [event.silo, conversationId, participantId, position, event.id, latestActivity]);
 }
 
 async function foldParticipant(db: Query, event: EventEnvelope,

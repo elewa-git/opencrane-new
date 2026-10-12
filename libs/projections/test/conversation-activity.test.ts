@@ -38,9 +38,12 @@ async function activityFixture() {
   async function assertRebuildEquality() {
     const before = await metadata();
     const feed = await readConversation(storage.db, 'test', 'chat');
+    const participants = await storage.db.query('SELECT * FROM conversation_participants');
     const head = await nats.store.head();
     await rebuild();
     expect(await metadata()).toEqual(before);
+    expect((await storage.db.query('SELECT * FROM conversation_participants')).rows)
+      .toEqual(participants.rows);
     const rebuilt = await readConversation(storage.db, 'test', 'chat');
     expect(rebuilt.rows).toEqual(feed.rows);
     expect(rebuilt.generation).toBe(feed.generation + 1);
@@ -85,6 +88,9 @@ async function keepsVisibleActivityAfterClose() {
     const firstClose = await fixture.append('conversation.closed', { closedBy: 'alice' });
     for (const report of lateReports) {
       const saved = await fixture.append(report.type, report.fields);
+      const participant = await fixture.storage.db.query(
+        'SELECT latest_activity FROM conversation_participants WHERE participant_id = $1', ['alice']);
+      expect(participant.rows[0]).toEqual({ latest_activity: String(firstClose.position) });
       expect(await fixture.metadata()).toMatchObject({
         latest_activity: String(firstClose.position), closed: true, position: String(saved.position),
       });
@@ -165,3 +171,30 @@ async function requiresOldTablesToBeRebuilt() {
 }
 it('refuses old metadata tables until offline replay restores activity and closing evidence',
   requiresOldTablesToBeRebuilt);
+
+async function rebuildsPreviousParticipantShape() {
+  const fixture = await activityFixture();
+  try {
+    await fixture.append('conversation.created', creation);
+    await fixture.append('message.posted', postedMessage);
+    await fixture.append('conversation.closed', { closedBy: 'alice' });
+    const before = await fixture.metadata();
+    const participants = await fixture.storage.db.query('SELECT * FROM conversation_participants');
+    const feed = await readConversation(fixture.storage.db, 'test', 'chat');
+    await fixture.storage.db.query('ALTER TABLE conversation_participants DROP COLUMN latest_activity');
+    await expect(fixture.runner.initialise(conversations)).rejects.toThrow('need rebuilding');
+    await fixture.rebuild();
+    expect(await fixture.metadata()).toEqual(before);
+    expect((await fixture.storage.db.query('SELECT * FROM conversation_participants')).rows)
+      .toEqual(participants.rows);
+    const rebuilt = await readConversation(fixture.storage.db, 'test', 'chat');
+    expect(rebuilt.rows).toEqual(feed.rows);
+    expect(rebuilt.generation).toBe(feed.generation + 1);
+    expect(await fixture.runner.checkpoint(conversations)).toBe(3);
+    expect(await fixture.append('message.posted', postedMessage)).toMatchObject({ position: 4 });
+  } finally {
+    await fixture.close();
+  }
+}
+it('rebuilds the previous participant table shape before creating its new activity index',
+  rebuildsPreviousParticipantShape);
