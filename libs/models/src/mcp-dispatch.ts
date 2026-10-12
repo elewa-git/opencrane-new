@@ -55,6 +55,10 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
   }
 
   function requireContract(policy: Policy) {
+    // Refuse hosted sends here. Built-in memory reads the same policy with its own checks.
+    if (policy.serverKind === 'hosted') {
+      throw new Error('Hosted image admission unavailable');
+    }
     return routeFor(policy.policy.serverId!, policy.policy.connectionId!);
   }
 

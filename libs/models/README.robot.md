@@ -355,6 +355,10 @@ Waiting approvals retain their stable policy revision and can obtain a fresh per
 The final check reads no complete catalogue or conversation history. Only reviewed transport headers leave this
 process; permits and caller credentials do not. A substituted backend or generation fails.
 The built-in memory route retains its separate signed-context checks at its backend.
+The shared policy reader returns the registration kind without refusing hosted memory.
+The ordinary sender checks that kind before binding or issuing a pass and refuses hosted
+images until image admission exists. Memory previews, discovery, recall and writes keep
+their existing policy, grant and backend checks. They create no shared send admission.
 Approvals include `dispatchBinding`, the route hash, in their id. A replaced backend or
 generation cannot use an old approval, including a late approval decision.
 Hosted image admission, recorded lifecycle generations, configuration acknowledgement and

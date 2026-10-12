@@ -33,6 +33,8 @@ pass before sending the original request. Servers without this contract are refu
 Before sending, it saves one admission record on the server's tool-rule stream.
 Block saved first refuses admission. Admission saved first allows that call;
 Block applies to later calls. It checks the small access streams within two seconds.
+Built-in memory uses its separate signed context and checks access again at its backend.
+Hosted image refusal applies to ordinary tool sends, so memory remains available.
 
 ## What it is responsible for
 
