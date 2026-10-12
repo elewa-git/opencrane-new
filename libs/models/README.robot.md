@@ -2,6 +2,40 @@
 
 For people, read [README.md](README.md) first.
 
+## Native egress route qualification
+
+P3-20 #61 PR 2 is split at the gateway prerequisite to stay below 600 changed lines.
+This first part adds `startGateway.egressDecisionUrl`. No process entrypoint sets it;
+ordinary startup leaves CONNECT disabled. The opt-in control URL accepts only HTTP
+on `127.0.0.1` with an explicit port and no credentials, path, query or fragment.
+Only the `computer-egress` JWT audience can reach this route. Model, MCP and provider
+routes retain their separate audiences.
+
+HTTP extAuthz copies the incoming method in agentgateway v1.5.0. The control call
+overrides `:method` to POST and passes the CONNECT authority and verified bearer.
+The dynamic backend reads only `extauthz.relay`. A route rule requires a numeric
+loopback relay address. Missing metadata has no caller-host fallback. Request
+headers are replaced before relay forwarding. No retries are configured.
+
+`BudgetActor.admitDispatch` now accepts the non-metered `computer-egress` call kind
+without a money hold. It uses the existing queue, saved stops, current-access
+callback and single-use dispatch event. Paid model calls still require a matching
+open hold. The fixture saves a decision first and consumes this gate before replying
+to extAuthz. Production egress admission is not implemented by this part.
+
+`test/egress-gateway.test.ts` uses real disposable NATS and the checksum-verified
+gateway with a recording loopback relay. The control service is a test fixture.
+It also verifies tokens strictly; the gateway JWT check alone permits clock skew.
+The fixture is not a production capability issuer, policy reader or socket guard.
+
+Remaining PR 2 work: complete operation-bound capability checks, all three rules,
+bounded DNS and pinned public sockets, TLS SNI checks, active closure, watchdogs and
+durable outage/open/close receipts. The binary removes raw Host before extAuthz;
+authority/Host disagreement still needs proof or the accepted broker fallback.
+Mixed/rebound DNS, forbidden address/protocol coverage, expiry of an open tunnel
+and fresh-install journeys are NOT RUN here. No worker or browser uses this route.
+The [receipt](../../docs/process/p3-20-pr2-gateway.md) records this limited proof.
+
 ## Dated MCP catalogue evidence
 
 Tool lists carry check and expiry dates; undated lists cannot authorise calls.

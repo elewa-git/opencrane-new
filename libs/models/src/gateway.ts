@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { toolObservation, toolObservationSchema, recordToolObservation } from './tool-dispatch.ts';
 import { providerGatewayRoutes } from './provider-gateway.ts';
+import { egressGatewayRoute } from './egress-gateway.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, open, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
@@ -87,6 +88,7 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
 function gatewayConfig(
   port: number, readinessPort: number, decisionUrl: string, keyFile: string,
   issuer: string, upstream?: string, mcpRoutes: McpRoute[] = [],
+  egressDecisionUrl?: string,
 ) {
   const decision = new URL(decisionUrl);
   function configuredMcpRoute(route: McpRoute) {
@@ -94,16 +96,22 @@ function gatewayConfig(
   }
   const providerRoutes = providerGatewayRoutes(decisionUrl, issuer, upstream);
   const configuredMcpRoutes = mcpRoutes.map(configuredMcpRoute);
+  const egressRoutes = [];
+  if (egressDecisionUrl !== undefined) {
+    egressRoutes.push(egressGatewayRoute(egressDecisionUrl, issuer));
+  }
   return {
     config: { adminAddr: 'off', statsAddr: 'off', readinessAddr: `127.0.0.1:${readinessPort}` },
     gateways: { default: { port } },
-    frontendPolicies: { accessLog: { add: { reservation: 'extauthz.reservationId',
+    frontendPolicies: {
+      ...(egressDecisionUrl === undefined ? {} : { connect: { mode: 'route' } }),
+      accessLog: { add: { reservation: 'extauthz.reservationId',
       inputTokens: 'llm.inputTokens', outputTokens: 'llm.outputTokens',
       cachedInputTokens: 'has(llm.cachedInputTokens) ? llm.cachedInputTokens : uint(0)',
       cacheWriteTokens: 'has(llm.cacheCreationInputTokens) ? llm.cacheCreationInputTokens : uint(0)',
       decisionRequestId: 'response.headers["x-request-id"]',
       toolRequestId: 'extauthz.toolRequestId' } } },
-    routes: [...providerRoutes, ...configuredMcpRoutes, {
+    routes: [...providerRoutes, ...configuredMcpRoutes, ...egressRoutes, {
       name: 'models', gateways: 'default',
       matches: [{ path: { exact: '/v1/responses' }, method: 'POST' }],
       policies: {
@@ -251,12 +259,15 @@ function nativeUsage(line: string, id: string) {
 export async function startGateway(options: { binary: string; configFile: string; usageFile: string; keyFile: string;
   port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string;
   mcpRoutes?: McpRoute[];
+  egressDecisionUrl?: string;
   onChildSpawn?: (child: ChildProcess, stop: (signal?: NodeJS.Signals) => Promise<void>) => void;
 }) {
   const build = process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64';
   const expected = AGENTGATEWAY_SHA256_BY_BUILD[build];
   if (createHash('sha256').update(await readFile(options.binary)).digest('hex') !== expected) throw new Error('Gateway digest mismatch');
-  await writeFile(options.configFile, JSON.stringify(gatewayConfig(options.port, options.readinessPort, options.decisionUrl, options.keyFile, options.issuer, options.upstream, options.mcpRoutes)), { mode: 0o600 });
+  const config = gatewayConfig(options.port, options.readinessPort, options.decisionUrl,
+    options.keyFile, options.issuer, options.upstream, options.mcpRoutes, options.egressDecisionUrl);
+  await writeFile(options.configFile, JSON.stringify(config), { mode: 0o600 });
   const child = spawn(options.binary, ['-f', options.configFile], {
     env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', RUST_LOG: 'info', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
