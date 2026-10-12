@@ -20,7 +20,7 @@ export const mcpInstanceStopSchema = z.strictObject({
 });
 const observation = z.strictObject({
   instanceId: digest, runGeneration: z.int().positive(), startChangeRef: id,
-  podUid: id, workloadSpecDigest: digest,
+  podUid: id, workloadSpecDigest: digest, expectedSequence: z.int().nonnegative().optional(),
   state: z.enum(['starting', 'failed', 'stopping', 'absent', 'unknown']),
   reason: z.enum(['startup_failed', 'not_found', 'transport_unavailable']).optional(),
 });
@@ -46,7 +46,10 @@ export function validMcpInstanceEvent(event: EventEnvelope): boolean {
     const stop = result.data;
     return event.principal?.kind === 'human' && event.principal.id === stop.requestedBy;
   }
-  return true;
+  const observed = mcpInstanceObservedSchema.safeParse(event.data);
+  if (!observed.success) return false;
+  return observed.data.expectedSequence === undefined ||
+    (event.principal?.kind === 'system' && event.commandId !== undefined);
 }
 
 const key = { siloId: 'silo_1', userId: 'member_1', profileId: 'profile_1',

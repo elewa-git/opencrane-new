@@ -402,6 +402,8 @@ It is a positive integer, contains no secret value and is separate from `runGene
 Malformed instance data returns `invalid_event` rather than throwing from the identity check.
 The deadline is positive and at most 20 seconds after the requested time.
 Observations bind the original start, run, Pod UID and workload digest.
+New reports include `expectedSequence` and require a system principal and command id.
+Older saved observations may omit the revision. No bearer value enters an event.
 A `not_found` reason requires `unknown`; callable claims and secret fields are refused.
 Stop records require a human principal matching `requestedBy`.
 These events have no registered reaction and grant no permission or credential release.

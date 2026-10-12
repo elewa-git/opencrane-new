@@ -126,9 +126,75 @@ Invalid input returns 400, changed retries and stale revisions return 409,
 and unavailable dependencies return 503 without internal response details.
 
 This is the HTTP part of #51 design row 2, split to keep this change under 600 lines.
-Authenticated observation, admin commands and worker registration remain next.
-There is no worker, wake, credential release, callable instance or new installer.
+Admin commands remain next. There is no workload worker, wake, credential release,
+callable instance or new installer.
 Every MCP still installs through the shared hosted path.
+
+### Authenticated worker observations
+
+`registerMcpInstanceWorkerRoutes(app, store, silo)` returns a trusted in-process
+`register` function. It checks an exact saved identity, start, run, workload digest,
+known Pod UID and expected sequence. It issues a random bearer for at most 30 seconds.
+The trusted caller receives the bearer once; the server retains only its SHA-256 digest
+as the lease lookup key and hashes incoming credentials before lookup. A timer removes
+each expired lease. Replacing a registration retires the earlier pass for that instance,
+cancels pending append backoff and prevents further publish attempts. Append also uses
+the pass's remaining lifetime as its deadline. Closing the server cancels all timers
+and passes. There is no HTTP registration route.
+
+`POST /internal/mcp/instances/:instanceId/observations` takes `changeRef`,
+`expectedSequence`, `state` and optional safe `reason`. It requires that worker pass;
+member and admin cookies grant no observation permission. Each new report checks
+saved history again and makes one conditional append. Changed retries conflict.
+The pass supplies all instance, user, profile, server, run and Pod fields.
+Replies and parser errors use no-store and hide internal errors.
+
+The normal server registers the route when instance dependencies are configured.
+No process registers a live workload worker yet. Pod creation and confirmation against
+Kubernetes remain design row 3. Reports cannot wake, release material or claim callable
+readiness. Admin commands and their refusal tests remain the next split of row 2.
+
+### Worker credential correction checks, 12 October 2026
+
+Runtime changes: `ff0c8e45` and `9d4575a9`. Rebased onto
+`2f56a09fb11c8128e366d17c9ab0f13393411ad2`; the rebase completed and that base
+is an ancestor of this branch. Test commit `417d2241` preceded implementation.
+Its five new cases failed: expiry and replacement each allowed another publish,
+and the lease map retained the bearer and expired entry. The NATS failure injection
+now lives in the event-store test helpers, without adding dependencies.
+
+PASS: two final focused runs, 15 files and 566 tests each, in 226.06 s and 192.81 s.
+Both ran under `nice -n 10`, with one worker and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+The batch covers all event-store tests, worker and member instance routes, model
+instance commands, instance event contracts, event security rules and both unchanged
+authority test files. Tests use disposable NATS/OpenFGA and private test databases.
+The new retry cases assert no further publish, no later event and unchanged instance
+state. The storage case checks retained lease entries and automatic expiry cleanup.
+
+PASS: full lint, workspace typecheck, event catalogue (129 types), standalone Knip,
+dependency rules and changelog checks. Lint reports 16 existing warnings and no errors.
+Logs: `/tmp/p3-10-pr2c-fix-final-{2,3}.log`,
+`/tmp/p3-10-pr2c-fix-{typecheck,events,knip,changelog}-final.log` and
+`/tmp/p3-10-pr2c-fix-deps.log` and `/tmp/p3-10-pr2c-fix-lint-complete.log`.
+NOT RUN: full root suite, live Kubernetes and fresh-install qualification.
+Admin commands and live workload registration remain unfinished.
+
+### Worker observation source checks, 12 October 2026
+
+Source `144ddd5c`; base `326eaeae`. Linux worktree, disposable NATS/OpenFGA and
+private PostgreSQL test databases; not a fresh silo. The pinned gateway was fetched
+before the final runs. PASS: `npm ci` and the requested NATS/Lychee links.
+Tests-first commits: `20454674`, `20d4aff1`, `2bfed203`. Failing checks covered missing
+worker behaviour, stale observation revisions, member cookies and retired workers.
+PASS: two seven-file batches, 467 tests each, in 84.17 s and 72.08 s. Both used
+`nice -n 10`, one worker and `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+Both authority test files are unchanged. PASS: lint, workspace typecheck, check:events
+(127 types), standalone Knip and lint:changelog. Lint has 15 existing warnings.
+Logs: `/tmp/p3-10-pr2c-tests-final-{1,2}.log` and
+`/tmp/p3-10-pr2c-{lint,typecheck,events,knip,changelog}.log`.
+PARTIAL: design row 2; admin commands and their refusal cases remain next.
+NOT RUN: full root suite, live Kubernetes and fresh-install qualification.
 
 ### Source checks, 12 October 2026
 

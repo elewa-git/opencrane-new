@@ -24,11 +24,11 @@ export class McpInstanceRefused extends Error {
   }
 }
 
-async function ownInstance(store: EventStore, binding: Binding, memberId: string, raw: unknown) {
+export async function readMcpInstance(store: EventStore, silo: string, raw: unknown) {
   const reference = referenceSchema.parse(raw);
   let rows: StoredEvent[];
   try {
-    rows = await history(store, `mcp-instance-${reference.instanceId}`, binding.silo,
+    rows = await history(store, `mcp-instance-${reference.instanceId}`, silo,
       performance.now() + 10_000);
   } catch (error) {
     // Hide another silo's stream in the same way as a missing instance.
@@ -39,11 +39,19 @@ async function ownInstance(store: EventStore, binding: Binding, memberId: string
   }
   let state: McpInstanceState | undefined;
   for (const row of rows) state = applyMcpInstance(state, row.event, row.sequence);
-  if (!state || state.start.userId !== memberId || state.start.siloId !== binding.silo ||
+  if (!state || state.start.siloId !== silo ||
       state.start.profileId !== reference.profileId || state.start.serverId !== reference.serverId) {
     throw new McpInstanceRefused('reference', 'Instance owner or reference mismatch');
   }
   return { rows, state };
+}
+
+async function ownInstance(store: EventStore, binding: Binding, memberId: string, raw: unknown) {
+  const current = await readMcpInstance(store, binding.silo, raw);
+  if (current.state.start.userId !== memberId) {
+    throw new McpInstanceRefused('reference', 'Instance owner mismatch');
+  }
+  return current;
 }
 
 export async function mcpInstanceStatus(store: EventStore, binding: Binding,

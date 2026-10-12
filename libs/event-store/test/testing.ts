@@ -277,3 +277,32 @@ export async function lostReplyStore(connection: NatsConnection) {
   client.publish = dropReply;
   return { store, loseNextReply };
 }
+
+/** Fail one publish without saving it, then allow retries to reach the real server. */
+export async function failingPublishStore(connection: NatsConnection) {
+  const client = jetstream(connection);
+  const manager = await jetstreamManager(connection);
+  const store = new EventStore(client, manager);
+  const publish = client.publish.bind(client);
+  let beforeFailure: (() => Promise<void>) | undefined;
+  let attempts = 0;
+  function failNextPublish(callback: () => Promise<void>) {
+    beforeFailure = callback;
+    attempts = 0;
+  }
+  async function attemptPublish(...args: Parameters<typeof publish>) {
+    attempts += 1;
+    const callback = beforeFailure;
+    if (callback) {
+      beforeFailure = undefined;
+      await callback();
+      throw new TimeoutError();
+    }
+    return publish(...args);
+  }
+  client.publish = attemptPublish;
+  function publishAttempts() {
+    return attempts;
+  }
+  return { store, failNextPublish, publishAttempts };
+}

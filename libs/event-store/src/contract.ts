@@ -21,6 +21,8 @@ export interface AppendCommand {
   expectedSequence: number;
   /** Stop retries when the caller's access check expires. Use performance.now(). */
   deadline?: number;
+  /** Stop further publishes when the caller withdraws permission. */
+  signal?: AbortSignal;
   /** Check this subject through expectedSequence and find no earlier matching command. */
   historyChecked?: true;
   /** Check the whole category, such as member-*, instead of one entity. */

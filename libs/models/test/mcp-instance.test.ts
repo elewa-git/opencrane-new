@@ -221,6 +221,11 @@ async function rejectsUnmatchedObservations() {
     workloadSpecDigest: fixture.data.workloadSpecDigest, state: 'starting' };
   const observation = envelope('test', fixture.event.subject, 'mcp.instance_observed', data);
   const observed = applyMcpInstance(current, observation, fixture.sequence + 1)!;
+  const staleRevision = { ...observation, data: { ...data, expectedSequence: 0 } };
+  function applyStaleRevision() {
+    return applyMcpInstance(current, staleRevision, fixture.sequence + 1);
+  }
+  expect(applyStaleRevision).toThrow();
   for (const overrides of [{ runGeneration: 2 }, { startChangeRef: 'foreign' },
     { podUid: 'replacement' }, { workloadSpecDigest: 'd'.repeat(64) }]) {
     const changed = { ...observation, data: { ...data, ...overrides } };

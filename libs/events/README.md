@@ -25,7 +25,7 @@ the hash of encrypted survey bytes.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
-  store["libs/event-store<br/>saved event log"] -.->|checks instance records| events
+  store["libs/event-store<br/>saved event log"] -.->|checks instance records and revisions| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode; checks nightly memory records| events["libs/events<br/>checks records<br/>previews dates"]
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks tool admission, control, turns, instance-bound approvals, spending limits, stops, expired holds and one-use send permissions| events
@@ -45,6 +45,7 @@ value calculated from those definitions. Older records remain readable for repla
   fixed-length value calculated from the encrypted bytes.
 
 - Define private tool-instance starts, observations and owner stop requests.
+  Require a system writer and change reference for new worker observations.
   These records contain identity and timing details, with no credentials or callable status.
   A counter names the version of startup access material, separately from process starts.
 - Define exact HTTPS destination rules for the silo, a person or an assistant.

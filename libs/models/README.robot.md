@@ -1441,8 +1441,17 @@ Commands may omit `runGeneration`; a new command uses the current run and an
 unchanged retry uses its saved original run. Explicit runs remain checked for internal callers.
 `McpInstanceRefused` distinguishes foreign or missing references, conflicting input
 and unavailable profile/admission prerequisites. Unexpected dependency errors stay unavailable.
-Observation commands, admin commands, worker registration and credential actions remain
-the next part of design row 2. No worker runs a saved stop yet.
+`mcpInstanceWorkerRegistration` checks the fixed identity, original start, run,
+workload digest, known Pod UID and exact revision before issuing a worker pass.
+`mcpInstanceObservation` accepts the checked registration separately from report input.
+It rechecks saved facts, rejects changed retries and saves one conditional append.
+The append deadline uses the worker pass's remaining lifetime. Replacing the worker
+cancels pending backoff and prevents later publish attempts.
+It checks the saved result before returning a receipt, including duplicate recovery.
+Reports store their checked `expectedSequence`; older observations may omit it.
+No membership or conversation streams decide this internal worker permission.
+Admin commands remain the next split of design row 2. Credential actions stay closed.
+No worker runs a saved stop yet.
 Every MCP continues to use the shared hosted installation path.
 
 Source checks, 11 October 2026: `03e136e4f8080b154bee7b35fd2e45bafbd2cd88`.
