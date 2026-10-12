@@ -68,8 +68,7 @@ async function start(siloId = 'test') {
   const result = await nats.store.append({ event, expectedSequence: 0 });
   if (result.status !== 'appended') throw new Error('Start fixture failed');
   const reference = { instanceId, profileId: identity.profileId, serverId: identity.serverId };
-  const stop = { changeRef: `stop-${counter}`, expectedSequence: result.sequence,
-    runGeneration: 1 };
+  const stop = { changeRef: `stop-${counter}`, expectedSequence: result.sequence };
   return { reference, data, event, sequence: result.sequence, stop };
 }
 
@@ -140,7 +139,7 @@ it.each(foreignCases)('refuses a foreign %s over HTTP', refusesForeign);
 async function refusesStaleAndChanged() {
   const fixture = await start();
   const url = instanceUrl(fixture.reference, '/stop');
-  for (const override of [{ expectedSequence: 0 }, { runGeneration: 2 }]) {
+  for (const override of [{ expectedSequence: 0 }]) {
     const payload = { ...fixture.stop, ...override };
     const response = await app.inject({ method: 'POST', url, headers: headers(), payload });
     expect(response.statusCode).toBe(409);
@@ -151,7 +150,7 @@ async function refusesStaleAndChanged() {
   expect(saved.statusCode).toBe(200);
   const retry = await app.inject(request);
   expect(retry.json()).toEqual(saved.json());
-  const changed = { ...fixture.stop, runGeneration: 2 };
+  const changed = { ...fixture.stop, expectedSequence: 0 };
   const conflict = await app.inject({ ...request, payload: changed });
   expect(conflict.statusCode).toBe(409);
   const rows = await history(nats.store, fixture.event.subject, 'test');
@@ -173,7 +172,7 @@ async function refusesWakeAndForgedInput() {
   expect(wake.json()).toEqual({ status: 'refused', reason: 'profile_or_admission_unavailable' });
   for (const extra of [{ userId: 'bob' }, { siloId: 'foreign' },
     { profileId: 'foreign' }, { serverId: 'foreign' }, { startupAccessGeneration: 2 },
-    { action: 'wake' }]) {
+    { runGeneration: 2 }, { action: 'wake' }]) {
     const payload = { ...fixture.stop, ...extra };
     const response = await app.inject({ method: 'POST',
       url: instanceUrl(fixture.reference, '/stop'), headers: headers(), payload });
@@ -217,3 +216,37 @@ async function refusesMissingSetup() {
   }
 }
 it('reports missing instance dependencies as unavailable', refusesMissingSetup);
+
+async function retainsOriginalRun() {
+  const fixture = await start();
+  const observation = { instanceId: fixture.reference.instanceId, runGeneration: 1,
+    startChangeRef: fixture.data.changeRef, podUid: 'original-pod',
+    workloadSpecDigest: fixture.data.workloadSpecDigest, state: 'starting' };
+  const observed = envelope('test', fixture.event.subject, 'mcp.instance_observed', observation);
+  const result = await nats.store.append({ event: observed, expectedSequence: fixture.sequence });
+  if (result.status !== 'appended') throw new Error('Observation fixture failed');
+  const payload = { ...fixture.stop, expectedSequence: result.sequence };
+  const request = { method: 'POST' as const, url: instanceUrl(fixture.reference, '/stop'),
+    headers: headers(), payload };
+  const saved = await app.inject(request);
+  expect(saved.statusCode).toBe(200);
+  const stopReceipt = saved.json<{ sequence: number }>();
+  const absent = envelope('test', fixture.event.subject, 'mcp.instance_observed',
+    { ...observation, state: 'absent' });
+  const stopped = await nats.store.append({ event: absent, expectedSequence: stopReceipt.sequence });
+  if (stopped.status !== 'appended') throw new Error('Absence fixture failed');
+  const next = envelope('test', fixture.event.subject, 'mcp.instance_start_requested',
+    { ...fixture.data, runGeneration: 2, changeRef: `next-${counter}` });
+  await nats.store.append({ event: next, expectedSequence: stopped.sequence });
+  const retry = await app.inject(request);
+  expect(retry.statusCode).toBe(200);
+  expect(retry.json()).toEqual(saved.json());
+  const original = await app.inject({ url: changeUrl(fixture.reference, payload.changeRef),
+    headers: headers() });
+  expect(original.json()).toEqual(saved.json());
+  const stale = { ...payload, changeRef: `stale-${counter}` };
+  const refused = await app.inject({ ...request, payload: stale });
+  expect(refused.statusCode).toBe(409);
+  expect(await history(nats.store, fixture.event.subject, 'test')).toHaveLength(5);
+}
+it('derives the run and keeps the original receipt after a later run starts', retainsOriginalRun);
