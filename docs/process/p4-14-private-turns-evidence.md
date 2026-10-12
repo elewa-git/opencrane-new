@@ -1,50 +1,79 @@
 # Private team turns check record
 
-Date: 5 October 2026. Branch: `work/p4-14-private-turns`.
-Draft PR: [#197](https://github.com/elewa-git/opencrane-new/pull/197).
-Base: `913e6cf`. The rebase completed and main's dispatch retry is preserved.
+## 12 October qualification run
 
-## Current results
-
-These rows describe the final fixes. Earlier runs are listed separately below.
-All suites and builds run under `nice -n 10`. Service tests use disposable fixtures
-and `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`, with two workers.
-No paid model call or owner stack is used.
+Branch: `work/p4-14-qual`, based on `origin/main`. The image build and live probe
+ran under `nice -n 10` in separate throwaway namespaces. The provider used a local
+model stub. No paid model call or owner stack was used.
 
 | Check | Result | Detail |
 | --- | --- | --- |
-| Lint | PASS | Code, dependencies, unused code, Markdown, links and fixtures |
+| Image build, licence and capability gates | PASS | 385/385 packages accepted; private capability check passed |
+| Existing fresh and resumed image checks | PASS | gVisor runtime, desktop, documents, network and PVC checks passed |
+| J1 | PASS | Replies and reasoning arrived; canary scans and private cleanup passed |
+| J2 | PASS | Two private turns and one memory-free turn; held and released scans passed |
+| J3 | PASS | Stop during a held reply; canary scans and private cleanup passed |
+| J4 | FAIL | `SIGSEGV` was caught and did not exit Codex; forced cleanup then passed. The separate `SIGKILL` case passed |
+| J5 | PASS | Reconnect during a held reply; one terminal report and cleanup passed |
+| J6 | PASS | Bridge restart and replacement Pod lost pending output and did not repeat the turn |
+| J7 | PASS | Tool attempts were refused; direct private compaction kept its canary in RAM and made no file |
+| Canary scans | PASS | No canary reached the PVC, logs, shared notes, another member's prompt or provider request |
+| Held-turn canaries | PASS | J2 found message, context and member canaries only in the private RAM volume and its turn home |
+| Pod mounts | PASS | The private home used a separate memory-backed volume |
+| Private volume mount | PASS | Node mount was `tmpfs`, 16 MiB, `noswap` |
+| Private volume `statfs` | PASS | 16,777,216 bytes; the 16 MiB limit was enforced |
+| Writable path census | PASS | Only `/tmp`, `/dev/shm` and private turn homes were writable |
+| Guest core limits | PASS | Bridge and private Codex core size limits were both zero |
+| runsc options | PASS | `io.containerd.runsc.v1`; no debug, trace or debug-log option was set |
+| Private home peak | PASS | 2,923,663 bytes; symlinks are counted without following their targets |
+| Private start time | PASS | 10 samples; p50 913 ms, p95 1,351 ms |
+| Two-turn peak memory | PASS | 365,871,104 bytes at the Pod cgroup |
+| F1: host swap | ACCEPTED (dev box, owner 12 Oct, [#366](https://github.com/elewa-git/opencrane-new/issues/366)) | `/swapfile` was active; no host setting was changed |
+| F2: host apport dumps | ACCEPTED (dev box, owner 12 Oct, [#366](https://github.com/elewa-git/opencrane-new/issues/366)) | Host `core_pattern` uses apport; guest core limits passed |
+| F3: complete live proof | FAIL | J4's `SIGSEGV` assertion failed; J5–J7 passed |
+| Lint | PASS | Full repository lint, including docs, links and changelog |
 | Typecheck | PASS | All workspaces |
-| Event catalogue | PASS | 96 event types agree |
-| private-context | PASS | 6 tests |
-| private-codex | PASS | 5 tests |
-| private-turn-channel | PASS | 55 tests, including mode omission |
-| shared-assistant | PASS | 27 tests, including both dispatch modes and context failure |
-| shared-runtime | PASS | 1 test |
-| bridge-channel | PASS | 11 tests |
-| bridge-replay | PASS | 12 tests |
-| chat | PASS | 8 tests |
-| chat-http | PASS | 1 test |
-| upload | PASS | 7 tests |
-| Full root suite | FAIL | 1,918 passed, 1 failed, 15 skipped; start load 11.62 |
-| Gateway settlement recheck | PASS | Failed root case passes alone; root failure remains recorded |
-| Local capability check | PASS | Private socket, pinned Codex, exact template capabilities, stub provider |
-| Image build and publication | PASS | 384 licences, 91 notices; qualification and release tags published |
-| Existing gVisor image checks | PASS | Custom host, fresh image and retained-disk resume |
-| Private gVisor journeys J1–J7 | NOT RUN | Probe moved to qualification branch |
-| F1: swap | FAIL | `/swapfile` is active; private process and memory-volume pages can reach disk |
-| F2: crash dumps | FAIL | Host `core_pattern` sends dumps to apport; guest limit is checked separately |
-| F3: complete live proof | NOT RUN | Needs all private gVisor journeys and measurements |
+| Event catalogue | PASS | 128 event types agree |
+| Changelog lint | PASS | Unreleased fragment accepted |
+| Changed computer tests | PASS | 6 tests passed |
+| Full root suite | FAIL | First run: 4,151 passed, 6 failed, 18 skipped across 257 files |
+| Affected-file recheck | PARTIAL | Four files passed (197 tests); `upgrade-after-publication` still found another database session |
 
-The capability remains **PARTIAL**. Memory admission remains **DISABLED**.
-Disk isolation is not yet proven on a live computer; memory features stay off
-until it is. The JSON beside this record contains only private-probe status and
-measurements. It does not contain source checks and is not a completed probe run.
-The complete root run has one failure: the gateway test “leaves money reserved on
-settlement failure and retries the recorded effect idempotently” exceeded 40 seconds.
-No timeout is raised. The case passes alone in the isolated recheck. The complete
-run remains FAIL; this draft is not source ready.
-Logs for these fixes are under `/tmp/p414-fixes/` on the builder host.
+F1 and F2 are accepted dev-box exceptions for the MVP and remain post-MVP
+security gaps in [#366](https://github.com/elewa-git/opencrane-new/issues/366).
+F3 is FAIL, so this run does not qualify private turns. The `SIGSEGV` check found
+that the pinned Codex process catches signal 11 (`SigCgt` includes it) and keeps
+running. The probe recorded the failure, sent `SIGKILL` to clean up that turn, and
+continued. The separate `SIGKILL` case and J5–J7 passed. The probe namespace was
+removed after capture. The JSON entry contains every check and raw measurement.
+During J2, the probe found the expected active canaries in the private RAM volume
+and one private home WAL file. It found none in the PVC, Pod logs, shared notes,
+another member's prompt or provider request. The J7 tool attempts were refused and
+the direct compaction canary appeared only in the allowed private RAM home.
+
+The first root run's six failures were the live-view fixture's OpenFGA timeout, the
+stale Codex path assertion, a provider-guard fixture's OpenFGA timeout, two handler
+upgrade cases that found other database sessions, and the decision-fence test's
+40-second timeout. The affected-file recheck passed the live-view, private Codex,
+provider-guard and decision-fence files, plus two of the three upgrade recovery
+cases. `upgrade-after-publication` still failed because a database session remained
+open after the child was killed. The disposable database was removed after the
+recheck. The root suite is not green.
+
+Memory admission remains **DISABLED**. The live proof failed, and even after F3
+passes with F1 and F2 accepted, the unauthenticated `/credentials` route remains
+the separate blocker tracked in [#200](https://github.com/elewa-git/opencrane-new/issues/200).
+The setting in `apps/server/src/chat/memory-admission.ts` stays disabled for those
+two reasons.
+
+The JSON beside this record contains the probe results and measurements from this
+run. It records F1 and F2 with the owner-approved status and records F3 as FAIL.
+J5–J7 passed after the probe cleaned up the turn that caught `SIGSEGV`.
+
+## 5 October source and test record
+
+The earlier source record follows. Its live probe, host-risk and registry details
+were superseded by the 12 October run above.
 
 ## Behaviour and limits
 
@@ -162,5 +191,8 @@ Earlier runs, before these fixes:
 - Private gVisor journeys and fresh-install qualification: NOT RUN.
 
 Chat screens, memory injection, per-Pod report sequences and managed-node
-qualification remain outside this change. Memory admission stays disabled until
-swap, crash-dump handling and the complete live proof pass on a qualified node.
+qualification remain outside this change. The owner accepted host swap and
+apport handling on this dev box for the MVP; [#366](https://github.com/elewa-git/opencrane-new/issues/366)
+tracks both as post-MVP gaps. Memory admission stays disabled until the live proof
+passes and the unauthenticated `/credentials` route is fixed in
+[#200](https://github.com/elewa-git/opencrane-new/issues/200).

@@ -479,15 +479,16 @@ or computer credential. See [bridge evidence](../../docs/process/bridge-evidence
 ## Private turns
 
 Team messages default to `restricted`, unless posted with `memory_free`.
-Each private turn opens a new Codex process and ephemeral thread as UID 1003.
+Each private turn opens the pinned Codex binary and an ephemeral thread as UID 1003.
 It never resumes a thread. At most two private turns prepare or run together.
 Its home is `/home/private/turn-<n>`, with config, temporary files and working
 files inside. The supervisor removes it after the process exits. Socket closure
 ends input. After 5 seconds it tries SIGKILL as UID 1003 if needed. A failed kill
 is checked and retried twice, one second apart. Each failure writes the fixed line
-`Private process cleanup failed`, with no private text. The five-second cleanup
-and removal during the turn are not yet proven under gVisor; J4 and J6 are NOT RUN.
-Disk isolation is not yet proven on a live computer; memory features stay off until it is.
+`Private process cleanup failed`, with no private text. The desktop removes an old
+Xvnc display lock before it starts after a container restart. It keeps the lock if
+its PID still runs Xvnc on display `:1`. The X11 socket directory is mode 0711, so
+other users can reach the display socket but cannot create files there.
 A private child error fails its own connection, rather than the supervisor.
 Stderr is discarded. The whole container inherits a hard core-file limit of zero.
 
@@ -513,8 +514,8 @@ concurrent homes or processes; only the absence of tools does. UID 1003 can read
 the workspace and reach loopback ports 8080, 8081 and 6901. Directory permissions are intended to prevent reading `/run/executor`, `/run/codex`, `/home/codex`, `/home/agent/codex`
 and `/home/tool`; this is not yet checked under gVisor. Every UID 1000 process can reach `private.sock`, including
 memory-free Codex and its connectors; this socket is not exclusive to the bridge.
-Codex uses its RAM `TMPDIR`, but the kernel still permits writes to `/tmp`,
-`/dev/shm` and world-writable workspace directories. The live probe checks them.
+Codex uses its RAM `TMPDIR`, but the kernel still permits writes to `/tmp` and
+`/dev/shm`. The live probe checks both paths and every other writable directory.
 
 The PVC journal stores a text-free line for each private text report, marked
 `memoryOnly: true`. Its text remains in bridge memory until acknowledged or
@@ -532,13 +533,17 @@ not receive it and cannot resume a former private thread.
 Both configs switch shared prompt files and skill instructions off. Personal
 and memory-free tools otherwise retain their existing persistent home and work.
 No fallback is enabled without a failing pinned-image check. The live canary probe
-and its provider are on `work/p4-14-qualification`, outside this change.
+and its local provider are `test/private-turns.mjs` and `test/private-provider.mjs`.
+They run in a throwaway Kubernetes namespace.
 The local `test/private-capabilities.mjs` runs a private turn through `private.sock`
 with the template's exact capabilities and a stub provider. It uses Docker's runc
 runtime and does not qualify gVisor isolation.
 [Check record](../../docs/process/p4-14-private-turns-evidence.md).
-Memory admission remains disabled while swap, host crash dumps or the live proof
-fail. This developer box cannot qualify swap or host core-dump isolation.
+The owner accepts host swap and apport crash dumps on this developer box for the
+MVP. The remaining host risks are tracked in
+[#366](https://github.com/elewa-git/opencrane-new/issues/366). Memory admission
+stays disabled until the live proof passes and the unauthenticated credentials
+replacement is fixed in [#200](https://github.com/elewa-git/opencrane-new/issues/200).
 
 ## Bridge credential delivery
 
@@ -603,10 +608,9 @@ paused and all private turns have ended; team traffic must remain memory-free
 until the server supports restricted reports again. A computer rollback requires
 restoring the old server before allowing default team traffic.
 
-`COMPUTER_PUSH_REGISTRY` sets the host address used by `build.sh` for publishing;
-it defaults to `127.0.0.1:5001`. The Pod image always uses `k3d-ocn-registry:5000`.
-A temporary user-space forwarder can reach the same registry when its published
-host port is broken. This does not change Docker settings or host networking.
+`build.sh` reads the registry container's address on `k3d-ocn` and forwards host
+traffic through `127.0.0.1:15001` for pulls and pushes. `COMPUTER_PUSH_REGISTRY`
+can set another host address. The Pod image always uses `k3d-ocn-registry:5000`.
 
 ## Tool call reports
 

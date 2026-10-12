@@ -1,28 +1,1679 @@
 {
-  "result": "NOT RUN",
+  "date": "2026-10-12T09:59:27.533Z",
+  "result": "FAIL",
   "memoryAdmission": "DISABLED",
   "checks": {
     "J1": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J2": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J3": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J4": {
-      "result": "NOT RUN"
+      "result": "FAIL",
+      "detail": [
+        "J4 -SEGV process exits"
+      ]
     },
     "J5": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J6": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J7": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
+    },
+    "private release probe-1": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1012.2840639999995
+      }
+    },
+    "private release probe-2": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1121.6210079999983
+      }
+    },
+    "reply and reasoning delivered": {
+      "result": "PASS"
+    },
+    "J1 scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-5": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1314.8008159999954
+      }
+    },
+    "J2 held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [
+          {
+            "path": "/home/private/turn-3/codex/logs_2.sqlite-wal",
+            "kind": "message"
+          },
+          {
+            "path": "/home/private/turn-4/codex/logs_2.sqlite-wal",
+            "kind": "message"
+          }
+        ],
+        "nodeHits": [],
+        "privateNodeHits": [
+          "message",
+          "context",
+          "alice",
+          "bob"
+        ],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-3": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1410.793571999995
+      }
+    },
+    "private release probe-4": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1218.496643999999
+      }
+    },
+    "J2 scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J3 held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-6": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 2311.7279890000063
+      }
+    },
+    "J3 scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J4 -SEGV held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J4 -SEGV process exits": {
+      "result": "FAIL",
+      "detail": {
+        "pid": 845,
+        "state": "S (sleeping)",
+        "command": "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex",
+        "signals": [
+          "SigPnd:\t0000000000000000",
+          "ShdPnd:\t0000000000000000",
+          "SigBlk:\t0000000000000000",
+          "SigIgn:\t0000000000001000",
+          "SigCgt:\t0000000000004040"
+        ]
+      }
+    },
+    "J4 forced cleanup after caught SIGSEGV": {
+      "result": "PASS"
+    },
+    "private release probe-7": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1016.6293279999954
+      }
+    },
+    "private release probe-8": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1014.1452100000024
+      }
+    },
+    "J4 -SEGV scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J4 -9 held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [
+          {
+            "path": "/home/private/turn-8/codex/logs_2.sqlite-wal",
+            "kind": "message"
+          }
+        ],
+        "nodeHits": [],
+        "privateNodeHits": [
+          "message",
+          "context",
+          "alice"
+        ],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J4 -9 process exits": {
+      "result": "PASS",
+      "detail": {
+        "pid": 1194,
+        "state": "gone"
+      }
+    },
+    "private release probe-9": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 943.4495829999796
+      }
+    },
+    "private release probe-10": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1354.38595299999
+      }
+    },
+    "J4 -9 scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J5 held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-11": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1757.671097000013
+      }
+    },
+    "J5 scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J6 false held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-12": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1600.505932
+      }
+    },
+    "J6 false lost output": {
+      "result": "PASS"
+    },
+    "J6 false no repeat": {
+      "result": "PASS"
+    },
+    "private release probe-13": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1360.637836000009
+      }
+    },
+    "J6 false scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J6 true held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-14": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 948.9234830000205
+      }
+    },
+    "J6 true lost output": {
+      "result": "PASS"
+    },
+    "J6 true no repeat": {
+      "result": "PASS"
+    },
+    "private release probe-15": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 992.5074140000215
+      }
+    },
+    "J6 true scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-16": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 923.0470949999872
+      }
+    },
+    "J7 exec_command scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J7 exec_command provider attempted": {
+      "result": "PASS"
+    },
+    "private release probe-17": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1093.0531060000067
+      }
+    },
+    "J7 apply_patch scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J7 apply_patch provider attempted": {
+      "result": "PASS"
+    },
+    "private release probe-18": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1059.4117149999947
+      }
+    },
+    "J7 exec scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J7 exec provider attempted": {
+      "result": "PASS"
+    },
+    "private release probe-19": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 975.416838999954
+      }
+    },
+    "J7 request_user_input scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J7 request_user_input provider attempted": {
+      "result": "PASS"
+    },
+    "direct ephemeral compaction": {
+      "result": "PASS",
+      "detail": {
+        "notifications": [
+          "configWarning",
+          "remoteControl/status/changed",
+          "thread/started",
+          "warning",
+          "thread/status/changed",
+          "turn/started",
+          "item/started",
+          "item/completed",
+          "item/started",
+          "item/agentMessage/delta",
+          "item/completed",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "thread/status/changed",
+          "turn/completed",
+          "thread/status/changed",
+          "turn/started",
+          "item/started",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "item/completed",
+          "warning",
+          "thread/status/changed",
+          "turn/completed"
+        ],
+        "requests": 2
+      }
+    },
+    "J7 compact scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "tools created no file": {
+      "result": "PASS"
+    },
+    "provider isolation": {
+      "result": "PASS"
+    },
+    "advertised private tools": {
+      "result": "PASS",
+      "detail": [
+        {
+          "thread": "01a12f8d-e45e-71b1-a533-f0a160249b17",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f8d-f6c6-7571-854b-eb60ad14fc2d",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f8e-3abd-7d80-ba68-dd3969c47ae8",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f8e-5552-7820-8aec-27a41f80ba4b",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f8e-64c5-7ec2-b6df-e19482f70790",
+          "memoryFree": true,
+          "names": []
+        },
+        {
+          "thread": "01a12f8e-de22-7cc2-b391-d454db4ab3f5",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f8f-2350-7ed0-8b2d-9c32df28f2f8",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f8f-312c-7a43-b9e5-efc228e83e22",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f8f-8911-7750-a1b9-e0f5cbca7a99",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f8f-a60c-7db0-8b9d-d5d85f3b49c3",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f8f-fe1d-7b91-98c3-a8830c6b6b6e",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f90-4323-72b2-8788-caf895a48dfa",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f90-926a-7883-b0fb-29c3750575c7",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f90-bfe9-7bb0-9c44-607b19d2b34f",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-125a-76a2-8819-38741ab25be6",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-31f3-74e0-8382-a915ccab0f27",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-31f3-74e0-8382-a915ccab0f27",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-522f-7ea3-a9de-da1a04ae2495",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-522f-7ea3-a9de-da1a04ae2495",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-73f4-7491-a047-f936fbb4b375",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-73f4-7491-a047-f936fbb4b375",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-95ae-7a52-adf2-ccaa54d37138",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-95ae-7a52-adf2-ccaa54d37138",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-bd94-7741-8b21-44ab2c20d2b6",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a12f91-bd94-7741-8b21-44ab2c20d2b6",
+          "memoryFree": false,
+          "names": []
+        }
+      ]
+    },
+    "one terminal probe-1": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-1",
+          "assistantId": "probe",
+          "turnId": "probe-1",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8d-e45e-71b1-a533-f0a160249b17",
+          "previousSequence": 0,
+          "sequence": 1,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-1",
+          "assistantId": "probe",
+          "turnId": "probe-1",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_1",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 1,
+          "sequence": 2,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-1",
+          "assistantId": "probe",
+          "turnId": "probe-1",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_1",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 2,
+          "sequence": 3,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-1",
+          "assistantId": "probe",
+          "turnId": "probe-1",
+          "type": "agent.turn_completed",
+          "previousSequence": 3,
+          "sequence": 4,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-2": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-2",
+          "assistantId": "probe",
+          "turnId": "probe-2",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8d-f6c6-7571-854b-eb60ad14fc2d",
+          "previousSequence": 0,
+          "sequence": 5,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-2",
+          "assistantId": "probe",
+          "turnId": "probe-2",
+          "type": "agent.reasoning_summarised",
+          "text": "P414_reasoning_6ae981ca9224cd1eaa8872cac69067cae36666127061a310",
+          "previousSequence": 5,
+          "sequence": 6,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-2",
+          "assistantId": "probe",
+          "turnId": "probe-2",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_2",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 6,
+          "sequence": 7,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-2",
+          "assistantId": "probe",
+          "turnId": "probe-2",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_2",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 7,
+          "sequence": 8,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-2",
+          "assistantId": "probe",
+          "turnId": "probe-2",
+          "type": "agent.turn_completed",
+          "previousSequence": 8,
+          "sequence": 9,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-3": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-3",
+          "assistantId": "probe",
+          "turnId": "probe-3",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8e-3abd-7d80-ba68-dd3969c47ae8",
+          "previousSequence": 0,
+          "sequence": 10,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-3",
+          "assistantId": "probe",
+          "turnId": "probe-3",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_3",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 10,
+          "sequence": 11,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-3",
+          "assistantId": "probe",
+          "turnId": "probe-3",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_3",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 11,
+          "sequence": 18,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-3",
+          "assistantId": "probe",
+          "turnId": "probe-3",
+          "type": "agent.turn_completed",
+          "previousSequence": 18,
+          "sequence": 19,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-4": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-4",
+          "assistantId": "probe",
+          "turnId": "probe-4",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8e-5552-7820-8aec-27a41f80ba4b",
+          "previousSequence": 0,
+          "sequence": 12,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-4",
+          "assistantId": "probe",
+          "turnId": "probe-4",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_4",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 12,
+          "sequence": 13,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-4",
+          "assistantId": "probe",
+          "turnId": "probe-4",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_4",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 13,
+          "sequence": 20,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-4",
+          "assistantId": "probe",
+          "turnId": "probe-4",
+          "type": "agent.turn_completed",
+          "previousSequence": 20,
+          "sequence": 21,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-5": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-5",
+          "assistantId": "probe",
+          "turnId": "probe-5",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8e-64c5-7ec2-b6df-e19482f70790",
+          "previousSequence": 0,
+          "sequence": 14,
+          "requesterId": "alice"
+        },
+        {
+          "conversationId": "probe-5",
+          "assistantId": "probe",
+          "turnId": "probe-5",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_5",
+          "text": "Memory-free fixture reply.",
+          "previousSequence": 14,
+          "sequence": 15,
+          "requesterId": "alice"
+        },
+        {
+          "conversationId": "probe-5",
+          "assistantId": "probe",
+          "turnId": "probe-5",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_5",
+          "text": "Memory-free fixture reply.",
+          "previousSequence": 15,
+          "sequence": 16,
+          "requesterId": "alice"
+        },
+        {
+          "conversationId": "probe-5",
+          "assistantId": "probe",
+          "turnId": "probe-5",
+          "type": "agent.turn_completed",
+          "previousSequence": 16,
+          "sequence": 17,
+          "requesterId": "alice"
+        }
+      ]
+    },
+    "one terminal probe-6": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-6",
+          "assistantId": "probe",
+          "turnId": "probe-6",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8e-de22-7cc2-b391-d454db4ab3f5",
+          "previousSequence": 0,
+          "sequence": 22,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-6",
+          "assistantId": "probe",
+          "turnId": "probe-6",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_6",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 22,
+          "sequence": 23,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-6",
+          "assistantId": "probe",
+          "turnId": "probe-6",
+          "type": "agent.turn_failed",
+          "previousSequence": 23,
+          "sequence": 24,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-7": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-7",
+          "assistantId": "probe",
+          "turnId": "probe-7",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8f-2350-7ed0-8b2d-9c32df28f2f8",
+          "previousSequence": 0,
+          "sequence": 25,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-7",
+          "assistantId": "probe",
+          "turnId": "probe-7",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_7",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 25,
+          "sequence": 26,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-7",
+          "assistantId": "probe",
+          "turnId": "probe-7",
+          "type": "agent.turn_failed",
+          "previousSequence": 26,
+          "sequence": 29,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-8": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-8",
+          "assistantId": "probe",
+          "turnId": "probe-8",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8f-312c-7a43-b9e5-efc228e83e22",
+          "previousSequence": 0,
+          "sequence": 27,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-8",
+          "assistantId": "probe",
+          "turnId": "probe-8",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_8",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 27,
+          "sequence": 28,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-8",
+          "assistantId": "probe",
+          "turnId": "probe-8",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_8",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 28,
+          "sequence": 30,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-8",
+          "assistantId": "probe",
+          "turnId": "probe-8",
+          "type": "agent.turn_completed",
+          "previousSequence": 30,
+          "sequence": 31,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-9": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-9",
+          "assistantId": "probe",
+          "turnId": "probe-9",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8f-8911-7750-a1b9-e0f5cbca7a99",
+          "previousSequence": 0,
+          "sequence": 32,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-9",
+          "assistantId": "probe",
+          "turnId": "probe-9",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_9",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 32,
+          "sequence": 33,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-9",
+          "assistantId": "probe",
+          "turnId": "probe-9",
+          "type": "agent.turn_failed",
+          "previousSequence": 33,
+          "sequence": 36,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-10": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-10",
+          "assistantId": "probe",
+          "turnId": "probe-10",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8f-a60c-7db0-8b9d-d5d85f3b49c3",
+          "previousSequence": 0,
+          "sequence": 34,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-10",
+          "assistantId": "probe",
+          "turnId": "probe-10",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_10",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 34,
+          "sequence": 35,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-10",
+          "assistantId": "probe",
+          "turnId": "probe-10",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_10",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 35,
+          "sequence": 37,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-10",
+          "assistantId": "probe",
+          "turnId": "probe-10",
+          "type": "agent.turn_completed",
+          "previousSequence": 37,
+          "sequence": 38,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-11": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-11",
+          "assistantId": "probe",
+          "turnId": "probe-11",
+          "type": "agent.turn_started",
+          "threadId": "01a12f8f-fe1d-7b91-98c3-a8830c6b6b6e",
+          "previousSequence": 0,
+          "sequence": 39,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-11",
+          "assistantId": "probe",
+          "turnId": "probe-11",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_11",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 39,
+          "sequence": 40,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-11",
+          "assistantId": "probe",
+          "turnId": "probe-11",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_11",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 40,
+          "sequence": 41,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-11",
+          "assistantId": "probe",
+          "turnId": "probe-11",
+          "type": "agent.turn_completed",
+          "previousSequence": 41,
+          "sequence": 42,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-12": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-12",
+          "assistantId": "probe",
+          "turnId": "probe-12",
+          "type": "agent.turn_started",
+          "threadId": "01a12f90-4323-72b2-8788-caf895a48dfa",
+          "previousSequence": 0,
+          "sequence": 43,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-12",
+          "assistantId": "probe",
+          "turnId": "probe-12",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_12",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 43,
+          "sequence": 44,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "sequence": 44,
+          "conversationId": "probe-12",
+          "turnId": "probe-12",
+          "assistantId": "probe",
+          "type": "agent.output_lost",
+          "previousSequence": 43,
+          "requesterId": "alice"
+        },
+        {
+          "conversationId": "probe-12",
+          "assistantId": "probe",
+          "turnId": "probe-12",
+          "type": "agent.turn_failed",
+          "previousSequence": 44,
+          "sequence": 45,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-13": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-13",
+          "assistantId": "probe",
+          "turnId": "probe-13",
+          "type": "agent.turn_started",
+          "threadId": "01a12f90-926a-7883-b0fb-29c3750575c7",
+          "previousSequence": 0,
+          "sequence": 46,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-13",
+          "assistantId": "probe",
+          "turnId": "probe-13",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_13",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 46,
+          "sequence": 47,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-13",
+          "assistantId": "probe",
+          "turnId": "probe-13",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_13",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 47,
+          "sequence": 48,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-13",
+          "assistantId": "probe",
+          "turnId": "probe-13",
+          "type": "agent.turn_completed",
+          "previousSequence": 48,
+          "sequence": 49,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-14": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-14",
+          "assistantId": "probe",
+          "turnId": "probe-14",
+          "type": "agent.turn_started",
+          "threadId": "01a12f90-bfe9-7bb0-9c44-607b19d2b34f",
+          "previousSequence": 0,
+          "sequence": 50,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-14",
+          "assistantId": "probe",
+          "turnId": "probe-14",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_14",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 50,
+          "sequence": 51,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "sequence": 51,
+          "conversationId": "probe-14",
+          "turnId": "probe-14",
+          "assistantId": "probe",
+          "type": "agent.output_lost",
+          "previousSequence": 50,
+          "requesterId": "alice"
+        },
+        {
+          "sequence": 52,
+          "conversationId": "probe-14",
+          "turnId": "probe-14",
+          "assistantId": "probe",
+          "type": "agent.turn_failed",
+          "requesterId": "alice",
+          "previousSequence": 51,
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-15": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-15",
+          "assistantId": "probe",
+          "turnId": "probe-15",
+          "type": "agent.turn_started",
+          "threadId": "01a12f91-125a-76a2-8819-38741ab25be6",
+          "previousSequence": 0,
+          "sequence": 53,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-15",
+          "assistantId": "probe",
+          "turnId": "probe-15",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_15",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 53,
+          "sequence": 54,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-15",
+          "assistantId": "probe",
+          "turnId": "probe-15",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_15",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 54,
+          "sequence": 55,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-15",
+          "assistantId": "probe",
+          "turnId": "probe-15",
+          "type": "agent.turn_completed",
+          "previousSequence": 55,
+          "sequence": 56,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-16": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-16",
+          "assistantId": "probe",
+          "turnId": "probe-16",
+          "type": "agent.turn_started",
+          "threadId": "01a12f91-31f3-74e0-8382-a915ccab0f27",
+          "previousSequence": 0,
+          "sequence": 57,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-16",
+          "assistantId": "probe",
+          "turnId": "probe-16",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_17",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 57,
+          "sequence": 58,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-16",
+          "assistantId": "probe",
+          "turnId": "probe-16",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_17",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 58,
+          "sequence": 59,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-16",
+          "assistantId": "probe",
+          "turnId": "probe-16",
+          "type": "agent.turn_completed",
+          "previousSequence": 59,
+          "sequence": 60,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-17": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-17",
+          "assistantId": "probe",
+          "turnId": "probe-17",
+          "type": "agent.turn_started",
+          "threadId": "01a12f91-522f-7ea3-a9de-da1a04ae2495",
+          "previousSequence": 0,
+          "sequence": 61,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-17",
+          "assistantId": "probe",
+          "turnId": "probe-17",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_19",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 61,
+          "sequence": 62,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-17",
+          "assistantId": "probe",
+          "turnId": "probe-17",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_19",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 62,
+          "sequence": 63,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-17",
+          "assistantId": "probe",
+          "turnId": "probe-17",
+          "type": "agent.turn_completed",
+          "previousSequence": 63,
+          "sequence": 64,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-18": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-18",
+          "assistantId": "probe",
+          "turnId": "probe-18",
+          "type": "agent.turn_started",
+          "threadId": "01a12f91-73f4-7491-a047-f936fbb4b375",
+          "previousSequence": 0,
+          "sequence": 65,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-18",
+          "assistantId": "probe",
+          "turnId": "probe-18",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_21",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 65,
+          "sequence": 66,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-18",
+          "assistantId": "probe",
+          "turnId": "probe-18",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_21",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 66,
+          "sequence": 67,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-18",
+          "assistantId": "probe",
+          "turnId": "probe-18",
+          "type": "agent.turn_completed",
+          "previousSequence": 67,
+          "sequence": 68,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-19": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-19",
+          "assistantId": "probe",
+          "turnId": "probe-19",
+          "type": "agent.turn_started",
+          "threadId": "01a12f91-95ae-7a52-adf2-ccaa54d37138",
+          "previousSequence": 0,
+          "sequence": 69,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-19",
+          "assistantId": "probe",
+          "turnId": "probe-19",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_23",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 69,
+          "sequence": 70,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-19",
+          "assistantId": "probe",
+          "turnId": "probe-19",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_23",
+          "text": "P414_reply_860e5081a41230ff33c03de89b67083ca9302621447fb2c2",
+          "previousSequence": 70,
+          "sequence": 71,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-19",
+          "assistantId": "probe",
+          "turnId": "probe-19",
+          "type": "agent.turn_completed",
+          "previousSequence": 71,
+          "sequence": 72,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "outline journal": {
+      "result": "PASS"
     }
   },
-  "measurements": {}
+  "measurements": {
+    "podMounts": {
+      "result": "PASS",
+      "value": "none / 9p ro,trans=fd,rfdno=56,wfdno=56,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=fscache,disable_fifo_open,overlayfs_stale_read,directfs 0 0\nnone /dev dev rw,nosuid,mode=0755 0 0\nnone /sys sysfs ro,nosuid,noexec,dentry_cache_limit=1000 0 0\nnone /tmp 9p rw,trans=fd,rfdno=57,wfdno=57,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /proc proc rw,nosuid,noexec,dentry_cache_limit=1000 0 0\nnone /fixture 9p ro,trans=fd,rfdno=58,wfdno=58,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /dev/pts devpts rw,nosuid,noexec 0 0\nnone /dev/shm tmpfs rw 0 0\nnone /etc/hosts 9p rw,trans=fd,rfdno=66,wfdno=66,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /run/codex 9p rw,trans=fd,rfdno=61,wfdno=61,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /home/tool 9p rw,trans=fd,rfdno=64,wfdno=64,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /home/agent 9p rw,trans=fd,rfdno=59,wfdno=59,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /home/codex 9p rw,trans=fd,rfdno=60,wfdno=60,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /home/desktop 9p rw,trans=fd,rfdno=62,wfdno=62,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /home/private 9p rw,trans=fd,rfdno=63,wfdno=63,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /run/executor 9p rw,trans=fd,rfdno=65,wfdno=65,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /etc/hostname 9p ro,trans=fd,rfdno=68,wfdno=68,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /sys/fs/cgroup tmpfs ro,nosuid,noexec 0 0\nnone /sys/fs/cgroup/cpu cgroup rw,cpu 0 0\nnone /sys/fs/cgroup/cpuacct cgroup rw,cpuacct 0 0\nnone /sys/fs/cgroup/cpuset cgroup rw,cpuset 0 0\nnone /sys/fs/cgroup/devices cgroup rw,devices 0 0\nnone /sys/fs/cgroup/job cgroup rw,job 0 0\nnone /sys/fs/cgroup/memory cgroup rw,memory 0 0\nnone /sys/fs/cgroup/pids cgroup rw,pids 0 0\nnone /etc/resolv.conf 9p ro,trans=fd,rfdno=69,wfdno=69,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /dev/termination-log 9p rw,trans=fd,rfdno=67,wfdno=67,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\n"
+    },
+    "privateNodeMount": {
+      "result": "PASS",
+      "value": [
+        "tmpfs /var/lib/kubelet/pods/04db0c32-3062-40c4-88ee-27827b8a7ac8/volumes/kubernetes.io~empty-dir/private tmpfs rw,relatime,size=16384k,inode64,noswap 0 0"
+      ]
+    },
+    "privateStatfs": {
+      "result": "PASS",
+      "value": {
+        "type": 16914839,
+        "bytes": 16777216,
+        "enforces16Mi": true,
+        "limitEnforced": true
+      }
+    },
+    "writableCensus": {
+      "result": "PASS",
+      "value": [
+        "/dev/shm",
+        "/home/private/turn-3",
+        "/home/private/turn-3/codex",
+        "/home/private/turn-3/tmp",
+        "/home/private/turn-3/work",
+        "/home/private/turn-4",
+        "/home/private/turn-4/codex",
+        "/home/private/turn-4/tmp",
+        "/home/private/turn-4/work",
+        "/tmp"
+      ]
+    },
+    "coreLimits": {
+      "result": "PASS",
+      "value": {
+        "bridge": "Limit                     Soft Limit           Hard Limit           Units     \nMax cpu time              unlimited            unlimited            seconds   \nMax file size             unlimited            unlimited            bytes     \nMax data size             unlimited            unlimited            bytes     \nMax stack size            8388608              unlimited            bytes     \nMax core file size        0                    0                    bytes     \nMax resident set          unlimited            unlimited            bytes     \nMax processes             unlimited            unlimited            processes \nMax open files            524288               524288               files     \nMax locked memory         65536                65536                bytes     \nMax address space         unlimited            unlimited            bytes     \nMax file locks            unlimited            unlimited            locks     \nMax pending signals       0                    0                    signals   \nMax msgqueue size         819200               819200               bytes     \nMax nice priority         0                    0                    \nMax realtime priority     0                    0                    \nMax realtime timeout      unlimited            unlimited            us        \n",
+        "private": "Limit                     Soft Limit           Hard Limit           Units     \nMax cpu time              unlimited            unlimited            seconds   \nMax file size             unlimited            unlimited            bytes     \nMax data size             unlimited            unlimited            bytes     \nMax stack size            8388608              unlimited            bytes     \nMax core file size        0                    0                    bytes     \nMax resident set          unlimited            unlimited            bytes     \nMax processes             unlimited            unlimited            processes \nMax open files            524288               524288               files     \nMax locked memory         65536                65536                bytes     \nMax address space         unlimited            unlimited            bytes     \nMax file locks            unlimited            unlimited            locks     \nMax pending signals       0                    0                    signals   \nMax msgqueue size         819200               819200               bytes     \nMax nice priority         0                    0                    \nMax realtime priority     0                    0                    \nMax realtime timeout      unlimited            unlimited            us        \n"
+      }
+    },
+    "swapCgroups": {
+      "result": "ACCEPTED",
+      "value": "/sys/fs/cgroup/kubepods/burstable/pod04db0c32-3062-40c4-88ee-27827b8a7ac8/memory.swap.max max\n/sys/fs/cgroup/kubepods/burstable/pod04db0c32-3062-40c4-88ee-27827b8a7ac8/70f7222d0bfae268575aeed2d231d8b5e2e5ee8c333db114770760cf098b583d/memory.swap.max max\n/sys/fs/cgroup/kubepods/burstable/pod04db0c32-3062-40c4-88ee-27827b8a7ac8/b48d2237fd795f1583e7a2262578ee8cdfa5c4c3bdab40ebfaae7fab2da16e4e/memory.swap.max max",
+      "reason": "Host swap is accepted on this dev box for the MVP; see #366."
+    },
+    "nodeSwaps": {
+      "result": "ACCEPTED",
+      "value": "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swapfile                               file\t\t8388604\t\t2933888\t\t-2",
+      "reason": "Host swap is accepted on this dev box for the MVP; see #366."
+    },
+    "hostCorePattern": {
+      "result": "ACCEPTED",
+      "value": "|/usr/share/apport/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -F%F -- %E",
+      "reason": "Host apport crash dumps are accepted on this dev box for the MVP; see #366."
+    },
+    "privateHomePeakBytes": {
+      "result": "PASS",
+      "value": {
+        "bytes": 2923663,
+        "method": "Largest single home sampled during held replies and after journeys"
+      }
+    },
+    "initialiseLatency": {
+      "result": "PASS",
+      "value": {
+        "samples": [
+          767.1513150000028,
+          830.3257959999974,
+          831.8556989999997,
+          851.6806199999992,
+          912.7777550000028,
+          945.2437690000006,
+          961.055687,
+          984.7181879999989,
+          1007.7788589999982,
+          1350.959637
+        ],
+        "p50": 912.7777550000028,
+        "p95": 1350.959637,
+        "method": "Private socket connection request to initialise result, including process spawn"
+      }
+    },
+    "twoTurnPeakMemory": {
+      "result": "PASS",
+      "value": "/sys/fs/cgroup/kubepods/burstable/pod04db0c32-3062-40c4-88ee-27827b8a7ac8/70f7222d0bfae268575aeed2d231d8b5e2e5ee8c333db114770760cf098b583d/memory.peak 365830144\n/sys/fs/cgroup/kubepods/burstable/pod04db0c32-3062-40c4-88ee-27827b8a7ac8/memory.peak 365871104\n/sys/fs/cgroup/kubepods/burstable/pod04db0c32-3062-40c4-88ee-27827b8a7ac8/b48d2237fd795f1583e7a2262578ee8cdfa5c4c3bdab40ebfaae7fab2da16e4e/memory.peak 0"
+    },
+    "runscOptions": {
+      "result": "PASS",
+      "value": "[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.'runsc']\n  runtime_type = \"io.containerd.runsc.v1\""
+    }
+  },
+  "conditions": {
+    "F1": {
+      "result": "ACCEPTED (dev box, owner 12 Oct, #366)",
+      "hostSwaps": "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swapfile                               file\t\t8388604\t\t2933888\t\t-2\n",
+      "reason": "Host swap is a post-MVP gap tracked in #366."
+    },
+    "F2": {
+      "result": "ACCEPTED (dev box, owner 12 Oct, #366)",
+      "guest": "PASS",
+      "hostCorePattern": "|/usr/share/apport/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -F%F -- %E"
+    },
+    "F3": {
+      "result": "FAIL",
+      "failing": [
+        "J4",
+        "J4 -SEGV process exits"
+      ],
+      "measurements": []
+    }
+  },
+  "limitations": [
+    "UID 1003 can write /tmp on node disk, /dev/shm and world-writable workspace directories.",
+    "Concurrent private turns share UID 1003; only absent tools separate them.",
+    "Bridge memory and supervisor stream buffers can be swapped under F1.",
+    "The PVC holds memory-free content and text-free private outlines by design.",
+    "Outline counts expose reply size and timing; ids are chosen by the client."
+  ],
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:f2f42e68ddb6751a8660c280bc4419500b87c0f5fdd2c2ef8dad15e1497736b4",
+  "diagnostics": {
+    "J4 -SEGV": {
+      "targetAfter250ms": {
+        "pid": 845,
+        "state": "S (sleeping)",
+        "command": "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex",
+        "signals": [
+          "SigPnd:\t0000000000000000",
+          "ShdPnd:\t0000000000000000",
+          "SigBlk:\t0000000000000000",
+          "SigIgn:\t0000000000001000",
+          "SigCgt:\t0000000000004040"
+        ]
+      }
+    },
+    "J4 -9": {
+      "targetAfter250ms": {
+        "pid": 1194,
+        "state": "gone"
+      }
+    }
+  }
 }
