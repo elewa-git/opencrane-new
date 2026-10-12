@@ -1,4 +1,6 @@
 import { expect, it } from 'vitest';
+import { computerTurnStartedDataSchema } from '@opencrane/events';
+import { tokenVerifier } from '@opencrane/auth';
 import { createEventStore } from '@opencrane/event-store';
 import { grantStream } from '@opencrane/authz';
 import { admitDescendant, descendantId, history } from '../src/index.ts';
@@ -19,11 +21,13 @@ function childBinding(name: string, parent?: { delegationId: string; turnId: str
     turnId: `turn-${name}`, threadId: `thread-${name}`, spawnItemId: `spawn-${name}`,
     dataClass: 'private' as const, scopes, task: 'native_descendant' as const,
     model: 'gpt-6.1-sol', providerId: 'provider', bindingSequence: 1,
+    executionMode: 'memory_free' as const,
     ...(parent ? { parentDelegationId: parent.delegationId } : {}) };
   binding.delegationId = descendantId('test', binding);
   return binding;
 }
-async function proof(context: Context, binding: ReturnType<typeof child>) {
+async function proof(context: Context,
+  binding: Parameters<typeof descendantId>[1] & { delegationId: string }) {
   binding.delegationId = descendantId('test', binding);
   const claims = { jti: binding.delegationId, typ: 'descendant-admission', silo: 'test', binding };
   return context.sign(claims, 'delegation-admission');
@@ -31,7 +35,8 @@ async function proof(context: Context, binding: ReturnType<typeof child>) {
 async function admit(context: Context, binding: ReturnType<typeof child>,
   store = context.nats.store) {
   const decision = await proof(context, binding);
-  return admitDescendant(store, context.binding, context.tokens, decision);
+  const verifier = tokenVerifier(context.identity.jwks, context.identity.issuer);
+  return admitDescendant(store, context.binding, verifier, decision);
 }
 async function setup() {
   const context = await fixture(2000, 20000, false, 'gpt-6.1-sol');
@@ -60,25 +65,37 @@ async function serialisesReplicaAdmissions() {
       attempts.push(admit(context, child(`race-${index}`), store));
     }
     const results = await Promise.allSettled(attempts);
-    function admitted(result: PromiseSettledResult<unknown>) { return result.status === 'fulfilled'; }
+    function admitted(result: PromiseSettledResult<unknown>) {
+      return result.status === 'fulfilled';
+    }
     expect(results.filter(admitted)).toHaveLength(4);
     const rows = await history(other, 'computer-assistant', 'test');
     function native(row: (typeof rows)[number]) {
-      return row.event.type === 'computer.turn_started' &&
-        Reflect.get(row.event.data as object, 'task') === 'native_descendant';
+      const start = computerTurnStartedDataSchema.safeParse(row.event.data);
+      return row.event.type === 'computer.turn_started' && start.success &&
+        start.data.task === 'native_descendant';
     }
     expect(rows.filter(native)).toHaveLength(4);
     const successfulIndex = results.findIndex(admitted);
     const first = child(`race-${successfulIndex}`);
+    const original = results[successfulIndex];
+    if (original?.status !== 'fulfilled') {
+      throw new Error('Missing successful admission');
+    }
     const saved = await admit(context, first);
+    expect(saved).toEqual(original.value);
     expect(await admit(context, first, other)).toEqual(saved);
     await assertNoEffects(context);
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 }
 it('admits at most four descendants across competing replicas and keeps retries unchanged',
   serialisesReplicaAdmissions);
 
 const invalidBindings = [
+  { executionMode: 'restricted' }, { providerId: 'other' }, { bindingSequence: 2 },
+  { model: 'gpt-6-astra' }, { computerId: 'other' }, { conversationId: 'other' },
   { parentTurnId: 'foreign' }, { parentThreadId: 'foreign' }, { generation: 2 },
   { requesterId: 'bob' }, { payingGroupId: 'other' }, { rootThreadId: 'foreign' },
   { turnId: 'bound-root' }, { threadId: 'bound-thread' }, { dataClass: 'shared' },
@@ -92,35 +109,46 @@ const invalidBindings = [
 ];
 async function refusesChangedBindings() {
   const context = await setup();
+  const verifier = tokenVerifier(context.identity.jwks, context.identity.issuer);
   try {
     for (const patch of invalidBindings) {
       const binding = { ...child('refused'), ...patch };
       const decision = await proof(context, binding);
       const position = await context.nats.store.head('computer-assistant');
-      await expect(admitDescendant(context.nats.store, context.binding, context.tokens, decision))
+      await expect(admitDescendant(context.nats.store, context.binding, verifier, decision))
         .rejects.toThrow();
       expect(await context.nats.store.head('computer-assistant')).toBe(position);
     }
+    const parent = { ...child('narrow-parent'), scopes: { ...scopes, models: [] } };
+    await admit(context, parent);
+    await expect(admit(context, child('wider-grandchild', parent)))
+      .rejects.toThrow('Descendant scope refused');
     await assertNoEffects(context);
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 }
 it('refuses cycles, foreign parents, changed identities and every wider scope',
   refusesChangedBindings);
 
 async function refusesUnsignedOrForgedDecisions() {
   const context = await setup();
+  const verifier = tokenVerifier(context.identity.jwks, context.identity.issuer);
   try {
     const signed = await proof(context, child('signed'));
     const segments = signed.split('.');
     const claims = Buffer.from(JSON.stringify({ typ: 'descendant-admission', silo: 'test',
       binding: child('forged') })).toString('base64url');
     const forged = `${segments[0]}.${claims}.${segments[2]}`;
-    for (const decision of [JSON.stringify(child('unsigned')), forged, context.headers['x-turn-token']]) {
-      await expect(admitDescendant(context.nats.store, context.binding, context.tokens, decision))
+    const decisions = [JSON.stringify(child('unsigned')), forged, context.headers['x-turn-token']];
+    for (const decision of decisions) {
+      await expect(admitDescendant(context.nats.store, context.binding, verifier, decision))
         .rejects.toThrow();
     }
     await assertNoEffects(context);
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 }
 it('refuses unsigned, forged and ordinary turn decisions', refusesUnsignedOrForgedDecisions);
 
@@ -132,10 +160,13 @@ async function refusesInheritedRevocation() {
     await context.append(grantStream('model', 'gpt-6.1-sol'), 'grant.revoked', {
       resourceType: 'model', resourceId: 'gpt-6.1-sol', granteeKind: 'member',
       granteeId: 'alice', revokedBy: 'alice' });
-    expect((await context.auth.use('person', 'alice', 'model', 'gpt-6.1-sol')).allowed).toBe(true);
+    const staleGrant = await context.auth.use('person', 'alice', 'model', 'gpt-6.1-sol');
+    expect(staleGrant.allowed).toBe(true);
     await expect(admit(context, child('grandchild', parent))).rejects.toThrow('IAM projection behind');
     await assertNoEffects(context);
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 }
 it('refuses inherited revocation while OpenFGA still allows the parent grant',
   refusesInheritedRevocation);
@@ -164,14 +195,47 @@ async function keepsLifetimeAndDepthLimits() {
     await expect(admit(context, child('fifth-child', parent))).rejects.toThrow();
     await closeChild(context, parent);
     await expect(admit(context, child('ended-parent', parent))).rejects.toThrow();
-    for (let index = 0; index < 3; index++) {
-      const next = child(`root-child-${index}`);
+    const secondParent = child('second-parent');
+    await admit(context, secondParent);
+    for (let index = 0; index < 2; index++) {
+      const next = child(`second-child-${index}`, secondParent);
       await admit(context, next);
       await closeChild(context, next);
     }
-    await expect(admit(context, child('ninth'))).rejects.toThrow();
+    await expect(admit(context, child('ninth', secondParent)))
+      .rejects.toThrow('Descendant limit reached');
     await assertNoEffects(context);
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 }
 it('counts ended admissions towards lifetime and parent limits and refuses a third level',
   keepsLifetimeAndDepthLimits);
+
+async function refusesDuplicateBindingsAndActiveOverflow() {
+  const context = await setup();
+  try {
+    const parent = child('parent');
+    const sibling = child('sibling');
+    await admit(context, parent);
+    await admit(context, sibling);
+    const grandchild = child('grandchild', parent);
+    await admit(context, grandchild);
+    await admit(context, child('other-grandchild', parent));
+    await expect(admit(context, child('active-overflow', sibling)))
+      .rejects.toThrow('Descendant limit reached');
+    await closeChild(context, grandchild);
+    await admit(context, child('replacement', sibling));
+    for (const patch of [{ threadId: parent.threadId }, { turnId: parent.turnId },
+      { spawnItemId: parent.spawnItemId }, { rootId: 'other-root' }]) {
+      await expect(admit(context, { ...child('duplicate'), ...patch })).rejects.toThrow();
+    }
+    await expect(admit(context, { ...parent, scopes: { ...scopes, models: [] } }))
+      .rejects.toThrow('Admission conflict');
+    await assertNoEffects(context);
+  } finally {
+    await context.close();
+  }
+}
+it('refuses duplicate bindings and counts active grandchildren across parents',
+  refusesDuplicateBindingsAndActiveOverflow);

@@ -26,6 +26,38 @@ whether to list remember. `toolDecision` supplies the existing review, mode and 
 rules for both. The backend repeats its own access check; write confirmations still
 read current policy. The slow-read regression keeps the original two-second lifetime.
 
+## Internal descendant admission
+
+`admitDescendant` saves one `computer.turn_started` for a signed internal decision.
+No route or production signer calls it. The separate `delegation.started` stage,
+root allowance checks and native call decisions remain for the next part of #93 PR 2.
+The native bridge, thread grants and Stop work remain in later design rows.
+
+The decision uses ES256, the configured issuer, audience `delegation-admission`,
+`typ: descendant-admission`, the silo, and the full native start binding. It expires
+within 120 seconds. Its `jti` and delegation id are the SHA-256 of the JSON array
+`[silo, rootId, computerId, generation, spawnItemId, threadId]`.
+No signature, another audience or a changed signed payload refuses admission.
+
+This first part accepts only private agent sessions with an explicit `memory_free`
+root and a saved model/provider choice. Older roots and shared sessions refuse.
+Descendants keep the requester, payer, generation, conversation, model and provider.
+Their model scopes narrow the recorded parent maximum; every other scope stays empty.
+Current permissions and applied grant receipts are checked again, including inherited
+revocations while OpenFGA still returns an earlier allow answer.
+
+The computer stream enforces two descendant levels, four lifetime children per parent,
+eight lifetime descendants per root and four active descendants. Closes free only
+active slots. A conditional append serialises competing replicas. Conflicts reload
+and repeat validation, within ten attempts and the original ten-second deadline.
+Retries compare the whole binding and return the original event. Changed retries refuse.
+
+History and grant summaries load before the two-second access check. That check watches
+only the existing small authority streams. Later root activity is read incrementally.
+`test/descendant-admission.test.ts` uses real NATS, PostgreSQL, OpenFGA and gateway
+fixtures. `test/delegation.test.ts` retains the refusal of native credentials and calls.
+These computer admissions grant no call authority and create no budget event or hold.
+
 ## Budget writes
 
 Native descendant model admission is explicitly disabled in `requireTurnDelegation`.

@@ -13,14 +13,14 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals, saved fact references, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks access and internal child admissions| models["libs/models<br/>AI rules, control, provider choice and spending"]
   ops["apps/ops<br/>background workers"] -.->|confirms owner appointments| models
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks saved grants, tool rules, one-use model sends, expired holds and memory passes| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves spending and instance changes; checks saved stops and reads activity, grants, closing records and spending stops| store["libs/event-store<br/>event log"]
+  models -->|saves spending and child admissions; reads saved changes| store["libs/event-store<br/>event log"]
 ```
 
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
@@ -106,6 +106,9 @@ A change to the tools or their rules ends that approval.
 - Refuse provider-bound model passes on the deployment-key gateway before holding money.
   Read switch-on from the silo’s spending stream before checking access.
   Calls through saved provider choices are not available yet.
+- Save internal child admissions for private turns with a fixed model and provider.
+  Check the signed decision, parent, narrowed model access and server limits first.
+  These records cannot start native tasks, issue their passes or hold money.
 - Refuse native child model calls before holding money. Older delegation records
   grant no call authority either.
 - Check member or admin access for reads using saved membership and current permissions.
@@ -142,6 +145,9 @@ Older holds keep their money because their senders used older rules.
 Later confirmed usage can still settle their cost.
 
 ## Processes it handles
+
+An internal child admission saves a checked parent and model scope. Competing servers
+share the same saved limits. Native execution remains disabled.
 
 A private credential stage saves one generation and returns its reference, UID and version.
 Recovery needs its saved identity or an exact identity supplied by the caller.

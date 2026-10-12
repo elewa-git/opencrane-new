@@ -243,7 +243,7 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 | `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
-| `computer.turn_started` / `computer.turn_closed` | server turn command | chat admission and idle-suspend checks; native computer-root read indexes | chat starts bind the message, thread and `executionMode`, with optional provider/model identity; native starts bind root and ancestry without granting authority; closed is permanent |
+| `computer.turn_started` / `computer.turn_closed` | server turn command | chat admission and idle-suspend checks; native computer-root read indexes and internal admission limits | chat starts bind the message, thread and `executionMode`, with optional provider/model identity; native starts bind root and ancestry without granting authority; closed is permanent |
 | `computer.suspended` / `computer.resumed` | server (intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
