@@ -41,6 +41,11 @@ The [receipt](../../docs/process/p3-20-pr2-gateway.md) records this limited proo
 Tool lists carry check and expiry dates; undated lists cannot authorise calls.
 `tool.approval_requested.policySequence` stores the stable `policyRevision`,
 not the latest MCP stream position. Unchanged checks keep waiting approvals valid.
+Failed checks advance that revision, so a later successful check cannot revive an
+unread pending approval. Saved drift stays held through discovery, review and legacy
+publication. `test/mcp-dispatch.test.ts` checks zero fixture calls after gateway restart;
+this is not a watch-worker restart test. The remaining work is listed in the
+[durable hold contract](../projections/README.robot.md#durable-drift-holds-48-pr-3-first-part).
 The [projection contract](../../libs/projections/README.robot.md#dated-mcp-catalogue-evidence)
 records snapshot and expiry rules for #48 PR 1.
 

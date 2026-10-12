@@ -154,6 +154,8 @@ bearer credentials. Private affected-turn lists are not part of organisation his
 ## Dated MCP catalogue evidence
 
 Tool lists carry check and expiry dates; undated lists cannot authorise calls.
+`toolPolicySchema.driftHeld` is optional for older replies. The shared event fold
+sets it after a saved tool change. The field reports a hold; it grants no authority.
 Unchanged checks preserve the approval rule revision while advancing the write position.
 The [projection contract](../../libs/projections/README.robot.md#dated-mcp-catalogue-evidence)
 records snapshot and expiry rules for #48 PR 1.

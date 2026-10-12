@@ -16,8 +16,8 @@ const emptyDigest = createHash('sha256').update('[]').digest('hex');
 const discovery = { serverId: 'fixture', toolCount: 1, schemaDigest,
   checkedAt, expiresAt, tools: [{ name: 'read', revision,
     reviewed: true, definition }] };
-function record(type: string, data: unknown) {
-  return { ...event(type), type, subject: 'mcp-fixture', data };
+function record(type: string, data: unknown, id = type) {
+  return { ...event(id), type, subject: 'mcp-fixture', data };
 }
 function discovered() {
   return applyToolPolicy(emptyToolPolicy(), record('mcp.server_discovered', discovery), 1);
@@ -75,6 +75,18 @@ async function rebuildsEvidence() {
     await storage.reopen();
     await rebuildMcpCatalogueProjection(storage.db, nats.reader, logger, { verify: true });
     expect((await storage.db.query('SELECT policy FROM mcp_catalogue')).rows).toEqual(before.rows);
+    const registeredAgain = record('mcp.server_registered', registration.data, 'register-again');
+    const capturedAgain = record('mcp.server_discovered', discovery, 'discover-again');
+    const publishedAgain = record('mcp.server_published', publication.data, 'publish-again');
+    await nats.seed([registeredAgain, capturedAgain, publishedAgain]);
+    const restarted = new ProjectionRunner(storage.db, nats.reader, logger);
+    await restarted.run(mcpCatalogue);
+    const afterRestart = await storage.db.query('SELECT policy FROM mcp_catalogue');
+    expect(afterRestart.rows[0]?.['policy']).toMatchObject({ published: false,
+      sequence: 8, catalogue: discovery });
+    await rebuildMcpCatalogueProjection(storage.db, nats.reader, logger, { verify: true });
+    expect((await storage.db.query('SELECT policy FROM mcp_catalogue')).rows)
+      .toEqual(afterRestart.rows);
   } finally {
     await storage.close();
     await nats.close();

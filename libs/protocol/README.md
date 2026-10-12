@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>visible chat pages, groups, invitations, departure reviews, history availability, control history, startup review and settings messages"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
   server["apps/server<br/>back end"] -.->|access replies and saved chat choices| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -45,6 +45,7 @@ They also identify the server and silo, and carry the rule revision used by wait
 - Check group chat participant edits and the current people list.
 - Check archive and read requests, and each person's saved choice in chat lists.
 - Check flat group rows and create or remove commands for the People & groups screen.
+- Carry a tool server's saved hold after its catalogue changes.
 
 ## Processes it handles
 

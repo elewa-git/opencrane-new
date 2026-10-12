@@ -103,21 +103,25 @@ async function checksApprovalAfterRenewal(outcome: typeof checkOutcomes[number])
     const { cards, csrf } = await setup.read(session);
     const approvalId = cards[0]!.approvalId;
     const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    let snapshot = before.catalogue!;
     const checkedAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 300_000).toISOString();
+    const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
     if (outcome === 'failed') {
       const failure = { serverId: 'fixture', outcome, checkedAt, reason: 'discovery_timeout' };
       await setup.append('mcp-fixture', 'mcp.catalogue_checked', failure);
     }
     if (outcome === 'drift') {
+      const added = toolEvidence({ name: 'another', reviewed: false, costCents: 0 });
+      const evidence = catalogueEvidence([...snapshot.tools!, added]);
+      snapshot = { ...snapshot, ...evidence };
       const change = { serverId: 'fixture', previousSchemaDigest: before.catalogue!.schemaDigest,
-        newSchemaDigest: before.catalogue!.schemaDigest, catalogue: before.catalogue };
+        newSchemaDigest: snapshot.schemaDigest, catalogue: snapshot };
       await setup.append('mcp-fixture', 'mcp.tools_changed', change);
       const publication = { serverId: 'fixture', publishedBy: 'alice' };
       await setup.append('mcp-fixture', 'mcp.server_published', publication);
     }
     const renewal = { serverId: 'fixture', outcome: 'unchanged', checkedAt, expiresAt,
-      schemaDigest: before.catalogue!.schemaDigest };
+      schemaDigest: snapshot.schemaDigest };
     await setup.append('mcp-fixture', 'mcp.catalogue_checked', renewal);
     // Leave the approval unread during failure and recovery, as when its worker is stopped.
     await setup.restart();

@@ -444,7 +444,8 @@ A published server without a fresh check is shown as unavailable.
 `mcp.server_discovered` stores a bounded snapshot with `checkedAt` and `expiresAt`.
 `mcp.tools_changed.catalogue` stores the next snapshot; replay retains the previous one.
 `mcp.catalogue_checked` renews a matching digest or records a failed check.
-Catalogue checks leave `policyRevision` stable; policy changes advance it.
+Unchanged catalogue checks leave `policyRevision` stable. Failed checks advance it
+and clear expiry, so later renewal cannot make an old approval valid again.
 `mcp.dispatch_admitted` advances only `sequence`. It preserves rules, approval revisions,
 check dates and lifecycle. Both the normal catalogue projection and rebuild use this fold.
 Replay never performs a send.
@@ -456,6 +457,26 @@ Descriptions, schemas and examples remain untrusted text, including in saved sna
 
 This is #48 PR 1. Watch scheduling, final dispatch permits, configuration acknowledgement
 and the comparison screens belong to later rows of the accepted design.
+
+### Durable drift holds (#48 PR 3, first part)
+
+`mcp.tools_changed` sets `driftHeld: true` in the shared event fold. Discovery,
+review, registration and unchanged checks preserve the hold. Legacy publication
+cannot set `published` while held. No event currently clears `driftHeld`: #45 has
+no exact configuration acknowledgement on this base, so restoration stays unavailable.
+There is no second publication path. Failed freshness checks alone can recover after
+an unchanged successful check, but old approvals remain invalid.
+
+Rebuild existing catalogue tables with `npm run replay -- mcp-catalogue --verify`
+to show holds from older events. Authorisation already reads those events directly.
+Normal projection and rebuild use the same rules, including repeated registration.
+`test/mcp-evidence.test.ts` checks PostgreSQL reopen/rebuild and late publication.
+The models dispatch and server approval tests check refused calls and late decisions.
+
+This part does not add the bounded watch, close dispatch before a failed drift append,
+cancel approvals on configuration reload, or qualify worker replacement. Those need
+the remaining watch/dispatch coordination work. Configuration acknowledgement and
+restoration must reuse #45 when available. Fresh-install journeys are NOT RUN.
 
 Policy replay recalculates hashes from saved tool definitions before keeping any review
 choice or renewing a check. It checks the tool count, distinct names, names inside definitions

@@ -433,7 +433,7 @@ async function refusesPublicationAfterDrift(recapture: boolean) {
     await setup.restart();
     expect((await send(setup, value)).status).toBe(403);
     const request = { method: 'POST', headers, body };
-    const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
       request);
     expect(response.status, await response.text()).toBe(403);
     expect(setup.received()).toBe(0);

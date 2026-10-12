@@ -142,6 +142,7 @@ have not been checked. Unrelated read receipts do not require reading the event 
 - Records tool starts and finishes as events and returns them in the conversation feed.
 - Tells a computer whether it supports approval messages and when a waiting
   approval has been decided or ended. A changed tool policy also ends a waiting approval.
+  A failed catalogue check ends old approvals even if a later check succeeds first.
   Reads each approval separately, so a slow read leaves other chats free to continue.
   Spaces out failed reads and tells the computer when it cannot accept another wait.
 - Records streamed replies using a chat summary. After its first use, it reads only

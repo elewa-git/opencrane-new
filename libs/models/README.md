@@ -167,6 +167,10 @@ Later confirmed usage can still settle their cost.
 
 ## Processes it handles
 
+A saved catalogue change holds every tool on that server. New reviews and legacy
+publication cannot restore calls yet. A failed catalogue check ends old approvals,
+even if a later check succeeds before the approval is read.
+
 An internal child admission saves a checked parent and model scope. Competing servers
 share the same saved limits. Each reply returns the saved admission. A retry with
 changed details is refused, including when two servers submit it together.
