@@ -206,3 +206,31 @@ async function refusesRegistrationAfterPodBinding() {
 }
 it('refuses a foreign Pod once the saved observation binds the original Pod',
   refusesRegistrationAfterPodBinding);
+
+async function retiresWorkerDuringHistoryRead() {
+  const fixture = await start();
+  const worker = await workers.register(fixture.registration);
+  const originalRead = nats.store.readStream.bind(nats.store);
+  async function* replaceDuringRead(subject: string, fromSequence?: number, deadline?: number) {
+    for await (const row of originalRead(subject, fromSequence, deadline)) {
+      yield row;
+    }
+    if (subject === fixture.event.subject) {
+      read.mockRestore();
+      await workers.register(fixture.registration);
+    }
+  }
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(replaceDuringRead);
+  try {
+    const response = await app.inject({ method: 'POST',
+      url: observationUrl(fixture.registration.instanceId),
+      headers: { authorization: worker.authorization }, payload: fixture.payload });
+    expect(response.statusCode).toBe(409);
+  } finally {
+    read.mockRestore();
+  }
+  expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
+}
+it('refuses a worker retired while its observation reads saved history',
+  retiresWorkerDuringHistoryRead);
