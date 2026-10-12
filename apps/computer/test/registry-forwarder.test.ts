@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { mkdtemp, cp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { createServer, connect, type AddressInfo, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it } from 'vitest';
 
