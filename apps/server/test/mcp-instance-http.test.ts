@@ -139,11 +139,9 @@ it.each(foreignCases)('refuses a foreign %s over HTTP', refusesForeign);
 async function refusesStaleAndChanged() {
   const fixture = await start();
   const url = instanceUrl(fixture.reference, '/stop');
-  for (const override of [{ expectedSequence: 0 }]) {
-    const payload = { ...fixture.stop, ...override };
-    const response = await app.inject({ method: 'POST', url, headers: headers(), payload });
-    expect(response.statusCode).toBe(409);
-  }
+  const stale = { ...fixture.stop, expectedSequence: 0 };
+  const response = await app.inject({ method: 'POST', url, headers: headers(), payload: stale });
+  expect(response.statusCode).toBe(409);
   expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
   const request = { method: 'POST' as const, url, headers: headers(), payload: fixture.stop };
   const saved = await app.inject(request);
@@ -250,3 +248,70 @@ async function retainsOriginalRun() {
   expect(await history(nats.store, fixture.event.subject, 'test')).toHaveLength(5);
 }
 it('derives the run and keeps the original receipt after a later run starts', retainsOriginalRun);
+
+async function refusesMalformedBodies() {
+  const fixture = await start();
+  const caller = { ...headers(), 'content-type': 'application/json' };
+  for (const payload of ['{', JSON.stringify({ padding: 'x'.repeat(4096) })]) {
+    const response = await app.inject({ method: 'POST',
+      url: instanceUrl(fixture.reference, '/stop'), headers: caller, payload });
+    expect([400, 413]).toContain(response.statusCode);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.json()).toEqual({ status: 'refused' });
+  }
+  expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
+}
+it('refuses malformed and oversized bodies without caching parser errors', refusesMalformedBodies);
+
+async function sanitisesUnavailableReads() {
+  const fixture = await start();
+  const originalRead = nats.store.readStream.bind(nats.store);
+  function unavailable(subject: string, fromSequence?: number, deadline?: number) {
+    if (subject === fixture.event.subject) {
+      throw new Error('Private upstream response with sensitive details');
+    }
+    return originalRead(subject, fromSequence, deadline);
+  }
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(unavailable);
+  try {
+    const response = await app.inject({ url: changeUrl(fixture.reference, fixture.data.changeRef),
+      headers: headers() });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+    expect(response.headers['cache-control']).toBe('no-store');
+  } finally {
+    read.mockRestore();
+  }
+  expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
+}
+it('keeps an unavailable read unknown and hides internal response details', sanitisesUnavailableReads);
+
+async function refusesRemovalDuringRead() {
+  const fixture = await start();
+  const originalRead = nats.store.readStream.bind(nats.store);
+  const originalAppend = nats.store.append.bind(nats.store);
+  const subjects: string[] = [];
+  async function* removeDuringRead(subject: string, fromSequence?: number, deadline?: number) {
+    subjects.push(subject);
+    for await (const row of originalRead(subject, fromSequence, deadline)) yield row;
+    if (subject === fixture.event.subject) {
+      const removed = envelope('test', 'member-alice', 'member.removed',
+        { memberId: 'alice', removedBy: 'admin' });
+      const expectedSequence = await nats.store.head('member-alice');
+      await originalAppend({ event: removed, expectedSequence });
+    }
+  }
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(removeDuringRead);
+  try {
+    const response = await app.inject({ url: instanceUrl(fixture.reference), headers: headers() });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    for (const subject of subjects) expect(subject).not.toMatch(/^conversation-/u);
+  } finally {
+    read.mockRestore();
+  }
+  expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
+}
+it('checks membership after loading status without reading a conversation', refusesRemovalDuringRead);
