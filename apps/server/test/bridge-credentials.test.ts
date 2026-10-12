@@ -157,12 +157,15 @@ async function rotatesWithStubProvider() {
 it('rotates the bridge pass and completes a turn with the stub provider',
   rotatesWithStubProvider, 60_000);
 
+const pinnedCodexBinary = '/spike/node_modules/@openai/codex-linux-x64/vendor/'
+  + 'x86_64-unknown-linux-musl/bin/codex';
+
 const inspectorCases = [
   { name: 'bridge and proxy', path: '/app/src/bridge.ts', uid: 1000, nodeOptions: '' },
   { name: 'desktop helper', path: '/app/src/desktop.ts', uid: 1002, nodeOptions: '' },
   { name: 'memory-free Codex wrapper', path: '/usr/local/bin/codex', uid: 1000,
     nodeOptions: '' },
-  { name: 'private Codex wrapper', path: '/usr/local/bin/codex', uid: 1003,
+  { name: 'private Codex process', path: pinnedCodexBinary, uid: 1003,
     nodeOptions: '' },
   { name: 'inherited inspector options', path: '/app/src/bridge.ts', uid: 1000,
     nodeOptions: '--inspect=0.0.0.0:9229' },

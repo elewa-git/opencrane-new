@@ -1,8 +1,10 @@
 export function privateCodexLaunch(home: string, caller: string) {
+  const binary = '/spike/node_modules/@openai/codex-linux-x64/vendor/'
+    + 'x86_64-unknown-linux-musl/bin/codex';
   return {
     command: '/usr/bin/setpriv',
     args: ['--reuid=1003', '--regid=1003', '--clear-groups', '--no-new-privs', '--',
-      '/usr/local/bin/node', '--disable-sigusr1', '/usr/local/bin/codex', 'app-server', '--stdio'],
+      '/usr/local/bin/node', '--disable-sigusr1', binary, 'app-server', '--stdio'],
     options: {
       cwd: `${home}/work`,
       stdio: ['pipe', 'pipe', 'ignore'] as ['pipe', 'pipe', 'ignore'],

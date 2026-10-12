@@ -1,28 +1,2073 @@
 {
-  "result": "NOT RUN",
+  "namespace": "p414-private-eb6a63d8",
+  "date": "2026-10-12T17:48:57.792Z",
+  "result": "PASS",
   "memoryAdmission": "DISABLED",
   "checks": {
     "J1": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J2": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J3": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J4": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J5": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J6": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
     },
     "J7": {
-      "result": "NOT RUN"
+      "result": "PASS",
+      "detail": []
+    },
+    "private release probe-1": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 853.7651889999979
+      }
+    },
+    "private release probe-2": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1008.4140320000006
+      }
+    },
+    "reply and reasoning delivered": {
+      "result": "PASS"
+    },
+    "J1 scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-5": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 833.7513919999983
+      }
+    },
+    "J2 held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [
+          {
+            "path": "/home/private/turn-3/codex/logs_2.sqlite-wal",
+            "kind": "message"
+          }
+        ],
+        "nodeHits": [],
+        "privateNodeHits": [
+          "message",
+          "context",
+          "alice"
+        ],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-3": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 976.7290539999958
+      }
+    },
+    "private release probe-4": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1013.1887779999961
+      }
+    },
+    "J2 scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J3 held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-6": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 2038.6222149999958
+      }
+    },
+    "J3 Stop failed terminal": {
+      "result": "PASS"
+    },
+    "J3 Stop bounded cleanup": {
+      "result": "PASS"
+    },
+    "J3 Stop no repeat": {
+      "result": "PASS"
+    },
+    "J3 scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J4 held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J4 real memory fault without a new dump": {
+      "result": "PASS",
+      "detail": {
+        "signal": "SIGSEGV",
+        "sameConditions": true,
+        "dumps": []
+      }
+    },
+    "J4 SIGKILL process exits": {
+      "result": "PASS"
+    },
+    "private release probe-7": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 948.6937010000111
+      }
+    },
+    "J4 SIGKILL failed terminal": {
+      "result": "PASS"
+    },
+    "J4 SIGKILL bounded cleanup": {
+      "result": "PASS"
+    },
+    "private release probe-8": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 791.3978989999741
+      }
+    },
+    "J4 SIGKILL no repeat": {
+      "result": "PASS"
+    },
+    "J4 scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J5 held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-9": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 1055.868397000013
+      }
+    },
+    "J5 scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J6 false held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-10": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 863.6438550000021
+      }
+    },
+    "J6 false lost output": {
+      "result": "PASS"
+    },
+    "J6 false no repeat": {
+      "result": "PASS"
+    },
+    "private release probe-11": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 797.04089199999
+      }
+    },
+    "J6 false scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J6 true held scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-12": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 708.3758760000055
+      }
+    },
+    "J6 true lost output": {
+      "result": "PASS"
+    },
+    "J6 true no repeat": {
+      "result": "PASS"
+    },
+    "private release probe-13": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 733.4657719999959
+      }
+    },
+    "J6 true scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "private release probe-14": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 723.8629049999872
+      }
+    },
+    "J7 exec_command scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J7 exec_command provider attempted": {
+      "result": "PASS"
+    },
+    "private release probe-15": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 856.0316830000083
+      }
+    },
+    "J7 apply_patch scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J7 apply_patch provider attempted": {
+      "result": "PASS"
+    },
+    "private release probe-16": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 847.082276000001
+      }
+    },
+    "J7 exec scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J7 exec provider attempted": {
+      "result": "PASS"
+    },
+    "private release probe-17": {
+      "result": "PASS",
+      "detail": {
+        "elapsed": 745.2211049999751
+      }
+    },
+    "J7 request_user_input scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "J7 request_user_input provider attempted": {
+      "result": "PASS"
+    },
+    "direct ephemeral compaction": {
+      "result": "PASS",
+      "detail": {
+        "notifications": [
+          "configWarning",
+          "remoteControl/status/changed",
+          "thread/started",
+          "warning",
+          "thread/status/changed",
+          "turn/started",
+          "item/started",
+          "item/completed",
+          "item/started",
+          "item/agentMessage/delta",
+          "item/completed",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "thread/status/changed",
+          "turn/completed",
+          "thread/status/changed",
+          "turn/started",
+          "item/started",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "item/completed",
+          "warning",
+          "thread/status/changed",
+          "turn/completed"
+        ],
+        "requests": 2
+      }
+    },
+    "J7 compact scans": {
+      "result": "PASS",
+      "detail": {
+        "podHits": [],
+        "privateHomeHits": [],
+        "nodeHits": [],
+        "privateNodeHits": [],
+        "logHits": [],
+        "crashHits": []
+      }
+    },
+    "tools created no file": {
+      "result": "PASS"
+    },
+    "provider isolation": {
+      "result": "PASS"
+    },
+    "advertised private tools": {
+      "result": "PASS",
+      "detail": [
+        {
+          "thread": "01a1313b-a5ca-73e2-be90-0d5c2784e647",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313b-b80f-7503-9e57-3bb0500b4ee0",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313b-d7ea-7512-b90b-c084588d0ebc",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313b-e5ea-7d50-9bee-1b5ac455d6c5",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313b-eddb-75d1-b990-5883e72e84af",
+          "memoryFree": true,
+          "names": []
+        },
+        {
+          "thread": "01a1313c-47d7-7852-9c4c-cb389d1ffe15",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313c-858f-73a1-9560-174ef30d8240",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313c-92f1-7660-9155-193b1acda3ec",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313d-8a10-78d3-86d2-07bbcd903572",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313d-b99e-7300-bc2a-f899dfd31d2c",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313d-ef31-7ea1-93f4-325c720c4836",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-09d5-7983-a3a2-55c47de38d60",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-42e5-7a32-8354-c959820297fe",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-5c09-74f0-90e9-4263097f938d",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-5c09-74f0-90e9-4263097f938d",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-77de-7f91-b172-46183ace342d",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-77de-7f91-b172-46183ace342d",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-9444-7310-b5ad-bec40cf9194b",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-9444-7310-b5ad-bec40cf9194b",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-afe8-7de0-b77e-fc5be1f6620f",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-afe8-7de0-b77e-fc5be1f6620f",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-c77e-73b3-9dd2-b270db18fc60",
+          "memoryFree": false,
+          "names": []
+        },
+        {
+          "thread": "01a1313e-c77e-73b3-9dd2-b270db18fc60",
+          "memoryFree": false,
+          "names": []
+        }
+      ]
+    },
+    "one terminal probe-1": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-1",
+          "assistantId": "probe",
+          "turnId": "probe-1",
+          "type": "agent.turn_started",
+          "threadId": "01a1313b-a5ca-73e2-be90-0d5c2784e647",
+          "previousSequence": 0,
+          "sequence": 1,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-1",
+          "assistantId": "probe",
+          "turnId": "probe-1",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_1",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 1,
+          "sequence": 2,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-1",
+          "assistantId": "probe",
+          "turnId": "probe-1",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_1",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 2,
+          "sequence": 3,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-1",
+          "assistantId": "probe",
+          "turnId": "probe-1",
+          "type": "agent.turn_completed",
+          "previousSequence": 3,
+          "sequence": 4,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-2": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-2",
+          "assistantId": "probe",
+          "turnId": "probe-2",
+          "type": "agent.turn_started",
+          "threadId": "01a1313b-b80f-7503-9e57-3bb0500b4ee0",
+          "previousSequence": 0,
+          "sequence": 5,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-2",
+          "assistantId": "probe",
+          "turnId": "probe-2",
+          "type": "agent.reasoning_summarised",
+          "text": "P414_reasoning_a4c2954046934f055b6ecce389a94bab9384d625388d38b5",
+          "previousSequence": 5,
+          "sequence": 6,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-2",
+          "assistantId": "probe",
+          "turnId": "probe-2",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_2",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 6,
+          "sequence": 7,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-2",
+          "assistantId": "probe",
+          "turnId": "probe-2",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_2",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 7,
+          "sequence": 8,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-2",
+          "assistantId": "probe",
+          "turnId": "probe-2",
+          "type": "agent.turn_completed",
+          "previousSequence": 8,
+          "sequence": 9,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-3": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-3",
+          "assistantId": "probe",
+          "turnId": "probe-3",
+          "type": "agent.turn_started",
+          "threadId": "01a1313b-d7ea-7512-b90b-c084588d0ebc",
+          "previousSequence": 0,
+          "sequence": 10,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-3",
+          "assistantId": "probe",
+          "turnId": "probe-3",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_3",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 10,
+          "sequence": 11,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-3",
+          "assistantId": "probe",
+          "turnId": "probe-3",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_3",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 11,
+          "sequence": 18,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-3",
+          "assistantId": "probe",
+          "turnId": "probe-3",
+          "type": "agent.turn_completed",
+          "previousSequence": 18,
+          "sequence": 19,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-4": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-4",
+          "assistantId": "probe",
+          "turnId": "probe-4",
+          "type": "agent.turn_started",
+          "threadId": "01a1313b-e5ea-7d50-9bee-1b5ac455d6c5",
+          "previousSequence": 0,
+          "sequence": 12,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-4",
+          "assistantId": "probe",
+          "turnId": "probe-4",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_4",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 12,
+          "sequence": 13,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-4",
+          "assistantId": "probe",
+          "turnId": "probe-4",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_4",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 13,
+          "sequence": 20,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-4",
+          "assistantId": "probe",
+          "turnId": "probe-4",
+          "type": "agent.turn_completed",
+          "previousSequence": 20,
+          "sequence": 21,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-5": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-5",
+          "assistantId": "probe",
+          "turnId": "probe-5",
+          "type": "agent.turn_started",
+          "threadId": "01a1313b-eddb-75d1-b990-5883e72e84af",
+          "previousSequence": 0,
+          "sequence": 14,
+          "requesterId": "alice"
+        },
+        {
+          "conversationId": "probe-5",
+          "assistantId": "probe",
+          "turnId": "probe-5",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_5",
+          "text": "Memory-free fixture reply.",
+          "previousSequence": 14,
+          "sequence": 15,
+          "requesterId": "alice"
+        },
+        {
+          "conversationId": "probe-5",
+          "assistantId": "probe",
+          "turnId": "probe-5",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_5",
+          "text": "Memory-free fixture reply.",
+          "previousSequence": 15,
+          "sequence": 16,
+          "requesterId": "alice"
+        },
+        {
+          "conversationId": "probe-5",
+          "assistantId": "probe",
+          "turnId": "probe-5",
+          "type": "agent.turn_completed",
+          "previousSequence": 16,
+          "sequence": 17,
+          "requesterId": "alice"
+        }
+      ]
+    },
+    "one terminal probe-6": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-6",
+          "assistantId": "probe",
+          "turnId": "probe-6",
+          "type": "agent.turn_started",
+          "threadId": "01a1313c-47d7-7852-9c4c-cb389d1ffe15",
+          "previousSequence": 0,
+          "sequence": 22,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-6",
+          "assistantId": "probe",
+          "turnId": "probe-6",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_6",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 22,
+          "sequence": 23,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-6",
+          "assistantId": "probe",
+          "turnId": "probe-6",
+          "type": "agent.turn_failed",
+          "previousSequence": 23,
+          "sequence": 24,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-7": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-7",
+          "assistantId": "probe",
+          "turnId": "probe-7",
+          "type": "agent.turn_started",
+          "threadId": "01a1313c-858f-73a1-9560-174ef30d8240",
+          "previousSequence": 0,
+          "sequence": 25,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-7",
+          "assistantId": "probe",
+          "turnId": "probe-7",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_7",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 25,
+          "sequence": 26,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-7",
+          "assistantId": "probe",
+          "turnId": "probe-7",
+          "type": "agent.turn_failed",
+          "previousSequence": 26,
+          "sequence": 29,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-8": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-8",
+          "assistantId": "probe",
+          "turnId": "probe-8",
+          "type": "agent.turn_started",
+          "threadId": "01a1313c-92f1-7660-9155-193b1acda3ec",
+          "previousSequence": 0,
+          "sequence": 27,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-8",
+          "assistantId": "probe",
+          "turnId": "probe-8",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_8",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 27,
+          "sequence": 28,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-8",
+          "assistantId": "probe",
+          "turnId": "probe-8",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_8",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 28,
+          "sequence": 30,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-8",
+          "assistantId": "probe",
+          "turnId": "probe-8",
+          "type": "agent.turn_completed",
+          "previousSequence": 30,
+          "sequence": 31,
+          "requesterId": "bob",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-9": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-9",
+          "assistantId": "probe",
+          "turnId": "probe-9",
+          "type": "agent.turn_started",
+          "threadId": "01a1313d-8a10-78d3-86d2-07bbcd903572",
+          "previousSequence": 0,
+          "sequence": 32,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-9",
+          "assistantId": "probe",
+          "turnId": "probe-9",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_9",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 32,
+          "sequence": 33,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-9",
+          "assistantId": "probe",
+          "turnId": "probe-9",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_9",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 33,
+          "sequence": 34,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-9",
+          "assistantId": "probe",
+          "turnId": "probe-9",
+          "type": "agent.turn_completed",
+          "previousSequence": 34,
+          "sequence": 35,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-10": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-10",
+          "assistantId": "probe",
+          "turnId": "probe-10",
+          "type": "agent.turn_started",
+          "threadId": "01a1313d-b99e-7300-bc2a-f899dfd31d2c",
+          "previousSequence": 0,
+          "sequence": 36,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-10",
+          "assistantId": "probe",
+          "turnId": "probe-10",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_10",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 36,
+          "sequence": 37,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "sequence": 37,
+          "conversationId": "probe-10",
+          "turnId": "probe-10",
+          "assistantId": "probe",
+          "type": "agent.output_lost",
+          "previousSequence": 36,
+          "requesterId": "alice"
+        },
+        {
+          "conversationId": "probe-10",
+          "assistantId": "probe",
+          "turnId": "probe-10",
+          "type": "agent.turn_failed",
+          "previousSequence": 37,
+          "sequence": 38,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-11": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-11",
+          "assistantId": "probe",
+          "turnId": "probe-11",
+          "type": "agent.turn_started",
+          "threadId": "01a1313d-ef31-7ea1-93f4-325c720c4836",
+          "previousSequence": 0,
+          "sequence": 39,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-11",
+          "assistantId": "probe",
+          "turnId": "probe-11",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_11",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 39,
+          "sequence": 40,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-11",
+          "assistantId": "probe",
+          "turnId": "probe-11",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_11",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 40,
+          "sequence": 41,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-11",
+          "assistantId": "probe",
+          "turnId": "probe-11",
+          "type": "agent.turn_completed",
+          "previousSequence": 41,
+          "sequence": 42,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-12": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-12",
+          "assistantId": "probe",
+          "turnId": "probe-12",
+          "type": "agent.turn_started",
+          "threadId": "01a1313e-09d5-7983-a3a2-55c47de38d60",
+          "previousSequence": 0,
+          "sequence": 43,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-12",
+          "assistantId": "probe",
+          "turnId": "probe-12",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_12",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 43,
+          "sequence": 44,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "sequence": 44,
+          "conversationId": "probe-12",
+          "turnId": "probe-12",
+          "assistantId": "probe",
+          "type": "agent.output_lost",
+          "previousSequence": 43,
+          "requesterId": "alice"
+        },
+        {
+          "sequence": 45,
+          "conversationId": "probe-12",
+          "turnId": "probe-12",
+          "assistantId": "probe",
+          "type": "agent.turn_failed",
+          "requesterId": "alice",
+          "previousSequence": 44,
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-13": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-13",
+          "assistantId": "probe",
+          "turnId": "probe-13",
+          "type": "agent.turn_started",
+          "threadId": "01a1313e-42e5-7a32-8354-c959820297fe",
+          "previousSequence": 0,
+          "sequence": 46,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-13",
+          "assistantId": "probe",
+          "turnId": "probe-13",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_13",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 46,
+          "sequence": 47,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-13",
+          "assistantId": "probe",
+          "turnId": "probe-13",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_13",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 47,
+          "sequence": 48,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-13",
+          "assistantId": "probe",
+          "turnId": "probe-13",
+          "type": "agent.turn_completed",
+          "previousSequence": 48,
+          "sequence": 49,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-14": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-14",
+          "assistantId": "probe",
+          "turnId": "probe-14",
+          "type": "agent.turn_started",
+          "threadId": "01a1313e-5c09-74f0-90e9-4263097f938d",
+          "previousSequence": 0,
+          "sequence": 50,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-14",
+          "assistantId": "probe",
+          "turnId": "probe-14",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_15",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 50,
+          "sequence": 51,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-14",
+          "assistantId": "probe",
+          "turnId": "probe-14",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_15",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 51,
+          "sequence": 52,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-14",
+          "assistantId": "probe",
+          "turnId": "probe-14",
+          "type": "agent.turn_completed",
+          "previousSequence": 52,
+          "sequence": 53,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-15": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-15",
+          "assistantId": "probe",
+          "turnId": "probe-15",
+          "type": "agent.turn_started",
+          "threadId": "01a1313e-77de-7f91-b172-46183ace342d",
+          "previousSequence": 0,
+          "sequence": 54,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-15",
+          "assistantId": "probe",
+          "turnId": "probe-15",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_17",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 54,
+          "sequence": 55,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-15",
+          "assistantId": "probe",
+          "turnId": "probe-15",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_17",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 55,
+          "sequence": 56,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-15",
+          "assistantId": "probe",
+          "turnId": "probe-15",
+          "type": "agent.turn_completed",
+          "previousSequence": 56,
+          "sequence": 57,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-16": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-16",
+          "assistantId": "probe",
+          "turnId": "probe-16",
+          "type": "agent.turn_started",
+          "threadId": "01a1313e-9444-7310-b5ad-bec40cf9194b",
+          "previousSequence": 0,
+          "sequence": 58,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-16",
+          "assistantId": "probe",
+          "turnId": "probe-16",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_19",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 58,
+          "sequence": 59,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-16",
+          "assistantId": "probe",
+          "turnId": "probe-16",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_19",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 59,
+          "sequence": 60,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-16",
+          "assistantId": "probe",
+          "turnId": "probe-16",
+          "type": "agent.turn_completed",
+          "previousSequence": 60,
+          "sequence": 61,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "one terminal probe-17": {
+      "result": "PASS",
+      "detail": [
+        {
+          "conversationId": "probe-17",
+          "assistantId": "probe",
+          "turnId": "probe-17",
+          "type": "agent.turn_started",
+          "threadId": "01a1313e-afe8-7de0-b77e-fc5be1f6620f",
+          "previousSequence": 0,
+          "sequence": 62,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-17",
+          "assistantId": "probe",
+          "turnId": "probe-17",
+          "type": "agent.message_delta",
+          "messageId": "msg_resp_21",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 62,
+          "sequence": 63,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-17",
+          "assistantId": "probe",
+          "turnId": "probe-17",
+          "type": "agent.message_completed",
+          "messageId": "msg_resp_21",
+          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "previousSequence": 63,
+          "sequence": 64,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        },
+        {
+          "conversationId": "probe-17",
+          "assistantId": "probe",
+          "turnId": "probe-17",
+          "type": "agent.turn_completed",
+          "previousSequence": 64,
+          "sequence": 65,
+          "requesterId": "alice",
+          "executionMode": "restricted"
+        }
+      ]
+    },
+    "outline journal": {
+      "result": "PASS"
     }
   },
-  "measurements": {}
+  "measurements": {
+    "podMounts": {
+      "result": "PASS",
+      "value": "none / 9p ro,trans=fd,rfdno=56,wfdno=56,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=fscache,disable_fifo_open,overlayfs_stale_read,directfs 0 0\nnone /dev dev rw,nosuid,mode=0755 0 0\nnone /sys sysfs ro,nosuid,noexec,dentry_cache_limit=1000 0 0\nnone /tmp 9p rw,trans=fd,rfdno=57,wfdno=57,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /proc proc rw,nosuid,noexec,dentry_cache_limit=1000 0 0\nnone /fixture 9p ro,trans=fd,rfdno=58,wfdno=58,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /dev/pts devpts rw,nosuid,noexec 0 0\nnone /dev/shm tmpfs rw 0 0\nnone /etc/hosts 9p rw,trans=fd,rfdno=66,wfdno=66,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /run/codex 9p rw,trans=fd,rfdno=61,wfdno=61,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /home/tool 9p rw,trans=fd,rfdno=64,wfdno=64,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /home/agent 9p rw,trans=fd,rfdno=59,wfdno=59,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /home/codex 9p rw,trans=fd,rfdno=60,wfdno=60,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /home/desktop 9p rw,trans=fd,rfdno=62,wfdno=62,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /home/private 9p rw,trans=fd,rfdno=63,wfdno=63,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /run/executor 9p rw,trans=fd,rfdno=65,wfdno=65,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /etc/hostname 9p ro,trans=fd,rfdno=68,wfdno=68,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /sys/fs/cgroup tmpfs ro,nosuid,noexec 0 0\nnone /sys/fs/cgroup/cpu cgroup rw,cpu 0 0\nnone /sys/fs/cgroup/cpuacct cgroup rw,cpuacct 0 0\nnone /sys/fs/cgroup/cpuset cgroup rw,cpuset 0 0\nnone /sys/fs/cgroup/devices cgroup rw,devices 0 0\nnone /sys/fs/cgroup/job cgroup rw,job 0 0\nnone /sys/fs/cgroup/memory cgroup rw,memory 0 0\nnone /sys/fs/cgroup/pids cgroup rw,pids 0 0\nnone /etc/resolv.conf 9p ro,trans=fd,rfdno=69,wfdno=69,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\nnone /dev/termination-log 9p rw,trans=fd,rfdno=67,wfdno=67,aname=/,dfltuid=4294967294,dfltgid=4294967294,dcache=1000,cache=remote_revalidating,disable_fifo_open,directfs 0 0\n"
+    },
+    "privateNodeMount": {
+      "result": "PASS",
+      "value": [
+        "tmpfs /var/lib/kubelet/pods/6615503d-1c2e-4d1f-aaa6-9e21822b1058/volumes/kubernetes.io~empty-dir/private tmpfs rw,relatime,size=16384k,inode64,noswap 0 0"
+      ]
+    },
+    "privateStatfs": {
+      "result": "PASS",
+      "value": {
+        "type": 16914839,
+        "bytes": 16777216,
+        "enforces16Mi": true,
+        "limitEnforced": true
+      }
+    },
+    "writableCensus": {
+      "result": "PASS",
+      "value": {
+        "directories": [
+          "/tmp",
+          "/home/private/turn-3",
+          "/home/private/turn-3/codex",
+          "/home/private/turn-3/codex/skills",
+          "/home/private/turn-3/codex/skills/.system",
+          "/home/private/turn-3/codex/skills/.system/imagegen",
+          "/home/private/turn-3/codex/skills/.system/imagegen/agents",
+          "/home/private/turn-3/codex/skills/.system/imagegen/assets",
+          "/home/private/turn-3/codex/skills/.system/imagegen/references",
+          "/home/private/turn-3/codex/skills/.system/imagegen/scripts",
+          "/home/private/turn-3/codex/skills/.system/openai-docs",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/agents",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/assets",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/references",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/scripts",
+          "/home/private/turn-3/codex/skills/.system/review-agent",
+          "/home/private/turn-3/codex/skills/.system/review-agent/agents",
+          "/home/private/turn-3/codex/skills/.system/skill-creator",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/agents",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/assets",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/references",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/scripts",
+          "/home/private/turn-3/codex/skills/.system/skill-installer",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/agents",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/assets",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/scripts",
+          "/home/private/turn-3/codex/tmp",
+          "/home/private/turn-3/codex/tmp/arg0",
+          "/home/private/turn-3/codex/tmp/arg0/codex-arg0fkJbXq",
+          "/home/private/turn-3/tmp",
+          "/home/private/turn-3/work",
+          "/home/private/turn-4",
+          "/home/private/turn-4/codex",
+          "/home/private/turn-4/codex/skills",
+          "/home/private/turn-4/codex/skills/.system",
+          "/home/private/turn-4/codex/skills/.system/imagegen",
+          "/home/private/turn-4/codex/skills/.system/imagegen/agents",
+          "/home/private/turn-4/codex/skills/.system/imagegen/assets",
+          "/home/private/turn-4/codex/skills/.system/imagegen/references",
+          "/home/private/turn-4/codex/skills/.system/imagegen/scripts",
+          "/home/private/turn-4/codex/skills/.system/openai-docs",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/agents",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/assets",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/references",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/scripts",
+          "/home/private/turn-4/codex/skills/.system/review-agent",
+          "/home/private/turn-4/codex/skills/.system/review-agent/agents",
+          "/home/private/turn-4/codex/skills/.system/skill-creator",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/agents",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/assets",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/references",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/scripts",
+          "/home/private/turn-4/codex/skills/.system/skill-installer",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/agents",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/assets",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/scripts",
+          "/home/private/turn-4/codex/tmp",
+          "/home/private/turn-4/codex/tmp/arg0",
+          "/home/private/turn-4/codex/tmp/arg0/codex-arg0Nbg6SP",
+          "/home/private/turn-4/tmp",
+          "/home/private/turn-4/work",
+          "/dev/shm"
+        ],
+        "files": [
+          "/home/private/turn-3/codex/.sandbox_migration",
+          "/home/private/turn-3/codex/config.toml",
+          "/home/private/turn-3/codex/environments.toml",
+          "/home/private/turn-3/codex/goals_1.sqlite",
+          "/home/private/turn-3/codex/goals_1.sqlite-shm",
+          "/home/private/turn-3/codex/goals_1.sqlite-wal",
+          "/home/private/turn-3/codex/installation_id",
+          "/home/private/turn-3/codex/logs_2.sqlite",
+          "/home/private/turn-3/codex/logs_2.sqlite-shm",
+          "/home/private/turn-3/codex/logs_2.sqlite-wal",
+          "/home/private/turn-3/codex/memories_1.sqlite",
+          "/home/private/turn-3/codex/memories_1.sqlite-shm",
+          "/home/private/turn-3/codex/memories_1.sqlite-wal",
+          "/home/private/turn-3/codex/queue_1.sqlite",
+          "/home/private/turn-3/codex/queue_1.sqlite-shm",
+          "/home/private/turn-3/codex/queue_1.sqlite-wal",
+          "/home/private/turn-3/codex/skills/.system/.codex-system-skills.marker",
+          "/home/private/turn-3/codex/skills/.system/imagegen/LICENSE.txt",
+          "/home/private/turn-3/codex/skills/.system/imagegen/SKILL.md",
+          "/home/private/turn-3/codex/skills/.system/imagegen/agents/openai.yaml",
+          "/home/private/turn-3/codex/skills/.system/imagegen/assets/imagegen-small.svg",
+          "/home/private/turn-3/codex/skills/.system/imagegen/assets/imagegen.png",
+          "/home/private/turn-3/codex/skills/.system/imagegen/references/cli.md",
+          "/home/private/turn-3/codex/skills/.system/imagegen/references/codex-network.md",
+          "/home/private/turn-3/codex/skills/.system/imagegen/references/image-api.md",
+          "/home/private/turn-3/codex/skills/.system/imagegen/references/prompting.md",
+          "/home/private/turn-3/codex/skills/.system/imagegen/references/sample-prompts.md",
+          "/home/private/turn-3/codex/skills/.system/imagegen/scripts/image_gen.py",
+          "/home/private/turn-3/codex/skills/.system/imagegen/scripts/remove_chroma_key.py",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/LICENSE.txt",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/SKILL.md",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/agents/openai.yaml",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/assets/openai-small.svg",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/assets/openai.png",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/references/codex-self-knowledge.md",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/references/latest-model.md",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/references/mcp-diagnostics.md",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/references/model-migration.md",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/references/model-selection.md",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/references/official-docs.md",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/references/prompting-guide.md",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/references/upgrade-guide.md",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/references/upgrading-to-gpt-6-astra.md",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/scripts/fetch-codex-manual.mjs",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/scripts/resolve-latest-model-info",
+          "/home/private/turn-3/codex/skills/.system/openai-docs/scripts/resolve-latest-model-info.cjs",
+          "/home/private/turn-3/codex/skills/.system/review-agent/SKILL.md",
+          "/home/private/turn-3/codex/skills/.system/review-agent/agents/openai.yaml",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/SKILL.md",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/agents/openai.yaml",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/assets/skill-creator-small.svg",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/assets/skill-creator.png",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/license.txt",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/references/openai_yaml.md",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/scripts/generate_openai_yaml.py",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/scripts/init_skill.py",
+          "/home/private/turn-3/codex/skills/.system/skill-creator/scripts/quick_validate.py",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/LICENSE.txt",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/SKILL.md",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/agents/openai.yaml",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/assets/skill-installer-small.svg",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/assets/skill-installer.png",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/scripts/github_utils.py",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/scripts/install-skill-from-github.py",
+          "/home/private/turn-3/codex/skills/.system/skill-installer/scripts/list-skills.py",
+          "/home/private/turn-3/codex/state_5.sqlite",
+          "/home/private/turn-3/codex/state_5.sqlite-shm",
+          "/home/private/turn-3/codex/state_5.sqlite-wal",
+          "/home/private/turn-3/codex/tmp/arg0/codex-arg0fkJbXq/.lock",
+          "/home/private/turn-4/codex/.sandbox_migration",
+          "/home/private/turn-4/codex/config.toml",
+          "/home/private/turn-4/codex/environments.toml",
+          "/home/private/turn-4/codex/goals_1.sqlite",
+          "/home/private/turn-4/codex/goals_1.sqlite-shm",
+          "/home/private/turn-4/codex/goals_1.sqlite-wal",
+          "/home/private/turn-4/codex/installation_id",
+          "/home/private/turn-4/codex/logs_2.sqlite",
+          "/home/private/turn-4/codex/logs_2.sqlite-shm",
+          "/home/private/turn-4/codex/logs_2.sqlite-wal",
+          "/home/private/turn-4/codex/memories_1.sqlite",
+          "/home/private/turn-4/codex/memories_1.sqlite-shm",
+          "/home/private/turn-4/codex/memories_1.sqlite-wal",
+          "/home/private/turn-4/codex/queue_1.sqlite",
+          "/home/private/turn-4/codex/queue_1.sqlite-shm",
+          "/home/private/turn-4/codex/queue_1.sqlite-wal",
+          "/home/private/turn-4/codex/skills/.system/.codex-system-skills.marker",
+          "/home/private/turn-4/codex/skills/.system/imagegen/LICENSE.txt",
+          "/home/private/turn-4/codex/skills/.system/imagegen/SKILL.md",
+          "/home/private/turn-4/codex/skills/.system/imagegen/agents/openai.yaml",
+          "/home/private/turn-4/codex/skills/.system/imagegen/assets/imagegen-small.svg",
+          "/home/private/turn-4/codex/skills/.system/imagegen/assets/imagegen.png",
+          "/home/private/turn-4/codex/skills/.system/imagegen/references/cli.md",
+          "/home/private/turn-4/codex/skills/.system/imagegen/references/codex-network.md",
+          "/home/private/turn-4/codex/skills/.system/imagegen/references/image-api.md",
+          "/home/private/turn-4/codex/skills/.system/imagegen/references/prompting.md",
+          "/home/private/turn-4/codex/skills/.system/imagegen/references/sample-prompts.md",
+          "/home/private/turn-4/codex/skills/.system/imagegen/scripts/image_gen.py",
+          "/home/private/turn-4/codex/skills/.system/imagegen/scripts/remove_chroma_key.py",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/LICENSE.txt",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/SKILL.md",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/agents/openai.yaml",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/assets/openai-small.svg",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/assets/openai.png",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/references/codex-self-knowledge.md",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/references/latest-model.md",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/references/mcp-diagnostics.md",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/references/model-migration.md",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/references/model-selection.md",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/references/official-docs.md",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/references/prompting-guide.md",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/references/upgrade-guide.md",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/references/upgrading-to-gpt-6-astra.md",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/scripts/fetch-codex-manual.mjs",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/scripts/resolve-latest-model-info",
+          "/home/private/turn-4/codex/skills/.system/openai-docs/scripts/resolve-latest-model-info.cjs",
+          "/home/private/turn-4/codex/skills/.system/review-agent/SKILL.md",
+          "/home/private/turn-4/codex/skills/.system/review-agent/agents/openai.yaml",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/SKILL.md",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/agents/openai.yaml",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/assets/skill-creator-small.svg",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/assets/skill-creator.png",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/license.txt",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/references/openai_yaml.md",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/scripts/generate_openai_yaml.py",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/scripts/init_skill.py",
+          "/home/private/turn-4/codex/skills/.system/skill-creator/scripts/quick_validate.py",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/LICENSE.txt",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/SKILL.md",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/agents/openai.yaml",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/assets/skill-installer-small.svg",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/assets/skill-installer.png",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/scripts/github_utils.py",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/scripts/install-skill-from-github.py",
+          "/home/private/turn-4/codex/skills/.system/skill-installer/scripts/list-skills.py",
+          "/home/private/turn-4/codex/state_5.sqlite",
+          "/home/private/turn-4/codex/state_5.sqlite-shm",
+          "/home/private/turn-4/codex/state_5.sqlite-wal",
+          "/home/private/turn-4/codex/tmp/arg0/codex-arg0Nbg6SP/.lock"
+        ],
+        "excluded": [
+          "/proc (process interface)",
+          "/sys (kernel interface)",
+          "/dev except /dev/shm (devices, not stored files)"
+        ]
+      }
+    },
+    "coreLimits": {
+      "result": "PASS",
+      "value": {
+        "bridge": "Limit                     Soft Limit           Hard Limit           Units     \nMax cpu time              unlimited            unlimited            seconds   \nMax file size             unlimited            unlimited            bytes     \nMax data size             unlimited            unlimited            bytes     \nMax stack size            8388608              unlimited            bytes     \nMax core file size        0                    0                    bytes     \nMax resident set          unlimited            unlimited            bytes     \nMax processes             unlimited            unlimited            processes \nMax open files            524288               524288               files     \nMax locked memory         65536                65536                bytes     \nMax address space         unlimited            unlimited            bytes     \nMax file locks            unlimited            unlimited            locks     \nMax pending signals       0                    0                    signals   \nMax msgqueue size         819200               819200               bytes     \nMax nice priority         0                    0                    \nMax realtime priority     0                    0                    \nMax realtime timeout      unlimited            unlimited            us        \n",
+        "private": "Limit                     Soft Limit           Hard Limit           Units     \nMax cpu time              unlimited            unlimited            seconds   \nMax file size             unlimited            unlimited            bytes     \nMax data size             unlimited            unlimited            bytes     \nMax stack size            8388608              unlimited            bytes     \nMax core file size        0                    0                    bytes     \nMax resident set          unlimited            unlimited            bytes     \nMax processes             unlimited            unlimited            processes \nMax open files            524288               524288               files     \nMax locked memory         65536                65536                bytes     \nMax address space         unlimited            unlimited            bytes     \nMax file locks            unlimited            unlimited            locks     \nMax pending signals       0                    0                    signals   \nMax msgqueue size         819200               819200               bytes     \nMax nice priority         0                    0                    \nMax realtime priority     0                    0                    \nMax realtime timeout      unlimited            unlimited            us        \n"
+      }
+    },
+    "swapCgroups": {
+      "result": "ACCEPTED",
+      "value": "/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/memory.swap.max max\n/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/9a4542776c4b9e3de2cc821b2b098cf87bb1edd1ba7423e58432ccb0b489f8a2/memory.swap.max max\n/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f/memory.swap.max max",
+      "reason": "Host swap is accepted on this dev box for the MVP; see #366."
+    },
+    "nodeSwaps": {
+      "result": "ACCEPTED",
+      "value": "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swapfile                               file\t\t8388604\t\t2901844\t\t-2",
+      "reason": "Host swap is accepted on this dev box for the MVP; see #366."
+    },
+    "hostCorePattern": {
+      "result": "ACCEPTED",
+      "value": "|/usr/share/apport/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -F%F -- %E",
+      "reason": "Host apport crash dumps are accepted on this dev box for the MVP; see #366."
+    },
+    "privateHomePeakBytes": {
+      "result": "PASS",
+      "value": {
+        "bytes": 2903063,
+        "method": "Largest single home sampled during held replies and after journeys"
+      }
+    },
+    "initialiseLatency": {
+      "result": "PASS",
+      "value": {
+        "samples": [
+          750.8219189999945,
+          780.9497679999986,
+          800.5162669999991,
+          843.9464049999951,
+          847.563387000002,
+          851.9028719999988,
+          858.9103069999983,
+          875.701592999998,
+          934.0988720000023,
+          955.8468540000031
+        ],
+        "p50": 847.563387000002,
+        "p95": 955.8468540000031,
+        "method": "Private socket connection request to initialise result, including process spawn"
+      }
+    },
+    "twoTurnPeakMemory": {
+      "result": "PASS",
+      "value": "/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/9a4542776c4b9e3de2cc821b2b098cf87bb1edd1ba7423e58432ccb0b489f8a2/memory.peak 497397760\n/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/memory.peak 497438720\n/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f/memory.peak 0"
+    },
+    "runscOptions": {
+      "result": "PASS",
+      "value": "[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.'runsc']\n  runtime_type = \"io.containerd.runsc.v1\""
+    },
+    "realFault": {
+      "result": "PASS",
+      "value": {
+        "fault": {
+          "target": {
+            "Uid": "1003\t1003\t1003\t1003",
+            "Gid": "1003\t1003\t1003\t1003",
+            "Groups": "",
+            "CapInh": "0000000000000000",
+            "CapPrm": "0000000000000000",
+            "CapEff": "0000000000000000",
+            "CapBnd": "00000000000000c3",
+            "CapAmb": "0000000000000000",
+            "NoNewPrivs": "1",
+            "Seccomp": "0",
+            "coreLimit": "0                    0                    bytes     ",
+            "cwd": "/home/private/turn-6/work",
+            "environmentSha256": "14c599cf2782e69e0ef8bed8ea58afd112f14f93d00aa5d566d4d879dfb69a1c"
+          },
+          "helper": {
+            "Uid": "1003\t1003\t1003\t1003",
+            "Gid": "1003\t1003\t1003\t1003",
+            "Groups": "",
+            "CapInh": "0000000000000000",
+            "CapPrm": "0000000000000000",
+            "CapEff": "0000000000000000",
+            "CapBnd": "00000000000000c3",
+            "CapAmb": "0000000000000000",
+            "NoNewPrivs": "1",
+            "Seccomp": "0",
+            "coreLimit": "0                    0                    bytes     ",
+            "cwd": "/home/private/turn-6/work",
+            "environmentSha256": "14c599cf2782e69e0ef8bed8ea58afd112f14f93d00aa5d566d4d879dfb69a1c"
+          },
+          "code": null,
+          "signal": "SIGSEGV"
+        },
+        "sameConditions": true,
+        "dumps": [],
+        "census": {
+          "directories": [
+            "/tmp",
+            "/home/private/turn-6",
+            "/home/private/turn-6/codex",
+            "/home/private/turn-6/codex/skills",
+            "/home/private/turn-6/codex/skills/.system",
+            "/home/private/turn-6/codex/skills/.system/imagegen",
+            "/home/private/turn-6/codex/skills/.system/imagegen/agents",
+            "/home/private/turn-6/codex/skills/.system/imagegen/assets",
+            "/home/private/turn-6/codex/skills/.system/imagegen/references",
+            "/home/private/turn-6/codex/skills/.system/imagegen/scripts",
+            "/home/private/turn-6/codex/skills/.system/openai-docs",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/agents",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/assets",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/references",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/scripts",
+            "/home/private/turn-6/codex/skills/.system/review-agent",
+            "/home/private/turn-6/codex/skills/.system/review-agent/agents",
+            "/home/private/turn-6/codex/skills/.system/skill-creator",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/agents",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/assets",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/references",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/scripts",
+            "/home/private/turn-6/codex/skills/.system/skill-installer",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/agents",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/assets",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/scripts",
+            "/home/private/turn-6/codex/tmp",
+            "/home/private/turn-6/codex/tmp/arg0",
+            "/home/private/turn-6/codex/tmp/arg0/codex-arg0mBB6M4",
+            "/home/private/turn-6/tmp",
+            "/home/private/turn-6/work",
+            "/home/private/turn-7",
+            "/home/private/turn-7/codex",
+            "/home/private/turn-7/codex/skills",
+            "/home/private/turn-7/codex/skills/.system",
+            "/home/private/turn-7/codex/skills/.system/imagegen",
+            "/home/private/turn-7/codex/skills/.system/imagegen/agents",
+            "/home/private/turn-7/codex/skills/.system/imagegen/assets",
+            "/home/private/turn-7/codex/skills/.system/imagegen/references",
+            "/home/private/turn-7/codex/skills/.system/imagegen/scripts",
+            "/home/private/turn-7/codex/skills/.system/openai-docs",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/agents",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/assets",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/references",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/scripts",
+            "/home/private/turn-7/codex/skills/.system/review-agent",
+            "/home/private/turn-7/codex/skills/.system/review-agent/agents",
+            "/home/private/turn-7/codex/skills/.system/skill-creator",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/agents",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/assets",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/references",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/scripts",
+            "/home/private/turn-7/codex/skills/.system/skill-installer",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/agents",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/assets",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/scripts",
+            "/home/private/turn-7/codex/tmp",
+            "/home/private/turn-7/codex/tmp/arg0",
+            "/home/private/turn-7/codex/tmp/arg0/codex-arg0BiCm3x",
+            "/home/private/turn-7/tmp",
+            "/home/private/turn-7/work",
+            "/dev/shm"
+          ],
+          "files": [
+            "/home/private/turn-6/codex/.sandbox_migration",
+            "/home/private/turn-6/codex/config.toml",
+            "/home/private/turn-6/codex/environments.toml",
+            "/home/private/turn-6/codex/goals_1.sqlite",
+            "/home/private/turn-6/codex/goals_1.sqlite-shm",
+            "/home/private/turn-6/codex/goals_1.sqlite-wal",
+            "/home/private/turn-6/codex/installation_id",
+            "/home/private/turn-6/codex/logs_2.sqlite",
+            "/home/private/turn-6/codex/logs_2.sqlite-shm",
+            "/home/private/turn-6/codex/logs_2.sqlite-wal",
+            "/home/private/turn-6/codex/memories_1.sqlite",
+            "/home/private/turn-6/codex/memories_1.sqlite-shm",
+            "/home/private/turn-6/codex/memories_1.sqlite-wal",
+            "/home/private/turn-6/codex/queue_1.sqlite",
+            "/home/private/turn-6/codex/queue_1.sqlite-shm",
+            "/home/private/turn-6/codex/queue_1.sqlite-wal",
+            "/home/private/turn-6/codex/skills/.system/.codex-system-skills.marker",
+            "/home/private/turn-6/codex/skills/.system/imagegen/LICENSE.txt",
+            "/home/private/turn-6/codex/skills/.system/imagegen/SKILL.md",
+            "/home/private/turn-6/codex/skills/.system/imagegen/agents/openai.yaml",
+            "/home/private/turn-6/codex/skills/.system/imagegen/assets/imagegen-small.svg",
+            "/home/private/turn-6/codex/skills/.system/imagegen/assets/imagegen.png",
+            "/home/private/turn-6/codex/skills/.system/imagegen/references/cli.md",
+            "/home/private/turn-6/codex/skills/.system/imagegen/references/codex-network.md",
+            "/home/private/turn-6/codex/skills/.system/imagegen/references/image-api.md",
+            "/home/private/turn-6/codex/skills/.system/imagegen/references/prompting.md",
+            "/home/private/turn-6/codex/skills/.system/imagegen/references/sample-prompts.md",
+            "/home/private/turn-6/codex/skills/.system/imagegen/scripts/image_gen.py",
+            "/home/private/turn-6/codex/skills/.system/imagegen/scripts/remove_chroma_key.py",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/LICENSE.txt",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/SKILL.md",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/agents/openai.yaml",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/assets/openai-small.svg",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/assets/openai.png",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/references/codex-self-knowledge.md",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/references/latest-model.md",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/references/mcp-diagnostics.md",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/references/model-migration.md",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/references/model-selection.md",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/references/official-docs.md",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/references/prompting-guide.md",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/references/upgrade-guide.md",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/references/upgrading-to-gpt-6-astra.md",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/scripts/fetch-codex-manual.mjs",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/scripts/resolve-latest-model-info",
+            "/home/private/turn-6/codex/skills/.system/openai-docs/scripts/resolve-latest-model-info.cjs",
+            "/home/private/turn-6/codex/skills/.system/review-agent/SKILL.md",
+            "/home/private/turn-6/codex/skills/.system/review-agent/agents/openai.yaml",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/SKILL.md",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/agents/openai.yaml",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/assets/skill-creator-small.svg",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/assets/skill-creator.png",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/license.txt",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/references/openai_yaml.md",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/scripts/generate_openai_yaml.py",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/scripts/init_skill.py",
+            "/home/private/turn-6/codex/skills/.system/skill-creator/scripts/quick_validate.py",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/LICENSE.txt",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/SKILL.md",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/agents/openai.yaml",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/assets/skill-installer-small.svg",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/assets/skill-installer.png",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/scripts/github_utils.py",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/scripts/install-skill-from-github.py",
+            "/home/private/turn-6/codex/skills/.system/skill-installer/scripts/list-skills.py",
+            "/home/private/turn-6/codex/state_5.sqlite",
+            "/home/private/turn-6/codex/state_5.sqlite-shm",
+            "/home/private/turn-6/codex/state_5.sqlite-wal",
+            "/home/private/turn-6/codex/tmp/arg0/codex-arg0mBB6M4/.lock",
+            "/home/private/turn-7/codex/.sandbox_migration",
+            "/home/private/turn-7/codex/config.toml",
+            "/home/private/turn-7/codex/environments.toml",
+            "/home/private/turn-7/codex/goals_1.sqlite",
+            "/home/private/turn-7/codex/goals_1.sqlite-shm",
+            "/home/private/turn-7/codex/goals_1.sqlite-wal",
+            "/home/private/turn-7/codex/installation_id",
+            "/home/private/turn-7/codex/logs_2.sqlite",
+            "/home/private/turn-7/codex/logs_2.sqlite-shm",
+            "/home/private/turn-7/codex/logs_2.sqlite-wal",
+            "/home/private/turn-7/codex/memories_1.sqlite",
+            "/home/private/turn-7/codex/memories_1.sqlite-shm",
+            "/home/private/turn-7/codex/memories_1.sqlite-wal",
+            "/home/private/turn-7/codex/queue_1.sqlite",
+            "/home/private/turn-7/codex/queue_1.sqlite-shm",
+            "/home/private/turn-7/codex/queue_1.sqlite-wal",
+            "/home/private/turn-7/codex/skills/.system/.codex-system-skills.marker",
+            "/home/private/turn-7/codex/skills/.system/imagegen/LICENSE.txt",
+            "/home/private/turn-7/codex/skills/.system/imagegen/SKILL.md",
+            "/home/private/turn-7/codex/skills/.system/imagegen/agents/openai.yaml",
+            "/home/private/turn-7/codex/skills/.system/imagegen/assets/imagegen-small.svg",
+            "/home/private/turn-7/codex/skills/.system/imagegen/assets/imagegen.png",
+            "/home/private/turn-7/codex/skills/.system/imagegen/references/cli.md",
+            "/home/private/turn-7/codex/skills/.system/imagegen/references/codex-network.md",
+            "/home/private/turn-7/codex/skills/.system/imagegen/references/image-api.md",
+            "/home/private/turn-7/codex/skills/.system/imagegen/references/prompting.md",
+            "/home/private/turn-7/codex/skills/.system/imagegen/references/sample-prompts.md",
+            "/home/private/turn-7/codex/skills/.system/imagegen/scripts/image_gen.py",
+            "/home/private/turn-7/codex/skills/.system/imagegen/scripts/remove_chroma_key.py",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/LICENSE.txt",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/SKILL.md",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/agents/openai.yaml",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/assets/openai-small.svg",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/assets/openai.png",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/references/codex-self-knowledge.md",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/references/latest-model.md",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/references/mcp-diagnostics.md",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/references/model-migration.md",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/references/model-selection.md",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/references/official-docs.md",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/references/prompting-guide.md",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/references/upgrade-guide.md",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/references/upgrading-to-gpt-6-astra.md",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/scripts/fetch-codex-manual.mjs",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/scripts/resolve-latest-model-info",
+            "/home/private/turn-7/codex/skills/.system/openai-docs/scripts/resolve-latest-model-info.cjs",
+            "/home/private/turn-7/codex/skills/.system/review-agent/SKILL.md",
+            "/home/private/turn-7/codex/skills/.system/review-agent/agents/openai.yaml",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/SKILL.md",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/agents/openai.yaml",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/assets/skill-creator-small.svg",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/assets/skill-creator.png",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/license.txt",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/references/openai_yaml.md",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/scripts/generate_openai_yaml.py",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/scripts/init_skill.py",
+            "/home/private/turn-7/codex/skills/.system/skill-creator/scripts/quick_validate.py",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/LICENSE.txt",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/SKILL.md",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/agents/openai.yaml",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/assets/skill-installer-small.svg",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/assets/skill-installer.png",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/scripts/github_utils.py",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/scripts/install-skill-from-github.py",
+            "/home/private/turn-7/codex/skills/.system/skill-installer/scripts/list-skills.py",
+            "/home/private/turn-7/codex/state_5.sqlite",
+            "/home/private/turn-7/codex/state_5.sqlite-shm",
+            "/home/private/turn-7/codex/state_5.sqlite-wal",
+            "/home/private/turn-7/codex/tmp/arg0/codex-arg0BiCm3x/.lock"
+          ],
+          "excluded": [
+            "/proc (process interface)",
+            "/sys (kernel interface)",
+            "/dev except /dev/shm (devices, not stored files)"
+          ]
+        },
+        "corePattern": "Not exposed by this gVisor runtime",
+        "beforeGuest": {
+          "archive": "docs/process/evidence/p4-14/private-turns-inventories.json.gz",
+          "roots": {
+            "/tmp": true,
+            "/home/private/turn-6": true,
+            "/home/private/turn-7": true,
+            "/dev/shm": true
+          },
+          "files": 139,
+          "directories": 63
+        },
+        "afterGuest": {
+          "archive": "docs/process/evidence/p4-14/private-turns-inventories.json.gz",
+          "roots": {
+            "/tmp": true,
+            "/home/private/turn-6": true,
+            "/home/private/turn-7": true,
+            "/dev/shm": true
+          },
+          "files": 139,
+          "directories": 63
+        },
+        "beforeNode": {
+          "archive": "docs/process/evidence/p4-14/private-turns-inventories.json.gz",
+          "roots": {
+            "/var/crash": true,
+            "/var/lib/systemd/coredump": true,
+            "/var/log/apport.log": true,
+            "/var/log/kern.log": true,
+            "/var/log/syslog": true,
+            "/proc/34205/root/var/crash": false,
+            "/proc/34205/root/var/lib/systemd/coredump": false,
+            "/proc/34205/root/tmp": true,
+            "/proc/34205/root/var/log/pods/p414-private-eb6a63d8_private_6615503d-1c2e-4d1f-aaa6-9e21822b1058": true,
+            "/proc/34205/root/run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f": true,
+            "/proc/34205/root/var/lib/rancher/k3s/agent/containerd/io.containerd.runtime.v2.task/k8s.io/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f": true,
+            "/var/lib/docker/containers/6964f10e0e7c63d16b4878d57a7c20044b8c71f3a1b0413fd6cc0aba18785444/6964f10e0e7c63d16b4878d57a7c20044b8c71f3a1b0413fd6cc0aba18785444-json.log": true
+          },
+          "files": 22489,
+          "directories": 2633
+        },
+        "afterNode": {
+          "archive": "docs/process/evidence/p4-14/private-turns-inventories.json.gz",
+          "roots": {
+            "/var/crash": true,
+            "/var/lib/systemd/coredump": true,
+            "/var/log/apport.log": true,
+            "/var/log/kern.log": true,
+            "/var/log/syslog": true,
+            "/proc/34205/root/var/crash": false,
+            "/proc/34205/root/var/lib/systemd/coredump": false,
+            "/proc/34205/root/tmp": true,
+            "/proc/34205/root/var/log/pods/p414-private-eb6a63d8_private_6615503d-1c2e-4d1f-aaa6-9e21822b1058": true,
+            "/proc/34205/root/run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f": true,
+            "/proc/34205/root/var/lib/rancher/k3s/agent/containerd/io.containerd.runtime.v2.task/k8s.io/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f": true,
+            "/var/lib/docker/containers/6964f10e0e7c63d16b4878d57a7c20044b8c71f3a1b0413fd6cc0aba18785444/6964f10e0e7c63d16b4878d57a7c20044b8c71f3a1b0413fd6cc0aba18785444-json.log": true
+          },
+          "files": 22489,
+          "directories": 2633
+        },
+        "scope": "Native helper in the same Pod and private RAM home. Codex SIGSEGV handler is not executed.",
+        "inventoryArchiveSha256": "fcc044a85ecb0e57c9bf81d65b179c0950b0ae0875fa2bc37e7dcb4844a28106"
+      }
+    }
+  },
+  "conditions": {
+    "F1": {
+      "result": "ACCEPTED (dev box, owner 12 Oct, #366)",
+      "hostSwaps": "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swapfile                               file\t\t8388604\t\t2901588\t\t-2\n",
+      "reason": "Host swap is a post-MVP gap tracked in #366."
+    },
+    "F2": {
+      "result": "ACCEPTED (dev box, owner 12 Oct, #366)",
+      "guest": "PASS",
+      "hostCorePattern": "|/usr/share/apport/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -F%F -- %E"
+    },
+    "F3": {
+      "result": "PASS",
+      "failing": [],
+      "missing": []
+    }
+  },
+  "limitations": [
+    "UID 1003 can write /tmp on node disk, /dev/shm and world-writable workspace directories.",
+    "Concurrent private turns share UID 1003; only absent tools separate them.",
+    "Bridge memory and supervisor stream buffers can be swapped under F1.",
+    "The PVC holds memory-free content and text-free private outlines by design.",
+    "Outline counts expose reply size and timing; ids are chosen by the client."
+  ],
+  "sourceCommit": "7310240f11ca5c8c96aad00ce18865d8117d40eb",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:3bb44be151ce4b91c8dcadcf6b78a3bd1bc8e09f7ec93a423e25543e6007735a",
+  "codexCrashHandler": {
+    "sourceInspection": "PASS",
+    "liveFaultInCodex": "NOT RUN",
+    "binarySha256": "1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e",
+    "codexVersion": "0.159.2",
+    "codexSource": "https://github.com/openai/codex/tree/8b9fa496bbf2c47aebd62e85a080b9a522a455b5",
+    "rustSource": "https://github.com/rust-lang/rust/blob/59807616e1fa2540724bfbac14d7976d7e4a3860/library/std/src/sys/pal/unix/stack_overflow.rs#L101-L143",
+    "observation": "The stripped pinned binary contains source paths for this exact Rust commit and its Unix stack-overflow handler. The Codex source tag selects Rust 1.95.0 and has no explicit SIGSEGV handler in its Rust sources.",
+    "handlerBehaviour": "The Rust standard handler checks whether the fault address is in the thread stack guard. A stack overflow prints a message and aborts. Other faults restore SIG_DFL and return, so a real invalid instruction faults again under the default action. An external signal has no faulting instruction to repeat.",
+    "limit": "This identifies the expected Rust handler from the pinned source and binary paths. It does not prove the active handler address or execute Codex's stack-overflow or other SIGSEGV paths. The native helper proves gVisor fault termination and dump controls under matching process conditions only. Pinned Codex SIGKILL and Stop cleanup are checked separately.",
+    "earlierSignalObservation": "The saved after-signal SigCgt mask was 0x4040. It no longer included SIGSEGV (bit 10, 0x400), which is consistent with the standard handler restoring SIG_DFL. The process remained sleeping because no memory access had faulted."
+  },
+  "memoryAdmissionRequirements": [
+    "Fix the unauthenticated credentials route (#200, PR #371).",
+    "Keep memory-derived reply text volatile; reports.ts still encrypts it with conversation keys.",
+    "Qualify invalidation and memory-tool journeys required by the accepted design (#326)."
+  ],
+  "earlierAttempts": [
+    {
+      "result": "FAIL",
+      "reason": "Client-side apply exceeded the ConfigMap annotation limit. Server-side apply fixed this fixture error. Promotion stopped."
+    },
+    {
+      "result": "FAIL",
+      "reason": "gVisor does not expose /proc/sys/kernel/core_pattern. The optional observation now records that absence. The required core-limit check stays unchanged."
+    },
+    {
+      "result": "FAIL",
+      "reason": "The replacement Pod was briefly absent. Polling now handles that expected gap and still requires a new UID and readiness."
+    }
+  ],
+  "sourceChecks": {
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "check:events": "PASS",
+    "knip": "PASS",
+    "lint:changelog": "PASS",
+    "changedTests": {
+      "result": "PASS",
+      "tests": 27,
+      "runs": 2
+    },
+    "fullRootSuite": {
+      "result": "NOT RUN",
+      "reason": "Not requested for this fix; changed tests ran twice."
+    }
+  }
 }

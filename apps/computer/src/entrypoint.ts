@@ -1,3 +1,4 @@
+import { prepareTemporaryDirectory } from './display-lock.ts';
 // Prepare protected homes and start the computer's separate user processes.
 import {
   mkdirSync, lstatSync, openSync, closeSync, fstatSync, fchmodSync, fchownSync,
@@ -109,6 +110,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   socket.on('error', () => process.exit(1));
 } else {
   process.umask(0o077);
+  prepareTemporaryDirectory();
   const home = trustedParent('/home'), run = trustedParent('/run');
   const agent = directory(home, 'agent', 0, 0o755);
   for (const [name, uid] of [['codex', 1000], ['workspace', 1001], ['profile', 1002]] as const) {

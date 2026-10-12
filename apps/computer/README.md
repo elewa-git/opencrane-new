@@ -5,8 +5,9 @@
 A private cloud computer where each person's assistant does its work. Each computer is a locked-down Linux container. It holds Codex (OpenAI's coding agent), a web browser and a remote desktop. Kubernetes, the system that runs containers, starts one for each person.
 
 Private turns run in a temporary Codex process with no tools. Its files use a memory
-volume, which can still be written to disk by swap. Isolation is not yet proven on
-a live computer; memory features stay off until it is.
+volume, which can still be written to disk by swap. The live check covers temporary
+processes and their files. Memory features stay off until private replies, memory
+tools and access changes also pass their checks.
 
 ## Where it fits
 
@@ -18,7 +19,7 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes| computer
   server["apps/server<br/>the back end"] <-->|turns, models, approvals, dispatch and consent reports| computer
   events["libs/events<br/>report text check"] -.-> computer
-  computer --> supervisor["Root supervisor<br/>protected launch and executor stop"]
+  computer --> supervisor["Root supervisor<br/>protected launch, admission and exit checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
   computer -->|sends model and reviewed tool calls| gateway["agentgateway<br/>AI gateway"]
@@ -41,6 +42,7 @@ flowchart LR
 - Keeps files in the person's workspace when the computer pauses and starts again.
 - Lets Codex reach the AI gateway only while the current chat turn holds a valid short-lived pass.
 - Separates the assistant, file tools and desktop into different Linux users.
+  Protects temporary desktop files before those users start.
 - Stops executors through a root-only socket. Keeps executor admission closed after
   a stop, including when the supervisor restarts. Browser quietness is still unproven,
   so taking control remains disabled.

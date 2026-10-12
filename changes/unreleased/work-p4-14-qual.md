@@ -1,0 +1,1 @@
+Computer desktops restart safely with protected temporary files and checked display locks. Image publication now requires every private-turn check to pass, apart from the approved dev-box host risks, and interrupted builds close their registry listener.
