@@ -113,6 +113,8 @@ const app = buildServer(authConfig, {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
     keyDirectory: process.env['MEMORY_KEY_DIRECTORY']!.trim(),
+    ...(process.env['MEMORY_MCP_GENERATION'] ?
+      { dispatchGeneration: process.env['MEMORY_MCP_GENERATION'] } : {}),
     ...(chat ? { chat } : {}),
     ...(budget ? { identity: { jwks: budget.tokens.jwks,
       issuer: process.env['TOKEN_ISSUER']! } } : {}),

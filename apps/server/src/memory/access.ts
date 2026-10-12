@@ -8,6 +8,7 @@ import type { ModelAccessOptions } from '../models/access-routes.ts';
 
 export type MemoryOptions = ModelAccessOptions & {
   keyDirectory?: string;
+  dispatchGeneration?: string;
   db: ModelAccessOptions['db'] & Partial<Pick<Db, 'lock'>>;
   chat?: import('../chat/access.ts').ChatOptions;
   identity?: { jwks: import('jose').JSONWebKeySet; issuer: string };

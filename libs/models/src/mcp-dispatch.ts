@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
+import type { MemoryDispatch } from './memory-context.ts';
 import type { mcpPolicy } from './mcp.ts';
 import { envelope } from './actor.ts';
 
@@ -18,7 +19,13 @@ export interface McpDispatchOptions {
   requireLeader: () => Promise<void>;
 }
 type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
+interface MemorySend {
+  method: string;
+  sign: (dispatch: MemoryDispatch, expiresAt: number) => Promise<string>;
+}
 interface Permit {
+  memory?: MemorySend;
+  memoryBinding: MemoryDispatch;
   requestId: string;
   silo: string;
   route: Route;
@@ -55,8 +62,10 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
   }
 
   function requireContract(policy: Policy) {
-    // Refuse hosted sends here. Built-in memory reads the same policy with its own checks.
-    if (policy.serverKind === 'hosted') {
+    // Keep built-in memory on this path. Other hosted images still need image admission.
+    const builtInMemory = policy.policy.serverId === 'memory' &&
+      policy.policy.connectionId === 'server';
+    if (policy.serverKind === 'hosted' && !builtInMemory) {
       throw new Error('Hosted image admission unavailable');
     }
     return routeFor(policy.policy.serverId!, policy.policy.connectionId!);
@@ -69,7 +78,7 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
   }
 
   function issue(policy: Policy, body: string, requestId: string,
-    confirmAccess: () => Promise<void>, accessDeadline: number) {
+    confirmAccess: () => Promise<void>, accessDeadline: number, memory?: MemorySend) {
     const route = requireContract(policy);
     if (policy.dispatchBinding !== digest(JSON.stringify(route))) {
       throw new Error('MCP backend changed during the decision');
@@ -93,16 +102,20 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
     const signature = signatureHash.digest('base64url');
     const token = `${encoded}.${signature}`;
     // Keep permits only in this active process. A restart cannot revive an old call.
-    pending.set(token, { ...binding, confirmAccess, accessDeadline });
+    const memoryBinding = { permitDigest: digest(token), backendGeneration: route.generation!,
+      schemaDigest: binding.schemaDigest, policyRevision: binding.policyRevision };
+    pending.set(token, { ...binding, confirmAccess, accessDeadline, memoryBinding,
+      ...(memory ? { memory } : {}) });
     return token;
   }
 
   function setPermit(res: ServerResponse, outcome: string, policy: Policy, body: string,
-    requestId: string, confirmAccess: () => Promise<void>, accessDeadline: number) {
+    requestId: string, confirmAccess: () => Promise<void>, accessDeadline: number,
+    memory?: MemorySend) {
     if (outcome !== 'allow') {
       return;
     }
-    const permit = issue(policy, body, requestId, confirmAccess, accessDeadline);
+    const permit = issue(policy, body, requestId, confirmAccess, accessDeadline, memory);
     res.setHeader('x-opencrane-mcp-permit', permit);
   }
 
@@ -128,11 +141,15 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
     const position = await store.head(`mcp-${route.serverId}`, deadline);
     await requireOnlyAdmissions(store, silo, `mcp-${route.serverId}`,
       permit.catalogueSequence, position, deadline);
+    let memoryContext: string | undefined;
+    if (permit.memory) {
+      memoryContext = await permit.memory.sign(permit.memoryBinding, permit.expiresAt);
+    }
     await options!.requireLeader();
     await admit(req, res, permit, route, position, deadline);
     requireCurrentRoute(permit);
     requireFreshDispatch(req, res, permit);
-    forward(route, permit, body, res);
+    forward(route, permit, body, res, memoryContext);
   }
 
   function requireCurrentRoute(permit: Permit) {
@@ -198,13 +215,17 @@ function requireFreshDispatch(req: IncomingMessage, res: ServerResponse,
   }
 }
 
-function forward(route: Route, permit: Permit, body: string, res: ServerResponse) {
+function forward(route: Route, permit: Permit, body: string, res: ServerResponse,
+  memoryContext?: string) {
   const destination = new URL(`http://${route.upstream}`);
+  const method = permit.memory?.method ?? 'tools/call';
+  const toolName = method === 'tools/call' ? permit.toolName : '';
   const headers = { 'content-type': 'application/json', accept: 'application/json',
-    'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call',
-    'mcp-name': permit.toolName, 'x-request-id': permit.requestId,
+    'mcp-protocol-version': '2026-07-28', 'mcp-method': method,
+    'mcp-name': toolName, 'x-request-id': permit.requestId,
     'x-opencrane-mcp-revision': permit.schemaDigest,
-    'x-opencrane-mcp-generation': route.generation! };
+    'x-opencrane-mcp-generation': route.generation!,
+    ...(memoryContext ? { 'x-memory-context': memoryContext } : {}) };
   const transport = { method: 'POST', headers };
   destination.pathname = `/mcp/${route.serverId}/${route.connectionId}`;
   function receive(upstream: IncomingMessage) {

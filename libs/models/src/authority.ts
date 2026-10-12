@@ -270,7 +270,7 @@ function changesChatAccess(subject: string, type: string) {
 /** Keep other callers strict; only decisions can ignore unrelated access events. */
 export async function decisionAuthorityFence(store: EventStore, started: number,
   subjects: string[], requesterId: string, assistantId: string,
-  grantHistory?: DecisionGrants) {
+  grantHistory?: DecisionGrants, callerDeadline = Infinity) {
   const grantees = new Set([`member-${requesterId}`, `assistant-${assistantId}`]);
   const earlierPositions = new Map<string, number>();
   if (grantHistory) {
@@ -288,7 +288,7 @@ export async function decisionAuthorityFence(store: EventStore, started: number,
     }
   }
   const authority = await createAuthorityFence(
-    store, started, subjects, Infinity, checkDecisionChanges, earlierPositions);
+    store, started, subjects, callerDeadline, checkDecisionChanges, earlierPositions);
   const includeSubjects = authority.fresh.include;
   function include(...subjects: string[]) {
     includeSubjects(...subjects);

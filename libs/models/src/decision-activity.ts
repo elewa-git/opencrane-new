@@ -2,7 +2,7 @@ import type { EventEnvelope } from '@opencrane/events';
 import { readStreamSummary, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { computerSummary, type ComputerSummary } from '@opencrane/auth';
 import { closesDecisionTurn, invalidatesApproval } from './approvals.ts';
-import { outputReportTypes } from './authority.ts';
+import { outputReportTypes, type decisionAuthorityFence } from './authority.ts';
 import { data } from './state.ts';
 import { managedProviderCallsEnabled } from './provider-turns.ts';
 import { decisionChatSummary } from './decision-summary.ts';
@@ -11,6 +11,19 @@ const harmlessConversationTypes = [
   'file.uploaded', 'file.rejected', 'file.delivered', 'message.posted', 'agent.turn_started',
   ...outputReportTypes,
 ];
+
+export async function confirmDecisionAccess(activity: Awaited<ReturnType<typeof decisionActivity>>,
+  authority: Awaited<ReturnType<typeof decisionAuthorityFence>>, needsApproval: boolean) {
+  while (true) {
+    const activityChanged = await activity.confirm(authority.deadline, needsApproval);
+    const authorityChanged = await authority();
+    if (!activityChanged && !authorityChanged) {
+      return;
+    }
+    // Recheck both because access or turn state can change while harmless events are read.
+    // Keep the original deadline so repeated activity cannot extend the check.
+  }
+}
 
 export async function decisionActivity(store: EventStore, silo: string, assistantId: string,
   conversationId: string, turnId: string, deadline: number) {

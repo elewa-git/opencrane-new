@@ -388,14 +388,11 @@ The unchanged authority tests keep their original deadlines and volume limits.
 Waiting approvals retain their stable policy revision and can obtain a fresh permit.
 The final check reads no complete catalogue or conversation history. Only reviewed transport headers leave this
 process; permits and caller credentials do not. A substituted backend or generation fails.
-The built-in memory route retains its separate signed-context checks at its backend.
-The shared policy reader returns the registration kind without refusing hosted memory.
-The ordinary sender checks that kind before binding or issuing a pass and refuses hosted
-images until image admission exists. Memory previews, discovery, recall and writes keep
-their existing policy, grant and backend checks. They create no shared send admission.
-Memory routes retain the original header replacement. Their signed memory context
-replaces caller credentials. Ordinary routes add the send pass. Reading a missing pass during
-memory header replacement makes the gateway retain caller credentials, so it is excluded.
+Built-in memory uses the same pass, route binding and conditional admission as other MCPs.
+The dispatcher signs `x-memory-context` for that pass and sends it only to the backend.
+The gateway strips caller credentials and forwards only the one-use pass to dispatch.
+Discovery and listing use the recall policy and preserve their original protocol method.
+Other hosted images still require image admission and remain refused.
 Approvals include `dispatchBinding`, the route hash, in their id. A replaced backend or
 generation cannot use an old approval, including a late approval decision.
 Hosted image admission, recorded lifecycle generations, configuration acknowledgement and
@@ -404,11 +401,6 @@ provide no image admission or installer. The P3-14 shared send gate is not merge
 permit check adds no spending gate and can move behind it later.
 
 ### Open items
-
-The memory MCP route already bypasses this sender on main. Its signed context can be
-reused within its lifetime and has no backend generation or catalogue revision. A
-follow-up PR moves memory MCP onto the shared dispatch check and retains its scope,
-access and write checks. This PR leaves that route's runtime behaviour unchanged.
 
 Model and MCP admission share `currentAuthority`: current member/role, team
 membership, assistant activation, conversation participation, requester and
@@ -966,11 +958,18 @@ event identity checks.
 
 ## Memory recall capabilities (P4-12 PR 3a)
 
-Only `/mcp/memory/server` receives signed `x-memory-context` after ext_authz checks
+Only `/mcp/memory/server` receives signed `x-memory-context` from the shared dispatcher.
+Before issuing a pass, ext_authz checks
 live turns, requester/assistant `mcp_server` grants, and Allow recall policy.
 Recall also requires current `memory_read` grants for its selected scope.
 Claims bind silo, requester, assistant, computer/generation, conversation, turn, thread,
 operation, selected scope, private content class, call/decision ids, body digest and event position.
+`dispatch` binds the pass SHA-256 digest, backend generation, schema digest and policy revision.
+The backend compares the signed revision with current policy and the generation with its
+configured instance. It consumes each pass digest once, before any asynchronous rights check.
+Its bounded process-local cache retains consumed digests until expiry. Contexts issued before
+that backend started are refused too. The dispatcher also consumes every pass before checking
+it, including refused attempts. Neither process retries a consumed call.
 The server verifies ES256, issuer, audience, expiry within two seconds and body/thread binding,
 then rechecks live rights and policy. Only an explicitly recorded `restricted` turn is allowed.
 Legacy starts without a mode, `memory_free` starts and shared-only contexts are refused.
@@ -1115,6 +1114,9 @@ installations keep working without a remember policy.
 `memoryRights` returns a final check that reads saved grants, current permissions and tool
 policy again. It reuses the conversation history already read. The server calls it before
 the conditional append, with the capability's original deadline.
+It uses the dispatcher's `confirmDecisionAccess` loop. Access and later activity
+checks repeat until both see no new events. A harmless admission cannot hide a
+revocation saved while it is read. The original deadline still ends the check.
 It watches small access streams and checks later turn activity separately. It does not add
 conversation or memory-content streams to the access snapshot. The server's signed recalled
 references and command checks are described in `apps/server/README.robot.md`.

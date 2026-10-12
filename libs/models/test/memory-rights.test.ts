@@ -8,15 +8,18 @@ import { memoryRights } from '../src/memory-context.ts';
 import { parseMcpCall, parseMemoryRequest } from '../src/mcp.ts';
 import { data } from '../src/state.ts';
 import { randomUUID } from 'node:crypto';
-import { authorityFence, currentAuthority } from '../src/authority.ts';
+import { decisionAuthorityFence, currentAuthority } from '../src/authority.ts';
 import { decisionActivity } from '../src/decision-activity.ts';
 import { mcpPolicy } from '../src/mcp.ts';
 
-function authorityModule() {
-  return { authorityFence: vi.fn(), currentAuthority: vi.fn() };
+async function authorityModule() {
+  const actual = await vi.importActual<typeof import('../src/authority.ts')>('../src/authority.ts');
+  return { ...actual, decisionAuthorityFence: vi.fn(), currentAuthority: vi.fn() };
 }
-function activityModule() {
-  return { decisionActivity: vi.fn() };
+async function activityModule() {
+  const actual = await vi.importActual<typeof import('../src/decision-activity.ts')>(
+    '../src/decision-activity.ts');
+  return { ...actual, decisionActivity: vi.fn() };
 }
 async function mcpModule() {
   const actual = await vi.importActual<typeof import('../src/mcp.ts')>('../src/mcp.ts');
@@ -66,9 +69,6 @@ async function* readStream(subject: string) {
 function confirm() {
   return Promise.resolve(false);
 }
-function confirmAccess() {
-  return Promise.resolve();
-}
 function prepare() {
   vi.restoreAllMocks();
   vi.resetAllMocks();
@@ -90,9 +90,9 @@ function prepare() {
       requesterId: 'alice', conversationId: 'conversation', threadId: 'thread',
       executionMode: 'restricted' }), firstClose: undefined },
     managedCallsEnabled: false, confirm };
-  const fresh = Object.assign(confirmAccess, { head: 10, deadline: performance.now() + 2000,
+  const fresh = Object.assign(confirm, { head: 10, deadline: performance.now() + 2000,
     include: vi.fn() });
-  vi.mocked(authorityFence).mockResolvedValue(fresh);
+  vi.mocked(decisionAuthorityFence).mockResolvedValue(fresh);
   vi.mocked(currentAuthority).mockResolvedValue('test-authority');
   vi.mocked(decisionActivity).mockResolvedValue(activity);
   const policyArgs = parseMcpCall(JSON.stringify(body)).args;
@@ -110,10 +110,12 @@ async function allowed() {
 }
 it('accepts matching saved access records', allowed);
 const assistantChanges = [
-  { field: 'silo', value: 'other' }, { field: 'assistantId', value: 'other' },
-  { field: 'ownerId', value: 'bob' }, { field: 'sequence', value: 11 },
+  { field: 'silo', value: 'other', message: 'Memory assistant refused' },
+  { field: 'assistantId', value: 'other', message: 'Memory assistant refused' },
+  { field: 'ownerId', value: 'bob', message: 'Memory assistant audience refused' },
+  { field: 'sequence', value: 11, message: 'Memory assistant refused' },
 ];
-async function refusesAssistant({ field, value }: { field: string; value: unknown }) {
+async function refusesAssistant({ field, value, message }: typeof assistantChanges[number]) {
   const saved = rows[0]!;
   if (field === 'silo') {
     saved.event.silo = String(value);
@@ -123,7 +125,7 @@ async function refusesAssistant({ field, value }: { field: string; value: unknow
     saved.event.data = { ...data(saved.event), [field]: value };
   }
   await expect(memoryRights(nats.store, binding, claims, parsed, performance.now() + 2000))
-    .rejects.toThrow();
+    .rejects.toThrow(message);
 }
 it.each(assistantChanges)('checks the assistant record independently: $field', refusesAssistant);
 

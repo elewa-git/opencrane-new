@@ -9,9 +9,9 @@ import { approvalDecision, closesDecisionTurn, type ReviewKeys } from './approva
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
-import { decisionActivity } from './decision-activity.ts';
+import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall } from './mcp.ts';
-import { MemoryPersonScopeOnly, prepareMemoryContext } from './memory-context.ts';
+import { MemoryPersonScopeOnly, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
@@ -300,12 +300,7 @@ export async function startDecision(
         subjects, turnToken.requester, computer.assistant, grants);
       let needsApproval = false;
       async function confirmAccess() {
-        while (true) {
-          const activityChanged = await activity.confirm(authority.deadline, needsApproval);
-          const authorityChanged = await authority();
-          if (!activityChanged && !authorityChanged) return;
-          // Recheck both because a turn can stop while unrelated grants are being read.
-        }
+        await confirmDecisionAccess(activity, authority, needsApproval);
       }
       async function confirmDecision() {
         await confirmAccess();
@@ -323,15 +318,15 @@ export async function startDecision(
           assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
           conversation: turnToken.conversation, turn: turnToken.turn, thread: turnToken.thread };
         const memory = await prepareMemoryContext(actor.store, binding, claims, raw,
-          req.headers, decisionDeadline, requestId);
+          req.headers, decisionDeadline, requestId, fresh.include);
+        const policy = mcpSender.bindPolicy(memory.policy);
         contextDigest = memory.contextDigest;
         callId = memory.callId;
         await audit('allow', 'memory_read_allowed');
         await fresh();
-        const remaining = decisionDeadline - performance.now();
-        const capability = await identity.memory.memoryContext(memory.payload, Date.now() + remaining);
-        await fresh();
-        res.setHeader('x-memory-context', capability);
+        const memorySend = prepareMemorySend(memory.payload, identity.memory.memoryContext);
+        mcpSender.setPermit(res, 'allow', policy, raw, requestId, fresh,
+          fresh.deadline, memorySend);
         res.setHeader('x-request-id', requestId);
         res.end('{}');
       }

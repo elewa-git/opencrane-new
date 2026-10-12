@@ -1598,7 +1598,13 @@ Private remember calls are refused even with plausible shared source references.
 Shared-only execution remains unavailable, and native turns receive no memory tools.
 
 The models process needs `TOKEN_SIGNING_KEY_FILE`. `MODEL_MCP_ROUTES` must include
-`{ "serverId": "memory", "connectionId": "server", "upstream": "<server-host>:<port>" }`.
+`{ "serverId": "memory", "connectionId": "server", "upstream": "<server-host>:<port>",
+"generation": "<instance-id>", "revisionHeader": "x-opencrane-mcp-revision" }`.
+`MEMORY_MCP_GENERATION` on the memory backend must match this generation. It has no default;
+missing configuration refuses calls. Use a unique value for each backend process and route
+to that exact process, never a Service alias shared by different instances. Replacement
+processes need a new generation and route configuration. The backend also refuses contexts
+issued before it started, so restarting cannot restore a captured context.
 The server uses its existing token issuer's public keys and `MEMORY_KEY_DIRECTORY` settings.
 Deployment keeps the backend behind the gateway; unsigned direct requests are refused.
 
@@ -1612,7 +1618,12 @@ The successful fixture records a `restricted` execution mode. A legacy start wit
 a mode is refused, as is `memory_free`. Both the requester and assistant need
 recorded grants of the right identity kind and current OpenFGA permission.
 The fixture warms service clients. Fresh-install journeys and backend network
-isolation remain NOT RUN. A valid signed context may be replayed during its short lifetime.
+isolation remain NOT RUN. Every memory request uses the shared one-use dispatch pass.
+A Block or hold saved before admission refuses forwarding. The signed context binds that
+pass, the backend generation and the reviewed catalogue; the backend refuses reuse.
+Concurrent admission records do not change tool policy or refuse another memory call.
+The startup regression expects three shared admissions: discovery, listing and recall.
+Its former zero-admission expectation described the removed bypass.
 
 ## Repeating a provider-bound turn
 

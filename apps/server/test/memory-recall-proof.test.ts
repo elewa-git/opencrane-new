@@ -8,6 +8,8 @@ const context: MemoryContext = { silo: 'test', requester: 'alice', assistant: 'a
   computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
   thread: 'thread', operation: 'remember', scopes: ['a'.repeat(64)], contentAccess: 'private',
   bodyDigest: 'b'.repeat(64), callId: 'call',
+  dispatch: { permitDigest: 'a'.repeat(64), backendGeneration: 'memory-instance',
+    schemaDigest: 'b'.repeat(64), policyRevision: 1 },
   requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 1, iat: 1, exp: 3 };
 const fact = { memoryId: 'fact', revision: 1 };
 const dependency = { scopeId: context.scopes[0]!, ...fact };

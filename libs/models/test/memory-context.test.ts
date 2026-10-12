@@ -16,6 +16,8 @@ const claims: JWTPayload = { silo: 'test', requester: 'alice', assistant: 'assis
   computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
   thread: 'thread', operation: 'recall', scopes: [scopeId], contentAccess: 'private',
   bodyDigest: parsed.bodyDigest, callId: 'call',
+  dispatch: { permitDigest: 'a'.repeat(64), backendGeneration: 'memory-instance',
+    schemaDigest: 'b'.repeat(64), policyRevision: 1 },
   requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
 let keys: Awaited<ReturnType<typeof generateKeyPair>>;
 let wrongKeys: typeof keys;
