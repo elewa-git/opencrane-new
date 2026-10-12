@@ -169,7 +169,7 @@ const maintenanceReference = z.strictObject({
 const maintenanceRecord = z.strictObject({
   scopeId: digest, nightId: digest, batchKey: digest, inputRevision: digest,
   date: z.iso.date(), bindingRevision: revision, memberId: identifier,
-  acceptedCapCents: z.literal(100), intendedAt: z.iso.datetime(), selectedAt: z.iso.datetime(),
+  acceptedCapCents: acceptedNightlyCap, intendedAt: z.iso.datetime(), selectedAt: z.iso.datetime(),
   inputRefs: z.array(maintenanceReference).max(32),
   action: z.enum(['due', 'refused', 'missed']),
   reason: z.enum(['qualification_blocked', 'window_missed', 'overlap']).nullable(),
