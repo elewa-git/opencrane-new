@@ -110,6 +110,7 @@ async function conversationAccess(options: ParticipationOptions,
   let colleagueId: string | undefined;
   let createdBy: string | undefined;
   let joinPosition = 0;
+  let joinEventId: string | undefined;
   let participantIds: string[] = [];
   let accessPosition = 0;
   if (conversationId) {
@@ -119,6 +120,7 @@ async function conversationAccess(options: ParticipationOptions,
     createdBy = created.createdBy;
     mode = created.mode;
     joinPosition = access.joinPosition;
+    joinEventId = access.joinEventId;
     participantIds = access.participantIds;
     accessPosition = access.accessPosition;
     if (created.mode === 'direct') {
@@ -129,7 +131,7 @@ async function conversationAccess(options: ParticipationOptions,
     }
     if (mode === 'agent_session') await readPrivateSession(options, memberId, conversationId);
   }
-  return { mode, colleagueId, joinPosition, participantIds, accessPosition, createdBy };
+  return { mode, colleagueId, joinPosition, joinEventId, participantIds, accessPosition, createdBy };
 }
 
 type ParticipationOptions = Pick<ChatOptions, 'store' | 'db' | 'silo' | 'binding'>;

@@ -2,6 +2,12 @@
 
 For people, read [README.md](README.md) first.
 
+`chatStateCommandSchema` strictly checks archive/read command ids and join ids.
+Archive carries a boolean and non-negative expected position. Read carries a positive
+safe position and event id. Conversation list rows optionally include `joinEventId`,
+`archived`, `archivePosition`, `throughPosition` and `throughEventId`; old replies
+still parse. The existing `chatChangeSchema` separates append and projection status.
+
 Protocol defines shared browser/server message schemas so the two sides cannot drift
 through separate declarations. It owns wire shapes, not authentication, persistence
 or event business rules. Both [web](../../apps/web/README.md) and

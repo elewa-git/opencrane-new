@@ -15,7 +15,7 @@ flowchart LR
   server -->|records changes, instance stops, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, invitations, bounded visible chat lists, closing records, join times, facts, models and tools| postgres
+  server -->|reads members, invitations, visible chat lists, own archive and read choices, facts, models and tools| postgres
   server -->|sends turns, files, stops, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -253,6 +253,10 @@ unavailable.
     cannot create extra pages. Ordinary late joiners see their join time, including in
     personal sessions. Group lists also show current participants without earlier
     creation details. The website loads the first page; paging controls are planned.
+13. **A person archives a chat or marks messages read.** The server saves only that
+    person's choice. Other devices see the same choice after the read tables catch up.
+    A lost reply can be checked with the original request id. Leaving and joining
+    again starts fresh choices. These actions start no assistant work or spending.
 
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.

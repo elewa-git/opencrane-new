@@ -27,6 +27,7 @@ export {
 export { computerRowSchema, computersResponseSchema, type ComputerRow, type ComputersResponse } from './computers.ts';
 export {
   sessionSlug,
+  chatStateCommandSchema,
   chatSubscribeSchema,
   chatMessageSchema,
   chatRowSchema,

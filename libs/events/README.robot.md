@@ -226,7 +226,8 @@ The registry-wide security rule already permits digest fields; no name exception
 `conversation.archive_set` and `conversation.read_advanced` use `chat-state-<memberId>`.
 Strict schemas require conversation/member/join ids and an archive boolean or positive safe
 read position plus event id. Parsing requires the matching human principal and command id.
-These events have no reactions and do not grant access. Commands and screens come later.
+These events have no reactions and do not grant access. The server exposes commands;
+screens come later.
 
 ## Shared child records
 

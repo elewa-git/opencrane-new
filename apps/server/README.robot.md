@@ -2,6 +2,36 @@
 
 For people, read [README.md](README.md) first.
 
+## Conversation preferences (P4-6 PR 3; Part of #88)
+
+`POST /api/conversations/:conversationId/state` accepts `chatStateCommandSchema`:
+`{id, action: archive, archived, expectedArchivePosition, joinEventId}` or
+`{id, action: read, throughPosition, throughEventId, joinEventId}`. Only the caller's
+currently readable conversations qualify, including closed chats. Writes require
+the member guard and configured Origin. They need no spending permission.
+Each command appends once to `chat-state-<memberId>`. Archive commands reject a
+stale opposite choice. Read commands verify the submitted event against the saved
+log and available history; the existing projection keeps the maximum across devices.
+Commands load incremental summaries before the two-second access check. Only member,
+participation and relevant assistant/team streams enter that check. A changed member
+preference stream allows at most three append attempts, each with fresh access checks.
+
+Retries verify the stored identity, data and original input hash, including archive
+expectations. Event ids are hashes of silo/member/command ids; `correlation.request`
+holds the input hash. Neither contains content. Changed same-id inputs return 409.
+`GET /api/conversations/:conversationId/changes/:commandId` checks the caller's
+preference stream before the shared feed, point-reads the saved event and returns
+`projection.content: applying|current` separately. Missing results remain unknown.
+Old joins and other people's choices are unavailable. List rows include `joinEventId`,
+`archived`, `archivePosition`, `throughPosition` and optional `throughEventId`.
+Invalid bodies return 400, denied access 403, conflicts 409 and unavailable writes 503.
+All replies use no-store. Reads, archive and read markers start no turns or computer
+activity and reserve no money. Screens and fresh-install qualification: NOT RUN.
+
+`test/direct-chat-http.test.ts` covers lost replies, changed and concurrent retries,
+stale opposite choices, unrelated stream changes, read verification and maximum,
+rebuild, re-addition, two server instances and closed personal sessions.
+
 ## Welcome survey HTTP (P4-18 row 4; Part of #101)
 
 `GET /api/onboarding` reads exact personal-stream history through an incremental
