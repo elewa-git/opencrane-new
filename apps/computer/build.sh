@@ -27,8 +27,10 @@ cleanup() {
 
 # Wait for long commands asynchronously so shell signals interrupt the wait immediately.
 run() {
-  "$@" &
+  exec 3<&0
+  "$@" <&3 &
   command_pid=$!
+  exec 3<&-
   wait "$command_pid"
   command_pid=
 }
@@ -71,15 +73,15 @@ run docker run --rm --network none \
   -v "$PWD/test:/app/test:ro" \
   --entrypoint node ocn-computer-runtime \
   --experimental-strip-types /app/test/codex-mcp-wire.mjs > .state/codex-mcp-wire.json
-docker run --rm -i \
+run docker run --rm -i \
   -v "$PWD/src:/expected/src:ro" \
   -v "$PWD/../../libs/models/src/routing.ts:/expected/routing.ts:ro" \
   -v "$PWD/../../libs/events/src/tool-call.ts:/expected/tool-call.ts:ro" \
   --entrypoint /usr/bin/python3 ocn-computer-runtime - < test/contents.py
 run .state/syft scan docker:ocn-computer-runtime -o syft-json=.state/sbom.syft.json -o spdx-json=.state/sbom.spdx.json
-docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime - notices < collect-licences.py > .state/licence-evidence.json
-docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime -c "$(cat test/notice-completeness.py)" < .state/licence-evidence.json
-python3 check-licences.py .state/sbom.syft.json .state/osi.json .state/licences.json .state/licence-evidence.json
+run docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime - notices < collect-licences.py > .state/licence-evidence.json
+run docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime -c "$(cat test/notice-completeness.py)" < .state/licence-evidence.json
+run python3 check-licences.py .state/sbom.syft.json .state/osi.json .state/licences.json .state/licence-evidence.json
 run node test/private-capabilities.mjs
 # Qualify the tracked manifest before moving the release tag.
 docker tag ocn-computer-runtime "$push_registry"/opencrane/computer:qualification
