@@ -10,6 +10,7 @@ import type { MemberAccessRow } from '@opencrane/protocol';
 import type { GroupOptions } from './group-routes.ts';
 import { retainedContent } from './retained-content.ts';
 
+const grantCategories = new Set(['team', 'assistant', 'grant']);
 const publicResources = new Set(['model', 'mcp_server', 'mcp_tool', 'shared_desktop']);
 type Assistant = ReturnType<typeof assistantCreatedDataSchema.parse>;
 type Grant = ReturnType<typeof grantGivenDataSchema.parse>;
@@ -22,12 +23,16 @@ async function recordedInputs(options: GroupOptions, memberId: string, deadline:
   const indexedPositions = await inventoryCategoryPositions(options.db, options.silo);
   const categoryPositions: Record<string, number> = {};
   let current = indexedPositions.backfilled;
+  let grantInputsCurrent = indexedPositions.backfilled;
   for (const category of inventoryCategories) {
     const subject = `${category}-*`;
     const position = await options.store.head(subject, deadline);
     categoryPositions[subject] = position;
     if (position !== (indexedPositions.positions[subject] ?? 0)) {
       current = false;
+      if (grantCategories.has(category)) {
+        grantInputsCurrent = false;
+      }
     }
   }
   const indexed = await readInventoryReferences(options.db, options.silo, memberId);
@@ -54,8 +59,8 @@ async function recordedInputs(options: GroupOptions, memberId: string, deadline:
     return first.sequence - second.sequence;
   }
   rows.sort(eventOrder);
-  return { rows, positions, categoryPositions, current, withinLimits: indexed.complete,
-    generation: indexedPositions.generation };
+  return { rows, positions, categoryPositions, current, grantInputsCurrent,
+    withinLimits: indexed.complete, generation: indexedPositions.generation };
 }
 
 function groupFacts(rows: StoredEvent[], memberId: string) {
@@ -189,8 +194,12 @@ async function accessRows(options: GroupOptions, memberId: string, inputs: Store
     }
     const source: MemberAccessRow['sources'][number] = {
       kind: 'direct', eventId: record.event.id, sequence: record.sequence,
+      recordedAt: record.event.time,
       granteeKind: grant.granteeKind, granteeId: grant.granteeId,
     };
+    if (grant.granteeKind === 'assistant') {
+      source.kind = 'assistant';
+    }
     if (grouped) {
       source.kind = 'group';
       source.groupId = grant.granteeId;
@@ -223,7 +232,7 @@ async function addSharedAssistants(options: GroupOptions, memberId: string, inpu
     }
     const source = { kind: 'group' as const, groupId: assistant.ownerId,
       groupName: groups.names.get(assistant.ownerId), eventId: record.event.id,
-      sequence: record.sequence };
+      sequence: record.sequence, recordedAt: record.event.time };
     const eligibility = { person, assistants: [], availability: 'unavailable' as const };
     rows.set(`assistant/${assistant.assistantId}`, { resourceType: 'assistant',
       resourceId: assistant.assistantId, label: assistant.name, relation: 'acts_for',
@@ -240,6 +249,33 @@ function unavailableIndexSections(inputs: { current: boolean; withinLimits: bool
     unavailable.add('inventory_limits');
   }
   return unavailable;
+}
+
+async function completeGrantInputs(options: GroupOptions,
+  inputs: Awaited<ReturnType<typeof recordedInputs>>, unavailable: Set<string>, deadline: number) {
+  if (!inputs.grantInputsCurrent || !inputs.withinLimits) {
+    return false;
+  }
+  const indexed = await inventoryIndexState(options.db);
+  if (!indexed.backfilled || indexed.generation !== inputs.generation) {
+    return false;
+  }
+  for (const category of grantCategories) {
+    const subject = `${category}-*`;
+    const position = await options.store.head(subject, deadline);
+    if (position !== inputs.categoryPositions[subject]) {
+      return false;
+    }
+  }
+  const grantSections = [
+    'grants', 'group_membership', 'unsupported_grants', 'unsupported_ownership',
+  ];
+  for (const section of grantSections) {
+    if (unavailable.has(section)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export async function memberInventory(options: GroupOptions, memberId: string, deadline: number) {
@@ -289,7 +325,13 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   const hash = createHash('sha256');
   const reviewedInputs = [2, inputs.positions, inputs.categoryPositions, inputs.generation, content];
   hash.update(JSON.stringify(reviewedInputs));
-  return { rows, complete: unavailable.size === 0, unavailableSections: Array.from(unavailable),
+  function assistantId(assistant: Assistant) {
+    return assistant.assistantId;
+  }
+  const assistantIds = assistants.map(assistantId);
+  const grantInputsComplete = await completeGrantInputs(options, inputs, unavailable, deadline);
+  return { rows, assistantIds, grantInputsComplete, complete: unavailable.size === 0,
+    unavailableSections: Array.from(unavailable),
     reviewRevision: hash.digest('hex'), checkCurrent, ownedSharedWork: [],
     personalConnections, routines,
     personalComputer: content.computers, retainedHistory: content.history };

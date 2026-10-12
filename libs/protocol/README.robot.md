@@ -169,3 +169,19 @@ next page of visible matches. Empty successful pages have a null cursor.
 Group rows may omit `createdBy`: ordinary late joiners receive their join time and
 current participants, without the original creator or group snapshot. See the
 [server list contract](../../apps/server/README.robot.md#chat-ui-reads-and-stop).
+
+## Tool access explanation messages
+
+`toolAccessExplanationSchema` checks the safe explanation reply. MCP member access
+rows can carry up to 50 `toolExplanations` and a nullable `toolExplanationTotal`.
+A null total means the full count could not be checked. Grant sources distinguish `direct`, `group`
+and `assistant`. Profile history absence and IAM failure remain separate fields.
+Publication and availability stay unavailable until the missing checks are built.
+See the [API contract](../../docs/api/members.md#tool-access-explanations).
+
+The tool access route accepts either a full permitted explanation or a strict
+missing-grant reply. The latter contains request ids, check time, permission results,
+permission reasons, `complete: false` and `availability: unavailable`. It contains
+no policy, catalogue, account, source or review-revision fields. Refused and failed
+reads use the route's ordinary status replies. Member inventory rows retain their
+admin-only tool explanation shape.

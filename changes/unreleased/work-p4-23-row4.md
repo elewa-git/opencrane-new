@@ -1,0 +1,2 @@
+- Explain a member's tool access from direct, group and assistant grants, with separate account and permission-check reasons. Add bounded tool explanations to admin member access reads. Availability stays closed while publication acknowledgement and usable account selection are unfinished.
+- Hide private tool rules from members without server access. Give guessed and inaccessible servers and tools the same refusal. Omit policy details from missing-grant explanations, and report unavailable when incomplete grant history cannot establish absence.

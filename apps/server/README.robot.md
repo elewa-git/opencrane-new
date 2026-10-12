@@ -2186,3 +2186,31 @@ The [library contract](../../libs/models/README.robot.md#per-tool-policy-p3-1)
 describes the required backend preconditions. Hosted startup and image admission remain
 unavailable; a configured route does not qualify either. The built-in memory backend
 continues to check its signed context. No new budget gate or database business rule is added.
+
+## Tool access explanations
+
+The [API contract](../../docs/api/members.md#tool-access-explanations) describes
+the own-member and admin read, safe fields, strict inputs and bounded member
+availability extension. It reuses the landed exact inventory inputs from #344.
+Publication acknowledgement and usable profile selection remain unfinished, so
+availability stays closed. Company account metadata and screens are later work.
+
+The tests were committed before implementation. They reproduced missing route
+and overflow handling. Tests use disposable NATS, PostgreSQL and OpenFGA.
+
+Tool explanation reads check current Owner/Admin access or the viewer's saved,
+checked requester grant before loading tool rules. Inaccessible and unknown servers
+and tools return the same 403 body. Permitted missing-grant replies omit all policy
+fields. When incomplete inventory cannot prove grant absence, the read returns
+503 rather than claiming a grant is missing. A failed permission check without
+a server row also returns 503. Admin detail can still distinguish an IAM
+outage when the recorded server grant row is available.
+
+The regression tests reproduce private-server probing and grants applied in OpenFGA
+while the members projection is paused. They also check unknown tools, permitted
+member and admin detail, permission-only replies and failed visibility checks.
+
+Grant absence uses a separate completeness result for the group, assistant and grant
+inputs, including permission receipts and a final check of those stream positions.
+Pending chat or computer tables do not turn a checked grant absence into a failed
+read. The ordinary departure completeness checks stay in place.

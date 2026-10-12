@@ -4,6 +4,7 @@ import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { currentMembership, readActiveMember, MemberAccessRefused } from '@opencrane/models';
 import { memberHeaderSchema, memberPageQuerySchema, memberDetailSchema,
   memberDirectorySchema } from '@opencrane/protocol';
+import { registerToolExplanation } from '../integrations/explanation-routes.ts';
 import { registerMemberInventory } from './inventory-routes.ts';
 import { memberCounts } from './read-counts.ts';
 import type { GroupOptions } from './group-routes.ts';
@@ -20,6 +21,7 @@ class InvalidMemberRequest extends Error {
 export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
   registerMemberInventory(app, config, options);
+  registerToolExplanation(app, config, options);
   app.get('/api/members', handler);
   app.get('/api/members/:memberId', handler);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
