@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { privateCodexLaunch } from '../src/private-codex.ts';
 
-function launchesThePinnedCodexBinaryDirectly() {
+function launchesPinnedCodexWithDebuggingDisabled() {
   const launch = privateCodexLaunch('/home/private/turn-4', 'caller-token');
   const binary = '/spike/node_modules/@openai/codex-linux-x64/vendor/'
     + 'x86_64-unknown-linux-musl/bin/codex';
@@ -13,6 +13,8 @@ function launchesThePinnedCodexBinaryDirectly() {
     '--clear-groups',
     '--no-new-privs',
     '--',
+    '/usr/local/bin/node',
+    '--disable-sigusr1',
     binary,
     'app-server',
     '--stdio',
@@ -33,4 +35,5 @@ function launchesThePinnedCodexBinaryDirectly() {
   expect(launch.options.env['PROXY_CALLER_TOKEN']).toBe('caller-token');
 }
 
-it('starts the pinned Codex process without its parent launcher', launchesThePinnedCodexBinaryDirectly);
+it('disables Node debugging before starting the pinned Codex process',
+  launchesPinnedCodexWithDebuggingDisabled);
