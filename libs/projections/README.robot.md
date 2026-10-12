@@ -585,4 +585,3 @@ Logs are on the builder host: `/tmp/p4-13-merged-lint.log`,
 `/tmp/p4-13-merged-typecheck.log`, `/tmp/p4-13-merged-events.log`,
 `/tmp/p4-13-merged-tests.log` and `/tmp/p4-13-merged-changed-{1,2}.log`.
 Hosted CI could not be read with the current repository token. Live qualification is NOT RUN.
-
