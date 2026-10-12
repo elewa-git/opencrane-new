@@ -1461,3 +1461,55 @@ async function hidesPreJoinCreationTime() {
 }
 it('shows the join time to ordinary late joiners instead of the original creation time',
   hidesPreJoinCreationTime);
+
+async function hidesPersonalSessionHistoryBeforeJoin() {
+  const fixture = await directFixture();
+  try {
+    const createdAt = new Date('2026-10-05T10:00:00.000Z');
+    const messageAt = new Date('2026-10-06T10:00:00.000Z');
+    const joinedAt = new Date('2026-10-09T10:00:00.000Z');
+    const conversationId = 'personal-late-time';
+    fixture.options.keys.provision('test', conversationId);
+    const created = envelope('test', `conversation-${conversationId}`, 'conversation.created', {
+      conversationId, mode: 'agent_session', createdBy: 'alice', assistantId: 'assistant',
+    }, 'created-personal-late-time', createdAt);
+    const encrypted = fixture.options.keys.encrypt('test', conversationId, 'Secret before joining');
+    const message = envelope('test', `conversation-${conversationId}`, 'message.posted', {
+      conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted,
+    }, 'message-personal-late-time', messageAt);
+    const joined = envelope('test', `participation-${conversationId}`, 'participant.added', {
+      conversationId, participantId: 'bob', addedBy: 'alice',
+    }, 'joined-personal-late-time', joinedAt);
+    await fixture.nats.seed([created, message, joined]);
+    await fixture.auth.handler.handle(created, fixture.options.db);
+    await fixture.auth.handler.handle(joined, fixture.options.db);
+    await fixture.runner.run(conversations);
+
+    const request = { url: '/api/conversations', headers: fixture.headers('bob') };
+    const response = await fixture.app.inject(request);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ rows: [{
+      conversationId, mode: 'agent_session', createdBy: 'alice', assistantId: 'assistant',
+      assistantKind: 'personal',
+      createdAt: joinedAt.toISOString(), title: 'New session', status: 'open',
+    }], nextCursor: null });
+    expect(response.body).not.toContain(createdAt.toISOString());
+    expect(response.body).not.toContain(messageAt.toISOString());
+    expect(response.body).not.toMatch(/secret|count|snippet/iu);
+    expect(await listPage(fixture, '?q=secret')).toEqual({ rows: [], nextCursor: null });
+
+    await seedListMessage(fixture, conversationId, 'Visible after joining');
+    await fixture.runner.run(conversations);
+    const later = await listPage(fixture);
+    expect(later.rows[0]).toMatchObject({ createdAt: joinedAt.toISOString(),
+      title: 'visible-after-joining' });
+    expect(JSON.stringify(later)).not.toContain(createdAt.toISOString());
+    const original = await listPage(fixture, '', 'alice');
+    expect(original.rows[0]).toMatchObject({ createdAt: createdAt.toISOString(),
+      title: 'secret-before-joining' });
+  } finally {
+    await fixture.close();
+  }
+}
+it('hides pre-join timestamps, counts and snippets from ordinary personal-session participants',
+  hidesPersonalSessionHistoryBeforeJoin);
