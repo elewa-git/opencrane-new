@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
-import { reportJournal, type BridgeReport } from '../src/report-journal.ts';
+import { reportJournal, wireReport, type BridgeReport } from '../src/report-journal.ts';
 import { turnRunner, type TurnDriver } from '../src/turn-runner.ts';
 
 function modelFixture(initialModel: unknown) {
@@ -164,3 +164,25 @@ async function doesNotRepeatAnAdmittedSharedTurnAfterRestart() {
 }
 it('fails an admitted shared turn on restart without dispatching it again',
   doesNotRepeatAnAdmittedSharedTurnAfterRestart);
+
+async function keepsSharedOutputThread() {
+  const directory = mkdtempSync(`${tmpdir()}/shared-output-thread-`);
+  try {
+    const journal = reportJournal({ journal: `${directory}/reports` });
+    const input = { id: 'turn', conversationId: 'child', assistantId: 'assistant',
+      executionMode: 'restricted' as const, contextClass: 'shared_only' as const };
+    journal.append(input, 'agent.turn_started', { threadId: 'shared-thread' });
+    const output = journal.append(input, 'agent.message_completed',
+      { messageId: 'reply', text: 'Shared answer' });
+    expect(output.threadId).toBe('shared-thread');
+    const reopened = reportJournal({ journal: `${directory}/reports` });
+    reopened.load();
+    expect(reopened.reports[1]?.threadId).toBe('shared-thread');
+    expect(wireReport(reopened.reports[1]!)).toMatchObject({
+      type: 'agent.output_lost', threadId: 'shared-thread',
+    });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+it('keeps the admitted thread on shared output and lost-output recovery', keepsSharedOutputThread);
