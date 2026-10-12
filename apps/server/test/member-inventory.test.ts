@@ -802,6 +802,23 @@ async function waitsForNewGrantInputs() {
 }
 it('does not claim missing grants while the member projection is paused', waitsForNewGrantInputs);
 
+async function permitsPendingChatHistory() {
+  const conversation = { conversationId: 'explanation-pending-chat',
+    assistantId: 'explained-helper', createdBy: 'explained' };
+  await append('conversation-explanation-pending-chat', 'conversation.created', conversation);
+  try {
+    const response = await explanationRequest('explained', 'explained', 'explained-server',
+      'ungranted-helper');
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ person: 'allowed', assistant: 'denied',
+      reasons: ['missing_assistant_grant'] });
+    expectNoPolicy(response);
+  } finally {
+    await project();
+  }
+}
+it('does not let pending chat history refuse a missing-grant explanation', permitsPendingChatHistory);
+
 async function reportsExplanationOverflow() {
   const tools = [];
   for (let index = 0; index < 51; index++) {
