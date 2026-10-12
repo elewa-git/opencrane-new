@@ -134,9 +134,13 @@ Every MCP still installs through the shared hosted path.
 
 `registerMcpInstanceWorkerRoutes(app, store, silo)` returns a trusted in-process
 `register` function. It checks an exact saved identity, start, run, workload digest,
-known Pod UID and expected sequence. It issues a random memory-only bearer for at
-most 30 seconds. Replacing a registration retires the earlier pass for that instance.
-Closing the server clears all passes. There is no HTTP registration route.
+known Pod UID and expected sequence. It issues a random bearer for at most 30 seconds.
+The trusted caller receives the bearer once; the server retains only its SHA-256 digest
+as the lease lookup key and hashes incoming credentials before lookup. A timer removes
+each expired lease. Replacing a registration retires the earlier pass for that instance,
+cancels pending append backoff and prevents further publish attempts. Append also uses
+the pass's remaining lifetime as its deadline. Closing the server cancels all timers
+and passes. There is no HTTP registration route.
 
 `POST /internal/mcp/instances/:instanceId/observations` takes `changeRef`,
 `expectedSequence`, `state` and optional safe `reason`. It requires that worker pass;

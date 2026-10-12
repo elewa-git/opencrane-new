@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks calls and holds; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves spending, instance reports and child admissions; reads saved changes| store["libs/event-store<br/>event log"]
+  models -->|saves spending, permitted instance reports and child admissions; reads saved changes| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -49,6 +49,7 @@ Hosted image refusal applies to ordinary tool sends, so memory remains available
   Check the saved stop before returning its receipt, so a concurrent retry cannot
   claim success for different details under the same request id.
 - Check a worker against one saved private tool run and record its observations.
+  Stop retrying a report when the worker pass expires or is replaced.
   Refuse old runs, different Pods and changed retries. Missing workloads stay unknown.
 - Stage private credentials in immutable Kubernetes Secrets. Check their owner, profile,
   operation, contents, unique identity (UID) and version before recovery or deletion.

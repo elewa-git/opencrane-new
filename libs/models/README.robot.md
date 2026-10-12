@@ -1445,6 +1445,8 @@ and unavailable profile/admission prerequisites. Unexpected dependency errors st
 workload digest, known Pod UID and exact revision before issuing a worker pass.
 `mcpInstanceObservation` accepts the checked registration separately from report input.
 It rechecks saved facts, rejects changed retries and saves one conditional append.
+The append deadline uses the worker pass's remaining lifetime. Replacing the worker
+cancels pending backoff and prevents later publish attempts.
 It checks the saved result before returning a receipt, including duplicate recovery.
 Reports store their checked `expectedSequence`; older observations may omit it.
 No membership or conversation streams decide this internal worker permission.

@@ -50,6 +50,9 @@ duplicate id, or `unavailable` after bounded backoff. Timeouts and server
 unavailability retry for ten seconds; its history reads share that deadline.
 An optional append `deadline` uses `performance.now()` and can shorten that limit.
 An expired deadline stops further attempts and returns unavailable.
+An optional append `signal` stops retry backoff and prevents further publishes after
+cancellation, including when cancellation arrives during a history read or failed publish.
+Cancellation returns unavailable. It cannot withdraw a publish already sent to NATS.
 It preserves the original expectation: callers reload and revalidate on
 conflict. Unexpected configuration/permission/corruption errors throw with
 the original cause. The `unavailable.cause` is internal diagnostic data;

@@ -92,7 +92,10 @@ export async function mcpInstanceObservation(store: EventStore, silo: string,
   } catch {
     throw new McpInstanceRefused('conflict', 'Observation does not match the saved run');
   }
-  const command = { event, expectedSequence: current.state.sequence, historyChecked: true as const };
+  const remainingLifetime = Math.max(0, permission.expiresAt - Date.now());
+  const deadline = performance.now() + remainingLifetime;
+  const command = { event, expectedSequence: current.state.sequence,
+    historyChecked: true as const, deadline, signal: permission.signal };
   const result = await store.append(command);
   if (result.status === 'conflict') {
     throw new McpInstanceRefused('conflict', 'Observation revision mismatch');
