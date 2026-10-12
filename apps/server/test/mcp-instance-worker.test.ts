@@ -1,9 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { jetstream, jetstreamManager } from '@nats-io/jetstream';
-import { TimeoutError } from '@nats-io/transport-node';
-import { EventStore } from '@opencrane/event-store';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { failingPublishStore, natsFixture } from '@opencrane/event-store/testing';
 import { envelope, history } from '@opencrane/models';
 import { applyMcpInstance, mcpInstanceId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
@@ -13,14 +10,13 @@ import { testAuthConfig } from './support/test-auth-config.ts';
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let app: ReturnType<typeof buildServer>;
 let workers: ReturnType<typeof registerMcpInstanceWorkerRoutes>;
-let client: ReturnType<typeof jetstream>;
+let failures: Awaited<ReturnType<typeof failingPublishStore>>;
 let counter = 0;
 async function initialise() {
   nats = await natsFixture();
   app = buildServer(testAuthConfig());
-  client = jetstream(nats.connection);
-  const manager = await jetstreamManager(nats.connection);
-  nats.store = new EventStore(client, manager);
+  failures = await failingPublishStore(nats.connection);
+  nats.store = failures.store;
   workers = registerMcpInstanceWorkerRoutes(app, nats.store, 'test');
 }
 beforeAll(initialise, 30_000);
@@ -276,22 +272,19 @@ async function expiresDuringPublishRetry(stage: 'publish' | 'backoff') {
   const clock = vi.spyOn(Date, 'now');
   // Leave ten milliseconds of permission when append starts, regardless of history read speed.
   clock.mockReturnValue(worker.expiresAt - 10);
-  const publish = vi.spyOn(client, 'publish');
-  async function failFirstPublish(): Promise<never> {
+  async function failFirstPublish() {
     if (stage === 'publish') {
       await delay(30);
     }
-    throw new TimeoutError();
   }
-  publish.mockImplementationOnce(failFirstPublish);
+  failures.failNextPublish(failFirstPublish);
   try {
     const response = await observe(fixture.registration.instanceId,
       worker.authorization, fixture.payload);
     expect.soft(response.statusCode).toBe(503);
-    expect.soft(publish).toHaveBeenCalledTimes(1);
+    expect.soft(failures.publishAttempts()).toBe(1);
   } finally {
     clock.mockRestore();
-    publish.mockRestore();
   }
   await expectUnchangedInstance(fixture);
 }
@@ -301,17 +294,15 @@ it.each(['publish', 'backoff'] as const)(
 async function replacesDuringPublishRetry(stage: 'publish' | 'backoff') {
   const fixture = await start();
   const worker = await workers.register(fixture.registration);
-  const publish = vi.spyOn(client, 'publish');
   const failed = Promise.withResolvers<void>();
   const replaced = Promise.withResolvers<void>();
-  async function failFirstPublish(): Promise<never> {
+  async function failFirstPublish() {
     failed.resolve();
     if (stage === 'publish') {
       await replaced.promise;
     }
-    throw new TimeoutError();
   }
-  publish.mockImplementationOnce(failFirstPublish);
+  failures.failNextPublish(failFirstPublish);
   try {
     const pending = observe(fixture.registration.instanceId, worker.authorization, fixture.payload);
     const responsePromise = pending.then();
@@ -320,10 +311,9 @@ async function replacesDuringPublishRetry(stage: 'publish' | 'backoff') {
     replaced.resolve();
     const response = await responsePromise;
     expect.soft(response.statusCode).toBe(503);
-    expect.soft(publish).toHaveBeenCalledTimes(1);
+    expect.soft(failures.publishAttempts()).toBe(1);
   } finally {
     replaced.resolve();
-    publish.mockRestore();
   }
   await expectUnchangedInstance(fixture);
 }
