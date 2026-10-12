@@ -16,7 +16,7 @@ function makeFixture() {
   const procRoot = join(root, 'proc');
   const lockPath = join(root, '.X1-lock');
   mkdirSync(procRoot);
-  writeFileSync(lockPath, '4321\n');
+  writeFileSync(lockPath, '4321\n', { mode: 0o600 });
   return { root, procRoot, lockPath };
 }
 

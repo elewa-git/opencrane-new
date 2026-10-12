@@ -7,7 +7,7 @@ function attack(scenario: string) {
     '--cap-add=SETUID', '--cap-add=SETGID', '--cap-add=CHOWN', '--cap-add=DAC_OVERRIDE',
     '-v', `${resolve('apps/computer')}:/display:ro`, '--entrypoint', 'node',
     'ocn-upload-computer:test', '--experimental-strip-types',
-    '/display/test/fixtures/display-attacks.mjs', scenario];
+    '/display/test/display-attacks.mjs', scenario];
   execFileSync('docker', args, { encoding: 'utf8', timeout: 20000 });
 }
 

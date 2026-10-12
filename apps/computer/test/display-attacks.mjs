@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
-import * as display from '../../src/display-lock.ts';
+import * as display from '../src/display-lock.ts';
 
 const scenario = process.argv[2];
 const root = '/display-test';
