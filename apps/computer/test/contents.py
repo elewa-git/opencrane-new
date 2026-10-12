@@ -11,7 +11,8 @@ for root in ['/opt', '/usr', '/tmp', '/app', '/spike']:
     assert not list(Path(root).rglob('__pycache__')), root
 for path in ['/tmp/node-compile-cache', '/home/codex/caller', '/home/codex/tokens.json',
              '/home/desktop/credentials.json', '/spike/probe.mjs', '/lifecycle', '/desktop',
-             '/usr/local/bin/npm', '/root/.npm', '/tmp/npm', '/tmp/collect-licences.py']:
+             '/usr/local/bin/npm', '/root/.npm', '/tmp/npm', '/tmp/collect-licences.py',
+             '/app/test', '/fixture', '/usr/local/bin/private-fault', '/tmp/private-fault.c']:
     assert not Path(path).exists(), path
 for name in ['/usr/local/bin/node', '/usr/local/bin/tool-user', '/usr/bin/setpriv',
              '/app/src/entrypoint.ts', '/app/src/desktop.ts', '/usr/local/libexec/codex-code-mode-host',

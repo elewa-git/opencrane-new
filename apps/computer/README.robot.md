@@ -247,7 +247,8 @@ names the earlier image. The lifecycle k3d test checks delivery on the current d
 ## Build and check
 
 On the [developer box](../../infra/devbox/README.md), with the pinned S0.5 image
-in its local registry, Docker, Node 22, Python 3, curl, tar, sha256sum, kubectl
+in its local registry, Docker, Node 22, Python 3, curl, tar, sha256sum, kubectl,
+gcc with static libc support, read-only passwordless sudo for dump inventories,
 and the root workspace dependencies:
 
 ```sh
@@ -262,7 +263,10 @@ the new image. `test:image` needs an image built first.
 
 `build.sh` collects and checks notices, publishes a qualification digest, updates
 the tracked manifest, runs the real k3d checks and only then moves `p2-1`. A
-failed licence or image check cannot publish the release.
+failed licence or image check cannot publish the release. Every required FAIL,
+NOT RUN or infrastructure error stops promotion. Only the owner-approved host
+swap and host crash-dump exceptions are accepted. TERM and INT stop the build and
+its loopback registry listener. Open connections are destroyed; shutdown is bounded.
 
 CI prepares the upload test with `sh scripts/build-test-computer.sh`. It rebuilds
 the desktop/Codex base from public pins, then uses the production Dockerfile and
@@ -486,9 +490,14 @@ files inside. The supervisor removes it after the process exits. Socket closure
 ends input. After 5 seconds it tries SIGKILL as UID 1003 if needed. A failed kill
 is checked and retried twice, one second apart. Each failure writes the fixed line
 `Private process cleanup failed`, with no private text. The desktop removes an old
-Xvnc display lock before it starts after a container restart. It keeps the lock if
-its PID still runs Xvnc on display `:1`. The X11 socket directory is mode 0711, so
-other users can reach the display socket but cannot create files there.
+Xvnc display lock before it starts after a container restart. Startup first sets
+root-owned `/tmp` to 1777, before any child starts. The sticky bit prevents one user
+replacing another user’s files. Lock removal opens the parent directory and lock
+without following symlinks, checks owner and type, and compares the inode before
+unlinking. The trusted desktop user has not started yet. A live Xvnc on display
+`:1` keeps its lock. The desktop opens its own socket directory without following
+symlinks and changes permissions through that checked descriptor. Mode 0711 lets
+other users reach the socket without creating files there.
 A private child error fails its own connection, rather than the supervisor.
 Stderr is discarded. The whole container inherits a hard core-file limit of zero.
 

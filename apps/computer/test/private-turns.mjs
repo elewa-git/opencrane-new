@@ -43,7 +43,7 @@ function k(...args) {
   return command('kubectl', ['-n', namespace, ...args]);
 }
 function apply(value) {
-  const args = ['-n', namespace, 'apply', '-f', '-'];
+  const args = ['-n', namespace, 'apply', '--server-side', '-f', '-'];
   const contents = JSON.stringify(value);
   return input('kubectl', args, contents);
 }
@@ -337,7 +337,10 @@ async function journey(name, run) {
       return evidence.checks[key].result === 'FAIL' && !previousFailures.includes(key);
     });
     check(name, failures.length === 0, failures);
-  } catch (error) { check(name, false, error.message); }
+  } catch (error) {
+    check(name, false, error.message);
+    throw error;
+  }
 }
 async function guestInventory(value) {
   const args = ['-n', namespace, 'exec', '-i', 'private', '--',
@@ -370,7 +373,9 @@ async function realFault(turn) {
     return !paths.some(function parent(other) { return other !== path && path.startsWith(other + '/'); });
   }
   const roots = paths.filter(topLevel);
-  const corePattern = await podExec(`console.log((await import('node:fs')).readFileSync('/proc/sys/kernel/core_pattern','utf8'))`);
+  const corePattern = await podExec(`import {existsSync,readFileSync} from 'node:fs';
+    const path='/proc/sys/kernel/core_pattern';
+    console.log(existsSync(path)?readFileSync(path,'utf8'):'Not exposed by this gVisor runtime');`);
   const beforeGuest = await guestInventory({ paths: roots });
   const beforeNode = await nodeInventory();
   const args = ['-n', namespace, 'exec', '-i', 'private', '--',
