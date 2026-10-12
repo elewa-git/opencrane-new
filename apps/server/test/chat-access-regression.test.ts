@@ -2029,7 +2029,8 @@ it('requires older closing events to be projected before the server starts',
   requiresLegacyClosesBeforeStartup, 120_000);
 
 
-async function childSession(context: Fixture, conversationId = 'child') {
+async function childSession(context: Fixture, conversationId = 'child',
+  seedRecordsBeforeCreation = false) {
   const parentData = { conversationId: 'parent', createdBy: 'alice', mode: 'group',
     participantIds: ['alice', 'bob'] };
   const parent = await context.append('conversation-parent', 'conversation.created', parentData);
@@ -2040,6 +2041,9 @@ async function childSession(context: Fixture, conversationId = 'child') {
     payingGroupId: 'child-team' };
   await context.append('assistant-child-assistant', 'assistant.created', assistantData);
   context.keys.provision('test', conversationId);
+  if (seedRecordsBeforeCreation) {
+    await seedChildRecordsBeforeCreation(context, conversationId);
+  }
   const initialJoins = [];
   for (const participantId of ['alice', 'bob']) {
     const join = { participantId, parentJoinEventId: parent.id, parentJoinPosition };
@@ -2061,6 +2065,46 @@ async function childSession(context: Fixture, conversationId = 'child') {
   await context.append(`conversation-${conversationId}`, 'message.posted', messageData, false);
   await context.runner.run(conversations);
   return creation;
+}
+
+async function seedChildRecordsBeforeCreation(context: Fixture, conversationId: string) {
+  await seedChildApproval(context, conversationId, 'b'.repeat(64));
+  await context.runner.run(auditTrail);
+}
+
+async function seedEarlierChildProjectionRows(context: Fixture, position: number) {
+  // Keep earlier child rows at a real event position while the child stream starts with creation.
+  const messageText = context.keys.encrypt('test', 'child', 'Earlier shared child message');
+  const messageData = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...messageText };
+  await context.db.query(
+    `INSERT INTO conversation_feed
+      (silo, conversation_id, position, event_id, type, data, time)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    ['test', 'child', position, 'before-creation-message', 'message.posted',
+      JSON.stringify(messageData), '2026-10-12T00:00:00.000Z']);
+  const file = { conversationId: 'child', fileId: 'before-creation', uploadedBy: 'alice',
+    name: 'shared.png', size: 4, sha256: 'a'.repeat(64), mime: 'image/png',
+    objectKey: 'test/child/before-creation', screenshot: { computerId: 'desktop',
+      generation: 1, width: 2, height: 2, capturedAt: '2026-10-12T00:00:00.000Z' } };
+  await context.db.query(
+    `INSERT INTO conversation_files
+      (silo, conversation_id, file_id, position, data, status)
+      VALUES ($1,$2,$3,$4,$5,$6)`,
+    ['test', 'child', file.fileId, position, JSON.stringify(file), 'uploaded']);
+}
+
+async function seedChildApproval(context: Fixture, conversationId: string, approvalId: string) {
+  const example = getEventDefinition('tool.approval_requested')?.example;
+  const saved = toolApprovalRequestedDataSchema.parse(example);
+  const reviewText = JSON.stringify({ action: 'Send report', tool: 'write',
+    target: 'private-target', data: 'private-arguments', destination: 'private-destination',
+    account: 'private-profile', consequence: 'Save the report' });
+  const encrypted = context.keys.encrypt('test', conversationId, reviewText);
+  const reviewDigest = createHash('sha256').update(reviewText).digest('hex');
+  const request = { ...saved, conversationId, assistantId: 'child-assistant', approvalId,
+    requesterId: 'bob', ...encrypted, reviewDigest };
+  await context.append(`approval-${approvalId}`, 'tool.approval_requested', request, false);
 }
 
 const childReadPaths = ['messages', 'approvals', 'files'];
@@ -2174,7 +2218,21 @@ async function explicitChildJoin() {
   const context = await fixture();
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
-    const creation = await childSession(context);
+    const creation = await childSession(context, 'child', true);
+    const creationPosition = await context.db.query<{ position: string }>(
+      `SELECT position FROM conversation_feed
+        WHERE silo = $1 AND conversation_id = $2 AND event_id = $3`,
+      ['test', 'child', creation.id]);
+    const creationSequence = Number(creationPosition.rows[0]?.position);
+    const earlierApproval = await context.db.query<{ position: string }>(
+      `SELECT position FROM audit_entries WHERE silo = $1 AND approval_id = $2`,
+      ['test', 'b'.repeat(64)]);
+    const earlierPosition = Number(earlierApproval.rows[0]?.position);
+    expect(earlierPosition).toBeGreaterThan(0);
+    expect(earlierPosition).toBeLessThan(creationSequence);
+    await seedEarlierChildProjectionRows(context, earlierPosition);
+    const laterApprovalId = 'd'.repeat(64);
+    await seedChildApproval(context, 'child', laterApprovalId);
     const downloadPath = await seedReadableScreenshot(context);
     const childRemoval = { conversationId: 'child', participantId: 'bob', removedBy: 'alice',
       contextKind: 'shared_child', reviewPosition: 1 };
@@ -2213,6 +2271,7 @@ async function explicitChildJoin() {
     await context.runner.run(conversations);
     const messages = await childRead(context, 'messages');
     expect(messages.statusCode, messages.body).toBe(200);
+    expect(messages.body).not.toContain('Earlier shared child message');
     expect(messages.body).toContain('Hello shared history');
     for (const hidden of ['origin', 'initialJoins', 'hidden-source', 'parentJoinEventId']) {
       expect(messages.body).not.toContain(hidden);
@@ -2225,25 +2284,44 @@ async function explicitChildJoin() {
     expect(list.body).not.toContain('initialJoins');
     const approvals = await childRead(context, 'approvals');
     expect(approvals.statusCode, approvals.body).toBe(200);
+    const approvalCards = approvals.json<{ cards: { approvalId: string }[] }>().cards;
+    expect(approvalCards.map((card) => card.approvalId)).not.toContain('b'.repeat(64));
+    expect(approvalCards.map((card) => card.approvalId)).toContain(laterApprovalId);
     const files = await childRead(context, 'files', 'bob');
     expect(files.statusCode, files.body).toBe(200);
-    expect(files.json<{ rows: { path: string }[] }>().rows).toContainEqual(
-      expect.objectContaining({ path: 'uploads/child/bob-readable/shared.png' }));
+    const listedPaths = files.json<{ rows: { path: string }[] }>().rows.map((row) => row.path);
+    expect(listedPaths).not.toContain('uploads/child/before-creation/shared.png');
+    expect(listedPaths).toContain('uploads/child/bob-readable/shared.png');
+    const earlierDownload = await childRead(context,
+      'files/view?path=uploads%2Fchild%2Fbefore-creation%2Fshared.png');
+    expect(earlierDownload.statusCode, earlierDownload.body).toBe(403);
     const download = await childRead(context, downloadPath);
     expect(download.statusCode, download.body).toBe(200);
+    expect(download.body).toBe('PNG!');
+    const earlierMessageReceipt = await childRead(context, 'changes/before-creation-message');
+    expect(earlierMessageReceipt.statusCode).toBe(404);
+    const laterMessage = await originalQuery<{ event_id: string }>(
+      `SELECT event_id FROM conversation_feed
+        WHERE silo = $1 AND conversation_id = $2 AND type = 'message.posted'
+          AND data->>'ciphertext' IS NOT NULL ORDER BY position DESC LIMIT 1`,
+      ['test', 'child']);
+    const laterMessageId = laterMessage.rows[0]?.event_id;
+    expect(laterMessageId).toBeDefined();
+    const laterMessageReceipt = await childRead(context, `changes/${laterMessageId}`);
+    expect(laterMessageReceipt.statusCode, laterMessageReceipt.body).toBe(200);
     const receipt = await childRead(context, `changes/${creation.id}`);
     expect(receipt.statusCode, receipt.body).toBe(200);
     await delay(300);
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
-    const creationPosition = await originalQuery<{ position: string }>(
-      `SELECT position FROM conversation_feed
-        WHERE silo = $1 AND conversation_id = $2 AND event_id = $3`,
-      ['test', 'child', creation.id]);
-    const creationSequence = Number(creationPosition.rows[0]?.position);
     expect(selectionStarts).toContainEqual({ kind: 'messages', position: creationSequence - 1 });
     expect(selectionStarts).toContainEqual({ kind: 'files', position: creationSequence });
     expect(selectionStarts).toContainEqual({ kind: 'changes', position: creationSequence });
     expect(approvalStarts.some((position) => position >= creationSequence)).toBe(true);
+    function hasReceivedText(text: string) {
+      return JSON.stringify(client?.received).includes(text);
+    }
+    expect(hasReceivedText('Earlier shared child message')).toBe(false);
+    expect(hasReceivedText('Hello shared history')).toBe(true);
     expect(JSON.stringify(client.received)).not.toContain('hidden-source');
   } finally {
     await client?.close();
