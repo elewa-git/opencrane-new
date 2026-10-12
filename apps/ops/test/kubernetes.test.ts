@@ -182,7 +182,8 @@ async function deliversThroughAuthenticatedExec() {
     const commands = await fixture.commands();
     expect(commands).toHaveLength(2);
     for (const command of commands) {
-      expect(command).toContain('exec -i computer -c computer -- node');
+      expect(command).toContain('exec -i computer -c computer -- /usr/bin/env -u NODE_OPTIONS');
+      expect(command).toContain('/usr/local/bin/node --disable-sigusr1');
       expect(command).toContain('/app/src/install-credential.ts');
       expect(command).not.toContain(token.value);
       expect(command).not.toContain('/proxy/credentials');

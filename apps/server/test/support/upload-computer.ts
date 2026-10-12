@@ -10,10 +10,11 @@ import { until } from '@opencrane/authz/testing';
 import { tcpProxy } from '@opencrane/event-store/testing';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { approvalJourneyTool } from '../../../../infra/dev-stack/journey-tool-policy.ts';
+import { z } from 'zod';
 const exec = promisify(execFile);
 
 /** Disposable runtime image with this branch's sources; no shared-stack Pods or credentials. */
-export async function uploadComputer(deliverCredential = true) {
+export async function uploadComputer(deliverCredential = true, nodeOptions = '') {
   const capture = await mkdtemp(`${tmpdir()}/upload-requests-`);
   const stub = spawn(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
     {
@@ -49,12 +50,18 @@ export async function uploadComputer(deliverCredential = true) {
     await until(() => /Stub ready (\d+)/u.test(output));
     const gateway = await docker('network', 'inspect', 'bridge', '--format', '{{(index .IPAM.Config 0).Gateway}}');
     relay = await tcpProxy(() => ({ host: '127.0.0.1', port: Number(/Stub ready (\d+)/u.exec(output)![1]) }), gateway);
+    // Use the current image command while mounting the current source into the fixture image.
+    const dockerfile = await readFile('apps/computer/Dockerfile', 'utf8');
+    const commandLine = /^CMD (.+)$/mu.exec(dockerfile)?.[1];
+    if (!commandLine) throw new Error('Computer image command missing');
+    const command = z.array(z.string()).parse(JSON.parse(commandLine) as unknown);
     let url = '';
     const start = async () => {
       // Match the silo's capabilities; Docker's defaults include CAP_KILL.
       container = await docker('run', '-d', '--name', `upload-computer-${randomUUID()}`, '-p', '127.0.0.1::8081',
         '--cap-drop=ALL', '--cap-add=SETUID', '--cap-add=SETGID', '--cap-add=CHOWN', '--cap-add=DAC_OVERRIDE',
-        '-v', `${disk}:/home/agent`, '-v', `${resolve('apps/computer/src')}:/app/src:ro`, '-e', 'POD_UID=fixture', '-e', `GATEWAY=http://${gateway}:${relay!.port}`, 'ocn-upload-computer:test');
+        '-v', `${disk}:/home/agent`, '-v', `${resolve('apps/computer/src')}:/app/src:ro`, '-e', 'POD_UID=fixture', '-e', `GATEWAY=http://${gateway}:${relay!.port}`, '-e', `NODE_OPTIONS=${nodeOptions}`,
+        'ocn-upload-computer:test', ...command);
       const port = Number((await docker('port', container, '8081/tcp')).split(':')[1]);
       url = `http://127.0.0.1:${port}`;
     };

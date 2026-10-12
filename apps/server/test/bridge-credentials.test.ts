@@ -156,3 +156,75 @@ async function rotatesWithStubProvider() {
 }
 it('rotates the bridge pass and completes a turn with the stub provider',
   rotatesWithStubProvider, 60_000);
+
+const inspectorCases = [
+  { name: 'bridge and proxy', path: '/app/src/bridge.ts', uid: 1000, nodeOptions: '' },
+  { name: 'desktop helper', path: '/app/src/desktop.ts', uid: 1002, nodeOptions: '' },
+  { name: 'memory-free Codex wrapper', path: '/usr/local/bin/codex', uid: 1000,
+    nodeOptions: '' },
+  { name: 'private Codex wrapper', path: '/usr/local/bin/codex', uid: 1003,
+    nodeOptions: '' },
+  { name: 'inherited inspector options', path: '/app/src/bridge.ts', uid: 1000,
+    nodeOptions: '--inspect=0.0.0.0:9229' },
+];
+
+async function refusesInspector(testCase: typeof inspectorCases[number]) {
+  const computer = await uploadComputer(true, testCase.nodeOptions);
+  const live = await connect(computer.url, computer.credential.value);
+  try {
+    // Signal from the same user as the service, without CAP_KILL or root access.
+    const probe = String.raw`
+import json, os, pathlib, signal, socket, time
+expected = b'${testCase.path}'
+private = None
+if ${testCase.uid} == 1003:
+    private = socket.socket(socket.AF_UNIX)
+    private.connect('/run/executor/private.sock')
+processes = []
+deadline = time.monotonic() + 5
+while not processes and time.monotonic() < deadline:
+    for entry in pathlib.Path('/proc').iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            arguments = (entry / 'cmdline').read_bytes().split(b'\x00')
+            owner = entry.stat().st_uid
+        except FileNotFoundError:
+            continue
+        if expected in arguments and owner == ${testCase.uid}:
+            processes.append(int(entry.name))
+    time.sleep(0.02)
+assert len(processes) == 1, processes
+pid = processes[0]
+status = pathlib.Path(f'/proc/{pid}/status').read_text()
+assert 'Uid:\t${testCase.uid}\t${testCase.uid}\t${testCase.uid}\t${testCase.uid}' in status
+os.setgroups([])
+os.setgid(${testCase.uid})
+os.setuid(${testCase.uid})
+assert os.getuid() == ${testCase.uid}
+os.kill(pid, signal.SIGUSR1)
+opened = False
+deadline = time.monotonic() + 1
+while time.monotonic() < deadline:
+    try:
+        with socket.create_connection(('127.0.0.1', 9229), timeout=0.1):
+            opened = True
+    except ConnectionRefusedError:
+        pass
+    time.sleep(0.02)
+os.kill(pid, 0)
+print(json.dumps(opened))
+`;
+    const result = await computer.exec('python3', '-c', probe);
+    expect.soft(JSON.parse(result) as unknown, 'no inspector port after SIGUSR1').toBe(false);
+    await expect(connect(computer.url, 'forged-computer')).rejects.toThrow();
+    live.ping();
+    await once(live, 'pong');
+    expect(live.readyState).toBe(WebSocket.OPEN);
+  } finally {
+    live.terminate();
+    await computer.close();
+  }
+}
+
+it.each(inspectorCases)('keeps $name unavailable to debugger attacks', refusesInspector, 60_000);
