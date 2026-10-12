@@ -31,15 +31,13 @@ function processState(pid) {
   return fields;
 }
 const target = processState(input.pid);
-const child = spawn('/usr/bin/prlimit', ['--core=0:0', '--', '/usr/bin/setpriv',
-  '--reuid=1003', '--regid=1003', '--clear-groups', '--no-new-privs', '--',
-  '/fixture/private-fault'], { env, cwd: env.HOME + '/work', stdio: ['pipe', 'pipe', 'ignore'] });
+const child = spawn('/fixture/private-fault', [], {
+  env, cwd: env.HOME + '/work', stdio: ['pipe', 'pipe', 'ignore'],
+});
 const deadline = setTimeout(expired, 5000);
 function expired() {
-  // Signal as the same UID; the root supervisor does not hold CAP_KILL.
-  const killer = spawn('/usr/bin/setpriv', ['--reuid=1003', '--regid=1003', '--clear-groups',
-    '--', '/bin/kill', '-KILL', String(child.pid)], { stdio: 'ignore' });
-  killer.on('exit', function failed() { process.exit(1); });
+  child.kill('SIGKILL');
+  process.exitCode = 1;
 }
 child.stdin.write(input.canary + '\n');
 const [ready] = await once(child.stdout, 'data');

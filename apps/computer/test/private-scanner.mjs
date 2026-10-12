@@ -11,9 +11,10 @@ function scanFile(path) {
   let bytes;
   try {
     bytes = readFileSync(path);
-  } catch {
-    // Skip files which disappear or cannot be read during the scan.
-    return;
+  } catch (error) {
+    // Allow a temporary file to disappear, but fail when its contents cannot be checked.
+    if (error.code === 'ENOENT') return;
+    throw error;
   }
   for (const [kind, patterns] of Object.entries(input.patterns)) {
     function matches(pattern) {
@@ -31,9 +32,9 @@ function visit(path) {
   let information;
   try {
     information = lstatSync(path);
-  } catch {
-    // Skip paths which disappear during the scan.
-    return;
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
   }
   if (information.isSymbolicLink()) return;
   if (information.isFile()) {
@@ -44,9 +45,9 @@ function visit(path) {
   let names;
   try {
     names = readdirSync(path);
-  } catch {
-    // Skip unreadable directories without following a different path.
-    return;
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
   }
   for (const name of names) {
     visit(`${path}/${name}`);

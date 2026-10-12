@@ -372,7 +372,10 @@ async function realFault(turn) {
   const roots = paths.filter(topLevel);
   const beforeGuest = await guestInventory({ paths: roots });
   const beforeNode = await nodeInventory();
-  const args = ['-n', namespace, 'exec', '-i', 'private', '--', 'node', '/fixture/private-fault.mjs'];
+  const args = ['-n', namespace, 'exec', '-i', 'private', '--',
+    '/usr/bin/prlimit', '--core=0:0', '--', '/usr/bin/setpriv',
+    '--reuid=1003', '--regid=1003', '--clear-groups', '--no-new-privs', '--',
+    'node', '/fixture/private-fault.mjs'];
   const faultInput = JSON.stringify({ pid: turn.privatePid, canary: canaries.fault });
   const fault = JSON.parse(await input('kubectl', args, faultInput));
   const afterGuest = await guestInventory({ paths: roots });
