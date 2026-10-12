@@ -34,3 +34,18 @@ function checksStartupAccessGeneration() {
 
 it('accepts only a positive integer startup access generation and no extra fields',
   checksStartupAccessGeneration);
+
+function checksObservationWriter() {
+  const data = { instanceId, runGeneration: 1, startChangeRef: start.changeRef,
+    podUid: 'pod_1', workloadSpecDigest: start.workloadSpecDigest,
+    state: 'starting', expectedSequence: 1 };
+  const observed = { ...event, type: 'mcp.instance_observed', data,
+    commandId: 'observe_1', principal: { kind: 'system', id: 'worker_1' } };
+  expect(parseEventByType(observed).success).toBe(true);
+  const human = { ...observed, principal: { kind: 'human', id: 'member_1' } };
+  expect(parseEventByType(human).success).toBe(false);
+  const missingId = { ...observed, commandId: undefined };
+  expect(parseEventByType(missingId).success).toBe(false);
+}
+it('requires a system writer and change id for observations with a checked revision',
+  checksObservationWriter);

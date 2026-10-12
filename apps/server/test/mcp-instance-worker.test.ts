@@ -149,3 +149,60 @@ async function missingRemainsUnknown() {
   expect(rows).toHaveLength(2);
 }
 it('records a missing workload as unknown rather than a terminal failure', missingRemainsUnknown);
+
+async function refusesReplacedOrOldRunWorkers() {
+  const fixture = await start();
+  const old = await workers.register(fixture.registration);
+  const worker = await workers.register(fixture.registration);
+  const url = observationUrl(fixture.registration.instanceId);
+  const retired = await app.inject({ method: 'POST', url,
+    headers: { authorization: old.authorization }, payload: fixture.payload });
+  expect(retired.statusCode).toBe(403);
+  const starting = await app.inject({ method: 'POST', url,
+    headers: { authorization: worker.authorization }, payload: fixture.payload });
+  expect(starting.statusCode).toBe(200);
+  const observation = { instanceId: fixture.registration.instanceId, runGeneration: 1,
+    startChangeRef: fixture.data.changeRef, podUid: 'original-pod',
+    workloadSpecDigest: fixture.data.workloadSpecDigest, state: 'absent' };
+  const stopData = { instanceId: fixture.registration.instanceId, runGeneration: 1,
+    startChangeRef: fixture.data.changeRef, changeRef: `stop-${counter}`,
+    expectedSequence: starting.json<{ sequence: number }>().sequence,
+    requestedBy: 'alice', reason: 'owner_stop' };
+  const stop = { ...fixture.event, id: stopData.changeRef, commandId: stopData.changeRef,
+    type: 'mcp.instance_stop_requested', data: stopData,
+    principal: { kind: 'human' as const, id: 'alice' } };
+  const stopped = await nats.store.append({ event: stop, expectedSequence: stopData.expectedSequence });
+  if (stopped.status !== 'appended') throw new Error('Stop fixture failed');
+  const absent = envelope('test', fixture.event.subject, 'mcp.instance_observed', observation);
+  const absence = await nats.store.append({ event: absent, expectedSequence: stopped.sequence });
+  if (absence.status !== 'appended') throw new Error('Absence fixture failed');
+  const next = envelope('test', fixture.event.subject, 'mcp.instance_start_requested',
+    { ...fixture.data, runGeneration: 2, changeRef: `next-${counter}` });
+  const newer = await nats.store.append({ event: next, expectedSequence: absence.sequence });
+  if (newer.status !== 'appended') throw new Error('Next run fixture failed');
+  const payload = { ...fixture.payload, changeRef: `late-${counter}`,
+    expectedSequence: newer.sequence };
+  const refused = await app.inject({ method: 'POST', url,
+    headers: { authorization: worker.authorization }, payload });
+  expect(refused.statusCode).toBe(409);
+  expect(await nats.store.head(fixture.event.subject)).toBe(newer.sequence);
+  const replacement = { ...fixture.registration, runGeneration: 2,
+    startChangeRef: `next-${counter}`, expectedSequence: newer.sequence, podUid: 'next-pod' };
+  await expect(workers.register(replacement)).resolves.toHaveProperty('authorization');
+}
+it('retires a replaced worker and refuses an old run even with its latest revision',
+  refusesReplacedOrOldRunWorkers);
+
+async function refusesRegistrationAfterPodBinding() {
+  const fixture = await start();
+  const worker = await workers.register(fixture.registration);
+  const response = await app.inject({ method: 'POST',
+    url: observationUrl(fixture.registration.instanceId),
+    headers: { authorization: worker.authorization }, payload: fixture.payload });
+  expect(response.statusCode).toBe(200);
+  const registration = { ...fixture.registration, podUid: 'foreign-pod',
+    expectedSequence: response.json<{ sequence: number }>().sequence };
+  await expect(workers.register(registration)).rejects.toThrow();
+}
+it('refuses a foreign Pod once the saved observation binds the original Pod',
+  refusesRegistrationAfterPodBinding);
