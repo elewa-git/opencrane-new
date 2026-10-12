@@ -13,7 +13,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals, saved fact references, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, private approval reviews, saved fact references, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
   models -->|sends admitted ordinary calls| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
@@ -118,6 +118,7 @@ Hosted image refusal applies to ordinary tool sends, so memory remains available
   if its event could not be saved.
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.
   Keep approval lists within the caller’s current period of participation.
+  Show shared child approval reviews only to the person who requested the action.
   Reuse checked approval facts and read only later messages and access changes
   before a decision.
 - Refuse provider-bound model passes on the deployment-key gateway before holding money.

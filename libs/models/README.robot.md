@@ -521,7 +521,11 @@ Reviews use the conversation's encrypted-content/key-reference convention. Neith
 the model nor browser supplies approval authority or replacement review text.
 
 `approvalCards`, `readApproval` and `decideApproval` replay approval streams; reads
-record expiry/cancellation through conditional appends. A request is bound to silo,
+record expiry/cancellation through conditional appends. Shared child callers set
+`requesterOnly: true` on `approvalCards`. It excludes other requesters before
+loading approval history or decrypting their review. Existing callers retain their
+current behaviour. Safe shared approval metadata is deferred to a later contract.
+A request is bound to silo,
 requester, conversation, logical turn, assistant, server, tool/schema revision,
 stable tool rule revision, connection/profile and argument/review digests. Only the original
 requester can decide. A current authority fence precedes consumption; audit and a

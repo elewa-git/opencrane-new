@@ -2330,6 +2330,7 @@ after OpenFGA replies. A removed or replaced parent join never restores inherita
 A valid explicit child join does not depend on parent or creator membership.
 Retained shared history starts at child creation; access still uses the current join.
 File reads keep their separate file restrictions and do not grant parent file access.
+Child approval reads omit other requesters before loading or decrypting their reviews.
 
 Sockets watch member and child participation streams. Inherited sockets also watch
 parent participation and creator membership. Their existing independent 100 ms poll

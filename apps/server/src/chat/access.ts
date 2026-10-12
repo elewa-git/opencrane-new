@@ -110,6 +110,7 @@ async function conversationAccess(options: ParticipationOptions,
   request: AccessRequest, deadline: number) {
   const { memberId, conversationId, relation = 'read', allowApplying = false } = request;
   let mode: 'agent_session' | 'direct' | 'group' | undefined;
+  let contextKind: 'shared_child' | undefined;
   let colleagueId: string | undefined;
   let createdBy: string | undefined;
   let joinPosition = 0;
@@ -123,6 +124,7 @@ async function conversationAccess(options: ParticipationOptions,
       deadline, relation, allowApplying);
     const created = access.created;
     createdBy = created.createdBy;
+    if ('contextKind' in created) contextKind = created.contextKind;
     mode = created.mode;
     joinPosition = access.joinPosition;
     joinEventId = access.joinEventId;
@@ -140,8 +142,8 @@ async function conversationAccess(options: ParticipationOptions,
       await readPrivateSession(options, memberId, conversationId);
     }
   }
-  return { mode, colleagueId, joinPosition, joinEventId, historyPosition, participantIds,
-    accessPosition, accessSubjects, createdBy };
+  return { mode, contextKind, colleagueId, joinPosition, joinEventId, historyPosition,
+    participantIds, accessPosition, accessSubjects, createdBy };
 }
 
 type ParticipationOptions = Pick<ChatOptions, 'store' | 'db' | 'silo' | 'binding'>;

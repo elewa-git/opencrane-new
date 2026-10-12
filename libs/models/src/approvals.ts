@@ -21,6 +21,7 @@ type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string
 type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assistantId' | 'serverId' | 'connectionId'>;
 type FreshAuthority = (() => Promise<void>) & { deadline?: number };
 interface ApprovalReadOptions {
+  requesterOnly?: boolean;
   fromSequence?: number;
   now?: Date;
   deadline?: number;
@@ -317,6 +318,8 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   for await (const { event } of readEvents(store, options.fromSequence ?? 1, head, signal)) {
     if (event.silo !== silo || event.type !== 'tool.approval_requested') continue;
     const request = toolApprovalRequestedDataSchema.parse(event.data);
+    // Keep other people's reviews encrypted when reading a shared child.
+    if (options.requesterOnly && request.requesterId !== memberId) continue;
     if (request.conversationId === conversationId) ids.push(request.approvalId);
   }
   const cards: ApprovalCard[] = [];
