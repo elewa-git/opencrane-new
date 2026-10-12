@@ -15,10 +15,10 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 ```mermaid
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
-  ops["apps/ops<br/>background workers"] -->|starts and pauses| computer
+  ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes| computer
   server["apps/server<br/>the back end"] <-->|turns, models, approvals, dispatch and consent reports| computer
   events["libs/events<br/>report text check"] -.-> computer
-  computer --> supervisor["Root supervisor<br/>executor admission and thread exit checks"]
+  computer --> supervisor["Root supervisor<br/>protected launch and executor stop"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
   computer -->|sends model and reviewed tool calls| gateway["agentgateway<br/>AI gateway"]
@@ -29,7 +29,11 @@ flowchart LR
 - Refuses unsupported native MCP consent and reports its request without private text.
 
 - Builds the container image with Codex, a browser, a remote desktop and document tools.
+- Accepts new server passes only through authenticated Kubernetes access as root.
+  Local Codex and desktop processes cannot replace them.
 - Runs the bridge that receives chat turns and sends progress reports to the server.
+- Disables Node debugging in trusted processes so local programs cannot use a debugger
+  to read their passes or change their access checks.
 - Runs each turn with the model the server confirms. Keeps that model when renewing
   the turn's pass. Older servers keep the existing task-based choice.
 - Reports when a listed tool call starts or finishes, without its arguments or result.

@@ -16,7 +16,7 @@ flowchart LR
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables, task relationships, jobs, configured memory, nightly jobs and retains failed nights| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
-  ops -->|checks and updates computers| kube["Kubernetes<br/>computer manager"]
+  ops -->|updates computers and delivers passes| kube["Kubernetes<br/>computer manager"]
 ```
 
 ## What it is responsible for
@@ -30,7 +30,8 @@ flowchart LR
 - Copies delegated task relationships and outcomes with the `delegations` worker.
   This worker starts no tasks and changes no permissions or spending.
 - Updates permissions and sets up a new member's assistant and computer when requested.
-- Starts computers, gives them short-lived access keys and pauses idle ones.
+- Starts computers, gives them short-lived access keys through authenticated
+  Kubernetes access as root, and pauses idle ones.
 - Settles model spending after a model request.
 - Rebuilds tables and permissions for operator recovery.
 - Checks all saved memory keys before rebuilding current memory and search text.

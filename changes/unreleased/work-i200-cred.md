@@ -1,0 +1,2 @@
+- Protect computer credential replacement with authenticated Kubernetes access as root. Local Codex and desktop processes can no longer replace the bridge pass through HTTP or its stored file. Store only a token hash, enforce the issuer's expiry, and keep worker delivery and server rotation working.
+- Disable Node debugging in trusted computer processes. Local programs cannot open a debugger with SIGUSR1, and inherited Node options cannot enable one to expose passes or bypass bridge authentication.

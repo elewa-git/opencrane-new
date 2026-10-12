@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
-  server -->|sends turns, files, stops, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
+  server -->|delivers passes, turns, files, stops, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -264,6 +264,9 @@ These reads contain dates and fact references, with no saved memory text or new 
     person's choice. Other devices see the same choice after the read tables catch up.
     A lost reply can be checked with the original request id. Leaving and joining
     again starts fresh choices. These actions start no assistant work or spending.
+
+The server renews computer passes through authenticated Kubernetes access as root.
+Desktop and Codex processes cannot replace these passes through HTTP.
 
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.

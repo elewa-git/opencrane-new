@@ -37,7 +37,7 @@ p.rename(str(p)+'.native')
 p.write_text('#!/bin/sh\\nnode /workspace/host-probe.mjs 2>/tmp/host-probe-error || exit 1\\nexec '+str(p)+'.native\\n')
 p.chmod(0o555)
 `);
-  socket = new WebSocket(computer.url.replace('http:', 'ws:') + '/bridge', { headers: { 'x-bridge-token': 'test-computer' } });
+  socket = new WebSocket(computer.url.replace('http:', 'ws:') + '/bridge', { headers: { 'x-bridge-token': computer.credential.value } });
   await once(socket, 'open');
   const reports = [];
   const completed = new Promise((resolve, reject) => {

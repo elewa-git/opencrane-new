@@ -23,7 +23,7 @@ export interface SandboxState {
   podUid?: string;
 }
 
-/** Minimal kubectl adapter; Pod reads observe identity; the proxy subresource delivers ephemeral grants. */
+/** Read computer identity and deliver short-lived grants through authenticated Pod exec. */
 export class SandboxClient {
   private readonly modes = new Map<string, 'Running' | 'Suspended'>();
   private readonly delivered = new Map<string, IssuedToken>();
@@ -206,7 +206,10 @@ export class SandboxClient {
   async credentials(name: string, token: IssuedToken, force = false): Promise<void> {
     const previous = this.delivered.get(name);
     if (!force && previous?.id === token.id && previous.expiresAt > Date.now() + 60_000) return;
-    await this.input(['create', '--raw', `/api/v1/namespaces/${this.namespace}/pods/${name}:8081/proxy/credentials`, '-f', '-'], token);
+    const command = ['exec', '-i', name, '-c', 'computer', '--',
+      '/usr/bin/env', '-u', 'NODE_OPTIONS', '/usr/local/bin/node', '--disable-sigusr1',
+      '--experimental-strip-types', '/app/src/install-credential.ts'];
+    await this.input(command, token);
     this.delivered.set(name, token);
   }
 

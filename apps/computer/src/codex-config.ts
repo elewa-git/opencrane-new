@@ -3,8 +3,11 @@ export function memoryFreeEnvironments() {
 include_local = false
 [[environments]]
 id = "tools"
-program = "node"
-args = ["--experimental-strip-types", "/app/src/entrypoint.ts", "connect"]
+program = "/usr/bin/env"
+args = [
+  "-u", "NODE_OPTIONS", "/usr/local/bin/node", "--disable-sigusr1",
+  "--experimental-strip-types", "/app/src/entrypoint.ts", "connect",
+]
 cwd = "/workspace"
 `;
 }

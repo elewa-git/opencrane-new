@@ -24,7 +24,8 @@ export interface TurnDriver extends ThreadLoadDriver {
   privateSession?(): Promise<PrivateSession>;
   file?(file: WorkspaceFile, bytes: Buffer): Promise<void | 'kept_existing'>;
   grant(thread: string, conversation: string, token: string, expiresAt: number): Promise<void>;
-  credential(): { value: string; expiresAt: number };
+  credential(): { expiresAt: number } & ({ value: string } | { digest: string });
+  authenticated?(value: string): void;
   journal: string;
 }
 

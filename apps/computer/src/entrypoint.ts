@@ -120,6 +120,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   closeSync(directory(agent, 'supervisor', 0, 0o700));
   const executorDirectory = directory(run, 'executor', 0, 0o750, 1000);
   closeSync(directory(executorDirectory, 'supervisor', 0, 0o700));
+  closeSync(directory(executorDirectory, 'credentials', 0, 0o750, 1000));
   closeSync(executorDirectory);
   rmSync('/run/executor/supervisor/control.sock', { force: true });
   const supervisor = supervisorStop();
@@ -201,11 +202,23 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   executor(['host']).listen('/run/executor/host.sock', () => {
     executor([]).listen('/run/executor/exec.sock', () => {
       process.umask(0o077);
-      watch(spawn('/usr/bin/setpriv', ['--no-new-privs', '/usr/local/bin/node', '--experimental-strip-types', '/app/src/desktop.ts'], { stdio: 'inherit' }), true);
-      watch(spawn('/usr/local/bin/node', ['--experimental-strip-types', '/app/src/bridge.ts'], {
-        uid: 1000, gid: 1000, stdio: 'inherit',
-        env: { PATH: process.env['PATH'], HOME: '/home/codex', GATEWAY: process.env['GATEWAY'], MODEL: process.env['MODEL'] ?? 'stub-model', PROXY_CALLER_TOKEN: caller },
-      }), true);
+      // Prevent same-user processes from opening a debugger and changing trusted checks.
+      const desktopArgs = ['--no-new-privs', '/usr/local/bin/node', '--disable-sigusr1',
+        '--experimental-strip-types', '/app/src/desktop.ts'];
+      const desktopEnvironment = { ...process.env, NODE_OPTIONS: '' };
+      const desktopOptions = { stdio: 'inherit' as const, env: desktopEnvironment };
+      const desktop = spawn('/usr/bin/setpriv', desktopArgs, desktopOptions);
+      watch(desktop, true);
+      const bridgeArgs = ['--disable-sigusr1', '--experimental-strip-types', '/app/src/bridge.ts'];
+      const bridgeEnvironment = {
+        PATH: process.env['PATH'], HOME: '/home/codex', GATEWAY: process.env['GATEWAY'],
+        MODEL: process.env['MODEL'] ?? 'stub-model', PROXY_CALLER_TOKEN: caller,
+      };
+      const bridgeOptions = {
+        uid: 1000, gid: 1000, stdio: 'inherit' as const, env: bridgeEnvironment,
+      };
+      const bridge = spawn('/usr/local/bin/node', bridgeArgs, bridgeOptions);
+      watch(bridge, true);
     });
   });
 }
