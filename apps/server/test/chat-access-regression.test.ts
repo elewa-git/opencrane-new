@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { getEventDefinition, toolApprovalRequestedDataSchema } from '@opencrane/events';
 // Regression probes for turn activity during reads and long agent sessions.
 import { setTimeout as delay } from 'node:timers/promises';
 import { once } from 'node:events';
@@ -2219,3 +2221,41 @@ async function refusesUnrecognisedDisplayEvent() {
 }
 it('withholds an unrecognised display event from a parent reader',
   refusesUnrecognisedDisplayEvent, 120_000);
+
+
+async function hidesOtherRequesterReview() {
+  const context = await fixture();
+  try {
+    await childSession(context);
+    const review = { action: 'Send report', tool: 'write', target: 'private-target',
+      data: 'private-arguments', destination: 'private-destination', account: 'private-profile',
+      consequence: 'Save the report' };
+    const text = JSON.stringify(review);
+    const digest = createHash('sha256');
+    digest.update(text);
+    const example = getEventDefinition('tool.approval_requested')?.example;
+    const saved = toolApprovalRequestedDataSchema.parse(example);
+    const approvalId = 'a'.repeat(64);
+    const encrypted = context.keys.encrypt('test', 'child', text);
+    const request = { ...saved, conversationId: 'child', assistantId: 'child-assistant',
+      approvalId, requesterId: 'alice', ...encrypted, reviewDigest: digest.digest('hex') };
+    await context.append(`approval-${approvalId}`, 'tool.approval_requested', request, false);
+    const expired = { approvalId };
+    await context.append(`approval-${approvalId}`, 'approval.expired', expired, false);
+    const otherReader = await childRead(context, 'approvals');
+    expect(otherReader.statusCode, otherReader.body).toBe(200);
+    expect(otherReader.json()).toMatchObject({ cards: [] });
+    const requester = await childRead(context, 'approvals', 'alice');
+    expect(requester.statusCode, requester.body).toBe(200);
+    expect(requester.body).toContain('private-arguments');
+    const decrypt = vi.spyOn(context.keys, 'decrypt');
+    decrypt.mockClear();
+    await childRead(context, 'approvals');
+    expect(decrypt).not.toHaveBeenCalled();
+    decrypt.mockRestore();
+  } finally {
+    await context.close();
+  }
+}
+it('hides another requester’s child approval review before decryption',
+  hidesOtherRequesterReview, 120_000);
