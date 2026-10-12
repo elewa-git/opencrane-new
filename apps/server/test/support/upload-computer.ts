@@ -12,7 +12,15 @@ const exec = promisify(execFile);
 export async function uploadComputer() {
   const capture = await mkdtemp(`${tmpdir()}/upload-requests-`);
   const stub = spawn(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
-    { env: { ...process.env, STUB_PORT: '0', MODEL_STUB_CAPTURE: `${capture}/requests.jsonl` }, stdio: ['ignore', 'pipe', 'ignore'] });
+    {
+      env: {
+        ...process.env,
+        STUB_PORT: '0',
+        MODEL_STUB_CAPTURE: `${capture}/requests.jsonl`,
+        MODEL_STUB_MCP_GENERATION: randomUUID(),
+      },
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
   let output = ''; stub.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
   let disk: string | undefined;
   let container: string | undefined, relay: Awaited<ReturnType<typeof tcpProxy>> | undefined;
