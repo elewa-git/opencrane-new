@@ -389,6 +389,8 @@ counts process starts for that fixed identity.
 | --- | --- | --- | --- |
 | `budget.ceiling_set` | admin | budgets | — |
 | `budget.reserved` | budget actor (inside `ext_authz`) | budgets | — |
+| `budget.reservation_expired` | budget actor at expiry | budgets | — |
+| `budget.call_dispatch_admitted` | budget actor at the final gateway check | budgets | — |
 | `budget.settled` | budget actor (on `effect.observed` or admission rejected before dispatch) | budgets, usage | — |
 | `budget.period_started` | timer (00:00 UTC on the 1st) | budgets | — |
 | `budget.exhausted` | budget actor | budgets | notify admins; stop affected work (hard stop cascades) |
@@ -427,9 +429,26 @@ reserved amount again. Duplicate reports and replay preserve that hold.
 If the audit or final authority fence rejects before a permit is returned, the
 actor instead appends `budget.settled` with `settledCents: 0` and
 `outcome: not_dispatched`. This releases the reservation without an effect;
-expiry and replay preserve that settlement. Expiry also writes this settlement
-when a hold has no matching allow decision, no provider dispatch record and no
-effect or security record. A hold that may have been sent is never refunded by time.
+expiry and replay preserve that settlement. New reservations carry `dispatchGate: 1`.
+Model sends and provider checks use one `budget.call_dispatch_admitted` command in
+that same actor queue. It binds the trusted call id, body hash, decision or provider
+request reference, reservation when priced, and the recorded turn, requester,
+payer, assistant and computer generation. It checks current access, stops and
+capacity without holding money twice. Provider reachability checks need no hold.
+Managed model calls remain disabled.
+
+The successful conditional append is the send boundary. The pinned gateway has
+no send retry policy. Only the first successful admission returns permission;
+a duplicate or lost reply cannot return it again. An admitted call may reach the
+provider after a later stop. Its hold remains until usage or resolution proves
+the cost. Expiry releases a new hold only when there is no admission, provider
+dispatch, effect or security evidence. Older holds remain uncertain because their
+senders did not require this record. Before recording their uncertainty, expiry saves
+`budget.reservation_expired` with the reservation id on the budget stream. This
+closes the hold to new admission without changing held or spent cents. Replay
+keeps it closed even if the clock moves backwards. Later usage can still settle
+its original cost. Model and provider admission cannot race
+expiry into releasing a potentially dispatched hold.
 `settle-budget` retries a recorded
 observation or operator resolution through the decision process; duplicate settlement is a no-op.
 It also records uncertainty for outstanding reservations of a lost computer.

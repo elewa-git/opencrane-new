@@ -27,7 +27,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance records| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks control, turns, spending limits, stop reasons and UTC resets| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks control, turns, spending limits, stops, expired holds and one-use send permissions| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
 ```
@@ -70,6 +70,10 @@ value calculated from those definitions. Older records remain readable for repla
 - Define spending stop reasons with their limit and UTC reset time.
   Keep older records with only a spending scope readable.
   Link each later refused turn to the saved stop that blocked it.
+- Define the final model send permission with its call, body hash and spending hold.
+  Saving this record means the call may have been sent, even if its reply is lost.
+- Define a record that closes an expired spending hold to new sends.
+  The record releases no money and still allows later usage to settle the cost.
 - Define optional provider and binding positions on turn records and spending holds.
 - Defines saved provider choices and pauses without granting model access.
 - Define the wrapper every event shares (its id, its type, what it is about,

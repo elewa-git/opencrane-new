@@ -118,15 +118,9 @@ async function recoversOrdinaryCall(failure: Failure) {
     const recovered = await recoverActor(current);
     const reservation = recovered.state.reservations[0]!;
     expect(await history(current.nats.store, `security-${reservation.id}`, 'test')).toEqual([]);
-    if (failure === 'read_after_allow') {
-      expect(totals(recovered.state, recovered.now())).toMatchObject({ reservedCents: 1 });
-      const effects = await history(current.nats.store, `effect-${reservation.id}`, 'test');
-      expect(effects[0]?.event.type).toBe('effect.uncertain');
-    } else {
-      expect(reservation.settledCents).toBe(0);
-      expect(totals(recovered.state, recovered.now())).toMatchObject({ reservedCents: 0 });
-      expect(await history(current.nats.store, `effect-${reservation.id}`, 'test')).toEqual([]);
-    }
+    expect(reservation.settledCents).toBe(0);
+    expect(totals(recovered.state, recovered.now())).toMatchObject({ reservedCents: 0 });
+    expect(await history(current.nats.store, `effect-${reservation.id}`, 'test')).toEqual([]);
   } finally {
     restore();
     await current.close();
@@ -187,15 +181,11 @@ async function recoversProviderCheck(failure: Failure) {
     expect(current.received()).toBe(0);
     if (failure === 'read_after_allow') {
       expect(provider.state?.modelAnswer?.settledCents).toBeUndefined();
-      expect(reservation.settledCents).toBeUndefined();
-      expect(totals(recovered.state, recovered.now())).toMatchObject({ reservedCents: 1 });
-      const effects = await history(current.nats.store, `effect-${reservation.id}`, 'test');
-      expect(effects[0]?.event.type).toBe('effect.uncertain');
     } else {
       expect(provider.state?.modelAnswer?.settledCents).toBe(0);
-      expect(reservation.settledCents).toBe(0);
-      expect(totals(recovered.state, recovered.now())).toMatchObject({ reservedCents: 0 });
     }
+    expect(reservation.settledCents).toBe(0);
+    expect(totals(recovered.state, recovered.now())).toMatchObject({ reservedCents: 0 });
     expect(await history(current.nats.store, `security-${reservation.id}`, 'test')).toEqual([]);
   } finally {
     restore();
@@ -272,7 +262,7 @@ async function releasesAfterLastAccessCheckFails(failure: (typeof lastAccessFail
   function failLastAccessCheck(...args: Parameters<typeof head>) {
     if (allowed && args[0] === 'member-alice') {
       checksAfterAllow += 1;
-      if (checksAfterAllow === 2) {
+      if (checksAfterAllow === 1) {
         if (failure === 'read_outage') {
           return Promise.reject(new Error('Scripted final access read outage'));
         }
@@ -290,7 +280,7 @@ async function releasesAfterLastAccessCheckFails(failure: (typeof lastAccessFail
   clock.mockImplementation(shiftedTime);
   try {
     const response = await current.call();
-    expect(checksAfterAllow).toBe(2);
+    expect(checksAfterAllow).toBe(1);
     expect(response.status).toBe(503);
     expect(current.received()).toBe(0);
     expect(totals(current.actor.state, current.actor.now())).toMatchObject({

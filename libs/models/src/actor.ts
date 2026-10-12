@@ -1,12 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { budgetCeilingSetDataSchema, effectResolvedDataSchema, effectUncertainDataSchema,
+import { budgetCeilingSetDataSchema, budgetCallDispatchAdmittedDataSchema,
+  effectResolvedDataSchema, effectUncertainDataSchema,
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
-import { registerHandler } from '@opencrane/handlers';
 import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budgetStopMessage,
-  exceededReasons, type BudgetState, type ModelCall } from './state.ts';
+  exceededReasons, requireDispatchReservation, type BudgetState, type ModelCall } from './state.ts';
 
 type ModelUsage = {
   inputTokens: number;
@@ -174,7 +174,8 @@ export class BudgetActor {
       await fresh?.();
       const id = randomUUID();
       await this.append('budget.reserved', { reservationId: id, permitId: id, amountCents,
-        payingGroupId: call.payingGroupId, assistantId: call.assistantId, modelCall: call });
+        payingGroupId: call.payingGroupId, assistantId: call.assistantId, modelCall: call,
+        dispatchGate: 1 });
       return id;
     });
   }
@@ -198,34 +199,46 @@ export class BudgetActor {
       throw new BudgetRefused(message);
     }
   }
-  requireOpenReservation(reservationId: string, fresh: () => Promise<void>) {
-    const appendNotDispatched = this.appendNotDispatched.bind(this);
-    const state = this.state;
-    const requireBudget = this.requireBudget.bind(this);
-    function matchesReservation(reservation: BudgetState['reservations'][number]) {
-      return reservation.id === reservationId;
-    }
-    async function checkReservation() {
-      const reservation = state.reservations.find(matchesReservation);
-      if (!reservation || reservation.settledCents !== undefined) {
-        throw new Error('Reservation is no longer open');
+  admitDispatch(raw: unknown, fresh: () => Promise<void>) {
+    const input = budgetCallDispatchAdmittedDataSchema.parse(raw);
+    const admit = async () => {
+      function matchesDispatch(saved: BudgetState['dispatches'][number]) {
+        return saved.callId === input.callId ||
+          (input.reservationId !== undefined && saved.reservationId === input.reservationId);
       }
-      requireBudget(reservation.call);
+      if (this.state.dispatches.some(matchesDispatch)) {
+        throw new Error('Call already admitted; no further send permission');
+      }
+      requireDispatchReservation(this.state, input);
+      this.requireBudget(input.modelCall);
+      const reasons = exceededReasons(this.state, input.modelCall, this.now(), 0);
+      if (reasons.length) {
+        const work = { conversationId: input.modelCall.conversationId,
+          turnId: input.modelCall.turnId };
+        await fresh();
+        await this.append('budget.exhausted', { reasons, work });
+        this.requireBudget(input.modelCall);
+      }
       // Recheck access after waiting in the queue, within the original time limit.
       try {
         await fresh();
       } catch (error) {
-        // Release the hold because no permit has left this process.
-        await appendNotDispatched(reservationId);
+        if (input.reservationId !== undefined) {
+          await this.appendNotDispatched(input.reservationId);
+        }
         throw error;
       }
-    }
-    return this.serial(checkReservation);
+      // Treat even a lost reply as a possible send. Never return this permission twice.
+      const dispatchId = randomUUID();
+      await this.append('budget.call_dispatch_admitted', input, dispatchId, fresh);
+    };
+    return this.serial(admit);
   }
   releaseUndispatched(id: string) {
     return this.serial(async () => {
       const r = this.state.reservations.find(r => r.id === id);
       if (!r) throw new Error('Unmatched reservation');
+      if (r.settledCents === 0 && !r.outcomeUnknown && !this.wasAdmitted(id)) return;
       if (r.settledCents !== undefined) throw new Error('Reservation already settled');
       // Call only with proof that the permit was not used for provider dispatch.
       await this.appendNotDispatched(id);
@@ -384,15 +397,16 @@ export class BudgetActor {
     if (reservation.settledCents !== undefined) {
       return;
     }
-    const allowed = await this.permitted(reservation.id, reservation.call.requestId);
-    if (allowed) {
+    // Keep older holds: those senders did not use the recorded one-use gate.
+    if (reservation.dispatchGate === undefined) {
+      await this.closeExpiredReservation(reservation);
       await this.recordEffectEvidence(reservation, undefined, 'success', 'settle_timeout');
       return;
     }
     const dispatched = await this.providerDispatched(reservation);
     const hasEvidence = await this.hasCallEvidence(reservation.id);
-    if (!dispatched && !hasEvidence) {
-      // Release only when no allow decision or evidence of a call exists.
+    if (!this.wasAdmitted(reservation.id) && !dispatched && !hasEvidence) {
+      // Release only when no send permission or other call evidence exists.
       // Keep the hold if a read fails, then try again at the next expiry check.
       await this.appendNotDispatched(reservation.id);
       return;
@@ -400,13 +414,35 @@ export class BudgetActor {
     if (dispatched) {
       await this.alert(reservation.id);
     }
+    await this.closeExpiredReservation(reservation);
     await this.recordEffectEvidence(reservation, undefined, 'success', 'settle_timeout');
   }
+  private async closeExpiredReservation(reservation: BudgetState['reservations'][number]) {
+    if (reservation.expired) {
+      return;
+    }
+    // Save refusal before uncertainty so replay and an earlier clock cannot reopen the call.
+    await this.append('budget.reservation_expired', { reservationId: reservation.id });
+  }
   private async appendNotDispatched(reservationId: string) {
+    function matchesReservation(saved: BudgetState['reservations'][number]) {
+      return saved.id === reservationId;
+    }
+    const reservation = this.state.reservations.find(matchesReservation);
+    if (!reservation || this.wasAdmitted(reservationId) ||
+        await this.providerDispatched(reservation) || await this.hasCallEvidence(reservationId)) {
+      throw new Error('Call may have been dispatched');
+    }
     const payload = {
       reservationId, permitId: reservationId, settledCents: 0, outcome: 'not_dispatched',
     };
     await this.append('budget.settled', payload);
+  }
+  private wasAdmitted(reservationId: string) {
+    function matchesDispatch(saved: BudgetState['dispatches'][number]) {
+      return saved.reservationId === reservationId;
+    }
+    return this.state.dispatches.some(matchesDispatch);
   }
   private async hasCallEvidence(reservationId: string) {
     const effects = await history(this.store, `effect-${reservationId}`, this.silo);
@@ -473,15 +509,6 @@ export class BudgetActor {
     if (!row) throw new Error('Effect not recorded');
     await this.settle(row.event);
   }
-}
-export function settlementHandler(decisionUrl: string) {
-  return registerHandler('settle-budget', async event => {
-    const d = data(event);
-    const lost = event.type === 'computer.lost';
-    const response = await fetch(`${decisionUrl}/${lost ? 'computer-lost' : 'settle'}`, { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(lost ? { subject: event.subject, eventId: event.id } : { permitId: d['permitId'], eventId: event.id }), signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) throw new Error('Budget settlement unavailable');
-  });
 }
 
 function observedPayload(r: BudgetState['reservations'][number], usage: { inputTokens: number; outputTokens: number;

@@ -28,7 +28,7 @@ async function close() {
 beforeEach(initialise);
 afterEach(close);
 
-async function reserve(provider = false, requestId?: string) {
+async function reserve(provider = false, requestId?: string, legacy = false) {
   const call = {
     requestId, model: 'gpt-6-luna', priceTableId,
     computerId: provider ? 'provider-primary' : 'computer',
@@ -37,7 +37,18 @@ async function reserve(provider = false, requestId?: string) {
     turnId: 'attempt', threadId: 'attempt', payingGroupId: 'group',
     contextDigest: '0'.repeat(64),
   };
-  return actor.reserve(call, 1);
+  if (!legacy) {
+    return actor.reserve(call, 1);
+  }
+  const reservationId = 'legacy-reservation';
+  const payload = { reservationId, permitId: reservationId, amountCents: 1,
+    payingGroupId: 'group', assistantId: call.assistantId, modelCall: call };
+  const event = envelope('test', 'budget-test', 'budget.reserved', payload,
+    'legacy-reserved', clock);
+  await nats.store.append({ event, expectedSequence: await nats.store.head('budget-test') });
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
+  return reservationId;
 }
 
 async function expire() {
@@ -71,7 +82,7 @@ it.each([false, true])('releases an expired hold without admission (provider: %s
   releasesWithoutAdmission);
 
 async function keepsAllowedHold(provider: boolean) {
-  const reservationId = await reserve(provider, 'request');
+  const reservationId = await reserve(provider, 'request', true);
   const payload = {
     requestId: 'request', route: 'model', outcome: 'allow', reason: 'model_allowed',
     contextDigest: '0'.repeat(64), permitId: reservationId,
@@ -115,15 +126,15 @@ async function keepsDispatchedHold() {
 
 it('keeps a dispatched provider hold uncertain even without an allow decision', keepsDispatchedHold);
 
-async function keepsLegacyHold() {
-  const reservationId = await reserve(false, undefined);
+async function keepsLegacyHold(requestId: string | undefined) {
+  const reservationId = await reserve(false, requestId, true);
   await expire();
   expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1 });
   const effects = await history(nats.store, `effect-${reservationId}`, 'test');
   expect(effects[0]?.event.type).toBe('effect.uncertain');
 }
 
-it('keeps a hold from before request ids were recorded uncertain', keepsLegacyHold);
+it.each([undefined, 'request'])('keeps an old hold uncertain (request id: %s)', keepsLegacyHold);
 
 async function keepsHoldAfterUsageWithoutDecision() {
   const budget = {
@@ -469,3 +480,41 @@ async function oldLossKeepsCurrentHold(reclaimed: boolean) {
 }
 it.each([false, true])('old loss leaves a later reservation untouched (reclaimed: %s)',
   oldLossKeepsCurrentHold);
+
+async function settlesExpiredLegacyHoldAfterReplay() {
+  const reservationId = await reserve(false, undefined, true);
+  const reservedAt = new Date(clock);
+  await expire();
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+  clock = reservedAt;
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
+  const reservation = actor.state.reservations[0]!;
+  const input = { callId: 'legacy-call', decisionId: 'legacy-decision',
+    reservationId, bodyDigest: '0'.repeat(64), modelCall: reservation.call };
+  async function fresh() {}
+  await expect(actor.admitDispatch(input, fresh)).rejects.toThrow('no longer open');
+  await actor.effect(reservationId, { inputTokens: 1000, outputTokens: 10 });
+  const effects = await history(nats.store, `effect-${reservationId}`, 'test');
+  function observed(row: (typeof effects)[number]) {
+    return row.event.type === 'effect.observed';
+  }
+  const usage = effects.find(observed)!;
+  await actor.settleRecorded(reservationId, usage.event.id);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 0, monthCents: 1 });
+  const storage = await databases();
+  try {
+    const db = pgDb(storage.queue);
+    const logger = createLogger('legacy-expiry-test', { level: 'silent' });
+    const runner = new ProjectionRunner(db, nats.store, logger);
+    await runner.initialise(budgets);
+    await runner.run(budgets);
+    const projected = await readBudget(db, 'test');
+    expect(projected.reservations).toEqual(actor.state.reservations);
+    expect(totals(projected, clock)).toMatchObject({ reservedCents: 0, monthCents: 1 });
+  } finally {
+    await storage.close();
+  }
+}
+it('settles later usage for an expired legacy hold without reopening admission after replay',
+  settlesExpiredLegacyHoldAfterReplay);

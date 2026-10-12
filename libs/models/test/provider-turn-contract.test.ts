@@ -265,7 +265,7 @@ async function switchOn(setup: Fixture) {
 async function releasesAfterReservedSwitchOn(stage: 'allow audit' | 'permit queue') {
   const setup = await fixture();
   const append = setup.nats.store.append.bind(setup.nats.store);
-  const requireOpen = setup.actor.requireOpenReservation.bind(setup.actor);
+  const requireOpen = setup.actor.admitDispatch.bind(setup.actor);
   let switched = false;
   async function switchDuringAudit(command: Parameters<typeof append>[0]) {
     const result = await append(command);
@@ -286,7 +286,7 @@ async function releasesAfterReservedSwitchOn(stage: 'allow audit' | 'permit queu
     return requireOpen(...args);
   }
   const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(switchDuringAudit);
-  const permits = vi.spyOn(setup.actor, 'requireOpenReservation');
+  const permits = vi.spyOn(setup.actor, 'admitDispatch');
   permits.mockImplementation(switchBeforePermit);
   try {
     const response = await setup.call();

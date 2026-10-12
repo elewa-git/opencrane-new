@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { decisionRecordedDataSchema, parseEventByType, providerDispatchedSchema, type EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createHash } from 'node:crypto';
@@ -7,12 +8,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { resolve } from 'node:path';
 import { exportPKCS8, generateKeyPair } from 'jose';
 import { tokenIssuer } from '@opencrane/auth';
-import { BudgetActor, history, startDecision, startGateway, totals } from '@opencrane/models';
+import { BudgetActor, startDecision, startGateway } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { mkdtemp, rm, writeFile, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { providerSecrets, providerSecretRef, ingestUsage } from '@opencrane/models';
-import { afterAll, beforeAll, expect, it, vi, type MockInstance } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -1083,122 +1084,69 @@ async function keepsLiveVerificationRunning() {
 it('a same-id retry during a live check writes nothing and lets the first check pass',
   keepsLiveVerificationRunning);
 
-function raceExpiryWithAdmission(providerId: string) {
-  const read = nats.store.readStream.bind(nats.store);
+async function expiresBeforeProviderAdmission(legacy: boolean) {
+  const providerId = `expiry-before-admission-${legacy}`;
+  await preparesVerificationProvider(providerId);
+  const input = verificationInput(`check-${providerId}`, 'test');
   const append = nats.store.append.bind(nats.store);
-  const providerRead = Promise.withResolvers<void>();
-  const dispatched = Promise.withResolvers<void>();
-  let phase = 'idle';
-  let expiring: Promise<void> | undefined;
-  let clock: MockInstance<() => Date> | undefined;
-
-  async function* pauseExpiryRead(...args: Parameters<typeof read>) {
-    if (phase === 'expiring' && args[0].startsWith('decision-')) {
-      yield* read(...args);
-      phase = 'after_decision';
-      return;
-    }
-    if (phase === 'after_decision' && args[0] === `provider-${providerId}`) {
-      phase = 'waiting_for_dispatch';
-      const rows: StoredEvent[] = [];
-      for await (const row of read(...args)) {
-        rows.push(row);
-      }
-      // Keep expiry's earlier read while admission records a later dispatch.
-      providerRead.resolve();
-      await dispatched.promise;
-      yield* rows;
-      return;
-    }
-    yield* read(...args);
-  }
-
-  async function admitDuringExpiry(command: Parameters<typeof append>[0]) {
+  const beforeRequests = upstreamCount;
+  let expired = false;
+  async function expireAfterAudit(command: Parameters<typeof append>[0]) {
     const parsed = parseEventByType(command.event);
-    if (parsed.success && parsed.event.type === 'decision.recorded' && phase === 'idle') {
-      const decision = decisionRecordedDataSchema.parse(parsed.event.data);
-      if (decision.reason === 'provider_verification') {
-        phase = 'expiring';
-        const reservationTime = Date.parse(actor.state.reservations.at(-1)!.time);
-        clock = vi.spyOn(actor, 'now');
-        clock.mockReturnValue(new Date(reservationTime + 181_000));
-        expiring = actor.expire();
-        await providerRead.promise;
+    if (legacy && parsed.success && parsed.event.type === 'budget.reserved') {
+      const payload = z.record(z.string(), z.unknown()).parse(parsed.event.data);
+      delete payload['dispatchGate'];
+      if (typeof command.event !== 'object' || command.event === null) {
+        throw new Error('Missing reservation event fixture');
       }
+      Reflect.set(command.event, 'data', payload);
     }
     const result = await append(command);
-    if (parsed.success && parsed.event.type === 'provider.verification_dispatched') {
-      dispatched.resolve();
+    if (parsed.success && parsed.event.type === 'decision.recorded' && !expired) {
+      expired = true;
+      const reservationTime = Date.parse(actor.state.reservations.at(-1)!.time);
+      const clock = vi.spyOn(actor, 'now');
+      clock.mockReturnValue(new Date(reservationTime + 181_000));
+      try {
+        await actor.expire();
+      } finally {
+        clock.mockRestore();
+      }
     }
     return result;
   }
-
-  const reader = vi.spyOn(nats.store, 'readStream');
-  reader.mockImplementation(pauseExpiryRead);
   const writer = vi.spyOn(nats.store, 'append');
-  writer.mockImplementation(admitDuringExpiry);
-
-  async function finish() {
-    dispatched.resolve();
-    try {
-      await expiring;
-    } finally {
-      clock?.mockRestore();
-      reader.mockRestore();
-      writer.mockRestore();
-    }
-  }
-
-  return finish;
-}
-
-async function restoresProviderHoldAfterExpiry(status: number) {
-  const providerId = `expiry-race-${status}`;
-  await preparesVerificationProvider(providerId);
-  const input = verificationInput(`check-${providerId}`, 'test');
-  const beforeRequests = upstreamCount;
-  const beforeTotals = totals(actor.state, actor.now());
-  const finish = raceExpiryWithAdmission(providerId);
-  upstreamFailure = status;
+  writer.mockImplementation(expireAfterAudit);
   try {
     const response = await request('POST', `/api/org/providers/${providerId}/verify`, input);
     expect(response.statusCode).toBe(200);
-    await finish();
-    expect(upstreamCount - beforeRequests).toBe(1);
+    expect(expired).toBe(true);
+    expect(upstreamCount).toBe(beforeRequests);
     const reservation = actor.state.reservations.at(-1)!;
-    expect(reservation.outcomeUnknown).toBe(true);
-    const afterTotals = totals(actor.state, actor.now());
-    expect(afterTotals.reservedCents - beforeTotals.reservedCents).toBe(1);
-    const providerRows = await history(nats.store, `provider-${providerId}`, 'acme');
-    function isDispatch(row: StoredEvent) {
-      return row.event.type === 'provider.verification_dispatched';
-    }
-    expect(providerRows.filter(isDispatch)).toHaveLength(1);
-    const effects = await history(nats.store, `effect-${reservation.id}`, 'acme');
-    if (status === 500) {
-      expect(reservation.settledCents).toBe(0);
-      expect(afterTotals.monthCents).toBe(beforeTotals.monthCents);
-      expect(effects[0]?.event).toMatchObject({
-        type: 'effect.uncertain', data: { reason: 'transport_failure' },
-      });
+    if (legacy) {
+      expect(reservation.dispatchGate).toBeUndefined();
+      expect(reservation.settledCents).toBeUndefined();
+      function earlierClock() {
+        return new Date(reservation.time);
+      }
+      const recovered = new BudgetActor(nats.store, 'acme', earlierClock);
+      await recovered.start();
+      const dispatch = { callId: reservation.call.requestId!,
+        decisionId: `${reservation.call.requestId}:allow`, bodyDigest: '0'.repeat(64),
+        reservationId: reservation.id, modelCall: reservation.call };
+      async function fresh() {}
+      await expect(recovered.admitDispatch(dispatch, fresh)).rejects.toThrow('no longer open');
+      expect(recovered.state.reservations.at(-1)?.settledCents).toBeUndefined();
     } else {
-      expect(reservation.settledCents).toBe(1);
-      expect(effects[0]?.event.type).toBe('effect.observed');
+      expect(reservation.settledCents).toBe(0);
     }
-    expect(await history(nats.store, `security-${reservation.id}`, 'acme')).toEqual([]);
-    const budgetRows = await history(nats.store, 'budget-acme', 'acme');
-    expect(budgetRows.at(-1)?.event).toMatchObject({
-      type: 'budget.settled',
-      data: { reservationId: reservation.id, outcome: 'unknown' },
-    });
+    expect(upstreamCount).toBe(beforeRequests);
   } finally {
-    upstreamFailure = 0;
-    await finish();
+    writer.mockRestore();
   }
 }
-
-it.each([0, 500])('restores a provider hold after expiry races admission (status: %s)',
-  restoresProviderHoldAfterExpiry, 60_000);
+it.each([false, true])('expiry before provider admission sends nothing (legacy hold: %s)',
+  expiresBeforeProviderAdmission);
 
 async function deniesRevokedRoleBeforeIamCatchesUp() {
   const row = { ...event('provider-revoked-owner', 'member-owner', 'member.role_changed'),

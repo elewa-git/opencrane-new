@@ -21,6 +21,15 @@ They are separate from browser event schemas, so browser builds do not load Node
 names, schemas, annotation flags, tool revisions and the catalogue digest.
 The event parser binds every MCP event's server id to its exact subject.
 
+## Final dispatch admission
+
+`budget.call_dispatch_admitted` records the call id, body SHA-256 hash, decision
+or provider request reference, optional reservation and the trusted model-call
+binding. New reservations carry `dispatchGate: 1`; older records remain readable.
+The models actor orders dispatch and expiry on one budget stream. This record
+changes no money. Its absence proves non-dispatch only for the new sender contract.
+The first successful append permits one gateway send; duplicates grant no send.
+
 ## Public contract
 
 Delegation version 1 records one computer generation, root, requester, payer,
@@ -352,3 +361,11 @@ Observations bind the original start, run, Pod UID and workload digest.
 A `not_found` reason requires `unknown`; callable claims and secret fields are refused.
 Stop records require a human principal matching `requestedBy`.
 These events have no registered reaction and grant no permission or credential release.
+
+## Expired spending holds
+
+`budget.reservation_expired` contains only `reservationId`. It belongs to the
+budget stream and closes the hold to new send permission. It changes no cents
+and grants no access. The budget actor saves it before expiry uncertainty.
+The actor and spending projection restore the closed hold on replay; later usage
+can still settle its cost. The event catalogue and registry name the same event.

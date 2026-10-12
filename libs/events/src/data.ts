@@ -558,11 +558,20 @@ export const budgetCeilingSetDataSchema = z.discriminatedUnion('scope', [
 const reservedModelCallDataSchema = optionalProviderTurnBindingSchema.safeExtend({
   requestId: id.optional(), model: id, priceTableId: id,
   computerId: id, assistantId: id, requesterId: id, conversationId: id,
+  generation: z.int().nonnegative().optional(),
   turnId: id, threadId: id, payingGroupId: id.optional(), contextDigest: digestSchema,
 });
 export const budgetReservedDataSchema = z.object({
   reservationId: id, permitId: id, amountCents: centsSchema,
   payingGroupId: id, assistantId: id, modelCall: reservedModelCallDataSchema.optional(),
+  dispatchGate: z.literal(1).optional(),
+}).strict();
+
+export const budgetReservationExpiredDataSchema = z.object({ reservationId: id }).strict();
+
+export const budgetCallDispatchAdmittedDataSchema = z.object({
+  callId: id, decisionId: id, bodyDigest: digestSchema, reservationId: id.optional(),
+  modelCall: reservedModelCallDataSchema.safeExtend({ payingGroupId: id }),
 }).strict();
 
 export const budgetSettledDataSchema = z

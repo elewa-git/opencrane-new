@@ -162,6 +162,23 @@ export async function admitProviderVerification(actor: BudgetActor, binding: Bin
   checkReservation(actor, input, requested.event.id, memberId, reservationId);
   await current.fresh();
   const key = await options.secrets.read(current.state.secretRef!);
+  function matchesReservation(reservation: (typeof actor.state.reservations)[number]) {
+    return reservation.id === reservationId;
+  }
+  const reservation = actor.state.reservations.find(matchesReservation);
+  const modelCall = reservation?.call ?? {
+    requestId: requested.event.id, model: 'provider-reachability', priceTableId,
+    computerId: `provider-${input.providerId}`, assistantId: 'provider-verification',
+    requesterId: memberId, conversationId: `provider-${input.providerId}`,
+    turnId: input.commandId, threadId: input.commandId,
+    payingGroupId: actor.state.defaultPayingGroupId, contextDigest: '0'.repeat(64),
+  };
+  const hash = createHash('sha256');
+  hash.update(body);
+  const decisionId = reservationId ? `${requested.event.id}:allow` : requested.event.id;
+  const dispatch = { callId: requested.event.id, decisionId, bodyDigest: hash.digest('hex'),
+    reservationId, modelCall };
+  await actor.admitDispatch(dispatch, current.fresh);
   const payload = { ...data, ...(reservationId ? { reservationId } : {}) };
   await appendProvider(actor.store, binding.silo, input.providerId, memberId,
     `internal:provider:${input.commandId}:dispatch`, 'provider.verification_dispatched', payload,
@@ -344,7 +361,8 @@ async function recordVerificationDecision(actor: BudgetActor, silo: string,
   requestedEventId: string, reservationId: string, contextDigest: string) {
   const payload = { requestId: requestedEventId, route: 'model', outcome: 'allow',
     reason: 'provider_verification', contextDigest, permitId: reservationId };
-  const audit = envelope(silo, `decision-${requestedEventId}`, 'decision.recorded', payload);
+  const audit = envelope(silo, `decision-${requestedEventId}`, 'decision.recorded', payload,
+    `${requestedEventId}:allow`);
   const command = { event: audit, expectedSequence: 0 };
   const result = await actor.store.append(command);
   if (result.status !== 'appended') {
@@ -413,15 +431,23 @@ async function gatewayFailure(actor: BudgetActor, silo: string, input: Verificat
       input.commandId;
   }
   const dispatched = rows.some(dispatchedAttempt);
+  function admittedReservation(dispatch: (typeof actor.state.dispatches)[number]) {
+    return reservationId !== undefined && dispatch.reservationId === reservationId;
+  }
+  const admitted = actor.state.dispatches.some(admittedReservation);
   const keyRejected = responseStatus === 401 || responseStatus === 403;
   const definiteRejection = keyRejected || responseStatus === 429;
   if (reservationId) {
-    if (!dispatched) {
-      // The gateway never released the key, so no provider cost can exist.
+    function matchesReservation(reservation: (typeof actor.state.reservations)[number]) {
+      return reservation.id === reservationId;
+    }
+    const reservation = actor.state.reservations.find(matchesReservation);
+    if (!dispatched && !admitted && reservation?.dispatchGate === 1) {
+      // Release only holds whose senders had to save a final admission before sending.
       await actor.releaseUndispatched(reservationId);
       return { outcome: 'unknown', settledCents: 0 };
     }
-    if (definiteRejection) {
+    if (dispatched && definiteRejection) {
       await actor.effect(reservationId, undefined, 'error');
       await settleRecordedProviderEffect(actor, silo, reservationId);
       return { outcome: 'fail', settledCents: 0 };

@@ -15,6 +15,7 @@ import { mcpEvents } from './mcp-events.ts';
 import { mcpInstanceEvents } from './mcp-instance.ts';
 import { decisionEvents } from './decision-events.ts';
 import { fileEvents } from './file-events.ts';
+import { budgetEvents } from './budget-events.ts';
 // The event-type registry: every event type named in
 // docs/architecture/events.md, in code. This is the contract CI checks:
 // scripts/check-event-catalogue.mjs fails the build if this list and the
@@ -354,42 +355,7 @@ export const eventRegistry: readonly EventDefinition[] = [
   ...mcpEvents,
   ...mcpInstanceEvents,
 
-  // Budgets
-  event(
-    'budget.ceiling_set',
-    'budget',
-    'An admin set a EUR ceiling in cents (global, paying group, or assistant).',
-    data.budgetCeilingSetDataSchema,
-    { scope: 'global', ceilingCents: 500000, setBy: 'mem_1' },
-  ),
-  event(
-    'budget.reserved',
-    'budget',
-    'The budget actor reserved the worst-case cost of a call.',
-    data.budgetReservedDataSchema,
-    { reservationId: 'res_1', permitId: 'permit_1', amountCents: 200, payingGroupId: 'team_1', assistantId: 'asst_1' },
-  ),
-  event(
-    'budget.settled',
-    'budget',
-    'The budget actor settled a reservation against its observed effect.',
-    data.budgetSettledDataSchema,
-    { reservationId: 'res_1', permitId: 'permit_1', settledCents: 180 },
-  ),
-  event(
-    'budget.period_started',
-    'budget',
-    'A new monthly budget period started.',
-    data.budgetPeriodStartedDataSchema,
-    { periodStart: '2026-10-01T00:00:00.000Z' },
-  ),
-  event(
-    'budget.exhausted',
-    'budget',
-    'A budget ceiling was reached; affected work stops.',
-    data.budgetExhaustedDataSchema,
-    { scope: 'assistant', scopeId: 'asst_1' },
-  ),
+  ...budgetEvents,
 
   // Company brain
   event(

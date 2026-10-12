@@ -1,0 +1,77 @@
+import { event } from './definition.ts';
+import * as data from './data.ts';
+
+export const budgetEvents = [
+  event(
+    'budget.ceiling_set',
+    'budget',
+    'An admin set a EUR ceiling in cents (global, paying group, or assistant).',
+    data.budgetCeilingSetDataSchema,
+    { scope: 'global', ceilingCents: 500000, setBy: 'mem_1' },
+  ),
+  event(
+    'budget.reserved',
+    'budget',
+    'The budget actor reserved the worst-case cost of a call.',
+    data.budgetReservedDataSchema,
+    {
+      reservationId: 'res_1',
+      permitId: 'permit_1',
+      amountCents: 200,
+      payingGroupId: 'team_1',
+      assistantId: 'asst_1',
+    },
+  ),
+  event(
+    'budget.reservation_expired',
+    'budget',
+    'The budget actor closed an expired reservation to new sends without releasing money.',
+    data.budgetReservationExpiredDataSchema,
+    { reservationId: 'res_1' },
+  ),
+  event(
+    'budget.call_dispatch_admitted',
+    'budget',
+    'The budget actor admitted one call for a single gateway send.',
+    data.budgetCallDispatchAdmittedDataSchema,
+    {
+      callId: 'call_1',
+      decisionId: 'decision_1',
+      bodyDigest: '0'.repeat(64),
+      reservationId: 'res_1',
+      modelCall: {
+        model: 'gpt-6-luna',
+        priceTableId: 'tariff',
+        computerId: 'computer_1',
+        assistantId: 'assistant_1',
+        requesterId: 'member_1',
+        conversationId: 'conversation_1',
+        turnId: 'turn_1',
+        threadId: 'thread_1',
+        payingGroupId: 'group_1',
+        contextDigest: '0'.repeat(64),
+      },
+    },
+  ),
+  event(
+    'budget.settled',
+    'budget',
+    'The budget actor settled a reservation against its observed effect.',
+    data.budgetSettledDataSchema,
+    { reservationId: 'res_1', permitId: 'permit_1', settledCents: 180 },
+  ),
+  event(
+    'budget.period_started',
+    'budget',
+    'A new monthly budget period started.',
+    data.budgetPeriodStartedDataSchema,
+    { periodStart: '2026-10-01T00:00:00.000Z' },
+  ),
+  event(
+    'budget.exhausted',
+    'budget',
+    'A budget ceiling was reached; affected work stops.',
+    data.budgetExhaustedDataSchema,
+    { scope: 'assistant', scopeId: 'asst_1' },
+  ),
+];
