@@ -96,3 +96,21 @@ it('caps memory passes at two seconds and keeps a shorter caller deadline',
     const shortToken = await issuer.memoryContext(payload, deadline);
     expect(decodeJwt(shortToken).exp).toBe(deadline / 1000);
   });
+
+async function refusesUnknownContextClass() {
+  directory = await mkdtemp(join(tmpdir(), 'turn-class-validation-'));
+  const keyOptions = { namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8' as const, format: 'pem' as const },
+    publicKeyEncoding: { type: 'spki' as const, format: 'pem' as const } };
+  const key = generateKeyPairSync('ec', keyOptions);
+  const path = join(directory, 'signing.pem');
+  await writeFile(path, key.privateKey, { mode: 0o600 });
+  const options = { privateKeyPath: path, issuer: 'https://class.invalid/' };
+  const issuer = await tokenIssuer(options);
+  const input = { silo: 'test', assistantId: 'assistant', conversationId: 'child',
+    turnId: 'turn', requesterId: 'alice', threadId: 'thread', task: 'chat_turn',
+    model: 'gpt-6-luna', contextClass: 'shared_only' as const };
+  Object.assign(input, { contextClass: 'private' });
+  await expect(issuer.turn(input)).rejects.toThrow();
+}
+it('refuses an unknown context class before signing a turn pass', refusesUnknownContextClass);
