@@ -369,7 +369,7 @@ export async function startDecision(
         linkApprovalAttempt(toolFacts, approvalId);
         await audit(outcome, reason, approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
         await fresh();
-        setDispatchPermit(res, mcpSender, outcome, policy, raw, requestId, fresh, fresh.deadline);
+        mcpSender.setPermit(res, outcome, policy, raw, requestId, fresh, fresh.deadline);
         res.setHeader('x-request-id', requestId);
         markRefusedDecision(res, outcome === 'allow');
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
@@ -425,14 +425,6 @@ async function dispatchRequest(req: IncomingMessage, res: ServerResponse,
     res.writeHead(403);
     res.end('{}');
   }
-}
-
-function setDispatchPermit(res: ServerResponse, dispatch: ReturnType<typeof mcpDispatch>,
-  outcome: string, policy: Awaited<ReturnType<typeof mcpPolicy>>, body: string,
-  requestId: string, confirmAccess: () => Promise<void>, accessDeadline: number) {
-  if (outcome !== 'allow') return;
-  const permit = dispatch.issue(policy, body, requestId, confirmAccess, accessDeadline);
-  res.setHeader('x-opencrane-mcp-permit', permit);
 }
 
 async function modelGrantHistory(actor: BudgetActor, model: string, route: string,

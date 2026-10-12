@@ -97,6 +97,15 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
     return token;
   }
 
+  function setPermit(res: ServerResponse, outcome: string, policy: Policy, body: string,
+    requestId: string, confirmAccess: () => Promise<void>, accessDeadline: number) {
+    if (outcome !== 'allow') {
+      return;
+    }
+    const permit = issue(policy, body, requestId, confirmAccess, accessDeadline);
+    res.setHeader('x-opencrane-mcp-permit', permit);
+  }
+
   function consume(req: IncomingMessage, body: string) {
     const token = req.headers['x-opencrane-mcp-permit'];
     const permit = typeof token === 'string' ? pending.get(token) : undefined;
@@ -162,7 +171,7 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
     }
   }
 
-  return { issue, handle, bindPolicy };
+  return { handle, bindPolicy, setPermit };
 }
 
 async function requireOnlyAdmissions(store: EventStore, silo: string, subject: string,
