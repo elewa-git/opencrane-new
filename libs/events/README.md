@@ -60,6 +60,8 @@ value calculated from those definitions. Older records remain readable for repla
 - Describe an owner or admin’s exact tool review separately from tool discovery.
 
 - Defines shared child records with a parent message, fixed payer and named people.
+- Records whether a child turn uses shared-only context separately from its restricted
+  execution mode.
 - Define strict routine records and rebuild their saved facts without starting work.
   Older routines stay readable and need migration before use.
 - Calculate daily and weekly routine dates in a named time zone. Show the first

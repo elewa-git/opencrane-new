@@ -9,6 +9,10 @@ volume, which can still be written to disk by swap. The live check covers tempor
 processes and their files. Memory features stay off until private replies, memory
 tools and access changes also pass their checks.
 
+The computer keeps a server-recorded shared-only label on restricted child turns.
+It saves the label with the start report and refuses to run that start again after
+a restart.
+
 ## Where it fits
 
 This is the personal computers layer. `apps/ops` starts and pauses computers. `apps/server` sends chat turns and files and can show a read-only desktop view. The computer sends model requests through agentgateway, the AI gateway in the server's models process.

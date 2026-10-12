@@ -74,6 +74,8 @@ have not been checked. Unrelated read receipts do not require reading the event 
   Refuse old reviews and changes to another connection.
 
 - Read recorded child participants without reading the whole conversation.
+- Record the shared-only class for restricted child turns and verify it on each
+  start report.
 
 - Returns missing approval details and accepts requester retries after verified non-dispatch.
 - Lets admins review a departure, remove access and recover the saved removal receipt.

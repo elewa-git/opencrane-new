@@ -1173,6 +1173,20 @@ up to 24 KiB, and time-only records of unfinished work. It is never stored.
 The [HTTP contract](../../docs/api/shared-assistants.md#private-turns-and-memory-free-turns)
 and [check record](../../docs/process/p4-14-private-turns-evidence.md) give the details.
 
+## Shared child turns
+
+The server derives `contextClass: shared_only` from the saved child creation and
+records it on the child start report and `computer.turn_started`, separately from
+`executionMode: restricted`.
+The start report must carry that class; a private conversation cannot claim it and
+a child cannot start without it. The server signs the class into the turn pass, and
+the models process checks it against the saved start. Shared turns cannot call MCP
+or memory routes.
+
+The bridge journal keeps the class with its start report. On restart, an unfinished
+restricted start is failed and is not dispatched again. A new human message is
+needed to start new work.
+
 ## Personal paying group summary
 
 Personal turn admission uses the event-store `budget-payer` summary with `keep: 4`.

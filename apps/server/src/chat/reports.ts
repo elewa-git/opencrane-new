@@ -16,6 +16,7 @@ const existingReportSchema = z.object({ sequence: z.int().positive(), previousSe
   turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
+  contextClass: z.literal('shared_only').optional(),
   reason: z.enum(['bridge_interrupted', 'restricted_tool_refused']).optional(),
   type: z.enum(['agent.output_lost', 'agent.command_ran', 'agent.reasoning_summarised', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.message_delta', 'agent.message_completed']),
 }).strict();
@@ -57,6 +58,7 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   if (created.assistantId !== context.assistantId || !facts.message) {
     throw new ReportRejected('Unrequested report');
   }
+  validateReportContextClass(report, created);
   if (report.requesterId) {
     const author = z.object({ authorId: z.string() }).parse(facts.message);
     if (author.authorId !== report.requesterId) throw new ReportRejected('Requester mismatch');
@@ -99,6 +101,20 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   verifyDigest(saved, digest);
   return 'recorded' as const;
 }
+
+function validateReportContextClass(report: z.infer<typeof reportSchema>,
+  created: ReturnType<typeof agentSessionData>) {
+  const sharedChild = 'contextKind' in created && created.contextKind === 'shared_child';
+  const contextClass = 'contextClass' in report ? report.contextClass : undefined;
+  if (report.type !== 'agent.turn_started') {
+    if (contextClass !== undefined) throw new ReportRejected('Context class is only valid on a turn start');
+    return;
+  }
+  if (contextClass !== (sharedChild ? 'shared_only' : undefined)
+    || (sharedChild && report.executionMode !== 'restricted')) {
+    throw new ReportRejected('Turn context class mismatch');
+  }
+}
 function reportData(report: z.infer<typeof reportSchema>, silo: string, assistantId: string, keys: ReturnType<typeof conversationKeys>) {
   const common = { conversationId: report.conversationId, turnId: report.turnId };
   if (report.type === 'agent.native_consent_refused') {
@@ -117,9 +133,12 @@ function reportData(report: z.infer<typeof reportSchema>, silo: string, assistan
     return { ...common, ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) };
   } else if (report.type === 'agent.turn_started') {
     const data: typeof common & { assistantId: string; threadId?: string;
-      executionMode?: 'restricted' | 'memory_free' } = { ...common, assistantId };
+      executionMode?: 'restricted' | 'memory_free'; contextClass?: 'shared_only' } = {
+      ...common, assistantId,
+    };
     if (report.threadId) data.threadId = report.threadId;
     if (report.executionMode) data.executionMode = report.executionMode;
+    if (report.contextClass) data.contextClass = report.contextClass;
     return data;
   } else if (report.type === 'agent.turn_failed') {
     return { ...common, reason: report.reason ?? 'bridge_interrupted' };

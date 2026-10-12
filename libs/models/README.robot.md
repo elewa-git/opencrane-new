@@ -65,6 +65,14 @@ whether to list remember. `toolDecision` supplies the existing review, mode and 
 rules for both. The backend repeats its own access check; write confirmations still
 read current policy. The slow-read regression keeps the original two-second lifetime.
 
+## Shared child model calls
+
+The turn pass may carry `contextClass: shared_only` only when the server saved that
+class on the matching `computer.turn_started`. The pass keeps this separate from
+`executionMode`. Model calls use the sender and the child assistant's recorded payer.
+MCP and memory routes refuse the class before reading tool policy or issuing a memory
+pass. A private turn cannot claim the class, and a shared child cannot omit it.
+
 ## Internal descendant admission
 
 `admitDescendant` saves one `computer.turn_started` for a signed internal decision.

@@ -107,6 +107,9 @@ export function turnMessage(options: WatchOptions, conversation: AgentSession,
     requesterId: requester.authorId, assistantId: conversation.assistantId, text, executionMode,
     attachments: attachments.slice(-100), omittedAttachments: Math.max(0, attachments.length - 100),
     token: 'preparing', expiresAt: Date.now() + 120_000 };
+  if ('contextKind' in conversation && conversation.contextKind === 'shared_child') {
+    return { ...turn, contextClass: 'shared_only' as const };
+  }
   return turn;
 }
 

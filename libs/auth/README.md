@@ -32,7 +32,8 @@ flowchart LR
   exact sign-in identities from another organisation.
 - Keep return links on the same website and end the Zitadel browser session at sign-out.
 - Sign and check short-lived passes for computers and individual chat turns.
-  Keep a saved provider choice in a turn pass and refuse a different choice.
+  Keep a saved provider choice and the server-recorded shared context class in a
+  turn pass, then refuse a different choice.
 - Refuse passes for native child tasks. Their saved records grant no call authority.
 - Check computer and turn passes against the computer's recorded state. It keeps a
   [stream summary](../../GLOSSARY.md#stream-summary) and reads new events before every check.

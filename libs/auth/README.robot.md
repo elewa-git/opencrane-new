@@ -78,6 +78,9 @@ and rotated token id. The signed `thread` must match the actual Codex `session-i
 `conversation`, `requester`, `task` and allowed `model` are also signed. Issuance
 requires `threadId`, `task` and the model chosen by the server from its routing
 table. Model admission refuses a request whose model differs from the grant.
+Shared child passes also sign `contextClass: shared_only` separately from the
+restricted execution mode. The models process compares it with the saved computer
+start before allowing a call, and refuses shared turns on MCP and memory routes.
 An optional active turn token id further narrows `check`; model admission
 requires a server-owned first `computer.turn_started` and refuses a
 `computer.turn_closed` from any source
