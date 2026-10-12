@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -61,3 +61,21 @@ function helperDiesFromRealFault() {
 it('rejects a new dump without any private canary', rejectsDumpWithoutCanary);
 it('recognises empty named dumps and unnamed ELF cores and minidumps', inventoriesUnnamedCoreAndMinidump);
 it('faults through a real inaccessible memory access with core limits zero', helperDiesFromRealFault);
+
+function refusesUnreadableCanaryScan() {
+  const directory = mkdtempSync(join(tmpdir(), 'private-unreadable-'));
+  try {
+    writeFileSync(join(directory, 'private'), 'canary');
+    chmodSync(directory, 0);
+    const input = JSON.stringify({ paths: [directory], patterns: { canary: ['Y2FuYXJ5'] } });
+    const child = spawnSync(process.execPath, ['apps/computer/test/private-scanner.mjs'], {
+      input, encoding: 'utf8',
+    });
+    expect(child.status).toBe(1);
+    expect(child.stderr).toContain('EACCES');
+  } finally {
+    chmodSync(directory, 0o700);
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+it('refuses to qualify an unreadable canary scan', refusesUnreadableCanaryScan);
