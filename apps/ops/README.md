@@ -14,7 +14,7 @@ flowchart LR
   nats -->|new events and owner appointments| ops["apps/ops<br/>workers and memory replay"]
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
-  ops -->|updates tables, task relationships, jobs and configured memory| postgres["PostgreSQL<br/>read tables"]
+  ops -->|updates tables, task relationships, jobs, configured memory, nightly jobs and retains failed nights| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
   ops -->|checks and updates computers| kube["Kubernetes<br/>computer manager"]
 ```
@@ -41,6 +41,10 @@ flowchart LR
 - Runs one-off upgrades for model access, the default budget group and handler subscriptions.
 
 ## Processes it handles
+
+The dispatcher also uses PostgreSQL's job queue to check enabled memory scopes each night.
+It records why a dirty scope is blocked or missed. Failed triggers keep their original night
+until startup or a later night can record the missed result. It sends no memory task to a computer.
 
 A member joins. When private key storage is configured, the dispatcher prepares one
 key for their private answers, including members without an assistant. It checks

@@ -39,6 +39,7 @@ export interface RuntimeOptions {
 
 /** Use a dedicated pg-boss schema in the supplied silo database. */
 export class HandlerRuntime {
+  private scheduler: PgBoss | undefined;
   readonly boss: PgBoss;
   readonly options: RuntimeOptions;
   constructor(options: RuntimeOptions) {
@@ -229,7 +230,63 @@ export class HandlerRuntime {
     });
   }
 
+  async startNightly(scan: (occurrence: Date) => Promise<void>): Promise<void> {
+    await scheduleNightly(this.boss, this.options.silo, scan);
+    const database = transactionAdapter(this.options.db);
+    const schedulerOptions = { db: database, supervise: false };
+    const scheduler = new PgBoss(schedulerOptions);
+    this.scheduler = scheduler;
+    const logger = this.options.logger;
+    function failed(err: Error) {
+      const fields = { err };
+      logger.error(fields, 'Nightly scheduler failed');
+    }
+    scheduler.on('error', failed);
+    // Start the native timekeeper only after the host has registered its workers and manifest.
+    await scheduler.start();
+    const payload = { silo: this.options.silo };
+    await this.boss.send('dream-nightly', payload);
+  }
+
   async stop(): Promise<void> {
+    await this.scheduler?.stop();
     await this.boss.stop({ graceful: true, timeout: 10_000 });
   }
+}
+
+async function recoverNightly(boss: PgBoss, silo: string,
+  scan: (occurrence: Date) => Promise<void>) {
+  const payload = { silo };
+  const options = { data: payload };
+  const jobs = await boss.findJobs<{ silo: string }>('dream-nightly', options);
+  for (const job of jobs) {
+    if (job.state !== 'failed') {
+      continue;
+    }
+    // Keep the failed trigger until every scope has a saved result for its original night.
+    await scan(job.createdOn);
+    await boss.deleteJob('dream-nightly', job.id);
+  }
+}
+
+export async function scheduleNightly(boss: PgBoss, silo: string,
+  scan: (occurrence: Date) => Promise<void>) {
+  // Retain exhausted triggers so startup or a later night can recover them.
+  const queue = { retryLimit: 5, retryDelay: 1, retryBackoff: true, deleteAfterSeconds: 0 };
+  await boss.createQueue('dream-nightly', queue);
+  await boss.updateQueue('dream-nightly', queue);
+  async function deliver(jobs: JobWithMetadata<{ silo: string }>[]) {
+    for (const job of jobs) {
+      if (job.data.silo !== silo) {
+        throw new Error('Foreign nightly trigger');
+      }
+      await recoverNightly(boss, silo, scan);
+      await scan(job.createdOn);
+    }
+  }
+  const workOptions = { includeMetadata: true } as const;
+  await boss.work('dream-nightly', workOptions, deliver);
+  const options = { tz: 'UTC', key: silo, missed: 'skip' as const };
+  const payload = { silo };
+  await boss.schedule('dream-nightly', '0 2 * * *', payload, options);
 }

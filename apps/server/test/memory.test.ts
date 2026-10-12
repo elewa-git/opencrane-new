@@ -2305,6 +2305,8 @@ it('allows disable after payer or assistant loss and refuses renewed enablement'
 
 it('refuses binding events that claim another member or another scope', invalidBindingEvent);
 
+it('shows blocked and missed history only to the binding owner', nightlyHistory);
+
 // Keep these history checks on shared services before fairness tests replace them.
 it.each(['destroyed', 'missing'] as const)(
   'checks a %s ancestor before accepting a derived fact', ancestor);
@@ -2513,6 +2515,51 @@ async function originalBinding() {
     nextAt: null, binding: { memberId: 'dreamer', revision: 1 } });
   expect((await get(`${path('dreamer')}/maintenance`, 'admin')).statusCode).toBe(404);
   expect((await get(`${path('dream-sales', 'group')}/maintenance`, 'admin')).statusCode).toBe(404);
+}
+
+async function nightlyHistory() {
+  const scopeId = memoryScopeId('acme', 'person', 'dreamer');
+  const outcomes = [
+    ['refused', 'qualification_blocked', '2026-10-12'],
+    ['missed', 'window_missed', '2026-10-13'],
+  ] as const;
+  for (const [action, reason, date] of outcomes) {
+    const intendedAt = `${date}T02:00:00.000Z`;
+    const compactDate = date.replaceAll('-', '');
+    const nightId = compactDate.padEnd(64, 'a');
+    const data = { scopeId, nightId,
+      batchKey: 'b'.repeat(64), inputRevision: 'c'.repeat(64), date,
+      bindingRevision: 1, memberId: 'dreamer', acceptedCapCents: 100,
+      intendedAt, selectedAt: intendedAt, action, reason, inputRefs: [] };
+    await append(`scope-${scopeId}`, 'memory.maintenance_recorded', data);
+  }
+  await runner.run(projection);
+  const maintenancePath = `${path('dreamer')}/maintenance`;
+  const response = await get(maintenancePath, 'dreamer');
+  expect(response.statusCode).toBe(200);
+  const expectedHistory = { history: [
+    { action: 'missed', reason: 'window_missed' },
+    { action: 'refused', reason: 'qualification_blocked' },
+  ] };
+  const original = response.json<unknown>();
+  expect(original).toMatchObject(expectedHistory);
+  const membership = { teamId: 'dream-sales', memberId: 'admin', addedBy: 'owner' };
+  await append('team-dream-sales', 'team.member_added', membership);
+  await runner.run(projection);
+  const shared = path('dream-sales', 'group');
+  const facts = await get(`${shared}/facts`, 'admin');
+  expect(facts.statusCode).toBe(200);
+  const sharedMaintenance = await get(`${shared}/maintenance`, 'admin');
+  expect(sharedMaintenance.statusCode).toBe(404);
+  const position = await nats.store.head();
+  await runner.rebuild(projection);
+  const rebuilt = await get(maintenancePath, 'dreamer');
+  const rebuiltHistory = rebuilt.json<unknown>();
+  expect(rebuiltHistory).toEqual(original);
+  const after = await nats.store.head();
+  expect(after).toBe(position);
+  const denied = await get(maintenancePath, 'admin');
+  expect(denied.statusCode).toBe(404);
 }
 
 async function replayBinding() {

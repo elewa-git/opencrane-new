@@ -12,6 +12,7 @@ import { dispatch, HandlerRuntime } from '@opencrane/handlers';
 import { memberAuthorisation } from '@opencrane/authz';
 import { tokenIssuer } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
+import { scanNightlyMemory } from './nightly-memory.ts';
 import { SandboxClient } from './kubernetes.ts';
 import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
 import { personalKeyHandler } from './personal-keys.ts';
@@ -150,6 +151,10 @@ try {
     const commandStore = commands.store;
     async function startWorkers() {
       await dispatcherRuntime.work();
+      async function scanNightly(occurrence: Date) {
+        await scanNightlyMemory(db.db, commandStore, silo, occurrence);
+      }
+      await dispatcherRuntime.startNightly(scanNightly);
       function deliverCredentials(id: string, token: import('@opencrane/auth').IssuedToken) {
         return kube.credentials(id, token);
       }

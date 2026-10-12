@@ -596,3 +596,10 @@ hidden ids from tombstones and historical dependencies without reading text or k
 The cleanup reaction reuses this calculation. The memory projection checks and consumes
 `memory.cleanup_recorded` without changing fact rows or keys. Completion evidence stays
 in the scope event history; rebuilding tables never runs cleanup or calls a model.
+
+## Nightly intent history
+
+`memory_maintenance_runs` copies checked maintenance records in the memory runner's
+transaction with its checkpoint. Offline memory replay rebuilds these rows without
+a scheduler, model, tool, computer or spending port. Rebuild memory on upgrade
+with readers and workers stopped to create this new table.

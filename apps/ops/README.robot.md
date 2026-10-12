@@ -484,3 +484,26 @@ after losing job tables remain required before any forget route can be enabled.
 key/index/append failure, duplicate delivery, a lost completion reply, replay without
 hidden decryption and completion evidence surviving loss of the job tables.
 Pending-job recovery and a fresh-install HTTP journey are NOT RUN.
+
+## Nightly memory intent worker
+
+Part of #99, P4-17 PR 2. The dispatcher starts native scheduling only after its
+subscription manifest is accepted and event workers are registered. The trigger
+uses the same database adapter and process. It also queues a startup scan.
+Scans require the memory checkpoint to reach a fixed event position, then page
+100 binding rows at a time. Each scope history has its own ten-second deadline.
+Bindings begin on the next UTC night. Clean and disabled scopes append nothing.
+Each dirty night gets one conditional scope append, using SHA-256 keys from
+silo, scope, date and selected revision metadata. Same-night input changes cannot
+claim another attempt. At most 32 oldest references are recorded, without text.
+No revision is marked reviewed. Every unprocessed fact remains dirty.
+After downtime, startup checks the latest elapsed boundary. Failed queued triggers
+are retained without an expiry and recovered before the new scan. Each keeps its
+original UTC night, even after retries are exhausted or the dispatcher restarts.
+A trigger is removed only after every scope has been checked successfully.
+Selection reads the current clock after preparing each scope. Reading history
+cannot extend the original fifteen-minute window. An unresolved `due` record skips a later night as overlap.
+No model, tool, computer or budget port is available to the scan.
+
+Tests: `apps/ops/test/nightly-memory.test.ts` uses real PostgreSQL and NATS,
+including two child processes. Live fresh-install qualification remains NOT RUN.

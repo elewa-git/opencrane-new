@@ -53,6 +53,9 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   envelopeSchema = envelopeSchema.refine(validEgressRuleEvent);
   envelopeSchema = envelopeSchema.refine(validSurveyEvent);
   envelopeSchema = envelopeSchema.superRefine(checkRoutineEvent);
+  if (definition.type === 'memory.maintenance_recorded') {
+    envelopeSchema = envelopeSchema.refine(matchingMaintenanceScope);
+  }
   if (definition.type === 'memory.maintenance_bound') {
     envelopeSchema = envelopeSchema.refine(validMaintenanceBinding);
   }
@@ -108,4 +111,10 @@ function validMaintenanceBinding(event: EventEnvelope) {
   return event.subject === `scope-${fields.scopeId}` && event.source === 'opencrane-server' &&
     event.principal?.kind === 'human' && event.principal.id === fields.memberId &&
     typeof event.commandId === 'string';
+}
+
+function matchingMaintenanceScope(event: EventEnvelope) {
+  const fields = z.object({ scopeId: z.string() });
+  const data = fields.parse(event.data);
+  return event.subject === `scope-${data.scopeId}`;
 }

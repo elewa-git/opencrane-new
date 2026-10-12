@@ -1937,9 +1937,9 @@ replies return unknown; the original `/changes/:commandId` GET checks saved hist
 caught-up memory tables and an unchanged table generation. It returns the current
 binding and `not_configured`, `disabled` or `qualification_blocked`. Dispatch is
 always disabled and `nextAt` is null. All responses use no-store. There is no run,
-retry or scheduler endpoint. Dirty selection, run contracts/history and nightly
-admission are deferred to the second part of the accepted row to keep this change
-small. No allowance is allocated and nothing can spend. The cap records consent.
+retry or scheduler endpoint. The nightly worker records blocked and missed nights,
+and the GET includes their bounded history as described below. No allowance is
+allocated and nothing can spend. The cap records consent.
 
 `test/memory.test.ts` covers HTTP consent, scope/assistant/payer refusal, retries,
 conflicts, status privacy and equal binding tables after offline replay without
@@ -2244,3 +2244,11 @@ Grant absence uses a separate completeness result for the group, assistant and g
 inputs, including permission receipts and a final check of those stream positions.
 Pending chat or computer tables do not turn a checked grant absence into a failed
 read. The ordinary departure completeness checks stay in place.
+
+## Nightly memory history
+
+The existing maintenance GET now includes up to 20 payload-free run records,
+newest first, capped at 16 KiB. The current binding member alone can read this
+status; scope read permission remains required. Other members receive 404.
+Checkpoint and generation checks reject stale or rebuilding tables. Reads still
+check access once. The 100-cent cap is recorded only; dispatch stays disabled.

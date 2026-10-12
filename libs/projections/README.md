@@ -25,7 +25,7 @@ flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, tool admission, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
-  store["libs/event-store<br/>saved events"] -->|events and private instance records in order| projections
+  store["libs/event-store<br/>saved events"] -->|events and nightly records in order| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
 ```
@@ -118,6 +118,9 @@ Closing a chat keeps that message position. Later reports and repeated closes ca
 these details. The reports remain in the feed so their saved evidence is available.
 
 ## Processes it handles
+
+Nightly memory records become a small history table for the server to read.
+Rebuilding it copies the saved records and starts no scheduled work.
 
 A saved memory tombstone marks a fact as hidden permanently. The worker follows its saved
 links and removes search text for every dependent copy in the same database step.

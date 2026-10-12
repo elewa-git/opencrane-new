@@ -235,3 +235,20 @@ state together from the whole ordered event log using the recovery procedure abo
 Never requeue old joins after newer removals. Live upgrade qualification is NOT RUN.
 
 New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).
+
+## Native nightly trigger
+
+`runtime.startNightly(scan)` registers the plain `dream-nightly` queue and worker,
+then saves `0 2 * * *`, UTC, key=silo, missed=skip through pg-boss 12.35.0.
+A second pg-boss instance in the same host enables only the native timekeeper;
+the original runtime still has schedule=false and handles trigger delivery.
+The host calls this only after the dispatcher manifest and workers are ready.
+Stopping the runtime stops both instances. Replay never calls this method.
+`test/nightly.test.ts` drives TestClock and the test-only PostgreSQL session
+adapter across 01:59:59 to 02:00 with two native timekeepers.
+
+The worker receives each trigger's original `createdOn` time. It checks retained
+failed triggers before scanning the new occurrence and removes a failed trigger
+only after the scan succeeds. `deleteAfterSeconds=0` keeps failed jobs indefinitely.
+The trigger body still contains only the silo. Startup queues a new trigger, so
+restart and the next nightly delivery both recover exhausted triggers.

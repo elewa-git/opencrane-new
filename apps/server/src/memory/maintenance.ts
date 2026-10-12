@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
 import { authorityFence, history, readActiveMember } from '@opencrane/models';
-import { memoryMaintenanceBoundDataSchema, parseEventByType } from '@opencrane/events';
+import { memoryMaintenanceBoundDataSchema, memoryMaintenanceRecordedDataSchema,
+  parseEventByType } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { memoryAccessChecks, scopeAccess, readAssistant, MemoryRefused,
   type MemoryOptions, type Scope } from './access.ts';
@@ -20,7 +21,7 @@ export function bindingReceipt(row: StoredEvent) {
   return { outcome: 'saved', binding, savedAt: row.event.time, dispatch: 'disabled' };
 }
 
-export async function maintenanceStatus(options: MemoryOptions, scope: Scope) {
+export async function maintenanceStatus(options: MemoryOptions, scope: Scope, requester: string) {
   const snapshot = await memorySnapshot(options, scope);
   const result = await options.db.query<{ data: unknown }>(`SELECT binding.data
     FROM projection_checkpoints checkpoint JOIN projection_generations generation USING (name)
@@ -34,12 +35,41 @@ export async function maintenanceStatus(options: MemoryOptions, scope: Scope) {
   let status = 'not_configured';
   if (result.rows[0].data !== null) {
     binding = memoryMaintenanceBoundDataSchema.parse(result.rows[0].data);
+    if (binding.memberId !== requester) {
+      throw new MemoryRefused();
+    }
     status = 'disabled';
     if (binding.enabled) {
       status = 'qualification_blocked';
     }
   }
-  return { status, binding, dispatch: 'disabled', nextAt: null };
+  const runs = await options.db.query<{ data: unknown }>(
+    `SELECT run.data FROM projection_checkpoints checkpoint
+     JOIN projection_generations generation USING (name)
+     LEFT JOIN LATERAL (SELECT data FROM memory_maintenance_runs
+       WHERE silo=$1 AND scope_id=$2 AND position<=$3 ORDER BY position DESC LIMIT 20) run ON true
+     WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3 AND generation.generation=$4`,
+    [options.silo, scope.scopeId, snapshot.position, snapshot.generation]);
+  if (!runs.rows.length) {
+    throw new Error('Memory maintenance history unavailable');
+  }
+  const history = [];
+  const empty = { status, binding, dispatch: 'disabled', nextAt: null, history: [] };
+  const encodedEmpty = JSON.stringify(empty);
+  let bytes = Buffer.byteLength(encodedEmpty);
+  for (const row of runs.rows) {
+    if (row.data === null) {
+      continue;
+    }
+    const run = memoryMaintenanceRecordedDataSchema.parse(row.data);
+    const encodedRun = JSON.stringify(run);
+    bytes += Buffer.byteLength(encodedRun) + 1;
+    if (bytes > 16_384) {
+      break;
+    }
+    history.push(run);
+  }
+  return { status, binding, dispatch: 'disabled', nextAt: null, history };
 }
 
 function requireMatchingScope(scope: Scope, input: BindingInput,

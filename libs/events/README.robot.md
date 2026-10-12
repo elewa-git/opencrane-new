@@ -429,3 +429,12 @@ Its only current outcome is `completed`. It requires the matching scope subject,
 `opencrane-worker` source/system principal and `commandId` equal to the event id.
 It contains no text, encrypted value or key reference. `cleanup-memory` subscribes to
 `memory.forgotten` only. Correction cleanup and unavailable evidence remain unimplemented.
+
+## Nightly intent records
+
+`memory.maintenance_recorded` belongs to `scope-<scopeId>`. Its strict schema
+accepts due/null, refused/qualification_blocked and missed/window_missed or overlap.
+It records nightId, batchKey, inputRevision, UTC date, binding revision, member,
+100-cent accepted cap, intendedAt, selectedAt and at most 32 revision references.
+It carries no plaintext, root allowance or dispatch permission. `due` represents
+unresolved work; this scheduler emits only refused or missed records.
