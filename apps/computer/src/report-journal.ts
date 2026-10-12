@@ -185,8 +185,17 @@ export function reportJournal(driver: JournalDriver) {
     };
     if (input.requesterId) report.requesterId = input.requesterId;
     if (input.executionMode === 'restricted') report.executionMode = 'restricted';
-    if (type === 'agent.turn_started' && input.contextClass === 'shared_only') {
-      report.contextClass = 'shared_only';
+    if (input.contextClass === 'shared_only') {
+      if (type === 'agent.turn_started') {
+        report.contextClass = 'shared_only';
+      } else {
+        function isTurnStart(saved: BridgeReport) {
+          return saved.turnId === turnId && saved.conversationId === input.conversationId
+            && saved.type === 'agent.turn_started';
+        }
+        const start = reports.find(isTurnStart);
+        if (start?.threadId) report.threadId = start.threadId;
+      }
     }
     if (input.executionMode === 'restricted' && report.text !== undefined) report.memoryOnly = true;
     const serializedReport = storedLine(report);
@@ -242,6 +251,7 @@ export function wireReport(report: BridgeReport): BridgeReport {
   };
   if (report.previousSequence !== undefined) lost.previousSequence = report.previousSequence;
   if (report.requesterId !== undefined) lost.requesterId = report.requesterId;
+  if (report.threadId !== undefined) lost.threadId = report.threadId;
   return lost;
 }
 

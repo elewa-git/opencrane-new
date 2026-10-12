@@ -2,9 +2,10 @@ import {
   conversationCreatedDataSchema, agentToolCallStartedDataSchema, agentToolCallFinishedDataSchema,
   agentNativeConsentRefusedDataSchema,
 } from '@opencrane/events';
+import { computerSummary, type ComputerSummary } from '@opencrane/auth';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { readEventAt, type AppendCommand, type EventStore, type StoredEvent } from '@opencrane/event-store';
+import { readEventAt, readStreamSummary, type AppendCommand, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
 import { readChatFacts } from './chat-summary.ts';
 import type { conversationKeys } from './keys.ts';
@@ -74,6 +75,10 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
     }
     return 'duplicate' as const;
   }
+  if ('contextKind' in created && created.contextKind === 'shared_child'
+    && report.type !== 'agent.turn_started') {
+    await requireSharedReportTurn(store, context, report, facts.message.authorId);
+  }
   let previousSequence = facts.lastReportSequence;
   let expectedPrevious = report.previousSequence;
   if (expectedPrevious === undefined) {
@@ -100,6 +105,28 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   if (committed?.event.id === id) saved = committed;
   verifyDigest(saved, digest);
   return 'recorded' as const;
+}
+
+async function requireSharedReportTurn(store: EventStore,
+  context: { silo: string; assistantId: string; computerId: string },
+  report: z.infer<typeof reportSchema>, requesterId: unknown) {
+  function take(summary: ComputerSummary) {
+    return summary.turns.get(report.turnId)?.firstStart;
+  }
+  // Check saved admission before encrypting output. A computer's claim is not proof.
+  const start = await readStreamSummary(store, context.silo, `computer-${context.assistantId}`,
+    computerSummary, performance.now() + 10_000, take);
+  if (!start || start.event.source !== 'opencrane-server') {
+    throw new ReportRejected('Shared report has no admitted turn');
+  }
+  const saved = z.record(z.string(), z.unknown()).parse(start.event.data);
+  const threadId = 'threadId' in report ? report.threadId : undefined;
+  if (saved['contextClass'] !== 'shared_only' || saved['executionMode'] !== 'restricted'
+    || saved['computerId'] !== context.computerId || saved['assistantId'] !== context.assistantId
+    || saved['conversationId'] !== report.conversationId || saved['turnId'] !== report.turnId
+    || saved['requesterId'] !== requesterId || saved['threadId'] !== threadId) {
+    throw new ReportRejected('Shared report turn mismatch');
+  }
 }
 
 function validateReportContextClass(report: z.infer<typeof reportSchema>,
