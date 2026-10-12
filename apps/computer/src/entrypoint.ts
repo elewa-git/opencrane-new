@@ -7,6 +7,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { privateConfig, privateEnvironments } from './codex-config.ts';
 import { privateCodexLaunch } from './private-codex.ts';
+import { supervisorStop } from './supervisor-stop.ts';
 import { createServer, connect, type Socket } from 'node:net';
 // Resolve each child through an open parent; mutate only the checked descriptor.
 function directory(parent: number, name: string, uid: number, mode: number, gid = uid) {
@@ -116,12 +117,17 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   for (const [name, uid] of [['codex', 1000], ['tool', 1001], ['desktop', 1002]] as const) {
     closeSync(directory(home, name, uid, 0o700));
   }
+  closeSync(directory(agent, 'supervisor', 0, 0o700));
+  const executorDirectory = directory(run, 'executor', 0, 0o750, 1000);
+  closeSync(directory(executorDirectory, 'supervisor', 0, 0o700));
+  closeSync(executorDirectory);
+  rmSync('/run/executor/supervisor/control.sock', { force: true });
+  const supervisor = supervisorStop();
   closeSync(directory(home, 'private', 0, 0o711));
   for (const name of readdirSync('/home/private')) {
     if (name.startsWith('turn-')) rmSync(`/home/private/${name}`, { recursive: true, force: true });
   }
   closeSync(directory(run, 'codex', 1000, 0o700));
-  closeSync(directory(run, 'executor', 0, 0o750, 1000));
   closeSync(agent); closeSync(home); closeSync(run);
   rmSync('/home/codex/.codex', { recursive: true, force: true });
   symlinkSync('/home/agent/codex', '/home/codex/.codex');
@@ -177,6 +183,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   }
   for (const name of ['control', 'app']) rmSync(`/run/codex/${name}.sock`, { force: true });
   const executor = (args: string[]) => createServer(socket => {
+    if (!supervisor.admit(socket)) return;
     const child = watch(spawn('/usr/local/bin/tool-user', args, { stdio: ['pipe', 'pipe', 'inherit'] }), false);
     if (!child.stdin || !child.stdout) throw new Error('Missing executor pipes');
     socket.pipe(child.stdin); child.stdout.pipe(socket);
@@ -187,6 +194,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   // Only UID 1000 can traverse this root-owned directory. No path-based socket chmod/chown.
   process.umask(0o111);
   function privateConnection(socket: Socket) {
+    if (!supervisor.admit(socket)) return;
     startPrivateCodex(socket, caller);
   }
   createServer(privateConnection).listen('/run/executor/private.sock');

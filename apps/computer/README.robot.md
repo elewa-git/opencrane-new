@@ -2,6 +2,75 @@
 
 For people, read [README.md](README.md) first.
 
+## Executor stop foundation — P3-17 row 2, first part
+
+The root-only `/run/executor/supervisor/control.sock` accepts `POST /stop`. Its caller must
+use trusted, namespace-scoped Pod exec. The request has `generation`, `podUid`,
+`takeoverId` and `affectedTurnIds` (at most 64 unique references). The Pod UID must
+match the downward API's `POD_UID`. The server must check generation against its
+saved computer events before calling; the supervisor does not replay those events.
+No bridge message or `/credentials` request can reach this root-owned directory.
+
+Before terminating work, the supervisor saves a deny-only record under the
+root-owned `/home/agent/supervisor/`. It closes existing exec, host and private
+connections and refuses every later launch. A repeated identical request checks
+exit again and retains its epoch. Conflicting requests are refused. Restart,
+a damaged record or an unavailable exit check cannot reopen admission. This file
+is local safety state, never business truth or authority to grant control.
+
+After closing admission, the supervisor starts a short-lived helper as UID 1001,
+then another as UID 1003. Each calls `kill(-1, SIGKILL)` before any exit scan.
+Linux locks its process list during this signal walk. A child created before the
+walk is included; a fork still waiting to join the list sees the pending fatal
+signal and is refused. The helper can signal only its own user inside this
+computer's private PID namespace. It refuses to run as root. No caller supplies
+target process IDs. The kernel excludes the helper from its own broadcast.
+The [Linux signal code](https://github.com/torvalds/linux/blob/master/kernel/signal.c)
+and [fork code](https://github.com/torvalds/linux/blob/master/kernel/fork.c)
+describe this ordering.
+
+After both helpers exit, the supervisor scans `/proc/<pid>/task/*/status` for live
+tasks owned by either executor user. A zombie main thread can still have live
+workers, so the check includes every thread. Only individual zombie or dead tasks
+are excluded. A successful empty scan visits every thread of every listed process.
+If tasks remain, both helpers run again before another scan. Missing permissions,
+invalid task data, helper failure or the ten-second deadline prevents an exit
+receipt. Admission remains closed and control stays disabled.
+
+Python runs in isolated mode so tool-owned packages cannot replace its imports.
+The helpers clear supplementary groups and prevent later privilege gains. They add
+no capability or dependency. The deadline uses monotonic time. The native tool
+launcher's environment, seccomp and no_new_privs settings are unchanged.
+
+A successful `executor_stop` receipt binds the request and root-generated `epoch`,
+sets `executionQuiet: true` and returns an empty `executionInventory`. It always
+sets `quietProof: unavailable` and `controlEnabled: false`. It is **not** a
+`takeover.paused` quiet receipt or a writer closure receipt. It cannot prove that
+UID 1000 Codex has unloaded its threads or that UID 1002 browser automation and
+queued input have stopped. Kasm and authorised viewing remain running.
+
+Scope split: the supervisor foundation is this first part. Bridge deny gates,
+late preparation/grant refusal, catalogue removal, interruption/unload receipts,
+event-backed approval and integer-cent reservation cancellation, server receipt
+validation, and crash checks at every durable pause transition remain in the
+second part. Writer API, input transport, renewal and fresh-Pod recovery are absent.
+If full proof is unavailable, control must remain disabled. A future explicit
+fresh-Pod recovery may lose unsaved forms.
+
+The changed tests use `uploadComputer()` and the real `ocn-upload-computer:test`
+image paths, with the template's capability set and branch sources mounted read-only.
+They exercise real Codex custom exec, a blocked shell child, a detached descendant,
+the native code-mode host, restricted Codex, helper failure, socket access from
+all four non-root UIDs, conflicting requests, restart and damaged saved denial.
+They also cover a live worker under a zombie main thread, an endless worker with
+a helper that does nothing, and a detached process repeatedly handing work to a
+fresh child. A test observer running as root forces a real fork after reading the PID
+directory and before reading status. The endless-worker check uses a no-op helper
+to simulate failed termination; a real task stuck in kernel I/O is NOT RUN.
+Run with `nice -n 10 npx vitest run apps/computer/test/supervisor-stop.test.ts
+--maxWorkers=1`. Docker/runc source checks do not qualify gVisor or a fresh silo.
+Pinned gVisor/Kasm full quietness and live takeover: **NOT RUN**.
+
 ## Review fixes — 8 October 2026
 
 Findings 1 and 2 were confirmed with failing tests before changing production code.
