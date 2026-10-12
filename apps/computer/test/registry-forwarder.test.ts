@@ -60,15 +60,24 @@ async function stopsWithOpenConnection() {
   }
 }
 
-async function interruptsBuild(signal: 'SIGTERM' | 'SIGINT') {
+async function interruptsBuild(signal: 'SIGTERM' | 'SIGINT', phase = 'download') {
   const directory = await mkdtemp(join(tmpdir(), 'computer-build-stop-'));
   const bin = join(directory, 'bin');
   const port = await freePort();
   await mkdir(bin);
   await cp('apps/computer/build.sh', join(directory, 'build.sh'));
   await cp('apps/computer/test', join(directory, 'test'), { recursive: true });
-  await writeFile(join(bin, 'docker'), '#!/bin/sh\necho 127.0.0.1\n', { mode: 0o755 });
-  await writeFile(join(bin, 'curl'), '#!/bin/sh\ncase "$*" in\n *v2*) exit 0;;\nesac\necho waiting\nsleep 60\n', { mode: 0o755 });
+  let dockerScript = '#!/bin/sh\necho 127.0.0.1\n';
+  let curlScript = '#!/bin/sh\ncase "$*" in\n *v2*) exit 0;;\nesac\necho waiting\nsleep 60\n';
+  if (phase === 'contents') {
+    dockerScript = '#!/bin/sh\ncase "$*" in\n *--rm*-i*) echo waiting; sleep 60;;\n inspect*) echo 127.0.0.1;;\nesac\n';
+    curlScript = '#!/bin/sh\nexit 0\n';
+    for (const name of ['sha256sum', 'tar']) {
+      await writeFile(join(bin, name), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    }
+  }
+  await writeFile(join(bin, 'docker'), dockerScript, { mode: 0o755 });
+  await writeFile(join(bin, 'curl'), curlScript, { mode: 0o755 });
   const nodeScript = `#!/bin/sh\nexec '${process.execPath}' "$1" "$2" "$3" ${port}\n`;
   await writeFile(join(bin, 'node'), nodeScript, { mode: 0o755 });
   const child = spawn('sh', [join(directory, 'build.sh')], {
@@ -104,3 +113,6 @@ async function interruptsBuildWithInt() { await interruptsBuild('SIGINT'); }
 it('closes open registry sockets before exiting', stopsWithOpenConnection);
 it('removes the listener when only the build shell receives TERM', terminatesBuild);
 it('removes the listener when only the build shell receives INT', interruptsBuildWithInt);
+
+async function terminatesContentsCheck() { await interruptsBuild('SIGTERM', 'contents'); }
+it('stops the listener while an image check is reading standard input', terminatesContentsCheck);
