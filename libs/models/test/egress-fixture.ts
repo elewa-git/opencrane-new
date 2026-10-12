@@ -1,11 +1,11 @@
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { createServer, request, type ServerResponse } from 'node:http';
-import { createServer as createTcpServer, type Socket } from 'node:net';
+import { createServer, request, type ServerResponse, IncomingMessage } from 'node:http';
+import { createServer as createTcpServer, Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { onTestFinished } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { egressGrantStream } from '@opencrane/projections';
@@ -16,14 +16,14 @@ const destination = { host: 'registry.npmjs.org', port: 443 };
 const rule = { ...destination, scope: 'person' as const, subjectId: 'alice' };
 const issuer = 'https://egress-fixture.invalid';
 const call = {
-  model: 'egress', priceTableId, computerId: 'computer', assistantId: 'assistant',
+  model: 'computer-egress', priceTableId, computerId: 'computer', assistantId: 'assistant',
   requesterId: 'alice', conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
   payingGroupId: 'group', contextDigest: '0'.repeat(64),
 };
 export type EgressScenario = 'allow' | 'deny' | 'stop' | 'revoke' | 'audit-outage' |
   'gate-outage' | 'missing-relay' | 'foreign-relay';
 
-export async function egressFixture() {
+export async function egressFixture(enabled = true) {
   const directory = await mkdtemp(`${tmpdir()}/egress-gateway-`);
   const nats = await natsFixture();
   const actor = new BudgetActor(nats.store, 'test');
@@ -36,7 +36,9 @@ export async function egressFixture() {
   let received = Buffer.alloc(0);
   let connected = 0;
   let authorised = 0;
-  let permit = randomUUID();
+  const controlRequests: { method: string | undefined;
+    authority: string | string[] | undefined }[] = [];
+  const permit = randomUUID();
   const sockets = new Set<Socket>();
   const order: string[] = [];
 
@@ -59,6 +61,7 @@ export async function egressFixture() {
   await once(relay, 'listening');
   const relayAddress = relay.address();
   if (!relayAddress || typeof relayAddress === 'string') throw new Error('No relay');
+  const relayPort = relayAddress.port;
 
   async function append(subject: string, type: string, data: unknown) {
     const event = envelope('test', subject, type, data);
@@ -71,9 +74,17 @@ export async function egressFixture() {
     if (result.status !== 'appended') throw new Error('Fixture append unavailable');
     return event;
   }
-  async function authorise(response: ServerResponse) {
+  async function authorise(incoming: IncomingMessage, response: ServerResponse) {
     authorised++;
     order.push('authz');
+    const controlRequest = { method: incoming.method,
+      authority: incoming.headers['x-egress-authority'] };
+    controlRequests.push(controlRequest);
+    const bearer = incoming.headers.authorization;
+    if (typeof bearer !== 'string') throw new Error('Missing pass');
+    const verification = { issuer, audience: 'computer-egress', algorithms: ['ES256'] };
+    const verified = await jwtVerify(bearer.slice(7), pair.publicKey, verification);
+    if (verified.payload['permit'] !== permit) throw new Error('Wrong permit');
     const fresh = await authorityFence(nats.store, performance.now(), [grantSubject]);
     if (scenario === 'deny') {
       response.writeHead(403);
@@ -81,6 +92,7 @@ export async function egressFixture() {
       return;
     }
     if (scenario === 'audit-outage') throw new Error('Audit unavailable');
+    const boundCall = { ...call, requestId: permit };
     const decision = await append(`decision-${permit}`, 'decision.recorded', {
       requestId: permit, permitId: permit, route: 'egress', outcome: 'allow',
       reason: 'allowed', contextDigest: call.contextDigest,
@@ -96,18 +108,19 @@ export async function egressFixture() {
     }
     if (scenario === 'gate-outage') throw new Error('Final check unavailable');
     const dispatch = { callId: permit, decisionId: decision.id,
-      bodyDigest: call.contextDigest, modelCall: call };
+      bodyDigest: call.contextDigest, modelCall: boundCall };
     await actor.admitDispatch(dispatch, fresh);
     order.push('dispatch');
     if (scenario !== 'missing-relay') {
-      let target = `127.0.0.1:${relayAddress.port}`;
+      let target = `127.0.0.1:${relayPort}`;
       if (scenario === 'foreign-relay') target = 'registry.npmjs.org:443';
       response.setHeader('x-egress-relay', target);
     }
     response.writeHead(200);
     response.end();
   }
-  function unavailable(response: ServerResponse) {
+  function unavailable(response: ServerResponse, error: unknown) {
+    if (error instanceof Error) order.push(`refused:${error.message}`);
     response.writeHead(503);
     response.end();
   }
@@ -123,7 +136,7 @@ export async function egressFixture() {
       response.end();
       return;
     }
-    void authorise(response).catch(unavailable.bind(null, response));
+    void authorise(incoming, response).catch(unavailable.bind(null, response));
   }
   const decision = createServer(handleDecision);
   decision.listen(0, '127.0.0.1');
@@ -132,14 +145,17 @@ export async function egressFixture() {
   if (!address || typeof address === 'string') throw new Error('No decision listener');
   const decisionUrl = `http://127.0.0.1:${address.port}`;
   const port = await freePort();
-  const options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
+  const binary = resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64');
+  const options: Parameters<typeof startGateway>[0] = { binary,
     configFile: `${directory}/config.json`, usageFile: `${directory}/usage.jsonl`,
-    keyFile: `${directory}/unused-key`, port, readinessPort: await freePort(), decisionUrl, issuer };
-  Object.assign(options, { egressDecisionUrl: decisionUrl });
-  let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
+    keyFile: `${directory}/unused-key`, port, readinessPort: await freePort(), decisionUrl, issuer,
+    mcpRoutes: [{ serverId: 'fixture', connectionId: 'installed',
+      upstream: `127.0.0.1:${relayPort}` }] };
+  if (enabled) options.egressDecisionUrl = decisionUrl;
+  const gatewayState: { gateway?: Awaited<ReturnType<typeof startGateway>> } = {};
   onTestFinished(close);
   await writeFile(options.keyFile, 'fixture-only-unused-key');
-  gateway = await startGateway(options);
+  gatewayState.gateway = await startGateway(options);
 
   async function token(audience = 'computer-egress', expires = 60) {
     const jwt = new SignJWT({ permit });
@@ -153,7 +169,7 @@ export async function egressFixture() {
   async function tunnel(bearer = '', authority = 'registry.npmjs.org:443') {
     const headers = { host: authority, 'proxy-authorization': `Bearer ${bearer}`,
       authorization: 'Bearer secret-canary', 'x-turn-token': 'secret-canary',
-      'x-egress-relay': `127.0.0.1:${relayAddress.port}`, 'x-requester-id': 'secret-canary' };
+      'x-egress-relay': `127.0.0.1:${relayPort}`, 'x-requester-id': 'secret-canary' };
     const outgoing = request({ host: '127.0.0.1', port, method: 'CONNECT',
       path: authority, headers });
     const pending = once(outgoing, 'connect');
@@ -163,7 +179,12 @@ export async function egressFixture() {
     }
     outgoing.on('timeout', timedOut);
     outgoing.end();
-    const [response, socket] = await pending as [import('node:http').IncomingMessage, Socket];
+    const reply: unknown[] = await pending;
+    const response = reply[0];
+    const socket = reply[1];
+    if (!(response instanceof IncomingMessage) || !(socket instanceof Socket)) {
+      throw new Error('Missing CONNECT reply');
+    }
     socket.on('error', ignoreSocketError);
     if (response.statusCode === 200) {
       const payload = Buffer.from('native-binary-tunnel');
@@ -174,23 +195,26 @@ export async function egressFixture() {
     socket.destroy();
     return response.statusCode;
   }
+  async function decisionDown() {
+    if (!decision.listening) return;
+    decision.closeAllConnections();
+    const closed = once(decision, 'close');
+    decision.close();
+    await closed;
+  }
   async function close() {
-    await gateway?.stop();
+    await gatewayState.gateway?.stop();
     const relayClosed = once(relay, 'close');
     relay.close();
     for (const socket of sockets) socket.destroy();
     await relayClosed;
-    decision.closeAllConnections();
-    const decisionClosed = once(decision, 'close');
-    decision.close();
-    await decisionClosed;
+    await decisionDown();
     await nats.close();
     await rm(directory, { recursive: true, force: true });
   }
-  return { token, tunnel, actor, nats, order, port,
+  return { token, tunnel, actor, order, port, controlRequests, decisionDown,
     received: () => received, connected: () => connected, authorised: () => authorised,
     scenario(value: EgressScenario) { scenario = value; },
-    nextPermit() { permit = randomUUID(); },
     receipts: () => history(nats.store, `decision-${permit}`, 'test') };
 }
 

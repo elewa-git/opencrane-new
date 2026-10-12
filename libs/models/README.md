@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|checks saved grants, tool rules, one-use model sends, expired holds and memory passes| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks calls and holds; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|saves spending and child admissions; reads saved changes| store["libs/event-store<br/>event log"]
 ```
@@ -38,6 +38,10 @@ Hosted image refusal applies to ordinary tool sends, so memory remains available
 
 ## What it is responsible for
 
+- Provide an optional gateway route for testing CONNECT, the HTTP request that
+  opens a byte tunnel. It uses only the private relay address returned by the
+  decision service. Normal startup keeps this route off. Computers cannot use it
+  until destination checks and guarded sockets are ready.
 - Read private tool-instance status and original changes for their current member owner.
   Save an owner stop request with one event. Wake stays refused until hosted admission
   and personal profiles are available. No instance starts or credentials are released.
@@ -160,6 +164,10 @@ An internal child admission saves a checked parent and model scope. Competing se
 share the same saved limits. Each reply returns the saved admission. A retry with
 changed details is refused, including when two servers submit it together.
 Native execution remains disabled.
+
+An isolated gateway test opens a CONNECT tunnel after the decision is saved and
+the spending process grants one send. A saved stop or access change prevents that
+send. This proves routing order; it does not prove safe HTTPS access yet.
 
 A private credential stage saves one generation and returns its reference, UID and version.
 Recovery needs its saved identity or an exact identity supplied by the caller.

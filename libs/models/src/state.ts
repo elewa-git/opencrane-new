@@ -114,7 +114,9 @@ export type BudgetState = z.infer<typeof stateSchema>;
 export function requireDispatchReservation(state: BudgetState,
   input: z.infer<typeof budgetCallDispatchAdmittedDataSchema>) {
   if (input.reservationId === undefined) {
-    if (input.modelCall.model !== 'provider-reachability') {
+    // Keep non-metered sends in the same queue so saved spending stops still refuse them.
+    const kind = input.modelCall.model;
+    if (kind !== 'provider-reachability' && kind !== 'computer-egress') {
       throw new Error('Paid calls need a reservation');
     }
     return;
