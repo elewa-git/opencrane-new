@@ -553,3 +553,97 @@ async function stopsWaitingApproval(point: typeof approvalStops[number]) {
   }
 }
 it.each(approvalStops)('refuses stopped Ask calls %s without sending upstream', stopsWaitingApproval);
+
+const recoveryCalls = ['refused MCP pass', 'untouched turn', 'renewed token'] as const;
+async function refusesModelAfterFreeTurnStop(attempt: typeof recoveryCalls[number]) {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    await stopBudget(setup);
+    if (attempt === 'refused MCP pass') {
+      const refused = await send(setup, value);
+      expect(refused.status, await refused.text()).toBe(403);
+    }
+    const limit = { scope: 'paying_group', scopeId: 'personal-default',
+      ceilingCents: 20000, setBy: 'alice' };
+    await setup.actor.configure(limit);
+    if (attempt === 'renewed token') {
+      const input = { assistantId: 'assistant', conversationId: 'conversation', turnId: 'dispatch',
+        threadId: capture.body.params._meta.threadId, requesterId: 'alice',
+        task: 'chat_turn', model: 'gpt-6-luna' };
+      const renewed = await setup.credentials.turn(input);
+      headers['x-turn-token'] = renewed.value;
+    }
+    const response = await setup.call(headers);
+    expect.soft(response.status, response.text).toBe(402);
+    expect.soft(setup.received()).toBe(0);
+    expect.soft(setup.actor.state.reservations).toEqual([]);
+    expect.soft(setup.actor.state.dispatches).toEqual([]);
+
+    const turn = { assistantId: 'assistant', computerId: 'computer',
+      conversationId: 'conversation', turnId: 'fresh', threadId: 'fresh-thread',
+      requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default' };
+    await setup.append('computer-assistant', 'computer.turn_started', turn);
+    const started = { conversationId: 'conversation', assistantId: 'assistant', turnId: 'fresh' };
+    await setup.append('conversation-conversation', 'agent.turn_started', started);
+    const claims = { ...setup.t, turn: 'fresh', thread: 'fresh-thread' };
+    const token = await setup.sign(claims, 'decision-service');
+    const freshHeaders = { 'x-turn-token': token, 'session-id': 'fresh-thread' };
+    const fresh = await setup.call(freshHeaders);
+    expect(fresh.status, fresh.text).toBe(200);
+    expect(setup.received()).toBe(1);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.dispatches).toHaveLength(1);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(recoveryCalls)('keeps a stopped free turn from model sends after recovery: %s',
+  refusesModelAfterFreeTurnStop);
+
+async function checksAdmissionOrder(stopped: boolean) {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    const order: string[] = [];
+    async function stopAfterBudgetAdmission(command: AppendCommand) {
+      const result = await append(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (result.status !== 'appended') return result;
+      if (event.type === 'mcp.dispatch_admitted') order.push(event.type);
+      if (event.type === 'budget.call_dispatch_admitted') {
+        order.push(event.type);
+        if (stopped) {
+          const stop = { conversationId: 'conversation', turnId: 'dispatch', requestedBy: 'alice' };
+          await setup.append('conversation-conversation', 'agent.turn_stop_requested', stop);
+          order.push('agent.turn_stop_requested');
+        }
+      }
+      return result;
+    }
+    const writer = vi.spyOn(setup.nats.store, 'append');
+    writer.mockImplementation(stopAfterBudgetAdmission);
+    try {
+      const response = await send(setup, value);
+      if (stopped) {
+        expect(response.status, await response.text()).toBe(403);
+        expect(order).toEqual(['budget.call_dispatch_admitted', 'agent.turn_stop_requested']);
+        expect(setup.received()).toBe(0);
+      } else {
+        expect(response.status, await response.text()).toBe(200);
+        expect(order).toEqual(['budget.call_dispatch_admitted', 'mcp.dispatch_admitted']);
+        expect(setup.received()).toBe(1);
+      }
+      expect(setup.actor.state.reservations).toEqual([]);
+    } finally {
+      writer.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it.each([false, true])('orders budget before tool admission and checks Stop between them: %s',
+  checksAdmissionOrder);
