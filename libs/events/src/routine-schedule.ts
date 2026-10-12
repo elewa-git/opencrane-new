@@ -67,7 +67,8 @@ function localTimestamp(formatter: Intl.DateTimeFormat, at: number): number {
   for (const part of parts) {
     fields[part.type] = part.value;
   }
-  const year = datePart(fields, 'year').padStart(4, '0');
+  const yearPart = datePart(fields, 'year');
+  const year = yearPart.padStart(4, '0');
   const month = datePart(fields, 'month');
   const day = datePart(fields, 'day');
   const hour = datePart(fields, 'hour');
@@ -143,11 +144,14 @@ function calculate(input: OccurrenceInput, formatter: Intl.DateTimeFormat): Rout
   };
   if (matches.length === 0) {
     const boundary = gapBoundary(formatter, intended, candidates);
+    const boundaryDate = new Date(boundary);
+    const checkAt = boundaryDate.toISOString();
     return { ...local, status: 'dst_skip', at: null, offsetMinutes: null,
-      repeated: false, checkAt: new Date(boundary).toISOString() };
+      repeated: false, checkAt };
   }
   const first = Math.min(...matches);
-  const at = new Date(first).toISOString();
+  const firstDate = new Date(first);
+  const at = firstDate.toISOString();
   const offsetMinutes = (intended - first) / minuteMilliseconds;
   return { ...local, status: 'scheduled', at, offsetMinutes,
     repeated: matches.length > 1, checkAt: at };
@@ -168,7 +172,8 @@ function isScheduledDate(schedule: OccurrenceInput['schedule'], date: number): b
   if (schedule.frequency === 'daily') {
     return true;
   }
-  const day = new Date(date).getUTCDay();
+  const utcDate = new Date(date);
+  const day = utcDate.getUTCDay();
   const isoWeekday = day === 0 ? 7 : day;
   return isoWeekday === schedule.weekday;
 }
@@ -186,7 +191,8 @@ export function previewRoutineOccurrences(input: unknown): RoutineOccurrence[] {
   }
   const occurrences: RoutineOccurrence[] = [];
   while (occurrences.length < checked.count) {
-    const dateText = new Date(date).toISOString();
+    const calendarDate = new Date(date);
+    const dateText = calendarDate.toISOString();
     const localDate = dateText.slice(0, 10);
     localDateSchema.parse(localDate);
     if (isScheduledDate(checked.schedule, date)) {

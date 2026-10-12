@@ -57,10 +57,14 @@ it('previews a weekly Brussels skip followed by the next Sunday', weeklyAcrossSp
 function weeklyAcrossAutumn() {
   const input = { ...request, schedule: weekly, now: '2026-10-24T12:00:00Z', count: 2 };
   const occurrences = previewRoutineOccurrences(input);
-  expect(occurrences[0]).toMatchObject({ localDate: '2026-10-25',
-    at: '2026-10-25T00:30:00.000Z', repeated: true });
-  expect(occurrences[1]).toMatchObject({ localDate: '2026-11-01',
-    at: '2026-11-01T01:30:00.000Z', repeated: false });
+  const firstExpected = {
+    localDate: '2026-10-25', at: '2026-10-25T00:30:00.000Z', repeated: true,
+  };
+  const secondExpected = {
+    localDate: '2026-11-01', at: '2026-11-01T01:30:00.000Z', repeated: false,
+  };
+  expect(occurrences[0]).toMatchObject(firstExpected);
+  expect(occurrences[1]).toMatchObject(secondExpected);
   const betweenRepeats = { ...input, now: '2026-10-25T00:45:00Z', count: 1 };
   expect(previewRoutineOccurrences(betweenRepeats)[0]?.localDate).toBe('2026-11-01');
 }
@@ -69,14 +73,18 @@ it('never offers the second repeated hour as another weekly occurrence', weeklyA
 function nonHourDst() {
   const repeatSchedule = { ...daily, localTime: '01:45', zone: 'Australia/Lord_Howe' };
   const repeatInput = { ...identity, schedule: repeatSchedule, localDate: '2026-04-05' };
-  expect(calculateRoutineOccurrence(repeatInput)).toMatchObject({
+  const repeatExpected = {
     at: '2026-04-04T14:45:00.000Z', offsetMinutes: 660, repeated: true,
-  });
+  };
+  const repeatedOccurrence = calculateRoutineOccurrence(repeatInput);
+  expect(repeatedOccurrence).toMatchObject(repeatExpected);
   const gapSchedule = { ...repeatSchedule, localTime: '02:15' };
   const gapInput = { ...identity, schedule: gapSchedule, localDate: '2026-10-04' };
-  expect(calculateRoutineOccurrence(gapInput)).toMatchObject({
+  const gapExpected = {
     at: null, offsetMinutes: null, status: 'dst_skip', checkAt: '2026-10-03T15:30:00.000Z',
-  });
+  };
+  const skippedOccurrence = calculateRoutineOccurrence(gapInput);
+  expect(skippedOccurrence).toMatchObject(gapExpected);
 }
 it('handles both half-hour clock changes on Lord Howe', nonHourDst);
 
@@ -84,8 +92,10 @@ function noDstAndCalendarRollover() {
   const schedule = { ...daily, localTime: '09:00', zone: 'Asia/Kolkata' };
   const input = { ...request, schedule, now: '2028-02-28T12:00:00Z', count: 2 };
   const occurrences = previewRoutineOccurrences(input);
-  expect(occurrences[0]).toMatchObject({ localDate: '2028-02-29',
-    at: '2028-02-29T03:30:00.000Z', offsetMinutes: 330 });
+  const leapDayExpected = {
+    localDate: '2028-02-29', at: '2028-02-29T03:30:00.000Z', offsetMinutes: 330,
+  };
+  expect(occurrences[0]).toMatchObject(leapDayExpected);
   expect(occurrences[1]?.localDate).toBe('2028-03-01');
 }
 it('uses local calendar dates in a zone without DST', noDstAndCalendarRollover);
