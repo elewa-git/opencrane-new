@@ -322,10 +322,11 @@ it('checks membership after loading status without reading a conversation', refu
 
 async function memberCannotObserve() {
   const fixture = await start();
-  const response = await app.inject({ method: 'POST',
+  const payload = { changeRef: 'observe', expectedSequence: fixture.sequence, state: 'starting' };
+  const request = { method: 'POST' as const,
     url: `/internal/mcp/instances/${fixture.reference.instanceId}/observations`,
-    headers: headers(), payload: { changeRef: 'observe', expectedSequence: fixture.sequence,
-      state: 'starting' } });
+    headers: headers(), payload };
+  const response = await app.inject(request);
   expect(response.statusCode).toBe(403);
   expect(response.headers['cache-control']).toBe('no-store');
   expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);

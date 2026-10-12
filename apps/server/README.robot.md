@@ -126,9 +126,29 @@ Invalid input returns 400, changed retries and stale revisions return 409,
 and unavailable dependencies return 503 without internal response details.
 
 This is the HTTP part of #51 design row 2, split to keep this change under 600 lines.
-Authenticated observation, admin commands and worker registration remain next.
-There is no worker, wake, credential release, callable instance or new installer.
+Admin commands remain next. There is no workload worker, wake, credential release,
+callable instance or new installer.
 Every MCP still installs through the shared hosted path.
+
+### Authenticated worker observations
+
+`registerMcpInstanceWorkerRoutes(app, store, silo)` returns a trusted in-process
+`register` function. It checks an exact saved identity, start, run, workload digest,
+known Pod UID and expected sequence. It issues a random memory-only bearer for at
+most 30 seconds. Replacing a registration retires the earlier pass for that instance.
+Closing the server clears all passes. There is no HTTP registration route.
+
+`POST /internal/mcp/instances/:instanceId/observations` takes `changeRef`,
+`expectedSequence`, `state` and optional safe `reason`. It requires that worker pass;
+member and admin cookies grant no observation permission. Each new report checks
+saved history again and makes one conditional append. Changed retries conflict.
+The pass supplies all instance, user, profile, server, run and Pod fields.
+Replies and parser errors use no-store and hide internal errors.
+
+The normal server registers the route when instance dependencies are configured.
+No process registers a live workload worker yet. Pod creation and confirmation against
+Kubernetes remain design row 3. Reports cannot wake, release material or claim callable
+readiness. Admin commands and their refusal tests remain the next split of row 2.
 
 ### Source checks, 12 October 2026
 

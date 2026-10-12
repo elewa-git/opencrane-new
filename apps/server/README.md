@@ -12,7 +12,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks startup, access, indexed departures, final tool sends, spending stops, memory setup, fact links, tool reviews and turn previews| libs["libs/*<br/>shared code"]
-  server -->|records changes, instance stops, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -->|records changes, instance observations and stops, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
@@ -45,7 +45,8 @@ have not been checked. Unrelated read receipts do not require reading the event 
 - Saves a member's welcome survey answers as encrypted records. Resumes confirmed
   progress, checks restarts and returns original saved receipts. Calls no model.
 - Lets members read their own private tool-instance status and original change results.
-  Saves an explicit owner stop request. Starting an instance remains unavailable.
+  Saves an explicit owner stop request. Accepts reports from a registered worker for
+  one exact run. Starting an instance remains unavailable.
 
 - Let owners and admins save one destination rule and read its original receipt.
   A change reference keeps its original rule and arguments when a request is repeated.

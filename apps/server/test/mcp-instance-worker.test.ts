@@ -48,6 +48,11 @@ async function start(siloId = 'test') {
 function observationUrl(instanceId: string) {
   return `/internal/mcp/instances/${instanceId}/observations`;
 }
+function observe(instanceId: string, authorization: string | undefined, payload: object) {
+  const headers = authorization ? { authorization } : {};
+  const request = { method: 'POST' as const, url: observationUrl(instanceId), headers, payload };
+  return app.inject(request);
+}
 
 async function savesOnlyAnObservation() {
   const fixture = await start();
@@ -62,7 +67,8 @@ async function savesOnlyAnObservation() {
   const retry = await app.inject(request);
   expect(retry.json()).toEqual(saved.json());
   const changed = { ...fixture.payload, state: 'failed' };
-  const refused = await app.inject({ ...request, payload: changed });
+  const changedRequest = { ...request, payload: changed };
+  const refused = await app.inject(changedRequest);
   expect(refused.statusCode).toBe(409);
   const rows = await history(nats.store, fixture.event.subject, 'test');
   expect(rows).toHaveLength(2);
@@ -97,22 +103,19 @@ async function refusesUntrustedObservations() {
   const fixture = await start();
   const other = await start();
   const worker = await workers.register(fixture.registration);
-  const url = observationUrl(fixture.registration.instanceId);
   for (const authorization of [undefined, 'Bearer foreign']) {
-    const headers = authorization ? { authorization } : {};
-    const refused = await app.inject({ method: 'POST', url, headers, payload: fixture.payload });
+    const refused = await observe(fixture.registration.instanceId, authorization, fixture.payload);
     expect(refused.statusCode).toBe(403);
     expect(refused.headers['cache-control']).toBe('no-store');
   }
-  const headers = { authorization: worker.authorization };
-  const foreign = await app.inject({ method: 'POST',
-    url: observationUrl(other.registration.instanceId), headers, payload: other.payload });
+  const foreign = await observe(other.registration.instanceId, worker.authorization, other.payload);
   expect(foreign.statusCode).toBe(403);
   for (const extra of [{ userId: 'bob' }, { siloId: 'foreign' }, { profileId: 'foreign' },
-    { serverId: 'foreign' }, { runGeneration: 2 }, { podUid: 'replacement' },
+    { serverId: 'foreign' }, { profileId: 'My renamed profile' },
+    { runGeneration: 2 }, { podUid: 'replacement' },
     { state: 'callable' }, { state: 'failed', reason: 'not_found' }]) {
     const payload = { ...fixture.payload, ...extra };
-    const refused = await app.inject({ method: 'POST', url, headers, payload });
+    const refused = await observe(fixture.registration.instanceId, worker.authorization, payload);
     expect(refused.statusCode).toBe(400);
   }
   const newer = envelope('test', fixture.event.subject, 'mcp.instance_observed', {
@@ -120,13 +123,14 @@ async function refusesUntrustedObservations() {
     startChangeRef: fixture.data.changeRef, podUid: 'original-pod',
     workloadSpecDigest: fixture.data.workloadSpecDigest, state: 'starting' });
   const result = await nats.store.append({ event: newer, expectedSequence: fixture.sequence });
-  const stale = await app.inject({ method: 'POST', url, headers, payload: fixture.payload });
+  const stale = await observe(fixture.registration.instanceId, worker.authorization, fixture.payload);
   expect(stale.statusCode).toBe(409);
   expect(result.status).toBe('appended');
   const clock = vi.spyOn(Date, 'now');
   try {
     clock.mockReturnValue(worker.expiresAt + 1);
-    const expired = await app.inject({ method: 'POST', url, headers, payload: fixture.payload });
+    const expired = await observe(fixture.registration.instanceId,
+      worker.authorization, fixture.payload);
     expect(expired.statusCode).toBe(403);
   } finally {
     clock.mockRestore();
@@ -140,9 +144,7 @@ async function missingRemainsUnknown() {
   const fixture = await start();
   const worker = await workers.register(fixture.registration);
   const payload = { ...fixture.payload, state: 'unknown', reason: 'not_found' };
-  const response = await app.inject({ method: 'POST',
-    url: observationUrl(fixture.registration.instanceId),
-    headers: { authorization: worker.authorization }, payload });
+  const response = await observe(fixture.registration.instanceId, worker.authorization, payload);
   expect(response.statusCode).toBe(200);
   const rows = await history(nats.store, fixture.event.subject, 'test');
   expect(rows[1]?.event.data).toMatchObject({ state: 'unknown', reason: 'not_found' });
@@ -154,12 +156,10 @@ async function refusesReplacedOrOldRunWorkers() {
   const fixture = await start();
   const old = await workers.register(fixture.registration);
   const worker = await workers.register(fixture.registration);
-  const url = observationUrl(fixture.registration.instanceId);
-  const retired = await app.inject({ method: 'POST', url,
-    headers: { authorization: old.authorization }, payload: fixture.payload });
+  const retired = await observe(fixture.registration.instanceId, old.authorization, fixture.payload);
   expect(retired.statusCode).toBe(403);
-  const starting = await app.inject({ method: 'POST', url,
-    headers: { authorization: worker.authorization }, payload: fixture.payload });
+  const starting = await observe(fixture.registration.instanceId,
+    worker.authorization, fixture.payload);
   expect(starting.statusCode).toBe(200);
   const observation = { instanceId: fixture.registration.instanceId, runGeneration: 1,
     startChangeRef: fixture.data.changeRef, podUid: 'original-pod',
@@ -182,8 +182,7 @@ async function refusesReplacedOrOldRunWorkers() {
   if (newer.status !== 'appended') throw new Error('Next run fixture failed');
   const payload = { ...fixture.payload, changeRef: `late-${counter}`,
     expectedSequence: newer.sequence };
-  const refused = await app.inject({ method: 'POST', url,
-    headers: { authorization: worker.authorization }, payload });
+  const refused = await observe(fixture.registration.instanceId, worker.authorization, payload);
   expect(refused.statusCode).toBe(409);
   expect(await nats.store.head(fixture.event.subject)).toBe(newer.sequence);
   const replacement = { ...fixture.registration, runGeneration: 2,
@@ -196,9 +195,8 @@ it('retires a replaced worker and refuses an old run even with its latest revisi
 async function refusesRegistrationAfterPodBinding() {
   const fixture = await start();
   const worker = await workers.register(fixture.registration);
-  const response = await app.inject({ method: 'POST',
-    url: observationUrl(fixture.registration.instanceId),
-    headers: { authorization: worker.authorization }, payload: fixture.payload });
+  const response = await observe(fixture.registration.instanceId,
+    worker.authorization, fixture.payload);
   expect(response.statusCode).toBe(200);
   const registration = { ...fixture.registration, podUid: 'foreign-pod',
     expectedSequence: response.json<{ sequence: number }>().sequence };
@@ -223,9 +221,8 @@ async function retiresWorkerDuringHistoryRead() {
   const read = vi.spyOn(nats.store, 'readStream');
   read.mockImplementation(replaceDuringRead);
   try {
-    const response = await app.inject({ method: 'POST',
-      url: observationUrl(fixture.registration.instanceId),
-      headers: { authorization: worker.authorization }, payload: fixture.payload });
+    const response = await observe(fixture.registration.instanceId,
+      worker.authorization, fixture.payload);
     expect(response.statusCode).toBe(409);
   } finally {
     read.mockRestore();
@@ -234,3 +231,21 @@ async function retiresWorkerDuringHistoryRead() {
 }
 it('refuses a worker retired while its observation reads saved history',
   retiresWorkerDuringHistoryRead);
+
+async function refusesChangedConcurrentRetry() {
+  const fixture = await start();
+  const worker = await workers.register(fixture.registration);
+  const changed = { ...fixture.payload, state: 'failed' };
+  const requests = [
+    observe(fixture.registration.instanceId, worker.authorization, fixture.payload),
+    observe(fixture.registration.instanceId, worker.authorization, changed),
+  ];
+  const responses = await Promise.all(requests);
+  const codes: number[] = [];
+  for (const response of responses) codes.push(response.statusCode);
+  codes.sort();
+  expect(codes).toEqual([200, 409]);
+  expect(await history(nats.store, fixture.event.subject, 'test')).toHaveLength(2);
+}
+it('saves one observation and refuses a concurrent changed retry with the same id',
+  refusesChangedConcurrentRetry);

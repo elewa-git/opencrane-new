@@ -51,6 +51,9 @@ export function applyMcpInstance(current: McpInstanceState | undefined,
 function applyObservation(current: McpInstanceState, event: EventEnvelope,
   sequence: number): McpInstanceState {
   const observed = mcpInstanceObservedSchema.parse(event.data);
+  if (observed.expectedSequence !== undefined && observed.expectedSequence !== current.sequence) {
+    throw new Error('Instance observation revision mismatch');
+  }
   if (observed.workloadSpecDigest !== current.start.workloadSpecDigest ||
       (current.podUid !== undefined && observed.podUid !== current.podUid)) {
     throw new Error('Instance workload mismatch');

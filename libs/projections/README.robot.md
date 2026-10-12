@@ -495,6 +495,8 @@ Renaming this field preserves the tuple order and the calculated instance id.
 The fold checks that id, exact stream, start deadline, installed bindings and every run.
 A replacement run requires recorded absence of the original stopped Pod and increments
 the run generation by one. Changed UID/spec or late old-run records refuse replay.
+New observations must name the preceding saved sequence. Older observations without
+`expectedSequence` retain their run and Pod checks.
 No phase grants callable access. A late starting observation cannot undo a stop.
 `ProjectionRunner.rebuild(mcpInstances)` rebuilds this table without external work.
 The ops worker and replay CLI do not register this projection yet.

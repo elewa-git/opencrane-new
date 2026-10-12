@@ -57,14 +57,14 @@ export function registerMcpInstanceRoutes(app: FastifyInstance, config: AuthConf
   }
 }
 
-function invalidBody(error: Error & { statusCode?: number }, _request: FastifyRequest,
+export function invalidBody(error: Error & { statusCode?: number }, _request: FastifyRequest,
   reply: FastifyReply) {
   reply.header('cache-control', 'no-store');
   const statusCode = error.statusCode === 413 ? 413 : 400;
   return reply.code(statusCode).send({ status: 'refused' });
 }
 
-function instanceError(reply: FastifyReply, error: unknown) {
+export function instanceError(reply: FastifyReply, error: unknown) {
   if (error instanceof MemberRefusal) {
     return reply.code(error.statusCode).send({ status: error.status });
   }
