@@ -327,3 +327,24 @@ async function allowsConcurrentMemory() {
   }
 }
 it('admits two concurrent memory calls on the same tool', allowsConcurrentMemory);
+
+async function refusesStoppedMemory() {
+  const permit = await memoryPass(call, 'recall');
+  const before = backendRequests;
+  const admissions = setup.actor.state.dispatches.length;
+  const limit = { scope: 'paying_group', scopeId: 'personal-default',
+    ceilingCents: 0, setBy: 'alice' };
+  await setup.actor.configure(limit);
+  const response = await dispatchMemory(permit, call);
+  expect(response.status, await response.text()).toBe(403);
+  expect(backendRequests).toBe(before);
+  expect(admissions).toBeGreaterThan(0);
+  expect(setup.actor.state.dispatches).toHaveLength(admissions);
+  expect(setup.actor.state.reservations).toEqual([]);
+  await setup.actor.configure({ ...limit, ceilingCents: 20000 });
+  await renewCredentials();
+  const renewed = await setup.call(headers, call, route);
+  expect(renewed.status, renewed.text).not.toBe(200);
+  expect(backendRequests).toBe(before);
+}
+it('stops memory before the shared gate and keeps the renewed turn stopped', refusesStoppedMemory);
