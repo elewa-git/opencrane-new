@@ -18,14 +18,29 @@ exit again and retains its epoch. Conflicting requests are refused. Restart,
 a damaged record or an unavailable exit check cannot reopen admission. This file
 is local safety state, never business truth or authority to grant control.
 
-The exit check inventories PID, Linux UID and process start time. It uses Python's
-standard-library process descriptors (`pidfd`) to signal the exact process as
-UID 1001 or 1003. Python runs in isolated mode so tool-owned packages cannot
-replace its imports. It adds no capability or dependency. The ten-second exit deadline
-uses monotonic time. Zombies are excluded because they cannot execute or hold
-connections. Missing process-descriptor support, permissions or inventory prevents
-an exit receipt. The native tool launcher's environment, seccomp and no_new_privs
-settings are unchanged.
+After closing admission, the supervisor starts a short-lived helper as UID 1001,
+then another as UID 1003. Each calls `kill(-1, SIGKILL)` before any exit scan.
+Linux locks its process list during this signal walk. A child created before the
+walk is included; a fork still waiting to join the list sees the pending fatal
+signal and is refused. The helper can signal only its own user inside this
+computer's private PID namespace. It refuses to run as root. No caller supplies
+target process IDs. The kernel excludes the helper from its own broadcast.
+The [Linux signal code](https://github.com/torvalds/linux/blob/master/kernel/signal.c)
+and [fork code](https://github.com/torvalds/linux/blob/master/kernel/fork.c)
+describe this ordering.
+
+After both helpers exit, the supervisor scans `/proc/<pid>/task/*/status` for live
+tasks owned by either executor user. A zombie main thread can still have live
+workers, so the check includes every thread. Only individual zombie or dead tasks
+are excluded. A successful empty scan visits every thread of every listed process.
+If tasks remain, both helpers run again before another scan. Missing permissions,
+invalid task data, helper failure or the ten-second deadline prevents an exit
+receipt. Admission remains closed and control stays disabled.
+
+Python runs in isolated mode so tool-owned packages cannot replace its imports.
+The helpers clear supplementary groups and prevent later privilege gains. They add
+no capability or dependency. The deadline uses monotonic time. The native tool
+launcher's environment, seccomp and no_new_privs settings are unchanged.
 
 A successful `executor_stop` receipt binds the request and root-generated `epoch`,
 sets `executionQuiet: true` and returns an empty `executionInventory`. It always
@@ -47,6 +62,11 @@ image paths, with the template's capability set and branch sources mounted read-
 They exercise real Codex custom exec, a blocked shell child, a detached descendant,
 the native code-mode host, restricted Codex, helper failure, socket access from
 all four non-root UIDs, conflicting requests, restart and damaged saved denial.
+They also cover a live worker under a zombie main thread, an endless worker with
+a helper that does nothing, and a detached process repeatedly handing work to a
+fresh child. A root-only test observer forces a real fork after reading the PID
+directory and before reading status. The endless-worker check uses a no-op helper
+to simulate failed termination; a real task stuck in kernel I/O is NOT RUN.
 Run with `nice -n 10 npx vitest run apps/computer/test/supervisor-stop.test.ts
 --maxWorkers=1`. Docker/runc source checks do not qualify gVisor or a fresh silo.
 Pinned gVisor/Kasm full quietness and live takeover: **NOT RUN**.

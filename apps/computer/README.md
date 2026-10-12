@@ -18,7 +18,7 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -->|starts and pauses| computer
   server["apps/server<br/>the back end"] <-->|turns, models, approvals, dispatch and consent reports| computer
   events["libs/events<br/>report text check"] -.-> computer
-  computer --> supervisor["Root supervisor<br/>executor admission and exit checks"]
+  computer --> supervisor["Root supervisor<br/>executor admission and thread exit checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
   computer -->|sends model and reviewed tool calls| gateway["agentgateway<br/>AI gateway"]
@@ -62,8 +62,9 @@ server whether it can wait for approval. Older computers receive Allow tools onl
 3. **A person uploads a file.** The server passes the scanned file to the bridge. The bridge puts it in the workspace for Codex to read.
 4. **A computer resumes.** Its files remain on its disk. The bridge sends any reports that the server has not confirmed yet.
 5. **A trusted root process stops executors.** The supervisor closes executor connections
-   and stops tools and private Codex processes. It checks that detached children have
-   exited too. Its receipt records only executor exit; it cannot grant desktop control.
+   and stops tools and private Codex processes. It checks every worker thread, including
+   workers whose main thread has exited, and detached children. If work keeps running,
+   it refuses an exit receipt. Its receipt cannot grant desktop control.
 
 The local HTTP listener allows up to 17 minutes to receive a request. This setting
 does not limit how long its reply can wait. Approval waits have their own 15-minute limit.

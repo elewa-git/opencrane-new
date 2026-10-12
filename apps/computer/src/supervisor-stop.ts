@@ -24,11 +24,6 @@ interface StopRequest {
 interface Gate extends StopRequest {
   epoch: string;
 }
-interface ProcessIdentity {
-  pid: number;
-  uid: number;
-  startTime: string;
-}
 
 function identifier(value: unknown): string {
   if (typeof value !== 'string' || value.length < 1 || value.length > 200) {
@@ -79,37 +74,23 @@ function hasLiveExecutionThread(pid: string) {
   return false;
 }
 
-function executionInventory() {
-  const inventory: ProcessIdentity[] = [];
+function hasLiveExecutionTasks() {
   for (const name of readdirSync('/proc')) {
     if (!/^\d+$/u.test(name)) continue;
     try {
-      const status = readFileSync(`/proc/${name}/status`, 'utf8');
-      const uid = Number(/^Uid:\s+(\d+)/mu.exec(status)?.[1]);
-      if (!Number.isSafeInteger(uid)) throw new Error('Process identity unavailable');
-      if (!hasLiveExecutionThread(name)) continue;
-      const stat = readFileSync(`/proc/${name}/stat`, 'utf8');
-      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-      const startTime = fields[19];
-      if (!startTime || !/^\d+$/u.test(startTime)) throw new Error('Process start unavailable');
-      inventory.push({ pid: Number(name), uid, startTime });
+      if (hasLiveExecutionThread(name)) return true;
     } catch (error) {
       ignoreExitedTask(error);
     }
   }
-  return inventory;
+  return false;
 }
 
-async function stopProcesses(inventory: ProcessIdentity[], deadline: number) {
+async function stopProcesses(deadline: number) {
   for (const uid of EXECUTION_UIDS) {
-    function belongsToUser(identity: ProcessIdentity) {
-      return identity.uid === uid;
-    }
-    const processes = inventory.filter(belongsToUser);
-    if (processes.length === 0) continue;
     // Ignore tool-owned Python settings when running the termination helper.
     const args = [`--reuid=${uid}`, `--regid=${uid}`, '--clear-groups', '--no-new-privs', '--',
-      '/usr/bin/python3', '-I', '/app/src/stop-processes.py', JSON.stringify(processes)];
+      '/usr/bin/python3', '-I', '/app/src/stop-processes.py'];
     const remainingMs = Math.floor(deadline - performance.now());
     if (remainingMs <= 0) throw new Error('Executor exit unavailable');
     const options = { timeout: remainingMs };
@@ -119,13 +100,13 @@ async function stopProcesses(inventory: ProcessIdentity[], deadline: number) {
 
 async function proveExecutionStopped() {
   const deadline = performance.now() + EXIT_LIMIT_MS;
-  let inventory = executionInventory();
-  while (inventory.length > 0) {
-    const remainingMs = deadline - performance.now();
-    if (remainingMs <= 0) throw new Error('Executor exit unavailable');
-    await stopProcesses(inventory, deadline);
+  while (true) {
+    // Kill before scanning. The kernel prevents a fork from escaping this signal walk.
+    await stopProcesses(deadline);
     await delay(25);
-    inventory = executionInventory();
+    const liveTasks = hasLiveExecutionTasks();
+    if (performance.now() >= deadline) throw new Error('Executor exit unavailable');
+    if (!liveTasks) return;
   }
 }
 
