@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { computerTurnStartedDataSchema } from '@opencrane/events';
 import { tokenVerifier } from '@opencrane/auth';
-import { createEventStore } from '@opencrane/event-store';
+import { createEventStore, type EventStore } from '@opencrane/event-store';
 import { grantStream } from '@opencrane/authz';
 import { admitDescendant, descendantId, history } from '../src/index.ts';
 import { fixture } from './fixture.ts';
@@ -92,6 +92,67 @@ async function serialisesReplicaAdmissions() {
 }
 it('admits at most four descendants across competing replicas and keeps retries unchanged',
   serialisesReplicaAdmissions);
+
+async function refusesConcurrentChangedRetry() {
+  const context = await setup();
+  try {
+    const other = await createEventStore(await context.nats.client('command'));
+    const narrow = { ...child('same-id'), scopes: { ...scopes, models: [] } };
+    const wider = child('same-id');
+    expect(narrow.delegationId).toBe(wider.delegationId);
+    const ready = Promise.withResolvers<void>();
+    let waiting = 0;
+    function competingStore(store: EventStore): EventStore {
+      const originalAppend = store.append.bind(store);
+      async function append(command: Parameters<EventStore['append']>[0]) {
+        waiting++;
+        if (waiting === 2) {
+          ready.resolve();
+        }
+        // Let both replicas validate the same position before either writes.
+        await ready.promise;
+        return originalAppend(command);
+      }
+      store.append = append;
+      return store;
+    }
+    const firstStore = competingStore(context.nats.store);
+    const secondStore = competingStore(other);
+    const attempts = [admit(context, narrow, firstStore), admit(context, wider, secondStore)];
+    const results = await Promise.allSettled(attempts);
+    function admitted(result: PromiseSettledResult<unknown>) {
+      return result.status === 'fulfilled';
+    }
+    function refused(result: PromiseSettledResult<unknown>) {
+      return result.status === 'rejected';
+    }
+    const accepted = results.filter(admitted);
+    const rejected = results.filter(refused);
+    expect(accepted).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]).toMatchObject({ reason: new Error('Admission conflict') });
+    const rows = await history(other, 'computer-assistant', 'test');
+    function sameAdmission(row: (typeof rows)[number]) {
+      return row.event.id === narrow.delegationId;
+    }
+    const saved = rows.filter(sameAdmission);
+    expect(saved).toHaveLength(1);
+    const original = saved[0]!;
+    expect(accepted[0]).toMatchObject({ value: original });
+    const originalBinding = computerTurnStartedDataSchema.parse(original.event.data);
+    const unchanged = originalBinding.scopes?.models.length === 0 ? narrow : wider;
+    const changed = unchanged === narrow ? wider : narrow;
+    expect(await admit(context, unchanged, other)).toEqual(original);
+    await expect(admit(context, changed)).rejects.toThrow('Admission conflict');
+    const finalRows = await history(other, 'computer-assistant', 'test');
+    expect(finalRows.filter(sameAdmission)).toEqual(saved);
+    await assertNoEffects(context);
+  } finally {
+    await context.close();
+  }
+}
+it('refuses a concurrent changed retry and returns the stored original on identical retry',
+  refusesConcurrentChangedRetry);
 
 const invalidBindings = [
   { executionMode: 'restricted' }, { providerId: 'other' }, { bindingSequence: 2 },
