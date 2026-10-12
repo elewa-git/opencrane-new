@@ -7,7 +7,8 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
-import { saveBearerConnection, foldConnection } from '../src/bearer-connections.ts';
+import { saveBearerConnection, foldConnection, changePersonalConnection }
+  from '../src/bearer-connections.ts';
 import type { ConnectionStage, connectionCustody } from '../src/connection-custody.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -27,6 +28,14 @@ async function initialise() {
   });
   await nats.store.append({ event: joined, expectedSequence: 0 });
   await auth.handler.handle(joined, pgDb(storage.queue));
+  for (const memberId of ['bob', 'admin']) {
+    const role = memberId === 'admin' ? 'admin' : 'member';
+    const member = envelope('test', `member-${memberId}`, 'member.joined', {
+      memberId, role, email: `${memberId}@example.test`, displayName: memberId,
+    });
+    await nats.store.append({ event: member, expectedSequence: 0 });
+    await auth.handler.handle(member, pgDb(storage.queue));
+  }
   const registered = envelope('test', 'mcp-server', 'mcp.server_registered', {
     serverId: 'server', kind: 'remote', locator: 'https://example.test/mcp', registeredBy: 'admin',
   });
@@ -166,7 +175,7 @@ async function concurrentRotations() {
 it('saves only one of two competing rotations', concurrentRotations);
 async function refusesForeign() {
   const test = fixture();
-  await expect(saveBearerConnection(nats.store, binding, 'bob', test.custody,
+  await expect(saveBearerConnection(nats.store, binding, 'outsider', test.custody,
     test.input, material)).rejects.toThrow();
   const foreign = { ...test.input, connectionId: 'foreign' };
   await expect(test.save(foreign)).rejects.toThrow('Connection server unavailable');
@@ -207,3 +216,134 @@ async function lostAppendReply() {
   expect(await nats.store.head(test.subject)).toBe(recovered.sequence);
 }
 it('recovers a lost append reply and refuses changed retry details', lostAppendReply);
+
+function controlInput(test: ReturnType<typeof fixture>, sequence: number) {
+  return { action: 'revoke' as const, userId: 'alice', serverId: 'server',
+    profileId: test.input.profileId, changeRef: 'stop', expectedSequence: sequence };
+}
+async function ownerRevoke() {
+  const test = fixture();
+  const created = await test.save();
+  const input = controlInput(test, created.sequence);
+  const result = await changePersonalConnection(nats.store, binding, 'alice', input);
+  expect(result.status).toBe('revoked');
+  const rows = await history(nats.store, test.subject, 'test');
+  expect(rows).toHaveLength(2);
+  expect(rows[1]!.event).toMatchObject({ type: 'connection.revoked',
+    principal: { kind: 'human', id: 'alice' },
+    data: { revokedBy: 'alice', expectedSequence: created.sequence, reason: 'owner_requested' } });
+  expect(foldConnection(rows).status).toBe('unavailable');
+  const retry = await changePersonalConnection(nats.store, binding, 'alice', input);
+  expect(retry).toEqual(result);
+  const rotate = { ...test.input, action: 'rotate', changeRef: 'after-revoke',
+    expectedSequence: result.sequence, expectedGeneration: 1 };
+  await expect(test.save(rotate)).rejects.toThrow('Connection conflict');
+  expect(JSON.stringify({ rows, result })).not.toContain(material);
+}
+it('lets only the owner invalidate a profile and recovers the same revoke', ownerRevoke);
+
+async function refusedControl() {
+  const test = fixture();
+  const created = await test.save();
+  const input = controlInput(test, created.sequence);
+  for (const actor of ['bob', 'admin']) {
+    await expect(changePersonalConnection(nats.store, binding, actor, input)).rejects.toThrow();
+  }
+  const disable = { ...input, action: 'disable', expectedSequence: 0 };
+  await expect(changePersonalConnection(nats.store, binding, 'alice', disable)).rejects.toThrow();
+  const changedOwner = { ...input, userId: 'bob' };
+  await expect(changePersonalConnection(nats.store, binding, 'bob', changedOwner)).rejects.toThrow();
+  for (const patch of [{ profileId: 'foreign' }, { siloId: 'foreign' }, { ownerId: 'bob' },
+    { reason: material }, { expectedSequence: 0 }]) {
+    const forged = { ...input, ...patch };
+    await expect(changePersonalConnection(nats.store, binding, 'alice', forged)).rejects.toThrow();
+  }
+  const wrongSilo = { ...binding, silo: 'foreign' };
+  await expect(changePersonalConnection(nats.store, wrongSilo, 'alice', input)).rejects.toThrow();
+  const wrongProfile = { ...disable, profileId: 'foreign' };
+  await expect(changePersonalConnection(nats.store, binding, 'admin', wrongProfile)).rejects.toThrow();
+  expect(await nats.store.head(test.subject)).toBe(created.sequence);
+  expect(await nats.store.head('connection-control-alice-server')).toBe(0);
+}
+it('refuses foreign owners, silos, profiles, ordinary disable and stale revoke', refusedControl);
+
+async function lostRevokeReply() {
+  const test = fixture();
+  const created = await test.save();
+  const input = controlInput(test, created.sequence);
+  const append = nats.store.append.bind(nats.store);
+  async function loseReply(command: AppendCommand) {
+    await append(command);
+    return { status: 'unavailable' as const, cause: new Error(material) };
+  }
+  const fault = vi.spyOn(nats.store, 'append');
+  fault.mockImplementation(loseReply);
+  try {
+    await expect(changePersonalConnection(nats.store, binding, 'alice', input))
+      .rejects.toThrow('Connection append unconfirmed');
+  } finally {
+    fault.mockRestore();
+  }
+  const result = await changePersonalConnection(nats.store, binding, 'alice', input);
+  expect(result.status).toBe('revoked');
+  expect(await history(nats.store, test.subject, 'test')).toHaveLength(2);
+  const changed = { ...input, expectedSequence: result.sequence };
+  await expect(changePersonalConnection(nats.store, binding, 'alice', changed))
+    .rejects.toThrow('Connection conflict');
+}
+it('recovers a lost revoke reply without copying a dependency error', lostRevokeReply);
+
+async function revokeDefeatsRotation() {
+  const test = fixture();
+  const created = await test.save();
+  const input = controlInput(test, created.sequence);
+  const stage = test.custody.stage;
+  async function revokeDuringStage(request: ConnectionStage, supplied: string) {
+    const result = await stage(request, supplied);
+    await changePersonalConnection(nats.store, binding, 'alice', input);
+    return result;
+  }
+  test.custody.stage = revokeDuringStage;
+  const rotate = { ...test.input, action: 'rotate', changeRef: 'racing',
+    expectedSequence: created.sequence, expectedGeneration: 1 };
+  await expect(test.save(rotate)).rejects.toThrow('Connection append unconfirmed');
+  const rows = await history(nats.store, test.subject, 'test');
+  expect(rows).toHaveLength(2);
+  expect(foldConnection(rows).status).toBe('unavailable');
+}
+it('refuses a rotation staged before an owner revoked the profile', revokeDefeatsRotation);
+
+async function adminDisable() {
+  const test = fixture();
+  const created = await test.save();
+  const input = { ...controlInput(test, 0), action: 'disable' };
+  const stage = test.custody.stage;
+  async function disableDuringStage(request: ConnectionStage, supplied: string) {
+    const result = await stage(request, supplied);
+    await changePersonalConnection(nats.store, binding, 'admin', input);
+    return result;
+  }
+  test.custody.stage = disableDuringStage;
+  const rotate = { ...test.input, action: 'rotate', changeRef: 'racing-disable',
+    expectedSequence: created.sequence, expectedGeneration: 1 };
+  await expect(test.save(rotate)).rejects.toThrow('Connection disabled');
+  expect(await nats.store.head(test.subject)).toBe(created.sequence);
+  const rows = await history(nats.store, 'connection-control-alice-server', 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.event).toMatchObject({ type: 'connection.disabled',
+    principal: { kind: 'human', id: 'admin' },
+    data: { userId: 'alice', serverId: 'server', disabledBy: 'admin', reason: 'admin_disabled' } });
+  const retry = await changePersonalConnection(nats.store, binding, 'admin', input);
+  expect(retry.status).toBe('disabled');
+  expect(retry.sequence).toBe(rows[0]!.sequence);
+  const reconnect = fixture();
+  const stageSpy = vi.spyOn(reconnect.custody, 'stage');
+  await expect(reconnect.save()).rejects.toThrow('Connection disabled');
+  expect(stageSpy).not.toHaveBeenCalled();
+  expect(await nats.store.head(reconnect.subject)).toBe(0);
+  const revoke = controlInput(test, created.sequence);
+  await changePersonalConnection(nats.store, binding, 'alice', revoke);
+  await expect(reconnect.save()).rejects.toThrow('Connection disabled');
+  expect(JSON.stringify({ rows, retry })).not.toContain(material);
+}
+it('keeps an admin disable across staging, owner revoke and a new profile', adminDisable);
