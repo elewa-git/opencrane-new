@@ -16,7 +16,7 @@ function refusesSymlinkLock() { attack('symlink-lock'); }
 function refusesForeignLock() { attack('foreign-lock'); }
 function preventsLockReplacement() { attack('lock-replacement'); }
 
-it('prevents the agent making desktop credentials readable through an X11 symlink', refusesSocketSwap);
+it('prevents the agent changing desktop credential permissions through an X11 symlink', refusesSocketSwap);
 it('refuses a display lock symlink made by the agent', refusesSymlinkLock);
 it('refuses a display lock owned by the agent', refusesForeignLock);
 it('prevents agent replacement between checking and unlinking a display lock', preventsLockReplacement);

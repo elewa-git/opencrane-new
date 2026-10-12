@@ -78,7 +78,7 @@ The pinned binary's SIGKILL and Stop paths were exercised separately.
 
 ## Fixes and failing-first checks
 
-Agent-UID tests first reproduced the X11 symlink disclosure, symlink and
+Agent-UID tests first reproduced an X11 symlink changing credential-file permissions, symlink and
 foreign-owner locks, and replacement during unlink. Startup now makes root-owned
 `/tmp` sticky before children start. Directory and lock operations use checked
 non-following descriptors, owner/type checks and an inode comparison before
