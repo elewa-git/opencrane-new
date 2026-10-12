@@ -1,7 +1,11 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import { jetstream, jetstreamManager } from '@nats-io/jetstream';
+import { TimeoutError } from '@nats-io/transport-node';
+import { EventStore } from '@opencrane/event-store';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope, history } from '@opencrane/models';
-import { mcpInstanceId } from '@opencrane/projections';
+import { applyMcpInstance, mcpInstanceId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { registerMcpInstanceWorkerRoutes } from '../src/integrations/instance-worker.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -9,10 +13,14 @@ import { testAuthConfig } from './support/test-auth-config.ts';
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let app: ReturnType<typeof buildServer>;
 let workers: ReturnType<typeof registerMcpInstanceWorkerRoutes>;
+let client: ReturnType<typeof jetstream>;
 let counter = 0;
 async function initialise() {
   nats = await natsFixture();
   app = buildServer(testAuthConfig());
+  client = jetstream(nats.connection);
+  const manager = await jetstreamManager(nats.connection);
+  nats.store = new EventStore(client, manager);
   workers = registerMcpInstanceWorkerRoutes(app, nats.store, 'test');
 }
 beforeAll(initialise, 30_000);
@@ -249,3 +257,114 @@ async function refusesChangedConcurrentRetry() {
 }
 it('saves one observation and refuses a concurrent changed retry with the same id',
   refusesChangedConcurrentRetry);
+
+async function expectUnchangedInstance(fixture: Awaited<ReturnType<typeof start>>) {
+  const rows = await history(nats.store, fixture.event.subject, 'test');
+  expect(rows).toHaveLength(1);
+  expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
+  const originalState = applyMcpInstance(undefined, fixture.event, fixture.sequence);
+  let currentState;
+  for (const row of rows) {
+    currentState = applyMcpInstance(currentState, row.event, row.sequence);
+  }
+  expect(currentState).toEqual(originalState);
+}
+
+async function expiresDuringPublishRetry(stage: 'publish' | 'backoff') {
+  const fixture = await start();
+  const worker = await workers.register(fixture.registration);
+  const clock = vi.spyOn(Date, 'now');
+  // Leave ten milliseconds of permission when append starts, regardless of history read speed.
+  clock.mockReturnValue(worker.expiresAt - 10);
+  const publish = vi.spyOn(client, 'publish');
+  async function failFirstPublish(): Promise<never> {
+    if (stage === 'publish') {
+      await delay(30);
+    }
+    throw new TimeoutError();
+  }
+  publish.mockImplementationOnce(failFirstPublish);
+  try {
+    const response = await observe(fixture.registration.instanceId,
+      worker.authorization, fixture.payload);
+    expect.soft(response.statusCode).toBe(503);
+    expect.soft(publish).toHaveBeenCalledTimes(1);
+  } finally {
+    clock.mockRestore();
+    publish.mockRestore();
+  }
+  await expectUnchangedInstance(fixture);
+}
+it.each(['publish', 'backoff'] as const)(
+  'stops publishing when permission expires during the failed first %s', expiresDuringPublishRetry);
+
+async function replacesDuringPublishRetry(stage: 'publish' | 'backoff') {
+  const fixture = await start();
+  const worker = await workers.register(fixture.registration);
+  const publish = vi.spyOn(client, 'publish');
+  const failed = Promise.withResolvers<void>();
+  const replaced = Promise.withResolvers<void>();
+  async function failFirstPublish(): Promise<never> {
+    failed.resolve();
+    if (stage === 'publish') {
+      await replaced.promise;
+    }
+    throw new TimeoutError();
+  }
+  publish.mockImplementationOnce(failFirstPublish);
+  try {
+    const pending = observe(fixture.registration.instanceId, worker.authorization, fixture.payload);
+    const responsePromise = pending.then();
+    await failed.promise;
+    await workers.register(fixture.registration);
+    replaced.resolve();
+    const response = await responsePromise;
+    expect.soft(response.statusCode).toBe(503);
+    expect.soft(publish).toHaveBeenCalledTimes(1);
+  } finally {
+    replaced.resolve();
+    publish.mockRestore();
+  }
+  await expectUnchangedInstance(fixture);
+}
+it.each(['publish', 'backoff'] as const)(
+  'stops publishing when a worker is replaced during the failed first %s',
+  replacesDuringPublishRetry);
+
+async function retainsOnlyDigestsAndDropsExpiredLeases() {
+  const fixture = await start();
+  const storageApp = buildServer(testAuthConfig());
+  const storageWorkers = registerMcpInstanceWorkerRoutes(storageApp, nats.store, 'test');
+  const retained: Map<unknown, unknown>[] = [];
+  const originalSet = Map.prototype.set;
+  function captureLease(this: Map<unknown, unknown>, key: unknown, value: unknown) {
+    if (typeof value === 'object' && value !== null && 'worker' in value) {
+      retained.push(this);
+    }
+    return originalSet.call(this, key, value);
+  }
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const writes = vi.spyOn(Map.prototype, 'set');
+  writes.mockImplementation(captureLease);
+  try {
+    const worker = await storageWorkers.register(fixture.registration);
+    writes.mockRestore();
+    expect(retained).toHaveLength(1);
+    const leases = retained[0];
+    expect(leases).toBeDefined();
+    if (!leases) throw new Error('Lease storage was not captured');
+    const saved = JSON.stringify(Array.from(leases.entries()));
+    expect.soft(saved).not.toContain(worker.authorization.slice('Bearer '.length));
+    for (const key of leases.keys()) {
+      expect.soft(key).toMatch(/^[a-f0-9]{64}$/u);
+    }
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect.soft(leases.size).toBe(0);
+  } finally {
+    writes.mockRestore();
+    vi.useRealTimers();
+    await storageApp.close();
+  }
+}
+it('keeps only credential digests and removes expired leases without another request',
+  retainsOnlyDigestsAndDropsExpiredLeases);
