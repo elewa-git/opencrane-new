@@ -162,19 +162,28 @@ function validCleanup(event: z.infer<typeof cleanupEnvelope>): boolean {
 export const memoryCleanupRecordedEventSchema = cleanupEnvelope
   .extend({ type: z.literal('memory.cleanup_recorded') }).refine(validCleanup);
 
+const maintenanceReference = z.strictObject({
+  memoryId: identifier, revision, expiresAt: z.iso.datetime().nullable(),
+  position: z.int().positive(),
+});
 const maintenanceRecord = z.strictObject({
   scopeId: digest, nightId: digest, batchKey: digest, inputRevision: digest,
   date: z.iso.date(), bindingRevision: revision, memberId: identifier,
   acceptedCapCents: z.literal(100), intendedAt: z.iso.datetime(), selectedAt: z.iso.datetime(),
-  inputRefs: z.array(z.strictObject({ memoryId: identifier, revision,
-    expiresAt: z.iso.datetime().nullable(), position: z.int().positive() })).max(32),
+  inputRefs: z.array(maintenanceReference).max(32),
   action: z.enum(['due', 'refused', 'missed']),
   reason: z.enum(['qualification_blocked', 'window_missed', 'overlap']).nullable(),
 });
 function validRun(data: z.infer<typeof maintenanceRecord>) {
-  if (data.intendedAt !== `${data.date}T02:00:00.000Z`) return false;
-  if (data.action === 'due') return data.reason === null;
-  if (data.action === 'refused') return data.reason === 'qualification_blocked';
+  if (data.intendedAt !== `${data.date}T02:00:00.000Z`) {
+    return false;
+  }
+  if (data.action === 'due') {
+    return data.reason === null;
+  }
+  if (data.action === 'refused') {
+    return data.reason === 'qualification_blocked';
+  }
   return data.reason === 'window_missed' || data.reason === 'overlap';
 }
 export const memoryMaintenanceRecordedDataSchema = maintenanceRecord.refine(validRun);

@@ -166,7 +166,10 @@ function prepareForgotten(envelope: EventEnvelope,
 }
 
 function prepareMaintenance(envelope: EventEnvelope) {
-  if (!parseEventByType(envelope).success) throw new Error('Invalid saved maintenance event');
+  const parsed = parseEventByType(envelope);
+  if (!parsed.success) {
+    throw new Error('Invalid saved maintenance event');
+  }
   const binding = envelope.type === 'memory.maintenance_bound';
   const schema = binding ? memoryMaintenanceBoundDataSchema : memoryMaintenanceRecordedDataSchema;
   const data = schema.parse(envelope.data);
@@ -176,8 +179,8 @@ function prepareMaintenance(envelope: EventEnvelope) {
       await db.query(`INSERT INTO memory_maintenance_bindings VALUES ($1,$2,$3,$4)
         ON CONFLICT (silo, scope_id) DO UPDATE SET data=$3, position=$4`, values);
     } else {
-      await db.query('INSERT INTO memory_maintenance_runs VALUES ($1,$2,$3,$4,$5)',
-        [envelope.silo, data.scopeId, envelope.id, JSON.stringify(data), position]);
+      const runValues = [envelope.silo, data.scopeId, envelope.id, JSON.stringify(data), position];
+      await db.query('INSERT INTO memory_maintenance_runs VALUES ($1,$2,$3,$4,$5)', runValues);
     }
   }
   return applyMaintenance;
@@ -200,7 +203,6 @@ export function memoryProjection(custody: {
     if (envelope.type === 'memory.maintenance_bound' ||
       envelope.type === 'memory.maintenance_recorded') {
       return prepareMaintenance(envelope);
-    }
     }
     if (envelope.type === 'memory.forgotten') {
       return prepareForgotten(envelope, erasure);

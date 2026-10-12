@@ -35,7 +35,9 @@ export async function maintenanceStatus(options: MemoryOptions, scope: Scope, re
   let status = 'not_configured';
   if (result.rows[0].data !== null) {
     binding = memoryMaintenanceBoundDataSchema.parse(result.rows[0].data);
-    if (binding.memberId !== requester) throw new MemoryRefused();
+    if (binding.memberId !== requester) {
+      throw new MemoryRefused();
+    }
     status = 'disabled';
     if (binding.enabled) {
       status = 'qualification_blocked';
@@ -48,15 +50,23 @@ export async function maintenanceStatus(options: MemoryOptions, scope: Scope, re
        WHERE silo=$1 AND scope_id=$2 AND position<=$3 ORDER BY position DESC LIMIT 20) run ON true
      WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3 AND generation.generation=$4`,
     [options.silo, scope.scopeId, snapshot.position, snapshot.generation]);
-  if (!runs.rows.length) throw new Error('Memory maintenance history unavailable');
+  if (!runs.rows.length) {
+    throw new Error('Memory maintenance history unavailable');
+  }
   const history = [];
   const empty = { status, binding, dispatch: 'disabled', nextAt: null, history: [] };
-  let bytes = Buffer.byteLength(JSON.stringify(empty));
+  const encodedEmpty = JSON.stringify(empty);
+  let bytes = Buffer.byteLength(encodedEmpty);
   for (const row of runs.rows) {
-    if (row.data === null) continue;
+    if (row.data === null) {
+      continue;
+    }
     const run = memoryMaintenanceRecordedDataSchema.parse(row.data);
-    bytes += Buffer.byteLength(JSON.stringify(run)) + 1;
-    if (bytes > 16_384) break;
+    const encodedRun = JSON.stringify(run);
+    bytes += Buffer.byteLength(encodedRun) + 1;
+    if (bytes > 16_384) {
+      break;
+    }
     history.push(run);
   }
   return { status, binding, dispatch: 'disabled', nextAt: null, history };

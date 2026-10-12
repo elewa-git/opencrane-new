@@ -1937,9 +1937,9 @@ replies return unknown; the original `/changes/:commandId` GET checks saved hist
 caught-up memory tables and an unchanged table generation. It returns the current
 binding and `not_configured`, `disabled` or `qualification_blocked`. Dispatch is
 always disabled and `nextAt` is null. All responses use no-store. There is no run,
-retry or scheduler endpoint. Dirty selection, run contracts/history and nightly
-admission are deferred to the second part of the accepted row to keep this change
-small. No allowance is allocated and nothing can spend. The cap records consent.
+retry or scheduler endpoint. The nightly worker records blocked and missed nights,
+and the GET includes their bounded history as described below. No allowance is
+allocated and nothing can spend. The cap records consent.
 
 `test/memory.test.ts` covers HTTP consent, scope/assistant/payer refusal, retries,
 conflicts, status privacy and equal binding tables after offline replay without

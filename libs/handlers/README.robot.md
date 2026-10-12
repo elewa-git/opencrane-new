@@ -246,3 +246,9 @@ The host calls this only after the dispatcher manifest and workers are ready.
 Stopping the runtime stops both instances. Replay never calls this method.
 `test/nightly.test.ts` drives TestClock and the test-only PostgreSQL session
 adapter across 01:59:59 to 02:00 with two native timekeepers.
+
+The worker receives each trigger's original `createdOn` time. It checks retained
+failed triggers before scanning the new occurrence and removes a failed trigger
+only after the scan succeeds. `deleteAfterSeconds=0` keeps failed jobs indefinitely.
+The trigger body still contains only the silo. Startup queues a new trigger, so
+restart and the next nightly delivery both recover exhausted triggers.

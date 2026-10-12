@@ -5,13 +5,15 @@ import { fixture, until } from './helpers.ts';
 
 let services: Awaited<ReturnType<typeof fixture>>;
 const schedulers: PgBoss[] = [];
-afterEach(async function close() {
-  for (const scheduler of schedulers) await scheduler.stop();
+async function close() {
+  for (const scheduler of schedulers) {
+    await scheduler.stop();
+  }
   schedulers.length = 0;
   await services?.close();
-});
-it('uses the native UTC schedule with one trigger across two timekeepers at 02:00',
-  async function nativeBoundary() {
+}
+afterEach(close);
+async function nativeBoundary() {
     services = await fixture();
     const clock = new TestClock('2030-10-12T01:59:59Z');
     let sessionStatements: string[] = [];
@@ -22,14 +24,19 @@ it('uses the native UTC schedule with one trigger across two timekeepers at 02:0
     async function executeSql(sql: string, values?: unknown[]) {
       const client = await services.pool.connect();
       try {
-        for (const statement of sessionStatements) await client.query(statement);
+        for (const statement of sessionStatements) {
+          await client.query(statement);
+        }
         return await client.query(sql, values);
-      } finally { client.release(); }
+      } finally {
+        client.release();
+      }
     }
     const adapter: Db = { executeSql, setSessionStatements };
     for (let index = 0; index < 2; index++) {
-      const scheduler = new PgBoss({ db: adapter, clock,
-        cronMonitorIntervalSeconds: 1, supervise: false });
+      const options = { db: adapter, clock,
+        cronMonitorIntervalSeconds: 1, supervise: false };
+      const scheduler = new PgBoss(options);
       schedulers.push(scheduler);
       await scheduler.start();
     }
@@ -40,13 +47,18 @@ it('uses the native UTC schedule with one trigger across two timekeepers at 02:0
     }
     await scheduleNightly(schedulers[0]!, 'test', record);
     const schedule = await schedulers[0]!.getSchedule('dream-nightly', 'test');
-    expect(schedule).toMatchObject({ cron: '0 2 * * *', timezone: 'UTC',
-      options: { missed: 'skip' } });
+    const expected = { cron: '0 2 * * *', timezone: 'UTC',
+      options: { missed: 'skip' } };
+    expect(schedule).toMatchObject(expected);
     expect(delivered).toBe(0);
     await clock.tick(1000);
     await clock.tick(10_000);
-    function received() { return Promise.resolve(delivered === 1); }
+    function received() {
+      return Promise.resolve(delivered === 1);
+    }
     await until(received);
     await clock.tick(60_000);
     expect(delivered).toBe(1);
-  }, 30_000);
+}
+it('uses the native UTC schedule with one trigger across two timekeepers at 02:00',
+  nativeBoundary, 30_000);

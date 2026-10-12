@@ -33,7 +33,7 @@ flowchart LR
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
   handlers -.-> events["libs/events<br/>reaction list"]
   handlers -.-> projections["libs/projections<br/>database helpers"]
-  handlers -->|saves jobs and nightly schedules| pg["PostgreSQL<br/>job queue"]
+  handlers -->|saves jobs, nightly schedules and failed nights| pg["PostgreSQL<br/>job queue"]
 ```
 
 ## What it is responsible for
@@ -56,6 +56,8 @@ queued during an upgrade use that order.
 
 The scheduling host enables pg-boss's own nightly clock after workers are ready.
 Its separate trigger queue asks the host to record memory intents, without starting a computer.
+Failed nights stay queued. Startup or the next night records their missed result after
+the memory worker catches up.
 
 1. **A member joins.** The dispatcher reads the "member joined" event and
    queues three jobs: give the member their permissions (`update-openfga`),

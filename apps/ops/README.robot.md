@@ -497,8 +497,12 @@ Each dirty night gets one conditional scope append, using SHA-256 keys from
 silo, scope, date and selected revision metadata. Same-night input changes cannot
 claim another attempt. At most 32 oldest references are recorded, without text.
 No revision is marked reviewed. Every unprocessed fact remains dirty.
-After downtime, only the latest elapsed boundary gets missed history; older work
-is never caught up. An unresolved `due` record skips a later night as overlap.
+After downtime, startup checks the latest elapsed boundary. Failed queued triggers
+are retained without an expiry and recovered before the new scan. Each keeps its
+original UTC night, even after retries are exhausted or the dispatcher restarts.
+A trigger is removed only after every scope has been checked successfully.
+Selection reads the current clock after preparing each scope. Reading history
+cannot extend the original fifteen-minute window. An unresolved `due` record skips a later night as overlap.
 No model, tool, computer or budget port is available to the scan.
 
 Tests: `apps/ops/test/nightly-memory.test.ts` uses real PostgreSQL and NATS,

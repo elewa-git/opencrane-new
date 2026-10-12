@@ -151,8 +151,8 @@ try {
     const commandStore = commands.store;
     async function startWorkers() {
       await dispatcherRuntime.work();
-      async function scanNightly() {
-        await scanNightlyMemory(db.db, commandStore, silo, new Date());
+      async function scanNightly(occurrence: Date) {
+        await scanNightlyMemory(db.db, commandStore, silo, occurrence);
       }
       await dispatcherRuntime.startNightly(scanNightly);
       function deliverCredentials(id: string, token: import('@opencrane/auth').IssuedToken) {
