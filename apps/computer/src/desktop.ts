@@ -7,7 +7,7 @@ import {
 } from './display-lock.ts';
 
 // Clear a lock left in disk-backed /tmp when this container restarts in its Pod.
-removeStaleDisplayLock('/tmp/.X1-lock');
+removeStaleDisplayLock('/tmp/.X1-lock', '/proc', 1002);
 
 if (!process.setgroups || !process.setgid || !process.setuid) throw new Error('Linux required');
 process.setgroups([]); process.setgid(1002); process.setuid(1002);
