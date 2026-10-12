@@ -958,6 +958,88 @@ async function backendRemember(body: Awaited<ReturnType<typeof recalledRemember>
   return app.inject(input);
 }
 
+async function refusesRevocationWhileReadingAdmission() {
+  const body = await recalledRemember('revoked-during-admission-read');
+  const token = await signedRemember(body);
+  const parsed = parseMemoryRequest(JSON.stringify(body), rememberHeaders);
+  const context = await verifyMemoryContext(token, setup.identity, parsed);
+  const deadline = performance.now() + context.exp * 1000 - Date.now();
+  const rights = await memoryRights(setup.nats.store, setup.binding, context, parsed, deadline);
+  const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
+    binding: setup.binding, feed: { memberId }, keyDirectory: dirname(setup.options.configFile) };
+  const grantSubject = grantStream('memory_write', scopeId);
+  const scopeSubject = `scope-${scopeId}`;
+  const scopePosition = await setup.nats.store.head(scopeSubject);
+  const grantPosition = await setup.nats.store.head(grantSubject);
+  const originalHead = setup.nats.store.head.bind(setup.nats.store);
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  let finalCheck = false;
+  let grantSamples = 0;
+  let sampledGrantPosition: number | undefined;
+  let admission: Awaited<ReturnType<typeof setup.append>> | undefined;
+  let revoked: Awaited<ReturnType<typeof setup.append>> | undefined;
+  async function confirmWrite() {
+    finalCheck = true;
+    return rights.confirm();
+  }
+  async function readHead(subject?: string, readDeadline?: number) {
+    // Add another call after currentAuthority has checked the write grant once.
+    // The next sample belongs to the final check before memory.written.
+    if (finalCheck && subject === 'mcp-memory' && grantSamples === 1 && !admission) {
+      const fields = { serverId: 'memory', connectionId: 'server',
+        requestId: '22222222-2222-4222-8222-222222222222', toolName: 'recall',
+        toolRevision: recallTool.revision, schemaDigest: memoryCatalogue.schemaDigest,
+        generation: 'memory-instance' };
+      admission = await setup.append('mcp-memory', 'mcp.dispatch_admitted', fields);
+    }
+    const position = await originalHead(subject, readDeadline);
+    if (finalCheck && subject === grantSubject) {
+      grantSamples += 1;
+      if (grantSamples === 2) sampledGrantPosition = position;
+    }
+    return position;
+  }
+  async function* readStream(subject: string, from?: number, readDeadline?: number) {
+    for await (const row of originalRead(subject, from, readDeadline)) {
+      // Save the revocation only after all stream positions were sampled.
+      if (subject === 'mcp-memory' && row.sequence === admission?.sequence && !revoked) {
+        expect(sampledGrantPosition).toBe(grantPosition);
+        const fields = { resourceType: 'memory_write', resourceId: scopeId,
+          granteeKind: 'assistant', granteeId: 'assistant', revokedBy: 'alice' };
+        revoked = await setup.append(grantSubject, 'grant.revoked', fields);
+      }
+      yield row;
+    }
+  }
+  const agent = { deadline, conversation: context.conversation, turn: context.turn,
+    requestId: context.requestId, confirm: confirmWrite };
+  const { remember } = await import('../src/memory/commands.ts');
+  const { scopeId: _scope, recallProof: _proof, ...command } = body.params.arguments;
+  const head = vi.spyOn(setup.nats.store, 'head').mockImplementation(readHead);
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
+  const appends = vi.spyOn(setup.nats.store, 'append');
+  try {
+    const result = remember(memory, 'alice', rights.scope, command, agent);
+    await expect(result).rejects.toThrow('Authority changed');
+    expect(admission).toBeDefined();
+    expect(revoked?.sequence).toBeGreaterThan(admission!.sequence);
+    expect(await originalHead(scopeSubject)).toBe(scopePosition);
+    for (const [saved] of appends.mock.calls) {
+      expect(z.object({ type: z.string() }).parse(saved.event).type).not.toBe('memory.written');
+    }
+  } finally {
+    appends.mockRestore();
+    reads.mockRestore();
+    head.mockRestore();
+    if (revoked) {
+      await setup.auth.handler.handle(revoked, setup.db);
+      await grantWrite('assistant');
+    }
+  }
+}
+it('refuses remember when another admission masks a saved write revocation',
+  refusesRevocationWhileReadingAdmission);
+
 // Keep command recovery and preparation checks while the exposed write lacks complete evidence.
 async function admittedRemember(body: Awaited<ReturnType<typeof recalledRemember>>, overrides = {}) {
   let statusCode = 200;
