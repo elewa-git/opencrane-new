@@ -100,6 +100,25 @@ Authenticated observation, admin commands and worker registration remain next.
 There is no worker, wake, credential release, callable instance or new installer.
 Every MCP still installs through the shared hosted path.
 
+### Source checks, 12 October 2026
+
+Runtime source: `ab3fade6`, based on main `f46d7721`. Linux worktree after `npm ci`;
+NATS and Lychee use the requested local tool links. HTTP uses Fastify request injection
+with real disposable NATS, OpenFGA and PostgreSQL databases. This was not a fresh silo.
+Test-first commits: `a1fce8bf` failed all ten initial HTTP cases; `40b777bf` failed
+three cases requiring server-derived runs; `4114ac8d` records the parser-cache refusal
+after that case failed. The fixes keep every refusal and original-receipt assertion.
+PASS: two focused batches, 497 tests each in 27.14 s and 29.63 s, one worker,
+`nice -n 10` and `PG_TEST_URL`. Earlier checks used the supplied port 55432;
+final batches used a throwaway PostgreSQL container, removed with its volume afterwards.
+PASS: workspace typecheck, event catalogue (125 types), standalone Knip and changelog checks.
+PASS: full lint. Logs: `/tmp/p3-10-pr2b-lint.log`.
+Both authority test files are unchanged. No full root suite ran.
+PARTIAL: design row 2. Observation/admin commands and worker registration remain unbuilt.
+NOT RUN: their refusal tests, live Kubernetes and fresh-install qualification.
+Logs: `/tmp/p3-10-pr2b-tests-final-{1,2}.log`, `/tmp/p3-10-pr2b-typecheck-final.log`,
+`/tmp/p3-10-pr2b-events.log`, `/tmp/p3-10-pr2b-knip.log`, `/tmp/p3-10-pr2b-changelog.log`.
+
 ## Dated MCP catalogue evidence
 
 Tool lists carry check and expiry dates; undated lists cannot authorise calls.
