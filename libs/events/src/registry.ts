@@ -6,7 +6,12 @@ import { egressEvents } from './egress.ts';
 import { takeoverEvents } from './takeover.ts';
 import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
   from './conversation.ts';
-import { memoryWrittenExample, memoryMaintenanceBoundDataSchema, memoryCleanupRecordedDataSchema, memoryMaintenanceRecordedDataSchema } from './memory.ts';
+import {
+  memoryWrittenExample,
+  memoryMaintenanceBoundDataSchema,
+  memoryCleanupRecordedDataSchema,
+  memoryMaintenanceRecordedDataSchema,
+} from './memory.ts';
 import { modernDelegationExample } from './delegation.ts';
 import { ownershipEvents } from './ownership-events.ts';
 import { providerEvents } from './provider-events.ts';
@@ -42,10 +47,17 @@ const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
 
 type MaintenanceRecord = ReturnType<typeof memoryMaintenanceRecordedDataSchema.parse>;
 const maintenanceRecordedExample: MaintenanceRecord = {
-  scopeId: memoryWrittenExample.scopeId, nightId: DIGEST_EXAMPLE, batchKey: DIGEST_EXAMPLE,
-  inputRevision: DIGEST_EXAMPLE, date: '2026-10-12', bindingRevision: 1, memberId: 'alice',
-  acceptedCapCents: 100, intendedAt: '2026-10-12T02:00:00.000Z',
-  selectedAt: '2026-10-12T02:00:00.000Z', inputRefs: [],
+  scopeId: memoryWrittenExample.scopeId,
+  nightId: DIGEST_EXAMPLE,
+  batchKey: DIGEST_EXAMPLE,
+  inputRevision: DIGEST_EXAMPLE,
+  date: '2026-10-12',
+  bindingRevision: 1,
+  memberId: 'alice',
+  acceptedCapCents: 100,
+  intendedAt: '2026-10-12T02:00:00.000Z',
+  selectedAt: '2026-10-12T02:00:00.000Z',
+  inputRefs: [],
   action: 'refused', reason: 'qualification_blocked',
 };
 
