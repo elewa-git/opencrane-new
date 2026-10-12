@@ -501,7 +501,7 @@ async function blocksBehindProjection() {
 it('keeps a behind projection or failed reader distinct from an empty result', blocksBehindProjection);
 
 function explanationRequest(sub = 'explained', requesterId = 'explained',
-  serverId = 'explained-server', assistantId = 'explained-helper', origin?: string) {
+  serverId = 'explained-server', assistantId = 'explained-helper', origin?: string, toolName = 'read') {
   const session = { sub, orgId: 'org-acme', roles: ['owner'],
     authTime: 1790856000, exp: 2000000000 };
   const headers: Record<string, string> = {
@@ -510,7 +510,7 @@ function explanationRequest(sub = 'explained', requesterId = 'explained',
   if (origin) {
     headers['origin'] = origin;
   }
-  const query = new URLSearchParams({ requesterId, assistantId, toolName: 'read' });
+  const query = new URLSearchParams({ requesterId, assistantId, toolName });
   const url = `/api/org/integrations/${serverId}/access/explanation?${query}`;
   const request = { method: 'GET' as const, url, headers };
   return app.inject(request);
@@ -616,7 +616,7 @@ it('allows only own or admin explanations and returns the same safe detail', kee
 async function distinguishesToolIamFailure() {
   const use = vi.spyOn(auth, 'use');
   use.mockResolvedValue(unavailablePermission);
-  const response = await explanationRequest();
+  const response = await explanationRequest('owner');
   expect(response.statusCode).toBe(200);
   expect(response.json()).toMatchObject({ person: 'unavailable', assistant: 'unavailable',
     profile: 'absent_on_version', availability: 'unavailable', complete: false,
@@ -662,6 +662,145 @@ async function explainsMissingAssistantGrant() {
   expect(body.reasons).toContain('missing_assistant_grant');
 }
 it('keeps the assistant grant separate from the requester grant', explainsMissingAssistantGrant);
+
+const privatePolicyFields = [
+  'mode', 'review', 'profile', 'freshness', 'policySequence', 'policyRevision',
+  'catalogueCheckedAt', 'catalogueExpiresAt', 'reviewRevision',
+];
+
+function expectNoPolicy(response: Awaited<ReturnType<typeof explanationRequest>>) {
+  const body = response.json<Record<string, unknown>>();
+  for (const field of privatePolicyFields) {
+    expect(body).not.toHaveProperty(field);
+  }
+  expect(response.body).not.toContain('tool_not_found');
+}
+
+async function refusesServerProbes() {
+  const memberId = 'probe-member';
+  const assistantId = 'probe-helper';
+  const member = { memberId, role: 'member', email: 'probe@example.test',
+    displayName: 'Probe member' };
+  const assistant = { assistantId, kind: 'personal', ownerId: memberId };
+  await append(`member-${memberId}`, 'member.joined', member);
+  await append(`assistant-${assistantId}`, 'assistant.created', assistant);
+  await project();
+  const reads = vi.spyOn(nats.store, 'readStream');
+  for (const [serverId, toolName] of [
+    ['explained-server', 'read'], ['unknown-server', 'read'],
+    ['explained-server', 'unknown-tool'],
+  ]) {
+    const response = await explanationRequest(memberId, memberId, serverId,
+      assistantId, undefined, toolName);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(response.headers['cache-control']).toBe('no-store');
+    expectNoPolicy(response);
+  }
+  for (const [subject] of reads.mock.calls) {
+    expect(subject).not.toMatch(/^mcp-/u);
+  }
+}
+it('refuses guessed servers and tools identically before reading private policy', refusesServerProbes);
+
+async function refusesUnknownTools() {
+  const policyPosition = await nats.store.head('mcp-explained-server');
+  for (const viewer of ['explained', 'owner', 'admin']) {
+    const allowed = await explanationRequest(viewer);
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json()).toMatchObject({ person: 'allowed', assistant: 'allowed',
+      mode: 'block', policySequence: policyPosition, policyRevision: policyPosition });
+    const unknown = await explanationRequest(viewer, 'explained', 'explained-server',
+      'explained-helper', undefined, 'unknown-tool');
+    expect(unknown.statusCode).toBe(403);
+    expect(unknown.json()).toEqual({ status: 'refused' });
+    expectNoPolicy(unknown);
+  }
+}
+it('keeps allowed member and admin detail while refusing unknown tools', refusesUnknownTools);
+
+async function hidesMissingGrantPolicy() {
+  const response = await explanationRequest('explained', 'explained', 'explained-server',
+    'ungranted-helper');
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ person: 'allowed', assistant: 'denied',
+    reasons: ['missing_assistant_grant'] });
+  expectNoPolicy(response);
+  const admin = await explanationRequest('admin', 'probe-member', 'explained-server',
+    'probe-helper');
+  expect(admin.statusCode).toBe(200);
+  expect(admin.json()).toMatchObject({ person: 'denied', assistant: 'denied' });
+  expectNoPolicy(admin);
+}
+it('returns only permission reasons for a permitted missing-grant explanation', hidesMissingGrantPolicy);
+
+async function refusesUnavailableVisibility() {
+  const use = vi.spyOn(auth, 'use');
+  use.mockResolvedValue(unavailablePermission);
+  const member = await explanationRequest();
+  expect(member.statusCode).toBe(503);
+  expect(member.json()).toEqual({ status: 'unavailable' });
+  expectNoPolicy(member);
+  const noRow = await explanationRequest('owner', 'probe-member', 'explained-server',
+    'probe-helper');
+  expect(noRow.statusCode).toBe(503);
+  expect(noRow.json()).toEqual({ status: 'unavailable' });
+  expectNoPolicy(noRow);
+}
+it('returns unavailable when server visibility or an absent-row grant check fails',
+  refusesUnavailableVisibility);
+
+async function waitsForNewGrantInputs() {
+  const memberId = 'late-grantee';
+  const assistantId = 'late-helper';
+  const serverId = 'late-server';
+  const member = { memberId, role: 'member', email: 'late@example.test',
+    displayName: 'Late grantee' };
+  const assistant = { assistantId, kind: 'personal', ownerId: memberId };
+  await append(`member-${memberId}`, 'member.joined', member);
+  await append(`assistant-${assistantId}`, 'assistant.created', assistant);
+  await project();
+  for (const [granteeKind, granteeId] of [['member', memberId], ['assistant', assistantId]]) {
+    const grant = { resourceType: 'mcp_server', resourceId: serverId,
+      granteeKind, granteeId, grantedBy: 'owner' };
+    await append(grantStream('mcp_server', serverId), 'grant.given', grant);
+  }
+  const registration = { serverId, kind: 'remote', locator: 'https://example.test/mcp',
+    registeredBy: 'owner' };
+  await append(`mcp-${serverId}`, 'mcp.server_registered', registration);
+  const catalogue = { serverId, connectionId: 'late-connection', accountMode: 'none',
+    toolCount: 1, schemaDigest: 'c'.repeat(64), tools: [{
+      name: 'read', revision: 'c'.repeat(64), reviewed: false, costCents: 0,
+    }] };
+  await append(`mcp-${serverId}`, 'mcp.server_discovered', catalogue);
+  try {
+    expect(await auth.use('person', memberId, 'mcp_server', serverId))
+      .toMatchObject({ allowed: true });
+    expect(await auth.use('assistant', assistantId, 'mcp_server', serverId))
+      .toMatchObject({ allowed: true });
+    const inventory = await memberInventory(options, memberId, performance.now() + 10_000);
+    expect(inventory.unavailableSections).toContain('inventory_index');
+    expect(inventory.rows).toEqual([]);
+    for (const outage of [false, true]) {
+      const use = vi.spyOn(auth, 'use');
+      if (outage) {
+        use.mockResolvedValue(unavailablePermission);
+      }
+      const response = await explanationRequest('owner', memberId, serverId, assistantId);
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ status: 'unavailable' });
+      expect(response.body).not.toMatch(/missing_requester_grant|missing_assistant_grant/u);
+      expectNoPolicy(response);
+      use.mockRestore();
+    }
+  } finally {
+    await project();
+  }
+  const caughtUp = await explanationRequest(memberId, memberId, serverId, assistantId);
+  expect(caughtUp.statusCode).toBe(200);
+  expect(caughtUp.json()).toMatchObject({ person: 'allowed', assistant: 'allowed' });
+}
+it('does not claim missing grants while the member projection is paused', waitsForNewGrantInputs);
 
 async function reportsExplanationOverflow() {
   const tools = [];
