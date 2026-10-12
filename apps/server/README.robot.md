@@ -42,7 +42,7 @@ Screens, independent review and fresh-install qualification are NOT RUN.
 ## Shared member guard
 
 `src/members/guard.ts` supplies `requireMember`, `MemberRefusal`, `idSchema` and
-`sameOrigin`. Chat, approval and file routes use it. Other member routes,
+`sameOrigin`. Chat, approval, file and personal tool-instance routes use it. Other member routes,
 screenshots, live view and integrations still use their existing checks; their
 migration is the remaining part of #121.
 
@@ -72,6 +72,33 @@ six missing cache headers. Existing route tests cover allowed requests, removals
 conversation access, Origin and slow histories. The required changed-route checks
 run with `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` under
 `nice -n 10`. Full root tests and a fresh-install journey are NOT RUN for this part.
+
+## Personal tool-instance HTTP routes
+
+`GET /api/my/tools/:serverId/profiles/:profileId/instance?instanceId=…` returns
+the current owner's safe status. Its `/stop` and `/wake` POST routes take only
+`changeRef` and `expectedSequence`. The server derives the run; extra identity,
+generation or action fields are invalid. Wake always refuses with
+`profile_or_admission_unavailable`. Stop records intent only; no worker runs it yet.
+`GET /api/my/tools/changes/:changeRef?instanceId=…&profileId=…&serverId=…` reads
+the owner's original receipt, including after a later run starts.
+The exact instance reference identifies saved history. It grants no access.
+These query fields are needed until usable personal profile lookup is available.
+
+`requireMember` checks the session, organisation, silo and mapped member.
+Its `sameOrigin` check protects writes. All ids use `idSchema` with the event
+contract's restrictions. The library loads instance history before its final
+membership check or short write check. No conversation stream is read or watched.
+Replies use `Cache-Control: no-store`, including malformed or oversized POST bodies.
+Missing or foreign instances return 404 with `status: unknown`; a missing change
+on an owned instance returns 200 with `status: unknown`. Neither is terminal proof.
+Invalid input returns 400, changed retries and stale revisions return 409,
+and unavailable dependencies return 503 without internal response details.
+
+This is the HTTP part of #51 design row 2, split to keep this change under 600 lines.
+Authenticated observation, admin commands and worker registration remain next.
+There is no worker, wake, credential release, callable instance or new installer.
+Every MCP still installs through the shared hosted path.
 
 ## Dated MCP catalogue evidence
 

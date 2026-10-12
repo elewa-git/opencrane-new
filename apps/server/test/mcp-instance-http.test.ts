@@ -294,7 +294,9 @@ async function refusesRemovalDuringRead() {
   const subjects: string[] = [];
   async function* removeDuringRead(subject: string, fromSequence?: number, deadline?: number) {
     subjects.push(subject);
-    for await (const row of originalRead(subject, fromSequence, deadline)) yield row;
+    for await (const row of originalRead(subject, fromSequence, deadline)) {
+      yield row;
+    }
     if (subject === fixture.event.subject) {
       const removed = envelope('test', 'member-alice', 'member.removed',
         { memberId: 'alice', removedBy: 'admin' });
@@ -308,7 +310,9 @@ async function refusesRemovalDuringRead() {
     const response = await app.inject({ url: instanceUrl(fixture.reference), headers: headers() });
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({ status: 'refused' });
-    for (const subject of subjects) expect(subject).not.toMatch(/^conversation-/u);
+    for (const subject of subjects) {
+      expect(subject).not.toMatch(/^conversation-/u);
+    }
   } finally {
     read.mockRestore();
   }
