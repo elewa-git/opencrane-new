@@ -171,3 +171,25 @@ async function bindsOnlySameNameClaim(otherName: boolean) {
 }
 it.each([true, false])('keeps the claim name and waits between reads (different: %s)',
   bindsOnlySameNameClaim);
+
+async function deliversThroughAuthenticatedExec() {
+  const fixture = await fakeKubectl();
+  const token = { id: 'fixture-id', value: 'fixture-value', expiresAt: Date.now() + 60_000 };
+  try {
+    const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+    await kube.credentials('computer', token);
+    await kube.credentials('computer', token, true);
+    const commands = await fixture.commands();
+    expect(commands).toHaveLength(2);
+    for (const command of commands) {
+      expect(command).toContain('exec -i computer -c computer -- node');
+      expect(command).toContain('/app/src/install-credential.ts');
+      expect(command).not.toContain(token.value);
+      expect(command).not.toContain('/proxy/credentials');
+    }
+  } finally {
+    await fixture.close();
+  }
+}
+it('delivers and rotates credentials through authenticated Pod exec',
+  deliversThroughAuthenticatedExec);
