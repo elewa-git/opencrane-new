@@ -691,7 +691,7 @@ async function retriesOnlyVerifiedNonDispatch() {
   try {
     await setup.call();
     await setup.decide();
-    await setup.closeUpstream();
+    await setup.refuseMcpConnection();
     expect((await setup.call()).status).toBe(503);
     await setup.restart();
     await ingestUsage(setup.actor, setup.options.usageFile);
@@ -704,7 +704,6 @@ async function retriesOnlyVerifiedNonDispatch() {
     const statuses = retries.map(statusCode);
     statuses.sort();
     expect(statuses).toEqual([200, 409]);
-    await setup.resumeUpstream();
     const retriedBody = setup.body().replace('approval-call', 'approval-retry');
     expect((await setup.call(undefined, {}, retriedBody)).status).toBe(200);
     expect((await setup.call()).status).toBe(403);
@@ -763,7 +762,7 @@ async function refusesRetryAfterBindingEnds(change: string) {
   try {
     await setup.call();
     await setup.decide();
-    await setup.closeUpstream();
+    await setup.refuseMcpConnection();
     await setup.call();
     await setup.restart();
     await ingestUsage(setup.actor, setup.options.usageFile);

@@ -3,7 +3,7 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import type { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:http';
+import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -195,17 +195,6 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const address = stub.address(); if (!address || typeof address === 'string') throw new Error('No stub');
   const keyFile = real ? resolve(process.env['MODELS_REAL_KEY_FILE'] ?? '.keys/.openai-key') : `${directory}/stub-key`;
   if (!real) await writeFile(keyFile, 'stub-only-placeholder');
-  function closeUpstream() {
-    stub.closeAllConnections();
-    const closed = once(stub, 'close');
-    stub.close();
-    return closed;
-  }
-  const upstreamPort = address.port;
-  async function resumeUpstream() {
-    stub.listen(upstreamPort, '127.0.0.1');
-    await once(stub, 'listening');
-  }
   const mcpRoutes: { serverId: string; connectionId: string; upstream: string;
     generation?: string; revisionHeader?: 'x-opencrane-mcp-revision' }[] = [{ serverId: 'fixture', connectionId: 'installed',
     upstream: `127.0.0.1:${address.port}`, generation: 'instance-1',
@@ -220,6 +209,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }),
     onChildSpawn: registerGatewayCleanup };
   let gateway: Awaited<ReturnType<typeof startGateway>>;
+  let refusalListener: ReturnType<typeof createServer> | undefined;
+  let refusalClosed: Promise<unknown> = Promise.resolve();
   for (let attempt = 0; ; attempt++) {
     try {
       gateway = await startGateway(options);
@@ -240,13 +231,60 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const abort = new AbortController(); const dispatching = dispatch(nats.connection, runtime, abort.signal);
   void dispatching.catch(() => undefined);
   if (grants === 'reactions') await waitForModelGrants(auth, 'alice', 'assistant');
+  async function refuseMcpConnection() {
+    function forwardAuthorisation(req: IncomingMessage, res: ServerResponse) {
+      function failed(error: Error) {
+        res.destroy(error);
+      }
+      function receiveAuthorisation(reply: IncomingMessage) {
+        const responseHeaders = { ...reply.headers };
+        if (req.url?.startsWith('/authorize/mcp/') && reply.statusCode === 200) {
+          // Stop accepting connections before returning Allow. The gateway must prove
+          // its own TCP refusal before the checked sender can receive any call bytes.
+          listener.close();
+          responseHeaders.connection = 'close';
+        }
+        res.writeHead(reply.statusCode ?? 502, responseHeaders);
+        reply.on('error', failed);
+        reply.pipe(res);
+      }
+      const destination = new URL(req.url ?? '/', decision.url);
+      const transport = { method: req.method, headers: req.headers };
+      const upstreamRequest = request(destination, transport, receiveAuthorisation);
+      upstreamRequest.on('error', failed);
+      req.pipe(upstreamRequest);
+    }
+    const listener = createServer(forwardAuthorisation);
+    refusalListener = listener;
+    refusalClosed = once(listener, 'close');
+    listener.listen(0, '127.0.0.1');
+    await once(listener, 'listening');
+    const refusalAddress = listener.address();
+    if (!refusalAddress || typeof refusalAddress === 'string') {
+      throw new Error('No gateway refusal listener');
+    }
+    const refusalOptions = { ...options,
+      decisionUrl: `http://127.0.0.1:${refusalAddress.port}` };
+    await gateway.stop();
+    gateway = await startGateway(refusalOptions);
+  }
+  async function closeRefusalListener() {
+    if (!refusalListener) {
+      return;
+    }
+    refusalListener.closeAllConnections();
+    if (refusalListener.listening) {
+      refusalListener.close();
+    }
+    await refusalClosed;
+  }
   const stopDispatch = async () => {
     abort.abort();
     await dispatching.catch(error => { if (!(error instanceof Error && error.name === 'AbortError')) throw error; });
   };
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { dispatchOptions, mcpPrecondition, tokens, keys, stopDispatch, closeUpstream, resumeUpstream,
+  return { dispatchOptions, mcpPrecondition, tokens, keys, stopDispatch, refuseMcpConnection,
     upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
@@ -323,7 +361,9 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     // Replay checks drain completed requests; crash checks explicitly request SIGKILL.
     async restart(signal: NodeJS.Signals = 'SIGTERM') { await gateway.stop(signal); gateway = await startGateway(options); },
     async close() {
-      await gateway.stop(); await decision.close(); stub.closeAllConnections(); await new Promise<void>(resolve => stub.close(() => resolve()));
+      await gateway.stop();
+      await closeRefusalListener();
+      await decision.close(); stub.closeAllConnections(); await new Promise<void>(resolve => stub.close(() => resolve()));
       await stopDispatch();
       await runtime.stop(); await Promise.all(observations); await nats.close(); await dbs.close(); await rm(directory, { recursive: true, force: true });
     },
