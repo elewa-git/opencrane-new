@@ -1,7 +1,8 @@
 import { validSurveyEvent } from './survey.ts';
 import { validEgressRuleEvent } from './egress.ts';
 import { validPreferenceIdentity } from './conversation.ts';
-import { memoryWrittenEventSchema, memoryForgottenEventSchema } from './memory.ts';
+import { memoryWrittenEventSchema, memoryForgottenEventSchema,
+  memoryCleanupRecordedEventSchema } from './memory.ts';
 import { checkDelegationEvent } from './delegation.ts';
 import { checkRoutineEvent } from './routines.ts';
 import { validMcpInstanceEvent } from './mcp-instance.ts';
@@ -70,6 +71,9 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   }
   if (definition.type === 'memory.forgotten') {
     schema = memoryForgottenEventSchema;
+  }
+  if (definition.type === 'memory.cleanup_recorded') {
+    schema = memoryCleanupRecordedEventSchema;
   }
   const result = schema.safeParse(input);
   if (!result.success) {

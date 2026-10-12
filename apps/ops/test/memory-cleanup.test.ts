@@ -2,12 +2,14 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { memoryIdentity, memoryKeys, memoryProjection, memoryScopeId,
+import { HandlerRuntime } from '@opencrane/handlers';
+import { memoryKeys, memoryProjection, memoryScopeId,
   ProjectionRunner, readMemoryFactIds } from '@opencrane/projections';
-import type { EventEnvelope, MemoryIdentity } from '@opencrane/events';
+import { memoryForgottenDataSchema, type EventEnvelope, type MemoryIdentity } from '@opencrane/events';
 import { database } from '../../../libs/projections/test/database.ts';
 import { memoryCleanupHandler } from '../src/memory-cleanup.ts';
 import { dispatcherHandlerNames } from '../src/dispatcher-handlers.ts';
+import { until } from '../../../libs/handlers/test/helpers.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof database>>;
@@ -82,8 +84,33 @@ async function completions() {
   return saved;
 }
 
+async function queuedCleanup() {
+  const reaction = handler();
+  const options = { db: storage.db, logger: createLogger('cleanup-runtime-test'),
+    silo: 'test', handlers: [reaction] };
+  const runtime = new HandlerRuntime(options);
+  async function enqueue(transaction: Parameters<typeof reaction.handle>[1]) {
+    await runtime.enqueue(reaction, forgotten, transaction);
+  }
+  async function finished() {
+    const result = await storage.db.query(`SELECT event_id FROM handler_receipts
+      WHERE handler='cleanup-memory' AND event_id=$1`, [forgotten.id]);
+    return result.rows.length === 1;
+  }
+  try {
+    await runtime.start();
+    await storage.db.transaction(enqueue);
+    await runtime.work(1);
+    await until(finished);
+  } finally {
+    await runtime.stop();
+  }
+}
+
 it('destroys dependent keys and candidate copies once, then rebuilds without hidden decryption',
   async function complete() {
+    const model = vi.spyOn(globalThis, 'fetch');
+    model.mockRejectedValue(new Error('Model disabled'));
     expect(dispatcherHandlerNames({ MEMORY_KEY_DIRECTORY: directory })).toContain('cleanup-memory');
     const candidate = { ...root, revision: 2 };
     const keyId = keys.provision(candidate);
@@ -91,11 +118,15 @@ it('destroys dependent keys and candidate copies once, then rebuilds without hid
     const pending = `${filename}-pending`;
     await writeFile(pending, await readFile(filename));
     await runner.run(projection);
+    await queuedCleanup();
+    await storage.db.query('DROP SCHEMA pgboss CASCADE');
+    await storage.db.query('DROP TABLE handler_receipts');
     await handler().handle(forgotten, storage.db);
-    await handler().handle(forgotten, storage.db);
+    expect(model).not.toHaveBeenCalled();
     expect(keys.status(root)).toBe('destroyed');
     expect(keys.status(child)).toBe('destroyed');
-    expect(keys.status({ ...root, memoryId: 'grandchild' })).toBe('destroyed');
+    const grandchild = { ...root, memoryId: 'grandchild' };
+    expect(keys.status(grandchild)).toBe('destroyed');
     expect(keys.status(candidate)).toBe('destroyed');
     expect(keys.status(independent)).toBe('available');
     expect(await readFile(filename)).toHaveLength(0);
@@ -105,7 +136,8 @@ it('destroys dependent keys and candidate copies once, then rebuilds without hid
       if (identity.ownerId === 'alice') throw new Error('Hidden text was decrypted');
       return keys.decrypt(identity, value);
     }
-    await runner.rebuild(memoryProjection({ decrypt: onlyVisible }));
+    const replay = memoryProjection({ decrypt: onlyVisible });
+    await runner.rebuild(replay);
     expect(await readMemoryFactIds(storage.db, root.silo, root.scopeId)).toEqual([]);
     function provisionAgain() {
       keys.provision(root);
@@ -159,11 +191,13 @@ it('keeps keys erased across append failure and a lost completion reply',
   async function appendBoundary() {
     await runner.run(projection);
     const append = nats.store.append.bind(nats.store);
-    const failing = vi.spyOn(nats.store, 'append').mockResolvedValue({ status: 'unavailable' });
+    const failure = { status: 'unavailable' as const, cause: new Error('Append unavailable') };
+    const failing = vi.spyOn(nats.store, 'append');
+    failing.mockResolvedValue(failure);
     await expect(handler().handle(forgotten, storage.db)).rejects.toThrow();
     expect(keys.status(root)).toBe('destroyed');
     expect(await completions()).toEqual([]);
-    async function lostReply(command: Parameters<typeof append>[0]) {
+    async function lostReply(command: Parameters<typeof append>[0]): Promise<never> {
       await append(command);
       throw new Error('Reply lost');
     }
@@ -176,7 +210,8 @@ it('keeps keys erased across append failure and a lost completion reply',
 
 it('refuses a deletion target that is not the saved tombstone', async function forgedTarget() {
   await runner.run(projection);
-  const data = { ...forgotten.data as object, memoryId: 'independent' };
+  const original = memoryForgottenDataSchema.parse(forgotten.data);
+  const data = { ...original, memoryId: 'independent' };
   await expect(handler().handle({ ...forgotten, data }, storage.db)).rejects.toThrow();
   expect(keys.status(independent)).toBe('available');
   expect(await completions()).toEqual([]);

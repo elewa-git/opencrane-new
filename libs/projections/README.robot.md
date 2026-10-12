@@ -588,3 +588,11 @@ Logs are on the builder host: `/tmp/p4-13-merged-lint.log`,
 `/tmp/p4-13-merged-typecheck.log`, `/tmp/p4-13-merged-events.log`,
 `/tmp/p4-13-merged-tests.log` and `/tmp/p4-13-merged-changed-{1,2}.log`.
 Hosted CI could not be read with the current repository token. Live qualification is NOT RUN.
+
+## Memory cleanup records
+
+`memoryErasureHistory` accepts saved events as an iterable or async iterable. It returns
+hidden ids from tombstones and historical dependencies without reading text or keys.
+The cleanup reaction reuses this calculation. The memory projection checks and consumes
+`memory.cleanup_recorded` without changing fact rows or keys. Completion evidence stays
+in the scope event history; rebuilding tables never runs cleanup or calls a model.

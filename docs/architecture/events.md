@@ -540,7 +540,8 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 | `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | dispatch disabled; no scheduling or spending |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
 | `memory.corrected` | OpenCrane memory MCP (planned); nightly dreaming job (planned) | Postgres memory projection (planned) | correction cleanup is planned |
-| `memory.forgotten` | Person HTTP command (planned); other scopes disabled | Postgres memory projection hides the fact and all dependent facts | revision-key cleanup is planned; no command or reaction is enabled yet |
+| `memory.forgotten` | Person HTTP command (planned); other scopes disabled | Postgres memory projection hides the fact and all dependent facts | `cleanup-memory` destroys person revision and candidate keys and verifies search removal |
+| `memory.cleanup_recorded` | Configured cleanup worker | Memory projection checks the record; scope history retains completion status | — |
 | `memory.consolidated` | Reserved for later use; not emitted by MVP dreaming | Postgres memory projection for that scope | — |
 | `scope.promotion_requested` / `scope.promoted` | person / approver | scopes | OpenFGA viewer tuples; copy to the target dataset |
 
@@ -554,8 +555,12 @@ metadata through a fixed event position before decrypting any memory. It follows
 saved dependency links in TypeScript, removes affected search text and vectors in one
 transaction, and never restores a hidden identity from a later write. Legacy tombstones
 still parse, but stop projection replay because their ownership is unknown.
-Physical key deletion, cleanup evidence, person HTTP forget and its status are not built
-yet. Forget remains disabled for every scope until these can work together.
+The configured dispatcher destroys person revision keys, next-revision candidates and
+pending copies. It records completion only after checking deletion markers and caught-up
+search removal. A failed append or verification leaves cleanup pending. The reaction
+checks saved targets and completed events before acting again, without model calls.
+HTTP forget/status, retry-exhaustion evidence and pending-job recovery after job-table loss
+are not built yet. Forget remains disabled for every scope until these work together.
 
 Nightly dreaming runs per scope in the handler runtime, using a cheap model through the gateway with a budget. It merges duplicates, flags contradictions and expires stale facts through `memory.corrected`; it never crosses scopes. `memory.consolidated` and the existing scope-promotion rows are retained for contract compatibility, with no MVP emitters or promotion reactions enabled. The stream table's older scope description includes these deferred operations. Sharing data across groups is a later design topic.
 
@@ -645,6 +650,7 @@ events. Desktop admission additionally requires an explicit member
 
 | Handler | Subscribed events |
 | --- | --- |
+| `cleanup-memory` | `memory.forgotten` |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
 | `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |
 | `update-openfga` | `provider.created`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |

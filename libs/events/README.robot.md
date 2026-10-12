@@ -143,7 +143,8 @@ identity, memory id, expectedRevision and revision = expectedRevision + 1. It co
 no text, ciphertext or key. The registry exposes this strict version-1 data shape;
 `memoryForgottenEventSchema` and `parseEventByType` also preserve exact legacy tombstones.
 The projection stops on those legacy records rather than guessing their ownership.
-No forget emitter, cleanup event or cleanup reaction is enabled in this split.
+No forget emitter is enabled. The configured dispatcher can verify key cleanup
+and record completion for a saved person tombstone.
 
 Saved memory events must use `parseEventByType`, or `memoryWrittenIdentity` when
 only their ownership fields are needed. `getEventDefinition('memory.written')`
@@ -419,3 +420,11 @@ request id, connection, tool name and revision, catalogue digest and backend gen
 It contains no pass, credentials or arguments. Its conditional append orders that
 call against policy and quarantine writes. No reaction sends a call on replay.
 Only the catalogue write position advances; tool policy and approval revision stay stable.
+
+## Memory cleanup completion
+
+`memory.cleanup_recorded` version 1 names scope id/kind/owner and the initiating `changeId`.
+Its only current outcome is `completed`. It requires the matching scope subject,
+`opencrane-worker` source/system principal and `commandId` equal to the event id.
+It contains no text, encrypted value or key reference. `cleanup-memory` subscribes to
+`memory.forgotten` only. Correction cleanup and unavailable evidence remain unimplemented.

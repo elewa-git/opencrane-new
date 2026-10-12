@@ -15,6 +15,7 @@ import { createLogger } from '@opencrane/observability';
 import { SandboxClient } from './kubernetes.ts';
 import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
 import { personalKeyHandler } from './personal-keys.ts';
+import { memoryCleanupHandler } from './memory-cleanup.ts';
 import { dispatcherHandlerNames } from './dispatcher-handlers.ts';
 import type { Handler } from '@opencrane/handlers';
 import type { HandlerName } from '@opencrane/events';
@@ -120,6 +121,10 @@ try {
     if (personalDirectory) {
       const keys = conversationKeys(personalDirectory);
       available.push(personalKeyHandler(commands.store, keys));
+    }
+    const memoryDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
+    if (memoryDirectory) {
+      available.push(memoryCleanupHandler(commands.store, memoryKeys(memoryDirectory)));
     }
     const decisionUrl = process.env['MODEL_DECISION_URL'];
     if (decisionUrl) {

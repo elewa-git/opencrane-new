@@ -56,7 +56,7 @@ function recordMetadata(histories: Map<string, ScopeHistory>, event: EventEnvelo
 }
 
 /** Find every dependent copy from saved metadata; never read text or revision keys. */
-export async function memoryErasureHistory(events: AsyncIterable<StoredEvent>) {
+export async function memoryErasureHistory(events: AsyncIterable<StoredEvent> | Iterable<StoredEvent>) {
   const histories = new Map<string, ScopeHistory>();
   for await (const stored of events) {
     recordMetadata(histories, stored.event);
