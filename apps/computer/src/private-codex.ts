@@ -2,7 +2,7 @@ export function privateCodexLaunch(home: string, caller: string) {
   return {
     command: '/usr/bin/setpriv',
     args: ['--reuid=1003', '--regid=1003', '--clear-groups', '--no-new-privs', '--',
-      '/usr/local/bin/codex', 'app-server', '--stdio'],
+      '/usr/local/bin/node', '--disable-sigusr1', '/usr/local/bin/codex', 'app-server', '--stdio'],
     options: {
       cwd: `${home}/work`,
       stdio: ['pipe', 'pipe', 'ignore'] as ['pipe', 'pipe', 'ignore'],

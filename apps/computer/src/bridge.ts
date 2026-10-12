@@ -32,9 +32,15 @@ const runtimeProxy = await proxy(gateway.origin, undefined,
 const { caller } = runtimeProxy;
 writeFileSync('/home/codex/.codex/environments.toml', memoryFreeEnvironments());
 writeFileSync('/home/codex/.codex/config.toml', memoryFreeConfig(process.env['MODEL'] ?? 'stub-model'));
-const child = spawn('codex', ['app-server', '--stdio'], { cwd: '/workspace', env: {
-  PATH: process.env['PATH'], HOME: '/home/codex', CODEX_HOME: '/home/codex/.codex', PROXY_CALLER_TOKEN: caller,
-}, stdio: ['pipe', 'pipe', 'inherit'] });
+const codexArgs = ['--disable-sigusr1', '/usr/local/bin/codex', 'app-server', '--stdio'];
+const codexEnvironment = {
+  PATH: process.env['PATH'], HOME: '/home/codex', CODEX_HOME: '/home/codex/.codex',
+  PROXY_CALLER_TOKEN: caller,
+};
+const codexOptions = {
+  cwd: '/workspace', env: codexEnvironment, stdio: ['pipe', 'pipe', 'inherit'] as ['pipe', 'pipe', 'inherit'],
+};
+const child = spawn('/usr/local/bin/node', codexArgs, codexOptions);
 child.on('error', () => process.exit(1)); child.on('exit', () => process.exit(1));
 child.stdin.on('error', () => process.exit(1));
 process.on('SIGTERM', () => child.kill('SIGTERM'));

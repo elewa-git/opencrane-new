@@ -560,10 +560,22 @@ The bridge compares incoming token hashes in constant time before replacing any
 live connection. It retains the authenticated server's token only in memory for
 per-thread gateway grants. Tokens never enter events, replies, logs or the PVC.
 
+Trusted Node launches use fixed arguments with `--disable-sigusr1`. The image command,
+credential installer and pipe connectors remove `NODE_OPTIONS` before starting Node.
+The bridge, desktop helper and both Codex wrappers receive environments without Node
+options. The model and MCP proxies run inside the protected bridge process. The root
+supervisor also starts native executors and Python stop helpers; those are not Node
+processes. No launch copies `process.execArgv` or accepts extra Node flags.
+
 `apps/server/test/bridge-credentials.test.ts` uses the existing disposable computer
 fixture, exact template capabilities, UIDs 1000–1003, signed fixture credentials and
 the stub provider. It covers unauthorised replacement, file changes, issuer expiry,
-forged connections and rotation followed by a real Codex turn. These local checks
+forged connections and rotation followed by a real Codex turn. The debugger regression
+sends SIGUSR1 from UID 1000 to the bridge and memory-free Codex wrapper, UID 1002 to
+the desktop helper, and UID 1003 to the private Codex wrapper. It checks that port 9229
+stays closed, forged authentication fails and the live server stays connected. Another
+case supplies `NODE_OPTIONS=--inspect=0.0.0.0:9229` at container startup. The fixture
+uses the current Dockerfile command and mounts current sources. These local checks
 use Docker runc. Fresh-install gVisor qualification remains NOT RUN.
 
 Deploy the new computer image before the worker and server. Old images lack the

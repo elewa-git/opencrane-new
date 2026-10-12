@@ -206,7 +206,8 @@ export class SandboxClient {
   async credentials(name: string, token: IssuedToken, force = false): Promise<void> {
     const previous = this.delivered.get(name);
     if (!force && previous?.id === token.id && previous.expiresAt > Date.now() + 60_000) return;
-    const command = ['exec', '-i', name, '-c', 'computer', '--', 'node',
+    const command = ['exec', '-i', name, '-c', 'computer', '--',
+      '/usr/bin/env', '-u', 'NODE_OPTIONS', '/usr/local/bin/node', '--disable-sigusr1',
       '--experimental-strip-types', '/app/src/install-credential.ts'];
     await this.input(command, token);
     this.delivered.set(name, token);

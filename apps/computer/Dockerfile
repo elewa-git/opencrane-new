@@ -50,9 +50,9 @@ COPY --from=launcher-build /tool-user /usr/local/bin/tool-user
 # Codex starts a pipe connector; only the root supervisor starts the native host.
 RUN mkdir -p /usr/local/libexec && \
     mv /spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host /usr/local/libexec/codex-code-mode-host && \
-    printf '#!/bin/sh\nexec /usr/local/bin/node --experimental-strip-types /app/src/entrypoint.ts connect-host\n' > /spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host && \
+    printf '#!/bin/sh\nexec /usr/bin/env -u NODE_OPTIONS /usr/local/bin/node --disable-sigusr1 --experimental-strip-types /app/src/entrypoint.ts connect-host\n' > /spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host && \
     chmod 0555 /spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host /usr/local/libexec/codex-code-mode-host
 COPY src ./src
 RUN chmod 0755 /app/src && chmod 0444 /app/src/* && chmod 0555 /usr/local/bin/tool-user
 ENV PATH="/opt/python/bin:/usr/local/bin:/usr/bin:/bin"
-CMD ["/usr/bin/prlimit", "--core=0:0", "--", "node", "--experimental-strip-types", "/app/src/entrypoint.ts"]
+CMD ["/usr/bin/prlimit", "--core=0:0", "--", "/usr/bin/env", "-u", "NODE_OPTIONS", "/usr/local/bin/node", "--disable-sigusr1", "--experimental-strip-types", "/app/src/entrypoint.ts"]

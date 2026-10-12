@@ -99,7 +99,8 @@ const launchesPrivateCodexAsUID1003WithIgnored = () => {
   const launch = privateCodexLaunch('/home/private/turn-1', 'caller');
   expect(launch.command).toBe('/usr/bin/setpriv');
   expect(launch.args).toEqual(['--reuid=1003', '--regid=1003', '--clear-groups',
-    '--no-new-privs', '--', '/usr/local/bin/codex', 'app-server', '--stdio']);
+    '--no-new-privs', '--', '/usr/local/bin/node', '--disable-sigusr1',
+    '/usr/local/bin/codex', 'app-server', '--stdio']);
   expect(launch.options).toEqual({ cwd: '/home/private/turn-1/work',
     stdio: ['pipe', 'pipe', 'ignore'], env: { PATH: '/opt/python/bin:/usr/local/bin:/usr/bin:/bin',
       HOME: '/home/private/turn-1', CODEX_HOME: '/home/private/turn-1/codex',
