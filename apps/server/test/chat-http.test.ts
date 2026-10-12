@@ -200,17 +200,32 @@ it('serves private chat commands and reads to joined members, refusing other org
     const historyWithEvidence = await app.inject({
       url: `/api/conversations/${conversationId}/messages`, headers: headers(),
     });
-    expect(historyWithEvidence.statusCode).toBe(200);
-    expect(historyWithEvidence.json<{ rows: { id: string }[] }>().rows)
+    expect.soft(historyWithEvidence.statusCode).toBe(200);
+    expect.soft(historyWithEvidence.json<{ rows?: { id: string }[] }>().rows ?? [])
       .not.toContainEqual(expect.objectContaining({ id: evidence.id }));
     const publicFeed = await db.query('SELECT event_id FROM conversation_feed WHERE event_id = $1',
       [evidence.id]);
-    expect(publicFeed.rows).toEqual([]);
+    expect.soft(publicFeed.rows).toEqual([]);
     let socket = await connect(0);
     try {
-      await until(() => received.some(r => r.type === 'ready'));
-      expect(received).not.toContainEqual(expect.objectContaining({ row:
-        expect.objectContaining({ id: evidence.id }) }));
+      const closeCodes: number[] = [];
+      function recordClose(code: number) {
+        closeCodes.push(code);
+      }
+      function isReady(message: (typeof received)[number]) {
+        return message.type === 'ready';
+      }
+      function hasReplyOrClose() {
+        return received.some(isReady) || closeCodes.length > 0;
+      }
+      socket.once('close', recordClose);
+      await until(hasReplyOrClose);
+      expect(closeCodes).toEqual([]);
+      expect(received.some(isReady)).toBe(true);
+      function isEvidenceMessage(message: (typeof received)[number]) {
+        return message.type === 'event' && message.row?.id === evidence.id;
+      }
+      expect(received.some(isEvidenceMessage)).toBe(false);
       const contentQueriesAfterFirstRead = contentQueries;
       await new Promise(resolve => setTimeout(resolve, 350));
       expect(contentQueries).toBe(contentQueriesAfterFirstRead);
@@ -234,7 +249,11 @@ it('serves private chat commands and reads to joined members, refusing other org
       await until(() => received.some(r => r.type === 'ready'));
       expect(received.filter(r => r.type === 'event').map(r => r.row?.id)).toEqual([id]);
       socket.terminate(); await once(socket, 'close'); received.length = 0;
-      await runner.rebuild(conversations); socket = await connect(cursor.position, cursor.generation);
+      await runner.rebuild(conversations);
+      const rebuiltFeed = await db.query('SELECT event_id FROM conversation_feed WHERE event_id = $1',
+        [evidence.id]);
+      expect(rebuiltFeed.rows).toEqual([]);
+      socket = await connect(cursor.position, cursor.generation);
       await until(() => received.some(r => r.type === 'resync'));
       expect(received[0]).toMatchObject({ type: 'resync', position: 0, generation: cursor.generation + 1 });
     } finally { socket.terminate(); await new Promise<void>(resolve => wss.close(() => resolve())); }

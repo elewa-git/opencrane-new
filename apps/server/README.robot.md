@@ -2387,6 +2387,9 @@ turn, thread, input generation and projection generation. Scope positions cannot
 backwards. Call and dispatch digests cannot be reused. Repeated identical event ids
 are harmless; conflicting data is refused. Invalidated and ended contexts retain
 references. Closing the turn also ends its context. Replay creates no execution permission.
+The summary also reads conversation closes saved on the participation stream.
+It ends the context and keeps its references on both a fresh read and a cached read.
+The history read has its own time limit; access checks keep their small stream set.
 The summary copies its result and counts retained evidence against its existing RAM cap.
 
 The first test commit failed 25 tests before implementation. The focused tests cover

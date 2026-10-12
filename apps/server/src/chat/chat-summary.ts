@@ -99,7 +99,8 @@ function addReport(summary: ChatSummary, report: NonNullable<StoredEvent['event'
   }
 }
 const chat: SummaryKind<ChatSummary> = {
-  name: 'chat', keep: 64, empty: emptyChat, add: addChat,
+  name: 'chat', keep: 64, includeConversationCloses: true,
+  empty: emptyChat, add: addChat,
   budget: { limit: 32 * 1024 * 1024, size: chatSize },
 };
 function chatSize(summary: ChatSummary) {
