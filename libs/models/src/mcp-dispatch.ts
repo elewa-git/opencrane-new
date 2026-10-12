@@ -83,9 +83,7 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
     if (policy.dispatchBinding !== digest(JSON.stringify(route))) {
       throw new Error('MCP backend changed during the decision');
     }
-    const accessExpiresAt = Date.now() + Math.max(0, accessDeadline - performance.now());
-    const expiresAt = Math.min(Date.now() + 2000, accessExpiresAt,
-      Date.parse(policy.policy.expiresAt!));
+    const expiresAt = Math.min(Date.now() + 2000, Date.parse(policy.policy.expiresAt!));
     for (const [token, permit] of pending) {
       if (permit.expiresAt <= Date.now()) pending.delete(token);
     }
