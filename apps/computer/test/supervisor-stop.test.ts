@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import { readFile } from 'node:fs/promises';
 import { WebSocket } from 'ws';
 import { expect, it } from 'vitest';
 import { uploadComputer } from '../../server/test/support/upload-computer.ts';
@@ -151,6 +152,63 @@ print('zombie leader with live worker')
 it.each([false, true])(
   'stops a live worker under a zombie leader or refuses proof if it never exits: %s',
   stopsZombieWorker, 60_000);
+
+async function stopsForkDuringScan() {
+  const computer = await uploadComputer();
+  try {
+    const source = `
+import os
+import pathlib
+import time
+
+pid_file = pathlib.Path('/workspace/handoff-pid')
+trigger = pathlib.Path('/workspace/handoff-now')
+done = pathlib.Path('/workspace/handoff-done')
+pid_file.write_text(str(os.getpid()))
+descriptor = os.open('/workspace/handoff-writes', os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+while True:
+    os.write(descriptor, b'x')
+    if trigger.exists():
+        trigger.unlink()
+        if os.fork():
+            os._exit(0)
+        pid_file.write_text(str(os.getpid()))
+        done.write_text('child running')
+    time.sleep(0.005)
+`;
+    const firstPid = await launchTool(computer, source);
+    await waitForFile(computer, '/workspace/handoff-writes');
+    // Confirm repeated detached handoffs before placing one inside the scan.
+    for (let index = 0; index < 2; index++) {
+      await computer.exec('rm', '-f', '/workspace/handoff-done');
+      await computer.write('/workspace/handoff-now', 'fork');
+      await waitForFile(computer, '/workspace/handoff-done');
+    }
+    expect(await computer.read('/workspace/handoff-pid')).not.toBe(firstPid);
+    expect(await inventory(computer)).not.toBe('[]');
+    const fixturePath = new URL('./fixtures/supervisor-fork-race.mjs', import.meta.url);
+    const observer = await readFile(fixturePath, 'utf8');
+    await computer.write('/workspace/fork-observer.mjs', observer);
+    const startObserver = `
+import { spawn } from 'node:child_process';
+const child = spawn('node', ['--experimental-strip-types', '/workspace/fork-observer.mjs'], {
+  detached: true, stdio: 'ignore',
+});
+child.unref();
+`;
+    await computer.exec('node', '--input-type=module', '-e', startObserver);
+    await waitForFile(computer, '/workspace/fork-observer-ready');
+    const result = await control(computer);
+    expect(result).toContain('200\n');
+    expect(result).toContain('"executionQuiet":true');
+    expect(result).toContain('"controlEnabled":false');
+    expect(await inventory(computer)).toBe('[]');
+  } finally {
+    await computer.close();
+  }
+}
+it('stops a detached process handing work to fresh children, including a fork during scan',
+  stopsForkDuringScan, 60_000);
 
 async function stopsRealExecutors(failure: boolean) {
   const computer = await uploadComputer();
