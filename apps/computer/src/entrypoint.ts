@@ -120,6 +120,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   closeSync(directory(agent, 'supervisor', 0, 0o700));
   const executorDirectory = directory(run, 'executor', 0, 0o750, 1000);
   closeSync(directory(executorDirectory, 'supervisor', 0, 0o700));
+  closeSync(directory(executorDirectory, 'credentials', 0, 0o750, 1000));
   closeSync(executorDirectory);
   rmSync('/run/executor/supervisor/control.sock', { force: true });
   const supervisor = supervisorStop();

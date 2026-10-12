@@ -2,6 +2,15 @@
 
 For people, read [README.md](README.md) first.
 
+## Computer credential delivery
+
+The bridge connection caller and lifecycle worker share `SandboxClient.credentials`.
+Delivery now uses root-only Pod exec and standard input, without token arguments.
+The computer stores only the token hash and expiry. The server then presents the
+actual token to `/bridge`. Public HTTP replacement is removed. Deploy the new
+computer image first; old images refuse delivery because the installer is absent.
+See the [computer contract](../computer/README.robot.md#bridge-credential-delivery).
+
 ## Conversation preferences (P4-6 PR 3; Part of #88)
 
 `POST /api/conversations/:conversationId/state` accepts `chatStateCommandSchema`:

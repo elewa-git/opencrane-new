@@ -265,7 +265,7 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
         event: envelope('test', 'computer-assistant', type, { computerId: 'computer', assistantId: 'assistant', generation: 1,
           ...(type === 'computer.claimed' ? { tokenId: 'token:test' } : { podUid: 'pod' }) }) });
     }
-    const connection = { url: `${computer.url.replace('http:', 'ws:')}/bridge`, computerId: 'computer', assistantId: 'assistant', bearer: 'test-computer' };
+    const connection = { url: `${computer.url.replace('http:', 'ws:')}/bridge`, computerId: 'computer', assistantId: 'assistant', bearer: computer.credential.value };
     let link = await connectBridge({ ...options, keys }, connection, tokens);
     try {
       const row = (await history(nats.store, 'conversation-conversation', 'test')).findLast(row => row.event.type === 'file.uploaded')!;

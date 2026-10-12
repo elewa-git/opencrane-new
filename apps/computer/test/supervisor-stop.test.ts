@@ -248,7 +248,7 @@ exec /bin/cat "$@"
 path.chmod(0o555)
 `);
     socket = new WebSocket(computer.url.replace('http:', 'ws:') + '/bridge', {
-      headers: { 'x-bridge-token': 'test-computer' },
+      headers: { 'x-bridge-token': computer.credential.value },
     });
     await once(socket, 'open');
     function acknowledge(bytes: Buffer) {

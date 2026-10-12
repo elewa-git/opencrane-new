@@ -203,11 +203,13 @@ Kubernetes RBAC has no field-level patch permission or operating-mode subresourc
 The policies cover all Pods in the dedicated computer namespace without a bypassable
 label selector; install service workloads elsewhere.
 
-The required credential sink POSTs through the authenticated Kubernetes Pod proxy to
-`/credentials`. The computer atomically writes `/run/codex/computer.json` (0600, UID
-1000, memory volume); Ready is appended only after delivery. The reconciler refreshes
-short-lived credentials before expiry. P2-3 may read that file to supply the existing
-per-thread proxy `/grant` control socket. No token value enters an event or PVC.
+The required credential sink uses authenticated Pod exec as root to run
+`/app/src/install-credential.ts`. It sends the token only on standard input.
+Both the worker and server use this adapter. The installer stores only a hash and
+expiry under the root-owned `/run/executor/credentials`; Ready follows successful
+delivery. The reconciler refreshes before expiry and can recover after it expires.
+The new computer image must precede the worker and server deployment. No token
+value enters an event, process argument, reply or PVC.
 
 P2-4 now uses the shared `computerCredentials(store, tokens, silo)` check in
 [libs/auth](../../libs/auth/src/credentials.ts), moved from this app so both workers

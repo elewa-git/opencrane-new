@@ -1,5 +1,5 @@
 import type { approvalHolds } from './approval-holds.ts';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, Server } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { record } from './http.ts';
@@ -21,12 +21,22 @@ interface TurnRunnerPort {
 function verify(driver: TurnDriver, request: IncomingMessage) {
   try {
     const credential = driver.credential();
-    const expected = Buffer.from(credential.value);
-    const actual = Buffer.from(String(request.headers['x-bridge-token'] ?? ''));
-    return credential.expiresAt > Date.now() && expected.length === actual.length
-      && timingSafeEqual(expected, actual);
+    let expected: Buffer;
+    let actual = Buffer.from(String(request.headers['x-bridge-token'] ?? ''));
+    if ('digest' in credential) {
+      expected = Buffer.from(credential.digest, 'hex');
+      const hash = createHash('sha256');
+      hash.update(actual);
+      actual = hash.digest();
+    } else {
+      expected = Buffer.from(credential.value);
+    }
+    if (credential.expiresAt <= Date.now() || expected.length !== actual.length
+      || !timingSafeEqual(expected, actual)) return undefined;
+    return { value: String(request.headers['x-bridge-token'] ?? ''),
+      expiresAt: credential.expiresAt };
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -135,6 +145,7 @@ function dispatch(
 
 function installHandlers(
   next: WebSocket,
+  expiresAt: number,
   state: BridgeSocketState,
   driver: TurnDriver,
   runner: TurnRunnerPort,
@@ -146,7 +157,7 @@ function installHandlers(
   state.resumed = false;
   const receiveFile = createFileReceiver(driver);
   const expiry = setTimeout(closeForCredentialExpiry(next),
-    Math.max(1, driver.credential().expiresAt - Date.now()));
+    Math.max(1, expiresAt - Date.now()));
   next.once('close', clearExpiry(expiry));
   next.on('error', terminateSocket(next));
   next.on('message', receiveMessage(next, state, runner, receiveFile, sendReports, approvals));
@@ -192,14 +203,21 @@ function receiveMessage(
 }
 
 function installConnectionHandler(
+  accepted: WeakMap<IncomingMessage, { value: string; expiresAt: number }>,
   state: BridgeSocketState,
   driver: TurnDriver,
   runner: TurnRunnerPort,
   sendReports: (since: unknown) => void,
   approvals: ReturnType<typeof approvalHolds> | undefined,
 ) {
-  return function handleConnection(next: WebSocket) {
-    installHandlers(next, state, driver, runner, sendReports, approvals);
+  return function handleConnection(next: WebSocket, request: IncomingMessage) {
+    const credential = accepted.get(request);
+    if (!credential || credential.expiresAt <= Date.now()) {
+      next.terminate();
+      return;
+    }
+    driver.authenticated?.(credential.value);
+    installHandlers(next, credential.expiresAt, state, driver, runner, sendReports, approvals);
   };
 }
 
@@ -233,8 +251,13 @@ export function bridgeSocket(
     replayReports(since, send);
   }
 
+  // Keep the expiry checked at authentication, even if rotation happens during the upgrade.
+  const accepted = new WeakMap<IncomingMessage, { value: string; expiresAt: number }>();
   function verifyClient(info: { req: IncomingMessage }) {
-    return verify(driver, info.req);
+    const credential = verify(driver, info.req);
+    if (!credential) return false;
+    accepted.set(info.req, credential);
+    return true;
   }
 
   const wss = new WebSocketServer({
@@ -243,7 +266,7 @@ export function bridgeSocket(
     maxPayload: 128 * 1024,
     verifyClient,
   });
-  const handleConnection = installConnectionHandler(state, driver, runner, resume, approvals);
+  const handleConnection = installConnectionHandler(accepted, state, driver, runner, resume, approvals);
   function advertiseSupport(headers: string[]) {
     if (approvals) headers.push('x-opencrane-approval-waiting: true');
   }

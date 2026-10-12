@@ -3,14 +3,14 @@ import { receiveFile } from './files.ts';
 import { spawn } from 'node:child_process';
 import { createServer as netServer, connect, type Socket } from 'node:net';
 import { createServer } from 'node:http';
-import { writeFileSync, chmodSync, renameSync, readFileSync } from 'node:fs';
+import { writeFileSync, chmodSync, readFileSync } from 'node:fs';
 import { once } from 'node:events';
 import { codexConnection } from './codex-connection.ts';
 import { memoryFreeConfig, memoryFreeEnvironments } from './codex-config.ts';
 import { bridgeChannel } from './channel.ts';
 import { proxy } from './proxy.ts';
 import { proxyControl } from './proxy-control.ts';
-import { body, json, record } from './http.ts';
+import { json, record } from './http.ts';
 function stopped(error: unknown) {
   const name = error instanceof Error ? error.name : 'Error';
   const safeName = /^[A-Za-z][A-Za-z0-9]{0,60}$/u.test(name) ? name : 'Error';
@@ -121,17 +121,6 @@ netServer(socket => {
   socket.on('close', () => { client = undefined; child.stdout.resume(); });
 }).listen('/run/codex/app.sock', () => chmodSync('/run/codex/app.sock', 0o600));
 const server = createServer((req, res) => {
-  if (req.url === '/credentials' && req.method === 'POST') {
-    void (async () => {
-      const token = record(await body(req));
-      if (typeof token['value'] !== 'string' || typeof token['id'] !== 'string' ||
-          typeof token['expiresAt'] !== 'number' || token['expiresAt'] <= Date.now()) throw new Error('Invalid credential');
-      writeFileSync('/run/codex/computer.json.tmp', JSON.stringify(token), { mode: 0o600 });
-      renameSync('/run/codex/computer.json.tmp', '/run/codex/computer.json');
-      json(res, { ok: true });
-    })().catch(() => json(res, { error: 'invalid credential' }, 400));
-    return;
-  }
   if (req.url !== '/health' || req.method !== 'GET') { json(res, { error: 'path' }, 404); return; }
   const desktop = connect(6901, '127.0.0.1');
   let answered = false;
@@ -149,13 +138,21 @@ const server = createServer((req, res) => {
   desktop.on('connect', () => reply(initialised));
 }).listen(8081, '0.0.0.0');
 
+let computerCredential = '';
 const channel = bridgeChannel(server, {
   file: receiveFile,
   journal: '/home/agent/codex/bridge-reports.jsonl',
   credential() {
-    const value = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);
-    if (typeof value['value'] !== 'string' || typeof value['expiresAt'] !== 'number') throw new Error('Missing credential');
-    return { value: value['value'], expiresAt: value['expiresAt'] };
+    const path = '/run/executor/credentials/computer.json';
+    const saved = record(JSON.parse(readFileSync(path, 'utf8')) as unknown);
+    if (typeof saved['digest'] !== 'string' || typeof saved['expiresAt'] !== 'number') {
+      throw new Error('Missing credential');
+    }
+    return { digest: saved['digest'], expiresAt: saved['expiresAt'] };
+  },
+  authenticated(value) {
+    // Retain the authenticated server's pass only in memory for gateway requests.
+    computerCredential = value;
   },
   rpc: persistent.rpc,
   privateSession,
@@ -169,9 +166,8 @@ const channel = bridgeChannel(server, {
     return proxyControl('/catalogue/drop', { loadKey });
   },
   grant(thread, conversation, token, expiresAt) {
-    const computer = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);
     const path = token ? '/grant' : '/drop';
-    const input = { thread, conversation, computer: computer['value'], token, expires: expiresAt };
+    const input = { thread, conversation, computer: computerCredential, token, expires: expiresAt };
     return proxyControl(path, input);
   },
 }, runtimeProxy.approvals);

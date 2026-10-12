@@ -238,9 +238,8 @@ are removed. Both decisions require reviewed, exact installed-file evidence.
 The current image build and publication results are in the
 [private-turn check record](../../docs/process/p4-14-private-turns-evidence.md).
 The older image receipt below describes the earlier memory-free release.
-This lifecycle build adds `/credentials`: the worker POSTs a short-lived computer
-credential through the Kubernetes Pod proxy; the bridge atomically stores it in
-`/run/codex/computer.json` (UID 1000, mode 0600, memory-backed). The existing private
+The worker delivers a short-lived computer credential through authenticated Pod exec.
+The root-only installer saves its SHA-256 hash and expiry on the memory volume. The existing private
 proxy control socket accepts per-thread grants. Model requests have a 2,000-token
 output ceiling, including reasoning and tool-call syntax. The OS layer is unchanged from the P2-1 [licence and image evidence](evidence.json); that receipt
 names the earlier image. The lifecycle k3d test checks delivery on the current digest. P2-3 adds the reviewed MIT `ws` package for the bridge channel.
@@ -541,14 +540,36 @@ runtime and does not qualify gVisor isolation.
 Memory admission remains disabled while swap, host crash dumps or the live proof
 fail. This developer box cannot qualify swap or host core-dump isolation.
 
-## Local bridge credential limit
+## Bridge credential delivery
 
-The loopback `POST /credentials` handler currently accepts a replacement credential
-without authentication. A local desktop or memory-free Codex process can replace
-it, open `/bridge`, disconnect the server and read private reports waiting in memory.
-It can also forge a start acknowledgement with private context. Tool-free private
-turns cannot currently make these calls, but this gap must be closed before they
-get tools or memory. The hardening work is [#200](https://github.com/elewa-git/opencrane-new/issues/200).
+`POST /credentials` is removed. Both worker delivery and server rotation use
+`SandboxClient.credentials`, which sends JSON on standard input to the root-only
+`/app/src/install-credential.ts` through authenticated, namespace-scoped Pod exec.
+Kubernetes authentication and root access authorise every delivery, including the
+first one and recovery after expiry. No bootstrap bearer or new permission is needed.
+The installer caps input at 16 KiB and lifetime at the issuer's ten minutes. It checks
+that the supplied expiry matches the signed token's `exp`, and checks `iat`, `jti`
+and computer type. It trusts the issuer reached through Pod exec; it does not verify
+the signature again. The gateway still verifies signed credentials on model requests.
+
+`/run/executor/credentials` is root-owned, mode 0750, group 1000. Its atomically
+replaced `computer.json` contains only a SHA-256 digest and expiry, mode 0440,
+owner root, group 1000. Codex can read the digest but cannot use it as a pass or
+change it. Desktop, tool and private Codex users cannot traverse the directory.
+The bridge compares incoming token hashes in constant time before replacing any
+live connection. It retains the authenticated server's token only in memory for
+per-thread gateway grants. Tokens never enter events, replies, logs or the PVC.
+
+`apps/server/test/bridge-credentials.test.ts` uses the existing disposable computer
+fixture, exact template capabilities, UIDs 1000–1003, signed fixture credentials and
+the stub provider. It covers unauthorised replacement, file changes, issuer expiry,
+forged connections and rotation followed by a real Codex turn. These local checks
+use Docker runc. Fresh-install gVisor qualification remains NOT RUN.
+
+Deploy the new computer image before the worker and server. Old images lack the
+installer and delivery fails closed. Replace running computers so each starts the
+new protected directory. Private tools and memory remain disabled pending their
+separate isolation qualification.
 
 ## Private-turn rollout
 

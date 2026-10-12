@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from 'node:child_process';
-import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtemp, mkdir, copyFile, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { readFileSync } from 'node:fs';
@@ -315,11 +315,15 @@ it.skipIf(!live)('qualifies the event-driven lifecycle on k3d gVisor', async () 
     expect((await k('get', 'sandboxclaims', '-o', 'json')).match(/"kind": "SandboxClaim"/gu)?.length).toBe(1);
     expect((await allEvents()).filter((event) => event.type === 'assistant.created')).toHaveLength(1);
     expect((await allEvents()).filter((event) => event.type === 'computer.claimed')).toHaveLength(1);
-    const delivered: unknown = JSON.parse(await k('exec', computerId, '--', 'cat', '/run/codex/computer.json'));
-    expect(nested(delivered, 'id')).toBe(issued[0]!.id);
-    const deliveredValue = nested(delivered, 'value');
-    if (typeof deliveredValue !== 'string') throw new Error('No delivered credential');
-    expect(await tokens.verify(deliveredValue, computerTokenAudience, issued[0]!.id)).toMatchObject({ computer: computerId });
+    const delivered: unknown = JSON.parse(await k('exec', computerId, '--', 'cat',
+      '/run/executor/credentials/computer.json'));
+    const hash = createHash('sha256');
+    hash.update(issued[0]!.value);
+    const expectedDigest = hash.digest('hex');
+    expect(nested(delivered, 'digest')).toBe(expectedDigest);
+    expect(nested(delivered, 'expiresAt')).toBe(issued[0]!.expiresAt);
+    expect(await tokens.verify(issued[0]!.value, computerTokenAudience, issued[0]!.id))
+      .toMatchObject({ computer: computerId });
     await k('exec', computerId, '--', 'node', '-e', "require('fs').writeFileSync('/home/agent/workspace/preserved','yes')");
 
     const readyEvent = (await allEvents()).findLast(event => event.type === 'computer.ready')!;
