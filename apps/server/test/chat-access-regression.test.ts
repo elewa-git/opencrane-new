@@ -1375,14 +1375,15 @@ async function removedParticipantReaders() {
 
 
 it('keeps reads and access checks bounded with 100,000 messages and a busy conversation',
-  participationVolume, 600_000);
+  privateVolume, 600_000);
 
-async function participationVolume() {
+async function participationVolume(sharedChild = false) {
   const context = await fixture();
   let stopped = false;
   let streaming: Promise<void> | undefined;
   try {
-    await context.agentSession('volume');
+    if (sharedChild) await childSession(context, 'volume');
+    else await context.agentSession('volume');
     await context.append('computer-assistant', 'computer.claimed', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, tokenId: 'token:test',
     }, false);
@@ -1435,9 +1436,11 @@ async function participationVolume() {
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).toContain('Hello');
       expect(performance.now() - started).toBeLessThan(1500);
-      await expect(viewAccess(context.options, 'alice', 'volume')).resolves.toMatchObject({
-        computerId: 'desktop',
-      });
+      if (!sharedChild) {
+        await expect(viewAccess(context.options, 'alice', 'volume')).resolves.toMatchObject({
+          computerId: 'desktop',
+        });
+      }
       const fileRead = { url: '/api/conversations/volume/files', headers: context.headers() };
       const fileResponse = await context.app.inject(fileRead);
       expect(fileResponse.statusCode, fileResponse.body).toBe(200);
@@ -1984,3 +1987,173 @@ async function requiresLegacyClosesBeforeStartup() {
 }
 it('requires older closing events to be projected before the server starts',
   requiresLegacyClosesBeforeStartup, 120_000);
+
+
+async function childSession(context: Fixture, conversationId = 'child') {
+  const parent = await context.append('conversation-parent', 'conversation.created', {
+    conversationId: 'parent', createdBy: 'alice', mode: 'group',
+    participantIds: ['alice', 'bob'],
+  });
+  const parentJoinPosition = await context.nats.store.head('conversation-parent');
+  await context.append('team-child-team', 'team.created', {
+    teamId: 'child-team', name: 'Child assistant', createdBy: 'alice',
+  });
+  await context.append('assistant-child-assistant', 'assistant.created', {
+    assistantId: 'child-assistant', kind: 'team', ownerId: 'child-team',
+    payingGroupId: 'child-team',
+  });
+  context.keys.provision('test', conversationId);
+  const initialJoins = [];
+  for (const participantId of ['alice', 'bob']) {
+    initialJoins.push({ participantId, parentJoinEventId: parent.id, parentJoinPosition });
+  }
+  await context.append(`conversation-${conversationId}`, 'conversation.created', {
+    conversationId, createdBy: 'alice', mode: 'agent_session', contextKind: 'shared_child',
+    assistantId: 'child-assistant', payingGroupId: 'child-team', initialJoins,
+    origin: { parentConversationId: 'parent', sourceMessageId: 'hidden-source',
+      sourcePosition: parentJoinPosition + 1, intentEventId: 'hidden-intent',
+      intentPosition: parentJoinPosition + 2, requestId: 'hidden-request',
+      firstInputId: 'hidden-input' },
+  });
+  const encrypted = context.keys.encrypt('test', conversationId, 'Hello shared history');
+  await context.append(`conversation-${conversationId}`, 'message.posted', {
+    conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted,
+  }, false);
+  await context.runner.run(conversations);
+}
+
+const childReadPaths = ['messages', 'approvals', 'files', 'changes/hidden-input'];
+async function childRead(context: Fixture, path: string, memberId = 'bob') {
+  const request = { url: `/api/conversations/child/${path}`, headers: context.headers(memberId) };
+  return context.app.inject(request);
+}
+async function removeParentPerson(context: Fixture, memberId: string) {
+  return context.append('participation-parent', 'participant.removed', {
+    conversationId: 'parent', participantId: memberId, removedBy: 'alice',
+  }, false);
+}
+
+async function deniesInheritedChild(removal: string) {
+  const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  let pause: ReturnType<typeof pauseFirstHistoryRead> | undefined;
+  try {
+    await childSession(context);
+    const firstRead = await childRead(context, 'messages');
+    expect(firstRead.statusCode, firstRead.body).toBe(200);
+    expect(firstRead.body).toContain('Hello shared history');
+    client = await openChatSocket(context, 'child', true, 'bob');
+    pause = pauseFirstHistoryRead(context);
+    const encrypted = context.keys.encrypt('test', 'child', 'Never deliver child content');
+    await context.append('conversation-child', 'message.posted', {
+      conversationId: 'child', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...encrypted,
+    }, false);
+    await context.runner.run(conversations);
+    await pause.reached;
+    const started = performance.now();
+    if (removal === 'creator membership') {
+      await context.append('member-alice', 'member.removed', {
+        memberId: 'alice', removedBy: 'bob',
+      }, false);
+    } else {
+      await removeParentPerson(context, removal);
+    }
+    function closed() {
+      return client?.socket.readyState === WebSocket.CLOSED;
+    }
+    await until(closed, 1900);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(client.closeCode()).toBe(1008);
+    expect(JSON.stringify(client.received)).not.toContain('Never deliver child content');
+    // Leave OpenFGA unchanged so its old answer cannot restore inherited access.
+    expect((await context.auth.conversation('bob', 'child', 'read')).allowed).toBe(true);
+    for (const path of childReadPaths) {
+      const response = await childRead(context, path);
+      expect(response.statusCode, response.body).toBe(403);
+    }
+    const list = await context.app.inject({ url: '/api/conversations',
+      headers: context.headers('bob') });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.body).not.toContain('Hello shared history');
+    expect(list.body).not.toContain('child-assistant');
+    if (removal !== 'creator membership') {
+      await context.append('participation-parent', 'participant.added', {
+        conversationId: 'parent', participantId: removal, addedBy: 'alice',
+      });
+      expect((await childRead(context, 'approvals')).statusCode).toBe(403);
+    }
+  } finally {
+    pause?.release();
+    await client?.close();
+    await context.close();
+  }
+}
+it.each(['bob', 'alice', 'creator membership'])(
+  'denies inherited child reads and blocked delivery after %s leaves, before IAM removal',
+  deniesInheritedChild, 120_000);
+
+async function explicitChildJoin() {
+  const context = await fixture();
+  try {
+    await childSession(context);
+    await context.append('participation-child', 'participant.removed', {
+      conversationId: 'child', participantId: 'bob', removedBy: 'alice',
+      contextKind: 'shared_child', reviewPosition: 1,
+    });
+    await context.append('participation-child', 'participant.added', {
+      conversationId: 'child', participantId: 'bob', addedBy: 'alice',
+      contextKind: 'shared_child', joinKind: 'explicit_child', reviewPosition: 1,
+    });
+    await removeParentPerson(context, 'bob');
+    await removeParentPerson(context, 'alice');
+    await context.append('member-alice', 'member.removed', {
+      memberId: 'alice', removedBy: 'bob',
+    }, false);
+    await context.runner.run(conversations);
+    const messages = await childRead(context, 'messages');
+    expect(messages.statusCode, messages.body).toBe(200);
+    expect(messages.body).toContain('Hello shared history');
+    for (const hidden of ['origin', 'initialJoins', 'hidden-source', 'parentJoinEventId']) {
+      expect(messages.body).not.toContain(hidden);
+    }
+    const list = await context.app.inject({ url: '/api/conversations',
+      headers: context.headers('bob') });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.body).toContain('hello-shared-history');
+    expect(list.body).not.toContain('origin');
+    expect(list.body).not.toContain('initialJoins');
+    expect((await childRead(context, 'approvals')).statusCode).toBe(200);
+  } finally {
+    await context.close();
+  }
+}
+it('keeps explicit child joins readable from creation without releasing parent references',
+  explicitChildJoin, 120_000);
+
+async function childVolume() {
+  await participationVolume(true);
+}
+it('keeps child readers available during 100,000 messages and unrelated turn activity',
+  childVolume, 600_000);
+
+
+async function privateVolume() {
+  await participationVolume();
+}
+
+async function refusesStaleInheritedAccess() {
+  const context = await fixture();
+  try {
+    await childSession(context);
+    await removeParentPerson(context, 'bob');
+    const permission = await context.auth.conversation('bob', 'child', 'read');
+    expect(permission.allowed).toBe(true);
+    const read = conversationParticipationReader(context.options, 'bob');
+    await expect(read('child')).rejects.toThrow('Conversation refused');
+  } finally {
+    await context.close();
+  }
+}
+it('refuses stale IAM inherited child permission after the parent join ends',
+  refusesStaleInheritedAccess, 120_000);
