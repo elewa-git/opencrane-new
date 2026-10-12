@@ -2,6 +2,55 @@
 
 For people, read [README.md](README.md) first.
 
+## Executor stop foundation — P3-17 row 2, first part
+
+The root-only `/run/executor/supervisor/control.sock` accepts `POST /stop`. Its caller must
+use trusted, namespace-scoped Pod exec. The request has `generation`, `podUid`,
+`takeoverId` and `affectedTurnIds` (at most 64 unique references). The Pod UID must
+match the downward API's `POD_UID`. The server must check generation against its
+saved computer events before calling; the supervisor does not replay those events.
+No bridge message or `/credentials` request can reach this root-owned directory.
+
+Before terminating work, the supervisor saves a deny-only record under the
+root-owned `/home/agent/supervisor/`. It closes existing exec, host and private
+connections and refuses every later launch. A repeated identical request checks
+exit again and retains its epoch. Conflicting requests are refused. Restart,
+a damaged record or an unavailable exit check cannot reopen admission. This file
+is local safety state, never business truth or authority to grant control.
+
+The exit check inventories PID, Linux UID and process start time. It uses Python's
+standard-library process descriptors (`pidfd`) to signal the exact process as
+UID 1001 or 1003. Python runs in isolated mode so tool-owned packages cannot
+replace its imports. It adds no capability or dependency. The ten-second exit deadline
+uses monotonic time. Zombies are excluded because they cannot execute or hold
+connections. Missing process-descriptor support, permissions or inventory prevents
+an exit receipt. The native tool launcher's environment, seccomp and no_new_privs
+settings are unchanged.
+
+A successful `executor_stop` receipt binds the request and root-generated `epoch`,
+sets `executionQuiet: true` and returns an empty `executionInventory`. It always
+sets `quietProof: unavailable` and `controlEnabled: false`. It is **not** a
+`takeover.paused` quiet receipt or a writer closure receipt. It cannot prove that
+UID 1000 Codex has unloaded its threads or that UID 1002 browser automation and
+queued input have stopped. Kasm and authorised viewing remain running.
+
+Scope split: the supervisor foundation is this first part. Bridge deny gates,
+late preparation/grant refusal, catalogue removal, interruption/unload receipts,
+event-backed approval and integer-cent reservation cancellation, server receipt
+validation, and crash checks at every durable pause transition remain in the
+second part. Writer API, input transport, renewal and fresh-Pod recovery are absent.
+If full proof is unavailable, control must remain disabled. A future explicit
+fresh-Pod recovery may lose unsaved forms.
+
+The changed tests use `uploadComputer()` and the real `ocn-upload-computer:test`
+image paths, with the template's capability set and branch sources mounted read-only.
+They exercise real Codex custom exec, a blocked shell child, a detached descendant,
+the native code-mode host, restricted Codex, helper failure, socket access from
+all four non-root UIDs, conflicting requests, restart and damaged saved denial.
+Run with `nice -n 10 npx vitest run apps/computer/test/supervisor-stop.test.ts
+--maxWorkers=1`. Docker/runc source checks do not qualify gVisor or a fresh silo.
+Pinned gVisor/Kasm full quietness and live takeover: **NOT RUN**.
+
 ## Review fixes — 8 October 2026
 
 Findings 1 and 2 were confirmed with failing tests before changing production code.
