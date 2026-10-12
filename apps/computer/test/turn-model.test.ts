@@ -165,7 +165,7 @@ async function doesNotRepeatAnAdmittedSharedTurnAfterRestart() {
 it('fails an admitted shared turn on restart without dispatching it again',
   doesNotRepeatAnAdmittedSharedTurnAfterRestart);
 
-async function keepsSharedOutputThread() {
+function keepsSharedOutputThread() {
   const directory = mkdtempSync(`${tmpdir()}/shared-output-thread-`);
   try {
     const journal = reportJournal({ journal: `${directory}/reports` });

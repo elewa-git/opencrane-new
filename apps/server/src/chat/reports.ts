@@ -75,10 +75,7 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
     }
     return 'duplicate' as const;
   }
-  if ('contextKind' in created && created.contextKind === 'shared_child'
-    && report.type !== 'agent.turn_started') {
-    await requireSharedReportTurn(store, context, report, facts.message.authorId);
-  }
+  await requireSharedReportTurn(store, context, report, created, facts.message.authorId);
   let previousSequence = facts.lastReportSequence;
   let expectedPrevious = report.previousSequence;
   if (expectedPrevious === undefined) {
@@ -109,7 +106,10 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
 
 async function requireSharedReportTurn(store: EventStore,
   context: { silo: string; assistantId: string; computerId: string },
-  report: z.infer<typeof reportSchema>, requesterId: unknown) {
+  report: z.infer<typeof reportSchema>, created: ReturnType<typeof agentSessionData>,
+  requesterId: unknown) {
+  if (report.type === 'agent.turn_started') return;
+  if (!('contextKind' in created) || created.contextKind !== 'shared_child') return;
   function take(summary: ComputerSummary) {
     return summary.turns.get(report.turnId)?.firstStart;
   }
