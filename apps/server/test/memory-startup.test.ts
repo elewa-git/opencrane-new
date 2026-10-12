@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { grantStream } from '@opencrane/authz';
 import { catalogueEvidence, fixture, reviewCatalogue,
   toolEvidence } from '@opencrane/models/testing';
-import { readToolPolicy } from '@opencrane/models';
+import { history, readToolPolicy } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { installWorker } from '../src/integrations/install-worker.ts';
@@ -82,11 +82,26 @@ async function keepsMemoryCallable(credentialContract: (typeof contracts)[number
     const metadata = { threadId: 'thread', callId: 'memory-startup-regression',
       'io.modelcontextprotocol/protocolVersion': '2026-07-28',
       'io.modelcontextprotocol/clientCapabilities': {} };
+    for (const method of ['server/discover', 'tools/list']) {
+      const discoveryHeaders = { 'mcp-protocol-version': '2026-07-28',
+        'mcp-method': method };
+      const discoveryCall = { jsonrpc: '2.0', id: 1, method,
+        params: { _meta: metadata } };
+      const discovered = await setup.call(discoveryHeaders, discoveryCall, '/mcp/memory/server');
+      expect(discovered.status, discovered.text).toBe(200);
+      expect(discovered.text).toContain('"result"');
+    }
     const call = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
       name: 'recall', arguments: { scopeId, query: '' }, _meta: metadata } };
     const response = await setup.call(headers, call, '/mcp/memory/server');
     expect(response.status).toBe(200);
     expect(response.text).toContain('"result"');
+    const memoryRows = await history(setup.nats.store, 'mcp-memory', 'test');
+    function isDispatchAdmission(row: (typeof memoryRows)[number]) {
+      return row.event.type === 'mcp.dispatch_admitted';
+    }
+    const admissions = memoryRows.filter(isDispatchAdmission);
+    expect(admissions).toHaveLength(0);
     const unsupported = { serverId: 'startup', kind: 'hosted', locator: memoryLocator,
       registeredBy: 'alice', credentialContract: { credentialMode: 'startup_lasting' } };
     await setup.append('mcp-startup', 'mcp.server_registered', unsupported);
