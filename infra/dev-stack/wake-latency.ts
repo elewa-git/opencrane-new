@@ -16,6 +16,8 @@ import { history, field, lifecycleHandlers, suspendComputer, watchComputers } fr
 import { chatCommand, chatHistory } from '../../apps/server/src/chat/commands.ts';
 import { conversationKeys } from '../../apps/server/src/chat/keys.ts';
 import { watchBridges } from '../../apps/server/src/chat/bridge.ts';
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { approvalJourneyTool } from './journey-tool-policy.ts';
 
 const run = promisify(execFile);
 const label = process.argv[2] ?? 'before';
@@ -114,7 +116,10 @@ try {
   const stub = (await readFile('infra/dev-stack/model-stub.ts', 'utf8')).replace("Number(process.env['MODEL_STUB_PORT'] ?? process.env['STUB_PORT'] ?? 43003), '127.0.0.1'", "3000, '0.0.0.0'");
   await apply({ apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'model-stub' }, data: { 'stub.ts': stub } });
   await apply({ apiVersion: 'v1', kind: 'Pod', metadata: { name: 'model-stub', labels: { app: 'opencrane-gateway' } }, spec: { automountServiceAccountToken: false,
-    containers: [{ name: 'stub', image: base, command: ['node', '--experimental-strip-types', '/fixture/stub.ts'], volumeMounts: [{ name: 'fixture', mountPath: '/fixture' }] }], volumes: [{ name: 'fixture', configMap: { name: 'model-stub' } }] } });
+    containers: [{ name: 'stub', image: base, command: ['node', '--experimental-strip-types', '/fixture/stub.ts'], env: [
+      { name: 'MODEL_STUB_MCP_REVISION', value: catalogueDigest([approvalJourneyTool()]) },
+      { name: 'MODEL_STUB_MCP_GENERATION', value: randomUUID() },
+    ], volumeMounts: [{ name: 'fixture', mountPath: '/fixture' }] }], volumes: [{ name: 'fixture', configMap: { name: 'model-stub' } }] } });
   await apply({ apiVersion: 'v1', kind: 'Service', metadata: { name: 'model-stub' }, spec: { selector: { app: 'opencrane-gateway' }, ports: [{ port: 3000, targetPort: 3000 }] } });
   await k('wait', '--for=condition=Ready', 'pod/model-stub', '--timeout=120s');
   const gatewayIp = await k('get', 'service/model-stub', '-o', 'jsonpath={.spec.clusterIP}');

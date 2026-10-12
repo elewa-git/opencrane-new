@@ -43,7 +43,7 @@ async function checksBackendBeforeRecording(): Promise<void> {
   const generation = randomUUID();
   const revision = catalogueDigest([approvalJourneyTool()]);
   const environment = { ...process.env, MODEL_STUB_PORT: '0',
-    MODEL_STUB_MCP_GENERATION: generation };
+    MODEL_STUB_MCP_GENERATION: generation, MODEL_STUB_MCP_REVISION: revision };
   const stub = spawn(process.execPath, ['--experimental-strip-types', stubPath],
     { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
   try {
@@ -82,16 +82,29 @@ async function checksBackendBeforeRecording(): Promise<void> {
 }
 
 async function refusesMissingGeneration(): Promise<void> {
-  const environment: NodeJS.ProcessEnv = { ...process.env, MODEL_STUB_PORT: '0' };
+  const revision = catalogueDigest([approvalJourneyTool()]);
+  const environment: NodeJS.ProcessEnv = { ...process.env, MODEL_STUB_PORT: '0',
+    MODEL_STUB_MCP_REVISION: revision };
   delete environment['MODEL_STUB_MCP_GENERATION'];
   const options = { env: environment };
   await assert.rejects(exec(process.execPath, ['--experimental-strip-types', stubPath], options),
     /Approval stub generation is missing/u);
 }
 
+async function refusesMissingRevision(): Promise<void> {
+  const environment: NodeJS.ProcessEnv = { ...process.env, MODEL_STUB_PORT: '0',
+    MODEL_STUB_MCP_GENERATION: randomUUID() };
+  delete environment['MODEL_STUB_MCP_REVISION'];
+  const options = { env: environment };
+  await assert.rejects(exec(process.execPath, ['--experimental-strip-types', stubPath], options),
+    /Approval stub revision is missing/u);
+}
+
 test('the approval stub checks revision and generation before recording any effect',
   { timeout: 15_000 }, checksBackendBeforeRecording);
 test('the approval stub refuses startup without its instance generation',
   { timeout: 15_000 }, refusesMissingGeneration);
+test('the approval stub refuses startup without its catalogue revision',
+  { timeout: 15_000 }, refusesMissingRevision);
 test('the wake Pod fixture starts the stub with only its packaged files',
   { timeout: 15_000 }, startsFromWakePodFixture);
