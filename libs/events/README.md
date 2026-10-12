@@ -28,7 +28,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance records| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks control, turns, spending limits, stops, expired holds and one-use send permissions| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks tool admission, control, turns, instance-bound approvals, spending limits, stops, expired holds and one-use send permissions| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
   events -.-> zones["Intl<br/>built-in time zone rules"]
@@ -92,6 +92,7 @@ repeated dependencies, so a bad write cannot stop table updates for other scopes
 
 It defines tool start and finish records that exclude arguments, results and error text.
 The computer and server share its check for call ids and tool names.
+Tool approvals can also name the exact running instance and backend through a hash.
 Tool access decisions can carry a call id. The shared text check refuses hidden
 control characters before saving the id.
 It also records when part of a private reply was lost before the server could save it.
@@ -156,3 +157,6 @@ const result = parseEventByType({ type: 'not.registered' });
 - [Event store](../event-store/README.md): where events are saved.
 - [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
 - [Glossary](../../GLOSSARY.md): plain meanings of shared terms.
+
+Tool send admission records share the server's tool-rule stream. They order a call
+against Block and tool holds. Replaying these records never sends a call.

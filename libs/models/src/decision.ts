@@ -1,3 +1,4 @@
+import { mcpDispatch, type McpDispatchOptions } from './mcp-dispatch.ts';
 import { providerTurnBindingSchema } from '@opencrane/events';
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
   type ProviderVerificationOptions } from './provider-verification.ts';
@@ -234,9 +235,15 @@ export async function startDecision(
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string;
     memory?: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'memoryContext'> },
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
+  dispatchOptions?: McpDispatchOptions,
 ) {
+  const mcpSender = mcpDispatch(actor.store, actor.silo, dispatchOptions);
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
+    if (req.url?.startsWith('/dispatch/mcp/')) {
+      void dispatchRequest(req, res, mcpSender);
+      return;
+    }
     const started = performance.now();
     let auditedContext: { requesterId: string; assistantId: string } | undefined;
     // This records that a write was started; it does not mean the audit succeeded.
@@ -292,13 +299,16 @@ export async function startDecision(
       const authority = await decisionAuthorityFence(actor.store, started,
         subjects, turnToken.requester, computer.assistant, grants);
       let needsApproval = false;
-      async function confirmDecision() {
+      async function confirmAccess() {
         while (true) {
           const activityChanged = await activity.confirm(authority.deadline, needsApproval);
           const authorityChanged = await authority();
           if (!activityChanged && !authorityChanged) return;
           // Recheck both because a turn can stop while unrelated grants are being read.
         }
+      }
+      async function confirmDecision() {
+        await confirmAccess();
       }
       const snapshot = { include: authority.include, head: authority.head,
         deadline: authority.deadline };
@@ -336,8 +346,9 @@ export async function startDecision(
         const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(req.url ?? '');
         if (!match) throw new Error('Unknown MCP route');
         fresh.include(`mcp-${match[1]!}`);
-        const policy = await mcpPolicy(
+        const reviewedPolicy = await mcpPolicy(
           actor.store, actor.silo, match[1]!, match[2]!, parsed, req.headers, fresh.deadline);
+        const policy = mcpSender.bindPolicy(reviewedPolicy);
         const logicalRequestId = digestContext([actor.silo, turnToken.conversation,
           turnToken.turn, turnToken.thread, callId, match[1], match[2],
           policy.name, policy.args.canonical, policy.revision]);
@@ -358,6 +369,7 @@ export async function startDecision(
         linkApprovalAttempt(toolFacts, approvalId);
         await audit(outcome, reason, approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
         await fresh();
+        mcpSender.setPermit(res, outcome, policy, raw, requestId, fresh, fresh.deadline);
         res.setHeader('x-request-id', requestId);
         markRefusedDecision(res, outcome === 'allow');
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
@@ -401,6 +413,18 @@ export async function startDecision(
   if (!address || typeof address === 'string') throw new Error('Decision listen failed');
   return { url: `http://127.0.0.1:${address.port}`, models,
     close: () => new Promise<void>((resolve, reject) => { if (!server.listening) { resolve(); return; } server.closeAllConnections(); server.close(error => error ? reject(error) : resolve()); }) };
+}
+
+async function dispatchRequest(req: IncomingMessage, res: ServerResponse,
+  dispatch: ReturnType<typeof mcpDispatch>) {
+  try {
+    const body = await readBody(req);
+    await dispatch.handle(req, res, body);
+  } catch {
+    res.setHeader('x-opencrane-decision', 'refused');
+    res.writeHead(403);
+    res.end('{}');
+  }
 }
 
 async function modelGrantHistory(actor: BudgetActor, model: string, route: string,

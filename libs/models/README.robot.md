@@ -317,16 +317,64 @@ projection replays the same fold. Org settings links each register row to its
 Tools & access screen, using the authenticated GET/POST
 `/api/org/integrations/:serverId/tools` interface with Origin checks on writes.
 
-`startGateway({ ..., mcpRoutes: [{ serverId, connectionId, upstream }] })` adds a
-fixed, operator-reviewed fixture route `/mcp/:serverId/:connectionId`. This is
-not an installer or arbitrary remote-URL interface. ext_authz accepts only bounded
-MCP `tools/call` for 2026-07-28 with matching method/tool/version headers and
-required `params._meta` version, thread id, call id and bounded client capabilities.
-The tool-name header is `mcp-name`. The route strips caller
-headers and never injects an invented credential. Only explicitly credential-free,
-non-metered reviewed fixtures priced at zero can run until the credential/budget tickets land.
-Ask records `approval_required` without dispatch; approval creation/consumption
-belongs to P3-2. Lossless approval argument binding belongs there too.
+`startGateway` adds fixed, operator-reviewed `/mcp/:serverId/:connectionId` routes.
+The gateway sends installed tool calls to the models process at `/dispatch/mcp/...`.
+Only explicitly credential-free, reviewed tools priced at zero can run. Discovery
+and descriptions cannot declare a transport safe. The original JSON bytes stay intact.
+
+`mcpDispatchRouteSchema` accepts `serverId`, `connectionId`, `upstream` (host:port),
+`generation` and `revisionHeader: 'x-opencrane-mcp-revision'`. Missing generation or
+revision contract denies calls. The operator must qualify that backend: it must compare
+both `x-opencrane-mcp-revision` (catalogue digest) and `x-opencrane-mcp-generation`
+(exact running instance identity) atomically before tool execution. HTTP 409 never retries.
+A declaration in an untrusted tool description is not a qualification.
+
+The final send consumes a signed, process-bound permit. Its request id links to the saved
+allow decision and its requester, assistant, conversation, turn and call id. It also binds
+silo, exact body digest, policy/tool/catalogue revisions, connection and backend generation.
+It expires within two seconds or at catalogue expiry, whichever comes first. The saved
+access callback retains the original two-second deadline. Pending permits are bounded to
+1,024; expired entries are dropped before issuing another. Restart drops them all.
+
+The final check confirms leadership and current access within the original two-second
+access deadline. It consumes each pass locally even on refusal, then conditionally
+appends `mcp.dispatch_admitted` to `mcp-<server>` before sending. The expected sequence
+covers the same stream as `setToolPolicy`, unpublication and tool-change quarantine.
+If Block or a hold was saved first, admission conflicts and refuses. If admission was
+saved first, that call may proceed; the later Block applies to later admissions.
+Replay never sends a call or restores the process-local pass.
+
+The sender tries admission at most three times. It retries a conflict only when every
+new row is another call's admission. It reads only rows after its checked position,
+checks access again and keeps the original deadline. Policy, freshness or hold changes
+refuse the pass. Admission advances the write position without changing tool rules,
+approval revisions or evidence dates. It therefore does not refuse another caller's
+access check. The repeat-until-matching access passes have been removed.
+The unchanged authority tests keep their original deadlines and volume limits.
+Waiting approvals retain their stable policy revision and can obtain a fresh permit.
+The final check reads no complete catalogue or conversation history. Only reviewed transport headers leave this
+process; permits and caller credentials do not. A substituted backend or generation fails.
+The built-in memory route retains its separate signed-context checks at its backend.
+The shared policy reader returns the registration kind without refusing hosted memory.
+The ordinary sender checks that kind before binding or issuing a pass and refuses hosted
+images until image admission exists. Memory previews, discovery, recall and writes keep
+their existing policy, grant and backend checks. They create no shared send admission.
+Memory routes retain the original header replacement. Their signed memory context
+replaces caller credentials. Ordinary routes add the send pass. Reading a missing pass during
+memory header replacement makes the gateway retain caller credentials, so it is excluded.
+Approvals include `dispatchBinding`, the route hash, in their id. A replaced backend or
+generation cannot use an old approval, including a late approval decision.
+Hosted image admission, recorded lifecycle generations, configuration acknowledgement and
+automatic card cancellation on lifecycle changes remain later design rows. These fixed routes
+provide no image admission or installer. The P3-14 shared send gate is not merged; this small
+permit check adds no spending gate and can move behind it later.
+
+### Open items
+
+The memory MCP route already bypasses this sender on main. Its signed context can be
+reused within its lifetime and has no backend generation or catalogue revision. A
+follow-up PR moves memory MCP onto the shared dispatch check and retains its scope,
+access and write checks. This PR leaves that route's runtime behaviour unchanged.
 
 Model and MCP admission share `currentAuthority`: current member/role, team
 membership, assistant activation, conversation participation, requester and
@@ -1372,3 +1420,76 @@ Both authority test files are unchanged. No full root suite ran.
 Logs: `/tmp/p3-10-pr2-final-tests-{1,2}.log`, `/tmp/p3-10-pr2-lint.log`,
 `/tmp/p3-10-pr2-final-typecheck.log`, `/tmp/p3-10-pr2-events.log`.
 NOT RUN: independent review, HTTP journeys, live Kubernetes and fresh-install qualification.
+
+## Final MCP send checks — 11 October 2026
+
+Runtime source: `a6e08fd1`, rebased onto `ef6e3420`. Linux, Node 22.23.3,
+disposable NATS/OpenFGA, local PostgreSQL and a recording upstream; no paid calls.
+PASS: clean npm ci, requested binary links, lint (warnings, no errors),
+workspace typecheck, check:events (115 types), Knip and lint:changelog.
+PASS: two final 21-file batches, 889 tests each, in 224.55 s and 180.74 s.
+Both used the supplied PG_TEST_URL, nice -n 10 and one worker.
+Failing tests were committed before their fixes. The two authority tests are unchanged.
+NOT RUN: full root suite, fresh install qualification, independent review and hosted CI.
+Logs: `/tmp/p3-6-pr2-tests-rebased-{1,2}.log`, `/tmp/p3-6-pr2-lint-rebased.log`,
+`/tmp/p3-6-pr2-typecheck-rebased.log` and `/tmp/p3-6-pr2-red-*.log`.
+
+## Checks for Block during final MCP access reads
+
+Date: 11 October 2026. Runtime source: `18bb3606`, rebased onto `eb67de6e`.
+Environment: Linux, Node 22.23.3, local worktree, disposable NATS and OpenFGA,
+the supplied PostgreSQL test server and a recording upstream. This is not a fresh install.
+
+FAIL before the fix, as expected: the regression in `61881db0` saved Block through
+`setToolPolicy` after the MCP position read, while a member-position read waited.
+The upstream received one request. PASS after the fix: the same test records zero
+upstream requests and HTTP 403. The test commit precedes the fix.
+
+PASS: the first seven-file batch passed 270 tests in 704.54 seconds. It includes both
+changed files, both unchanged authority guards, decision races, gateway and memory-context
+checks. The opt-in paid-provider test was skipped. PASS: both changed files passed again,
+46 tests in 146.53 seconds. Both runs used the supplied `PG_TEST_URL`, `nice -n 10` and
+one worker. The authority files and their limits match main.
+
+PASS: full lint (16 warnings, no errors), workspace typecheck, event catalogue
+(121 types), standalone Knip and changelog validation. No dependencies were added.
+NOT RUN: full root suite, fresh-install qualification, paid calls and hosted CI.
+
+Logs: `/tmp/p3-6-pr2-review-red.log`, `/tmp/p3-6-pr2-review-green.log`,
+`/tmp/p3-6-pr2-review-tests-{1,2}.log`, `/tmp/p3-6-pr2-review-lint.log`,
+`/tmp/p3-6-pr2-review-typecheck.log`, `/tmp/p3-6-pr2-review-events.log`,
+`/tmp/p3-6-pr2-review-knip.log` and `/tmp/p3-6-pr2-review-changelog.log`.
+
+## Checks for ordered MCP send admission
+
+Date: 11 October 2026. Runtime source: `b056dcfbd845d2041862b8704e3cf58728caea10`.
+Rebased onto `d7e253aa`; the rebase finished and main is an ancestor.
+Environment: Linux, Node 22, local worktree, disposable NATS and OpenFGA,
+the supplied PostgreSQL test server and a recording upstream. This is not a fresh install.
+
+FAIL before the fix, as expected: Block saved during the terminating access pass
+still sent one upstream request. The regression commits `3b51b2d5` and `a0623e25`
+precede implementation `81afabcd`. PASS after the fix: Block before admission
+returns HTTP 403 and sends zero upstream requests. Admission before Block allows
+that call and refuses the next one. Two competing calls on the same tool both succeed.
+Admission records leave the approval revision and tool choices unchanged on replay.
+
+PASS: the first targeted batch passed 1,067 tests in 26 files in 477.85 seconds.
+It includes `mcp-dispatch.test.ts`, `codex-mcp.test.ts`, projection `mcp-evidence.test.ts`,
+both unchanged authority guards, `decision-fence.test.ts` and all event-schema tests.
+PASS: the three changed files passed again, 57 tests in 212.15 seconds.
+Both runs used `nice -n 10 npx vitest run`, one worker and the supplied `PG_TEST_URL`.
+Both authority test files still match main exactly.
+
+PASS: full `npm run lint` (16 warnings, no errors), workspace `npm run typecheck`,
+`npm run check:events` (123 types), standalone `npm run lint:unused` (Knip) and
+`npm run lint:changelog`. All ran under `nice -n 10`.
+The first lint run found two extra Markdown blank lines from the rebase; the corrected
+full run passed. No production code changed after these checks. No dependency was added.
+NOT RUN: full root suite, paid calls, hosted CI and fresh-install qualification.
+
+Logs: `/tmp/p3-6-pr2-order-red-final.log`,
+`/tmp/p3-6-pr2-order-boundary-red.log`, `/tmp/p3-6-pr2-rebased-green.log`,
+`/tmp/p3-6-pr2-admission-tests-{1,2}.log`, `/tmp/p3-6-pr2-admission-lint-final.log`,
+`/tmp/p3-6-pr2-admission-typecheck.log`, `/tmp/p3-6-pr2-admission-events.log`,
+`/tmp/p3-6-pr2-admission-knip.log` and `/tmp/p3-6-pr2-admission-changelog.log`.

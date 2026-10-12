@@ -304,6 +304,10 @@ export async function decisionAuthorityFence(store: EventStore, started: number,
 function unrelatedDecisionEvent(event: EventEnvelope, requesterId: string,
   grantees: Set<string>) {
   const fields = data(event);
+  // Keep another admitted call from changing this call's tool access.
+  if (event.subject.startsWith('mcp-') && event.type === 'mcp.dispatch_admitted') {
+    return true;
+  }
   if (event.type === 'grant.given' || event.type === 'grant.revoked') {
     // Refuse team grant changes because they may alter this person's access.
     return fields['granteeKind'] !== 'team' && !matchesGrantKind(fields, grantees);

@@ -17,6 +17,7 @@ export interface ReviewKeys {
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const approvalDecisionStates = { approved: 'approved', rejected: 'denied' } as const;
 type Request = z.infer<typeof toolApprovalRequestedDataSchema>;
+type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
 type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assistantId' | 'serverId' | 'connectionId'>;
 type FreshAuthority = (() => Promise<void>) & { deadline?: number };
 interface ApprovalReadOptions {
@@ -28,7 +29,7 @@ interface ApprovalReadOptions {
 
 // Build the id before writing so a mismatched retry cannot create another card.
 function prepareApproval(silo: string, bound: Binding,
-  policy: Awaited<ReturnType<typeof mcpPolicy>>) {
+  policy: Policy) {
   const args = policy.args.value;
   const review = policy.review;
   if (!review || !(args instanceof Map) || !policy.revision) {
@@ -71,6 +72,7 @@ function prepareApproval(silo: string, bound: Binding,
     connectionId: bound.connectionId,
     profile: 'none',
     policySequence: policy.policy.policyRevision,
+    ...(policy.dispatchBinding ? { dispatchBinding: policy.dispatchBinding } : {}),
     digestVersion: 'lossless-json-v1' as const,
     argumentsDigest: hash(policy.args.canonical),
   };
@@ -92,7 +94,7 @@ function reviewTarget(args: Map<string, JsonValue>, targetArgument: string, miss
 
 // Reuse the same request so a retry cannot reopen an ended approval.
 async function askApproval(store: EventStore, silo: string, bound: Binding,
-  policy: Awaited<ReturnType<typeof mcpPolicy>>, keys: ReviewKeys,
+  policy: Policy, keys: ReviewKeys,
   now: Date, deadline: number, prepared: ReturnType<typeof prepareApproval>,
   conversationRows?: StoredEvent[]) {
   const { binding, text, reviewDigest, approvalId, stepUp, missingFields } = prepared;
@@ -342,7 +344,7 @@ function approvalCard(request: Request, state: ApprovalCard['state'], memberId: 
 }
 
 export async function approvalDecision(store: EventStore, silo: string, bound: Binding,
-  policy: Awaited<ReturnType<typeof mcpPolicy>>, keys: ReviewKeys | undefined,
+  policy: Policy, keys: ReviewKeys | undefined,
   now: () => Date, fresh: FreshAuthority, requestId: string, conversationRows?: StoredEvent[]) {
   if (policy.expectedApproval && policy.outcome !== 'ask') {
     return { outcome: 'deny' as const, reason: 'approval_mismatch', approvalId: undefined };

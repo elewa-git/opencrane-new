@@ -401,6 +401,7 @@ export const toolApprovalRequestedDataSchema = z.object({
   approvalId: id, conversationId: id, turnId: id, assistantId: id, requesterId: id,
   tool: id, serverId: id, toolRevision: digestSchema, schemaDigest: digestSchema,
   connectionId: id, profile: id, policySequence: z.int().nonnegative(),
+  dispatchBinding: digestSchema.optional(),
   digestVersion: z.literal('lossless-json-v1'), argumentsDigest: digestSchema,
   expiresAt: z.iso.datetime(), stepUp: z.boolean(),
   missingFields: z.array(z.string().regex(/^[a-zA-Z][\w-]{0,63}$/u)).max(20).optional(),
@@ -452,6 +453,13 @@ function validCatalogueDates(value: { checkedAt?: string | undefined; expiresAt?
   const age = Date.parse(value.expiresAt) - Date.parse(value.checkedAt);
   return age >= 0 && age <= 300_000;
 }
+
+export const mcpDispatchAdmittedDataSchema = z.strictObject({
+  serverId: z.string().regex(/^[\w-]{1,200}$/u),
+  connectionId: z.string().regex(/^[\w-]{1,200}$/u), requestId: id,
+  toolName: z.string().min(1).max(200), toolRevision: digestSchema,
+  schemaDigest: digestSchema, generation: z.string().regex(/^[\w-]{1,200}$/u),
+});
 
 export const mcpCatalogueCheckedDataSchema = z.discriminatedUnion('outcome', [
   z.object({ serverId: id, outcome: z.literal('unchanged'), schemaDigest: digestSchema,

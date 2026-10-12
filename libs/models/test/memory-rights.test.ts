@@ -98,7 +98,7 @@ function prepare() {
   const policyArgs = parseMcpCall(JSON.stringify(body)).args;
   const policy: Awaited<ReturnType<typeof mcpPolicy>> = { outcome: 'allow',
     reason: 'policy_allow', schemaDigest: 'a'.repeat(64), review: undefined,
-    destination: 'test', waitLimited: false, expectedApproval: undefined,
+    destination: 'test', serverKind: 'hosted', waitLimited: false, expectedApproval: undefined,
     policy: emptyToolPolicy(), revision: undefined, name: 'recall', args: policyArgs };
   vi.mocked(mcpPolicy).mockResolvedValue(policy);
 }

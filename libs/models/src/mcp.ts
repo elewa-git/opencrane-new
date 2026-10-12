@@ -89,7 +89,11 @@ function reviewMetadata(rows: StoredEvent[], name: string,
   const review = discovery.tools?.find(t => t.name === name)?.review;
   const registered = rows.find(r => r.event.type === 'mcp.server_registered');
   const { kind, locator } = z.object({ kind: z.enum(['remote', 'hosted']), locator: z.string() }).parse(registered?.event.data);
-  return { schemaDigest: discovery.schemaDigest, review, destination: kind === 'remote' ? new URL(locator).origin : `Hosted: ${locator}` };
+  let destination = `Hosted: ${locator}`;
+  if (kind === 'remote') {
+    destination = new URL(locator).origin;
+  }
+  return { schemaDigest: discovery.schemaDigest, review, destination, serverKind: kind };
 }
 
 function plain(node: JsonValue): unknown {

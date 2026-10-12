@@ -5,10 +5,13 @@ import type { IntegrationRow, SharedStateKind, ToolPolicy } from '@opencrane/pro
 import type { Projection } from './runner.ts';
 
 const eventTypes = new Set<string>([
-  'mcp.catalogue_checked', 'mcp.server_registered', 'mcp.server_discovered', 'mcp.server_rejected',
-  'mcp.server_reviewed', 'mcp.server_published', 'mcp.server_unpublished', 'mcp.tool_mode_set', 'mcp.tools_changed',
+  'mcp.dispatch_admitted', 'mcp.catalogue_checked', 'mcp.server_registered',
+  'mcp.server_discovered', 'mcp.server_rejected', 'mcp.server_reviewed',
+  'mcp.server_published', 'mcp.server_unpublished', 'mcp.tool_mode_set', 'mcp.tools_changed',
 ]);
-const policyOnlyEvents = new Set(['mcp.catalogue_checked', 'mcp.server_reviewed']);
+const policyOnlyEvents = new Set([
+  'mcp.catalogue_checked', 'mcp.server_reviewed', 'mcp.dispatch_admitted',
+]);
 type ToolMode = 'allow' | 'ask' | 'block';
 
 interface McpCatalogueTables {

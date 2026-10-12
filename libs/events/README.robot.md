@@ -30,6 +30,13 @@ The models actor orders dispatch and expiry on one budget stream. This record
 changes no money. Its absence proves non-dispatch only for the new sender contract.
 The first successful append permits one gateway send; duplicates grant no send.
 
+## MCP approval transport binding
+
+`tool.approval_requested.dispatchBinding` is an optional SHA-256 digest of the reviewed
+transport route, including server, connection, backend address and instance generation.
+It participates in the approval id. Missing fields remain readable for replay.
+A gateway call with a different current transport binding cannot use that old approval.
+
 ## Public contract
 
 Delegation version 1 records one computer generation, root, requester, payer,
@@ -404,3 +411,11 @@ budget stream and closes the hold to new send permission. It changes no cents
 and grants no access. The budget actor saves it before expiry uncertainty.
 The actor and spending projection restore the closed hold on replay; later usage
 can still settle its cost. The event catalogue and registry name the same event.
+
+## MCP send admission
+
+`mcp.dispatch_admitted` records one accepted send on `mcp-<server>`. It carries the
+request id, connection, tool name and revision, catalogue digest and backend generation.
+It contains no pass, credentials or arguments. Its conditional append orders that
+call against policy and quarantine writes. No reaction sends a call on replay.
+Only the catalogue write position advances; tool policy and approval revision stay stable.
