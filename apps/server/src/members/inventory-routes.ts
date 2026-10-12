@@ -53,7 +53,8 @@ async function sendInventory(reply: FastifyReply, request: FastifyRequest, optio
   memberId: string, target: Awaited<ReturnType<typeof currentMembership>>,
   inventory: Awaited<ReturnType<typeof memberInventory>>, memberSequence: number) {
   const checkedAt = new Date().toISOString();
-  const { rows, assistantIds: _assistantIds, checkCurrent: _checkCurrent, ...departure } = inventory;
+  const { rows, assistantIds: _assistantIds, checkCurrent: _checkCurrent,
+    grantInputsComplete: _grantInputsComplete, ...departure } = inventory;
   if (request.routeOptions.url?.endsWith('/access')) {
     await extendToolAvailability(options, memberId, inventory, performance.now() + 10_000);
     if (reply.sent) return reply;

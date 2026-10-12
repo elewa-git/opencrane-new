@@ -18,10 +18,18 @@ const toolExplanationSchema = z.object({
   catalogueCheckedAt: z.iso.datetime().nullable(), catalogueExpiresAt: z.iso.datetime().nullable(),
   availability: z.literal('unavailable'), reasons: z.array(z.string()),
 }).strict();
-export const toolAccessExplanationSchema = toolExplanationSchema.extend({
+const detailedToolAccessExplanation = toolExplanationSchema.extend({
   serverId: z.string(), requesterId: z.string(), sources: z.array(source),
   complete: z.boolean(), unavailableSections: z.array(z.string()), reviewRevision: z.string(),
 }).strict();
+const missingGrantExplanation = z.object({
+  serverId: z.string(), requesterId: z.string(), assistantId: z.string(), toolName: z.string(),
+  checkedAt: z.iso.datetime(), person: checkedGrant, assistant: checkedGrant, actsFor: checkedGrant,
+  reasons: z.array(z.string()), complete: z.literal(false), availability: z.literal('unavailable'),
+}).strict();
+export const toolAccessExplanationSchema = z.union([
+  detailedToolAccessExplanation, missingGrantExplanation,
+]);
 export type ToolExplanation = z.infer<typeof toolExplanationSchema>;
 
 const accessRow = z.object({

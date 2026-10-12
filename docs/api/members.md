@@ -376,14 +376,25 @@ report `unavailable`. These states never stand in for an exact zero count.
 fields `requesterId`, `assistantId` and `toolName`. Members can read only their
 own requester context. Reading another person requires current Owner/Admin access.
 The assistant must belong to that person's current personal or group context.
-Foreign and unknown contexts receive 403. Invalid input receives 400; failed reads
+Foreign and unknown contexts receive 403. Before reading tool rules, the server
+checks that the viewer is a current Owner/Admin or has a checked, saved requester
+grant for the server. Inaccessible and unknown servers and tools all return
+403 with only `{status: "refused"}`. Invalid input receives 400; failed reads
 receive 503. Replies use `no-store`. A supplied Origin must match this website.
 
 Replies contain safe direct, group and selected-assistant grant sources, checked
 person/assistant permissions, `actsFor`, mode, review, catalogue dates and policy
 positions. They contain no account identifiers, secrets, email or private content.
 `reviewRevision` includes the inventory revision and exact policy positions.
+A permitted explanation with a missing requester or assistant grant contains only
+request ids, the check time, permission results and permission reasons. It omits
+tool rules, catalogue dates, profile state, sources and review revisions.
 An IAM outage returns `unavailable`, never a missing-grant reason for that check.
+An incomplete inventory cannot establish grant absence. Such explanations return
+503, including when new grants have reached OpenFGA before the member index.
+A failed permission check without a server row also returns 503. Grant absence
+checks group, assistant and grant inputs separately from retained chat and computer
+history. Pending content tables do not refuse an otherwise checked explanation.
 `profile: absent_on_version` means a complete history check found no profile
 records on this version. Unsupported or incomplete history stays separate.
 `not_required` means the saved account mode requires no account.

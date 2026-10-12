@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>visible chat pages, groups, invitations, departure reviews, history availability, control history, startup review and settings messages"]
-  server["apps/server<br/>back end"] -.-> protocol
+  server["apps/server<br/>back end"] -.->|checks access replies| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list shapes"]
@@ -35,7 +35,8 @@ They also identify the server and silo, and carry the rule revision used by wait
 - Provide the same schemas and types to browser and Node.js code.
 - Check invitation email requests, create and renew commands, status parameters and saved receipts.
 - Check tool explanations with separate person, assistant and account results.
-  Keep unavailable checks separate from missing grants.
+  Keep unavailable checks separate from missing grants. Check permission replies
+  that omit private tool rules when a grant is missing.
 - Check member access reasons and departure reviews without private content.
   Report when a complete departure review permits removal.
   Keep unknown history separate from a checked absence.

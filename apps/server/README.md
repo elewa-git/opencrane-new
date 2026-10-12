@@ -28,7 +28,9 @@ must compare the approved tool list and running instance before executing the ca
 ## What it is responsible for
 
 Tool access explanations show why a person and their assistant have access.
-Members can read their own explanation; owners and admins can read others.
+Members can read their own explanation for servers they can access.
+Owners and admins can read others. Guessed private servers and tools receive
+the same refusal. Missing-grant replies contain permission reasons only.
 Missing account support and unavailable permission checks have separate reasons.
 These reads explain saved access. They do not approve or start a tool call.
 

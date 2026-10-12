@@ -46,7 +46,18 @@ function permissionReasons(person: CheckedGrant, assistant: CheckedGrant, actsFo
   return reasons;
 }
 
-async function checkedGrants(options: GroupOptions, inventory: Inventory,
+function requireCompleteGrantAbsence(inventory: Inventory, row: MemberAccessRow | undefined,
+  person: CheckedGrant, assistant: CheckedGrant) {
+  if (inventory.grantInputsComplete) {
+    return;
+  }
+  // Check only access inputs. Delayed chat tables cannot change a saved grant.
+  if (!row || person === 'denied' || assistant === 'denied') {
+    throw new Error('Grant absence could not be checked completely');
+  }
+}
+
+export async function checkedToolGrants(options: GroupOptions, inventory: Inventory,
   requesterId: string, serverId: string, assistantId: string) {
   function matchesServer(row: MemberAccessRow) {
     return row.resourceType === 'mcp_server' && row.resourceId === serverId;
@@ -59,10 +70,11 @@ async function checkedGrants(options: GroupOptions, inventory: Inventory,
   const auth = memberAuthorisation(options.binding);
   let person: CheckedGrant = row?.eligibility.person ?? 'denied';
   const assistant: CheckedGrant = savedAssistant?.grant ?? 'denied';
+  requireCompleteGrantAbsence(inventory, row, person, assistant);
   if (!row) {
     const permission = await auth.use('person', requesterId, 'mcp_server', serverId);
-    if (permission.status === 'unavailable') {
-      person = 'unavailable';
+    if (permission.status === 'unavailable' || permission.allowed) {
+      throw new Error('Permission and saved grant absence could not be confirmed');
     }
   }
   // Require a saved requester source even if IAM still returns a revoked permission.
@@ -70,6 +82,9 @@ async function checkedGrants(options: GroupOptions, inventory: Inventory,
     return source.granteeKind === 'member' || source.kind === 'group';
   }
   if (person === 'allowed' && !row?.sources.some(requesterSource)) {
+    if (!inventory.grantInputsComplete) {
+      throw new Error('Requester grant inputs could not be checked completely');
+    }
     person = 'denied';
   }
   const acting = await auth.actsFor(requesterId, assistantId);
@@ -109,15 +124,8 @@ function policyReasons(policy: ToolPolicy, tool: ToolPolicy['tools'][number] | u
   return reasons;
 }
 
-export async function explainTool(options: GroupOptions, inventory: Inventory,
-  requesterId: string, serverId: string, assistantId: string, toolName: string,
-  policy: ToolPolicy): Promise<ToolExplanation> {
-  const grants = await checkedGrants(options, inventory, requesterId, serverId, assistantId);
-  return describeTool(inventory, assistantId, toolName, policy, grants);
-}
-
-function describeTool(inventory: Inventory, assistantId: string, toolName: string,
-  policy: ToolPolicy, grants: Awaited<ReturnType<typeof checkedGrants>>): ToolExplanation {
+export function explainTool(inventory: Inventory, assistantId: string, toolName: string,
+  policy: ToolPolicy, grants: Awaited<ReturnType<typeof checkedToolGrants>>): ToolExplanation {
   function matchesTool(tool: ToolPolicy['tools'][number]) {
     return tool.name === toolName;
   }
@@ -166,7 +174,7 @@ export async function extendToolAvailability(options: GroupOptions, memberId: st
     const explanations: ToolExplanation[] = [];
     let overflow = false;
     for (const assistant of row.eligibility.assistants) {
-      const grants = await checkedGrants(options, inventory, memberId, row.resourceId,
+      const grants = await checkedToolGrants(options, inventory, memberId, row.resourceId,
         assistant.assistantId);
       for (const tool of policy.tools) {
         if (explanations.length >= 50) {
@@ -176,7 +184,7 @@ export async function extendToolAvailability(options: GroupOptions, memberId: st
         if (performance.now() >= deadline) {
           throw new Error('Tool explanation deadline exceeded');
         }
-        const explanation = describeTool(inventory, assistant.assistantId, tool.name,
+        const explanation = explainTool(inventory, assistant.assistantId, tool.name,
           policy, grants);
         explanations.push(explanation);
       }

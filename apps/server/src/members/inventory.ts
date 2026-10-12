@@ -10,6 +10,7 @@ import type { MemberAccessRow } from '@opencrane/protocol';
 import type { GroupOptions } from './group-routes.ts';
 import { retainedContent } from './retained-content.ts';
 
+const grantCategories = new Set(['team', 'assistant', 'grant']);
 const publicResources = new Set(['model', 'mcp_server', 'mcp_tool', 'shared_desktop']);
 type Assistant = ReturnType<typeof assistantCreatedDataSchema.parse>;
 type Grant = ReturnType<typeof grantGivenDataSchema.parse>;
@@ -22,12 +23,16 @@ async function recordedInputs(options: GroupOptions, memberId: string, deadline:
   const indexedPositions = await inventoryCategoryPositions(options.db, options.silo);
   const categoryPositions: Record<string, number> = {};
   let current = indexedPositions.backfilled;
+  let grantInputsCurrent = indexedPositions.backfilled;
   for (const category of inventoryCategories) {
     const subject = `${category}-*`;
     const position = await options.store.head(subject, deadline);
     categoryPositions[subject] = position;
     if (position !== (indexedPositions.positions[subject] ?? 0)) {
       current = false;
+      if (grantCategories.has(category)) {
+        grantInputsCurrent = false;
+      }
     }
   }
   const indexed = await readInventoryReferences(options.db, options.silo, memberId);
@@ -54,8 +59,8 @@ async function recordedInputs(options: GroupOptions, memberId: string, deadline:
     return first.sequence - second.sequence;
   }
   rows.sort(eventOrder);
-  return { rows, positions, categoryPositions, current, withinLimits: indexed.complete,
-    generation: indexedPositions.generation };
+  return { rows, positions, categoryPositions, current, grantInputsCurrent,
+    withinLimits: indexed.complete, generation: indexedPositions.generation };
 }
 
 function groupFacts(rows: StoredEvent[], memberId: string) {
@@ -246,6 +251,33 @@ function unavailableIndexSections(inputs: { current: boolean; withinLimits: bool
   return unavailable;
 }
 
+async function completeGrantInputs(options: GroupOptions,
+  inputs: Awaited<ReturnType<typeof recordedInputs>>, unavailable: Set<string>, deadline: number) {
+  if (!inputs.grantInputsCurrent || !inputs.withinLimits) {
+    return false;
+  }
+  const indexed = await inventoryIndexState(options.db);
+  if (!indexed.backfilled || indexed.generation !== inputs.generation) {
+    return false;
+  }
+  for (const category of grantCategories) {
+    const subject = `${category}-*`;
+    const position = await options.store.head(subject, deadline);
+    if (position !== inputs.categoryPositions[subject]) {
+      return false;
+    }
+  }
+  const grantSections = [
+    'grants', 'group_membership', 'unsupported_grants', 'unsupported_ownership',
+  ];
+  for (const section of grantSections) {
+    if (unavailable.has(section)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function memberInventory(options: GroupOptions, memberId: string, deadline: number) {
   const inputs = await recordedInputs(options, memberId, deadline);
   const unavailable = unavailableIndexSections(inputs);
@@ -297,7 +329,8 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
     return assistant.assistantId;
   }
   const assistantIds = assistants.map(assistantId);
-  return { rows, assistantIds, complete: unavailable.size === 0,
+  const grantInputsComplete = await completeGrantInputs(options, inputs, unavailable, deadline);
+  return { rows, assistantIds, grantInputsComplete, complete: unavailable.size === 0,
     unavailableSections: Array.from(unavailable),
     reviewRevision: hash.digest('hex'), checkCurrent, ownedSharedWork: [],
     personalConnections, routines,
