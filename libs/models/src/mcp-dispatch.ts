@@ -1,10 +1,11 @@
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
+import type { ModelCall } from './state.ts';
 import type { EventStore } from '@opencrane/event-store';
 import type { MemoryDispatch } from './memory-context.ts';
 import type { mcpPolicy } from './mcp.ts';
-import { envelope } from './actor.ts';
+import { envelope, type BudgetActor } from './actor.ts';
 
 const identifier = z.string().regex(/^[\w-]{1,200}$/u);
 export const mcpDispatchRouteSchema = z.strictObject({
@@ -23,7 +24,13 @@ interface MemorySend {
   method: string;
   sign: (dispatch: MemoryDispatch, expiresAt: number) => Promise<string>;
 }
+interface BudgetBinding {
+  modelCall: ModelCall;
+  decisionId: string;
+  admittedAt: number;
+}
 interface Permit {
+  budget: BudgetBinding;
   memory?: MemorySend;
   memoryBinding: MemoryDispatch;
   requestId: string;
@@ -46,7 +53,8 @@ function digest(body: string) {
   return hash.digest('hex');
 }
 
-export function mcpDispatch(store: EventStore, silo: string, options?: McpDispatchOptions) {
+export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
+  const { store, silo } = actor;
   const signingKey = randomBytes(32);
   const pending = new Map<string, Permit>();
 
@@ -78,7 +86,8 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
   }
 
   function issue(policy: Policy, body: string, requestId: string,
-    confirmAccess: () => Promise<void>, accessDeadline: number, memory?: MemorySend) {
+    confirmAccess: () => Promise<void>, accessDeadline: number, budget: BudgetBinding,
+    memory?: MemorySend) {
     const route = requireContract(policy);
     if (policy.dispatchBinding !== digest(JSON.stringify(route))) {
       throw new Error('MCP backend changed during the decision');
@@ -104,18 +113,18 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
     // Keep permits only in this active process. A restart cannot revive an old call.
     const memoryBinding = { permitDigest: digest(token), backendGeneration: route.generation!,
       schemaDigest: binding.schemaDigest, policyRevision: binding.policyRevision };
-    pending.set(token, { ...binding, confirmAccess, accessDeadline, memoryBinding,
+    pending.set(token, { ...binding, confirmAccess, accessDeadline, memoryBinding, budget,
       ...(memory ? { memory } : {}) });
     return token;
   }
 
   function setPermit(res: ServerResponse, outcome: string, policy: Policy, body: string,
     requestId: string, confirmAccess: () => Promise<void>, accessDeadline: number,
-    memory?: MemorySend) {
+    budget: BudgetBinding, memory?: MemorySend) {
     if (outcome !== 'allow') {
       return;
     }
-    const permit = issue(policy, body, requestId, confirmAccess, accessDeadline, memory);
+    const permit = issue(policy, body, requestId, confirmAccess, accessDeadline, budget, memory);
     res.setHeader('x-opencrane-mcp-permit', permit);
   }
 
@@ -146,6 +155,14 @@ export function mcpDispatch(store: EventStore, silo: string, options?: McpDispat
       memoryContext = await permit.memory.sign(permit.memoryBinding, permit.expiresAt);
     }
     await options!.requireLeader();
+    const dispatch = { callId: permit.requestId, decisionId: permit.budget.decisionId,
+      bodyDigest: permit.bodyDigest, modelCall: permit.budget.modelCall };
+    async function confirmSend() {
+      await permit.confirmAccess();
+      requireCurrentRoute(permit);
+      requireFreshDispatch(req, res, permit);
+    }
+    await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
     await admit(req, res, permit, route, position, deadline);
     requireCurrentRoute(permit);
     requireFreshDispatch(req, res, permit);

@@ -10,7 +10,7 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
-import { mcpPolicy, parseMcpCall } from './mcp.ts';
+import { mcpPolicy, parseMcpCall, requireMcpThread } from './mcp.ts';
 import { MemoryPersonScopeOnly, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -214,18 +214,6 @@ function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
-function requireMcpThread(call: ReturnType<typeof parseMcpCall>['call'], thread: string) {
-  // Check both request thread references against the signed turn before reading tool policy.
-  const metadata = call.params._meta;
-  const metadataThread = metadata['x-codex-turn-metadata']?.['thread_id'];
-  if (metadata.threadId !== thread) {
-    throw new Error('MCP thread refused');
-  }
-  if (metadataThread !== undefined && metadataThread !== thread) {
-    throw new Error('MCP metadata thread refused');
-  }
-}
-
 function linkApprovalAttempt(tool: { logicalRequestId: string }, approvalId: string | undefined) {
   // Keep retries linked when Codex assigns a new call id.
   if (approvalId) tool.logicalRequestId = approvalId;
@@ -237,7 +225,7 @@ export async function startDecision(
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
   dispatchOptions?: McpDispatchOptions,
 ) {
-  const mcpSender = mcpDispatch(actor.store, actor.silo, dispatchOptions);
+  const mcpSender = mcpDispatch(actor, dispatchOptions);
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
     if (req.url?.startsWith('/dispatch/mcp/')) {
@@ -322,11 +310,18 @@ export async function startDecision(
         const policy = mcpSender.bindPolicy(memory.policy);
         contextDigest = memory.contextDigest;
         callId = memory.callId;
-        await audit('allow', 'memory_read_allowed');
+        const modelCall = { model: 'mcp-zero-cost', priceTableId, requestId,
+          computerId: computer.computer, generation: computer.generation,
+          assistantId: computer.assistant, requesterId: turnToken.requester,
+          conversationId: turnToken.conversation, turnId: turnToken.turn, threadId: turnToken.thread,
+          payingGroupId: z.string().min(1).parse(data(turn.event)['payingGroupId']), contextDigest };
+        await actor.checkBudget(modelCall, fresh, turn.sequence);
+        const decisionId = await audit('allow', 'memory_read_allowed');
+        const budget = { modelCall, decisionId, admittedAt: turn.sequence };
         await fresh();
         const memorySend = prepareMemorySend(memory.payload, identity.memory.memoryContext);
         mcpSender.setPermit(res, 'allow', policy, raw, requestId, fresh,
-          fresh.deadline, memorySend);
+          fresh.deadline, budget, memorySend);
         res.setHeader('x-request-id', requestId);
         res.end('{}');
       }
@@ -352,7 +347,9 @@ export async function startDecision(
         const call = await context(actor, binding, computer, turnToken, checked.sequence,
           'mcp_server', match[1]!, fresh, conversation, turn);
         contextDigest = digestContext([call.contextDigest, policy]);
-        // Only explicitly zero-cost MCP tools reach approval; rejected calls never reserve.
+        // Check stops before opening or consuming an approval. Zero-cost calls hold no money.
+        const modelCall = { ...call, requestId, model: 'mcp-zero-cost' };
+        await actor.checkBudget(modelCall, fresh, turn.sequence);
         await fresh();
         const approvalBinding = {
           requesterId: turnToken.requester, assistantId: computer.assistant,
@@ -362,9 +359,11 @@ export async function startDecision(
         const { outcome, reason, approvalId } = await approvalDecision(actor.store, actor.silo,
           approvalBinding, policy, keys, actor.now, fresh, requestId, conversation);
         linkApprovalAttempt(toolFacts, approvalId);
-        await audit(outcome, reason, approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
+        const decisionId = await audit(outcome, reason,
+          approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
+        const budget = { modelCall, decisionId, admittedAt: turn.sequence };
         await fresh();
-        mcpSender.setPermit(res, outcome, policy, raw, requestId, fresh, fresh.deadline);
+        mcpSender.setPermit(res, outcome, policy, raw, requestId, fresh, fresh.deadline, budget);
         res.setHeader('x-request-id', requestId);
         markRefusedDecision(res, outcome === 'allow');
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;

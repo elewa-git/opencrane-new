@@ -434,11 +434,13 @@ If the audit or final authority fence rejects before a permit is returned, the
 actor instead appends `budget.settled` with `settledCents: 0` and
 `outcome: not_dispatched`. This releases the reservation without an effect;
 expiry and replay preserve that settlement. New reservations carry `dispatchGate: 1`.
-Model sends and provider checks use one `budget.call_dispatch_admitted` command in
+Model, MCP and memory sends and provider checks use one `budget.call_dispatch_admitted` command in
 that same actor queue. It binds the trusted call id, body hash, decision or provider
 request reference, reservation when priced, and the recorded turn, requester,
 payer, assistant and computer generation. It checks current access, stops and
-capacity without holding money twice. Provider reachability checks need no hold.
+capacity without holding money twice. Provider reachability checks and reviewed
+zero-cost MCP calls (`model: mcp-zero-cost`) need no hold. MCP still requires its
+conditional tool-rule admission after budget admission; both must pass before sending.
 Managed model calls remain disabled.
 
 The successful conditional append is the send boundary. The pinned gateway has

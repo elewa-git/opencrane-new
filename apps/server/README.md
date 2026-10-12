@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks startup, member and child access, indexed departures, final tool and memory sends, spending stops, memory setup, fact links, tool reviews, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -.->|checks startup, member and child access, indexed departures, final tool and memory sends, stopped renewals, spending stops, memory setup, fact links, tool reviews, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes, authenticated instance observations and stops, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -139,6 +139,8 @@ have not been checked. Unrelated read receipts do not require reading the event 
   Resolving a hold also reads its history first and rechecks access before saving.
 - Starts personal turns using the latest default paying group. It keeps a small
   summary with the provider switch-on state and reads each new spending event once.
+  Refuses renewal when a spending stop affected the saved turn. Raising the limit
+  can allow new work, but cannot reopen that turn.
 - Records tool starts and finishes as events and returns them in the conversation feed.
 - Tells a computer whether it supports approval messages and when a waiting
   approval has been decided or ended. A changed tool policy also ends a waiting approval.

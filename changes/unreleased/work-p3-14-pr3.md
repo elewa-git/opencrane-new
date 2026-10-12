@@ -1,0 +1,1 @@
+Free tool and memory calls now pass the same budget gate as model calls. Spending stops refuse waiting approvals, old passes and turn renewals without creating a zero-cent hold. Raising a limit does not reopen a stopped turn.

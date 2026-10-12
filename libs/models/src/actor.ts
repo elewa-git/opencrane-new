@@ -6,7 +6,7 @@ import { budgetCeilingSetDataSchema, budgetCallDispatchAdmittedDataSchema,
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budgetStopMessage,
-  exceededReasons, requireDispatchReservation, type BudgetState, type ModelCall } from './state.ts';
+  exceededReasons, observedPayload, requireDispatchReservation, type BudgetState, type ModelCall } from './state.ts';
 
 type ModelUsage = {
   inputTokens: number;
@@ -192,14 +192,24 @@ export class BudgetActor {
     await fresh?.();
     await this.append('budget.exhausted', refusal);
   }
-  private requireBudget(call: ModelCall) {
-    const stopId = budgetStopId(this.state, call, this.now());
+  private requireBudget(call: ModelCall, admittedAt?: number) {
+    const stopId = budgetStopId(this.state, call, this.now(), admittedAt);
     if (stopId !== undefined) {
       const message = budgetStopMessage(this.state, call, stopId);
       throw new BudgetRefused(message);
     }
   }
-  admitDispatch(raw: unknown, fresh: () => Promise<void>) {
+  checkBudget(call: ModelCall, fresh: () => Promise<void>, admittedAt: number) {
+    const check = async () => {
+      const stopId = budgetStopId(this.state, call, this.now(), admittedAt);
+      if (stopId !== undefined) {
+        await this.recordRefusedWork(call, stopId, fresh);
+        this.requireBudget(call, admittedAt);
+      }
+    };
+    return this.serial(check);
+  }
+  admitDispatch(raw: unknown, fresh: () => Promise<void>, admittedAt?: number) {
     const input = budgetCallDispatchAdmittedDataSchema.parse(raw);
     const admit = async () => {
       function matchesDispatch(saved: BudgetState['dispatches'][number]) {
@@ -210,14 +220,14 @@ export class BudgetActor {
         throw new Error('Call already admitted; no further send permission');
       }
       requireDispatchReservation(this.state, input);
-      this.requireBudget(input.modelCall);
+      this.requireBudget(input.modelCall, admittedAt);
       const reasons = exceededReasons(this.state, input.modelCall, this.now(), 0);
       if (reasons.length) {
         const work = { conversationId: input.modelCall.conversationId,
           turnId: input.modelCall.turnId };
         await fresh();
         await this.append('budget.exhausted', { reasons, work });
-        this.requireBudget(input.modelCall);
+        this.requireBudget(input.modelCall, admittedAt);
       }
       // Recheck access after waiting in the queue, within the original time limit.
       try {
@@ -509,17 +519,6 @@ export class BudgetActor {
     if (!row) throw new Error('Effect not recorded');
     await this.settle(row.event);
   }
-}
-
-function observedPayload(r: BudgetState['reservations'][number], usage: { inputTokens: number; outputTokens: number;
-  cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined } | undefined, outcome: 'success' | 'error') {
-  if (!models.some(row => row.id === r.call.model && row.priceTableId === r.call.priceTableId)) return undefined;
-  if (!usage && outcome !== 'error') return undefined;
-  try {
-    return { permitId: r.id, computerId: r.call.computerId, tool: r.call.model, destination: 'openai', outcome,
-      costCents: usage ? costCents(r.call.model, usage.inputTokens, usage.outputTokens, usage.cachedInputTokens, usage.cacheWriteTokens, r.call.priceTableId) : 0,
-      ...(usage ? { usage: { ...usage, priceTableId: r.call.priceTableId } } : {}) };
-  } catch { return undefined; }
 }
 
 function redundantTimeout(type: string, reason: string, rows: Awaited<ReturnType<typeof history>>) {

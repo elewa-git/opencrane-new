@@ -187,3 +187,15 @@ function expectedApprovalId(headers: IncomingHttpHeaders) {
   }
   return value;
 }
+
+export function requireMcpThread(call: ReturnType<typeof parseMcpCall>['call'], thread: string) {
+  // Check both request thread references against the signed turn before reading tool policy.
+  const metadata = call.params._meta;
+  const metadataThread = metadata['x-codex-turn-metadata']?.['thread_id'];
+  if (metadata.threadId !== thread) {
+    throw new Error('MCP thread refused');
+  }
+  if (metadataThread !== undefined && metadataThread !== thread) {
+    throw new Error('MCP metadata thread refused');
+  }
+}

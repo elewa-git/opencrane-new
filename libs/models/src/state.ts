@@ -116,7 +116,7 @@ export function requireDispatchReservation(state: BudgetState,
   if (input.reservationId === undefined) {
     // Keep non-metered sends in the same queue so saved spending stops still refuse them.
     const kind = input.modelCall.model;
-    if (kind !== 'provider-reachability' && kind !== 'computer-egress') {
+    if (kind !== 'provider-reachability' && kind !== 'computer-egress' && kind !== 'mcp-zero-cost') {
       throw new Error('Paid calls need a reservation');
     }
     return;
@@ -381,7 +381,9 @@ function applyExhaustion(state: BudgetState, event: EventEnvelope) {
     stopWork(state, payload.work, event.id);
   }
 }
-export function budgetStopId(state: BudgetState, call: ModelCall, now: Date): string | undefined {
+type BudgetWork = Pick<ModelCall, 'conversationId' | 'turnId' | 'assistantId' | 'payingGroupId'>;
+export function budgetStopId(state: BudgetState, call: BudgetWork, now: Date,
+  admittedAt?: number): string | undefined {
   for (const work of state.stoppedWork) {
     if (work.conversationId === call.conversationId && work.turnId === call.turnId) {
       return work.stopId;
@@ -393,9 +395,15 @@ export function budgetStopId(state: BudgetState, call: ModelCall, now: Date): st
       return limit.configurationId;
     }
   }
+  return scopeStopId(state, call, now, admittedAt);
+}
+function scopeStopId(state: BudgetState, call: BudgetWork, now: Date, admittedAt?: number) {
   for (const stop of state.stops) {
     for (const reason of stop.reasons) {
-      if (!matchesScope(reason, call) || now.toISOString() >= reason.resetAt) {
+      if (!matchesScope(reason, call)) continue;
+      // Keep a saved turn stopped even after its limit recovers, without a money hold.
+      if (admittedAt !== undefined && stop.position > admittedAt) return stop.id;
+      if (now.toISOString() >= reason.resetAt) {
         continue;
       }
       for (const limit of state.limits) {
@@ -443,3 +451,26 @@ function budgetProjection(name: string, table: string): Projection { return {
 }; }
 export const budgets = budgetProjection('model-budgets', 'model_budgets');
 export const replayBudgets = budgetProjection('model-budgets-replay', 'model_budgets_replay');
+
+
+export function observedPayload(reservation: BudgetState['reservations'][number],
+  usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined;
+    cacheWriteTokens?: number | undefined } | undefined, outcome: 'success' | 'error') {
+  function matchesTariff(model: typeof models[number]) {
+    return model.id === reservation.call.model && model.priceTableId === reservation.call.priceTableId;
+  }
+  if (!models.some(matchesTariff)) return undefined;
+  if (!usage && outcome !== 'error') return undefined;
+  try {
+    let amountCents = 0;
+    if (usage) {
+      amountCents = costCents(reservation.call.model, usage.inputTokens, usage.outputTokens,
+        usage.cachedInputTokens, usage.cacheWriteTokens, reservation.call.priceTableId);
+    }
+    return { permitId: reservation.id, computerId: reservation.call.computerId,
+      tool: reservation.call.model, destination: 'openai', outcome, costCents: amountCents,
+      ...(usage ? { usage: { ...usage, priceTableId: reservation.call.priceTableId } } : {}) };
+  } catch {
+    return undefined;
+  }
+}
