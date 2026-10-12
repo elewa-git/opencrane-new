@@ -130,7 +130,8 @@ async function refusesConcurrentChangedRetry() {
     const rejected = results.filter(refused);
     expect(accepted).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect(rejected[0]).toMatchObject({ reason: new Error('Admission conflict') });
+    const expectedRefusal = { reason: new Error('Admission conflict') };
+    expect(rejected[0]).toMatchObject(expectedRefusal);
     const rows = await history(other, 'computer-assistant', 'test');
     function sameAdmission(row: (typeof rows)[number]) {
       return row.event.id === narrow.delegationId;
@@ -138,9 +139,13 @@ async function refusesConcurrentChangedRetry() {
     const saved = rows.filter(sameAdmission);
     expect(saved).toHaveLength(1);
     const original = saved[0]!;
-    expect(accepted[0]).toMatchObject({ value: original });
+    const expectedAcceptance = { value: original };
+    expect(accepted[0]).toMatchObject(expectedAcceptance);
     const originalBinding = computerTurnStartedDataSchema.parse(original.event.data);
-    const unchanged = originalBinding.scopes?.models.length === 0 ? narrow : wider;
+    if (originalBinding.task !== 'native_descendant') {
+      throw new Error('Saved admission is not a native descendant');
+    }
+    const unchanged = originalBinding.scopes.models.length === 0 ? narrow : wider;
     const changed = unchanged === narrow ? wider : narrow;
     expect(await admit(context, unchanged, other)).toEqual(original);
     await expect(admit(context, changed)).rejects.toThrow('Admission conflict');
