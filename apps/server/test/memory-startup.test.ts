@@ -96,7 +96,7 @@ async function keepsMemoryCallable(credentialContract: (typeof contracts)[number
       'io.modelcontextprotocol/clientCapabilities': {} };
     for (const method of ['server/discover', 'tools/list']) {
       const discoveryHeaders = { 'mcp-protocol-version': '2026-07-28',
-        'mcp-method': method };
+        'mcp-method': method, 'mcp-name': '' };
       const discoveryCall = { jsonrpc: '2.0', id: 1, method,
         params: { _meta: metadata } };
       const discovered = await setup.call(discoveryHeaders, discoveryCall, '/mcp/memory/server');

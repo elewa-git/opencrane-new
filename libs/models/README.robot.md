@@ -359,8 +359,8 @@ The shared policy reader returns the registration kind without refusing hosted m
 The ordinary sender checks that kind before binding or issuing a pass and refuses hosted
 images until image admission exists. Memory previews, discovery, recall and writes keep
 their existing policy, grant and backend checks. They create no shared send admission.
-Memory routes retain the original header replacement: only their signed memory context
-leaves the gateway. Ordinary routes add the send pass. Requesting a missing pass during
+Memory routes retain the original header replacement. Their signed memory context
+replaces caller credentials. Ordinary routes add the send pass. Reading a missing pass during
 memory header replacement makes the gateway retain caller credentials, so it is excluded.
 Approvals include `dispatchBinding`, the route hash, in their id. A replaced backend or
 generation cannot use an old approval, including a late approval decision.
