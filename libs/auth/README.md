@@ -10,7 +10,7 @@ This is a shared library used by the back end, background workers and the models
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks sign-in and session organisation| auth["libs/auth<br/>checked sign-in details and passes"]
+  server["apps/server<br/>back end"] -.->|checks sign-in and signs turn classes| auth["libs/auth<br/>checked sign-in details and passes"]
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.->|signs memory passes| auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
@@ -33,7 +33,7 @@ flowchart LR
 - Keep return links on the same website and end the Zitadel browser session at sign-out.
 - Sign and check short-lived passes for computers and individual chat turns.
   Keep a saved provider choice and the server-recorded shared context class in a
-  turn pass, then refuse a different choice.
+  turn pass and each renewed pass, then refuse a different choice.
 - Refuse passes for native child tasks. Their saved records grant no call authority.
 - Check computer and turn passes against the computer's recorded state. It keeps a
   [stream summary](../../GLOSSARY.md#stream-summary) and reads new events before every check.

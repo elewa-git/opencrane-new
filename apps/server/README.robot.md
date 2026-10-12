@@ -7,6 +7,20 @@ renewal while an approval is unread. The existing approval reader saves cancella
 a late Approve cannot send a call. An unchanged check alone preserves approval.
 Gateway restart is covered; no watch worker is added by #48 PR 3's first part.
 
+## Shared child output admission
+
+Every new child output report must name the thread from its first server-owned
+`computer.turn_started`. That saved start must have `contextClass: shared_only`
+and `executionMode: restricted`, and match the computer, assistant, conversation,
+turn and message author. Missing, private, closed or substituted turns are refused
+before encryption and append. The report class still belongs only on start reports.
+The saved start supplies the class for later output.
+
+Reports use the computer summary with a separate ten-second history deadline.
+They add no conversation stream to an access check. Exact saved report retries
+keep their digest check and can be acknowledged after the computer turn closes.
+`test/shared-child-reports.test.ts` covers these refusals and closure retries.
+
 ## Computer credential delivery
 
 The bridge connection caller and lifecycle worker share `SandboxClient.credentials`.

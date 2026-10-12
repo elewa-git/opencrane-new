@@ -8,7 +8,9 @@ The bridge accepts `contextClass: shared_only` only with
 `executionMode: restricted`. It keeps both values in the turn start report. The
 journal saves the class beside the admitted start so restart recovery fails
 uncertain restricted work instead of running it again. The class does not turn a
-restricted thread into a reusable conversation thread.
+restricted thread into a reusable conversation thread. Later shared reports copy
+the thread id from that turn's saved start. Lost-output recovery keeps the same id,
+so the server can check the admitted turn without recovering private text.
 
 ## Executor stop foundation — P3-17 row 2, first part
 
