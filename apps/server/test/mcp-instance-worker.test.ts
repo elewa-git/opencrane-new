@@ -326,6 +326,7 @@ async function retainsOnlyDigestsAndDropsExpiredLeases() {
   const storageApp = buildServer(testAuthConfig());
   const storageWorkers = registerMcpInstanceWorkerRoutes(storageApp, nats.store, 'test');
   const retained: Map<unknown, unknown>[] = [];
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- Call with the receiving map below.
   const originalSet = Map.prototype.set;
   function captureLease(this: Map<unknown, unknown>, key: unknown, value: unknown) {
     if (typeof value === 'object' && value !== null && 'worker' in value) {

@@ -73,7 +73,9 @@ export function registerMcpInstanceWorkerRoutes(app: FastifyInstance, store: Eve
     const digest = credentialDigest(request.headers.authorization ?? '');
     const lease = leases.get(digest);
     if (!lease || lease.expiresAt <= Date.now()) {
-      if (lease) retire(digest, lease);
+      if (lease) {
+        retire(digest, lease);
+      }
       return reply.code(403).send({ status: 'refused' });
     }
     try {

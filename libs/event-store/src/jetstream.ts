@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { connectNats } from "./nats-connection.ts";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   jetstream,
@@ -10,8 +10,6 @@ import {
   type StreamConfig,
 } from "@nats-io/jetstream";
 import {
-  connect,
-  nkeyAuthenticator,
   TimeoutError,
   RequestError,
   ConnectionError,
@@ -213,34 +211,6 @@ export async function createEventStore(connection: NatsConnection) {
   return new EventStore(jetstream(connection, { timeout: requestMs }), manager);
 }
 
-/** Require TLS before starting the NATS connection. */
-export async function connectNats(env: NodeJS.ProcessEnv = process.env) {
-  function required(name: string): string {
-    const value = env[name]?.trim();
-    if (!value) {
-      throw new Error(`${name} is required for NATS`);
-    }
-    return value;
-  }
-  const servers = required("NATS_URL");
-  const address = new URL(servers.includes("://") ? servers : `tls://${servers}`);
-  if (address.username || address.password || !["tls:", "nats:"].includes(address.protocol)) {
-    throw new Error("NATS_URL must be a NATS address without credentials");
-  }
-  return connect({
-    servers,
-    tls: {
-      caFile: required("NATS_CA_FILE"),
-      certFile: required("NATS_CERT_FILE"),
-      keyFile: required("NATS_KEY_FILE"),
-      handshakeFirst: true,
-      rejectUnauthorized: true,
-    },
-    authenticator: nkeyAuthenticator(await readFile(required("NATS_NKEY_SEED_FILE"))),
-    inboxPrefix: required("NATS_INBOX_PREFIX"),
-  });
-}
-
 /** Processes use this adapter; operators create the EVENTS stream separately. */
 export async function connectEventStore(env: NodeJS.ProcessEnv = process.env) {
   const connection = await connectNats(env);
@@ -310,7 +280,9 @@ export class EventStore {
           // Round up so a fractional timeout cannot start another attempt before backoff ends.
           await delay(Math.ceil(waitMs), undefined, options);
         } catch (error) {
-          if (!command.signal?.aborted) throw error;
+          if (!command.signal?.aborted) {
+            throw error;
+          }
           return { status: "unavailable", cause: command.signal.reason };
         }
         backoff = Math.min(backoff * 2, 500);
@@ -363,7 +335,9 @@ export class EventStore {
     }
     // Recheck after awaited reads, immediately before starting a new publish.
     signal?.throwIfAborted();
-    if (performance.now() >= deadline) throw new TimeoutError();
+    if (performance.now() >= deadline) {
+      throw new TimeoutError();
+    }
     return this.publishConditional(event, expectedSequence, deadline, expectedSubject,
       expectedGlobalSequence, historyChecked);
   }
