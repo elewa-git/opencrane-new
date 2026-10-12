@@ -153,15 +153,15 @@ export class BudgetActor {
       return { status: 'appended' };
     });
   }
-  reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>) {
+  reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>, admittedAt?: number) {
     return this.serial(async () => {
       z.int().positive().parse(amountCents);
       if (!models.some(row => row.id === call.model && row.priceTableId === call.priceTableId && !row.retired)) throw new Error('Unknown model tariff');
       if (!call.payingGroupId) throw new Error('Paying group unavailable');
-      const stopId = budgetStopId(this.state, call, this.now());
+      const stopId = budgetStopId(this.state, call, this.now(), admittedAt);
       if (stopId !== undefined) {
         await this.recordRefusedWork(call, stopId, fresh);
-        this.requireBudget(call);
+        this.requireBudget(call, admittedAt);
       }
       const reasons = exceededReasons(this.state, call, this.now(), amountCents);
       if (reasons.length) {

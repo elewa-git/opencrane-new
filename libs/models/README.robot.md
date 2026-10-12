@@ -1624,14 +1624,25 @@ zero-cost tools qualify for `model: mcp-zero-cost`; no reservation is created.
 The one-use pass holds the decision id, body hash and recorded turn's payer,
 requester, assistant and generation. The existing conditional tool-rule admission
 still follows budget admission. Both must succeed before the sender writes upstream.
-Stop before budget admission refuses the send. A later Stop cannot recall that
-permission; Block before tool-rule admission can still refuse it.
+A budget stop before budget admission refuses the send. A later budget stop cannot
+recall that permission. A user Stop or Block before tool-rule admission still refuses it.
 
 Ask checks budget stops before opening or consuming an approval. Stop after
 `approval.used` burns that approval and receives no budget send permission.
 The saved computer turn's stream position also checks earlier applicable stops,
 even after rollover or a ceiling increase. It comes from server admission, never
 from the caller's token. Native descendant calls remain disabled.
+
+Model calls pass that same original position to `reserve` and `admitDispatch`.
+The actor checks it inside the reservation queue before holding money. This also
+refuses free turns that never attempted a call while their spending limit was stopped.
+Renewing a token does not change the original position. A new turn started after
+the limit rises can obtain its own hold and send permission.
+
+`mcp-dispatch.test.ts` exercises refused free passes, untouched free turns and renewed
+tokens through `/v1/responses`, using the real gateway and a recording upstream.
+It also records budget admission before tool-rule admission and saves a user Stop
+between them to prove that the call never reaches upstream.
 
 `turnBudgetStop` uses the same budget fold for renewal. Its first history read runs
 before the short membership check; later checks read only new budget events.

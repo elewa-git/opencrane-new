@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|checks calls and holds; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks calls, holds and spending stops; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|saves spending, checks connection changes together, saves instance reports and child admissions| store["libs/event-store<br/>event log"]
 ```
@@ -104,6 +104,8 @@ Other hosted images still need image admission.
   Save each refused turn before replying, including turns refused by an existing
   stop. Tool and memory calls use the same budget check. Stopping running computers
   is still planned.
+  Check when the turn first started before holding money for a model call. A free
+  turn stopped by an earlier limit cannot switch to paid calls after that limit rises.
 - Hold money before an AI call and settle the charge when usage is reported.
   Keep the budget state in memory after replay, so saving each change does not
   read all the old spending events again.

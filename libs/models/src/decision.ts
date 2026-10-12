@@ -379,13 +379,14 @@ export async function startDecision(
       contextDigest = call.contextDigest;
       requireConnectedClient(req, res);
       const modelCall = { ...call, requestId };
-      const reservation = await actor.reserve(modelCall, amountCents, fresh);
+      // Keep the original turn stopped after a limit increase, before holding any money.
+      const reservation = await actor.reserve(modelCall, amountCents, fresh, turn.sequence);
       const decisionId = await allowModel(reservation);
       const bodyHash = createHash('sha256');
       bodyHash.update(raw);
       const dispatch = { callId: requestId, decisionId, bodyDigest: bodyHash.digest('hex'),
         reservationId: reservation, modelCall };
-      await actor.admitDispatch(dispatch, fresh);
+      await actor.admitDispatch(dispatch, fresh, turn.sequence);
       res.setHeader('x-request-id', requestId);
       res.setHeader('x-reservation-id', reservation); res.end('{}');
     })().catch(async (error: unknown) => {
