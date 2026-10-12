@@ -6,6 +6,8 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { until } from '@opencrane/authz/testing';
 import { tcpProxy } from '@opencrane/event-store/testing';
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { approvalJourneyTool } from '../../../../infra/dev-stack/journey-tool-policy.ts';
 const exec = promisify(execFile);
 
 /** Disposable runtime image with this branch's sources; no shared-stack Pods or credentials. */
@@ -18,6 +20,7 @@ export async function uploadComputer() {
         STUB_PORT: '0',
         MODEL_STUB_CAPTURE: `${capture}/requests.jsonl`,
         MODEL_STUB_MCP_GENERATION: randomUUID(),
+        MODEL_STUB_MCP_REVISION: catalogueDigest([approvalJourneyTool()]),
       },
       stdio: ['ignore', 'pipe', 'ignore'],
     });

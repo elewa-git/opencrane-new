@@ -15,7 +15,9 @@ import { modelFirewall } from './model-network.ts';
 import { createStore } from '@opencrane/authz';
 import { connectEventStore } from '@opencrane/event-store';
 import { envelope } from '@opencrane/models';
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
+import { approvalJourneyTool } from './journey-tool-policy.ts';
 
 const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
@@ -393,10 +395,12 @@ async function up(fresh: boolean) {
   const approvalRoute = { serverId: 'approval-journey', connectionId: 'installed',
     upstream: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, generation: randomUUID(),
     revisionHeader: 'x-opencrane-mcp-revision' };
+  const approvalRevision = catalogueDigest([approvalJourneyTool()]);
   if (!secondary) await modelFirewall(true);
   if (!secondary) {
     const stubEnvironment = { MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,
-      MODEL_STUB_MCP_GENERATION: approvalRoute.generation };
+      MODEL_STUB_MCP_GENERATION: approvalRoute.generation,
+      MODEL_STUB_MCP_REVISION: approvalRevision };
     await start('model-stub', ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
       stubEnvironment);
   }
@@ -408,6 +412,7 @@ async function up(fresh: boolean) {
     CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
     MODEL_MCP_ROUTES: JSON.stringify([approvalRoute]),
     MODEL_STUB_MCP_GENERATION: approvalRoute.generation,
+    MODEL_STUB_MCP_REVISION: approvalRevision,
     MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, MODEL_KEY_FILE: `${directory}/model-stub-key`,
     AGENTGATEWAY_BINARY: `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`,
     MODEL_DECISION_PORT: settings['MODEL_DECISION_PORT']!, MODEL_GATEWAY_PORT: settings['MODEL_GATEWAY_PORT']!, MODEL_READINESS_PORT: settings['MODEL_READINESS_PORT']!, MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,

@@ -494,12 +494,11 @@ The signed-in owner saves the exact Ask review through
 `POST /api/org/integrations/:serverId/review` before publication.
 The later integration-list check uses the same path to save Allow for its read tool
 and Block for its write tool. The gateway is called with lifecycle credentials.
-The stack gives the recording stub a new `MODEL_STUB_MCP_GENERATION` on startup
-and puts that same value in the configured MCP route, with
-`revisionHeader: 'x-opencrane-mcp-revision'`. The stub checks both the exact running
-instance and the catalogue digest immediately before recording the call. Its digest
-comes from the same saved test definition as the journey. Missing or changed headers
-return 409 with no recorded effect. The focused check is
+The stack gives the recording stub a new `MODEL_STUB_MCP_GENERATION` and the saved
+catalogue digest at startup. It puts the same generation in the configured MCP route,
+with `revisionHeader: 'x-opencrane-mcp-revision'`. The stub checks both values just
+before recording the call. Its digest comes from the same saved test definition as
+the journey. Missing or changed headers return 409 with no recorded effect. Run the focused check with
 `nice -n 10 node --experimental-strip-types --test infra/dev-stack/model-stub.test.ts`.
 The signed-in requester sees the 8g card, approves in the browser and retries the tool once.
 A refused or ambiguous decision submission uses Check status before a safe retry,
