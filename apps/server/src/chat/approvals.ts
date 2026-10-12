@@ -29,7 +29,7 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
         .digest('hex');
       if (req.method === 'GET') {
         const readOptions = { deadline: performance.now() + 10_000,
-          fromSequence: access.joinPosition };
+          fromSequence: access.historyPosition };
         const cards = await approvalCards(
           configured.store, configured.silo, conversationId, memberId, configured.keys,
           readOptions);

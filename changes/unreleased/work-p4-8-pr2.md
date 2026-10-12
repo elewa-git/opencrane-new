@@ -1,0 +1,1 @@
+- Shared child chat reads now check the original parent joins and creator membership. Direct child invitations retain shared history, and chat replies hide parent access references. Child creation through the API remains planned.

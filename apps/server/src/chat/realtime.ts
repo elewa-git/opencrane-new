@@ -83,7 +83,7 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
       state.access = await chatSubscriptionAccess(options, memberId, conversationId, deadline);
     }
     const access = await state.access(deadline);
-    state.joinPosition = access.joinPosition;
+    state.joinPosition = access.historyPosition;
     state.accessVersion = access.accessPosition;
     const mode = access.mode;
     state.accessPassed = true;

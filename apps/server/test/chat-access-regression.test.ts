@@ -1382,8 +1382,11 @@ async function participationVolume(sharedChild = false) {
   let stopped = false;
   let streaming: Promise<void> | undefined;
   try {
-    if (sharedChild) await childSession(context, 'volume');
-    else await context.agentSession('volume');
+    if (sharedChild) {
+      await childSession(context, 'volume');
+    } else {
+      await context.agentSession('volume');
+    }
     await context.append('computer-assistant', 'computer.claimed', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, tokenId: 'token:test',
     }, false);
@@ -1990,47 +1993,47 @@ it('requires older closing events to be projected before the server starts',
 
 
 async function childSession(context: Fixture, conversationId = 'child') {
-  const parent = await context.append('conversation-parent', 'conversation.created', {
-    conversationId: 'parent', createdBy: 'alice', mode: 'group',
-    participantIds: ['alice', 'bob'],
-  });
+  const parentData = { conversationId: 'parent', createdBy: 'alice', mode: 'group',
+    participantIds: ['alice', 'bob'] };
+  const parent = await context.append('conversation-parent', 'conversation.created', parentData);
   const parentJoinPosition = await context.nats.store.head('conversation-parent');
-  await context.append('team-child-team', 'team.created', {
-    teamId: 'child-team', name: 'Child assistant', createdBy: 'alice',
-  });
-  await context.append('assistant-child-assistant', 'assistant.created', {
-    assistantId: 'child-assistant', kind: 'team', ownerId: 'child-team',
-    payingGroupId: 'child-team',
-  });
+  const teamData = { teamId: 'child-team', name: 'Child assistant', createdBy: 'alice' };
+  await context.append('team-child-team', 'team.created', teamData);
+  const assistantData = { assistantId: 'child-assistant', kind: 'team', ownerId: 'child-team',
+    payingGroupId: 'child-team' };
+  await context.append('assistant-child-assistant', 'assistant.created', assistantData);
   context.keys.provision('test', conversationId);
   const initialJoins = [];
   for (const participantId of ['alice', 'bob']) {
-    initialJoins.push({ participantId, parentJoinEventId: parent.id, parentJoinPosition });
+    const join = { participantId, parentJoinEventId: parent.id, parentJoinPosition };
+    initialJoins.push(join);
   }
-  await context.append(`conversation-${conversationId}`, 'conversation.created', {
+  const childData = {
     conversationId, createdBy: 'alice', mode: 'agent_session', contextKind: 'shared_child',
     assistantId: 'child-assistant', payingGroupId: 'child-team', initialJoins,
     origin: { parentConversationId: 'parent', sourceMessageId: 'hidden-source',
       sourcePosition: parentJoinPosition + 1, intentEventId: 'hidden-intent',
       intentPosition: parentJoinPosition + 2, requestId: 'hidden-request',
       firstInputId: 'hidden-input' },
-  });
+  };
+  const creation = await context.append(`conversation-${conversationId}`,
+    'conversation.created', childData);
   const encrypted = context.keys.encrypt('test', conversationId, 'Hello shared history');
-  await context.append(`conversation-${conversationId}`, 'message.posted', {
-    conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted,
-  }, false);
+  const messageData = { conversationId, authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...encrypted };
+  await context.append(`conversation-${conversationId}`, 'message.posted', messageData, false);
   await context.runner.run(conversations);
+  return creation;
 }
 
-const childReadPaths = ['messages', 'approvals', 'files', 'changes/hidden-input'];
+const childReadPaths = ['messages', 'approvals', 'files'];
 async function childRead(context: Fixture, path: string, memberId = 'bob') {
   const request = { url: `/api/conversations/child/${path}`, headers: context.headers(memberId) };
   return context.app.inject(request);
 }
 async function removeParentPerson(context: Fixture, memberId: string) {
-  return context.append('participation-parent', 'participant.removed', {
-    conversationId: 'parent', participantId: memberId, removedBy: 'alice',
-  }, false);
+  const removal = { conversationId: 'parent', participantId: memberId, removedBy: 'alice' };
+  return context.append('participation-parent', 'participant.removed', removal, false);
 }
 
 async function deniesInheritedChild(removal: string) {
@@ -2038,24 +2041,28 @@ async function deniesInheritedChild(removal: string) {
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   let pause: ReturnType<typeof pauseFirstHistoryRead> | undefined;
   try {
-    await childSession(context);
+    const creation = await childSession(context);
+    const statusPath = `changes/${creation.id}`;
+    const status = await childRead(context, statusPath);
+    expect(status.statusCode, status.body).toBe(200);
+    expect(status.json()).toMatchObject({ status: 'appended', type: 'conversation.created' });
+    const files = await childRead(context, 'files', 'alice');
+    expect(files.statusCode, files.body).toBe(200);
     const firstRead = await childRead(context, 'messages');
     expect(firstRead.statusCode, firstRead.body).toBe(200);
     expect(firstRead.body).toContain('Hello shared history');
     client = await openChatSocket(context, 'child', true, 'bob');
     pause = pauseFirstHistoryRead(context);
     const encrypted = context.keys.encrypt('test', 'child', 'Never deliver child content');
-    await context.append('conversation-child', 'message.posted', {
-      conversationId: 'child', authorId: 'alice', authorKind: 'human',
-      contentType: 'text', ...encrypted,
-    }, false);
+    const messageData = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...encrypted };
+    await context.append('conversation-child', 'message.posted', messageData, false);
     await context.runner.run(conversations);
     await pause.reached;
     const started = performance.now();
     if (removal === 'creator membership') {
-      await context.append('member-alice', 'member.removed', {
-        memberId: 'alice', removedBy: 'bob',
-      }, false);
+      const removal = { memberId: 'alice', removedBy: 'bob' };
+      await context.append('member-alice', 'member.removed', removal, false);
     } else {
       await removeParentPerson(context, removal);
     }
@@ -2068,20 +2075,23 @@ async function deniesInheritedChild(removal: string) {
     expect(JSON.stringify(client.received)).not.toContain('Never deliver child content');
     // Leave OpenFGA unchanged so its old answer cannot restore inherited access.
     expect((await context.auth.conversation('bob', 'child', 'read')).allowed).toBe(true);
-    for (const path of childReadPaths) {
+    const readPaths = [...childReadPaths, statusPath];
+    for (const path of readPaths) {
       const response = await childRead(context, path);
       expect(response.statusCode, response.body).toBe(403);
     }
+    if (removal !== 'bob') {
+      expect((await childRead(context, 'files', 'alice')).statusCode).toBe(403);
+    }
     await context.runner.run(conversations);
-    const list = await context.app.inject({ url: '/api/conversations',
-      headers: context.headers('bob') });
+    const listRequest = { url: '/api/conversations', headers: context.headers('bob') };
+    const list = await context.app.inject(listRequest);
     expect(list.statusCode, list.body).toBe(200);
     expect(list.body).not.toContain('Hello shared history');
     expect(list.body).not.toContain('child-assistant');
     if (removal !== 'creator membership') {
-      await context.append('participation-parent', 'participant.added', {
-        conversationId: 'parent', participantId: removal, addedBy: 'alice',
-      });
+      const addition = { conversationId: 'parent', participantId: removal, addedBy: 'alice' };
+      await context.append('participation-parent', 'participant.added', addition);
       expect((await childRead(context, 'approvals')).statusCode).toBe(403);
     }
   } finally {
@@ -2099,21 +2109,18 @@ async function explicitChildJoin() {
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
     await childSession(context);
-    await context.append('participation-child', 'participant.removed', {
-      conversationId: 'child', participantId: 'bob', removedBy: 'alice',
-      contextKind: 'shared_child', reviewPosition: 1,
-    });
-    await context.append('participation-child', 'participant.added', {
-      conversationId: 'child', participantId: 'bob', addedBy: 'alice',
-      contextKind: 'shared_child', joinKind: 'explicit_child', reviewPosition: 1,
-    });
+    const childRemoval = { conversationId: 'child', participantId: 'bob', removedBy: 'alice',
+      contextKind: 'shared_child', reviewPosition: 1 };
+    await context.append('participation-child', 'participant.removed', childRemoval);
+    const childAddition = { conversationId: 'child', participantId: 'bob', addedBy: 'alice',
+      contextKind: 'shared_child', joinKind: 'explicit_child', reviewPosition: 1 };
+    await context.append('participation-child', 'participant.added', childAddition);
     await context.runner.run(conversations);
     client = await openChatSocket(context, 'child', true, 'bob');
     await removeParentPerson(context, 'bob');
     await removeParentPerson(context, 'alice');
-    await context.append('member-alice', 'member.removed', {
-      memberId: 'alice', removedBy: 'bob',
-    }, false);
+    const removal = { memberId: 'alice', removedBy: 'bob' };
+    await context.append('member-alice', 'member.removed', removal, false);
     await context.runner.run(conversations);
     const messages = await childRead(context, 'messages');
     expect(messages.statusCode, messages.body).toBe(200);
@@ -2121,8 +2128,8 @@ async function explicitChildJoin() {
     for (const hidden of ['origin', 'initialJoins', 'hidden-source', 'parentJoinEventId']) {
       expect(messages.body).not.toContain(hidden);
     }
-    const list = await context.app.inject({ url: '/api/conversations',
-      headers: context.headers('bob') });
+    const listRequest = { url: '/api/conversations', headers: context.headers('bob') };
+    const list = await context.app.inject(listRequest);
     expect(list.statusCode, list.body).toBe(200);
     expect(list.body).toContain('hello-shared-history');
     expect(list.body).not.toContain('origin');
@@ -2202,8 +2209,8 @@ async function refusesUnrecognisedDisplayEvent() {
     await context.db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
       ['test', 'parent', position + 1, 'hidden-intent-id', 'conversation.child_requested',
         JSON.stringify(data), new Date().toISOString()]);
-    const response = await context.app.inject({ url: '/api/conversations/parent/messages',
-      headers: context.headers('bob') });
+    const request = { url: '/api/conversations/parent/messages', headers: context.headers('bob') };
+    const response = await context.app.inject(request);
     expect(response.statusCode, response.body).toBe(503);
     expect(response.json()).toEqual({ status: 'unavailable' });
   } finally {
