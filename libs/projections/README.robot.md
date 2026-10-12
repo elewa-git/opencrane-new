@@ -512,6 +512,8 @@ keep history links for each affected member. Routine and connection stream rows
 record history that is unsupported.
 Membership removals and grant revocations replace link rows without deleting them.
 Legacy revocations retain member, group and assistant targets.
+Computer ownership links come only from computer lifecycle events. View audit
+events do not carry an assistant id and do not change computer ownership.
 
 `readInventoryReferences` finds a member's recorded groups, their distinct current
 people, owned assistants, grant streams and computers. Every query filters the
