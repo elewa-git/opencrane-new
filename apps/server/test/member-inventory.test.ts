@@ -507,45 +507,55 @@ function explanationRequest(sub = 'explained', requesterId = 'explained',
   const headers: Record<string, string> = {
     cookie: `${config.cookieName}=${encodeSession(config, session)}`,
   };
-  if (origin) headers['origin'] = origin;
+  if (origin) {
+    headers['origin'] = origin;
+  }
   const query = new URLSearchParams({ requesterId, assistantId, toolName: 'read' });
   const url = `/api/org/integrations/${serverId}/access/explanation?${query}`;
-  return app.inject({ method: 'GET', url, headers });
+  const request = { method: 'GET' as const, url, headers };
+  return app.inject(request);
 }
 
 async function explainsToolSources() {
   for (const memberId of ['explained', 'tool-outsider']) {
-    await append(`member-${memberId}`, 'member.joined', {
+    const member = {
       memberId, role: 'member', email: `${memberId}@example.test`, displayName: memberId,
-    });
+    };
+    await append(`member-${memberId}`, 'member.joined', member);
   }
-  await append('team-explained', 'team.created', {
+  const group = {
     teamId: 'explained', name: 'Tool readers', createdBy: 'owner',
-  });
-  await append('team-explained', 'team.member_added', {
+  };
+  await append('team-explained', 'team.created', group);
+  const membership = {
     teamId: 'explained', memberId: 'explained', addedBy: 'owner',
-  });
-  await append('assistant-explained-helper', 'assistant.created', {
+  };
+  await append('team-explained', 'team.member_added', membership);
+  const assistant = {
     assistantId: 'explained-helper', kind: 'personal', ownerId: 'explained',
-  });
+  };
+  await append('assistant-explained-helper', 'assistant.created', assistant);
   for (const [granteeKind, granteeId] of [
     ['member', 'explained'], ['team', 'explained'], ['assistant', 'explained-helper'],
   ]) {
-    await append(grantStream('mcp_server', 'explained-server'), 'grant.given', {
+    const grant = {
       resourceType: 'mcp_server', resourceId: 'explained-server',
       granteeKind, granteeId, grantedBy: 'owner',
-    });
+    };
+    await append(grantStream('mcp_server', 'explained-server'), 'grant.given', grant);
   }
-  await append('mcp-explained-server', 'mcp.server_registered', {
+  const registration = {
     serverId: 'explained-server', kind: 'remote', locator: 'https://example.test/mcp',
     registeredBy: 'owner',
-  });
-  await append('mcp-explained-server', 'mcp.server_discovered', {
+  };
+  await append('mcp-explained-server', 'mcp.server_registered', registration);
+  const catalogue = {
     serverId: 'explained-server', connectionId: 'explained-connection', accountMode: 'personal',
     toolCount: 1, schemaDigest: 'a'.repeat(64), tools: [{
       name: 'read', revision: 'a'.repeat(64), reviewed: false, costCents: 0,
     }],
-  });
+  };
+  await append('mcp-explained-server', 'mcp.server_discovered', catalogue);
   await project();
   const before = await nats.store.head();
   const reads = vi.spyOn(nats.store, 'readStream');
@@ -559,8 +569,11 @@ async function explainsToolSources() {
       { kind: 'direct', granteeKind: 'member' },
       { kind: 'group', groupName: 'Tool readers' },
       { kind: 'assistant', granteeKind: 'assistant' },
-    ], reasons: expect.arrayContaining(['profile_not_available_yet', 'publication_unavailable']),
+    ],
   });
+  const explanation = response.json<{ reasons: string[] }>();
+  expect(explanation.reasons).toContain('profile_not_available_yet');
+  expect(explanation.reasons).toContain('publication_unavailable');
   for (const [subject] of reads.mock.calls) expect(subject).not.toContain('*');
   expect(await nats.store.head()).toBe(before);
   const inventory = await request('access', 'owner', 'org-acme', 'explained');
@@ -607,16 +620,22 @@ async function distinguishesToolIamFailure() {
   expect(response.statusCode).toBe(200);
   expect(response.json()).toMatchObject({ person: 'unavailable', assistant: 'unavailable',
     profile: 'absent_on_version', availability: 'unavailable', complete: false,
-    reasons: expect.arrayContaining(['iam_unavailable']) });
+  });
+  const body = response.json<{ reasons: string[] }>();
+  expect(body.reasons).toContain('iam_unavailable');
   expect(response.body).not.toContain('missing_requester_grant');
 }
 it('keeps absent profile evidence separate from an IAM outage', distinguishesToolIamFailure);
 
 async function permitsSlowExplanation() {
   const original = nats.store.readStream.bind(nats.store);
-  function finishDelay(resolve: () => void) { setTimeout(resolve, 2100); }
+  function finishDelay(resolve: () => void) {
+    setTimeout(resolve, 2100);
+  }
   async function* delayed(subject: string, from = 1, deadline = Infinity) {
-    if (subject === 'mcp-explained-server') await new Promise<void>(finishDelay);
+    if (subject === 'mcp-explained-server') {
+      await new Promise<void>(finishDelay);
+    }
     yield* original(subject, from, deadline);
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(delayed);
@@ -629,27 +648,33 @@ async function permitsSlowExplanation() {
 it('lets a read finish after two seconds without treating it as lost access', permitsSlowExplanation);
 
 async function explainsMissingAssistantGrant() {
-  await append('assistant-ungranted-helper', 'assistant.created', {
+  const assistant = {
     assistantId: 'ungranted-helper', kind: 'personal', ownerId: 'explained',
-  });
+  };
+  await append('assistant-ungranted-helper', 'assistant.created', assistant);
   await project();
   const response = await explanationRequest('explained', 'explained', 'explained-server',
     'ungranted-helper');
   expect(response.statusCode).toBe(200);
   expect(response.json()).toMatchObject({ person: 'allowed', assistant: 'denied',
-    actsFor: 'allowed', reasons: expect.arrayContaining(['missing_assistant_grant']) });
+    actsFor: 'allowed' });
+  const body = response.json<{ reasons: string[] }>();
+  expect(body.reasons).toContain('missing_assistant_grant');
 }
 it('keeps the assistant grant separate from the requester grant', explainsMissingAssistantGrant);
 
 async function reportsExplanationOverflow() {
   const tools = [];
   for (let index = 0; index < 51; index++) {
-    tools.push({ name: `read-${index}`, revision: 'b'.repeat(64), reviewed: false, costCents: 0 });
+    const tool = { name: `read-${index}`, revision: 'b'.repeat(64),
+      reviewed: false, costCents: 0 };
+    tools.push(tool);
   }
-  await append('mcp-explained-server', 'mcp.server_discovered', {
+  const catalogue = {
     serverId: 'explained-server', connectionId: 'explained-connection', accountMode: 'none',
     toolCount: 51, schemaDigest: 'b'.repeat(64), tools,
-  });
+  };
+  await append('mcp-explained-server', 'mcp.server_discovered', catalogue);
   await project();
   const response = await request('access', 'owner', 'org-acme', 'explained');
   const inventory = memberAccessSchema.parse(response.json());

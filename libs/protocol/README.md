@@ -34,6 +34,8 @@ They also identify the server and silo, and carry the rule revision used by wait
 - Reject messages with missing or wrongly typed fields. Live-connection messages also reject fields they do not know; some page data allows extra fields so that newer data still loads.
 - Provide the same schemas and types to browser and Node.js code.
 - Check invitation email requests, create and renew commands, status parameters and saved receipts.
+- Check tool explanations with separate person, assistant and account results.
+  Keep unavailable checks separate from missing grants.
 - Check member access reasons and departure reviews without private content.
   Report when a complete departure review permits removal.
   Keep unknown history separate from a checked absence.

@@ -369,3 +369,32 @@ do not change the review revision.
 Routine and connection history reports `absent_on_version` only after a complete
 check. Known unsupported records report `unsupported_history`; incomplete reads
 report `unavailable`. These states never stand in for an exact zero count.
+
+## Tool access explanations
+
+`GET /api/org/integrations/:serverId/access/explanation` requires strict query
+fields `requesterId`, `assistantId` and `toolName`. Members can read only their
+own requester context. Reading another person requires current Owner/Admin access.
+The assistant must belong to that person's current personal or group context.
+Foreign and unknown contexts receive 403. Invalid input receives 400; failed reads
+receive 503. Replies use `no-store`. A supplied Origin must match this website.
+
+Replies contain safe direct, group and selected-assistant grant sources, checked
+person/assistant permissions, `actsFor`, mode, review, catalogue dates and policy
+positions. They contain no account identifiers, secrets, email or private content.
+`reviewRevision` includes the inventory revision and exact policy positions.
+An IAM outage returns `unavailable`, never a missing-grant reason for that check.
+`profile: absent_on_version` means a complete history check found no profile
+records on this version. Unsupported or incomplete history stays separate.
+`not_required` means the saved account mode requires no account.
+
+Gateway publication acknowledgement is not available yet. `publication` and
+`availability` remain `unavailable`, with `complete: false`. An explanation is
+never permission to dispatch a call or approve an Ask tool.
+
+The existing admin member access reply adds `eligibility.toolExplanations` for
+MCP server rows. It returns at most 50 assistant/tool explanations per row.
+Overflow sets `toolExplanationTotal: null`, reports `tool_limits` and keeps the
+reply incomplete. Missing definitions report `tool_policy` and a null total.
+Reads stop at ten seconds; each exact MCP history stops at
+10,000 records. Slow reads do not start a two-second write access check.

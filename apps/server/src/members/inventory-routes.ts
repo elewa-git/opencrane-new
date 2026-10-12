@@ -4,6 +4,7 @@ import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { currentMembership, readActiveMember, MemberAccessRefused } from '@opencrane/models';
 import { memberAccessSchema, memberDepartureSchema } from '@opencrane/protocol';
 import type { GroupOptions } from './group-routes.ts';
+import { extendToolAvailability } from '../integrations/access-explanation.ts';
 import { sessionFor } from './routes.ts';
 import { memberInventory, reviewedRevision } from './inventory.ts';
 
@@ -52,8 +53,10 @@ async function sendInventory(reply: FastifyReply, request: FastifyRequest, optio
   memberId: string, target: Awaited<ReturnType<typeof currentMembership>>,
   inventory: Awaited<ReturnType<typeof memberInventory>>, memberSequence: number) {
   const checkedAt = new Date().toISOString();
-  const { rows, checkCurrent: _checkCurrent, ...departure } = inventory;
+  const { rows, assistantIds: _assistantIds, checkCurrent: _checkCurrent, ...departure } = inventory;
   if (request.routeOptions.url?.endsWith('/access')) {
+    await extendToolAvailability(options, memberId, inventory, performance.now() + 10_000);
+    if (reply.sent) return reply;
     const unavailableSections = [...inventory.unavailableSections];
     if (rows.length) unavailableSections.push('use_availability');
     const body = { checkedAt, complete: unavailableSections.length === 0, unavailableSections, rows };

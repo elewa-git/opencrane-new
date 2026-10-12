@@ -189,8 +189,12 @@ async function accessRows(options: GroupOptions, memberId: string, inputs: Store
     }
     const source: MemberAccessRow['sources'][number] = {
       kind: 'direct', eventId: record.event.id, sequence: record.sequence,
+      recordedAt: record.event.time,
       granteeKind: grant.granteeKind, granteeId: grant.granteeId,
     };
+    if (grant.granteeKind === 'assistant') {
+      source.kind = 'assistant';
+    }
     if (grouped) {
       source.kind = 'group';
       source.groupId = grant.granteeId;
@@ -223,7 +227,7 @@ async function addSharedAssistants(options: GroupOptions, memberId: string, inpu
     }
     const source = { kind: 'group' as const, groupId: assistant.ownerId,
       groupName: groups.names.get(assistant.ownerId), eventId: record.event.id,
-      sequence: record.sequence };
+      sequence: record.sequence, recordedAt: record.event.time };
     const eligibility = { person, assistants: [], availability: 'unavailable' as const };
     rows.set(`assistant/${assistant.assistantId}`, { resourceType: 'assistant',
       resourceId: assistant.assistantId, label: assistant.name, relation: 'acts_for',
@@ -289,7 +293,12 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   const hash = createHash('sha256');
   const reviewedInputs = [2, inputs.positions, inputs.categoryPositions, inputs.generation, content];
   hash.update(JSON.stringify(reviewedInputs));
-  return { rows, complete: unavailable.size === 0, unavailableSections: Array.from(unavailable),
+  function assistantId(assistant: Assistant) {
+    return assistant.assistantId;
+  }
+  const assistantIds = assistants.map(assistantId);
+  return { rows, assistantIds, complete: unavailable.size === 0,
+    unavailableSections: Array.from(unavailable),
     reviewRevision: hash.digest('hex'), checkCurrent, ownedSharedWork: [],
     personalConnections, routines,
     personalComputer: content.computers, retainedHistory: content.history };

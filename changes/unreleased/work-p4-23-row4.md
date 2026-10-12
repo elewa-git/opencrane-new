@@ -1,0 +1,1 @@
+- Explain a member's tool access from direct, group and assistant grants, with separate account and permission-check reasons. Add bounded tool explanations to admin member access reads. Availability stays closed while publication acknowledgement and usable account selection are unfinished.

@@ -27,6 +27,11 @@ must compare the approved tool list and running instance before executing the ca
 
 ## What it is responsible for
 
+Tool access explanations show why a person and their assistant have access.
+Members can read their own explanation; owners and admins can read others.
+Missing account support and unavailable permission checks have separate reasons.
+These reads explain saved access. They do not approve or start a tool call.
+
 Member access and departure reviews use indexed stream names to read saved grants,
 groups and assistants. Removed access stays incomplete until permission receipts
 arrive. Reviews stop above 100 groups or 500 distinct people. After an upgrade,

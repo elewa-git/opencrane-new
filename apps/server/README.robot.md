@@ -2186,3 +2186,14 @@ The [library contract](../../libs/models/README.robot.md#per-tool-policy-p3-1)
 describes the required backend preconditions. Hosted startup and image admission remain
 unavailable; a configured route does not qualify either. The built-in memory backend
 continues to check its signed context. No new budget gate or database business rule is added.
+
+## Tool access explanations
+
+The [API contract](../../docs/api/members.md#tool-access-explanations) describes
+the own-member and admin read, safe fields, strict inputs and bounded member
+availability extension. It reuses the landed exact inventory inputs from #344.
+Publication acknowledgement and usable profile selection remain unfinished, so
+availability stays closed. Company account metadata and screens are later work.
+
+The tests were committed before implementation. They reproduced missing route
+and overflow handling. Tests use disposable NATS, PostgreSQL and OpenFGA.

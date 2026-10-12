@@ -91,3 +91,5 @@ export {
   type ModelAccessCandidatesResponse,
 } from './model-access.ts';
 export { memberAccessSchema, memberDepartureSchema, type MemberAccessRow } from './member-inventory.ts';
+
+export { toolAccessExplanationSchema, type ToolExplanation } from './member-inventory.ts';
