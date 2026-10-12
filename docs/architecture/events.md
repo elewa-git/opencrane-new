@@ -375,8 +375,8 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.instance_observed` | authenticated, run-bound lifecycle worker | matching run, Pod UID, checked workload and expected sequence; system principal and change id for new reports; starting, failed, stopping, absent or unknown; no callable state | none |
 | `mcp.instance_stop_requested` | current owner command | close the exact run with its original start and stop references | none; no workload handler |
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade | grants | OpenFGA tuples |
-| `connection.created` | person command after private secret staging | connections (secret *reference* only) | planned cleanup verifies that an orphan cannot become current before deleting its exact UID/version |
-| `connection.refreshed` | reaction (OAuth refresh) | connections | — |
+| `connection.created` | personal bearer create command after private staging | connection fold (exact reference and generation; identity unverified) | planned cleanup verifies that an orphan cannot become current before deleting its exact UID/version |
+| `connection.refreshed` | personal bearer rotate command after private staging; planned OAuth refresh | connection fold replaces the exact reference at the expected generation and revision | planned orphan cleanup; never release on replay |
 | `connection.revoked` | person, admin or reaction | connections | delete the secret |
 
 Private instance starts identify the silo, user, opaque profile, server and

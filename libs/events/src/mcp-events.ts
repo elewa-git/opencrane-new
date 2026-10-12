@@ -94,14 +94,14 @@ export const mcpEvents = [
   event(
     'connection.created',
     'connection',
-    'A person completed a credential connection to an MCP server.',
+    'A person saved a staged connection reference; account identity may remain unverified.',
     data.connectionCreatedDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret:1' },
   ),
   event(
     'connection.refreshed',
     'connection',
-    "A reaction refreshed a connection's OAuth token.",
+    "A command rotated a bearer reference, or a reaction refreshed an OAuth connection.",
     data.connectionRefreshedDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret:2' },
   ),

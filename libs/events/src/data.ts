@@ -61,12 +61,6 @@ export const ciphertextSchema = z
 export const keyIdSchema = z
   .string()
   .regex(/^key:[A-Za-z0-9_-]+$/, 'keyId must be an opaque reference, e.g. "key:<id>", never the key itself');
-const secretRefSchema = z
-  .string()
-  .regex(
-    /^secret:[A-Za-z0-9_-]+$/,
-    'secretRef must be an opaque reference, e.g. "secret:<id>", never the credential value itself',
-  );
 
 // An MCP server is registered as a URL or as an image (plan.md, "Installing
 // an MCP server"), and `locator` means something different for each, so the
@@ -532,20 +526,8 @@ export const grantRevokedDataSchema = z
     granteeKind: z.enum(['member', 'team', 'assistant']).optional(), revokedBy: id })
   .strict();
 
-// Risky type: the secret itself never appears here, only a reference id
-// the secret store understands. userId, serverId and profile together
-// identify the connection.
-export const connectionCreatedDataSchema = z
-  .object({ userId: id, serverId: id, profile: id, secretRef: secretRefSchema })
-  .strict();
-
-export const connectionRefreshedDataSchema = z
-  .object({ userId: id, serverId: id, profile: id, secretRef: secretRefSchema })
-  .strict();
-
-export const connectionRevokedDataSchema = z
-  .object({ userId: id, serverId: id, profile: id, revokedBy: id })
-  .strict();
+export { connectionCreatedDataSchema, connectionRefreshedDataSchema,
+  connectionRevokedDataSchema } from './connections.ts';
 
 // --- Budgets (single-writer actor per silo) -----------------------------
 

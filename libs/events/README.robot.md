@@ -440,3 +440,14 @@ It records nightId, batchKey, inputRevision, UTC date, binding revision, member,
 100-cent accepted cap, intendedAt, selectedAt and at most 32 revision references.
 It carries no plaintext, root allowance or dispatch permission. `due` represents
 unresolved work; this scheduler emits only refused or missed records.
+
+## Personal bearer activation records (P3-8 PR 2)
+
+`connection.created` and `connection.refreshed` retain their old strict fields and add
+optional `activation`. When present, this strict object requires the installed connection,
+personal owner kind and purpose, generation, exact UID/resourceVersion, endpointDigest,
+operationId, changedBy, expectedSequence, appendUntil and bearer_create/bearer_rotation reason.
+The secretRef is a `secret:` reference to the custody name. No material or material-derived
+hash is recorded. endpointDigest hashes the registered locator only. The private custody
+adapter retains the material verifier. Missing activation is accepted for legacy replay;
+it supplies no usable generation. No new event type or release reaction is registered.

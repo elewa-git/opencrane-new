@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks calls and holds; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves spending, permitted instance reports and child admissions; reads saved changes| store["libs/event-store<br/>event log"]
+  models -->|saves spending, personal connection references, instance reports and child admissions| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -181,6 +181,9 @@ Recovery needs its saved identity or an exact identity supplied by the caller.
 A lost create reply without that evidence is refused, and the create is never sent again.
 Deletion stays unresolved while the Secret exists. A later check can confirm its removal.
 This adapter grants no tool access.
+Personal bearer commands save a staged reference or replace it at the expected version.
+The stream keeps only references and exact storage identities. Saved profiles remain
+unavailable for tool calls until their upstream account identity can be checked.
 
 1. **A person sends a chat message.** The server and the computer pick the model for the task. The computer sends the AI call to agentgateway. agentgateway asks the models process, which checks the passes, permissions and budget and holds the money. The models process saves one final send permission. agentgateway then sends the call once to the AI provider.
 2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the full amount stays held for review. A later report of an unknown result restores money released before an allowed call was sent.
