@@ -181,6 +181,129 @@ beforeAll(prepare, 120_000);
 beforeEach(prepareTestServices);
 afterAll(close);
 
+async function memoryPass(body: unknown, toolName: string) {
+  const requestHeaders = { ...setup.headers, ...headers, 'mcp-name': toolName };
+  const request = { method: 'POST', headers: requestHeaders, body: JSON.stringify(body) };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize${route}`, request);
+  expect(response.status, await response.text()).toBe(200);
+  const permit = response.headers.get('x-opencrane-mcp-permit');
+  expect(permit).toBeTruthy();
+  return permit!;
+}
+
+function dispatchMemory(permit: string, body: unknown) {
+  const requestHeaders = { 'content-type': 'application/json',
+    'x-opencrane-mcp-permit': permit };
+  const request = { method: 'POST', headers: requestHeaders, body: JSON.stringify(body) };
+  return fetch(`${setup.options.decisionUrl}/dispatch${route}`, request);
+}
+
+const dispatchChanges = ['block', 'hold', 'generation', 'catalogue'] as const;
+async function refusesChangedMemory(change: typeof dispatchChanges[number], operation: string) {
+  let body: unknown = call;
+  if (operation === 'remember') body = await recalledRemember(`dispatch-${change}`);
+  const permit = await memoryPass(body, operation);
+  const configured = setup.options.mcpRoutes.at(-1)!;
+  const generation = configured.generation;
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let changed = false;
+  async function changeBeforeAdmission(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'mcp.dispatch_admitted' && !changed) {
+      changed = true;
+      if (change === 'generation') {
+        configured.generation = 'replacement';
+      } else if (change === 'block') {
+        const tool = operation === 'recall' ? recallTool : rememberTool;
+        const policy = { serverId: 'memory', connectionId: 'server', toolName: operation,
+          toolRevision: tool.revision, mode: 'block', setBy: 'alice' };
+        await setup.append('mcp-memory', 'mcp.tool_mode_set', policy);
+      } else {
+        const outcome = change === 'hold' ? 'failed' : 'unchanged';
+        const checkedAt = new Date().toISOString();
+        const expiresAt = new Date(Date.now() + 300_000).toISOString();
+        const check = { serverId: 'memory', outcome, checkedAt, expiresAt,
+          schemaDigest: memoryCatalogue.schemaDigest };
+        await setup.append('mcp-memory', 'mcp.catalogue_checked', check);
+      }
+    }
+    return append(command);
+  }
+  const delayed = vi.spyOn(setup.nats.store, 'append');
+  delayed.mockImplementation(changeBeforeAdmission);
+  capability = '';
+  try {
+    const response = await dispatchMemory(permit, body);
+    expect(changed).toBe(true);
+    expect(response.status).toBe(403);
+    expect(capability).toBe('');
+  } finally {
+    delayed.mockRestore();
+    configured.generation = generation;
+    await govern(setup);
+  }
+}
+async function refusesChangedRecall(change: typeof dispatchChanges[number]) {
+  await refusesChangedMemory(change, 'recall');
+}
+async function refusesChangedRemember(change: typeof dispatchChanges[number]) {
+  await refusesChangedMemory(change, 'remember');
+}
+it.each(dispatchChanges)('stops recall before the backend after a saved %s', refusesChangedRecall);
+it.each(dispatchChanges)('stops remember before the backend after a saved %s', refusesChangedRemember);
+
+async function refusesMemoryReplay() {
+  const permit = await memoryPass(call, 'recall');
+  const first = await dispatchMemory(permit, call);
+  expect(first.status, await first.text()).toBe(200);
+  const captured = capability;
+  const second = await dispatchMemory(permit, call);
+  expect(second.status).toBe(403);
+  const requestHeaders = { ...headers, 'x-memory-context': captured };
+  const request = { method: 'POST' as const, url: route, headers: requestHeaders, payload: call };
+  const replay = await app.inject(request);
+  expect(replay.statusCode).toBe(403);
+}
+it('consumes the memory pass and captured backend context once', refusesMemoryReplay);
+
+async function refusesCapturedMemoryContext() {
+  const first = await setup.call(headers, call, route);
+  expect(first.status, first.text).toBe(200);
+  const requestHeaders = { ...headers, 'x-memory-context': capability };
+  const request = { method: 'POST' as const, url: route, headers: requestHeaders, payload: call };
+  const replay = await app.inject(request);
+  expect(replay.statusCode).toBe(403);
+}
+it('refuses direct replay of the signed memory context', refusesCapturedMemoryContext);
+
+async function allowsConcurrentMemory() {
+  const first = await memoryPass(call, 'recall');
+  const second = await memoryPass(call, 'recall');
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const bothReady = Promise.withResolvers<void>();
+  let admissions = 0;
+  async function overlap(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'mcp.dispatch_admitted') {
+      admissions += 1;
+      if (admissions === 2) bothReady.resolve();
+      await bothReady.promise;
+    }
+    return append(command);
+  }
+  const delayed = vi.spyOn(setup.nats.store, 'append');
+  delayed.mockImplementation(overlap);
+  try {
+    const replies = await Promise.all([dispatchMemory(first, call), dispatchMemory(second, call)]);
+    for (const reply of replies) expect(reply.status, await reply.text()).toBe(200);
+    expect(admissions).toBe(3);
+  } finally {
+    bothReady.resolve();
+    delayed.mockRestore();
+  }
+}
+it('admits two concurrent memory calls on the same tool', allowsConcurrentMemory);
+
 function scopedRequester(team: boolean, kind: MemoryIdentity['scopeKind']) {
   if (team && kind !== 'person') {
     return { granteeKind: 'team', granteeId: 'sales' };
