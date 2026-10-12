@@ -1015,7 +1015,7 @@ async function manyConversations() {
     await context.runner.run(conversations);
     const started = performance.now();
     const response = await context.app.inject({
-      url: '/api/conversations', headers: context.headers(),
+      url: '/api/conversations?limit=50', headers: context.headers(),
     });
     const elapsed = performance.now() - started;
     expect(response.statusCode).toBe(200);
@@ -1119,7 +1119,7 @@ async function listDuringStreaming() {
     streaming = streamReplies(context);
     await delay(300);
     for (let attempt = 0; attempt < 4; attempt++) {
-      const request = { url: '/api/conversations', headers: context.headers() };
+      const request = { url: '/api/conversations?limit=50', headers: context.headers() };
       const response = await context.app.inject(request);
       expect(response.statusCode).toBe(200);
       const rows = response.json<{ rows: { conversationId: string }[] }>().rows;

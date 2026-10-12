@@ -116,9 +116,26 @@ async function listsSixtySessions() {
     await auth.handler.handle(rows[0]!.event, pgDb(dbs.queue));
   }
   await runner.run(conversations);
-  const response = await request('GET', '/api/conversations', undefined, 'alice');
-  expect(response.statusCode, response.body).toBe(200);
-  expect(response.json<{ rows: unknown[] }>().rows).toHaveLength(60);
+  const rows: { conversationId: string }[] = [];
+  let nextCursor: string | null = null;
+  do {
+    let url = '/api/conversations';
+    if (nextCursor) url += `?cursor=${encodeURIComponent(nextCursor)}`;
+    const response = await request('GET', url, undefined, 'alice');
+    expect(response.statusCode, response.body).toBe(200);
+    const result = response.json<{ rows: { conversationId: string }[];
+      nextCursor: string | null }>();
+    expect(result.rows).toHaveLength(20);
+    rows.push(...result.rows);
+    expect(rows.length).toBeLessThanOrEqual(60);
+    nextCursor = result.nextCursor;
+  } while (nextCursor);
+  expect(rows).toHaveLength(60);
+  function conversationId(row: typeof rows[number]) {
+    return row.conversationId;
+  }
+  const conversationIds = rows.map(conversationId);
+  expect(new Set(conversationIds).size).toBe(60);
 }
 it('lists 60 personal sessions', listsSixtySessions, 120_000);
 
