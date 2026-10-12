@@ -629,7 +629,11 @@ try {
   if (!created) evidence.infrastructure = 'NOT RUN';
 } finally {
   driver?.stdin.end();
-  if (created) await k('delete', 'namespace', namespace, '--wait=true', '--timeout=120s');
-  finishQualification(evidence, created);
+  try {
+    if (created) await k('delete', 'namespace', namespace, '--wait=true', '--timeout=120s');
+  } catch (error) {
+    evidence.error = `Namespace cleanup failed: ${error.message}`;
+  }
+  finishQualification(evidence);
   save();
 }

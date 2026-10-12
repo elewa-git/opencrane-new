@@ -1,31 +1,32 @@
-export function finishQualification(evidence, created) {
-  const failures = Object.entries(evidence.checks).filter(function failed(entry) { return entry[1].result === 'FAIL'; });
-  const missing = Object.entries(evidence.checks).filter(function missing(entry) { return entry[1].result === 'NOT RUN'; });
-  const measurementFailures = Object.entries(evidence.measurements).filter(function required(entry) {
-    return !['PASS', 'ACCEPTED'].includes(entry[1].result);
-  });
-  let liveResult = 'PASS';
-  const failedMeasurements = measurementFailures.filter(function failed(entry) {
-    return entry[1].result === 'FAIL';
-  });
-  if (failures.length || failedMeasurements.length || (created && evidence.error)) liveResult = 'FAIL';
-  else if (missing.length || measurementFailures.length) liveResult = 'NOT RUN';
-  evidence.conditions.F3 = { result: liveResult,
-    failing: failures.map(function name(entry) { return entry[0]; }),
-    measurements: measurementFailures.map(function name(entry) { return entry[0]; }) };
-  if (liveResult === 'PASS') {
-    evidence.result = 'PASS';
-  } else if (liveResult === 'FAIL') {
-    evidence.result = 'FAIL';
-  } else {
-    evidence.result = 'PARTIAL';
+const acceptedHostMeasurements = new Set(['nodeSwaps', 'swapCgroups', 'hostCorePattern']);
+const acceptedHostResult = 'ACCEPTED (dev box, owner 12 Oct, #366)';
+
+export function finishQualification(evidence) {
+  const failures = [];
+  const missing = [];
+  function requireResult(name, result, accepted = false) {
+    if (result === 'PASS' || accepted) return;
+    if (result === 'NOT RUN') missing.push(name);
+    else failures.push(name);
   }
-  function productFailure(entry) {
-    const name = entry[0];
-    return name.endsWith(' scans') || name.endsWith(' no repeat')
-      || name.startsWith('one terminal ') || name.startsWith('private release ')
-      || name.startsWith('J4 ')
-      || name === 'provider isolation' || name === 'tools created no file';
+  for (const [name, value] of Object.entries(evidence.checks)) {
+    requireResult(name, value.result);
   }
-  if (failures.some(productFailure)) process.exitCode = 1;
+  for (const [name, value] of Object.entries(evidence.measurements)) {
+    const accepted = acceptedHostMeasurements.has(name) && value.result === 'ACCEPTED';
+    requireResult(name, value.result, accepted);
+  }
+  for (const [name, value] of Object.entries(evidence.conditions)) {
+    if (name === 'F3') continue;
+    const accepted = (name === 'F1' || name === 'F2') && value.result === acceptedHostResult;
+    requireResult(name, value.result, accepted);
+    if (value.guest !== undefined) requireResult(`${name} guest`, value.guest);
+  }
+  if (evidence.error || evidence.infrastructure) failures.push('infrastructure');
+  let result = 'PASS';
+  if (failures.length > 0) result = 'FAIL';
+  else if (missing.length > 0) result = 'NOT RUN';
+  evidence.conditions.F3 = { result, failing: failures, missing };
+  evidence.result = result;
+  process.exitCode = result === 'PASS' ? 0 : 1;
 }
