@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { MemoryPersonScopeOnly, memoryRights, parseMemoryRequest, verifyMemoryContext } from '@opencrane/models';
+import { MemoryPersonScopeOnly, type MemoryContext, memoryRights,
+  parseMemoryRequest, verifyMemoryContext } from '@opencrane/models';
 import type { AuthConfig } from '@opencrane/auth';
 import type { MemoryOptions } from './access.ts';
 import { remember } from './commands.ts';
@@ -19,6 +20,7 @@ const discovery = { ...cache, supportedVersions: ['2026-07-28'], capabilities: {
 
 export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
   options?: MemoryOptions) {
+  const consume = memoryContextConsumer(options?.dispatchGeneration);
   // Keep the original JSON number text for the gateway's signed body digest.
   function register(instance: FastifyInstance, _options: unknown, done: () => void) {
     instance.removeContentTypeParser('application/json');
@@ -40,9 +42,14 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       const token = request.headers['x-memory-context'];
       if (typeof token !== 'string') throw new Error('Memory context missing');
       const context = await verifyMemoryContext(token, options.identity, parsed);
+      consume(context);
       const remaining = context.exp * 1000 - Date.now();
       const deadline = performance.now() + remaining;
       const rights = await memoryRights(options.store, options.binding, context, parsed, deadline);
+      if (context.dispatch.schemaDigest !== rights.policy.schemaDigest ||
+          context.dispatch.policyRevision !== rights.policy.policy.policyRevision) {
+        throw new Error('Memory catalogue changed');
+      }
       let result: unknown = discovery;
       if (parsed.request.method === 'tools/list') {
         result = toolList;
@@ -80,4 +87,29 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
     }
   }
   void app.register(register);
+}
+
+function memoryContextConsumer(generation: string | undefined) {
+  const startedAt = Date.now() / 1000;
+  const consumed = new Map<string, number>();
+  function consume(context: MemoryContext) {
+    if (!generation ||
+        context.dispatch.backendGeneration !== generation ||
+        context.iat <= startedAt) {
+      throw new Error('Memory backend changed');
+    }
+    const now = Date.now() / 1000;
+    for (const [permit, expiresAt] of consumed) {
+      if (expiresAt <= now) {
+        consumed.delete(permit);
+      }
+    }
+    const permit = context.dispatch.permitDigest;
+    if (consumed.has(permit) || consumed.size >= 1024) {
+      throw new Error('Memory context already used or unavailable');
+    }
+    // Consume before awaiting access checks. A refused or interrupted call cannot be replayed.
+    consumed.set(permit, context.exp);
+  }
+  return consume;
 }

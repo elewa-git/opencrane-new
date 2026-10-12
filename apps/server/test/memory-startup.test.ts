@@ -66,7 +66,8 @@ async function keepsMemoryCallable(credentialContract: (typeof contracts)[number
   const projectionOptions = { decrypt: keys.decrypt };
   const projection = memoryProjection(projectionOptions);
   const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
-    binding: setup.binding, feed: { memberId }, identity: setup.identity, keyDirectory };
+    binding: setup.binding, feed: { memberId }, identity: setup.identity,
+    dispatchGeneration: 'memory-instance', keyDirectory };
   const authConfig = testAuthConfig();
   const serverOptions = { memory };
   const app = buildServer(authConfig, serverOptions);
@@ -86,7 +87,8 @@ async function keepsMemoryCallable(credentialContract: (typeof contracts)[number
     await setup.runner.initialise(projection);
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     const upstream = new URL(address).host;
-    const route = { serverId: 'memory', connectionId: 'server', upstream };
+    const route = { serverId: 'memory', connectionId: 'server', upstream,
+      generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' as const };
     setup.options.mcpRoutes.push(route);
     await setup.restart();
     const headers = { 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call',
@@ -113,7 +115,7 @@ async function keepsMemoryCallable(credentialContract: (typeof contracts)[number
       return row.event.type === 'mcp.dispatch_admitted';
     }
     const admissions = memoryRows.filter(isDispatchAdmission);
-    expect(admissions).toHaveLength(0);
+    expect(admissions).toHaveLength(3);
     const unsupported = { serverId: 'startup', kind: 'hosted', locator: memoryLocator,
       registeredBy: 'alice', credentialContract: { credentialMode: 'startup_lasting' } };
     await setup.append('mcp-startup', 'mcp.server_registered', unsupported);

@@ -1,0 +1,1 @@
+Memory calls now use the shared one-use send check. A saved Block or hold stops forwarding, changed tool catalogues or backends refuse old passes, and captured signed memory contexts cannot be replayed.

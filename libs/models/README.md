@@ -13,8 +13,8 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, private approval reviews, saved fact references, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
-  models -->|sends admitted ordinary calls| mcp["MCP server<br/>checks revision before execution"]
+  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals including private reviews, saved fact references, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  models -->|sends admitted calls, including memory| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
@@ -33,8 +33,9 @@ pass before sending the original request. Servers without this contract are refu
 Before sending, it saves one admission record on the server's tool-rule stream.
 Block saved first refuses admission. Admission saved first allows that call;
 Block applies to later calls. It checks the small access streams within two seconds.
-Built-in memory uses its separate signed context and checks access again at its backend.
-Hosted image refusal applies to ordinary tool sends, so memory remains available.
+Built-in memory uses the same send check. Its signed context also identifies the one-use
+pass, running backend and reviewed tool list. The memory backend checks access again
+and refuses a context it has already received. Other hosted images still need image admission.
 
 ## What it is responsible for
 

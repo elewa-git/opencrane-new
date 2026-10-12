@@ -50,13 +50,8 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
   const path = `/mcp/${route.serverId}/${route.connectionId}`;
   const responseHeaders = ['x-request-id'];
   const upstreamHeaders = [...MCP_UPSTREAM_HEADERS];
-  if (path === '/mcp/memory/server') {
-    responseHeaders.push('x-memory-context');
-    upstreamHeaders.push('"x-memory-context":request.headers["x-memory-context"]');
-  } else {
-    responseHeaders.push('x-opencrane-mcp-permit');
-    upstreamHeaders.push('"x-opencrane-mcp-permit":request.headers["x-opencrane-mcp-permit"]');
-  }
+  responseHeaders.push('x-opencrane-mcp-permit');
+  upstreamHeaders.push('"x-opencrane-mcp-permit":request.headers["x-opencrane-mcp-permit"]');
   return { name: `mcp-${route.serverId}-${route.connectionId}`, gateways: 'default', matches: [{ path: { exact: path }, method: 'POST' }],
     policies: {
       jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
@@ -76,14 +71,8 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
           metadata: { toolRequestId: 'response.headers["x-request-id"]' } } },
         failureMode: { denyWithStatus: 503 } },
       transformations: { request: { replace: `{${upstreamHeaders.join(', ')}}` } },
-      ...(path === '/mcp/memory/server' ? {} :
-        { urlRewrite: { path: { full: `/dispatch${path}` } } }),
-    }, backends: [{ host: path === '/mcp/memory/server' ? route.upstream :
-      new URL(decisionUrl).host, policies: {
-      // Keep refusals from the checked sender. Remove forged markers from memory replies.
-      responseHeaderModifier: { remove: path === '/mcp/memory/server' ?
-        ['x-opencrane-decision'] : [] },
-    } }] };
+      urlRewrite: { path: { full: `/dispatch${path}` } },
+    }, backends: [{ host: new URL(decisionUrl).host }] };
 }
 function gatewayConfig(
   port: number, readinessPort: number, decisionUrl: string, keyFile: string,

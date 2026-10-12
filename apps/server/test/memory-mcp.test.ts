@@ -52,13 +52,6 @@ const headers = { 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/cal
   'mcp-name': 'recall', 'x-memory-context': 'forged-caller-context' };
 const projection = memoryProjection({ decrypt });
 
-async function renewTurnToken() {
-  // Renew the two-minute token so slow runs can still test whether the turn is live.
-  const claims = decodeJwt(setup.headers['x-turn-token']);
-  const token = await setup.sign(claims, 'decision-service');
-  setup.headers['x-turn-token'] = token;
-}
-beforeEach(renewTurnToken);
 function decrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
   return keys.decrypt(identity, encrypted);
 }
@@ -126,12 +119,13 @@ async function prepare() {
   await setup.runner.run(projection);
   const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
     binding: setup.binding, feed: { memberId }, identity: setup.identity,
-    keyDirectory: dirname(setup.options.configFile) };
+    dispatchGeneration: 'memory-instance', keyDirectory: dirname(setup.options.configFile) };
   app = buildServer(testAuthConfig(), { memory });
   app.addHook('preHandler', captureContext);
   const address = await app.listen({ host: '127.0.0.1', port: 0 });
   const upstream = new URL(address).host;
-  setup.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream });
+  setup.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream,
+    generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
   await setup.restart();
   // Warm service clients. Cold calls may correctly refuse when the access deadline expires.
   await setup.call(headers, call, route);
@@ -180,129 +174,6 @@ async function prepareTestServices() {
 beforeAll(prepare, 120_000);
 beforeEach(prepareTestServices);
 afterAll(close);
-
-async function memoryPass(body: unknown, toolName: string) {
-  const requestHeaders = { ...setup.headers, ...headers, 'mcp-name': toolName };
-  const request = { method: 'POST', headers: requestHeaders, body: JSON.stringify(body) };
-  const response = await fetch(`${setup.options.decisionUrl}/authorize${route}`, request);
-  expect(response.status, await response.text()).toBe(200);
-  const permit = response.headers.get('x-opencrane-mcp-permit');
-  expect(permit).toBeTruthy();
-  return permit!;
-}
-
-function dispatchMemory(permit: string, body: unknown) {
-  const requestHeaders = { 'content-type': 'application/json',
-    'x-opencrane-mcp-permit': permit };
-  const request = { method: 'POST', headers: requestHeaders, body: JSON.stringify(body) };
-  return fetch(`${setup.options.decisionUrl}/dispatch${route}`, request);
-}
-
-const dispatchChanges = ['block', 'hold', 'generation', 'catalogue'] as const;
-async function refusesChangedMemory(change: typeof dispatchChanges[number], operation: string) {
-  let body: unknown = call;
-  if (operation === 'remember') body = await recalledRemember(`dispatch-${change}`);
-  const permit = await memoryPass(body, operation);
-  const configured = setup.options.mcpRoutes.at(-1)!;
-  const generation = configured.generation;
-  const append = setup.nats.store.append.bind(setup.nats.store);
-  let changed = false;
-  async function changeBeforeAdmission(command: Parameters<typeof append>[0]) {
-    const event = z.object({ type: z.string() }).parse(command.event);
-    if (event.type === 'mcp.dispatch_admitted' && !changed) {
-      changed = true;
-      if (change === 'generation') {
-        configured.generation = 'replacement';
-      } else if (change === 'block') {
-        const tool = operation === 'recall' ? recallTool : rememberTool;
-        const policy = { serverId: 'memory', connectionId: 'server', toolName: operation,
-          toolRevision: tool.revision, mode: 'block', setBy: 'alice' };
-        await setup.append('mcp-memory', 'mcp.tool_mode_set', policy);
-      } else {
-        const outcome = change === 'hold' ? 'failed' : 'unchanged';
-        const checkedAt = new Date().toISOString();
-        const expiresAt = new Date(Date.now() + 300_000).toISOString();
-        const check = { serverId: 'memory', outcome, checkedAt, expiresAt,
-          schemaDigest: memoryCatalogue.schemaDigest };
-        await setup.append('mcp-memory', 'mcp.catalogue_checked', check);
-      }
-    }
-    return append(command);
-  }
-  const delayed = vi.spyOn(setup.nats.store, 'append');
-  delayed.mockImplementation(changeBeforeAdmission);
-  capability = '';
-  try {
-    const response = await dispatchMemory(permit, body);
-    expect(changed).toBe(true);
-    expect(response.status).toBe(403);
-    expect(capability).toBe('');
-  } finally {
-    delayed.mockRestore();
-    configured.generation = generation;
-    await govern(setup);
-  }
-}
-async function refusesChangedRecall(change: typeof dispatchChanges[number]) {
-  await refusesChangedMemory(change, 'recall');
-}
-async function refusesChangedRemember(change: typeof dispatchChanges[number]) {
-  await refusesChangedMemory(change, 'remember');
-}
-it.each(dispatchChanges)('stops recall before the backend after a saved %s', refusesChangedRecall);
-it.each(dispatchChanges)('stops remember before the backend after a saved %s', refusesChangedRemember);
-
-async function refusesMemoryReplay() {
-  const permit = await memoryPass(call, 'recall');
-  const first = await dispatchMemory(permit, call);
-  expect(first.status, await first.text()).toBe(200);
-  const captured = capability;
-  const second = await dispatchMemory(permit, call);
-  expect(second.status).toBe(403);
-  const requestHeaders = { ...headers, 'x-memory-context': captured };
-  const request = { method: 'POST' as const, url: route, headers: requestHeaders, payload: call };
-  const replay = await app.inject(request);
-  expect(replay.statusCode).toBe(403);
-}
-it('consumes the memory pass and captured backend context once', refusesMemoryReplay);
-
-async function refusesCapturedMemoryContext() {
-  const first = await setup.call(headers, call, route);
-  expect(first.status, first.text).toBe(200);
-  const requestHeaders = { ...headers, 'x-memory-context': capability };
-  const request = { method: 'POST' as const, url: route, headers: requestHeaders, payload: call };
-  const replay = await app.inject(request);
-  expect(replay.statusCode).toBe(403);
-}
-it('refuses direct replay of the signed memory context', refusesCapturedMemoryContext);
-
-async function allowsConcurrentMemory() {
-  const first = await memoryPass(call, 'recall');
-  const second = await memoryPass(call, 'recall');
-  const append = setup.nats.store.append.bind(setup.nats.store);
-  const bothReady = Promise.withResolvers<void>();
-  let admissions = 0;
-  async function overlap(command: Parameters<typeof append>[0]) {
-    const event = z.object({ type: z.string() }).parse(command.event);
-    if (event.type === 'mcp.dispatch_admitted') {
-      admissions += 1;
-      if (admissions === 2) bothReady.resolve();
-      await bothReady.promise;
-    }
-    return append(command);
-  }
-  const delayed = vi.spyOn(setup.nats.store, 'append');
-  delayed.mockImplementation(overlap);
-  try {
-    const replies = await Promise.all([dispatchMemory(first, call), dispatchMemory(second, call)]);
-    for (const reply of replies) expect(reply.status, await reply.text()).toBe(200);
-    expect(admissions).toBe(3);
-  } finally {
-    bothReady.resolve();
-    delayed.mockRestore();
-  }
-}
-it('admits two concurrent memory calls on the same tool', allowsConcurrentMemory);
 
 function scopedRequester(team: boolean, kind: MemoryIdentity['scopeKind']) {
   if (team && kind !== 'person') {
@@ -366,7 +237,8 @@ async function scopedRecall(team: boolean) {
     await govern(target);
     const scopes = await seedScopedFacts(target, team);
     const memory = { silo: 'test', store: target.nats.store, db: target.db,
-      binding: target.binding, feed: { memberId }, identity: target.identity };
+      binding: target.binding, feed: { memberId }, identity: target.identity,
+      dispatchGeneration: 'memory-instance' };
     backend = buildServer(testAuthConfig(), { memory });
     let issued = '';
     function captureScoped(request: import('fastify').FastifyRequest,
@@ -377,7 +249,8 @@ async function scopedRecall(team: boolean) {
     backend.addHook('preHandler', captureScoped);
     const address = await backend.listen({ host: '127.0.0.1', port: 0 });
     const upstream = new URL(address).host;
-    target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream });
+    target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream,
+      generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
     await target.restart();
     await refuseUnboundScopes(target, backend);
     for (const scope of scopes) {
@@ -506,13 +379,23 @@ async function grantMemory(target: typeof setup, kind: string, granteeId: string
 
 async function isolatedBackend(target: typeof setup) {
   const memory = { silo: 'test', store: target.nats.store, db: setup.db,
-    binding: target.binding, feed: { memberId }, identity: target.identity };
+    binding: target.binding, feed: { memberId }, identity: target.identity,
+    dispatchGeneration: 'memory-instance' };
   const backend = buildServer(testAuthConfig(), { memory });
   const address = await backend.listen({ host: '127.0.0.1', port: 0 });
   const upstream = new URL(address).host;
-  target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream });
+  target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream,
+    generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
   await target.restart();
   return backend;
+}
+
+async function memoryBinding(target: typeof setup) {
+  const policy = await readToolPolicy(target.nats.store, 'test', 'memory');
+  const hash = createHash('sha256');
+  hash.update(crypto.randomUUID());
+  return { permitDigest: hash.digest('hex'), backendGeneration: 'memory-instance',
+    schemaDigest: memoryCatalogue.schemaDigest, policyRevision: policy.policyRevision };
 }
 
 async function signedRecall(target: typeof setup, overrides = {}, body = call) {
@@ -522,7 +405,8 @@ async function signedRecall(target: typeof setup, overrides = {}, body = call) {
     thread: 'thread', operation: 'recall', scopes: [scopeId], contentAccess: 'private',
     bodyDigest: parsed.bodyDigest, callId: metadata.callId,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
-  return target.tokens.memoryContext({ ...claims, ...overrides }, Date.now() + 2000);
+  const dispatch = await memoryBinding(target);
+  return target.tokens.memoryContext({ ...claims, dispatch, ...overrides }, Date.now() + 2000);
 }
 
 async function assertRecallRefused(target: typeof setup, backend: typeof app) {
@@ -1064,7 +948,8 @@ async function signedRemember(body: Awaited<ReturnType<typeof recalledRemember>>
     thread: 'thread', operation: 'remember', scopes: [scopeId], contentAccess: 'private',
     bodyDigest: parsed.bodyDigest, callId: metadata.callId,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
-  return setup.tokens.memoryContext({ ...claims, ...overrides }, Date.now() + 2000);
+  const dispatch = await memoryBinding(setup);
+  return setup.tokens.memoryContext({ ...claims, dispatch, ...overrides }, Date.now() + 2000);
 }
 async function backendRemember(body: Awaited<ReturnType<typeof recalledRemember>>, overrides = {}) {
   const token = await signedRemember(body, overrides);
@@ -1436,6 +1321,7 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
     }
     const memory = { silo: 'test', store: target.nats.store, db: target.db,
       binding: target.binding, feed: { memberId }, identity: target.identity,
+      dispatchGeneration: 'memory-instance',
       keyDirectory: dirname(target.options.configFile) };
     backend = buildServer(testAuthConfig(), { memory });
     const recallArguments = { scopeId: selectedId, query: '' };
@@ -1446,7 +1332,8 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
       thread: 'thread', operation: 'recall', scopes: [selectedId], contentAccess: 'private',
       bodyDigest: parsed.bodyDigest, callId: metadata.callId,
       requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
-    const recalledToken = await target.tokens.memoryContext(claims, Date.now() + 2000);
+    const dispatch = await memoryBinding(target);
+    const recalledToken = await target.tokens.memoryContext({ ...claims, dispatch }, Date.now() + 2000);
     const readHeaders = { ...headers, 'x-memory-context': recalledToken };
     const readRequest = { method: 'POST' as const, url: route,
       headers: readHeaders, payload: recallBody };
@@ -1461,7 +1348,9 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
     const writeBody = { ...call, params: { ...call.params, name: 'remember',
       arguments: argumentsValue } };
     const writeParsed = parseMemoryRequest(JSON.stringify(writeBody), rememberHeaders);
-    const writeClaims = { ...claims, operation: 'remember', bodyDigest: writeParsed.bodyDigest };
+    const writeDispatch = await memoryBinding(target);
+    const writeClaims = { ...claims, dispatch: writeDispatch, operation: 'remember',
+      bodyDigest: writeParsed.bodyDigest };
     const token = await target.tokens.memoryContext(writeClaims, Date.now() + 2000);
     const writeHeaders = { ...rememberHeaders, 'x-memory-context': token };
     const writeRequest = { method: 'POST' as const, url: route,

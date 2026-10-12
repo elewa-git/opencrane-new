@@ -4,7 +4,7 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { grantStream, type Binding } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
 import { assistantCreatedDataSchema, type MemoryIdentity } from '@opencrane/events';
-import { authorityFence, currentAuthority } from './authority.ts';
+import { type authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall, parseMemoryRequest, toolDecision } from './mcp.ts';
 import { closesDecisionTurn } from './approvals.ts';
@@ -14,13 +14,16 @@ import type { IncomingHttpHeaders } from 'node:http';
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const dispatchSchema = z.object({ permitDigest: digest, backendGeneration: identifier,
+  schemaDigest: digest, policyRevision: z.int().nonnegative() });
+export type MemoryDispatch = z.infer<typeof dispatchSchema>;
 const claimsSchema = z.object({ silo: identifier, requester: identifier, assistant: identifier,
   computer: identifier, generation: z.int().positive(), conversation: identifier,
   turn: identifier, thread: identifier,
   operation: z.enum(['recall', 'remember', 'server/discover', 'tools/list']),
   scopes: z.array(digest).max(1), contentAccess: z.literal('private'),
   bodyDigest: digest, callId: z.string().min(1).max(200), requestId: z.uuid(),
-  contextPosition: z.int().nonnegative(), exp: z.number(), iat: z.number() });
+  dispatch: dispatchSchema, contextPosition: z.int().nonnegative(), exp: z.number(), iat: z.number() });
 export type MemoryContext = z.infer<typeof claimsSchema>;
 
 export class MemoryPersonScopeOnly extends Error {
@@ -52,13 +55,24 @@ export async function verifyMemoryContext(token: string,
 export async function memoryRights(store: EventStore, binding: Binding,
   claims: Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' | 'generation' |
     'conversation' | 'turn' | 'thread'>, parsed: ReturnType<typeof parseMemoryRequest>,
-  deadline: number) {
+  deadline: number, includeDispatch?: (...subjects: string[]) => void) {
   const activity = await liveMemoryTurn(store, binding, claims, parsed, deadline);
   const rights = await check(deadline);
   return { ...rights, confirm: check };
 
   async function check(checkDeadline = deadline) {
-    const fresh = await authorityFence(store, performance.now(), [], checkDeadline);
+    const authority = await decisionAuthorityFence(store, performance.now(), [],
+      claims.requester, claims.assistant, undefined, checkDeadline);
+    async function confirmAuthority() {
+      await authority();
+    }
+    function include(...subjects: string[]) {
+      authority.include(...subjects);
+      includeDispatch?.(...subjects);
+    }
+    const snapshot = { include, head: authority.head,
+      deadline: authority.deadline };
+    const fresh = Object.assign(confirmAuthority, snapshot);
     fresh.include('mcp-memory');
     const policy = await memoryToolPolicy(store, binding.silo, parsed, checkDeadline);
     if (policy.outcome !== 'allow') {
@@ -94,7 +108,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
     }
     await activity.confirm(checkDeadline, false);
     await fresh();
-    return { scope, contextDigest, contextPosition: fresh.head, canRemember };
+    return { scope, contextDigest, contextPosition: fresh.head, canRemember, policy };
   }
 }
 
@@ -255,13 +269,24 @@ function requireLiveComputer(activity: Awaited<ReturnType<typeof decisionActivit
 
 export async function prepareMemoryContext(store: EventStore, binding: Binding,
   claims: ThreadIdentity, raw: string, headers: IncomingHttpHeaders, deadline: number,
-  requestId: string) {
+  requestId: string, includeDispatch?: (...subjects: string[]) => void) {
   const parsed = parseMemoryRequest(raw, headers);
-  const rights = await memoryRights(store, binding, claims, parsed, deadline);
+  const rights = await memoryRights(store, binding, claims, parsed, deadline, includeDispatch);
   const operation = parsed.input ? parsed.input.operation : parsed.request.method;
   const scopes = parsed.input ? [parsed.input.scopeId] : [];
   const callId = parsed.request.params._meta.callId;
   const payload = { ...claims, operation, scopes, contentAccess: 'private',
     bodyDigest: parsed.bodyDigest, callId, requestId, contextPosition: rights.contextPosition };
-  return { payload, contextDigest: rights.contextDigest, callId };
+  return { payload, policy: rights.policy, contextDigest: rights.contextDigest, callId };
+}
+
+export function prepareMemorySend(payload: Awaited<ReturnType<typeof prepareMemoryContext>>['payload'],
+  sign: (claims: Record<string, unknown>, expiresAt: number) => Promise<string>) {
+  function signContext(dispatch: MemoryDispatch, expiresAt: number) {
+    const claims = { ...payload, dispatch };
+    return sign(claims, expiresAt);
+  }
+  const operation = payload.operation;
+  const method = operation === 'recall' || operation === 'remember' ? 'tools/call' : operation;
+  return { method, sign: signContext };
 }
