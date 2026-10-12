@@ -506,7 +506,7 @@ Stderr is discarded. The whole container inherits a hard core-file limit of zero
 | Bridge memory | Process RAM | UID 1000 bridge | Yes, until acknowledged; swappable here |
 | Supervisor stream buffers | Process RAM | Root supervisor | Yes, while passing bytes; swappable here |
 | Private Codex memory | Process RAM | UID 1003 Codex | Yes; swappable here |
-| `/home/private/turn-<n>` | 16Mi Memory volume | UID 1003 | Yes; swappable here; gVisor backing not yet measured |
+| `/home/private/turn-<n>` | 16Mi Memory volume | UID 1003 | Yes; gVisor tmpfs measured; host swap remains an accepted dev-box risk |
 | `/home/agent/codex` | PVC | UID 1000 | No; only text-free private outlines |
 | `/home/agent/workspace` (`/workspace`) | PVC | UID 1001; UID 1003 in world-writable directories | No |
 | `/home/agent/profile` | PVC | UID 1002 | No |
@@ -543,7 +543,13 @@ Both configs switch shared prompt files and skill instructions off. Personal
 and memory-free tools otherwise retain their existing persistent home and work.
 No fallback is enabled without a failing pinned-image check. The live canary probe
 and its local provider are `test/private-turns.mjs` and `test/private-provider.mjs`.
-They run in a throwaway Kubernetes namespace.
+They run in a new throwaway Kubernetes namespace. The native fault helper reads a
+canary, then writes to a page with no access permission. It uses the same Pod, UID,
+capabilities, core limits, environment and RAM home as a held private Codex turn.
+Full before/after guest and node file inventories are saved as compressed JSON.
+The readable JSON record links that archive and records its SHA-256 checksum.
+Any new or changed core or dump fails the check, even without a canary. This does
+not execute Codex’s own signal handler; that limit is recorded beside the results.
 The local `test/private-capabilities.mjs` runs a private turn through `private.sock`
 with the template's exact capabilities and a stub provider. It uses Docker's runc
 runtime and does not qualify gVisor isolation.
@@ -553,6 +559,10 @@ MVP. The remaining host risks are tracked in
 [#366](https://github.com/elewa-git/opencrane-new/issues/366). Memory admission
 stays disabled until the live proof passes and the unauthenticated credentials
 replacement is fixed in [#200](https://github.com/elewa-git/opencrane-new/issues/200).
+The accepted design in [#326](https://github.com/elewa-git/opencrane-new/pull/326)
+also requires volatile memory-derived replies, invalidation and qualified memory-tool
+journeys. `apps/server/src/chat/reports.ts` still keeps reply text with conversation
+keys. Passing this process check alone cannot enable memory.
 
 ## Bridge credential delivery
 

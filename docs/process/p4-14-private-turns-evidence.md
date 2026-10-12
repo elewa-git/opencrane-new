@@ -1,74 +1,111 @@
 # Private team turns check record
 
-## 12 October qualification run
+## 12 October qualification after fixes
 
-Branch: `work/p4-14-qual`, based on `origin/main`. The image build and live probe
-ran under `nice -n 10` in separate throwaway namespaces. The provider used a local
-model stub. No paid model call or owner stack was used.
+**PASS for J1–J7 on the dev box**, with only F1 and F2 accepted by the owner on
+12 October. **Memory admission stays DISABLED.** This run qualifies the process
+and storage checks below. It does not execute Codex's own memory-fault handler or
+qualify memory tools and memory-derived replies.
 
-| Check | Result | Detail |
+The branch was rebased onto `origin/main` at `580a07f6`; the rebase finished and
+that commit is an ancestor. The probe source is `7310240f11ca5c8c96aad00ce18865d8117d40eb`.
+The image is `k3d-ocn-registry:5000/opencrane/computer@sha256:3bb44be151ce4b91c8dcadcf6b78a3bd1bc8e09f7ec93a423e25543e6007735a`. The fresh namespace was `p414-private-eb6a63d8`
+and was deleted after the run. Commands used `nice -n 10`. The local provider was
+a fixture: no paid model call, dev-stack slot or owner stack was used. Host
+settings were unchanged.
+
+| Check | Result | Observed result |
 | --- | --- | --- |
-| Image build, licence and capability gates | PASS | 385/385 packages accepted; private capability check passed |
-| Existing fresh and resumed image checks | PASS | gVisor runtime, desktop, documents, network and PVC checks passed |
-| J1 | PASS | Replies and reasoning arrived; canary scans and private cleanup passed |
-| J2 | PASS | Two private turns and one memory-free turn; held and released scans passed |
-| J3 | PASS | Stop during a held reply; canary scans and private cleanup passed |
-| J4 | FAIL | `SIGSEGV` was caught and did not exit Codex; forced cleanup then passed. The separate `SIGKILL` case passed |
-| J5 | PASS | Reconnect during a held reply; one terminal report and cleanup passed |
-| J6 | PASS | Bridge restart and replacement Pod lost pending output and did not repeat the turn |
-| J7 | PASS | Tool attempts were refused; direct private compaction kept its canary in RAM and made no file |
-| Canary scans | PASS | No canary reached the PVC, logs, shared notes, another member's prompt or provider request |
-| Held-turn canaries | PASS | J2 found message, context and member canaries only in the private RAM volume and its turn home |
-| Pod mounts | PASS | The private home used a separate memory-backed volume |
-| Private volume mount | PASS | Node mount was `tmpfs`, 16 MiB, `noswap` |
-| Private volume `statfs` | PASS | 16,777,216 bytes; the 16 MiB limit was enforced |
-| Writable path census | PASS | Only `/tmp`, `/dev/shm` and private turn homes were writable |
-| Guest core limits | PASS | Bridge and private Codex core size limits were both zero |
-| runsc options | PASS | `io.containerd.runsc.v1`; no debug, trace or debug-log option was set |
-| Private home peak | PASS | 2,923,663 bytes; symlinks are counted without following their targets |
-| Private start time | PASS | 10 samples; p50 913 ms, p95 1,351 ms |
-| Two-turn peak memory | PASS | 365,871,104 bytes at the Pod cgroup |
-| F1: host swap | ACCEPTED (dev box, owner 12 Oct, [#366](https://github.com/elewa-git/opencrane-new/issues/366)) | `/swapfile` was active; no host setting was changed |
-| F2: host apport dumps | ACCEPTED (dev box, owner 12 Oct, [#366](https://github.com/elewa-git/opencrane-new/issues/366)) | Host `core_pattern` uses apport; guest core limits passed |
-| F3: complete live proof | FAIL | J4's `SIGSEGV` assertion failed; J5–J7 passed |
-| Lint | PASS | Full repository lint, including docs, links and changelog |
-| Typecheck | PASS | All workspaces |
-| Event catalogue | PASS | 128 event types agree |
-| Changelog lint | PASS | Unreleased fragment accepted |
-| Changed computer tests | PASS | 6 tests passed |
-| Full root suite | FAIL | First run: 4,151 passed, 6 failed, 18 skipped across 257 files |
-| Affected-file recheck | PARTIAL | Four files passed (197 tests); `upgrade-after-publication` still found another database session |
+| Image build, contents, licences and capabilities | PASS | Product source matched the checkout; fault helpers and fixtures were absent from the image |
+| Fresh and resumed image checks | PASS | gVisor, desktop, documents, network, hostile PVC cases and resume passed |
+| J1 | PASS | Replies and reasoning arrived; private cleanup and canary scans passed |
+| J2 | PASS | Two private turns ran beside a memory-free turn; member context stayed separate |
+| J3 | PASS | Stop produced one failed terminal report, bounded removal, no repeat and no canary on the PVC |
+| J4 | PASS | Real native fault died of SIGSEGV; pinned Codex SIGKILL passed failed-report, cleanup and no-repeat checks |
+| J5 | PASS | Reconnect retained one terminal report and cleaned up the private turn |
+| J6 | PASS | Bridge restart and replacement Pod lost pending output and did not repeat work |
+| J7 | PASS | Tool attempts were refused; compaction kept its canary in RAM and created no tool file |
+| Canary scans | PASS | No private canary on the PVC, in Pod logs, shared notes or another member's model input |
+| Writable guest paths | PASS | Full directory and regular-file census; writable stored files were under `/tmp`, `/dev/shm` and private homes |
+| RAM home and core limits | PASS | Separate 16 MiB tmpfs; bridge and private Codex soft/hard core limits were 0/0 |
+| Native helper conditions | PASS | Same Pod/runtime, UID/GID 1003, groups, capabilities, no-new-privileges, core limits, environment and RAM working directory |
+| Dump inventories | PASS | Every writable guest path and relevant host/node dump and log locations checked before and after; no new or changed core/dump |
+| Private home peak | PASS | Largest sampled home: 2,903,063 bytes |
+| Private start time | PASS | Ten samples; p50 848 ms, p95 956 ms |
+| F1: host swap | ACCEPTED | Dev-box MVP exception in [#366](https://github.com/elewa-git/opencrane-new/issues/366) |
+| F2: host crash dumps | ACCEPTED | Same owner decision; guest 0/0 core limits remain required |
+| F3: required live checks | PASS | Every required check and measurement passed; probe exit status was zero |
+| Codex's own memory-fault path | NOT RUN | Source inspected; the native helper does not execute Codex's handler |
+| Lint, typecheck, event catalogue, knip and changelog lint | PASS | 130 event types agree; lint had warnings and no errors |
+| Changed tests | PASS | 27 tests passed twice with `PG_TEST_URL` set; one worker |
+| Local full root suite | NOT RUN | Excluded from this fix's requested checks |
 
-F1 and F2 are accepted dev-box exceptions for the MVP and remain post-MVP
-security gaps in [#366](https://github.com/elewa-git/opencrane-new/issues/366).
-F3 is FAIL, so this run does not qualify private turns. The `SIGSEGV` check found
-that the pinned Codex process catches signal 11 (`SigCgt` includes it) and keeps
-running. The probe recorded the failure, sent `SIGKILL` to clean up that turn, and
-continued. The separate `SIGKILL` case and J5–J7 passed. The probe namespace was
-removed after capture. The JSON entry contains every check and raw measurement.
-During J2, the probe found the expected active canaries in the private RAM volume
-and one private home WAL file. It found none in the PVC, Pod logs, shared notes,
-another member's prompt or provider request. The J7 tool attempts were refused and
-the direct compaction canary appeared only in the allowed private RAM home.
+The [JSON record](evidence/p4-14/private-turns.json) contains the checks, process
+conditions, timings and paths. Its [compressed JSON inventories](evidence/p4-14/private-turns-inventories.json.gz)
+retain all file entries, sizes, inode numbers, modification times, hashes and dump
+flags. The record includes the archive's SHA-256 checksum. No file was omitted to
+reduce the record's size. `139` guest files and
+`22489` host/node files were inventoried before the fault.
+The writable census excludes process/kernel interfaces and devices other than
+`/dev/shm`; these exclusions are explicit in the record.
 
-The first root run's six failures were the live-view fixture's OpenFGA timeout, the
-stale Codex path assertion, a provider-guard fixture's OpenFGA timeout, two handler
-upgrade cases that found other database sessions, and the decision-fence test's
-40-second timeout. The affected-file recheck passed the live-view, private Codex,
-provider-guard and decision-fence files, plus two of the three upgrade recovery
-cases. `upgrade-after-publication` still failed because a database session remained
-open after the child was killed. The disposable database was removed after the
-recheck. The root suite is not green.
+## What the memory fault proves
 
-Memory admission remains **DISABLED**. The live proof failed, and even after F3
-passes with F1 and F2 accepted, the unauthenticated `/credentials` route remains
-the separate blocker tracked in [#200](https://github.com/elewa-git/opencrane-new/issues/200).
-The setting in `apps/server/src/chat/memory-admission.ts` stays disabled for those
-two reasons.
+The native helper reads a canary into memory, maps a page with `PROT_NONE` (no
+read or write access), and writes to it. The parent observed fatal `SIGSEGV`.
+The helper inherited the same measured conditions as the held private Codex turn.
+The inventories reject newly created or changed named core/dump files, ELF core
+files and minidumps, even if they contain no canary. Existing dump files were
+recorded before the fault. The guest does not expose `core_pattern`; the host
+pattern and both guest core limits are recorded separately.
 
-The JSON beside this record contains the probe results and measurements from this
-run. It records F1 and F2 with the owner-approved status and records F3 as FAIL.
-J5–J7 passed after the probe cleaned up the turn that caught `SIGSEGV`.
+The pinned Codex binary is version 0.159.2, SHA-256
+`1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e`.
+Its embedded Rust source paths identify commit `59807616e1fa2540724bfbac14d7976d7e4a3860`.
+The [matching Rust handler](https://github.com/rust-lang/rust/blob/59807616e1fa2540724bfbac14d7976d7e4a3860/library/std/src/sys/pal/unix/stack_overflow.rs#L101-L143)
+checks the thread's stack guard. A stack overflow prints a diagnostic and aborts.
+For another fault, it restores the default handler and returns; a real invalid
+memory access then faults again. An external signal has no instruction to repeat.
+The [Codex source tag](https://github.com/openai/codex/tree/8b9fa496bbf2c47aebd62e85a080b9a522a455b5)
+selects Rust 1.95.0 and has no explicit SIGSEGV handler in its Rust sources.
+The earlier after-signal mask, `0x4040`, no longer contained the SIGSEGV bit.
+That observation is consistent with this handler removing itself.
+
+This identifies the expected standard-library handler from source and binary
+paths. It does not establish the active handler address or execute Codex's own
+stack-overflow or other memory-fault path. Those paths remain unqualified.
+The pinned binary's SIGKILL and Stop paths were exercised separately.
+
+## Fixes and failing-first checks
+
+Agent-UID tests first reproduced the X11 symlink disclosure, symlink and
+foreign-owner locks, and replacement during unlink. Startup now makes root-owned
+`/tmp` sticky before children start. Directory and lock operations use checked
+non-following descriptors, owner/type checks and an inode comparison before
+removal. The sticky parent prevents an untrusted user replacing that checked lock.
+
+Exit-status tests first showed required failures and infrastructure errors could
+return zero. Every required FAIL or NOT RUN now prevents promotion. Only the
+named F1/F2 host exceptions are accepted. Unreadable canary scans also fail.
+Shutdown tests first reproduced open-connection and interrupted-shell leaks,
+including interruption during a check that reads standard input. TERM and INT
+now stop the build and its bounded registry listener, destroying open sockets.
+Each failing test change was committed before its fix.
+
+Earlier live attempts stopped on three fixture issues: an oversized apply
+annotation, the absent guest `core_pattern` file, and the normal gap between old
+and replacement Pods. The JSON records those failures. Required assertions were
+retained. The final complete build passed and promoted the checked image.
+
+## Memory stays disabled
+
+Passing these checks does not enable memory. The unauthenticated `/credentials`
+route remains tracked in [#200](https://github.com/elewa-git/opencrane-new/issues/200)
+and [PR #371](https://github.com/elewa-git/opencrane-new/pull/371).
+The [accepted design](https://github.com/elewa-git/opencrane-new/pull/326) also needs
+volatile memory-derived output, invalidation and qualified memory-tool journeys.
+`apps/server/src/chat/reports.ts` still encrypts reply text with conversation keys.
+`memory-admission.ts` remains disabled; no access, money or memory check was relaxed.
 
 ## 5 October source and test record
 
