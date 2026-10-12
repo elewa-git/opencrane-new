@@ -29,6 +29,7 @@ import { colleagues, chatChange } from './reads.ts';
 import { chatCommand, chatInput, ChatConflict } from './commands.ts';
 import { chatGroups, chatGroupSnapshot, reviewedGroup, GroupSnapshotTooLarge } from './groups.ts';
 import { memoryAdmission } from './memory-admission.ts';
+import { stateCommand, stateChange, listPreference } from './state.ts';
 
 export type { ChatOptions } from './access.ts';
 type Access = Awaited<ReturnType<typeof chatAccess>>;
@@ -101,14 +102,18 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
     handler,
   };
   app.route(participantsRoute);
+  const stateRoute = { method: 'POST' as const, url: '/api/conversations/:conversationId/state',
+    bodyLimit: 4096, handler };
+  app.route(stateRoute);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     try {
       const { conversationId, commandId } = parameters.parse(request.params);
       const participants = request.routeOptions.url === participantsRoute.url;
+      const preferences = request.routeOptions.url === stateRoute.url;
       let accessConversationId = conversationId;
       // Keep participant access in its existing read and command functions.
-      if (participants) accessConversationId = undefined;
+      if (participants || preferences) accessConversationId = undefined;
       const checks = { write: request.method === 'POST', conversationId: accessConversationId,
         allowApplying: commandId !== undefined };
       const context = await requireMember(request, reply, config, options, checks);
@@ -119,10 +124,19 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
         return await participantReply(request, reply, configured, memberId,
           participantConversationId);
       }
+      if (preferences) {
+        const result = await stateCommand(configured, memberId,
+          idSchema.parse(conversationId), request.body);
+        return reply.code(appendStatusCode(result)).send(result.status === 'appended'
+          ? result : { status: result.status });
+      }
       if (request.method === 'GET') {
         let result;
         if (conversationId && commandId) {
-          result = await chatChange(configured, conversationId, commandId, access.joinPosition);
+          const preference = await stateChange(configured, memberId, conversationId,
+            commandId, idSchema.parse(access.joinEventId));
+          result = preference ?? await chatChange(configured, conversationId,
+            commandId, access.joinPosition);
         } else {
           result = await read(request, configured, memberId, conversationId,
             access, config.cookieSecret);
@@ -198,10 +212,11 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
         throw new ConversationListChanged();
       }
       visibleCandidates.push(candidate);
-      const state = z.object({ archived: z.boolean() }).nullable().parse(candidate.state);
-      const archived = state?.archived ?? false;
+      const preference = listPreference(access.joinEventId, candidate.state);
+      const archived = preference.archived;
       if (archived !== (query.section === 'archived')) return undefined;
       const display = await summary(options, row.conversationId, row.mode, access.historyPosition);
+      const details = { ...display, ...preference };
       const normalisedSearch = query.q.normalize('NFC');
       const search = normalisedSearch.toLowerCase();
       const normalisedTitle = display.title.normalize('NFC');
@@ -216,11 +231,11 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
         // Return current people and join time without details from an earlier creation.
         if (access.historyPosition > access.creation.sequence) {
           return { conversationId: row.conversationId, mode: row.mode,
-            createdAt, participantIds: access.participantIds, ...display };
+            createdAt, participantIds: access.participantIds, ...details };
         }
-        return { ...row, participantIds: access.participantIds, ...display };
+        return { ...row, participantIds: access.participantIds, ...details };
       }
-      return { ...row, createdAt, ...display };
+      return { ...row, createdAt, ...details };
     } catch (error) {
       if (isChatRefused(error) || error instanceof ChatAccessApplying) return undefined;
       throw error;

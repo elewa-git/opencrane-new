@@ -91,6 +91,9 @@ const conversationDisplay = {
   conversationId: z.string(), createdBy: z.string(), createdAt: z.string(),
   title: z.string().optional(),
   status: z.enum(['open', 'working', 'done', 'closed', 'failed', 'stopped', 'lost']).optional(),
+  joinEventId: chatIdSchema.optional(), archived: z.boolean().optional(),
+  archivePosition: z.int().nonnegative().optional(),
+  throughPosition: z.int().nonnegative().optional(), throughEventId: chatIdSchema.optional(),
 };
 export const chatListSchema = z.object({ rows: z.array(z.union([
   z.object({
@@ -151,3 +154,10 @@ export const chatParticipantsSchema = z.strictObject({
   joinPosition: z.int().positive(), accessPosition: z.int().positive(),
   canManage: z.boolean(), canLeave: z.boolean(),
 });
+
+export const chatStateCommandSchema = z.discriminatedUnion('action', [
+  z.strictObject({ id: chatIdSchema, action: z.literal('archive'),
+    joinEventId: chatIdSchema, archived: z.boolean(), expectedArchivePosition: z.int().nonnegative() }),
+  z.strictObject({ id: chatIdSchema, action: z.literal('read'), joinEventId: chatIdSchema,
+    throughPosition: z.int().positive(), throughEventId: chatIdSchema }),
+]);

@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>visible chat pages, groups, invitations, departure reviews, history availability, control history, startup review and settings messages"]
-  server["apps/server<br/>back end"] -.->|checks access replies| protocol
+  server["apps/server<br/>back end"] -.->|access replies and saved chat choices| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list shapes"]
@@ -43,6 +43,7 @@ They also identify the server and silo, and carry the rule revision used by wait
   Keep member headers separate from the admin directory.
 - Check own-group picker pages, reviewed member snapshots and human group chat rows.
 - Check group chat participant edits and the current people list.
+- Check archive and read requests, and each person's saved choice in chat lists.
 - Check flat group rows and create or remove commands for the People & groups screen.
 
 ## Processes it handles
@@ -53,6 +54,8 @@ They also identify the server and silo, and carry the rule revision used by wait
    Ordinary late joiners receive their join time and current participants, without
    earlier creation details. Older replies still load.
    Group participant requests carry the last access position so stale edits can be refused.
+   Archive and read requests name the current join. Replies let another device
+   use the same saved choice and check an uncertain request by its original id.
 3. **A person reviews the history of changes.** The server filters the response, then both sides use the same shapes for the request and result.
 
 Chat replies include a typed computer state. After a computer is lost, they also

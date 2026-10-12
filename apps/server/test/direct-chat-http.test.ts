@@ -105,6 +105,233 @@ async function directFixture() {
   return { app, nats, db, auth, runner, headers, append, create, close, config, options, fga, directory, feed };
 }
 
+async function saveState(fixture: Awaited<ReturnType<typeof directFixture>>,
+  payload: object, memberId = 'alice') {
+  const request = { method: 'POST' as const, url: '/api/conversations/direct/state',
+    headers: fixture.headers(memberId), payload };
+  return fixture.app.inject(request);
+}
+
+async function archiveAfterLostReply() {
+  const fixture = await directFixture();
+  try {
+    await fixture.create();
+    const input = { id: 'archive', action: 'archive', archived: true,
+      joinEventId: 'create', expectedArchivePosition: 0 };
+    const append = fixture.nats.store.append.bind(fixture.nats.store);
+    async function loseReply(command: Parameters<typeof append>[0]) {
+      await append(command);
+      return { status: 'unavailable' as const, cause: new Error('Lost reply') };
+    }
+    const lost = vi.spyOn(fixture.nats.store, 'append');
+    lost.mockImplementationOnce(loseReply);
+    expect((await saveState(fixture, input)).statusCode).toBe(503);
+    lost.mockRestore();
+    const statusRequest = { url: '/api/conversations/direct/changes/archive',
+      headers: fixture.headers() };
+    const status = await fixture.app.inject(statusRequest);
+    expect(status.statusCode).toBe(200);
+    expect(chatChangeSchema.parse(status.json())).toMatchObject({
+      type: 'conversation.archive_set', projection: { content: 'applying', iam: 'current' },
+    });
+    const retry = await saveState(fixture, input);
+    expect(retry.statusCode).toBe(200);
+    expect((await history(fixture.nats.store, 'chat-state-alice', 'test'))).toHaveLength(1);
+    const changedChoice = { ...input, archived: false };
+    expect((await saveState(fixture, changedChoice)).statusCode).toBe(409);
+    const changedExpectation = { ...input, expectedArchivePosition: 1 };
+    expect((await saveState(fixture, changedExpectation)).statusCode).toBe(409);
+    const stale = { ...input, id: 'stale', archived: false };
+    expect((await saveState(fixture, stale)).statusCode).toBe(409);
+    await fixture.runner.run(conversations);
+    const secondDevice = buildServer(fixture.config, { chat: fixture.options });
+    try {
+      const recent = await secondDevice.inject({ url: '/api/conversations',
+        headers: fixture.headers() });
+      expect(chatListSchema.parse(recent.json()).rows).toHaveLength(0);
+      const archived = await secondDevice.inject({ url: '/api/conversations?section=archived',
+        headers: fixture.headers() });
+      expect(archived.json<{ rows: unknown[] }>().rows[0]).toMatchObject({
+        archived: true, joinEventId: 'create', archivePosition: retry.json<{ sequence: number }>().sequence,
+      });
+      const bob = await secondDevice.inject({ ...statusRequest, headers: fixture.headers('bob') });
+      expect(bob.statusCode).toBe(404);
+    } finally {
+      await secondDevice.close();
+    }
+    const foreign = await saveState(fixture, input, 'carol');
+    expect(foreign.statusCode).toBe(403);
+    const badOrigin = { ...fixture.headers(), origin: 'https://other.example.test' };
+    const refused = await fixture.app.inject({ method: 'POST',
+      url: '/api/conversations/direct/state', headers: badOrigin, payload: input });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.headers['cache-control']).toBe('no-store');
+    const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
+    expect(rows).toHaveLength(1);
+    expect(await fixture.nats.store.head()).toBe(rows[0]!.sequence + 1);
+  } finally {
+    await fixture.close();
+  }
+}
+it('saves archive once after a lost reply and verifies private status before projection',
+  archiveAfterLostReply, 120_000);
+
+async function readMaximumAcrossDevices() {
+  const fixture = await directFixture();
+  try {
+    await fixture.create();
+    const send = { method: 'POST' as const, url: '/api/conversations/direct/messages',
+      headers: fixture.headers('bob'), payload: { id: 'message', text: 'Visible message' } };
+    const posted = await fixture.app.inject(send);
+    await fixture.runner.run(conversations);
+    const throughPosition = posted.json<{ sequence: number }>().sequence;
+    const input = { id: 'read', action: 'read', joinEventId: 'create',
+      throughPosition, throughEventId: 'message' };
+    const wrongId = { ...input, throughEventId: 'wrong' };
+    const wrongPosition = { ...input, throughPosition: 1 };
+    expect((await saveState(fixture, wrongId)).statusCode).toBe(409);
+    expect((await saveState(fixture, wrongPosition)).statusCode).toBe(409);
+    const newer = await saveState(fixture, input);
+    expect(newer.statusCode).toBe(200);
+    expect((await saveState(fixture, input)).body).toBe(newer.body);
+    const changedRead = { ...input, throughEventId: 'create' };
+    expect((await saveState(fixture, changedRead)).statusCode).toBe(409);
+    const creationRows = await history(fixture.nats.store, 'conversation-direct', 'test');
+    const older = { ...input, id: 'older-device', throughPosition: creationRows[0]!.sequence,
+      throughEventId: 'create' };
+    expect((await saveState(fixture, older)).statusCode).toBe(200);
+    await fixture.runner.run(conversations);
+    await fixture.runner.rebuild(conversations);
+    const list = await fixture.app.inject({ url: '/api/conversations', headers: fixture.headers() });
+    expect(list.json<{ rows: unknown[] }>().rows[0]).toMatchObject({
+      throughPosition, throughEventId: 'message', archived: false,
+    });
+    const preferences = await history(fixture.nats.store, 'chat-state-alice', 'test');
+    expect(preferences).toHaveLength(2);
+    expect(await fixture.nats.store.head()).toBe(preferences.at(-1)!.sequence);
+    expect(await fixture.nats.store.head('computer-*')).toBe(0);
+    expect(await fixture.nats.store.head('budget-*')).toBe(0);
+  } finally {
+    await fixture.close();
+  }
+}
+it('verifies read references and keeps the maximum across devices and rebuild',
+  readMaximumAcrossDevices, 120_000);
+
+async function choicesAfterReaddition() {
+  const fixture = await directFixture();
+  try {
+    await fixture.create('group');
+    const archived = { id: 'archive-bob', action: 'archive', archived: true,
+      joinEventId: 'create', expectedArchivePosition: 0 };
+    expect((await saveState(fixture, archived, 'bob')).statusCode).toBe(200);
+    const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
+    const read = { id: 'read-bob', action: 'read', joinEventId: 'create',
+      throughPosition: rows[0]!.sequence, throughEventId: 'create' };
+    expect((await saveState(fixture, read, 'bob')).statusCode).toBe(200);
+    await fixture.append('participation-direct', 'participant.removed', {
+      conversationId: 'direct', participantId: 'bob', removedBy: 'alice',
+    }, false);
+    expect((await saveState(fixture, archived, 'bob')).statusCode).toBe(403);
+    const status = { url: '/api/conversations/direct/changes/archive-bob',
+      headers: fixture.headers('bob') };
+    expect((await fixture.app.inject(status)).statusCode).toBe(403);
+    const joined = await fixture.append('participation-direct', 'participant.added', {
+      conversationId: 'direct', participantId: 'bob', addedBy: 'alice',
+    });
+    await fixture.runner.run(conversations);
+    expect((await saveState(fixture, archived, 'bob')).statusCode).toBe(409);
+    expect((await saveState(fixture, read, 'bob')).statusCode).toBe(409);
+    expect((await fixture.app.inject(status)).statusCode).toBe(404);
+    const list = await fixture.app.inject({ url: '/api/conversations', headers: fixture.headers('bob') });
+    expect(list.json<{ rows: unknown[] }>().rows[0]).toMatchObject({
+      archived: false, archivePosition: 0, throughPosition: 0, joinEventId: joined.id,
+    });
+    const preJoin = { ...read, id: 'pre-join', joinEventId: joined.id };
+    expect((await saveState(fixture, preJoin, 'bob')).statusCode).toBe(409);
+    const fresh = { ...archived, id: 'fresh', joinEventId: joined.id };
+    expect((await saveState(fixture, fresh, 'bob')).statusCode).toBe(200);
+  } finally {
+    await fixture.close();
+  }
+}
+it('refuses removed readers and resets archive and read choices after re-addition',
+  choicesAfterReaddition, 120_000);
+
+async function concurrentPreferenceRequests() {
+  const fixture = await directFixture();
+  try {
+    await fixture.create();
+    const input = { id: 'same-id', action: 'archive', archived: true,
+      joinEventId: 'create', expectedArchivePosition: 0 };
+    const retries = [saveState(fixture, input), saveState(fixture, input)];
+    const replies = await Promise.all(retries);
+    expect(replies[0]!.statusCode).toBe(200);
+    expect(replies[1]!.body).toBe(replies[0]!.body);
+    const archivePosition = replies[0]!.json<{ sequence: number }>().sequence;
+    const changed = { ...input, id: 'raced-id', expectedArchivePosition: archivePosition };
+    const opposite = { ...changed, archived: false };
+    const races = [saveState(fixture, changed), saveState(fixture, opposite)];
+    const outcomes = await Promise.all(races);
+    function statusCode(response: (typeof outcomes)[number]) {
+      return response.statusCode;
+    }
+    const codes = outcomes.map(statusCode);
+    expect(codes.sort()).toEqual([200, 409]);
+    const preferences = await history(fixture.nats.store, 'chat-state-alice', 'test');
+    const latestPosition = preferences.at(-1)!.sequence;
+    const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
+    const read = { id: 'intervening-read', action: 'read', joinEventId: 'create',
+      throughPosition: rows[0]!.sequence, throughEventId: 'create' };
+    const append = fixture.nats.store.append.bind(fixture.nats.store);
+    async function anotherDeviceReads(command: Parameters<typeof append>[0]) {
+      expect((await saveState(fixture, read)).statusCode).toBe(200);
+      return append(command);
+    }
+    const concurrent = vi.spyOn(fixture.nats.store, 'append');
+    concurrent.mockImplementationOnce(anotherDeviceReads);
+    const next = { ...input, id: 'after-read', expectedArchivePosition: latestPosition };
+    expect((await saveState(fixture, next)).statusCode).toBe(200);
+    concurrent.mockRestore();
+    expect((await saveState(fixture, input, 'bob')).statusCode).toBe(200);
+    const future = { ...read, id: 'future', throughPosition: 999999 };
+    expect((await saveState(fixture, future)).statusCode).toBe(409);
+  } finally {
+    await fixture.close();
+  }
+}
+it('checks concurrent payloads and retries unrelated preference changes within a bound',
+  concurrentPreferenceRequests, 120_000);
+
+async function archiveClosedPersonalSession() {
+  const fixture = await directFixture();
+  try {
+    const created = await fixture.append('conversation-direct', 'conversation.created', {
+      conversationId: 'direct', mode: 'agent_session', createdBy: 'alice', assistantId: 'assistant',
+    });
+    await fixture.append('conversation-direct', 'conversation.closed', {
+      conversationId: 'direct', closedBy: 'alice',
+    }, false);
+    await fixture.runner.run(conversations);
+    const before = await fixture.nats.store.head();
+    const input = { id: 'personal-archive', action: 'archive', archived: true,
+      joinEventId: created.id, expectedArchivePosition: 0 };
+    expect((await saveState(fixture, input)).statusCode).toBe(200);
+    await fixture.runner.run(conversations);
+    const list = await fixture.app.inject({ url: '/api/conversations?section=archived',
+      headers: fixture.headers() });
+    expect(chatListSchema.parse(list.json()).rows[0]).toMatchObject({ archived: true,
+      mode: 'agent_session', status: 'closed' });
+    expect(await fixture.nats.store.head()).toBe(before + 1);
+    expect(await fixture.nats.store.head('computer-*')).toBe(0);
+    expect(await fixture.nats.store.head('budget-*')).toBe(0);
+  } finally {
+    await fixture.close();
+  }
+}
+it('archives closed personal sessions without spending access or computer activity',
+  archiveClosedPersonalSession, 120_000);
+
 it('lets both participants exchange and reload direct messages while keeping owners outside', async () => {
   const fixture = await directFixture();
   const { app, headers, runner } = fixture;
@@ -1492,6 +1719,7 @@ async function hidesPersonalSessionHistoryBeforeJoin() {
       conversationId, mode: 'agent_session', createdBy: 'alice', assistantId: 'assistant',
       assistantKind: 'personal',
       createdAt: joinedAt.toISOString(), title: 'New session', status: 'open',
+      joinEventId: joined.id, archived: false, archivePosition: 0, throughPosition: 0,
     }], nextCursor: null });
     expect(response.body).not.toContain(createdAt.toISOString());
     expect(response.body).not.toContain(messageAt.toISOString());
