@@ -105,6 +105,10 @@ Archive and read choices name one person and their join. They contain no chat te
 
 ## Processes it handles
 
+A memory tombstone records a fact id and its next revision without any private text.
+The projection uses it to hide the fact and dependent copies before reading their keys.
+The HTTP forget command and key cleanup are not built yet.
+
 1. **The event store checks an event before saving it.** It passes the event to
    `parseEventByType`. A badly formed event or an unknown type is refused and
    never saved.

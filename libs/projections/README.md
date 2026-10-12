@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, destination, inventory and survey tables| projections["libs/projections<br/>read tables, indexed member history and survey progress"]
+  ops["apps/ops<br/>workers"] -->|fills memory, provider, spending, child, destination, inventory and survey tables| projections["libs/projections<br/>read tables, memory and indexed member history"]
   server["apps/server<br/>back end"] -->|reads tables, chat candidates and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|events and private instance records in order| projections
@@ -69,6 +69,7 @@ lets removal checks detect new history without reading unrelated events.
 - Rebuild child participants and their recorded parent references from saved events.
 - Keep an index for reading initial memory in a stable order.
 - Keep each saved fact’s earlier links to the facts it came from.
+- Hide forgotten facts and every dependent copy before reading their encrypted text.
 - Keeps delegated task relationships and outcomes in read tables. Rebuilding these
   tables starts no tasks and changes no permissions or spending.
 - Copies recorded tool dispatch evidence into conversation feeds without calling a tool.
@@ -115,6 +116,11 @@ Closing a chat keeps that message position. Later reports and repeated closes ca
 these details. The reports remain in the feed so their saved evidence is available.
 
 ## Processes it handles
+
+A saved memory tombstone marks a fact as hidden permanently. The worker follows its saved
+links and removes search text for every dependent copy in the same database step.
+Rebuilding reads these links first, so hidden text is never decrypted, even while its
+keys still exist. The forget command and physical key cleanup are not built yet.
 
 A saved survey event arrives. The worker checks the hash of its encrypted bytes, then keeps the answers, hash
 and saved date.

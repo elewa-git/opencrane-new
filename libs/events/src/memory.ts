@@ -123,3 +123,27 @@ export const memoryMaintenanceBoundDataSchema = z.strictObject({
   assistantId: identifier, payingGroupId: identifier, enabled: z.boolean(),
   acceptedCapCents: acceptedNightlyCap, revision,
 });
+
+export const memoryForgottenDataSchema = z.strictObject({
+  schemaVersion: z.literal(1), ...identityFields, expectedRevision: revision,
+});
+const legacyForgotten = z.strictObject({ scopeId: z.string().min(1), memoryId: z.string().min(1) });
+const replayForgotten = z.union([memoryForgottenDataSchema, legacyForgotten]);
+const forgottenEnvelope = eventEnvelopeSchema(replayForgotten);
+function validForgotten(event: z.infer<typeof forgottenEnvelope>): boolean {
+  const data = event.data;
+  if (!('schemaVersion' in data)) {
+    return true;
+  }
+  const identifiers = [event.id, event.commandId, event.principal?.id];
+  for (const value of identifiers) {
+    if (!identifier.safeParse(value).success) {
+      return false;
+    }
+  }
+  const size = encoder.encode(JSON.stringify(event)).byteLength;
+  return event.subject === `scope-${data.scopeId}` &&
+    data.revision === data.expectedRevision + 1 && size <= 16384;
+}
+export const memoryForgottenEventSchema = forgottenEnvelope
+  .extend({ type: z.literal('memory.forgotten') }).refine(validForgotten, 'Invalid memory tombstone');

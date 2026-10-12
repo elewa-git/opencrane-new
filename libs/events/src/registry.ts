@@ -411,7 +411,8 @@ export const eventRegistry: readonly EventDefinition[] = [
     'scope',
     "A memory was hidden by a tombstone before its revision keys are deleted.",
     data.memoryForgottenDataSchema,
-    { scopeId: 'scope_1', memoryId: 'memory_1' },
+    { schemaVersion: 1, scopeId: memoryWrittenExample.scopeId, scopeKind: 'person',
+      ownerId: 'alice', memoryId: 'memory_1', expectedRevision: 1, revision: 2 },
   ),
   event(
     'memory.consolidated',

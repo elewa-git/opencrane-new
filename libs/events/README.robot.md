@@ -122,7 +122,12 @@ by the caller; the turn token does not sign it.
 `memory.written` now uses a strict version-1 registry schema. `parseEventByType`
 also reads the exact old unversioned shape. `memoryWrittenIdentity` returns null for
 that shape: its ownership is unknown, so callers must quarantine it. No default
-audience or offline mapping is supplied. The other old memory schemas remain.
+audience or offline mapping is supplied. The old correction schema remains. Version-1 `memory.forgotten` records checked scope
+identity, memory id, expectedRevision and revision = expectedRevision + 1. It contains
+no text, ciphertext or key. The registry exposes this strict version-1 data shape;
+`memoryForgottenEventSchema` and `parseEventByType` also preserve exact legacy tombstones.
+The projection stops on those legacy records rather than guessing their ownership.
+No forget emitter, cleanup event or cleanup reaction is enabled in this split.
 
 Saved memory events must use `parseEventByType`, or `memoryWrittenIdentity` when
 only their ownership fields are needed. `getEventDefinition('memory.written')`

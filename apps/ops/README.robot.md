@@ -454,3 +454,9 @@ with PostgreSQL/NATS and `nice -n 10`.
 Logs: `/tmp/p4-18-pr3-exact-tests-{1,2}.log`, `/tmp/p4-18-pr3-lint-final.log`,
 `/tmp/p4-18-pr3-typecheck-final.log` on the builder host.
 The root test suite was not run. CI and live qualification remain separate gates.
+
+Memory catch-up and offline replay now read tombstones and historical dependency links
+through a fixed event position before preparing any text. Hidden facts are not decrypted.
+This includes replay with keys still present, so pending physical cleanup cannot reveal
+old text during rebuild. The dispatcher still has no memory cleanup reaction; HTTP forget
+remains disabled until erasure, completion evidence and restart recovery land together.

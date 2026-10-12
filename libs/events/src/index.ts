@@ -85,3 +85,4 @@ export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyRestartedDataSche
   from './survey.ts';
 export { routineDefinitionSchema } from './routines.ts';
 export { foldRoutine, type RoutineState } from './routine-fold.ts';
+export { memoryForgottenDataSchema, memoryForgottenEventSchema } from './memory.ts';

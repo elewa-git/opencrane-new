@@ -1,7 +1,7 @@
 import { validSurveyEvent } from './survey.ts';
 import { validEgressRuleEvent } from './egress.ts';
 import { validPreferenceIdentity } from './conversation.ts';
-import { memoryWrittenEventSchema } from './memory.ts';
+import { memoryWrittenEventSchema, memoryForgottenEventSchema } from './memory.ts';
 import { checkDelegationEvent } from './delegation.ts';
 import { checkRoutineEvent } from './routines.ts';
 import { validMcpInstanceEvent } from './mcp-instance.ts';
@@ -64,7 +64,13 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   const checkedSchema = definition.stream === 'chat-state'
     ? mcpSchema.refine(validPreferenceIdentity)
     : mcpSchema;
-  const schema = definition.type === 'memory.written' ? memoryWrittenEventSchema : checkedSchema;
+  let schema: z.ZodType<EventEnvelope> = checkedSchema;
+  if (definition.type === 'memory.written') {
+    schema = memoryWrittenEventSchema;
+  }
+  if (definition.type === 'memory.forgotten') {
+    schema = memoryForgottenEventSchema;
+  }
   const result = schema.safeParse(input);
   if (!result.success) {
     return { success: false, reason: 'invalid_event', error: result.error };
