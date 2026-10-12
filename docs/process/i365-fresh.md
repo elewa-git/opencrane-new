@@ -60,3 +60,28 @@ The nightly script explicitly unsets `P4_JOURNEY_ATTEMPT`; these runs use the sa
 journey. The separate optional organisation/group-chat extension and screenshot
 journey are NOT RUN by this repair. Production approval and access checks, money
 rules, existing assertions and their time limits are unchanged.
+
+## Run receipts
+
+Both runs started from a fresh stack in secondary slot 1. They used the local
+model stub and the existing private Zitadel PAT file. No paid model call was
+made. The stack was stopped after the second run, and slot 1 is free.
+
+| Run | Result | Receipt |
+| --- | --- | --- |
+| 1 | PASS: 37 journey checks. Sign-in, chat, uploads, live view, approvals at both widths, action history, four spending refusals and both projection replays passed. | [Run 1 receipt](i365-fresh-run-1.txt) |
+| 2 | PASS: 37 journey checks with the same coverage. | [Run 2 receipt](i365-fresh-run-2.txt) |
+
+Each run restored approval cards after reload at 390px and 1280px, recorded
+exactly one upstream call for the allowed tool, and refused the retry and denial
+without another effect. Each passed the `members` and `mcp-catalogue` replay
+checks. All four over-ceiling spending calls were refused and stayed refused after
+reload. The live view was revoked and its pixels cleared at both widths.
+
+The root suite ran twice. The first run overlapped another worktree's root suite
+and had service timeouts. The isolated retry finished with 250 files and 4,176
+tests passing, 5 files and 18 tests skipped, and 3 timed-out tests in three
+files. The upload timeout came from this branch's required stub generation
+missing in its test fixture; that fixture now supplies one. The three affected
+files then passed alone: 47 tests passed across upload, gateway approval and
+hold recovery. The two other full-suite timeouts did not reproduce in that run.
