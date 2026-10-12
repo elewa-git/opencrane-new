@@ -154,6 +154,32 @@ No process registers a live workload worker yet. Pod creation and confirmation a
 Kubernetes remain design row 3. Reports cannot wake, release material or claim callable
 readiness. Admin commands and their refusal tests remain the next split of row 2.
 
+### Worker credential correction checks, 12 October 2026
+
+Runtime changes: `ff0c8e45` and `9d4575a9`. Rebased onto
+`2f56a09fb11c8128e366d17c9ab0f13393411ad2`; the rebase completed and that base
+is an ancestor of this branch. Test commit `417d2241` preceded implementation.
+Its five new cases failed: expiry and replacement each allowed another publish,
+and the lease map retained the bearer and expired entry. The NATS failure injection
+now lives in the event-store test helpers, without adding dependencies.
+
+PASS: two final focused runs, 15 files and 566 tests each, in 226.06 s and 192.81 s.
+Both ran under `nice -n 10`, with one worker and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+The batch covers all event-store tests, worker and member instance routes, model
+instance commands, instance event contracts, event security rules and both unchanged
+authority test files. Tests use disposable NATS/OpenFGA and private test databases.
+The new retry cases assert no further publish, no later event and unchanged instance
+state. The storage case checks retained lease entries and automatic expiry cleanup.
+
+PASS: full lint, workspace typecheck, event catalogue (129 types), standalone Knip,
+dependency rules and changelog checks. Lint reports 16 existing warnings and no errors.
+Logs: `/tmp/p3-10-pr2c-fix-final-{2,3}.log`,
+`/tmp/p3-10-pr2c-fix-{typecheck,events,knip,changelog}-final.log` and
+`/tmp/p3-10-pr2c-fix-deps.log` and `/tmp/p3-10-pr2c-fix-lint-complete.log`.
+NOT RUN: full root suite, live Kubernetes and fresh-install qualification.
+Admin commands and live workload registration remain unfinished.
+
 ### Worker observation source checks, 12 October 2026
 
 Source `144ddd5c`; base `326eaeae`. Linux worktree, disposable NATS/OpenFGA and
