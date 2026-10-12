@@ -1,3 +1,4 @@
+import { chatDisplayData, hasDisplayText } from './display.ts';
 import { participantCommand, participantList } from './participants.ts';
 import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { creationEvent, privateSessionReader, sharedAssistantAuthority,
@@ -47,11 +48,11 @@ export async function chatRows(options: ChatOptions, conversationId: string,
   const result = await readConversation(options.db, options.silo, conversationId, visibleSince);
   const computer = await conversationComputerState(options, conversationId, mode);
   function decryptRow(row: (typeof result.rows)[number]) {
-    const data = z.record(z.string(), z.unknown()).parse(row.data);
-    if (!('ciphertext' in data)) return row;
-    const { ciphertext: _ciphertext, keyId: _keyId, ...rest } = data;
-    const text = options.keys.decrypt(options.silo, conversationId, data);
-    return { ...row, data: { ...rest, text } };
+    const data = chatDisplayData(row.type, row.data);
+    const saved = z.record(z.string(), z.unknown()).parse(row.data);
+    if (!hasDisplayText(row.type) || !('ciphertext' in saved)) return { ...row, data };
+    const text = options.keys.decrypt(options.silo, conversationId, saved);
+    return { ...row, data: { ...data, text } };
   }
   const rows = result.rows.map(decryptRow);
   return { ...result, ...computer, rows };
@@ -136,7 +137,7 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
           const preference = await stateChange(configured, memberId, conversationId,
             commandId, idSchema.parse(access.joinEventId));
           result = preference ?? await chatChange(configured, conversationId,
-            commandId, access.joinPosition);
+            commandId, access.historyPosition);
         } else {
           result = await read(request, configured, memberId, conversationId,
             access, config.cookieSecret);
@@ -187,7 +188,7 @@ async function read(
     const query = z.object({ since: z.coerce.number().int().nonnegative().default(0) });
     const { since } = query.parse(request.query);
     const mode = recordedChatMode(access);
-    return chatRows(options, conversationId, mode, since, access.joinPosition);
+    return chatRows(options, conversationId, mode, since, access.historyPosition);
   }
   return conversationList(options, memberId, request.query, secret);
 }
@@ -205,7 +206,7 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
     try {
       const access = await readParticipation(row.conversationId);
       if (access.joinEventId !== candidate.joinEventId) throw new ConversationListChanged();
-      if (row.mode === 'agent_session') {
+      if (row.mode === 'agent_session' && !('contextKind' in access.created)) {
         await readPrivate(row.conversationId, access.creation.event);
       }
       if (access.accessPosition !== candidate.participationPosition) {
@@ -235,7 +236,9 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
         }
         return { ...row, participantIds: access.participantIds, ...details };
       }
-      return { ...row, createdAt, ...details };
+      const { conversationId, mode, assistantId, payingGroupId, createdBy, assistantKind } = row;
+      return { conversationId, mode, assistantId, payingGroupId, createdBy, assistantKind,
+        createdAt, ...details };
     } catch (error) {
       if (isChatRefused(error) || error instanceof ChatAccessApplying) return undefined;
       throw error;

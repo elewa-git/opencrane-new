@@ -1,8 +1,11 @@
+import { createHash } from 'node:crypto';
+import { getEventDefinition, toolApprovalRequestedDataSchema } from '@opencrane/events';
 // Regression probes for turn activity during reads and long agent sessions.
 import { setTimeout as delay } from 'node:timers/promises';
 import { once } from 'node:events';
 import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
 import { expect, it, vi } from 'vitest';
@@ -12,7 +15,7 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { wireSubject, type AppendCommand, type AppendResult } from '@opencrane/event-store';
 import {
-  members, computers, conversations, files, pgDb, ProjectionRunner, connectMemberFeed,
+  auditTrail, members, computers, conversations, files, pgDb, ProjectionRunner, connectMemberFeed,
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { envelope } from '@opencrane/models';
@@ -111,7 +114,7 @@ async function fixture(countChecks = false) {
   await append('assistant-assistant', 'assistant.created', {
     assistantId: 'assistant', ownerId: 'alice', kind: 'personal',
   });
-  for (const projection of [members, conversations, computers, files]) {
+  for (const projection of [members, conversations, computers, files, auditTrail]) {
     await runner.initialise(projection);
     await runner.run(projection);
   }
@@ -144,7 +147,7 @@ async function fixture(countChecks = false) {
     await rm(directory, { recursive: true, force: true });
   }
   return { app, nats, db, keys, runner, headers, append, agentSession, close,
-    config, options, feed, fgaProxy, auth };
+    config, options, objects, feed, fgaProxy, auth };
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -1375,14 +1378,23 @@ async function removedParticipantReaders() {
 
 
 it('keeps reads and access checks bounded with 100,000 messages and a busy conversation',
-  participationVolume, 600_000);
+  privateVolume, 600_000);
 
-async function participationVolume() {
+async function participationVolume(sharedChild = false) {
   const context = await fixture();
   let stopped = false;
   let streaming: Promise<void> | undefined;
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
-    await context.agentSession('volume');
+    let creation: Awaited<ReturnType<typeof childSession>> | undefined;
+    let screenshotPath: string | undefined;
+    if (sharedChild) {
+      creation = await childSession(context, 'volume');
+      screenshotPath = await seedReadableScreenshot(context, 'volume');
+      client = await openChatSocket(context, 'volume', true, 'bob');
+    } else {
+      await context.agentSession('volume');
+    }
     await context.append('computer-assistant', 'computer.claimed', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, tokenId: 'token:test',
     }, false);
@@ -1418,6 +1430,8 @@ async function participationVolume() {
       " WHERE name = 'conversations'";
     await context.db.query(checkpointSql,
       [previousHead + 100_000]);
+    await context.db.query(`UPDATE projection_checkpoints SET sequence = $1
+      WHERE name = 'audit'`, [previousHead + 100_000]);
     async function stream() {
       while (!stopped) {
         await context.append('conversation-volume', 'agent.turn_started', {
@@ -1427,24 +1441,53 @@ async function participationVolume() {
       }
     }
     streaming = stream();
+    let readerId = 'alice';
+    if (sharedChild) readerId = 'bob';
     for (let attempt = 0; attempt < 3; attempt++) {
       const started = performance.now();
       const response = await context.app.inject({
-        url: '/api/conversations/volume/messages', headers: context.headers(),
+        url: '/api/conversations/volume/messages', headers: context.headers(readerId),
       });
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).toContain('Hello');
       expect(performance.now() - started).toBeLessThan(1500);
-      await expect(viewAccess(context.options, 'alice', 'volume')).resolves.toMatchObject({
-        computerId: 'desktop',
-      });
-      const fileRead = { url: '/api/conversations/volume/files', headers: context.headers() };
+      if (!sharedChild) {
+        await expect(viewAccess(context.options, 'alice', 'volume')).resolves.toMatchObject({
+          computerId: 'desktop',
+        });
+      }
+      const fileRead = { url: '/api/conversations/volume/files',
+        headers: context.headers(readerId) };
       const fileResponse = await context.app.inject(fileRead);
       expect(fileResponse.statusCode, fileResponse.body).toBe(200);
+      if (sharedChild) {
+        const files = fileResponse.json<{ rows: { path: string }[] }>().rows;
+        expect(files).toContainEqual(expect.objectContaining({
+          path: 'uploads/volume/bob-readable/shared.png',
+        }));
+        const fileDownload = await context.app.inject({
+          url: `/api/conversations/volume/${screenshotPath}`,
+          headers: context.headers('bob'),
+        });
+        expect(fileDownload.statusCode, fileDownload.body).toBe(200);
+        const childCreation = creation;
+        if (!childCreation) throw new Error('Child creation is missing');
+        const approvals = await context.app.inject({
+          url: '/api/conversations/volume/approvals', headers: context.headers('bob'),
+        });
+        expect(approvals.statusCode, approvals.body).toBe(200);
+        const status = await context.app.inject({
+          url: `/api/conversations/volume/changes/${childCreation.id}`,
+          headers: context.headers('bob'),
+        });
+        expect(status.statusCode, status.body).toBe(200);
+        expect(client?.socket.readyState).toBe(WebSocket.OPEN);
+      }
     }
   } finally {
     stopped = true;
     await streaming;
+    await client?.close();
     await context.close();
   }
 }
@@ -1984,3 +2027,419 @@ async function requiresLegacyClosesBeforeStartup() {
 }
 it('requires older closing events to be projected before the server starts',
   requiresLegacyClosesBeforeStartup, 120_000);
+
+
+async function childSession(context: Fixture, conversationId = 'child',
+  seedRecordsBeforeCreation = false) {
+  const parentData = { conversationId: 'parent', createdBy: 'alice', mode: 'group',
+    participantIds: ['alice', 'bob'] };
+  const parent = await context.append('conversation-parent', 'conversation.created', parentData);
+  const parentJoinPosition = await context.nats.store.head('conversation-parent');
+  const teamData = { teamId: 'child-team', name: 'Child assistant', createdBy: 'alice' };
+  await context.append('team-child-team', 'team.created', teamData);
+  const assistantData = { assistantId: 'child-assistant', kind: 'team', ownerId: 'child-team',
+    payingGroupId: 'child-team' };
+  await context.append('assistant-child-assistant', 'assistant.created', assistantData);
+  context.keys.provision('test', conversationId);
+  if (seedRecordsBeforeCreation) {
+    await seedChildRecordsBeforeCreation(context, conversationId);
+  }
+  const initialJoins = [];
+  for (const participantId of ['alice', 'bob']) {
+    const join = { participantId, parentJoinEventId: parent.id, parentJoinPosition };
+    initialJoins.push(join);
+  }
+  const childData = {
+    conversationId, createdBy: 'alice', mode: 'agent_session', contextKind: 'shared_child',
+    assistantId: 'child-assistant', payingGroupId: 'child-team', initialJoins,
+    origin: { parentConversationId: 'parent', sourceMessageId: 'hidden-source',
+      sourcePosition: parentJoinPosition + 1, intentEventId: 'hidden-intent',
+      intentPosition: parentJoinPosition + 2, requestId: 'hidden-request',
+      firstInputId: 'hidden-input' },
+  };
+  const creation = await context.append(`conversation-${conversationId}`,
+    'conversation.created', childData);
+  const encrypted = context.keys.encrypt('test', conversationId, 'Hello shared history');
+  const messageData = { conversationId, authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...encrypted };
+  await context.append(`conversation-${conversationId}`, 'message.posted', messageData, false);
+  await context.runner.run(conversations);
+  return creation;
+}
+
+async function seedChildRecordsBeforeCreation(context: Fixture, conversationId: string) {
+  await seedChildApproval(context, conversationId, 'b'.repeat(64));
+  await context.runner.run(auditTrail);
+}
+
+async function seedEarlierChildProjectionRows(context: Fixture, position: number) {
+  // Keep earlier child rows at a real event position while the child stream starts with creation.
+  const messageText = context.keys.encrypt('test', 'child', 'Earlier shared child message');
+  const messageData = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...messageText };
+  await context.db.query(
+    `INSERT INTO conversation_feed
+      (silo, conversation_id, position, event_id, type, data, time)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    ['test', 'child', position, 'before-creation-message', 'message.posted',
+      JSON.stringify(messageData), '2026-10-12T00:00:00.000Z']);
+  const file = { conversationId: 'child', fileId: 'before-creation', uploadedBy: 'alice',
+    name: 'shared.png', size: 4, sha256: 'a'.repeat(64), mime: 'image/png',
+    objectKey: 'test/child/before-creation', screenshot: { computerId: 'desktop',
+      generation: 1, width: 2, height: 2, capturedAt: '2026-10-12T00:00:00.000Z' } };
+  await context.db.query(
+    `INSERT INTO conversation_files
+      (silo, conversation_id, file_id, position, data, status)
+      VALUES ($1,$2,$3,$4,$5,$6)`,
+    ['test', 'child', file.fileId, position, JSON.stringify(file), 'uploaded']);
+}
+
+async function seedChildApproval(context: Fixture, conversationId: string, approvalId: string) {
+  const example = getEventDefinition('tool.approval_requested')?.example;
+  const saved = toolApprovalRequestedDataSchema.parse(example);
+  const reviewText = JSON.stringify({ action: 'Send report', tool: 'write',
+    target: 'private-target', data: 'private-arguments', destination: 'private-destination',
+    account: 'private-profile', consequence: 'Save the report' });
+  const encrypted = context.keys.encrypt('test', conversationId, reviewText);
+  const reviewDigest = createHash('sha256').update(reviewText).digest('hex');
+  const request = { ...saved, conversationId, assistantId: 'child-assistant', approvalId,
+    requesterId: 'bob', ...encrypted, reviewDigest };
+  await context.append(`approval-${approvalId}`, 'tool.approval_requested', request, false);
+}
+
+const childReadPaths = ['messages', 'approvals', 'files'];
+async function childRead(context: Fixture, path: string, memberId = 'bob') {
+  const request = { url: `/api/conversations/child/${path}`, headers: context.headers(memberId) };
+  return context.app.inject(request);
+}
+async function removeParentPerson(context: Fixture, memberId: string) {
+  const removal = { conversationId: 'parent', participantId: memberId, removedBy: 'alice' };
+  return context.append('participation-parent', 'participant.removed', removal, false);
+}
+
+async function seedReadableScreenshot(context: Fixture, conversationId = 'child') {
+  const screenshot = { computerId: 'desktop', generation: 1, width: 2, height: 2,
+    capturedAt: '2026-10-12T00:00:00.000Z' };
+  const file = { conversationId, fileId: 'bob-readable', uploadedBy: 'alice',
+    name: 'shared.png', size: 4, sha256: 'a'.repeat(64), mime: 'image/png',
+    objectKey: `test/${conversationId}/bob-readable`, screenshot };
+  await context.append(`conversation-${conversationId}`, 'file.uploaded', file, false);
+  await context.runner.run(files);
+  function downloadScreenshot() {
+    return Promise.resolve(Readable.from([Buffer.from('PNG!')]));
+  }
+  vi.spyOn(context.objects, 'getObject').mockImplementation(downloadScreenshot);
+  return `files/view?path=${encodeURIComponent(
+    `uploads/${conversationId}/bob-readable/shared.png`)}`;
+}
+
+async function deniesInheritedChild(removal: string) {
+  const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  let pause: ReturnType<typeof pauseFirstHistoryRead> | undefined;
+  try {
+    const creation = await childSession(context);
+    const downloadPath = await seedReadableScreenshot(context);
+    const bobFiles = await childRead(context, 'files');
+    expect(bobFiles.statusCode, bobFiles.body).toBe(200);
+    expect(bobFiles.json<{ rows: { path: string }[] }>().rows).toContainEqual(
+      expect.objectContaining({ path: 'uploads/child/bob-readable/shared.png' }));
+    const bobDownload = await childRead(context, downloadPath);
+    expect(bobDownload.statusCode, bobDownload.body).toBe(200);
+    expect(bobDownload.body).toBe('PNG!');
+    const statusPath = `changes/${creation.id}`;
+    const status = await childRead(context, statusPath);
+    expect(status.statusCode, status.body).toBe(200);
+    expect(status.json()).toMatchObject({ status: 'appended', type: 'conversation.created' });
+    const files = await childRead(context, 'files', 'alice');
+    expect(files.statusCode, files.body).toBe(200);
+    const firstRead = await childRead(context, 'messages');
+    expect(firstRead.statusCode, firstRead.body).toBe(200);
+    expect(firstRead.body).toContain('Hello shared history');
+    client = await openChatSocket(context, 'child', true, 'bob');
+    pause = pauseFirstHistoryRead(context);
+    const encrypted = context.keys.encrypt('test', 'child', 'Never deliver child content');
+    const messageData = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...encrypted };
+    await context.append('conversation-child', 'message.posted', messageData, false);
+    await context.runner.run(conversations);
+    await pause.reached;
+    const started = performance.now();
+    if (removal === 'creator membership') {
+      const removal = { memberId: 'alice', removedBy: 'bob' };
+      await context.append('member-alice', 'member.removed', removal, false);
+    } else {
+      await removeParentPerson(context, removal);
+    }
+    const blockedAt = started;
+    function closed() {
+      return client?.socket.readyState === WebSocket.CLOSED;
+    }
+    await until(closed, 1900);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(client.closeCode()).toBe(1008);
+    expect(JSON.stringify(client.received)).not.toContain('Never deliver child content');
+    // Leave OpenFGA unchanged so its old answer cannot restore inherited access.
+    expect((await context.auth.conversation('bob', 'child', 'read')).allowed).toBe(true);
+    const readPaths = [...childReadPaths, statusPath, downloadPath];
+    for (const path of readPaths) {
+      const readStarted = performance.now();
+      const response = await childRead(context, path);
+      expect(response.statusCode, response.body).toBe(403);
+      expect(performance.now() - readStarted).toBeLessThan(2000);
+      expect(performance.now() - blockedAt).toBeLessThan(2000);
+    }
+    if (removal !== 'bob') {
+      const creatorFileRead = await childRead(context, 'files', 'alice');
+      expect(creatorFileRead.statusCode).toBe(403);
+    }
+    await context.runner.run(conversations);
+    const listRequest = { url: '/api/conversations', headers: context.headers('bob') };
+    const list = await context.app.inject(listRequest);
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.body).not.toContain('Hello shared history');
+    expect(list.body).not.toContain('child-assistant');
+    if (removal !== 'creator membership') {
+      const addition = { conversationId: 'parent', participantId: removal, addedBy: 'alice' };
+      await context.append('participation-parent', 'participant.added', addition);
+      expect((await childRead(context, 'approvals')).statusCode).toBe(403);
+    }
+  } finally {
+    pause?.release();
+    await client?.close();
+    await context.close();
+  }
+}
+it.each(['bob', 'alice', 'creator membership'])(
+  'denies inherited child reads and blocked delivery after %s leaves, before IAM removal',
+  deniesInheritedChild, 120_000);
+
+async function explicitChildJoin() {
+  const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    const creation = await childSession(context, 'child', true);
+    const creationPosition = await context.db.query<{ position: string }>(
+      `SELECT position FROM conversation_feed
+        WHERE silo = $1 AND conversation_id = $2 AND event_id = $3`,
+      ['test', 'child', creation.id]);
+    const creationSequence = Number(creationPosition.rows[0]?.position);
+    const earlierApproval = await context.db.query<{ position: string }>(
+      `SELECT position FROM audit_entries WHERE silo = $1 AND approval_id = $2`,
+      ['test', 'b'.repeat(64)]);
+    const earlierPosition = Number(earlierApproval.rows[0]?.position);
+    expect(earlierPosition).toBeGreaterThan(0);
+    expect(earlierPosition).toBeLessThan(creationSequence);
+    await seedEarlierChildProjectionRows(context, earlierPosition);
+    const laterApprovalId = 'd'.repeat(64);
+    await seedChildApproval(context, 'child', laterApprovalId);
+    const downloadPath = await seedReadableScreenshot(context);
+    const childRemoval = { conversationId: 'child', participantId: 'bob', removedBy: 'alice',
+      contextKind: 'shared_child', reviewPosition: 1 };
+    await context.append('participation-child', 'participant.removed', childRemoval);
+    const childAddition = { conversationId: 'child', participantId: 'bob', addedBy: 'alice',
+      contextKind: 'shared_child', joinKind: 'explicit_child', reviewPosition: 1 };
+    await context.append('participation-child', 'participant.added', childAddition);
+    await context.runner.run(conversations);
+    const selectionStarts: { kind: string; position: number }[] = [];
+    const originalQuery = context.db.query.bind(context.db);
+    async function recordSelection(sql: string, values: unknown[] = []) {
+      if (sql.includes('FROM conversation_feed') && sql.includes('position > $3')) {
+        selectionStarts.push({ kind: 'messages', position: Number(values[2]) });
+      }
+      if (sql.includes('FROM conversation_files') && sql.includes('position >= $3')) {
+        selectionStarts.push({ kind: 'files', position: Number(values[2]) });
+      }
+      if (sql.includes('event_id = $3 AND position >= $4')) {
+        selectionStarts.push({ kind: 'changes', position: Number(values[3]) });
+      }
+      return originalQuery(sql, values);
+    }
+    vi.spyOn(context.db, 'query').mockImplementation(recordSelection);
+    const approvalStarts: number[] = [];
+    const originalSubscribe = context.nats.store.subscribe.bind(context.nats.store);
+    const subscribe = vi.spyOn(context.nats.store, 'subscribe');
+    subscribe.mockImplementation((...args) => {
+      approvalStarts.push(args[0] ?? 1);
+      return originalSubscribe(...args);
+    });
+    client = await openChatSocket(context, 'child', true, 'bob');
+    await removeParentPerson(context, 'bob');
+    await removeParentPerson(context, 'alice');
+    const removal = { memberId: 'alice', removedBy: 'bob' };
+    await context.append('member-alice', 'member.removed', removal, false);
+    await context.runner.run(conversations);
+    const messages = await childRead(context, 'messages');
+    expect(messages.statusCode, messages.body).toBe(200);
+    expect(messages.body).not.toContain('Earlier shared child message');
+    expect(messages.body).toContain('Hello shared history');
+    for (const hidden of ['origin', 'initialJoins', 'hidden-source', 'parentJoinEventId']) {
+      expect(messages.body).not.toContain(hidden);
+    }
+    const listRequest = { url: '/api/conversations', headers: context.headers('bob') };
+    const list = await context.app.inject(listRequest);
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.body).toContain('hello-shared-history');
+    expect(list.body).not.toContain('origin');
+    expect(list.body).not.toContain('initialJoins');
+    const approvals = await childRead(context, 'approvals');
+    expect(approvals.statusCode, approvals.body).toBe(200);
+    const approvalCards = approvals.json<{ cards: { approvalId: string }[] }>().cards;
+    expect(approvalCards.map((card) => card.approvalId)).not.toContain('b'.repeat(64));
+    expect(approvalCards.map((card) => card.approvalId)).toContain(laterApprovalId);
+    const files = await childRead(context, 'files', 'bob');
+    expect(files.statusCode, files.body).toBe(200);
+    const listedPaths = files.json<{ rows: { path: string }[] }>().rows.map((row) => row.path);
+    expect(listedPaths).not.toContain('uploads/child/before-creation/shared.png');
+    expect(listedPaths).toContain('uploads/child/bob-readable/shared.png');
+    const earlierDownload = await childRead(context,
+      'files/view?path=uploads%2Fchild%2Fbefore-creation%2Fshared.png');
+    expect(earlierDownload.statusCode, earlierDownload.body).toBe(403);
+    const download = await childRead(context, downloadPath);
+    expect(download.statusCode, download.body).toBe(200);
+    expect(download.body).toBe('PNG!');
+    const earlierMessageReceipt = await childRead(context, 'changes/before-creation-message');
+    expect(earlierMessageReceipt.statusCode).toBe(404);
+    const laterMessage = await originalQuery<{ event_id: string }>(
+      `SELECT event_id FROM conversation_feed
+        WHERE silo = $1 AND conversation_id = $2 AND type = 'message.posted'
+          AND data->>'ciphertext' IS NOT NULL ORDER BY position DESC LIMIT 1`,
+      ['test', 'child']);
+    const laterMessageId = laterMessage.rows[0]?.event_id;
+    expect(laterMessageId).toBeDefined();
+    const laterMessageReceipt = await childRead(context, `changes/${laterMessageId}`);
+    expect(laterMessageReceipt.statusCode, laterMessageReceipt.body).toBe(200);
+    const receipt = await childRead(context, `changes/${creation.id}`);
+    expect(receipt.statusCode, receipt.body).toBe(200);
+    await delay(300);
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    expect(selectionStarts).toContainEqual({ kind: 'messages', position: creationSequence - 1 });
+    expect(selectionStarts).toContainEqual({ kind: 'files', position: creationSequence });
+    expect(selectionStarts).toContainEqual({ kind: 'changes', position: creationSequence });
+    expect(approvalStarts.some((position) => position >= creationSequence)).toBe(true);
+    function hasReceivedText(text: string) {
+      return JSON.stringify(client?.received).includes(text);
+    }
+    expect(hasReceivedText('Earlier shared child message')).toBe(false);
+    expect(hasReceivedText('Hello shared history')).toBe(true);
+    expect(JSON.stringify(client.received)).not.toContain('hidden-source');
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+it('keeps explicit child joins readable from creation without releasing parent references',
+  explicitChildJoin, 120_000);
+
+async function childVolume() {
+  await participationVolume(true);
+}
+it('keeps child readers available during 100,000 messages and unrelated turn activity',
+  childVolume, 600_000);
+
+
+async function privateVolume() {
+  await participationVolume();
+}
+
+async function refusesStaleInheritedAccess() {
+  const context = await fixture();
+  try {
+    await childSession(context);
+    await removeParentPerson(context, 'bob');
+    const permission = await context.auth.conversation('bob', 'child', 'read');
+    expect(permission.allowed).toBe(true);
+    const read = conversationParticipationReader(context.options, 'bob');
+    await expect(read('child')).rejects.toThrow('Conversation refused');
+  } finally {
+    await context.close();
+  }
+}
+it('refuses stale IAM inherited child permission after the parent join ends',
+  refusesStaleInheritedAccess, 120_000);
+
+
+async function removesParentDuringChildPermission() {
+  const context = await fixture();
+  const originalHead = context.nats.store.head.bind(context.nats.store);
+  try {
+    await childSession(context);
+    let checked = 0;
+    async function removeAfterPermission(subject?: string, deadline?: number) {
+      if (subject === 'participation-child') {
+        checked++;
+        if (checked === 2) await removeParentPerson(context, 'bob');
+      }
+      return originalHead(subject, deadline);
+    }
+    context.nats.store.head = removeAfterPermission;
+    const response = await childRead(context, 'approvals');
+    expect(response.statusCode, response.body).toBe(403);
+    expect(checked).toBe(2);
+  } finally {
+    context.nats.store.head = originalHead;
+    await context.close();
+  }
+}
+it('denies a parent removal saved while OpenFGA checks child read permission',
+  removesParentDuringChildPermission, 120_000);
+
+async function refusesUnrecognisedDisplayEvent() {
+  const context = await fixture();
+  try {
+    await childSession(context);
+    const position = await context.nats.store.head();
+    const data = { conversationId: 'parent', childConversationId: 'hidden-child',
+      requestId: 'hidden-request', text: 'Private child question' };
+    await context.db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      ['test', 'parent', position + 1, 'hidden-intent-id', 'conversation.child_requested',
+        JSON.stringify(data), new Date().toISOString()]);
+    const request = { url: '/api/conversations/parent/messages', headers: context.headers('bob') };
+    const response = await context.app.inject(request);
+    expect(response.statusCode, response.body).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+  } finally {
+    await context.close();
+  }
+}
+it('withholds an unrecognised display event from a parent reader',
+  refusesUnrecognisedDisplayEvent, 120_000);
+
+
+async function hidesOtherRequesterReview() {
+  const context = await fixture();
+  try {
+    await childSession(context);
+    const review = { action: 'Send report', tool: 'write', target: 'private-target',
+      data: 'private-arguments', destination: 'private-destination', account: 'private-profile',
+      consequence: 'Save the report' };
+    const text = JSON.stringify(review);
+    const digest = createHash('sha256');
+    digest.update(text);
+    const example = getEventDefinition('tool.approval_requested')?.example;
+    const saved = toolApprovalRequestedDataSchema.parse(example);
+    const approvalId = 'a'.repeat(64);
+    const encrypted = context.keys.encrypt('test', 'child', text);
+    const request = { ...saved, conversationId: 'child', assistantId: 'child-assistant',
+      approvalId, requesterId: 'alice', ...encrypted, reviewDigest: digest.digest('hex') };
+    await context.append(`approval-${approvalId}`, 'tool.approval_requested', request, false);
+    const expired = { approvalId };
+    await context.append(`approval-${approvalId}`, 'approval.expired', expired, false);
+    const otherReader = await childRead(context, 'approvals');
+    expect(otherReader.statusCode, otherReader.body).toBe(200);
+    expect(otherReader.json()).toMatchObject({ cards: [] });
+    await context.runner.run(auditTrail);
+    const requester = await childRead(context, 'approvals', 'alice');
+    expect(requester.statusCode, requester.body).toBe(200);
+    expect(requester.body).toContain('private-arguments');
+    const decrypt = vi.spyOn(context.keys, 'decrypt');
+    decrypt.mockClear();
+    await childRead(context, 'approvals');
+    expect(decrypt).not.toHaveBeenCalled();
+    decrypt.mockRestore();
+  } finally {
+    await context.close();
+  }
+}
+it('hides another requester’s child approval review before decryption',
+  hidesOtherRequesterReview, 120_000);

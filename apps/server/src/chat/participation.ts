@@ -130,7 +130,7 @@ export async function participation(store: Pick<EventStore, 'readStream'>,
     if (currentJoin.event.id !== creation.event.id) authorityRows.push(currentJoin);
   }
   return { created, creation, participantIds: [...joins.keys()], joinPosition: join.sequence,
-    joinEventId: join.event.id, historyPosition: conversationHistoryPosition(creation, join),
+    joinEventId: join.event.id, join, historyPosition: conversationHistoryPosition(creation, join),
     accessPosition, authorityRows };
 }
 

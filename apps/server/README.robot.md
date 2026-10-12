@@ -2318,3 +2318,39 @@ newest first, capped at 16 KiB. The current binding member alone can read this
 status; scope read permission remains required. Other members receive 404.
 Checkpoint and generation checks reject stale or rebuilding tables. Reads still
 check access once. The 100-cent cap is recorded only; dispatch stays disabled.
+
+## Effective shared child reads (#90, PR 2)
+
+All existing HTTP message, approval, file and change-status reads use the same
+conversation access check. Shared children require active silo membership, a
+current recorded child join and OpenFGA read permission with an applied join receipt.
+Inherited joins also require the reader's and creator's exact original parent joins
+and the creator's current silo membership. Checks repeat these saved dependencies
+after OpenFGA replies. A removed or replaced parent join never restores inheritance.
+A valid explicit child join does not depend on parent or creator membership.
+Retained shared history starts at child creation; access still uses the current join.
+File reads keep their separate file restrictions and do not grant parent file access.
+Child approval reads omit other requesters before loading or decrypting their reviews.
+They use checked approval event positions from the audit projection and read the
+short unprojected tail from the event log. This keeps long chat history out of the approval
+request scan while retaining new requests that have not reached PostgreSQL yet.
+
+Sockets watch member and child participation streams. Inherited sockets also watch
+parent participation and creator membership. Their existing independent 100 ms poll
+checks removals while content is blocked and closes denied sockets within two seconds.
+Reads never open a write check. Writes include these small dependencies in their
+existing two-second check. Creation reads stop after the first event; no access check
+reads conversation history or watches conversation activity.
+
+Feed replies select display fields before decrypting text. Shared child creation and
+list rows omit origin and parent join references. Unrecognised feed event types
+return 503 without rows until they have a safe display contract. Lists retain the bounded scan,
+visible activity, title search and join-time rules from #352. There is no child
+creation, invitation, origin or summary API in this change.
+
+`test/chat-access-regression.test.ts` covers stale IAM parent removal, creator parent
+and silo departure, removal/rejoin, explicit child history, blocked socket delivery,
+HTTP/approval/file/status refusal, list filtering and 100,000-message activity. The
+large-child case also reads approvals and change status and keeps a child socket open.
+Checks and fresh-install qualification are recorded in the draft PR. Fresh-install
+qualification: NOT RUN. This is backend access support, not a complete child journey.

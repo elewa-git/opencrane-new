@@ -1,3 +1,4 @@
+import { inheritedChildSubjects, requireInheritedChildAccess } from './child-access.ts';
 import { legacyParticipation, participation, ParticipationRefused, ParticipationApplying, chatMembership }
   from './participation.ts';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -45,8 +46,9 @@ async function readChatAccessContext(options: ChatOptions, memberId: string,
     memberId, legacy, deadline);
   const created = access.created;
   const subjects = [`member-${memberId}`, `participation-${conversationId}`];
+  subjects.push(...inheritedChildSubjects(access));
   let privateSession: Awaited<ReturnType<typeof privateSessionCreation>> | undefined;
-  if (created.mode === 'agent_session') {
+  if (created.mode === 'agent_session' && !('contextKind' in created)) {
     privateSession = await privateSessionCreation(options, conversationId);
     if (privateSession.assistant.kind === 'team') {
       subjects.push(`team-${privateSession.assistant.ownerId}`);
@@ -87,7 +89,7 @@ export async function chatSubscriptionAccess(options: ChatOptions, memberId: str
     // Save positions from before the check so a change during it is checked next time.
     previousHeads = heads;
     return { mode: created.mode, joinPosition: current.joinPosition,
-      accessPosition: current.accessPosition };
+      historyPosition: current.historyPosition, accessPosition: current.accessPosition };
   }
 }
 
@@ -99,6 +101,7 @@ export async function writeChatAccess(options: ChatOptions, request: AccessReque
     options.store, performance.now(), subjects, request.deadline);
   await activeChatMember(options, request.memberId, fresh);
   const context = await conversationAccess(options, request, fresh.deadline);
+  fresh.include(...context.accessSubjects);
   await fresh();
   return Object.assign(fresh, context);
 }
@@ -107,31 +110,40 @@ async function conversationAccess(options: ParticipationOptions,
   request: AccessRequest, deadline: number) {
   const { memberId, conversationId, relation = 'read', allowApplying = false } = request;
   let mode: 'agent_session' | 'direct' | 'group' | undefined;
+  let contextKind: 'shared_child' | undefined;
   let colleagueId: string | undefined;
   let createdBy: string | undefined;
   let joinPosition = 0;
   let joinEventId: string | undefined;
   let participantIds: string[] = [];
   let accessPosition = 0;
+  let historyPosition = 0;
+  let accessSubjects: string[] = [];
   if (conversationId) {
     const access = await conversationParticipation(options, memberId, conversationId,
       deadline, relation, allowApplying);
     const created = access.created;
     createdBy = created.createdBy;
+    if ('contextKind' in created) contextKind = created.contextKind;
     mode = created.mode;
     joinPosition = access.joinPosition;
     joinEventId = access.joinEventId;
     participantIds = access.participantIds;
     accessPosition = access.accessPosition;
+    historyPosition = access.historyPosition;
+    accessSubjects = inheritedChildSubjects(access);
     if (created.mode === 'direct') {
       function isOtherParticipant(participantId: string) {
         return participantId !== memberId;
       }
       colleagueId = participantIds.find(isOtherParticipant);
     }
-    if (mode === 'agent_session') await readPrivateSession(options, memberId, conversationId);
+    if (mode === 'agent_session' && !('contextKind' in created)) {
+      await readPrivateSession(options, memberId, conversationId);
+    }
   }
-  return { mode, colleagueId, joinPosition, joinEventId, participantIds, accessPosition, createdBy };
+  return { mode, contextKind, colleagueId, joinPosition, joinEventId, historyPosition,
+    participantIds, accessPosition, accessSubjects, createdBy };
 }
 
 type ParticipationOptions = Pick<ChatOptions, 'store' | 'db' | 'silo' | 'binding'>;
@@ -171,6 +183,7 @@ export function conversationParticipationReader(options: ParticipationOptions, m
     let current = await participation(options.store, options.silo, conversationId,
       memberId, legacy, deadline);
     await requireMember(deadline);
+    await requireInheritedChildAccess(options, current, memberId, deadline);
     const permission = await auth.conversation(memberId, conversationId, relation);
     if (permission.status === 'unavailable') throw new Error('IAM unavailable');
     await requireMember(deadline);
@@ -180,7 +193,9 @@ export function conversationParticipationReader(options: ParticipationOptions, m
       current = await participation(options.store, options.silo, conversationId,
         memberId, legacy, deadline);
     }
-    if (!await auth.applied(current.joinEventId)) {
+    const applied = await auth.applied(current.joinEventId);
+    await requireInheritedChildAccess(options, current, memberId, deadline);
+    if (!applied) {
       if (allowApplying) return current;
       throw new ParticipationApplying('Conversation access still applying');
     }

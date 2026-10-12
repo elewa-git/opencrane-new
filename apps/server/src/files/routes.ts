@@ -228,7 +228,7 @@ async function authorise(options: FileOptions, config: AuthConfig,
   const checks = { write: request.method === 'POST', conversationId };
   const context = await requireMember(request, reply, config, options, checks);
   const { memberId, access } = context;
-  const { joinPosition, createdBy } = access;
+  const { historyPosition: joinPosition, createdBy } = access;
   if (access.mode !== 'agent_session' || !createdBy) {
     throw new FileRefusal('conversation_refused');
   }
