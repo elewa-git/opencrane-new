@@ -26,5 +26,13 @@ export const connectionCreatedDataSchema = z
 export const connectionRefreshedDataSchema = connectionCreatedDataSchema.clone();
 
 export const connectionRevokedDataSchema = z
-  .object({ userId: id, serverId: id, profile: id, revokedBy: id })
+  .object({ userId: id, serverId: id, profile: id, revokedBy: id,
+    expectedSequence: z.int().nonnegative().optional(),
+    reason: z.literal('owner_requested').optional() })
   .strict();
+
+export const connectionDisabledDataSchema = z.strictObject({
+  userId: connectionId, serverId: connectionId, profile: connectionId,
+  disabledBy: connectionId, expectedSequence: z.int().nonnegative(),
+  reason: z.literal('admin_disabled'),
+});

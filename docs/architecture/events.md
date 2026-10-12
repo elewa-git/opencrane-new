@@ -78,6 +78,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `gateway-<request>` | safe gateway evidence | observation recorded |
 | `provider-<providerId>` | company model provider | configuration and verification |
 | `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
+| `connection-control-<user>-<server>` | admin block for a member's personal profiles | disabled |
 | `view-<session>` | bounded desktop view | started, stopped |
 | `grant-<resource>` | shared resource (type and id) | given, revoked |
 | `budget-<silo>` | silo budget (all ceilings) | ceiling set, reserved, settled, period started |
@@ -378,7 +379,8 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade | grants | OpenFGA tuples |
 | `connection.created` | personal bearer create command after private staging | connection fold (exact reference and generation; identity unverified) | planned cleanup verifies that an orphan cannot become current before deleting its exact UID/version |
 | `connection.refreshed` | personal bearer rotate command after private staging; planned OAuth refresh | connection fold replaces the exact reference at the expected generation and revision | planned orphan cleanup; never release on replay |
-| `connection.revoked` | person, admin or reaction | connections | delete the secret |
+| `connection.revoked` | personal profile owner command | connection fold invalidates the profile at its expected revision | retain material; safe cleanup is a separate planned reaction |
+| `connection.disabled` | current admin command | member/server control stream blocks all personal profile saves, including new profiles | no deletion, enable or credential release; owner reconnect cannot clear the block |
 
 Private instance starts identify the silo, user, opaque profile, server and
 `startupAccessGeneration`. This positive integer counts versions of the profile's

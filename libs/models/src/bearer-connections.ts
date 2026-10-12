@@ -15,6 +15,10 @@ const commandSchema = z.strictObject({ action: z.enum(['create', 'rotate']),
   expectedSequence: z.int().nonnegative(), expectedGeneration: z.int().nonnegative(),
   appendUntil: z.int().positive() });
 const savedSchema = connectionCreatedDataSchema.required({ activation: true });
+const controlSchema = z.strictObject({
+  action: z.enum(['revoke', 'disable']), userId: id, serverId: id, profileId: id,
+  changeRef: id, expectedSequence: z.int().nonnegative(),
+});
 type Saved = z.infer<typeof savedSchema>;
 type Command = z.infer<typeof commandSchema>;
 type Custody = Pick<ReturnType<typeof connectionCustody>, 'stage'>;
@@ -164,6 +168,7 @@ export async function saveBearerConnection(store: EventStore, binding: Binding,
   }
   const server = await eligibleServer(store, binding.silo, input);
   await readActiveMember(store, binding, memberId);
+  await requireConnectionEnabled(store, memberId, input.serverId, performance.now() + 10_000);
   const stage: ConnectionStage = { siloId: binding.silo, userId: memberId,
     serverId: input.serverId, connectionId: input.connectionId, profileId: input.profileId,
     purpose: 'personal', generation: input.expectedGeneration + 1, operationId,
@@ -195,9 +200,12 @@ async function appendConnection(store: EventStore, binding: Binding, memberId: s
   input: Command, event: EventEnvelope,
   server: Awaited<ReturnType<typeof eligibleServer>>, original?: StoredEvent) {
   // Start the short membership check only after custody and profile history have finished.
-  const fresh = await authorityFence(store, performance.now(), [`member-${memberId}`]);
+  const controlSubject = `connection-control-${memberId}-${input.serverId}`;
+  const subjects = [`member-${memberId}`, controlSubject];
+  const fresh = await authorityFence(store, performance.now(), subjects);
   const options = { requiredRole: 'member' as const, fresh };
   await activeMember(store, binding, memberId, options);
+  await requireConnectionEnabled(store, memberId, input.serverId, fresh.deadline);
   if (original) {
     requireSameEvent(original, event);
     return receipt(original);
@@ -221,4 +229,93 @@ async function appendConnection(store: EventStore, binding: Binding, memberId: s
   }
   requireSameEvent(saved, event);
   return receipt(saved);
+}
+
+async function requireConnectionEnabled(store: EventStore, memberId: string,
+  serverId: string, deadline: number) {
+  // Keep the admin block across new profile ids. Only a future explicit admin enable can lift it.
+  const sequence = await store.head(`connection-control-${memberId}-${serverId}`, deadline);
+  if (sequence !== 0) {
+    throw new Error('Connection disabled');
+  }
+}
+
+/** Record invalidation only. Retain stored material until cleanup can prove deletion is safe. */
+export async function changePersonalConnection(store: EventStore, binding: Binding,
+  actorId: string, raw: unknown) {
+  const parsed = controlSchema.safeParse(raw);
+  if (!parsed.success || !id.safeParse(actorId).success) {
+    throw new Error('Connection input invalid');
+  }
+  const input = parsed.data;
+  const isRevoke = input.action === 'revoke';
+  if (isRevoke && input.userId !== actorId) {
+    throw new Error('Connection owner required');
+  }
+  const requiredRole = isRevoke ? 'member' as const : 'admin' as const;
+  await readActiveMember(store, binding, actorId, requiredRole);
+  const profileSubject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
+  const controlSubject = `connection-control-${input.userId}-${input.serverId}`;
+  const subject = isRevoke ? profileSubject : controlSubject;
+  const profileRows = await history(store, profileSubject, binding.silo, performance.now() + 10_000);
+  let rows = profileRows;
+  if (!isRevoke) {
+    rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+  }
+  const operationId = digest([binding.silo, subject, input.changeRef]);
+  function originalOperation(row: StoredEvent) {
+    return row.event.id === operationId;
+  }
+  const original = rows.find(originalOperation);
+  if (!original) {
+    requireControlTarget(profileRows, input);
+    if ((rows.at(-1)?.sequence ?? 0) !== input.expectedSequence) {
+      throw new Error('Connection conflict');
+    }
+  }
+  const fields = { userId: input.userId, serverId: input.serverId,
+    profile: input.profileId, expectedSequence: input.expectedSequence };
+  const payload = isRevoke
+    ? { ...fields, revokedBy: actorId, reason: 'owner_requested' }
+    : { ...fields, disabledBy: actorId, reason: 'admin_disabled' };
+  const type = isRevoke ? 'connection.revoked' : 'connection.disabled';
+  const event = { ...envelope(binding.silo, subject, type, payload, operationId),
+    commandId: input.changeRef, source: 'opencrane-server',
+    principal: { kind: 'human' as const, id: actorId } };
+  // Read profile history before starting the short actor membership check.
+  const fresh = await authorityFence(store, performance.now(), [`member-${actorId}`]);
+  const options = { requiredRole, fresh };
+  await activeMember(store, binding, actorId, options);
+  const sequence = await appendControl(store, event, input.expectedSequence, fresh, original);
+  const status = isRevoke ? 'revoked' as const : 'disabled' as const;
+  return { status, sequence, changeRef: input.changeRef };
+}
+
+function requireControlTarget(rows: StoredEvent[], input: z.infer<typeof controlSchema>) {
+  const state = foldConnection(rows);
+  if (state.status !== 'saved_unverified' || state.data?.userId !== input.userId ||
+      state.data.serverId !== input.serverId || state.data.profile !== input.profileId) {
+    throw new Error('Connection conflict');
+  }
+}
+
+async function appendControl(store: EventStore, event: EventEnvelope, expectedSequence: number,
+  fresh: Awaited<ReturnType<typeof authorityFence>>, original?: StoredEvent) {
+  if (original) {
+    requireSameEvent(original, event);
+    return original.sequence;
+  }
+  await fresh();
+  const command = { event, expectedSequence, historyChecked: true as const,
+    deadline: fresh.deadline };
+  const result = await store.append(command);
+  if (result.status !== 'appended') {
+    throw new Error('Connection append unconfirmed');
+  }
+  const saved = await readEventAt(store, event.subject, result.sequence, performance.now() + 10_000);
+  if (!saved) {
+    throw new Error('Connection append unconfirmed');
+  }
+  requireSameEvent(saved, event);
+  return saved.sequence;
 }

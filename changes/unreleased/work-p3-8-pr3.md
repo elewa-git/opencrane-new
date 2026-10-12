@@ -1,0 +1,1 @@
+- Personal connection owners can revoke their own saved profiles. Admins can block a member's connections to one tool server, and reconnecting with a new profile cannot clear that block. These internal commands retain stored tokens; safe cleanup and user-facing controls will follow.

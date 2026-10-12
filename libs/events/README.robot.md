@@ -465,3 +465,13 @@ Neither digest covers memory text.
 The strict schema bounds each addition list, scope positions and byte counts.
 The server summary checks transitions and cumulative limits. No production writer is
 connected in this change. This contract does not qualify native memory or prove delivery.
+
+## Personal connection invalidation records
+
+`connection.revoked` adds optional expectedSequence and the fixed `owner_requested` reason
+to preserve legacy replay. New owner commands supply both. It does not confirm deletion.
+`connection.disabled` is a strict record containing userId, serverId, profile, disabledBy,
+expectedSequence and the fixed `admin_disabled` reason. Its member/server control stream
+covers all personal profiles, including new ones; profile names the reviewed target.
+Neither event contains material or a material-derived hash. Disable has no registered
+reaction, and no enable or cleanup command is supplied in this first part of P3-8 row 3.

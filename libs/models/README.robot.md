@@ -1567,8 +1567,8 @@ Only member and ownership streams participate in the short access check.
 The operation id hashes silo, subject and changeRef. History retains retry identity beyond
 NATS deduplication. A retry must recover the same private material and exact identity and
 match the saved payload. Confirmed appends are read back and compared before returning.
-Unknown appends retain custody; this slice never deletes it. Orphan closure and cleanup
-remain row 3. `foldConnection` keeps old or incomplete records unavailable and new profiles
+Unknown appends retain custody; these commands never delete it. Orphan closure and cleanup
+remain a follow-up to row 3's first part. `foldConnection` keeps old or incomplete records unavailable and new profiles
 `saved_unverified`. It reads no secret store and starts no work.
 
 The existing `profile` event field holds the opaque profileId, never an editable label.
@@ -1576,3 +1576,28 @@ The stream is `connection-<member>-<server>-<profile>`. Selection, identity veri
 release, broker, HTTP routes, UI and fresh-install qualification remain NOT RUN here.
 Tests use real NATS/OpenFGA and disposable PostgreSQL, with a custody boundary fixture;
 the existing custody tests separately exercise the private HTTP adapter.
+
+## Personal revoke and admin disable (P3-8 PR 3, first part of row 3)
+
+`changePersonalConnection(store, binding, actorId, input)` is internal, with no HTTP route.
+The binding and actor come from authenticated server context. Strict input names action
+(revoke/disable), userId, serverId, profileId, changeRef and expectedSequence.
+Revoke requires the current owner and the profile stream revision. It appends
+`connection.revoked` with reason `owner_requested`; replay leaves the profile unavailable.
+An admin cannot revoke someone else's personal profile through this command.
+Disable requires a current admin, an existing saved profile and the member/server control
+stream revision. It appends `connection.disabled` with reason `admin_disabled` on
+`connection-control-<user>-<server>`. This blocks every profile for that member/server.
+Only a later explicit admin enable could remove it; no enable command exists here.
+
+Each command makes one conditional append. The original change reference recovers its
+confirmed receipt after a lost reply, but changed retry details conflict. Membership is
+checked again on retries. No token is read or returned, and neither command deletes one.
+Save checks the control stream before staging and again in its short access check.
+Profile history stays outside that check. Conversation access checks are unchanged.
+
+The approximately 600-line limit splits row 3. Orphan enumeration, coordination with
+staging, operation closure and deletion reactions remain unimplemented. Unknown appends,
+current references, late appends and exact delete conflicts still need reconciler tests
+in that follow-up. No broker, release, selection, API or UI is added here. Fresh-install
+qualification is NOT RUN; this first part does not complete #49.

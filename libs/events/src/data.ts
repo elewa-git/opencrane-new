@@ -527,7 +527,7 @@ export const grantRevokedDataSchema = z
   .strict();
 
 export { connectionCreatedDataSchema, connectionRefreshedDataSchema,
-  connectionRevokedDataSchema } from './connections.ts';
+  connectionRevokedDataSchema, connectionDisabledDataSchema } from './connections.ts';
 
 // --- Budgets (single-writer actor per silo) -----------------------------
 
