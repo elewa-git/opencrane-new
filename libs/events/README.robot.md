@@ -37,7 +37,6 @@ transport route, including server, connection, backend address and instance gene
 It participates in the approval id. Missing fields remain readable for replay.
 A gateway call with a different current transport binding cannot use that old approval.
 
-
 ## Public contract
 
 Delegation version 1 records one computer generation, root, requester, payer,
