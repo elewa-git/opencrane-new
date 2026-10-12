@@ -2,7 +2,8 @@ import { newDumpFiles } from './private-fault-evidence.mjs';
 import { finishQualification } from './private-result.mjs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { command, input, until } from '../../../spikes/s0-3-warm-pool/lab.mjs';
@@ -37,7 +38,25 @@ function acceptedMeasurement(name, value, reason) {
 }
 function save() {
   mkdirSync('docs/process/evidence/p4-14', { recursive: true });
+  saveFaultInventories();
   writeFileSync(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
+}
+function saveFaultInventories() {
+  const fault = evidence.measurements.realFault.value;
+  if (!fault) return;
+  const inventories = {};
+  const archive = 'docs/process/evidence/p4-14/private-turns-inventories.json.gz';
+  for (const name of ['beforeGuest', 'afterGuest', 'beforeNode', 'afterNode']) {
+    const inventory = fault[name];
+    inventories[name] = inventory;
+    fault[name] = { archive, roots: inventory.roots, files: inventory.files.length,
+      directories: inventory.directories.length };
+  }
+  const bytes = gzipSync(JSON.stringify(inventories));
+  writeFileSync(archive, bytes);
+  const hash = createHash('sha256');
+  hash.update(bytes);
+  fault.inventoryArchiveSha256 = hash.digest('hex');
 }
 function k(...args) {
   return command('kubectl', ['-n', namespace, ...args]);
@@ -576,7 +595,9 @@ try {
       if (replacement) {
         await k('delete', 'pod/private', '--wait=true');
         await until(async function replaced() {
-          const pod = JSON.parse(await k('get', 'pod/private', '-o', 'json'));
+          const replacement = await k('get', 'pod/private', '--ignore-not-found', '-o', 'json');
+          if (!replacement) return false;
+          const pod = JSON.parse(replacement);
           return pod.metadata.uid !== old.metadata.uid;
         }, 'new Pod');
       } else {
