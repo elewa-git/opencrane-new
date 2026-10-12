@@ -64,7 +64,7 @@ the native code-mode host, restricted Codex, helper failure, socket access from
 all four non-root UIDs, conflicting requests, restart and damaged saved denial.
 They also cover a live worker under a zombie main thread, an endless worker with
 a helper that does nothing, and a detached process repeatedly handing work to a
-fresh child. A root-only test observer forces a real fork after reading the PID
+fresh child. A test observer running as root forces a real fork after reading the PID
 directory and before reading status. The endless-worker check uses a no-op helper
 to simulate failed termination; a real task stuck in kernel I/O is NOT RUN.
 Run with `nice -n 10 npx vitest run apps/computer/test/supervisor-stop.test.ts
