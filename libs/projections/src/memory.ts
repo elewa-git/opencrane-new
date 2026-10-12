@@ -52,6 +52,14 @@ function ignored(): Promise<void> {
   return Promise.resolve();
 }
 
+function checkedEvent(envelope: EventEnvelope) {
+  const checked = parseEventByType(envelope);
+  if (!checked.success) {
+    throw new Error('Invalid saved memory event');
+  }
+  return checked.event;
+}
+
 function requiresPreparation(): Promise<void> {
   return Promise.reject(new Error('Memory projection requires ProjectionRunner preparation'));
 }
@@ -164,6 +172,10 @@ export function memoryProjection(custody: {
     erasure = await memoryErasureHistory(events);
   }
   async function prepare(envelope: EventEnvelope): Promise<Projection['apply']> {
+    if (envelope.type === 'memory.cleanup_recorded') {
+      checkedEvent(envelope);
+      return ignored;
+    }
     if (envelope.type === 'memory.maintenance_bound') {
       if (!parseEventByType(envelope).success) {
         throw new Error('Invalid saved binding event');
@@ -185,11 +197,7 @@ export function memoryProjection(custody: {
       }
       return ignored;
     }
-    const checked = parseEventByType(envelope);
-    if (!checked.success) {
-      throw new Error('Invalid saved memory event');
-    }
-    const parsed = memoryWrittenEventSchema.parse(checked.event);
+    const parsed = memoryWrittenEventSchema.parse(checkedEvent(envelope));
     const identity = memoryIdentity(parsed);
     const data = parsed.data;
     let text: string | null = null;

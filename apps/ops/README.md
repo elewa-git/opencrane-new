@@ -13,10 +13,10 @@ flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events and owner appointments| ops["apps/ops<br/>workers and memory replay"]
   ops -.->|uses| libs["libs/*<br/>shared code"]
+  ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables, task relationships, jobs and configured memory| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
   ops -->|checks and updates computers| kube["Kubernetes<br/>computer manager"]
-  kube -->|runs| computer["apps/computer<br/>assistant runtime"]
 ```
 
 ## What it is responsible for
@@ -35,6 +35,8 @@ flowchart LR
 - Rebuilds tables and permissions for operator recovery.
 - Checks all saved memory keys before rebuilding current memory and search text.
   Readers and workers stay stopped during this process.
+- Destroy forgotten personal memory keys and dependent copies when configured.
+  Record completion only after checking key deletion and removal of searchable text.
 - Lists failed reaction jobs and records an operator’s chosen cancellation.
 - Runs one-off upgrades for model access, the default budget group and handler subscriptions.
 

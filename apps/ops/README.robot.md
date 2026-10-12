@@ -460,3 +460,27 @@ through a fixed event position before preparing any text. Hidden facts are not d
 This includes replay with keys still present, so pending physical cleanup cannot reveal
 old text during rebuild. The dispatcher still has no memory cleanup reaction; HTTP forget
 remains disabled until erasure, completion evidence and restart recovery land together.
+
+## Verified memory key cleanup
+
+The dispatcher registers `cleanup-memory` when `MEMORY_KEY_DIRECTORY` is set.
+Its `memory.forgotten` subscription currently accepts only version-1 person tombstones.
+Apply the normal handler subscription upgrade before restarting an existing dispatcher.
+The separate memory worker must catch up before completion can be recorded.
+
+The reaction checks the saved target, follows all historical dependencies and destroys
+committed revision keys plus each fact's one next-revision candidate. It installs permanent
+empty markers and removes pending copies in batches of 16. Missing committed custody fails;
+it is not evidence of erasure. It verifies caught-up rows contain no searchable text,
+search vectors or encrypted values before one conditional `memory.cleanup_recorded` append.
+Duplicate delivery and lost replies use saved completion without decrypting old text.
+A failed verification or append leaves the fact hidden and the job available for retry.
+No model endpoint is used. Offline replay still runs no reaction and changes no keys.
+
+This is the first split of the remaining P4-13 row 2, under the 600-line budget.
+HTTP forget/status, unavailable evidence on retry exhaustion and rebuilding pending jobs
+after losing job tables remain required before any forget route can be enabled.
+`test/memory-cleanup.test.ts` uses real NATS/PostgreSQL and the handler queue. It covers
+key/index/append failure, duplicate delivery, a lost completion reply, replay without
+hidden decryption and completion evidence surviving loss of the job tables.
+Pending-job recovery and a fresh-install HTTP journey are NOT RUN.

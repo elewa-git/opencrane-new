@@ -6,7 +6,8 @@ import { egressEvents } from './egress.ts';
 import { takeoverEvents } from './takeover.ts';
 import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
   from './conversation.ts';
-import { memoryWrittenExample, memoryMaintenanceBoundDataSchema } from './memory.ts';
+import { memoryWrittenExample, memoryMaintenanceBoundDataSchema,
+  memoryCleanupRecordedDataSchema } from './memory.ts';
 import { modernDelegationExample } from './delegation.ts';
 import { ownershipEvents } from './ownership-events.ts';
 import { providerEvents } from './provider-events.ts';
@@ -380,6 +381,11 @@ export const eventRegistry: readonly EventDefinition[] = [
     { schemaVersion: 1, scopeId: memoryWrittenExample.scopeId, scopeKind: 'person',
       ownerId: 'alice', memoryId: 'memory_1', expectedRevision: 1, revision: 2 },
   ),
+  event('memory.cleanup_recorded', 'scope',
+    'The worker verified destruction of memory keys and removal of searchable text.',
+    memoryCleanupRecordedDataSchema,
+    { schemaVersion: 1, scopeId: memoryWrittenExample.scopeId, scopeKind: 'person',
+      ownerId: 'alice', changeId: 'forget-root', outcome: 'completed' }),
   event(
     'memory.consolidated',
     'scope',

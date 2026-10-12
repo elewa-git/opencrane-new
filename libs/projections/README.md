@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, tool admission, destination, inventory and survey tables| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, tool admission, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves chat activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|events and private instance records in order| projections
@@ -122,7 +122,9 @@ these details. The reports remain in the feed so their saved evidence is availab
 A saved memory tombstone marks a fact as hidden permanently. The worker follows its saved
 links and removes search text for every dependent copy in the same database step.
 Rebuilding reads these links first, so hidden text is never decrypted, even while its
-keys still exist. The forget command and physical key cleanup are not built yet.
+keys still exist. The dispatcher can then destroy the keys and record completion.
+The projection checks that record without reading hidden text or changing keys.
+The HTTP forget command is not built yet.
 
 A saved survey event arrives. The worker checks the hash of its encrypted bytes, then keeps the answers, hash
 and saved date.

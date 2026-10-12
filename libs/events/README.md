@@ -27,7 +27,7 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance records| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode; checks memory cleanup and saved choices| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks tool admission, control, turns, instance-bound approvals, spending limits, stops, expired holds and one-use send permissions| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
@@ -116,7 +116,9 @@ Archive and read choices name one person and their join. They contain no chat te
 
 A memory tombstone records a fact id and its next revision without any private text.
 The projection uses it to hide the fact and dependent copies before reading their keys.
-The HTTP forget command and key cleanup are not built yet.
+The cleanup completion record confirms that the dispatcher checked key destruction
+and removal of searchable text. It names the original change without private text.
+The HTTP forget command is not built yet.
 
 1. **The event store checks an event before saving it.** It passes the event to
    `parseEventByType`. A badly formed event or an unknown type is refused and

@@ -1,6 +1,7 @@
 // Named subscriptions from the event catalogue. An implementation is enabled
 // only when its host registers it; this does not enable the future reactions.
 export const handlerSubscriptions = {
+  "cleanup-memory": ["memory.forgotten"],
   "settle-budget": ["effect.observed", "effect.resolved", "computer.lost"],
   "update-members": [
     "member.invited",

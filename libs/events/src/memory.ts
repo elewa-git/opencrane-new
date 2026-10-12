@@ -147,3 +147,17 @@ function validForgotten(event: z.infer<typeof forgottenEnvelope>): boolean {
 }
 export const memoryForgottenEventSchema = forgottenEnvelope
   .extend({ type: z.literal('memory.forgotten') }).refine(validForgotten, 'Invalid memory tombstone');
+
+export const memoryCleanupRecordedDataSchema = z.strictObject({
+  schemaVersion: z.literal(1), scopeId: digest, scopeKind, ownerId: identifier,
+  changeId: identifier, outcome: z.literal('completed'),
+});
+const cleanupEnvelope = eventEnvelopeSchema(memoryCleanupRecordedDataSchema);
+function validCleanup(event: z.infer<typeof cleanupEnvelope>): boolean {
+  return event.subject === `scope-${event.data.scopeId}` &&
+    event.source === 'opencrane-worker' && event.principal?.kind === 'system' &&
+    event.principal.id === 'opencrane-worker' && identifier.safeParse(event.id).success &&
+    event.commandId === event.id;
+}
+export const memoryCleanupRecordedEventSchema = cleanupEnvelope
+  .extend({ type: z.literal('memory.cleanup_recorded') }).refine(validCleanup);

@@ -1,0 +1,1 @@
+- Destroy forgotten personal memory keys and dependent copies in the configured dispatcher. Record completion only after checking key deletion and removal of searchable text. Forget routes remain disabled while HTTP commands and pending-job recovery are built.
