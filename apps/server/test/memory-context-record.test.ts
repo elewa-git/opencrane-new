@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import { getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { envelope } from '@opencrane/models';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 
 const type = 'agent.memory_context_recorded';
@@ -211,6 +212,46 @@ async function turnClosed() {
   await expect(fixture(events).read()).rejects.toThrow();
 }
 it('keeps references when the turn closes and refuses later load records', turnClosed);
+
+async function participationClose(lateDelivery: 'initial' | 'recall') {
+  const nats = await natsFixture();
+  try {
+    async function append(saved: EventEnvelope) {
+      const expectedSequence = await nats.store.head(saved.subject);
+      const result = await nats.store.append({ event: saved, expectedSequence });
+      expect(result.status).toBe('appended');
+    }
+    await append(event('prepared', prepared));
+    await append(event('loaded', loaded));
+    const warm = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+    expect(warm.memoryContext).toMatchObject({ status: 'loaded', references: [personal] });
+
+    const close = envelope('test', 'participation-chat', 'conversation.closed', {
+      conversationId: 'chat', closedBy: 'alice',
+    });
+    await append(close);
+    const coldStore = { readStream: nats.store.readStream.bind(nats.store) };
+    for (const store of [nats.store, coldStore]) {
+      const facts = await readChatFacts(store, 'test', 'chat', 'turn');
+      expect(facts).toMatchObject({ closed: true, conversationClosed: true,
+        memoryContext: { status: 'ended', references: [personal], executionAvailable: false } });
+    }
+
+    const lateLoad = lateDelivery === 'initial'
+      ? { ...loaded, delivery: 'initial', callDigest: null, dispatchDigest: null }
+      : { ...loaded, callDigest: 'e'.repeat(64), dispatchDigest: 'f'.repeat(64) };
+    await append(event('late-load', lateLoad));
+    await expect(readChatFacts(nats.store, 'test', 'chat', 'turn')).rejects
+      .toThrow('Memory evidence arrived after the turn closed');
+    await expect(readChatFacts(coldStore, 'test', 'chat', 'turn')).rejects
+      .toThrow('Memory evidence arrived after the turn closed');
+  } finally {
+    await nats.close();
+  }
+}
+it.each(['initial', 'recall'] as const)(
+  'ends retained memory on a participation close and refuses a later %s load',
+  participationClose);
 
 async function savedAppendRace() {
   const nats = await natsFixture();

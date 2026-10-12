@@ -11,6 +11,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
+import type { EventEnvelope } from '@opencrane/events';
 import { members, computers, conversations, pgDb, ProjectionRunner, connectMemberFeed } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { envelope, history } from '@opencrane/models';
@@ -180,9 +181,36 @@ it('serves private chat commands and reads to joined members, refusing other org
       ws.on('message', raw => received.push(chatMessageSchema.parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown)));
       await once(ws, 'open'); ws.send(JSON.stringify({ type: 'subscribe', topic: 'conversation', conversationId, since, generation })); return ws;
     };
+    const evidence: EventEnvelope = {
+      id: randomUUID(), commandId: randomUUID(), type: 'agent.memory_context_recorded',
+      subject: `conversation-${conversationId}`, silo: 'test', source: 'opencrane-server',
+      principal: { kind: 'system', id: 'server' }, time: new Date().toISOString(),
+      correlation: {}, data: {
+        conversationId, turnId, requesterId: 'alice', assistantId: 'assistant',
+        computerId: 'computer', generation: 1, threadId: 'thread',
+        inputGeneration: 'context', action: 'prepared', delivery: null,
+        callDigest: null, dispatchDigest: null, additions: [], scopePositions: [],
+        projectionGeneration: 'projection', byteCount: 0, hasOmissions: false, reason: 'none',
+      },
+    };
+    const evidenceAppend = await nats.store.append({ event: evidence,
+      expectedSequence: await nats.store.head(evidence.subject) });
+    expect(evidenceAppend.status).toBe('appended');
+    await runner.run(conversations);
+    const historyWithEvidence = await app.inject({
+      url: `/api/conversations/${conversationId}/messages`, headers: headers(),
+    });
+    expect(historyWithEvidence.statusCode).toBe(200);
+    expect(historyWithEvidence.json<{ rows: { id: string }[] }>().rows)
+      .not.toContainEqual(expect.objectContaining({ id: evidence.id }));
+    const publicFeed = await db.query('SELECT event_id FROM conversation_feed WHERE event_id = $1',
+      [evidence.id]);
+    expect(publicFeed.rows).toEqual([]);
     let socket = await connect(0);
     try {
       await until(() => received.some(r => r.type === 'ready'));
+      expect(received).not.toContainEqual(expect.objectContaining({ row:
+        expect.objectContaining({ id: evidence.id }) }));
       const contentQueriesAfterFirstRead = contentQueries;
       await new Promise(resolve => setTimeout(resolve, 350));
       expect(contentQueries).toBe(contentQueriesAfterFirstRead);
