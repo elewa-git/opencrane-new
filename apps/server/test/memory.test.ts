@@ -2515,6 +2515,29 @@ async function originalBinding() {
   expect((await get(`${path('dream-sales', 'group')}/maintenance`, 'admin')).statusCode).toBe(404);
 }
 
+it('shows blocked and missed history only to the binding owner', async function nightlyHistory() {
+  const scopeId = memoryScopeId('acme', 'person', 'dreamer');
+  for (const [action, reason, date] of [
+    ['refused', 'qualification_blocked', '2026-10-12'],
+    ['missed', 'window_missed', '2026-10-13'],
+  ]) {
+    const intendedAt = `${date}T02:00:00.000Z`;
+    const data = { scopeId, nightId: date!.replaceAll('-', '').padEnd(64, 'a'),
+      batchKey: 'b'.repeat(64), inputRevision: 'c'.repeat(64), date,
+      bindingRevision: 1, memberId: 'dreamer', acceptedCapCents: 100,
+      intendedAt, selectedAt: intendedAt, action, reason, inputRefs: [] };
+    await append(`scope-${scopeId}`, 'memory.maintenance_recorded', data);
+  }
+  await runner.run(projection);
+  const response = await get(`${path('dreamer')}/maintenance`, 'dreamer');
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ history: [
+    { action: 'missed', reason: 'window_missed' },
+    { action: 'refused', reason: 'qualification_blocked' },
+  ] });
+  expect((await get(`${path('dreamer')}/maintenance`, 'admin')).statusCode).toBe(404);
+});
+
 async function replayBinding() {
   const before = await get(`${path('dreamer')}/maintenance`, 'dreamer');
   function absentKeys() {
