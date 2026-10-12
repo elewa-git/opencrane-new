@@ -237,11 +237,11 @@ export async function startDecision(
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
   dispatchOptions?: McpDispatchOptions,
 ) {
-  const dispatch = mcpDispatch(actor.store, actor.silo, dispatchOptions);
+  const mcpSender = mcpDispatch(actor.store, actor.silo, dispatchOptions);
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
     if (req.url?.startsWith('/dispatch/mcp/')) {
-      void dispatchRequest(req, res, dispatch);
+      void dispatchRequest(req, res, mcpSender);
       return;
     }
     const started = performance.now();
@@ -348,7 +348,7 @@ export async function startDecision(
         fresh.include(`mcp-${match[1]!}`);
         const reviewedPolicy = await mcpPolicy(
           actor.store, actor.silo, match[1]!, match[2]!, parsed, req.headers, fresh.deadline);
-        const policy = dispatch.bindPolicy(reviewedPolicy);
+        const policy = mcpSender.bindPolicy(reviewedPolicy);
         const logicalRequestId = digestContext([actor.silo, turnToken.conversation,
           turnToken.turn, turnToken.thread, callId, match[1], match[2],
           policy.name, policy.args.canonical, policy.revision]);
@@ -369,7 +369,7 @@ export async function startDecision(
         linkApprovalAttempt(toolFacts, approvalId);
         await audit(outcome, reason, approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
         await fresh();
-        setDispatchPermit(res, dispatch, outcome, policy, raw, requestId, fresh, fresh.deadline);
+        setDispatchPermit(res, mcpSender, outcome, policy, raw, requestId, fresh, fresh.deadline);
         res.setHeader('x-request-id', requestId);
         markRefusedDecision(res, outcome === 'allow');
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
