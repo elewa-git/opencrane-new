@@ -1,0 +1,30 @@
+import { z } from 'zod';
+
+const id = z.string().min(1);
+const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
+const secretRefSchema = z
+  .string()
+  .regex(
+    /^secret:[A-Za-z0-9_-]+$/,
+    'secretRef must be an opaque reference, e.g. "secret:<id>", never the credential value itself',
+  );
+
+// Keep old profiles readable. Require all activation details together for new generations.
+const connectionId = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const connectionActivationSchema = z.strictObject({
+  connectionId, ownerKind: z.literal('personal'), purpose: z.literal('personal'),
+  generation: z.int().positive(), uid: connectionId, resourceVersion: connectionId,
+  endpointDigest: digestSchema, operationId: connectionId, changedBy: connectionId,
+  expectedSequence: z.int().nonnegative(), appendUntil: z.int().positive(),
+  reason: z.enum(['bearer_create', 'bearer_rotation']),
+});
+export const connectionCreatedDataSchema = z
+  .object({ userId: id, serverId: id, profile: id, secretRef: secretRefSchema,
+    activation: connectionActivationSchema.optional() })
+  .strict();
+
+export const connectionRefreshedDataSchema = connectionCreatedDataSchema.clone();
+
+export const connectionRevokedDataSchema = z
+  .object({ userId: id, serverId: id, profile: id, revokedBy: id })
+  .strict();

@@ -1542,3 +1542,32 @@ Logs: `/tmp/p3-6-pr2-order-red-final.log`,
 `/tmp/p3-6-pr2-admission-tests-{1,2}.log`, `/tmp/p3-6-pr2-admission-lint-final.log`,
 `/tmp/p3-6-pr2-admission-typecheck.log`, `/tmp/p3-6-pr2-admission-events.log`,
 `/tmp/p3-6-pr2-admission-knip.log` and `/tmp/p3-6-pr2-admission-changelog.log`.
+
+## Personal bearer commands (P3-8 PR 2, part of #49)
+
+`saveBearerConnection(store, binding, memberId, custody, input, material)` is internal
+orchestration, with no HTTP route. `memberId` comes from authenticated server context.
+Input names `action` (create/rotate), serverId, connectionId, profileId, changeRef,
+expectedSequence, expectedGeneration and a fixed appendUntil UTC millisecond deadline.
+Material is separate, bounded to 1–8192 UTF-8 bytes, and never returned or logged.
+Only reviewed, published remote servers in personal account mode are accepted here.
+Hosted and company profiles remain outside this slice.
+
+The orchestration reads history and checks membership before staging with PR 1 custody.
+It then starts a fresh membership check and calls the append-only command. This command
+makes one conditional append; it never writes custody or a read table. It checks the
+saved server revision again and stops append retries at the earliest access, stage or catalogue expiry.
+Only member and ownership streams participate in the short access check.
+
+The operation id hashes silo, subject and changeRef. History retains retry identity beyond
+NATS deduplication. A retry must recover the same private material and exact identity and
+match the saved payload. Confirmed appends are read back and compared before returning.
+Unknown appends retain custody; this slice never deletes it. Orphan closure and cleanup
+remain row 3. `foldConnection` keeps old or incomplete records unavailable and new profiles
+`saved_unverified`. It reads no secret store and starts no work.
+
+The existing `profile` event field holds the opaque profileId, never an editable label.
+The stream is `connection-<member>-<server>-<profile>`. Selection, identity verification,
+release, broker, HTTP routes, UI and fresh-install qualification remain NOT RUN here.
+Tests use real NATS/OpenFGA and disposable PostgreSQL, with a custody boundary fixture;
+the existing custody tests separately exercise the private HTTP adapter.

@@ -90,3 +90,5 @@ export { foldRoutine, type RoutineState } from './routine-fold.ts';
 export { memoryForgottenDataSchema, memoryForgottenEventSchema } from './memory.ts';
 
 export { memoryMaintenanceRecordedDataSchema } from './memory.ts';
+
+export { connectionCreatedDataSchema, connectionRefreshedDataSchema } from './data.ts';

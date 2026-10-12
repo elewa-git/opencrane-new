@@ -1,0 +1,1 @@
+- Personal bearer profiles can be saved and rotated through internal commands after private storage succeeds. Stale changes are refused and replay keeps only exact storage references. Profiles remain unavailable for tool calls; account selection, credential release and screens are still to come.

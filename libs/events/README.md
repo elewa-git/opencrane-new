@@ -28,7 +28,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance records and revisions| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode; checks nightly memory records| events["libs/events<br/>checks records<br/>previews dates"]
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks tool admission, control, turns, instance-bound approvals, spending limits, stops, expired holds and one-use send permissions| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks tool admission, personal connection references, control, turns and spending| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
   events -.-> zones["Intl<br/>built-in time zone rules"]
@@ -114,6 +114,10 @@ events keep their original reading rules.
 Archive and read choices name one person and their join. They contain no chat text.
 
 ## Processes it handles
+
+Personal connection records can name an exact stored generation and the person who
+saved it. A replacement names the expected stream version. Old records still replay,
+but missing generation details never make a profile available for tool calls.
 
 Nightly memory records name one scope and date, its selected fact revisions and why work stopped.
 They contain no memory text and grant no spending or computer access.

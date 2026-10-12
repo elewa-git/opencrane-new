@@ -53,3 +53,5 @@ export { admitDescendant, descendantId } from './descendant-admission.ts';
 export { mcpDispatchRouteSchema } from './mcp-dispatch.ts';
 export { mcpInstanceWorkerRegistration, mcpInstanceObservation }
   from './mcp-instance-observation.ts';
+
+export { saveBearerConnection, foldConnection } from './bearer-connections.ts';

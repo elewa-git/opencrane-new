@@ -1,6 +1,8 @@
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { z } from 'zod';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
+import type { AppendCommand } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { pgDb } from '@opencrane/projections';
@@ -35,7 +37,14 @@ async function initialise() {
   const published = envelope('test', 'mcp-server', 'mcp.server_published', {
     serverId: 'server', publishedBy: 'admin',
   });
-  await nats.seed([registered, discovered, published]);
+  await nats.seed([registered, discovered]);
+  const policyRevision = await nats.store.head('mcp-server');
+  const review = envelope('test', 'mcp-server', 'mcp.server_reviewed', {
+    serverId: 'server', catalogueDigest: catalogue.schemaDigest, connectionId: 'installed',
+    accountMode: 'personal', policyRevision, reviewedBy: 'admin', tools: [],
+  });
+  review.principal = { kind: 'human', id: 'admin' };
+  await nats.seed([review, published]);
 }
 async function close() {
   await storage?.close();
@@ -51,13 +60,17 @@ function fixture() {
     expectedGeneration: 0, appendUntil: Date.now() + 60_000 };
   const subject = `connection-alice-server-${input.profileId}`;
   const staged = new Map<string, string>();
-  async function stage(request: ConnectionStage, supplied: string) {
+  function stage(request: ConnectionStage, supplied: string) {
     const previous = staged.get(request.operationId);
-    if (previous !== undefined && previous !== supplied) return { status: 'conflict' as const };
+    if (previous !== undefined && previous !== supplied) {
+      const conflict = { status: 'conflict' as const };
+      return Promise.resolve(conflict);
+    }
     staged.set(request.operationId, supplied);
     const identity = { reference: `mcp-${input.profileId}-g${request.generation}`,
       uid: `uid-${request.generation}`, resourceVersion: String(request.generation) };
-    return { status: 'staged' as const, identity };
+    const result = { status: 'staged' as const, identity };
+    return Promise.resolve(result);
   }
   const custody: Pick<ReturnType<typeof connectionCustody>, 'stage'> = { stage };
   async function save(command: unknown = input, supplied = material) {
@@ -74,7 +87,9 @@ async function stageFailure(action: 'create' | 'rotate') {
     sequence = created.sequence;
     generation = 1;
   }
-  async function failStage(): Promise<never> { throw new Error(material); }
+  function failStage(): Promise<never> {
+    return Promise.reject(new Error(material));
+  }
   test.custody.stage = failStage;
   const input = { ...test.input, action, changeRef: 'failed', expectedSequence: sequence,
     expectedGeneration: generation };
@@ -120,3 +135,75 @@ async function legacyClosed() {
   expect(await history(nats.store, test.subject, 'test')).toHaveLength(1);
 }
 it('keeps a legacy profile without an exact generation unavailable', legacyClosed);
+
+async function incompleteClosed() {
+  const test = fixture();
+  await test.save();
+  const rows = await history(nats.store, test.subject, 'test');
+  const incomplete = structuredClone(rows);
+  const dataSchema = z.object({ activation: z.object({ uid: z.string().optional() }).loose() }).loose();
+  const data = dataSchema.parse(incomplete[0]!.event.data);
+  delete data.activation.uid;
+  incomplete[0]!.event.data = data;
+  expect(foldConnection(incomplete).status).toBe('unavailable');
+}
+it('keeps an incomplete exact identity unavailable on replay', incompleteClosed);
+async function concurrentRotations() {
+  const test = fixture();
+  const created = await test.save();
+  const first = { ...test.input, action: 'rotate', changeRef: 'first',
+    expectedSequence: created.sequence, expectedGeneration: 1 };
+  const second = { ...first, changeRef: 'second' };
+  const attempts = await Promise.allSettled([test.save(first), test.save(second)]);
+  function succeeded(result: PromiseSettledResult<unknown>) {
+    return result.status === 'fulfilled';
+  }
+  expect(attempts.filter(succeeded)).toHaveLength(1);
+  const rows = await history(nats.store, test.subject, 'test');
+  expect(rows).toHaveLength(2);
+  expect(foldConnection(rows).data?.activation.generation).toBe(2);
+}
+it('saves only one of two competing rotations', concurrentRotations);
+async function refusesForeign() {
+  const test = fixture();
+  await expect(saveBearerConnection(nats.store, binding, 'bob', test.custody,
+    test.input, material)).rejects.toThrow();
+  const foreign = { ...test.input, connectionId: 'foreign' };
+  await expect(test.save(foreign)).rejects.toThrow('Connection server unavailable');
+  expect(await nats.store.head(test.subject)).toBe(0);
+}
+it('refuses a non-member and a different installation', refusesForeign);
+async function unknownStage() {
+  const test = fixture();
+  function unknown() {
+    const result = { status: 'unknown' as const };
+    return Promise.resolve(result);
+  }
+  test.custody.stage = unknown;
+  await expect(test.save()).rejects.toThrow('Connection custody unavailable');
+  expect(await history(nats.store, test.subject, 'test')).toEqual([]);
+}
+it('keeps an unknown custody outcome unrecorded', unknownStage);
+
+async function lostAppendReply() {
+  const test = fixture();
+  const append = nats.store.append.bind(nats.store);
+  async function loseReply(command: AppendCommand) {
+    await append(command);
+    return { status: 'unavailable' as const, cause: new Error('Reply lost') };
+  }
+  const fault = vi.spyOn(nats.store, 'append');
+  fault.mockImplementation(loseReply);
+  try {
+    await expect(test.save()).rejects.toThrow('Connection append unconfirmed');
+  } finally {
+    fault.mockRestore();
+  }
+  const recovered = await test.save();
+  expect(recovered.generation).toBe(1);
+  expect(await history(nats.store, test.subject, 'test')).toHaveLength(1);
+  const changed = { ...test.input, appendUntil: test.input.appendUntil + 1 };
+  await expect(test.save(changed)).rejects.toThrow('Connection conflict');
+  expect(await nats.store.head(test.subject)).toBe(recovered.sequence);
+}
+it('recovers a lost append reply and refuses changed retry details', lostAppendReply);
