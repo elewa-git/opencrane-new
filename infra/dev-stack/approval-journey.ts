@@ -9,6 +9,7 @@ import { grantStream, type memberAuthorisation } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
 import { history } from '@opencrane/models';
 import { directory, readEnv } from './config.ts';
+import { approvalJourneyTool, reviewJourneyTools } from './journey-tool-policy.ts';
 
 type Append = (type: string, subject: string, data: Record<string, unknown>, source?: string) => Promise<void>;
 
@@ -22,7 +23,8 @@ async function captureApprovalFailure(page: Page, width: number, error: unknown)
 }
 
 /** Real browser decisions and gateway admission; only the tool and its active turn are scripted. */
-export async function approvalJourney(pages: Page[], store: EventStore, auth: ReturnType<typeof memberAuthorisation>, append: Append,
+export async function approvalJourney(ownerPage: Page, pages: Page[], store: EventStore,
+  auth: ReturnType<typeof memberAuthorisation>, append: Append,
   input: { silo: string; origin: string; requesterId: string; assistantId: string; computerId: string; generation: number }) {
   const settings = await readEnv('settings');
   const budget = await history(store, `budget-${input.silo}`, input.silo);
@@ -30,14 +32,12 @@ export async function approvalJourney(pages: Page[], store: EventStore, auth: Re
     budget.findLast(row => row.event.type === 'budget.ceiling_set' &&
       z.object({ defaultPayingGroupId: z.string() }).safeParse(row.event.data).success)?.event.data);
   const tokens = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${input.origin}/` });
-  const serverId = 'approval-journey', connectionId = 'installed', revision = 'a'.repeat(64);
+  const serverId = 'approval-journey', connectionId = 'installed';
   const upstream = `http://127.0.0.1:${settings['MODEL_STUB_PORT']}`;
   await append('mcp.server_registered', `mcp-${serverId}`, { serverId, kind: 'remote', locator: `${upstream}/mcp`, registeredBy: 'zitadel-owner' });
-  await append('mcp.server_discovered', `mcp-${serverId}`, { serverId, connectionId, accountMode: 'none', schemaDigest: revision, toolCount: 1,
-    tools: [{ name: 'write', revision, reviewed: true, costCents: 0, review: { action: 'Update order note', consequence: 'The recording stub receives this order note once.',
-      targetArgument: 'order', fields: ['order', 'note'], stepUp: false } }] });
-  await append('mcp.server_published', `mcp-${serverId}`, { serverId, publishedBy: 'zitadel-owner' });
-  await append('mcp.tool_mode_set', `mcp-${serverId}`, { serverId, connectionId, toolName: 'write', toolRevision: revision, mode: 'ask', setBy: 'zitadel-owner' });
+  const writeTool = approvalJourneyTool();
+  await reviewJourneyTools(ownerPage, store, input.silo, input.origin, append,
+    serverId, [writeTool], ['ask']);
   for (const [granteeId, granteeKind] of [[input.requesterId, 'member'], [input.assistantId, 'assistant']]) {
     await append('grant.given', grantStream('mcp_server', serverId), { resourceType: 'mcp_server', resourceId: serverId, granteeId, granteeKind, grantedBy: 'zitadel-owner' });
   }

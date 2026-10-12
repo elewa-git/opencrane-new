@@ -1,6 +1,7 @@
 import { issueMinioLease } from './minio-tokens.ts';
 import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { open, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { setPriority } from 'node:os';
@@ -308,6 +309,10 @@ async function up(fresh: boolean) {
   if (secondary && !await exists(`${directory}/models.env`)) await writeEnv('models', {});
   if (fresh) {
     await stop();
+    // Rebuild local workspace packages after the daily checkout changes their exports.
+    if (secondary) {
+      await rm(`${root}/apps/web/.angular/cache`, { recursive: true, force: true });
+    }
     await compose('down', '--volumes', '--remove-orphans');
     await removeComputers();
     // Use the owner record to make sure this worktree only removes its own stack directory.
@@ -385,15 +390,24 @@ async function up(fresh: boolean) {
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
   await save('model-jwks.json', JSON.stringify(issuer.jwks));
   await save('model-stub-key', 'dev-stack-stub-only');
+  const approvalRoute = { serverId: 'approval-journey', connectionId: 'installed',
+    upstream: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, generation: randomUUID(),
+    revisionHeader: 'x-opencrane-mcp-revision' };
   if (!secondary) await modelFirewall(true);
-  if (!secondary) await start('model-stub', ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'], { MODEL_STUB_PORT: settings['MODEL_STUB_PORT']! });
+  if (!secondary) {
+    const stubEnvironment = { MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,
+      MODEL_STUB_MCP_GENERATION: approvalRoute.generation };
+    await start('model-stub', ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
+      stubEnvironment);
+  }
   await run('flock', ['--close', `/tmp/opencrane-dev-stack-tools-${process.getuid!()}.lock`, 'bash', 'spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh']);
   const models = {
     ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
     DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default',
     MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
     CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
-    MODEL_MCP_ROUTES: JSON.stringify([{ serverId: 'approval-journey', connectionId: 'installed', upstream: `127.0.0.1:${settings['MODEL_STUB_PORT']}` }]),
+    MODEL_MCP_ROUTES: JSON.stringify([approvalRoute]),
+    MODEL_STUB_MCP_GENERATION: approvalRoute.generation,
     MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, MODEL_KEY_FILE: `${directory}/model-stub-key`,
     AGENTGATEWAY_BINARY: `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`,
     MODEL_DECISION_PORT: settings['MODEL_DECISION_PORT']!, MODEL_GATEWAY_PORT: settings['MODEL_GATEWAY_PORT']!, MODEL_READINESS_PORT: settings['MODEL_READINESS_PORT']!, MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,

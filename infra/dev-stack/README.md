@@ -19,7 +19,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
-  stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>browser checks, saved-data repeats and daily run"]
+  stack -->|runs checks and saves owner tool reviews| journeys["Journeys and timer<br/>browser checks, saved-data repeats and daily run"]
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|uses local cluster| devbox
 ```
@@ -35,7 +35,10 @@ flowchart LR
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
 - Run browser checks against real local services. The approval check sends Codex's
   tool request shape. The thread id ties the call to its live chat turn. The call id
-  links the tool's attempts and progress reports.
+  links the tool's attempts and progress reports. The signed-in owner saves an exact
+  review of the test tools before the approval check uses them.
+  The local tool stand-in checks that a call names its current tool definition and
+  running instance before recording it.
 - Check group chats from the To line, participant access, direct chats, shared assistants and
   provider key saving in a fresh stack.
 - Keep one extra computer place so a saved-data repeat can start a new shared assistant.
@@ -86,7 +89,8 @@ infra/dev-stack/status.sh
 infra/dev-stack/down.sh
 ```
 
-`up.sh --fresh` replaces this stack's local data and credentials.
+`up.sh --fresh` replaces this stack's local data and credentials. For a spare stack,
+it also clears this worktree's website build cache so changed packages are rebuilt.
 
 The daily timer runs at 03:17 UTC. Before each run, its launcher updates the detached
 `~/dev/daily-fresh` checkout to the latest `main` and installs packages only when the lock
