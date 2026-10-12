@@ -51,6 +51,9 @@ eight lifetime descendants per root and four active descendants. Closes free onl
 active slots. A conditional append serialises competing replicas. Conflicts reload
 and repeat validation, within ten attempts and the original ten-second deadline.
 Retries compare the whole binding and return the original event. Changed retries refuse.
+After every successful append result, admission reads that exact stored position and
+checks the event identity and full binding. Duplicate recovery cannot return a caller's
+proposed event when another replica saved different scopes under the same id.
 
 History and grant summaries load before the two-second access check. That check watches
 only the existing small authority streams. Later root activity is read incrementally.

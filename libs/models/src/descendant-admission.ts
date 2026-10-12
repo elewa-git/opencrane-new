@@ -6,7 +6,7 @@ import type { Binding } from '@opencrane/authz';
 import { computerTurnStartedDataSchema, computerTurnClosedDataSchema, conversationCreatedDataSchema,
   parseEventByType }
   from '@opencrane/events';
-import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
+import { readEventAt, readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
   from '@opencrane/event-store';
 import { closesDecisionTurn } from './approvals.ts';
 import { decisionActivity } from './decision-activity.ts';
@@ -143,13 +143,31 @@ export async function admitDescendant(store: EventStore, access: Binding,
       deadline: fresh.deadline };
     const saved = await store.append(command);
     if (saved.status === 'appended') {
-      return { sequence: saved.sequence, event };
+      // Read the saved event because duplicate recovery may return another replica's admission.
+      const stored = await readEventAt(store, subject, saved.sequence, deadline);
+      requireSavedAdmission(stored, event);
+      return stored;
     }
     if (saved.status !== 'conflict') {
       throw new Error('Descendant admission unavailable');
     }
   }
   throw new Error('Descendant admission contention or deadline');
+}
+
+function requireSavedAdmission(stored: StoredEvent | undefined,
+  proposed: StoredEvent['event']): asserts stored is StoredEvent {
+  if (!stored) {
+    throw new Error('Descendant admission unavailable');
+  }
+  const saved = stored.event;
+  if (!parseEventByType(saved).success || saved.id !== proposed.id ||
+      saved.commandId !== proposed.commandId || saved.silo !== proposed.silo ||
+      saved.subject !== proposed.subject || saved.type !== proposed.type ||
+      saved.source !== proposed.source || !isDeepStrictEqual(saved.principal, proposed.principal) ||
+      !isDeepStrictEqual(saved.data, proposed.data)) {
+    throw new Error('Admission conflict');
+  }
 }
 
 function requirePrivateActivity(activity: Awaited<ReturnType<typeof decisionActivity>>,
