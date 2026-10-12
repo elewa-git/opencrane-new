@@ -2244,3 +2244,11 @@ Grant absence uses a separate completeness result for the group, assistant and g
 inputs, including permission receipts and a final check of those stream positions.
 Pending chat or computer tables do not turn a checked grant absence into a failed
 read. The ordinary departure completeness checks stay in place.
+
+## Nightly memory history
+
+The existing maintenance GET now includes up to 20 payload-free run records,
+newest first, capped at 16 KiB. The current binding member alone can read this
+status; scope read permission remains required. Other members receive 404.
+Checkpoint and generation checks reject stale or rebuilding tables. Reads still
+check access once. The 100-cent cap is recorded only; dispatch stays disabled.

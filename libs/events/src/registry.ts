@@ -6,8 +6,7 @@ import { egressEvents } from './egress.ts';
 import { takeoverEvents } from './takeover.ts';
 import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
   from './conversation.ts';
-import { memoryWrittenExample, memoryMaintenanceBoundDataSchema,
-  memoryCleanupRecordedDataSchema } from './memory.ts';
+import { memoryWrittenExample, memoryMaintenanceBoundDataSchema, memoryCleanupRecordedDataSchema, memoryMaintenanceRecordedDataSchema } from './memory.ts';
 import { modernDelegationExample } from './delegation.ts';
 import { ownershipEvents } from './ownership-events.ts';
 import { providerEvents } from './provider-events.ts';
@@ -42,6 +41,13 @@ import * as data from './data.ts';
 const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
 
 export const eventRegistry: readonly EventDefinition[] = [
+  event('memory.maintenance_recorded', 'scope',
+    'One scope night was claimed or skipped without dispatch.', memoryMaintenanceRecordedDataSchema,
+    { scopeId: memoryWrittenExample.scopeId, nightId: DIGEST_EXAMPLE, batchKey: DIGEST_EXAMPLE,
+      inputRevision: DIGEST_EXAMPLE, date: '2026-10-12', bindingRevision: 1, memberId: 'alice',
+      acceptedCapCents: 100, intendedAt: '2026-10-12T02:00:00.000Z',
+      selectedAt: '2026-10-12T02:00:00.000Z', inputRefs: [],
+      action: 'refused', reason: 'qualification_blocked' }),
   event('memory.maintenance_bound', 'scope',
     'A member accepted the nightly cap and chose a memory maintenance binding.',
     memoryMaintenanceBoundDataSchema,

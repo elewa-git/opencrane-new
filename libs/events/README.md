@@ -27,7 +27,7 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance records| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode; checks memory cleanup and saved choices| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode; checks nightly memory records| events["libs/events<br/>checks records<br/>previews dates"]
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks tool admission, control, turns, instance-bound approvals, spending limits, stops, expired holds and one-use send permissions| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
@@ -113,6 +113,9 @@ events keep their original reading rules.
 Archive and read choices name one person and their join. They contain no chat text.
 
 ## Processes it handles
+
+Nightly memory records name one scope and date, its selected fact revisions and why work stopped.
+They contain no memory text and grant no spending or computer access.
 
 A memory tombstone records a fact id and its next revision without any private text.
 The projection uses it to hide the fact and dependent copies before reading their keys.

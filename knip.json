@@ -28,7 +28,8 @@
     },
     "apps/ops": {
       "entry": [
-        "test/**/*.test.ts"
+        "test/**/*.test.ts",
+        "test/support/nightly-process.ts"
       ],
       "project": [
         "src/**/*.ts",

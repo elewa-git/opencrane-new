@@ -1,6 +1,6 @@
 import { parseEventByType, memoryWrittenEventSchema, memoryTextSchema, type EventEnvelope,
   type MemoryIdentity, memoryMaintenanceBoundDataSchema, memoryForgottenEventSchema,
-  memoryForgottenDataSchema } from '@opencrane/events';
+  memoryForgottenDataSchema, memoryMaintenanceRecordedDataSchema } from '@opencrane/events';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -11,6 +11,9 @@ type SavedMemoryWrite = ReturnType<typeof memoryWrittenEventSchema.parse>['data'
 type MemoryWrite = Extract<SavedMemoryWrite, { schemaVersion: 1 }>;
 
 async function create(db: Query): Promise<void> {
+  await db.query(`CREATE TABLE IF NOT EXISTS memory_maintenance_runs (
+    silo TEXT NOT NULL, scope_id TEXT NOT NULL, event_id TEXT NOT NULL, data JSONB NOT NULL,
+    position BIGINT NOT NULL, PRIMARY KEY (silo, scope_id, event_id))`);
   await db.query(`CREATE TABLE IF NOT EXISTS memory_maintenance_bindings (
     silo TEXT NOT NULL, scope_id TEXT NOT NULL, data JSONB NOT NULL, position BIGINT NOT NULL,
     PRIMARY KEY (silo, scope_id))`);
@@ -44,7 +47,7 @@ async function create(db: Query): Promise<void> {
 }
 
 async function drop(db: Query): Promise<void> {
-  await db.query(`DROP TABLE IF EXISTS memory_maintenance_bindings,
+  await db.query(`DROP TABLE IF EXISTS memory_maintenance_runs, memory_maintenance_bindings,
     memory_dependencies, memory_changes, memory_facts`);
 }
 
@@ -162,6 +165,24 @@ function prepareForgotten(envelope: EventEnvelope,
   return applyForgotten;
 }
 
+function prepareMaintenance(envelope: EventEnvelope) {
+  if (!parseEventByType(envelope).success) throw new Error('Invalid saved maintenance event');
+  const binding = envelope.type === 'memory.maintenance_bound';
+  const schema = binding ? memoryMaintenanceBoundDataSchema : memoryMaintenanceRecordedDataSchema;
+  const data = schema.parse(envelope.data);
+  async function applyMaintenance(db: Query, _event: EventEnvelope, position: number) {
+    const values = [envelope.silo, data.scopeId, JSON.stringify(data), position];
+    if (binding) {
+      await db.query(`INSERT INTO memory_maintenance_bindings VALUES ($1,$2,$3,$4)
+        ON CONFLICT (silo, scope_id) DO UPDATE SET data=$3, position=$4`, values);
+    } else {
+      await db.query('INSERT INTO memory_maintenance_runs VALUES ($1,$2,$3,$4,$5)',
+        [envelope.silo, data.scopeId, envelope.id, JSON.stringify(data), position]);
+    }
+  }
+  return applyMaintenance;
+}
+
 /** Give replay only decryption access, so it cannot create or delete a revision key. */
 export function memoryProjection(custody: {
   decrypt(identity: MemoryIdentity, value: { ciphertext: string; keyId: string }):
@@ -176,17 +197,10 @@ export function memoryProjection(custody: {
       checkedEvent(envelope);
       return ignored;
     }
-    if (envelope.type === 'memory.maintenance_bound') {
-      if (!parseEventByType(envelope).success) {
-        throw new Error('Invalid saved binding event');
-      }
-      const data = memoryMaintenanceBoundDataSchema.parse(envelope.data);
-      async function applyBinding(db: Query, _event: EventEnvelope, position: number) {
-        const values = [envelope.silo, data.scopeId, JSON.stringify(data), position];
-        await db.query(`INSERT INTO memory_maintenance_bindings VALUES ($1,$2,$3,$4)
-          ON CONFLICT (silo, scope_id) DO UPDATE SET data=$3, position=$4`, values);
-      }
-      return applyBinding;
+    if (envelope.type === 'memory.maintenance_bound' ||
+      envelope.type === 'memory.maintenance_recorded') {
+      return prepareMaintenance(envelope);
+    }
     }
     if (envelope.type === 'memory.forgotten') {
       return prepareForgotten(envelope, erasure);

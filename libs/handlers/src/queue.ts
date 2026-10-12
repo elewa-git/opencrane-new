@@ -1,5 +1,5 @@
 import { handlerJobKey } from './job-key.ts';
-import { PgBoss, type Queue, type JobWithMetadata } from "pg-boss";
+import { PgBoss, type Queue, type JobWithMetadata, type Job } from "pg-boss";
 import { parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { runHandler, type Logger } from "@opencrane/observability";
 import type { Db, Query } from "@opencrane/projections";
@@ -39,6 +39,7 @@ export interface RuntimeOptions {
 
 /** Use a dedicated pg-boss schema in the supplied silo database. */
 export class HandlerRuntime {
+  private scheduler: PgBoss | undefined;
   readonly boss: PgBoss;
   readonly options: RuntimeOptions;
   constructor(options: RuntimeOptions) {
@@ -229,7 +230,36 @@ export class HandlerRuntime {
     });
   }
 
+  async startNightly(scan: () => Promise<void>): Promise<void> {
+    await scheduleNightly(this.boss, this.options.silo, scan);
+    const scheduler = new PgBoss({ db: transactionAdapter(this.options.db), supervise: false });
+    this.scheduler = scheduler;
+    const logger = this.options.logger;
+    function failed(err: Error) {
+      logger.error({ err }, 'Nightly scheduler failed');
+    }
+    scheduler.on('error', failed);
+    // Start the native timekeeper only after the host has registered its workers and manifest.
+    await scheduler.start();
+    await this.boss.send('dream-nightly', { silo: this.options.silo });
+  }
+
   async stop(): Promise<void> {
+    await this.scheduler?.stop();
     await this.boss.stop({ graceful: true, timeout: 10_000 });
   }
+}
+
+export async function scheduleNightly(boss: PgBoss, silo: string, scan: () => Promise<void>) {
+  const queue = { retryLimit: 5, retryDelay: 1, retryBackoff: true };
+  await boss.createQueue('dream-nightly', queue);
+  async function deliver(jobs: Job<{ silo: string }>[]) {
+    for (const job of jobs) {
+      if (job.data.silo !== silo) throw new Error('Foreign nightly trigger');
+      await scan();
+    }
+  }
+  await boss.work('dream-nightly', deliver);
+  const options = { tz: 'UTC', key: silo, missed: 'skip' as const };
+  await boss.schedule('dream-nightly', '0 2 * * *', { silo }, options);
 }

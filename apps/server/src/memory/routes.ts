@@ -115,7 +115,7 @@ async function readContent(request: FastifyRequest, options: MemoryOptions, requ
   }
   if (request.routeOptions.url?.endsWith('/maintenance')) {
     z.strictObject({}).parse(request.query);
-    return await maintenanceStatus(options, scope);
+    return await maintenanceStatus(options, scope, requester);
   }
   if (request.routeOptions.url?.endsWith('/:memoryId')) {
     return await readDetail(request, options, requester, scope);

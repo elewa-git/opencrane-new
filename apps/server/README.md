@@ -15,7 +15,7 @@ flowchart LR
   server -->|records changes, instance stops, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, invitations, visible chat lists, own archive and read choices, facts, models and tools| postgres
+  server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
   server -->|sends turns, files, stops, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -177,6 +177,9 @@ computer and tool call is still planned. Switching on managed provider calls rem
 unavailable.
 
 ## Processes it handles
+
+The person who set up nightly memory upkeep can read its blocked and missed history.
+These reads contain dates and fact references, with no saved memory text or new work.
 
 1. **A person signs in.** The server sends the browser to Zitadel and checks the returned identity. It keeps the session in an encrypted cookie. If the sign-in details are too large
    for a browser cookie, it shows a clear error.

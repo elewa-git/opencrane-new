@@ -537,7 +537,8 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | dispatch disabled; no scheduling or spending |
+| `memory.maintenance_recorded` | Native nightly scheduler | Payload-free scope night history | No dispatch or spending |
+| `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | Native scheduling records intent only; no dispatch or spending |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
 | `memory.corrected` | OpenCrane memory MCP (planned); nightly dreaming job (planned) | Postgres memory projection (planned) | correction cleanup is planned |
 | `memory.forgotten` | Person HTTP command (planned); other scopes disabled | Postgres memory projection hides the fact and all dependent facts | `cleanup-memory` destroys person revision and candidate keys and verifies search removal |
@@ -562,7 +563,7 @@ checks saved targets and completed events before acting again, without model cal
 HTTP forget/status, retry-exhaustion evidence and pending-job recovery after job-table loss
 are not built yet. Forget remains disabled for every scope until these work together.
 
-Nightly dreaming runs per scope in the handler runtime, using a cheap model through the gateway with a budget. It merges duplicates, flags contradictions and expires stale facts through `memory.corrected`; it never crosses scopes. `memory.consolidated` and the existing scope-promotion rows are retained for contract compatibility, with no MVP emitters or promotion reactions enabled. The stream table's older scope description includes these deferred operations. Sharing data across groups is a later design topic.
+Nightly dreaming currently records one blocked or missed intent per dirty scope and UTC night. The native pg-boss clock triggers at 02:00 UTC, with a 15-minute start window. Restart records only the latest missed night; facts stay dirty. Computer dispatch and spending remain disabled. Later work will run per scope through the gateway with a budget. It merges duplicates, flags contradictions and expires stale facts through `memory.corrected`; it never crosses scopes. `memory.consolidated` and the existing scope-promotion rows are retained for contract compatibility, with no MVP emitters or promotion reactions enabled. The stream table's older scope description includes these deferred operations. Sharing data across groups is a later design topic.
 
 Cognee is deferred until after the MVP; it may become another projection fed by replaying the same memory events plus document ingestion, without changing the agent's tools.
 

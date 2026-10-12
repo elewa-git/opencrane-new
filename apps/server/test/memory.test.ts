@@ -2305,6 +2305,8 @@ it('allows disable after payer or assistant loss and refuses renewed enablement'
 
 it('refuses binding events that claim another member or another scope', invalidBindingEvent);
 
+it('shows blocked and missed history only to the binding owner', nightlyHistory);
+
 // Keep these history checks on shared services before fairness tests replace them.
 it.each(['destroyed', 'missing'] as const)(
   'checks a %s ancestor before accepting a derived fact', ancestor);
@@ -2515,7 +2517,7 @@ async function originalBinding() {
   expect((await get(`${path('dream-sales', 'group')}/maintenance`, 'admin')).statusCode).toBe(404);
 }
 
-it('shows blocked and missed history only to the binding owner', async function nightlyHistory() {
+async function nightlyHistory() {
   const scopeId = memoryScopeId('acme', 'person', 'dreamer');
   for (const [action, reason, date] of [
     ['refused', 'qualification_blocked', '2026-10-12'],
@@ -2535,8 +2537,19 @@ it('shows blocked and missed history only to the binding owner', async function 
     { action: 'missed', reason: 'window_missed' },
     { action: 'refused', reason: 'qualification_blocked' },
   ] });
+  await append('team-dream-sales', 'team.member_added',
+    { teamId: 'dream-sales', memberId: 'admin', addedBy: 'owner' });
+  await runner.run(projection);
+  const shared = path('dream-sales', 'group');
+  expect((await get(`${shared}/facts`, 'admin')).statusCode).toBe(200);
+  expect((await get(`${shared}/maintenance`, 'admin')).statusCode).toBe(404);
+  const position = await nats.store.head();
+  await runner.rebuild(projection);
+  const rebuilt = await get(`${path('dreamer')}/maintenance`, 'dreamer');
+  expect(rebuilt.json()).toEqual(response.json());
+  expect(await nats.store.head()).toBe(position);
   expect((await get(`${path('dreamer')}/maintenance`, 'admin')).statusCode).toBe(404);
-});
+}
 
 async function replayBinding() {
   const before = await get(`${path('dreamer')}/maintenance`, 'dreamer');

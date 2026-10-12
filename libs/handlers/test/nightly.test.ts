@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import { PgBoss, TestClock, type Db } from 'pg-boss';
-import { scheduleNightly } from '../src/nightly.ts';
+import { scheduleNightly } from '../src/queue.ts';
 import { fixture, until } from './helpers.ts';
 
 let services: Awaited<ReturnType<typeof fixture>>;
@@ -13,9 +13,12 @@ afterEach(async function close() {
 it('uses the native UTC schedule with one trigger across two timekeepers at 02:00',
   async function nativeBoundary() {
     services = await fixture();
-    const clock = new TestClock('2026-10-12T01:59:59Z');
+    const clock = new TestClock('2030-10-12T01:59:59Z');
     let sessionStatements: string[] = [];
-    async function setSessionStatements(statements: string[]) { sessionStatements = statements; }
+    function setSessionStatements(statements: string[]) {
+      sessionStatements = statements;
+      return Promise.resolve();
+    }
     async function executeSql(sql: string, values?: unknown[]) {
       const client = await services.pool.connect();
       try {
@@ -31,15 +34,18 @@ it('uses the native UTC schedule with one trigger across two timekeepers at 02:0
       await scheduler.start();
     }
     let delivered = 0;
-    async function record() { delivered++; }
+    function record() {
+      delivered++;
+      return Promise.resolve();
+    }
     await scheduleNightly(schedulers[0]!, 'test', record);
     const schedule = await schedulers[0]!.getSchedule('dream-nightly', 'test');
     expect(schedule).toMatchObject({ cron: '0 2 * * *', timezone: 'UTC',
       options: { missed: 'skip' } });
     expect(delivered).toBe(0);
     await clock.tick(1000);
-    await clock.tick(3000);
-    async function received() { return delivered === 1; }
+    await clock.tick(10_000);
+    function received() { return Promise.resolve(delivered === 1); }
     await until(received);
     await clock.tick(60_000);
     expect(delivered).toBe(1);
