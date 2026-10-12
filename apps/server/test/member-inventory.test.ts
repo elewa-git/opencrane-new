@@ -500,6 +500,167 @@ async function blocksBehindProjection() {
 }
 it('keeps a behind projection or failed reader distinct from an empty result', blocksBehindProjection);
 
+function explanationRequest(sub = 'explained', requesterId = 'explained',
+  serverId = 'explained-server', assistantId = 'explained-helper', origin?: string) {
+  const session = { sub, orgId: 'org-acme', roles: ['owner'],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers: Record<string, string> = {
+    cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+  };
+  if (origin) headers['origin'] = origin;
+  const query = new URLSearchParams({ requesterId, assistantId, toolName: 'read' });
+  const url = `/api/org/integrations/${serverId}/access/explanation?${query}`;
+  return app.inject({ method: 'GET', url, headers });
+}
+
+async function explainsToolSources() {
+  for (const memberId of ['explained', 'tool-outsider']) {
+    await append(`member-${memberId}`, 'member.joined', {
+      memberId, role: 'member', email: `${memberId}@example.test`, displayName: memberId,
+    });
+  }
+  await append('team-explained', 'team.created', {
+    teamId: 'explained', name: 'Tool readers', createdBy: 'owner',
+  });
+  await append('team-explained', 'team.member_added', {
+    teamId: 'explained', memberId: 'explained', addedBy: 'owner',
+  });
+  await append('assistant-explained-helper', 'assistant.created', {
+    assistantId: 'explained-helper', kind: 'personal', ownerId: 'explained',
+  });
+  for (const [granteeKind, granteeId] of [
+    ['member', 'explained'], ['team', 'explained'], ['assistant', 'explained-helper'],
+  ]) {
+    await append(grantStream('mcp_server', 'explained-server'), 'grant.given', {
+      resourceType: 'mcp_server', resourceId: 'explained-server',
+      granteeKind, granteeId, grantedBy: 'owner',
+    });
+  }
+  await append('mcp-explained-server', 'mcp.server_registered', {
+    serverId: 'explained-server', kind: 'remote', locator: 'https://example.test/mcp',
+    registeredBy: 'owner',
+  });
+  await append('mcp-explained-server', 'mcp.server_discovered', {
+    serverId: 'explained-server', connectionId: 'explained-connection', accountMode: 'personal',
+    toolCount: 1, schemaDigest: 'a'.repeat(64), tools: [{
+      name: 'read', revision: 'a'.repeat(64), reviewed: false, costCents: 0,
+    }],
+  });
+  await project();
+  const before = await nats.store.head();
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const response = await explanationRequest();
+  expect(response.statusCode).toBe(200);
+  expect(response.headers['cache-control']).toBe('no-store');
+  expect(response.json()).toMatchObject({
+    person: 'allowed', assistant: 'allowed', actsFor: 'allowed',
+    profile: 'absent_on_version', mode: 'block', publication: 'unavailable',
+    complete: false, sources: [
+      { kind: 'direct', granteeKind: 'member' },
+      { kind: 'group', groupName: 'Tool readers' },
+      { kind: 'assistant', granteeKind: 'assistant' },
+    ], reasons: expect.arrayContaining(['profile_not_available_yet', 'publication_unavailable']),
+  });
+  for (const [subject] of reads.mock.calls) expect(subject).not.toContain('*');
+  expect(await nats.store.head()).toBe(before);
+  const inventory = await request('access', 'owner', 'org-acme', 'explained');
+  expect(inventory.json()).toMatchObject({ complete: false, rows: [{ eligibility: {
+    toolExplanations: [{ assistantId: 'explained-helper', toolName: 'read',
+      person: 'allowed', assistant: 'allowed', profile: 'absent_on_version' }],
+  } }] });
+}
+it('explains direct, group and assistant grants using exact inventory facts', explainsToolSources);
+
+async function keepsExplanationPrivate() {
+  const foreignMember = { ...event('foreign-member', 'member-foreign', 'member.joined'),
+    silo: 'elsewhere', data: { memberId: 'foreign', role: 'member',
+      email: 'private@example.test', displayName: 'Private name' } };
+  const foreignServer = { ...event('foreign-server', 'mcp-foreign', 'mcp.server_registered'),
+    silo: 'elsewhere', data: { serverId: 'foreign', kind: 'remote',
+      locator: 'https://private.example.test/mcp', registeredBy: 'foreign' } };
+  await nats.seed([foreignMember, foreignServer]);
+  await project();
+  const own = await explanationRequest();
+  const admin = await explanationRequest('owner');
+  expect(admin.statusCode).toBe(200);
+  const ownBody = own.json<Record<string, unknown>>();
+  const adminBody = admin.json<Record<string, unknown>>();
+  delete ownBody['checkedAt'];
+  delete adminBody['checkedAt'];
+  expect(adminBody).toEqual(ownBody);
+  expect(admin.body).not.toMatch(/example\.test|ciphertext|secretRef|displayName/u);
+  expect((await explanationRequest('tool-outsider')).statusCode).toBe(403);
+  expect((await explanationRequest('explained', 'bob')).statusCode).toBe(403);
+  expect((await explanationRequest('owner', 'foreign')).statusCode).toBe(403);
+  expect((await explanationRequest('owner', 'explained', 'foreign')).statusCode).toBe(403);
+  expect((await explanationRequest('owner', 'explained', 'explained-server', 'personal'))
+    .statusCode).toBe(403);
+  expect((await explanationRequest('explained', 'explained', 'explained-server',
+    'explained-helper', 'https://foreign.test')).statusCode).toBe(403);
+}
+it('allows only own or admin explanations and returns the same safe detail', keepsExplanationPrivate);
+
+async function distinguishesToolIamFailure() {
+  const use = vi.spyOn(auth, 'use');
+  use.mockResolvedValue(unavailablePermission);
+  const response = await explanationRequest();
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ person: 'unavailable', assistant: 'unavailable',
+    profile: 'absent_on_version', availability: 'unavailable', complete: false,
+    reasons: expect.arrayContaining(['iam_unavailable']) });
+  expect(response.body).not.toContain('missing_requester_grant');
+}
+it('keeps absent profile evidence separate from an IAM outage', distinguishesToolIamFailure);
+
+async function permitsSlowExplanation() {
+  const original = nats.store.readStream.bind(nats.store);
+  function finishDelay(resolve: () => void) { setTimeout(resolve, 2100); }
+  async function* delayed(subject: string, from = 1, deadline = Infinity) {
+    if (subject === 'mcp-explained-server') await new Promise<void>(finishDelay);
+    yield* original(subject, from, deadline);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(delayed);
+  const started = performance.now();
+  const response = await explanationRequest();
+  expect(performance.now() - started).toBeGreaterThan(2000);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ person: 'allowed', assistant: 'allowed' });
+}
+it('lets a read finish after two seconds without treating it as lost access', permitsSlowExplanation);
+
+async function explainsMissingAssistantGrant() {
+  await append('assistant-ungranted-helper', 'assistant.created', {
+    assistantId: 'ungranted-helper', kind: 'personal', ownerId: 'explained',
+  });
+  await project();
+  const response = await explanationRequest('explained', 'explained', 'explained-server',
+    'ungranted-helper');
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ person: 'allowed', assistant: 'denied',
+    actsFor: 'allowed', reasons: expect.arrayContaining(['missing_assistant_grant']) });
+}
+it('keeps the assistant grant separate from the requester grant', explainsMissingAssistantGrant);
+
+async function reportsExplanationOverflow() {
+  const tools = [];
+  for (let index = 0; index < 51; index++) {
+    tools.push({ name: `read-${index}`, revision: 'b'.repeat(64), reviewed: false, costCents: 0 });
+  }
+  await append('mcp-explained-server', 'mcp.server_discovered', {
+    serverId: 'explained-server', connectionId: 'explained-connection', accountMode: 'none',
+    toolCount: 51, schemaDigest: 'b'.repeat(64), tools,
+  });
+  await project();
+  const response = await request('access', 'owner', 'org-acme', 'explained');
+  const inventory = memberAccessSchema.parse(response.json());
+  expect(inventory.complete).toBe(false);
+  expect(inventory.unavailableSections).toContain('tool_limits');
+  expect(response.json()).toMatchObject({ rows: [{ eligibility: {
+    toolExplanationTotal: null,
+  } }] });
+}
+it('reports a tool explanation limit without claiming an exact total', reportsExplanationOverflow);
+
 async function blocksUnsupportedRecords() {
   const previous = (await request('departure')).json<{ reviewRevision: string }>();
   await append('member-bob', 'member.role_changed', {
