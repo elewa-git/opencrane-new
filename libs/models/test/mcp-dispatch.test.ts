@@ -129,6 +129,24 @@ async function refusesReuse() {
 }
 it('sends original bytes with the revision precondition and consumes its permit once', refusesReuse);
 
+async function allowsModelAndToolFromOneProcess() {
+  const setup = await fixture();
+  try {
+    const model = await setup.call();
+    expect(model.status, model.text).toBe(200);
+    expect(setup.received()).toBe(1);
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    const tool = await send(setup, value);
+    expect(tool.status, await tool.text()).toBe(200);
+    expect(setup.received()).toBe(2);
+  } finally {
+    await setup.close();
+  }
+}
+it('admits model and ordinary MCP calls from the same decision process',
+  allowsModelAndToolFromOneProcess);
+
 async function refusesUnsupported() {
   const setup = await fixture();
   try {
