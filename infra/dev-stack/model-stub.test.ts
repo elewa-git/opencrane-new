@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
@@ -9,6 +10,34 @@ import { approvalJourneyTool } from './journey-tool-policy.ts';
 
 const exec = promisify(execFile);
 const stubPath = new URL('./model-stub.ts', import.meta.url).pathname;
+
+async function startsFromWakePodFixture(): Promise<void> {
+  const fixture = await mkdtemp(`${process.cwd()}/infra/dev-stack/.wake-stub-`);
+  const fixtureStub = `${fixture}/stub.ts`;
+  const stubSource = await readFile(stubPath, 'utf8');
+  await writeFile(fixtureStub, stubSource);
+  const generation = randomUUID();
+  const revision = catalogueDigest([approvalJourneyTool()]);
+  const environment = { ...process.env, MODEL_STUB_PORT: '0',
+    MODEL_STUB_MCP_GENERATION: generation, MODEL_STUB_MCP_REVISION: revision };
+  const stub = spawn(process.execPath, ['--experimental-strip-types', fixtureStub],
+    { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    let output = '';
+    for await (const chunk of stub.stdout) {
+      output += chunk.toString();
+      if (/Stub ready \d+/u.test(output)) break;
+    }
+    assert.match(output, /Stub ready \d+/u);
+  } finally {
+    if (stub.exitCode === null) {
+      const stopped = once(stub, 'exit');
+      stub.kill('SIGTERM');
+      await stopped;
+    }
+    await rm(fixture, { recursive: true, force: true });
+  }
+}
 
 async function checksBackendBeforeRecording(): Promise<void> {
   const generation = randomUUID();
@@ -64,3 +93,5 @@ test('the approval stub checks revision and generation before recording any effe
   { timeout: 15_000 }, checksBackendBeforeRecording);
 test('the approval stub refuses startup without its instance generation',
   { timeout: 15_000 }, refusesMissingGeneration);
+test('the wake Pod fixture starts the stub with only its packaged files',
+  { timeout: 15_000 }, startsFromWakePodFixture);
