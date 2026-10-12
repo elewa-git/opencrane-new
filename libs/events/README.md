@@ -7,6 +7,7 @@ An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened
 This package says which event types exist and what information each one carries.
 It checks new memory text and still accepts older encrypted events for replay.
 It checks event data, but it does not save events or decide whether a person may act.
+It also previews routine dates from a supplied time, without starting work.
 
 ## Where it fits
 
@@ -23,13 +24,14 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks survey hashes and routine replay<br/>ignores duplicate records"]
+  server["apps/server<br/>back end"] -.->|checks startup, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance records| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks control, turns, spending limits, stops, expired holds and one-use send permissions| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
+  events -.-> zones["Intl<br/>built-in time zone rules"]
 ```
 
 Tool catalogue records keep exact definitions and the dates of successful or failed checks.
@@ -57,6 +59,8 @@ value calculated from those definitions. Older records remain readable for repla
 - Defines shared child records with a parent message, fixed payer and named people.
 - Define strict routine records and rebuild their saved facts without starting work.
   Older routines stay readable and need migration before use.
+- Calculate daily and weekly routine dates in a named time zone. Show the first
+  repeated time and flag missing times when clocks move forward.
 - Defines delegated task relationships and outcomes, including cancellation. Older records
   remain readable. These records grant no permission to run a task.
 
@@ -123,6 +127,10 @@ The HTTP forget command and key cleanup are not built yet.
 3. **Saved routine records are read again.** `foldRoutine` rebuilds their definition
    and run facts. It remembers each modern event's id and ignores that event if it
    arrives again, even after later changes. It grants no access and starts no work.
+
+4. **A caller previews a routine schedule.** It supplies the time and the last used
+   local date, if there is one. The library returns future dates and clock-change
+   warnings. It saves nothing and starts no work.
 
 ## How to run or test it
 

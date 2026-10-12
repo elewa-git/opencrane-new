@@ -10,7 +10,7 @@ const zone = z.string().min(1).max(100);
 const reason = z.string().regex(/^[a-z][a-z0-9_]{1,63}$/u);
 const daily = z.object({ frequency: z.literal('daily'), localTime, zone }).strict();
 const weekly = daily.extend({ frequency: z.literal('weekly'), weekday: z.int().min(1).max(7) });
-const schedule = z.discriminatedUnion('frequency', [daily, weekly]);
+export const routineScheduleSchema = z.discriminatedUnion('frequency', [daily, weekly]);
 const slot = z.object({ localDate: z.iso.date(), localTime, zone, at: instant,
   offsetMinutes: z.int().min(-840).max(840) }).strict();
 const reference = z.object({ eventId: id, position: revision }).strict();
@@ -24,7 +24,8 @@ export const routineDefinitionSchema = z.object({
   assistantPayingGroupId: id, connectionId: id, connectionKind: z.literal('company'),
   profileId: id, profileRevision: revision, connectionRevision: revision,
   companyAccountId: id, scopes: z.array(id).max(32),
-  instructions: z.object({ ciphertext: ciphertextSchema, keyId: keyIdSchema }).strict(), schedule,
+  instructions: z.object({ ciphertext: ciphertextSchema, keyId: keyIdSchema }).strict(),
+  schedule: routineScheduleSchema,
 }).strict().refine(hasAssistantPayer, 'The payer must equal the assistant payer');
 function hasAssistantPayer(data: { payingGroupId: string; assistantPayingGroupId: string }) {
   return data.payingGroupId === data.assistantPayingGroupId;
