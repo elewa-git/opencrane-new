@@ -5,7 +5,7 @@ import { grantStream, type Binding } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
 import { assistantCreatedDataSchema, type MemoryIdentity } from '@opencrane/events';
 import { type authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
-import { decisionActivity } from './decision-activity.ts';
+import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall, parseMemoryRequest, toolDecision } from './mcp.ts';
 import { closesDecisionTurn } from './approvals.ts';
 import { data } from './state.ts';
@@ -64,7 +64,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
     const authority = await decisionAuthorityFence(store, performance.now(), [],
       claims.requester, claims.assistant, undefined, checkDeadline);
     async function confirmAuthority() {
-      await authority();
+      await confirmDecisionAccess(activity, authority, false);
     }
     function include(...subjects: string[]) {
       authority.include(...subjects);
@@ -106,7 +106,6 @@ export async function memoryRights(store: EventStore, binding: Binding,
         claims.assistant, claims.conversation, resourceType, scope.scopeId, fresh,
         activity.conversation);
     }
-    await activity.confirm(checkDeadline, false);
     await fresh();
     return { scope, contextDigest, contextPosition: fresh.head, canRemember, policy };
   }

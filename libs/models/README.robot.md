@@ -1114,6 +1114,9 @@ installations keep working without a remember policy.
 `memoryRights` returns a final check that reads saved grants, current permissions and tool
 policy again. It reuses the conversation history already read. The server calls it before
 the conditional append, with the capability's original deadline.
+It uses the dispatcher's `confirmDecisionAccess` loop. Access and later activity
+checks repeat until both see no new events. A harmless admission cannot hide a
+revocation saved while it is read. The original deadline still ends the check.
 It watches small access streams and checks later turn activity separately. It does not add
 conversation or memory-content streams to the access snapshot. The server's signed recalled
 references and command checks are described in `apps/server/README.robot.md`.

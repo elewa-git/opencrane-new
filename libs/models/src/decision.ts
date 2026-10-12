@@ -9,7 +9,7 @@ import { approvalDecision, closesDecisionTurn, type ReviewKeys } from './approva
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
-import { decisionActivity } from './decision-activity.ts';
+import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall } from './mcp.ts';
 import { MemoryPersonScopeOnly, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -300,12 +300,7 @@ export async function startDecision(
         subjects, turnToken.requester, computer.assistant, grants);
       let needsApproval = false;
       async function confirmAccess() {
-        while (true) {
-          const activityChanged = await activity.confirm(authority.deadline, needsApproval);
-          const authorityChanged = await authority();
-          if (!activityChanged && !authorityChanged) return;
-          // Recheck both because a turn can stop while unrelated grants are being read.
-        }
+        await confirmDecisionAccess(activity, authority, needsApproval);
       }
       async function confirmDecision() {
         await confirmAccess();

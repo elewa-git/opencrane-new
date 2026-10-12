@@ -12,11 +12,14 @@ import { decisionAuthorityFence, currentAuthority } from '../src/authority.ts';
 import { decisionActivity } from '../src/decision-activity.ts';
 import { mcpPolicy } from '../src/mcp.ts';
 
-function authorityModule() {
-  return { decisionAuthorityFence: vi.fn(), currentAuthority: vi.fn() };
+async function authorityModule() {
+  const actual = await vi.importActual<typeof import('../src/authority.ts')>('../src/authority.ts');
+  return { ...actual, decisionAuthorityFence: vi.fn(), currentAuthority: vi.fn() };
 }
-function activityModule() {
-  return { decisionActivity: vi.fn() };
+async function activityModule() {
+  const actual = await vi.importActual<typeof import('../src/decision-activity.ts')>(
+    '../src/decision-activity.ts');
+  return { ...actual, decisionActivity: vi.fn() };
 }
 async function mcpModule() {
   const actual = await vi.importActual<typeof import('../src/mcp.ts')>('../src/mcp.ts');

@@ -982,7 +982,8 @@ async function refusesRevocationWhileReadingAdmission() {
     finalCheck = true;
     return rights.confirm();
   }
-  async function readHead(subject?: string, readDeadline?: number) {
+  async function readHead(subject?: string, readDeadline?: number,
+    includeConversationCloses?: boolean) {
     // Add another call after currentAuthority has checked the write grant once.
     // The next sample belongs to the final check before memory.written.
     if (finalCheck && subject === 'mcp-memory' && grantSamples === 1 && !admission) {
@@ -992,15 +993,17 @@ async function refusesRevocationWhileReadingAdmission() {
         generation: 'memory-instance' };
       admission = await setup.append('mcp-memory', 'mcp.dispatch_admitted', fields);
     }
-    const position = await originalHead(subject, readDeadline);
+    const position = await originalHead(subject, readDeadline, includeConversationCloses);
     if (finalCheck && subject === grantSubject) {
       grantSamples += 1;
       if (grantSamples === 2) sampledGrantPosition = position;
     }
     return position;
   }
-  async function* readStream(subject: string, from?: number, readDeadline?: number) {
-    for await (const row of originalRead(subject, from, readDeadline)) {
+  async function* readStream(subject: string, from?: number, readDeadline?: number,
+    includeConversationCloses?: boolean) {
+    const rows = originalRead(subject, from, readDeadline, includeConversationCloses);
+    for await (const row of rows) {
       // Save the revocation only after all stream positions were sampled.
       if (subject === 'mcp-memory' && row.event.id === admission?.id && !revoked) {
         expect(sampledGrantPosition).toBe(grantPosition);

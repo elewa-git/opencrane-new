@@ -35,7 +35,9 @@ Block saved first refuses admission. Admission saved first allows that call;
 Block applies to later calls. It checks the small access streams within two seconds.
 Built-in memory uses the same send check. Its signed context also identifies the one-use
 pass, running backend and reviewed tool list. The memory backend checks access again
-and refuses a context it has already received. Other hosted images still need image admission.
+and refuses a context it has already received. It repeats the final access check when
+other calls arrive, so a saved revocation still stops the write within the same deadline.
+Other hosted images still need image admission.
 
 ## What it is responsible for
 
