@@ -32,9 +32,10 @@ function inventoriesUnnamedCoreAndMinidump() {
     const input = JSON.stringify({ paths: [directory] });
     const child = spawnSync('python3', args, { input, encoding: 'utf8' });
     expect(child.status, child.stderr).toBe(0);
-    const result = JSON.parse(child.stdout) as { files: { dump: boolean }[] };
-    expect(result.files).toHaveLength(3);
-    for (const file of result.files) expect(file.dump).toBe(true);
+    const result: unknown = JSON.parse(child.stdout);
+    expect(result).toMatchObject({ files: [
+      { dump: true }, { dump: true }, { dump: true },
+    ] });
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

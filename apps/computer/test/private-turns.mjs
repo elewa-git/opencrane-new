@@ -1,3 +1,4 @@
+import { newDumpFiles } from './private-fault-evidence.mjs';
 import { finishQualification } from './private-result.mjs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -7,10 +8,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { command, input, until } from '../../../spikes/s0-3-warm-pool/lab.mjs';
 
 process.chdir(new URL('../../..', import.meta.url).pathname);
-const namespace = 'p414-private';
+const namespace = `p414-private-${randomBytes(4).toString('hex')}`;
 const evidencePath = 'docs/process/evidence/p4-14/private-turns.json';
 const fixtureImage = 'k3d-ocn-registry:5000/opencrane/s035@sha256:6fe29bfc4455f19601bbca9e3cffa998fed57632484bb3a624a8da69beecee47';
-const evidence = { date: new Date().toISOString(), result: 'PARTIAL', memoryAdmission: 'DISABLED',
+const evidence = { namespace, date: new Date().toISOString(), result: 'PARTIAL', memoryAdmission: 'DISABLED',
   checks: {}, measurements: {}, conditions: {}, limitations: [
     'UID 1003 can write /tmp on node disk, /dev/shm and world-writable workspace directories.',
     'Concurrent private turns share UID 1003; only absent tools separate them.',
@@ -21,7 +22,7 @@ const evidence = { date: new Date().toISOString(), result: 'PARTIAL', memoryAdmi
 const journeyNames = ['J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'J7'];
 const measurementNames = ['podMounts', 'privateNodeMount', 'privateStatfs', 'writableCensus',
   'coreLimits', 'swapCgroups', 'nodeSwaps', 'hostCorePattern', 'privateHomePeakBytes',
-  'initialiseLatency', 'twoTurnPeakMemory', 'runscOptions'];
+  'initialiseLatency', 'twoTurnPeakMemory', 'runscOptions', 'realFault'];
 for (const name of journeyNames) evidence.checks[name] = { result: 'NOT RUN' };
 for (const name of measurementNames) evidence.measurements[name] = { result: 'NOT RUN' };
 function check(name, passed, detail) {
@@ -69,7 +70,7 @@ function variants(canary) {
   return results;
 }
 const canaries = {};
-for (const kind of ['message', 'context', 'reply', 'reasoning', 'compaction', 'tool', 'alice', 'bob', 'prompt']) {
+for (const kind of ['message', 'context', 'reply', 'reasoning', 'compaction', 'tool', 'alice', 'bob', 'fault', 'prompt']) {
   canaries[kind] = `P414_${kind}_${randomBytes(24).toString('hex')}`;
 }
 const privateCanaries = { ...canaries };
@@ -244,20 +245,6 @@ async function privatePids() {
     }catch{}}console.log(JSON.stringify(pids));`;
   return JSON.parse(await podExec(source));
 }
-async function privateProcess(pid) {
-  const source = `import {readFileSync} from 'node:fs';const pid=${Number(pid)};
-    try{const status=readFileSync('/proc/'+pid+'/status','utf8');
-      const command=readFileSync('/proc/'+pid+'/cmdline','utf8').split('\\0');
-      const state=status.match(/^State:\\s+(.+)$/m)?.[1]??'unknown';
-      const fields=status.split('\\n').filter(function signalField(line){
-        return ['SigPnd:','ShdPnd:','SigBlk:','SigIgn:','SigCgt:'].some(function prefix(value){
-          return line.startsWith(value);
-        });
-      });
-      console.log(JSON.stringify({pid,state,command:command[0],signals:fields}));
-    }catch{console.log(JSON.stringify({pid,state:'gone'}));}`;
-  return JSON.parse(await podExec(source));
-}
 async function sendPrivateSignal(pid, signal) {
   const source = stdinJson + `import {spawnSync} from 'node:child_process';
     const child=spawnSync('/usr/bin/setpriv',['--reuid=1003','--regid=1003','--clear-groups',
@@ -319,12 +306,13 @@ async function scan(name, active = false) {
   const privateNodeHits = containsPrivate(privateVolumeBytes);
   const logs = await k('logs', 'private');
   let previous = '';
-  try { previous = await k('logs', 'private', '--previous'); } catch { /* No previous container yet. */ }
+  const restarts = pod.status.containerStatuses[0].restartCount;
+  if (restarts > 0) previous = await k('logs', 'private', '--previous');
   const logHits = containsPrivate(Buffer.from(logs + previous));
   const crashHits = [];
   for (const file of readdirSync('/var/crash')) {
     if (crashBefore.has(file)) continue;
-    if (containsPrivate(readFileSync(`/var/crash/${file}`)).length) crashHits.push(file);
+    crashHits.push(file);
   }
   const sizes = JSON.parse(await podExec(`import {readdirSync,lstatSync} from 'node:fs';
     function size(path){let total=0;for(const name of readdirSync(path)){const next=path+'/'+name;
@@ -351,6 +339,54 @@ async function journey(name, run) {
     check(name, failures.length === 0, failures);
   } catch (error) { check(name, false, error.message); }
 }
+async function guestInventory(value) {
+  const args = ['-n', namespace, 'exec', '-i', 'private', '--',
+    '/usr/bin/python3', '/fixture/private-inventory.py'];
+  return JSON.parse(await input('kubectl', args, JSON.stringify(value)));
+}
+
+async function nodeInventory() {
+  const nodePid = await command('docker', ['inspect', 'k3d-ocn-server-0', '--format', '{{.State.Pid}}']);
+  const pod = JSON.parse(await k('get', 'pod/private', '-o', 'json'));
+  const containerId = pod.status.containerStatuses[0].containerID.split('://')[1];
+  const root = `/proc/${nodePid}/root`;
+  const paths = ['/var/crash', '/var/lib/systemd/coredump', '/var/log/apport.log',
+    '/var/log/kern.log', '/var/log/syslog'];
+  const nodePaths = ['/var/crash', '/var/lib/systemd/coredump', '/tmp',
+    `/var/log/pods/${namespace}_private_${pod.metadata.uid}`,
+    `/run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/${containerId}`,
+    `/var/lib/rancher/k3s/agent/containerd/io.containerd.runtime.v2.task/k8s.io/${containerId}`];
+  for (const path of nodePaths) paths.push(root + path);
+  const nodeLog = await command('docker', ['inspect', 'k3d-ocn-server-0', '--format', '{{.LogPath}}']);
+  if (nodeLog) paths.push(nodeLog);
+  const args = ['-n', 'python3', 'apps/computer/test/private-inventory.py'];
+  return JSON.parse(await input('sudo', args, JSON.stringify({ paths })));
+}
+
+async function realFault(turn) {
+  const census = await guestInventory({ operation: 'census' });
+  const paths = [...census.directories, ...census.files];
+  function topLevel(path) {
+    return !paths.some(function parent(other) { return other !== path && path.startsWith(other + '/'); });
+  }
+  const roots = paths.filter(topLevel);
+  const beforeGuest = await guestInventory({ paths: roots });
+  const beforeNode = await nodeInventory();
+  const args = ['-n', namespace, 'exec', '-i', 'private', '--', 'node', '/fixture/private-fault.mjs'];
+  const faultInput = JSON.stringify({ pid: turn.privatePid, canary: canaries.fault });
+  const fault = JSON.parse(await input('kubectl', args, faultInput));
+  const afterGuest = await guestInventory({ paths: roots });
+  const afterNode = await nodeInventory();
+  const dumps = [...newDumpFiles(beforeGuest.files, afterGuest.files),
+    ...newDumpFiles(beforeNode.files, afterNode.files)];
+  const sameConditions = JSON.stringify(fault.target) === JSON.stringify(fault.helper);
+  const passed = fault.signal === 'SIGSEGV' && fault.code === null && sameConditions && dumps.length === 0;
+  measurement('realFault', passed, { fault, sameConditions, dumps, census,
+    beforeGuest, afterGuest, beforeNode, afterNode,
+    scope: 'Native helper in the same Pod and private RAM home. Codex SIGSEGV handler is not executed.' });
+  check('J4 real memory fault without a new dump', passed, { signal: fault.signal, sameConditions, dumps });
+}
+
 async function measureRunning() {
   const pids = await privatePids();
   const source = stdinJson + `import {readFileSync,readdirSync,statfsSync} from 'node:fs';
@@ -370,28 +406,17 @@ async function measureRunning() {
   const zeroCore = (limits.match(/Max core file size\s+0\s+0/gu) ?? []).length === 2;
   measurement('coreLimits', zeroCore, { bridge: values.bridgeLimits, private: values.privateLimits });
   evidence.conditions.F2.guest = zeroCore ? 'PASS' : 'FAIL';
-  const census = stdinJson + `import {readdirSync,lstatSync,openSync,closeSync,unlinkSync,constants} from 'node:fs';
-    const directories=[];function walk(path,depth){let stat;try{stat=lstatSync(path)}catch{return}
-      if(!stat.isDirectory())return;directories.push(path);if(depth===4)return;
-      let names;try{names=readdirSync(path)}catch{return};for(const name of names)walk((path==='/'?'':path)+'/'+name,depth+1)}
-    walk('/',0);process.setgroups([]);process.setgid(1003);process.setuid(1003);const writable=[];
-    for(const path of directories){const file=(path||'')+'/p414-write-'+process.pid;
-      try{const fd=openSync(file,constants.O_CREAT|constants.O_EXCL|constants.O_WRONLY,0o600);
-        closeSync(fd);unlinkSync(file);writable.push(path||'/')}catch{}}
-    console.log(JSON.stringify(writable));`;
-  const writable = JSON.parse(await podExec(census));
+  const census = await guestInventory({ operation: 'census' });
+  const writable = [...census.directories, ...census.files];
   function allowedPath(path) {
-    return path === '/tmp' || path === '/dev/shm' || path.startsWith('/home/private/turn-');
+    return path === '/tmp' || path.startsWith('/tmp/') || path === '/dev/shm'
+      || path.startsWith('/dev/shm/') || path.startsWith('/home/private/turn-');
   }
-  const expectedWritablePaths = ['/tmp', '/dev/shm'];
-  const hasEveryExpectedPath = expectedWritablePaths.every(function exists(path) {
-    return writable.includes(path);
-  });
-  const hasPrivateHome = writable.some(function isPrivateHome(path) {
+  const expected = census.directories.includes('/tmp') && census.directories.includes('/dev/shm');
+  const hasPrivateHome = writable.some(function home(path) {
     return path.startsWith('/home/private/turn-');
   });
-  measurement('writableCensus', writable.every(allowedPath)
-    && hasEveryExpectedPath && hasPrivateHome, writable);
+  measurement('writableCensus', expected && hasPrivateHome && writable.every(allowedPath), census);
   const nodeMounts = await command('docker', ['exec', 'k3d-ocn-server-0', 'cat', '/proc/mounts']);
   const ownMount = nodeMounts.split('\n').filter(function own(line) {
     return line.includes(metadata.uid) && line.includes('/private');
@@ -429,6 +454,9 @@ acceptedMeasurement('hostCorePattern', hostCorePattern,
 try {
   if (await command('kubectl', ['config', 'current-context']) !== 'k3d-ocn') throw new Error('k3d-ocn unavailable');
   if (await k('get', 'ns', namespace, '--ignore-not-found')) throw new Error('Probe namespace already exists');
+  mkdirSync('apps/computer/.state', { recursive: true });
+  await command('gcc', ['-static', '-s', '-O2', '-Wall', '-Wextra', '-Werror',
+    'apps/computer/test/private-fault.c', '-o', 'apps/computer/.state/private-fault']);
   const template = JSON.parse(readFileSync('apps/computer/sandbox-template.json', 'utf8'));
   evidence.image = template.spec.podTemplate.spec.containers[0].image;
   await apply({ apiVersion: 'v1', kind: 'Namespace', metadata: { name: namespace } });
@@ -436,7 +464,10 @@ try {
   await apply({ apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'provider' }, data: {
     'private-provider.mjs': readFileSync('apps/computer/test/private-provider.mjs', 'utf8'),
     'private-driver.mjs': readFileSync('apps/computer/test/private-driver.mjs', 'utf8'),
-    'private-scanner.mjs': readFileSync('apps/computer/test/private-scanner.mjs', 'utf8') } });
+    'private-scanner.mjs': readFileSync('apps/computer/test/private-scanner.mjs', 'utf8'),
+    'private-fault.mjs': readFileSync('apps/computer/test/private-fault.mjs', 'utf8'),
+    'private-inventory.py': readFileSync('apps/computer/test/private-inventory.py', 'utf8') },
+    binaryData: { 'private-fault': readFileSync('apps/computer/.state/private-fault').toString('base64') } });
   await apply({ apiVersion: 'v1', kind: 'Pod', metadata: { name: 'backend',
     labels: { app: 'opencrane-gateway' } }, spec: { automountServiceAccountToken: false,
     terminationGracePeriodSeconds: 0, containers: [{ name: 'provider', image: fixtureImage,
@@ -453,7 +484,7 @@ try {
       resources: { requests: { storage: '1Gi' } } } });
   const spec = structuredClone(template.spec.podTemplate.spec);
   spec.volumes[0] = { name: 'home', persistentVolumeClaim: { claimName: 'disk' } };
-  spec.volumes.push({ name: 'fixture', configMap: { name: 'provider' } });
+  spec.volumes.push({ name: 'fixture', configMap: { name: 'provider', defaultMode: 0o555 } });
   spec.containers[0].volumeMounts.push({ name: 'fixture', mountPath: '/fixture', readOnly: true });
   await apply({ apiVersion: 'agents.x-k8s.io/v1beta1', kind: 'Sandbox', metadata: { name: 'private' },
     spec: { podTemplate: { metadata: { labels: { app: 'computer' } }, spec } } });
@@ -487,37 +518,35 @@ try {
   });
   await journey('J3', async function stops() {
     const active = await turn('heldStop'); await scan('J3 held', true);
+    const beforeRequests = (await provider('requests')).length;
+    const stoppedAt = performance.now();
     await drive('stop', { frame: { type: 'stop', turnId: active.id, conversationId: active.id } });
-    await ended(active); await scan('J3');
+    await ended(active);
+    check('J3 Stop failed terminal', terminal(active.id)?.type === 'agent.turn_failed');
+    check('J3 Stop bounded cleanup', performance.now() - stoppedAt <= 5000);
+    await delay(500);
+    check('J3 Stop no repeat', (await provider('requests')).length === beforeRequests);
+    await scan('J3');
   });
   await journey('J4', async function crashes() {
-    for (const signal of ['-SEGV', '-9']) {
-      const before = await privatePids();
-      const doomed = await turn('heldCrash');
-      const pids = await privatePids();
-      function newlyStarted(pid) { return !before.includes(pid); }
-      const doomedPid = pids.find(newlyStarted);
-      if (doomedPid === undefined) throw new Error('Crash target process unavailable');
-      const other = await turn('heldOther', 'bob');
-      await scan(`J4 ${signal} held`, true);
-      await sendPrivateSignal(doomedPid, signal);
-      await delay(250);
-      const processAfterSignal = await privateProcess(doomedPid);
-      evidence.diagnostics ??= {};
-      evidence.diagnostics[`J4 ${signal}`] = { targetAfter250ms: processAfterSignal };
-      const exitedAfterSignal = await waitForPrivateExit(doomedPid);
-      check(`J4 ${signal} process exits`, exitedAfterSignal, processAfterSignal);
-      if (!exitedAfterSignal && signal !== '-9') {
-        await sendPrivateSignal(doomedPid, '-9');
-        const exitedAfterCleanup = await waitForPrivateExit(doomedPid);
-        check('J4 forced cleanup after caught SIGSEGV', exitedAfterCleanup);
-        if (!exitedAfterCleanup) throw new Error('Private process survived forced cleanup');
-      }
-      if (!exitedAfterSignal && signal === '-9') {
-        throw new Error('Private process survived SIGKILL');
-      }
-      await ended(doomed); await provider('release', {}); await ended(other); await scan(`J4 ${signal}`);
-    }
+    const doomed = await turn('heldCrash');
+    const other = await turn('heldOther', 'bob');
+    await scan('J4 held', true);
+    await realFault(doomed);
+    const beforeRequests = (await provider('requests')).length;
+    const killStarted = performance.now();
+    await sendPrivateSignal(doomed.privatePid, '-9');
+    const exited = await waitForPrivateExit(doomed.privatePid);
+    check('J4 SIGKILL process exits', exited);
+    if (!exited) throw new Error('Private process survived SIGKILL');
+    await ended(doomed);
+    check('J4 SIGKILL failed terminal', terminal(doomed.id)?.type === 'agent.turn_failed');
+    check('J4 SIGKILL bounded cleanup', performance.now() - killStarted <= 5000);
+    await provider('release', {});
+    await ended(other);
+    await delay(500);
+    check('J4 SIGKILL no repeat', (await provider('requests')).length === beforeRequests);
+    await scan('J4');
   });
   await journey('J5', async function reconnects() {
     const active = await turn('heldReconnect'); await scan('J5 held', true);

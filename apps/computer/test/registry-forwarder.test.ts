@@ -1,17 +1,23 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, cp, mkdir, writeFile, rm } from 'node:fs/promises';
-import { createServer, connect, type AddressInfo, type Socket } from 'node:net';
+import { createServer, connect, type Server, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it } from 'vitest';
 
+function listeningPort(server: Server) {
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing TCP address');
+  return address.port;
+}
+
 async function freePort() {
   const server = createServer();
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
-  const port = (server.address() as AddressInfo).port;
+  const port = listeningPort(server);
   server.close();
   await once(server, 'close');
   return port;
@@ -32,13 +38,13 @@ async function stopsWithOpenConnection() {
   const registry = createServer(accepted);
   registry.listen(0, '127.0.0.1');
   await once(registry, 'listening');
-  const upstream = (registry.address() as AddressInfo).port;
+  const upstream = listeningPort(registry);
   const port = await freePort();
   const child = spawn(process.execPath, ['apps/computer/test/registry-forwarder.mjs',
     '127.0.0.1', String(upstream), String(port)]);
   let client: Socket | undefined;
   try {
-    await once(child.stdout!, 'data');
+    await once(child.stdout, 'data');
     client = connect(port, '127.0.0.1');
     await once(client, 'connect');
     client.write('keep this connection open');
@@ -70,7 +76,7 @@ async function interruptsBuild(signal: 'SIGTERM' | 'SIGINT') {
   });
   let output = '';
   function collect(chunk: Buffer) { output += chunk.toString(); }
-  child.stdout!.on('data', collect);
+  child.stdout.on('data', collect);
   let socket: Socket | undefined;
   try {
     const deadline = Date.now() + 5000;
