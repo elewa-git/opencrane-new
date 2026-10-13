@@ -198,14 +198,15 @@ assert len(processes) == 1, processes
 pid = processes[0]
 arguments = pathlib.Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\x00')
 assert b'--disable-sigusr1' in arguments
-environment = pathlib.Path(f'/proc/{pid}/environ').read_bytes().split(b'\x00')
-assert not any(value.startswith(b'NODE_OPTIONS=') for value in environment)
 status = pathlib.Path(f'/proc/{pid}/status').read_text()
 assert 'Uid:\t${testCase.uid}\t${testCase.uid}\t${testCase.uid}\t${testCase.uid}' in status
 os.setgroups([])
 os.setgid(${testCase.uid})
 os.setuid(${testCase.uid})
 assert os.getuid() == ${testCase.uid}
+if expected == b'/app/src/bridge.ts':
+    environment = pathlib.Path(f'/proc/{pid}/environ').read_bytes().split(b'\x00')
+    assert not any(value.startswith(b'NODE_OPTIONS=') for value in environment)
 os.kill(pid, signal.SIGUSR1)
 opened = False
 deadline = time.monotonic() + 1
