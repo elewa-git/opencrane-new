@@ -42,8 +42,15 @@ it('serves private chat commands and reads to joined members, refusing other org
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId, roles: [], authTime: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+60 })}` });
     const personal = await app.inject({ url: '/api/chat', headers: headers() });
     expect(personal.statusCode).toBe(200);
-    expect(personal.json()).toMatchObject({ memberId: 'alice', assistantId: 'assistant', displayName: 'Alice',
-      memoryAdmission: { state: 'disabled', failing: ['The private memory checks have not all passed.'] } });
+    expect(personal.json()).toMatchObject({
+      memberId: 'alice',
+      assistantId: 'assistant',
+      displayName: 'Alice',
+      memoryAdmission: {
+        state: 'disabled',
+        failing: ['The P4-15 private memory checks have not run yet.'],
+      },
+    });
     expect((await app.inject({ url: '/api/chat', headers: headers('wrong') })).statusCode).toBe(403);
     // An identity allowed by name keeps access from its own organisation, as at sign-in.
     // Naming someone else does not let Alice in from another organisation.
