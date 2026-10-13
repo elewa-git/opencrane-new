@@ -92,7 +92,7 @@ async function stale(patch: Record<string, unknown>) {
   await refused(409, patch);
 }
 it.each([{ expectedRevision: 2 }, { expectedProviderSequence: 0 },
-  { expectedDrainSequence: 0 }])('refuses stale input %j without saving', stale);
+  { expectedDrainSequence: 0 }, { commandId: 'saved-key' }])('refuses stale input %j without saving', stale);
 async function noDrain() {
   await drain(false);
   await refused(403);
@@ -198,10 +198,7 @@ async function recovers() {
     throw new Error('Lost reply');
   }
   vi.spyOn(setup.nats.store, 'append').mockImplementationOnce(lost);
-  const pending = request(command).then(received);
-  function received(response: Awaited<ReturnType<typeof request>>) {
-    return response;
-  }
+  const pending = Promise.resolve(request(command));
   try {
     await Promise.race([entered.promise, pending]);
     expect((await request(undefined, `changes/${command.commandId}`)).json()).toEqual(
@@ -222,6 +219,10 @@ async function recovers() {
   expect((await setup.call()).status).toBe(403);
   expect(setup.actor.state.reservations).toHaveLength(0);
   expect(setup.received()).toBe(0);
+  const later = { action: 'models', providerId: 'primary', commandId: command.commandId,
+    expectedRevision: 3, models: ['gpt-6-luna'] };
+  await providerCommand(setup.nats.store, setup.binding, 'alice', later);
+  expect((await request(undefined, `changes/${command.commandId}`)).json()).toMatchObject(saved.json());
 }
 it('records one marker and recovers the original receipt after a lost reply', recovers);
 async function races(kind: string) {
@@ -325,13 +326,17 @@ async function newChoice(kind: 'assistant' | 'silo_default') {
 it.each(['assistant', 'silo_default'] as const)('new turns use the %s choice', newChoice);
 
 async function creationReceipt() {
-  const rows = await Array.fromAsync(setup.nats.store.readStream('provider-primary'));
-  const createdId = rows[0]?.event.id;
+  const command = await input();
+  const rows = setup.nats.store.readStream('provider-primary');
+  const createdId = (await rows.next()).value?.event.id;
+  await rows.return(undefined);
   const applied = setup.auth.applied.bind(setup.auth);
   async function withoutProviderReceipt(eventId: string) {
     return eventId !== createdId && await applied(eventId);
   }
   vi.spyOn(setup.auth, 'applied').mockImplementation(withoutProviderReceipt);
-  await refused(403);
+  const before = await setup.nats.store.head();
+  expect((await request(command)).statusCode).toBe(403);
+  expect(await setup.nats.store.head()).toBe(before);
 }
 it('requires the provider creation receipt even when manage permission already exists', creationReceipt);
