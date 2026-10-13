@@ -305,3 +305,35 @@ async function refusesDuplicateBindingsAndActiveOverflow() {
 }
 it('refuses duplicate bindings and counts active grandchildren across parents',
   refusesDuplicateBindingsAndActiveOverflow);
+
+async function recordsSeparateStart() {
+  const context = await setup();
+  try {
+    const budgetPosition = await context.nats.store.head('budget-test');
+    const binding = child('record');
+    const result = await admit(context, binding);
+    const admissions = await history(context.nats.store, 'computer-assistant', 'test');
+    const admission = admissions.at(-1)!;
+    const starts = await history(context.nats.store, `delegation-${binding.delegationId}`, 'test');
+    expect(starts).toHaveLength(1);
+    const start = starts[0]!;
+    expect(result).toEqual({ admission, start });
+    expect(start.event.type).toBe('delegation.started');
+    expect(start.event.data).toEqual({
+      version: 1, delegationId: binding.delegationId, rootId: 'root', rootTurnId: 'bound-root',
+      rootThreadId: 'bound-thread', assistantId: 'assistant', computerId: 'computer', generation: 1,
+      conversationId: 'conversation', requesterId: 'alice', payingGroupId: 'personal-default',
+      parentTurnId: 'bound-root', parentThreadId: 'bound-thread', turnId: 'turn-record',
+      threadId: 'thread-record', spawnItemId: 'spawn-record', dataClass: 'private',
+      scopes: { models: ['gpt-6.1-sol'], tools: [], resources: [], operations: [],
+        destinations: [], connectionIds: [], profileIds: [] },
+      computerAdmission: { eventId: admission.event.id, position: admission.sequence },
+    });
+    expect(await context.nats.store.head('budget-test')).toBe(budgetPosition);
+    await assertNoEffects(context);
+  } finally {
+    await context.close();
+  }
+}
+it('records a separate versioned start with the exact saved computer admission',
+  recordsSeparateStart);
