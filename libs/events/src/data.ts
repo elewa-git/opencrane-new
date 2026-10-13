@@ -305,7 +305,7 @@ export const participantRemovedDataSchema = z.union([
 export const agentTurnStartedDataSchema = z
   .object({ conversationId: id, turnId: id, assistantId: id, threadId: id.optional(),
     executionMode: z.enum(['restricted', 'memory_free']).optional(),
-    contextClass: z.literal('shared_only').optional() })
+    sharingClass: z.literal('shared_only').optional() })
   .strict();
 
 export const agentOutputLostDataSchema = z.object({ conversationId: id, turnId: id }).strict();
@@ -646,7 +646,7 @@ const computerTurnStartedFieldsSchema = optionalProviderTurnBindingSchema.safeEx
   assistantId: id, computerId: id, conversationId: id, turnId: id, threadId: id,
   requesterId: id, task: z.literal('chat_turn'), payingGroupId: id.optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
-  contextClass: z.literal('shared_only').optional(),
+  sharingClass: z.literal('shared_only').optional(),
   model: id.optional(),
 });
 const chatTurnStarted = computerTurnStartedFieldsSchema

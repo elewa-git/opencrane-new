@@ -4,7 +4,7 @@ For people, read [README.md](README.md) first.
 
 ## Shared child turns
 
-The bridge accepts `contextClass: shared_only` only with
+The bridge accepts `sharingClass: shared_only` only with
 `executionMode: restricted`. It keeps both values in the turn start report. The
 journal saves the class beside the admitted start so restart recovery fails
 uncertain restricted work instead of running it again. The class does not turn a

@@ -33,11 +33,11 @@ it('accepts only a strict tool list within the server and UTF-8 byte limits', pa
 
 function acceptsOnlyTheSharedClassOnRestrictedTurns() {
   const shared = parseTurn({ ...frame, executionMode: 'restricted',
-    contextClass: 'shared_only' });
-  expect(shared.contextClass).toBe('shared_only');
-  expect(() => parseTurn({ ...frame, contextClass: 'shared_only' })).toThrow();
+    sharingClass: 'shared_only' });
+  expect(shared.sharingClass).toBe('shared_only');
+  expect(() => parseTurn({ ...frame, sharingClass: 'shared_only' })).toThrow();
   expect(() => parseTurn({ ...frame, executionMode: 'memory_free',
-    contextClass: 'shared_only' })).toThrow();
+    sharingClass: 'shared_only' })).toThrow();
 }
 it('accepts the shared-only class only on restricted turns',
   acceptsOnlyTheSharedClassOnRestrictedTurns);

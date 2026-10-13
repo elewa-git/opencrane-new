@@ -17,7 +17,7 @@ const existingReportSchema = z.object({ sequence: z.int().positive(), previousSe
   turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
-  contextClass: z.literal('shared_only').optional(),
+  sharingClass: z.literal('shared_only').optional(),
   reason: z.enum(['bridge_interrupted', 'restricted_tool_refused']).optional(),
   type: z.enum(['agent.output_lost', 'agent.command_ran', 'agent.reasoning_summarised', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.message_delta', 'agent.message_completed']),
 }).strict();
@@ -121,7 +121,7 @@ async function requireSharedReportTurn(store: EventStore,
   }
   const saved = z.record(z.string(), z.unknown()).parse(start.event.data);
   const threadId = 'threadId' in report ? report.threadId : undefined;
-  if (saved['contextClass'] !== 'shared_only' || saved['executionMode'] !== 'restricted'
+  if (saved['sharingClass'] !== 'shared_only' || saved['executionMode'] !== 'restricted'
     || saved['computerId'] !== context.computerId || saved['assistantId'] !== context.assistantId
     || saved['conversationId'] !== report.conversationId || saved['turnId'] !== report.turnId
     || saved['requesterId'] !== requesterId || saved['threadId'] !== threadId) {
@@ -132,12 +132,12 @@ async function requireSharedReportTurn(store: EventStore,
 function validateReportContextClass(report: z.infer<typeof reportSchema>,
   created: ReturnType<typeof agentSessionData>) {
   const sharedChild = 'contextKind' in created && created.contextKind === 'shared_child';
-  const contextClass = 'contextClass' in report ? report.contextClass : undefined;
+  const sharingClass = 'sharingClass' in report ? report.sharingClass : undefined;
   if (report.type !== 'agent.turn_started') {
-    if (contextClass !== undefined) throw new ReportRejected('Context class is only valid on a turn start');
+    if (sharingClass !== undefined) throw new ReportRejected('Context class is only valid on a turn start');
     return;
   }
-  if (contextClass !== (sharedChild ? 'shared_only' : undefined)
+  if (sharingClass !== (sharedChild ? 'shared_only' : undefined)
     || (sharedChild && report.executionMode !== 'restricted')) {
     throw new ReportRejected('Turn context class mismatch');
   }
@@ -160,12 +160,12 @@ function reportData(report: z.infer<typeof reportSchema>, silo: string, assistan
     return { ...common, ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) };
   } else if (report.type === 'agent.turn_started') {
     const data: typeof common & { assistantId: string; threadId?: string;
-      executionMode?: 'restricted' | 'memory_free'; contextClass?: 'shared_only' } = {
+      executionMode?: 'restricted' | 'memory_free'; sharingClass?: 'shared_only' } = {
       ...common, assistantId,
     };
     if (report.threadId) data.threadId = report.threadId;
     if (report.executionMode) data.executionMode = report.executionMode;
-    if (report.contextClass) data.contextClass = report.contextClass;
+    if (report.sharingClass) data.sharingClass = report.sharingClass;
     return data;
   } else if (report.type === 'agent.turn_failed') {
     return { ...common, reason: report.reason ?? 'bridge_interrupted' };

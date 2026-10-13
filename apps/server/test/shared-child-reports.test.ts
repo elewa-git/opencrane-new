@@ -9,7 +9,7 @@ let nats: Awaited<ReturnType<typeof natsFixture>>;
 const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
 const admitted = { assistantId: 'assistant', computerId: 'computer', conversationId: 'child',
   turnId: 'input', requesterId: 'alice', threadId: 'shared-thread', task: 'chat_turn',
-  executionMode: 'restricted', contextClass: 'shared_only' };
+  executionMode: 'restricted', sharingClass: 'shared_only' };
 const output = { assistantId: 'assistant', conversationId: 'child', turnId: 'input',
   requesterId: 'alice', threadId: 'shared-thread', executionMode: 'restricted',
   type: 'agent.message_completed', messageId: 'reply', text: 'Shared answer',
@@ -49,11 +49,11 @@ const refusals = [
   { name: 'a private thread', start: admitted, patch: { threadId: 'private-thread' } },
   { name: 'no reported thread', start: admitted, patch: { threadId: undefined } },
   { name: 'a private turn', start: { ...admitted, turnId: 'private-input' }, patch: {} },
-  { name: 'a private saved class', start: { ...admitted, contextClass: undefined }, patch: {} },
+  { name: 'a private saved class', start: { ...admitted, sharingClass: undefined }, patch: {} },
   { name: 'another conversation', start: { ...admitted, conversationId: 'private' }, patch: {} },
   { name: 'another computer', start: { ...admitted, computerId: 'other' }, patch: {} },
   { name: 'another requester', start: { ...admitted, requesterId: 'bob' }, patch: {} },
-  { name: 'a supplied output class', start: admitted, patch: { contextClass: 'shared_only' } },
+  { name: 'a supplied output class', start: admitted, patch: { sharingClass: 'shared_only' } },
 ];
 async function refusesOutput(test: typeof refusals[number]) {
   const keys = await setup(test.start);

@@ -24,7 +24,7 @@ import { agentSessionData, ReportRejected } from './reports.ts';
 const bindingFields = optionalProviderTurnBindingSchema.safeExtend({
   conversationId: z.string(), turnId: z.string(), threadId: z.string().optional(),
   requesterId: z.string(), task: z.literal('chat_turn'), payingGroupId: z.string().optional(),
-  model: z.string().optional(), contextClass: z.literal('shared_only').optional(),
+  model: z.string().optional(), sharingClass: z.literal('shared_only').optional(),
 });
 const binding = bindingFields.strip();
 const assistantDetails = z.object({
@@ -67,7 +67,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   const subject = `computer-${context.assistantId}`;
   const facts = await computerFacts(store, context.silo, context.assistantId, input);
   const data = decideTurn(facts, conversation, input, context.computerId,
-    requested.requesterId, requested.contextClass);
+    requested.requesterId, requested.sharingClass);
   if (!data) return;
   let fresh: WriteAuthority | undefined;
   let status = input.status;
@@ -94,7 +94,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   const id = hash.digest('hex');
   const eventData: TurnBinding & {
     assistantId: string; computerId: string; status?: 'completed' | 'failed';
-    executionMode?: ExecutionMode; contextClass?: ContextClass | undefined;
+    executionMode?: ExecutionMode; sharingClass?: ContextClass | undefined;
   } = { ...data, assistantId: context.assistantId, computerId: context.computerId };
   const event: EventEnvelope = {
     id, commandId: id, type, subject, silo: context.silo, correlation: {},
@@ -107,7 +107,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   if (refusal) throw refusal;
   if (input.status === 'started') return { ...data, threadId: z.string().parse(data.threadId),
     executionMode: executionMode ?? 'memory_free',
-    ...(data.contextClass ? { contextClass: data.contextClass } : {}) };
+    ...(data.sharingClass ? { sharingClass: data.sharingClass } : {}) };
   return undefined;
 }
 
@@ -206,10 +206,10 @@ function requestedTurn(conversation: ChatFacts, assistantId: string) {
   }
   const details = z.object({ authorId: z.string(), executionMode: z.literal('memory_free').optional() })
     .parse(conversation.message);
-  const contextClass: ContextClass | undefined =
+  const sharingClass: ContextClass | undefined =
     'contextKind' in created && created.contextKind === 'shared_child'
     ? 'shared_only' : undefined;
-  return { requesterId: details.authorId, executionMode: details.executionMode, contextClass };
+  return { requesterId: details.authorId, executionMode: details.executionMode, sharingClass };
 }
 function checkStart(facts: ComputerFacts, conversation: ChatFacts, computerId: string) {
   const current = facts.lifecycle;
@@ -231,7 +231,7 @@ function requireNoControl(facts: ComputerFacts) {
 }
 
 function decideTurn(facts: ComputerFacts, conversation: ChatFacts, input: TurnInput,
-  computerId: string, requesterId: string, contextClass: ContextClass | undefined) {
+  computerId: string, requesterId: string, sharingClass: ContextClass | undefined) {
   const turn = facts.turn;
   const closed = turn?.firstClose;
   const started = turn?.firstStart;
@@ -249,7 +249,7 @@ function decideTurn(facts: ComputerFacts, conversation: ChatFacts, input: TurnIn
   if (started) {
     data = binding.parse(started.event.data);
   } else {
-    data = binding.parse({ ...input, requesterId, task: 'chat_turn', contextClass });
+    data = binding.parse({ ...input, requesterId, task: 'chat_turn', sharingClass });
   }
   if (input.status === 'started') {
     requireNoControl(facts);

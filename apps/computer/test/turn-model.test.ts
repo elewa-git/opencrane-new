@@ -110,7 +110,7 @@ async function doesNotRepeatAnAdmittedSharedTurnAfterRestart() {
   const journalPath = `${directory}/reports`;
   const firstJournal = reportJournal({ journal: journalPath });
   firstJournal.append({ id: 'turn', conversationId: 'child', assistantId: 'assistant',
-    executionMode: 'restricted', contextClass: 'shared_only' }, 'agent.turn_started', {
+    executionMode: 'restricted', sharingClass: 'shared_only' }, 'agent.turn_started', {
     threadId: 'thread',
   });
   const reopenedJournal = reportJournal({ journal: journalPath });
@@ -140,20 +140,20 @@ async function doesNotRepeatAnAdmittedSharedTurnAfterRestart() {
   const runner = turnRunner(driver, reopenedJournal, send, closeSocket);
   const input = {
     id: 'turn', conversationId: 'child', assistantId: 'assistant', requesterId: 'bob',
-    executionMode: 'restricted' as const, contextClass: 'shared_only' as const,
+    executionMode: 'restricted' as const, sharingClass: 'shared_only' as const,
     text: 'new child turn', token: 'token', expiresAt: Date.now() + 60_000,
     taskKind: 'chat_turn', omittedAttachments: 0,
   };
 
   try {
-    expect(reopenedJournal.reports[0]?.contextClass).toBe('shared_only');
+    expect(reopenedJournal.reports[0]?.sharingClass).toBe('shared_only');
     expect(reopenedJournal.reports).toMatchObject([
       { type: 'agent.turn_started', turnId: 'turn' },
       { type: 'agent.turn_failed', turnId: 'turn' },
     ]);
     reopenedJournal.replay(0, new Map(), send);
     expect(reports).toMatchObject([
-      { type: 'agent.turn_started', contextClass: 'shared_only' },
+      { type: 'agent.turn_started', sharingClass: 'shared_only' },
       { type: 'agent.turn_failed' },
     ]);
     await runner.start(input);
@@ -170,7 +170,7 @@ function keepsSharedOutputThread() {
   try {
     const journal = reportJournal({ journal: `${directory}/reports` });
     const input = { id: 'turn', conversationId: 'child', assistantId: 'assistant',
-      executionMode: 'restricted' as const, contextClass: 'shared_only' as const };
+      executionMode: 'restricted' as const, sharingClass: 'shared_only' as const };
     journal.append(input, 'agent.turn_started', { threadId: 'shared-thread' });
     const output = journal.append(input, 'agent.message_completed',
       { messageId: 'reply', text: 'Shared answer' });

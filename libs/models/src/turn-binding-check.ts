@@ -9,7 +9,7 @@ type SignedTurn = {
   providerId?: string | undefined;
   bindingSequence?: number | undefined;
   model: string;
-  contextClass?: 'shared_only' | undefined;
+  sharingClass?: 'shared_only' | undefined;
 };
 
 const eventDataSchema = z.record(z.string(), z.unknown());
@@ -25,7 +25,7 @@ export function requireRecordedActiveTurn(turnToken: SignedTurn,
       recorded['requesterId'] !== turnToken.requester || recorded['task'] !== turnToken.task ||
       recorded['providerId'] !== turnToken.providerId ||
       recorded['bindingSequence'] !== turnToken.bindingSequence ||
-      recorded['contextClass'] !== turnToken.contextClass ||
+      recorded['sharingClass'] !== turnToken.sharingClass ||
       (recorded['model'] !== undefined && recorded['model'] !== turnToken.model)) {
     throw new Error('Turn is not active');
   }
@@ -48,6 +48,6 @@ export function requireCurrentComputer(computer: StoredEvent | undefined, sequen
   }
 }
 
-export function requireSharedTurnTools(contextClass: 'shared_only' | undefined) {
-  if (contextClass === 'shared_only') throw new Error('Shared turns have no tools');
+export function requireSharedTurnTools(sharingClass: 'shared_only' | undefined) {
+  if (sharingClass === 'shared_only') throw new Error('Shared turns have no tools');
 }

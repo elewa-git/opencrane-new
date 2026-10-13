@@ -92,7 +92,7 @@ async function refusesAClaimedSharedClassOnAPrivateSession() {
     requesterId: 'alice',
     threadId: 'private-thread',
     executionMode: 'restricted',
-    contextClass: 'shared_only',
+    sharingClass: 'shared_only',
     type: 'agent.turn_started',
   };
   await expect(recordReport(nats.store, keys, context, forged))

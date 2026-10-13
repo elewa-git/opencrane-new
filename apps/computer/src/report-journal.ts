@@ -22,14 +22,14 @@ export interface BridgeReport {
   messageId?: string;
   text?: string;
   executionMode?: 'restricted' | 'memory_free';
-  contextClass?: 'shared_only';
+  sharingClass?: 'shared_only';
   reason?: 'restricted_tool_refused' | 'unsupported_native_consent';
   memoryOnly?: boolean;
 }
 
 interface ReportInput {
   executionMode?: 'restricted' | 'memory_free';
-  contextClass?: 'shared_only';
+  sharingClass?: 'shared_only';
   id: string;
   conversationId: string;
   assistantId: string;
@@ -185,9 +185,9 @@ export function reportJournal(driver: JournalDriver) {
     };
     if (input.requesterId) report.requesterId = input.requesterId;
     if (input.executionMode === 'restricted') report.executionMode = 'restricted';
-    if (input.contextClass === 'shared_only') {
+    if (input.sharingClass === 'shared_only') {
       if (type === 'agent.turn_started') {
-        report.contextClass = 'shared_only';
+        report.sharingClass = 'shared_only';
       } else {
         function isTurnStart(saved: BridgeReport) {
           return saved.turnId === turnId && saved.conversationId === input.conversationId
@@ -261,12 +261,12 @@ function readStorageDetails(value: Record<string, unknown>, report: BridgeReport
     if (mode !== 'restricted' && mode !== 'memory_free') throw new Error('Invalid journal mode');
     report.executionMode = mode;
   }
-  const contextClass = value['contextClass'];
-  if (contextClass !== undefined) {
-    if (contextClass !== 'shared_only' || mode !== 'restricted') {
+  const sharingClass = value['sharingClass'];
+  if (sharingClass !== undefined) {
+    if (sharingClass !== 'shared_only' || mode !== 'restricted') {
       throw new Error('Invalid journal context class');
     }
-    report.contextClass = 'shared_only';
+    report.sharingClass = 'shared_only';
   }
   const reason = value['reason'];
   if (reason !== undefined) {

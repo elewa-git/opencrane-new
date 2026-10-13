@@ -253,7 +253,7 @@ export async function startDecision(
       contextDigest = digestContext([computer, turnToken]);
       const raw = await readBody(req);
       async function memoryDecision() {
-        requireSharedTurnTools(turnToken.contextClass);
+        requireSharedTurnTools(turnToken.sharingClass);
         if (!identity.memory) throw new Error('Memory signing unavailable');
         const claims = { silo: actor.silo, requester: turnToken.requester,
           assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
@@ -283,7 +283,7 @@ export async function startDecision(
         return;
       }
       if (route === 'mcp') {
-        requireSharedTurnTools(turnToken.contextClass);
+        requireSharedTurnTools(turnToken.sharingClass);
         const parsed = parseMcpCall(raw);
         callId = parsed.call.params._meta.callId;
         requireMcpThread(parsed.call, turnToken.thread);

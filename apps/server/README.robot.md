@@ -10,7 +10,7 @@ Gateway restart is covered; no watch worker is added by #48 PR 3's first part.
 ## Shared child output admission
 
 Every new child output report must name the thread from its first server-owned
-`computer.turn_started`. That saved start must have `contextClass: shared_only`
+`computer.turn_started`. That saved start must have `sharingClass: shared_only`
 and `executionMode: restricted`, and match the computer, assistant, conversation,
 turn and message author. Missing, private, closed or substituted turns are refused
 before encryption and append. The report class still belongs only on start reports.
@@ -1189,7 +1189,7 @@ and [check record](../../docs/process/p4-14-private-turns-evidence.md) give the 
 
 ## Shared child turns
 
-The server derives `contextClass: shared_only` from the saved child creation and
+The server derives `sharingClass: shared_only` from the saved child creation and
 records it on the child start report and `computer.turn_started`, separately from
 `executionMode: restricted`.
 The start report must carry that class; a private conversation cannot claim it and

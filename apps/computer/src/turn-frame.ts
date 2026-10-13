@@ -12,7 +12,7 @@ export interface ToolServer {
 
 export interface Turn {
   executionMode: 'restricted' | 'memory_free';
-  contextClass?: 'shared_only';
+  sharingClass?: 'shared_only';
   id: string;
   conversationId: string;
   assistantId: string;
@@ -36,7 +36,7 @@ export function requiredString(value: Record<string, unknown>, name: string) {
 
 export function parseTurn(value: Record<string, unknown>): Turn {
   const executionMode = parseExecutionMode(value['executionMode']);
-  const contextClass = parseContextClass(value['contextClass'], executionMode);
+  const sharingClass = parseContextClass(value['sharingClass'], executionMode);
   const expiresAt = value['expiresAt'];
   const taskKind = value['taskKind'] ?? 'chat_turn';
   const omittedAttachments = value['omittedAttachments'] ?? 0;
@@ -67,7 +67,7 @@ export function parseTurn(value: Record<string, unknown>): Turn {
     attachments: value['attachments'],
     omittedAttachments,
   };
-  if (contextClass) turn.contextClass = contextClass;
+  if (sharingClass) turn.sharingClass = sharingClass;
   if (typeof requesterId === 'string') turn.requesterId = requesterId;
   if (value['tools'] !== undefined) turn.tools = parseTools(value['tools']);
   return turn;

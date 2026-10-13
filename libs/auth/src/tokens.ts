@@ -5,7 +5,7 @@ import { createPublicKey, randomUUID } from 'node:crypto';
 import { createLocalJWKSet, exportJWK, importPKCS8, importSPKI, jwtVerify, SignJWT, type JSONWebKeySet, type JWTPayload } from 'jose';
 
 const turnClaimsSchema = optionalProviderTurnBindingSchema.safeExtend({
-  contextClass: z.literal('shared_only').optional(),
+  sharingClass: z.literal('shared_only').optional(),
 });
 
 const algorithm = 'ES256';
@@ -91,11 +91,11 @@ export async function tokenIssuer(options: TokenOptions) {
       silo: string; conversationId: string; turnId: string; requesterId: string;
       threadId: string; task: string; model: string; assistantId: string;
       computerTokenId?: string; delegation?: string[];
-      contextClass?: 'shared_only' | undefined;
+      sharingClass?: 'shared_only' | undefined;
       providerId?: string | undefined; bindingSequence?: number | undefined;
     }) {
       const claims = { providerId: input.providerId, bindingSequence: input.bindingSequence,
-        contextClass: input.contextClass };
+        sharingClass: input.sharingClass };
       const checkedClaims = turnClaimsSchema.parse(claims);
       const payload = {
         ...checkedClaims, typ: 'turn', silo: input.silo,

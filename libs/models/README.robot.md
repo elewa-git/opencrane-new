@@ -67,7 +67,7 @@ read current policy. The slow-read regression keeps the original two-second life
 
 ## Shared child model calls
 
-The turn pass may carry `contextClass: shared_only` only when the server saved that
+The turn pass may carry `sharingClass: shared_only` only when the server saved that
 class on the matching `computer.turn_started`. The pass keeps this separate from
 `executionMode`. Model calls use the sender and the child assistant's recorded payer.
 MCP and memory routes refuse the class before reading tool policy or issuing a memory

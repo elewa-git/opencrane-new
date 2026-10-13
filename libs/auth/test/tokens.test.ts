@@ -109,8 +109,8 @@ async function refusesUnknownContextClass() {
   const issuer = await tokenIssuer(options);
   const input = { silo: 'test', assistantId: 'assistant', conversationId: 'child',
     turnId: 'turn', requesterId: 'alice', threadId: 'thread', task: 'chat_turn',
-    model: 'gpt-6-luna', contextClass: 'shared_only' as const };
-  Object.assign(input, { contextClass: 'private' });
+    model: 'gpt-6-luna', sharingClass: 'shared_only' as const };
+  Object.assign(input, { sharingClass: 'private' });
   await expect(issuer.turn(input)).rejects.toThrow();
 }
 it('refuses an unknown context class before signing a turn pass', refusesUnknownContextClass);
