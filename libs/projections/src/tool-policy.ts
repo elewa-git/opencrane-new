@@ -1,6 +1,6 @@
 import { validateMcpCatalogue, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { getEventDefinition, hostedCredentialContractSchema, mcpServerDiscoveredDataSchema,
-  mcpServerReviewedDataSchema,
+  mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
@@ -42,6 +42,10 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     next = applyReview(next, state, event);
   }
   if (event.type === 'mcp.server_published') {
+    const intent = mcpPublicationIntentDataSchema.safeParse(data);
+    if (intent.success) {
+      return { ...state, sequence, published: false, publication: intent.data };
+    }
     // Keep drift held until the publication path can confirm the exact applied revision.
     next.published = state.startupReviewRequired !== true && state.driftHeld !== true;
   }
@@ -70,7 +74,8 @@ function applyReview(next: ToolPolicy, state: ToolPolicy, event: EventEnvelope):
   if (!tools || !principalMatchesReviewer) {
     throw new Error('Tool review does not match the saved catalogue');
   }
-  return { ...next, tools, published: keepsPublication(state, tools) };
+  return { ...next, tools, reviewRevision: next.sequence,
+    published: keepsPublication(state, tools) };
 }
 
 function requiresStartupReview(data: Record<string, unknown>) {

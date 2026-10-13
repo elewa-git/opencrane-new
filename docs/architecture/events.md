@@ -75,6 +75,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `credential-<lease>` | request-bound credential release | released |
 | `egress-grant-<subjectDigest>-<destinationDigest>` | one silo, subject and HTTPS destination | destination allowed or revoked |
 | `egress-<request>` | observed egress | observed |
+| `gateway-config-<silo>` | reviewed gateway entries | configuration requested; delivery is not connected |
 | `gateway-<request>` | safe gateway evidence | observation recorded |
 | `provider-<providerId>` | company model provider | configuration and verification |
 | `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
@@ -371,7 +372,8 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
 | `mcp.dispatch_admitted` | models process | catalogue write position only; preserve tool rules, policy revision and check dates | Order one-use send admission with policy and hold changes on `mcp-<server>`. Replay never sends a call. |
-| `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
+| `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue and exact publication intent | no preparation during replay; no delivery worker yet |
+| `gateway.configuration_requested` | explicit preparation | serial generation, complete reviewed tool entries and source positions | no delivery or Ready acknowledgement yet |
 | `mcp.tools_changed` | drift check | catalogue (before/after snapshots, dated new catalogue, changed policyRevision and durable drift hold) | shared policy denies calls and cancels old approvals on their next read; the models watch closes dispatch before saving drift; legacy publication cannot clear the hold; acknowledged restoration remains unbuilt |
 | `mcp.instance_start_requested` | reserved lifecycle command; wake is refused for now | exact personal instance identity, installed image, run and original change; 20-second deadline | none; no workload or release handler |
 | `mcp.instance_observed` | authenticated, run-bound lifecycle worker | matching run, Pod UID, checked workload and expected sequence; system principal and change id for new reports; starting, failed, stopping, absent or unknown; no callable state | none |
@@ -809,3 +811,11 @@ refusals. Existing per-call connections, including reviewed memory registrations
 without a startup contract, keep their existing publication and access checks.
 No startup process, credential release, Connect flow or ordinary startup tool call
 is enabled by this contract.
+
+Publication intents include commandId, expectedSequence, reviewRevision and a server-derived
+fragmentDigest. They leave the legacy published flag false and keep policyRevision unchanged.
+The generation stream saves one record per changeRef. Conditional appends order competing
+changes; preparation rereads after conflicts. Each member names one exact reviewed entry,
+its original change and its source position. Later source events make the record stale.
+These are preparation inputs; the full route renderer and fixed model/memory routes remain
+for the next part. No worker prepares records on replay, and no record establishes Ready.

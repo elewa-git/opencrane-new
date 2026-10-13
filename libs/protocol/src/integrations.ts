@@ -1,3 +1,4 @@
+import { mcpPublicationIntentDataSchema } from '@opencrane/events';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { z } from 'zod';
 
@@ -45,7 +46,8 @@ export const toolPolicySchema = z.object({
   silo: z.string().nullable().default(null), serverId: z.string().nullable().default(null),
   connectionId: z.string().nullable(), accountMode: z.enum(['none', 'personal', 'company']).nullable(),
   startupReviewRequired: z.boolean().optional(), published: z.boolean(),
-  driftHeld: z.boolean().optional(),
+  driftHeld: z.boolean().optional(), reviewRevision: z.int().positive().optional(),
+  publication: mcpPublicationIntentDataSchema.optional(),
   sequence: z.int().nonnegative(),
   policyRevision: z.int().nonnegative().default(0),
   catalogue: mcpServerDiscoveredDataSchema.nullable().default(null),

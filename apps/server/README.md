@@ -11,8 +11,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks public tool addresses, startup, member and child access, indexed departures, final tool and memory sends, renewal access before spending stops, memory setup, fact links, tool reviews, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
-  server -->|records changes, authenticated instance observations and stops, control intent, memory facts, recall references and choices, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -.->|checks public tool addresses, startup, member and child access, indexed departures, final tool and memory sends, renewal access before spending stops, memory setup, fact links, tool reviews, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -->|records changes, authenticated instance observations and stops, control intent, memory facts, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
@@ -35,6 +35,8 @@ text or proof. A lost reply keeps its saved references and cannot be sent again.
 Native memory and agent-derived writes stay disabled.
 
 ## What it is responsible for
+
+Let owners and admins request publication of an exact reviewed tool list. Calls remain disabled.
 
 Tool access explanations show why a person and their assistant have access.
 Members can read their own explanation for servers they can access.

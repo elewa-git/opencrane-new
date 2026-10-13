@@ -94,3 +94,6 @@ export { memoryMaintenanceRecordedDataSchema } from './memory.ts';
 export { connectionCreatedDataSchema, connectionRefreshedDataSchema } from './data.ts';
 export { memoryContextRecordedDataSchema, memoryContextRecordedEventSchema,
   type MemoryContextRecord } from './memory-context.ts';
+
+export { mcpPublicationIntentDataSchema } from './data.ts';
+export { gatewayEntrySchema, gatewayConfigurationSchema } from './gateway-configuration.ts';

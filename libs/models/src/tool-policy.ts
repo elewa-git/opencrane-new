@@ -1,9 +1,10 @@
+import { publicationEntry, publicationDigest } from './publication.ts';
 import { authorityFence } from './authority.ts';
 import { currentMembership } from './ownership.ts';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { mcpServerReviewedDataSchema } from '@opencrane/events';
+import { mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema } from '@opencrane/events';
 import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable,
   reviewedToolChoices } from '@opencrane/projections';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -50,6 +51,50 @@ export async function reviewToolPolicy(store: EventStore, binding: Binding, memb
   const expiresAt = Date.parse(state.expiresAt ?? '');
   return saveToolCommand(store, binding, memberId, serverId, 'mcp.server_reviewed',
     payload, reference, rows, valid, expiresAt);
+}
+
+const publicationInput = z.strictObject({ ...commandFields, reviewRevision: z.int().positive() });
+
+export async function publishToolPolicy(store: EventStore, binding: Binding, memberId: string,
+  serverId: string, raw: unknown) {
+  const command = publicationInput.parse(raw);
+  const rows = await history(store, `mcp-${serverId}`, binding.silo, performance.now() + 10_000);
+  const state = foldPolicy(rows);
+  const entry = publicationEntry(state);
+  function matchesCommand(row: StoredEvent) {
+    return row.event.commandId === command.commandId;
+  }
+  const prior = rows.find(matchesCommand);
+  const original = mcpPublicationIntentDataSchema.safeParse(prior?.event.data);
+  let fragmentDigest = '0'.repeat(64);
+  if (original.success) {
+    fragmentDigest = original.data.fragmentDigest;
+  } else if (entry) {
+    fragmentDigest = publicationDigest(entry);
+  }
+  const payload = { ...command, serverId, publishedBy: memberId, fragmentDigest };
+  const valid = entry !== null && command.reviewRevision === state.reviewRevision &&
+    command.expectedSequence === state.sequence;
+  const result = await saveToolCommand(store, binding, memberId, serverId, 'mcp.server_published',
+    payload, command, rows, valid, Date.parse(state.expiresAt ?? ''));
+  if (result.status !== 'appended' || !('sequence' in result)) {
+    return result;
+  }
+  // Check duplicate recovery against the event actually saved by the store.
+  const saved = await store.readEvent(result.sequence);
+  if (!matchesPublication(saved, binding.silo, serverId, memberId, payload)) {
+    return { status: 'conflict' };
+  }
+  return { status: 'appended', sequence: result.sequence };
+}
+
+function matchesPublication(row: StoredEvent, silo: string, serverId: string,
+  memberId: string, payload: { commandId: string }) {
+  const event = row.event;
+  return event.silo === silo && event.subject === `mcp-${serverId}` &&
+    event.principal?.kind === 'human' && event.principal.id === memberId &&
+    event.commandId === payload.commandId && event.type === 'mcp.server_published' &&
+    publicationDigest(event.data) === publicationDigest(payload);
 }
 
 export async function setToolPolicy(store: EventStore, binding: Binding, memberId: string,
@@ -107,7 +152,7 @@ async function saveToolCommand(store: EventStore, binding: Binding, memberId: st
       prior.event.principal.id === memberId;
     const status = samePayload && sameActor && prior.event.type === type ? 'appended' : 'conflict';
     await fresh();
-    return { status };
+    return { status, sequence: prior.sequence };
   }
   if (!valid) {
     return { status: 'conflict' };
@@ -118,6 +163,7 @@ async function saveToolCommand(store: EventStore, binding: Binding, memberId: st
   if (Date.now() >= expiresAt) {
     return { status: 'conflict' };
   }
-  const append = { event, expectedSequence: command.expectedSequence };
+  const deadline = Math.min(fresh.deadline, performance.now() + expiresAt - Date.now());
+  const append = { event, expectedSequence: command.expectedSequence, deadline };
   return store.append(append);
 }

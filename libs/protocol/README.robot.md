@@ -193,3 +193,8 @@ permission reasons, `complete: false` and `availability: unavailable`. It contai
 no policy, catalogue, account, source or review-revision fields. Refused and failed
 reads use the route's ordinary status replies. Member inventory rows retain their
 admin-only tool explanation shape.
+
+## Publication preparation (P3-4 PR 2a; Part of #45)
+
+ToolPolicy optionally carries reviewRevision and the strict publication intent.
+These are saved facts, with no gateway readiness claim. Older policy replies still parse.

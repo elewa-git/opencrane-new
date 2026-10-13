@@ -633,3 +633,9 @@ in the scope event history; rebuilding tables never runs cleanup or calls a mode
 transaction with its checkpoint. Offline memory replay rebuilds these rows without
 a scheduler, model, tool, computer or spending port. Rebuild memory on upgrade
 with readers and workers stopped to create this new table.
+
+## Publication preparation (P3-4 PR 2a; Part of #45)
+
+The tool-policy fold saves reviewRevision and publication intent. New publication events
+leave published false and policyRevision unchanged. Old boolean events cannot supply a
+generation entry. Rebuilding the catalogue repeats the same fold and starts no preparation.

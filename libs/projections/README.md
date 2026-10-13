@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, tool admission, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, tool review and publication, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, nightly records, tool holds and checked private instance revisions| projections
@@ -31,6 +31,8 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+Keep publication requests separate from permission to call tools.
 
 Private memory reference records stay in the saved event log. They do not enter
 the chat read table, so history pages and live chat show only public rows.

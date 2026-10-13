@@ -1825,3 +1825,12 @@ as progress. Invalidated or ended evidence for the checked turn refuses its next
 confirmation; another turn's evidence does not. The server records recall evidence
 before replying through the existing one-use memory dispatch. No access streams are
 added. Complete loaded-reference checks on every dispatch remain separate work.
+
+## Publication preparation (P3-4 PR 2a; Part of #45)
+
+Publication commands save one exact review reference and return the original saved position on retry.
+`prepareGatewayConfiguration` is an explicit internal operation, with no worker registration.
+It saves reviewed MCP entries, source positions and a digest on `gateway-config-<silo>`.
+It rereads after competing conditional appends. The renderer, fixed model/memory routes,
+delivery and acknowledgement are deferred to the next parts. Replay calls no preparation.
+`gatewayConfigurationCurrent` rejects changed sources or a replaced gateway record.
