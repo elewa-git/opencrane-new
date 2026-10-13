@@ -1,3 +1,4 @@
+import { memoryContextEvent } from './memory-context.ts';
 import { surveyEvents } from './survey.ts';
 import { routineEvents, modernRoutineExamples } from './routine-events.ts';
 import * as routines from './routines.ts';
@@ -62,6 +63,7 @@ const maintenanceRecordedExample: MaintenanceRecord = {
 };
 
 export const eventRegistry: readonly EventDefinition[] = [
+  memoryContextEvent,
   event('memory.maintenance_recorded', 'scope',
     'One scope night was claimed or skipped without dispatch.', memoryMaintenanceRecordedDataSchema,
     maintenanceRecordedExample),

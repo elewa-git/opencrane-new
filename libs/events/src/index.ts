@@ -92,3 +92,5 @@ export { memoryForgottenDataSchema, memoryForgottenEventSchema } from './memory.
 export { memoryMaintenanceRecordedDataSchema } from './memory.ts';
 
 export { connectionCreatedDataSchema, connectionRefreshedDataSchema } from './data.ts';
+export { memoryContextRecordedDataSchema, memoryContextRecordedEventSchema,
+  type MemoryContextRecord } from './memory-context.ts';

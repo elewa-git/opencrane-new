@@ -11,6 +11,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
+import type { EventEnvelope } from '@opencrane/events';
 import { members, computers, conversations, pgDb, ProjectionRunner, connectMemberFeed } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { envelope, history } from '@opencrane/models';
@@ -180,9 +181,51 @@ it('serves private chat commands and reads to joined members, refusing other org
       ws.on('message', raw => received.push(chatMessageSchema.parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown)));
       await once(ws, 'open'); ws.send(JSON.stringify({ type: 'subscribe', topic: 'conversation', conversationId, since, generation })); return ws;
     };
+    const evidence: EventEnvelope = {
+      id: randomUUID(), commandId: randomUUID(), type: 'agent.memory_context_recorded',
+      subject: `conversation-${conversationId}`, silo: 'test', source: 'opencrane-server',
+      principal: { kind: 'system', id: 'server' }, time: new Date().toISOString(),
+      correlation: {}, data: {
+        conversationId, turnId, requesterId: 'alice', assistantId: 'assistant',
+        computerId: 'computer', generation: 1, threadId: 'thread',
+        inputGeneration: 'context', action: 'prepared', delivery: null,
+        callDigest: null, dispatchDigest: null, additions: [], scopePositions: [],
+        projectionGeneration: 'projection', byteCount: 0, hasOmissions: false, reason: 'none',
+      },
+    };
+    const evidenceAppend = await nats.store.append({ event: evidence,
+      expectedSequence: await nats.store.head(evidence.subject) });
+    expect(evidenceAppend.status).toBe('appended');
+    await runner.run(conversations);
+    const historyWithEvidence = await app.inject({
+      url: `/api/conversations/${conversationId}/messages`, headers: headers(),
+    });
+    expect.soft(historyWithEvidence.statusCode).toBe(200);
+    expect.soft(historyWithEvidence.json<{ rows?: { id: string }[] }>().rows ?? [])
+      .not.toContainEqual(expect.objectContaining({ id: evidence.id }));
+    const publicFeed = await db.query('SELECT event_id FROM conversation_feed WHERE event_id = $1',
+      [evidence.id]);
+    expect.soft(publicFeed.rows).toEqual([]);
     let socket = await connect(0);
     try {
-      await until(() => received.some(r => r.type === 'ready'));
+      const closeCodes: number[] = [];
+      function recordClose(code: number) {
+        closeCodes.push(code);
+      }
+      function isReady(message: (typeof received)[number]) {
+        return message.type === 'ready';
+      }
+      function hasReplyOrClose() {
+        return received.some(isReady) || closeCodes.length > 0;
+      }
+      socket.once('close', recordClose);
+      await until(hasReplyOrClose);
+      expect(closeCodes).toEqual([]);
+      expect(received.some(isReady)).toBe(true);
+      function isEvidenceMessage(message: (typeof received)[number]) {
+        return message.type === 'event' && message.row?.id === evidence.id;
+      }
+      expect(received.some(isEvidenceMessage)).toBe(false);
       const contentQueriesAfterFirstRead = contentQueries;
       await new Promise(resolve => setTimeout(resolve, 350));
       expect(contentQueries).toBe(contentQueriesAfterFirstRead);
@@ -206,7 +249,11 @@ it('serves private chat commands and reads to joined members, refusing other org
       await until(() => received.some(r => r.type === 'ready'));
       expect(received.filter(r => r.type === 'event').map(r => r.row?.id)).toEqual([id]);
       socket.terminate(); await once(socket, 'close'); received.length = 0;
-      await runner.rebuild(conversations); socket = await connect(cursor.position, cursor.generation);
+      await runner.rebuild(conversations);
+      const rebuiltFeed = await db.query('SELECT event_id FROM conversation_feed WHERE event_id = $1',
+        [evidence.id]);
+      expect(rebuiltFeed.rows).toEqual([]);
+      socket = await connect(cursor.position, cursor.generation);
       await until(() => received.some(r => r.type === 'resync'));
       expect(received[0]).toMatchObject({ type: 'resync', position: 0, generation: cursor.generation + 1 });
     } finally { socket.terminate(); await new Promise<void>(resolve => wss.close(() => resolve())); }

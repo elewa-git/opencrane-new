@@ -187,6 +187,11 @@ The server reads one computer record per changed chat feed, without lifecycle-hi
 
 ## Tool decisions in conversation feeds
 
+`agent.memory_context_recorded` stays in the event log. The conversations worker
+does not put it in `conversation_feed` or advance chat metadata for it. This keeps
+the internal record out of HTTP history and live WebSocket replies. Offline replay
+uses the same rule.
+
 An MCP `decision.recorded` with a `conversationId` enters that conversation's
 feed with only `turnId`, `outcome`, `reason`, `requestId` and optional `callId` and
 `approvalId` from `correlation.approval`. It excludes requester id, assistant id

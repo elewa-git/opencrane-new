@@ -451,3 +451,17 @@ The secretRef is a `secret:` reference to the custody name. No material or mater
 hash is recorded. endpointDigest hashes the registered locator only. The private custody
 adapter retains the material verifier. Missing activation is accepted for legacy replay;
 it supplies no usable generation. No new event type or release reaction is registered.
+
+## Private turn memory reference records
+
+`agent.memory_context_recorded` is a server-only conversation event, capped at 16 KiB
+including the envelope. It refuses computer reports. `inputGeneration` identifies
+one prepared set of turn inputs; it is metadata, not another dispatch pass.
+`prepared` starts with no loaded references. `loaded` carries initial input or recall
+additions. A recall record's `dispatchDigest` is the signed context's existing
+`dispatch.permitDigest`. `callDigest` hashes the call id and input generation.
+Neither digest covers memory text.
+`invalidated` and `ended` carry fixed reasons and no additions or bytes.
+The strict schema bounds each addition list, scope positions and byte counts.
+The server summary checks transitions and cumulative limits. No production writer is
+connected in this change. This contract does not qualify native memory or prove delivery.
