@@ -108,9 +108,17 @@ export const mcpEvents = [
   event(
     'connection.revoked',
     'connection',
-    'A connection was revoked and its secret deleted.',
+    'An owner revoked a connection. Secret cleanup is separate.',
     data.connectionRevokedDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', revokedBy: 'mem_1' },
+  ),
+  event(
+    'connection.disabled',
+    'connection',
+    'An admin blocked personal connections for one member and server.',
+    data.connectionDisabledDataSchema,
+    { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', disabledBy: 'admin_1',
+      expectedSequence: 0, reason: 'admin_disabled' },
   ),
 
 ];
