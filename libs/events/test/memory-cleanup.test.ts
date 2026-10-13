@@ -14,11 +14,18 @@ it('accepts a cleanup completion without private text or keys', function accepte
   expect(parseEventByType(completion).success).toBe(true);
 });
 
+it('accepts fixed unavailable evidence and keeps completed records readable', function unavailable() {
+  const failure = { ...completion, data: { ...completion.data,
+    outcome: 'unavailable', failureCode: 'retry_exhausted' } };
+  expect(parseEventByType(failure).success).toBe(true);
+  expect(parseEventByType(completion).success).toBe(true);
+});
+
 const invalid = [
   { ...completion, subject: 'scope-other' },
   { ...completion, principal: { kind: 'human', id: 'alice' } },
   { ...completion, source: 'opencrane-server' },
-  { ...completion, data: { ...completion.data, outcome: 'unavailable' } },
+  { ...completion, data: { ...completion.data, outcome: 'unavailable', failureCode: 'raw-error' } },
   { ...completion, data: { ...completion.data, text: 'Private text' } },
   { ...completion, data: { ...completion.data, keyId: `key:${scopeId}` } },
 ];

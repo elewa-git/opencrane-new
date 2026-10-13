@@ -7,7 +7,7 @@ import { memoryKeys, memoryProjection, memoryScopeId,
   ProjectionRunner, readMemoryFactIds } from '@opencrane/projections';
 import { memoryForgottenDataSchema, type EventEnvelope, type MemoryIdentity } from '@opencrane/events';
 import { database } from '../../../libs/projections/test/database.ts';
-import { memoryCleanupHandler } from '../src/memory-cleanup.ts';
+import { memoryCleanupHandler, recoverMemoryCleanup } from '../src/memory-cleanup.ts';
 import { dispatcherHandlerNames } from '../src/dispatcher-handlers.ts';
 import { until } from '../../../libs/handlers/test/helpers.ts';
 
@@ -216,3 +216,94 @@ it('refuses a deletion target that is not the saved tombstone', async function f
   expect(keys.status(independent)).toBe('available');
   expect(await completions()).toEqual([]);
 });
+
+it('records one safe unavailable result after exhausted retries, then completes on replay',
+  async function exhaustedCleanup() {
+    await runner.run(projection);
+    const remove = keys.delete;
+    function failChild(identity: MemoryIdentity) {
+      if (identity.memoryId === 'child') throw new Error('PRIVATE ERROR /keys/private');
+      remove(identity);
+    }
+    const failingKeys = { ...keys, delete: failChild };
+    const reaction = memoryCleanupHandler(nats.store, failingKeys);
+    const logger = createLogger('cleanup-exhaustion-test');
+    const errors = vi.spyOn(logger, 'error');
+    const runtime = new HandlerRuntime({ db: storage.db, logger, silo: 'test',
+      handlers: [reaction], retryLimit: 0 });
+    await runtime.start();
+    async function enqueue(transaction: Parameters<typeof reaction.handle>[1]) {
+      await runtime.enqueue(reaction, forgotten, transaction);
+    }
+    await storage.db.transaction(enqueue);
+    await runtime.work(1);
+    async function unavailable() {
+      return (await completions()).some((record) => record.data.outcome === 'unavailable');
+    }
+    await until(unavailable);
+    const failed = (await runtime.deadLetters('cleanup-memory'))[0]!;
+    expect(failed).toBeDefined();
+    expect((await completions()).map((record) => record.data.outcome)).toEqual(['unavailable']);
+    expect(errors).toHaveBeenCalledTimes(1);
+    const logged = JSON.stringify(errors.mock.calls);
+    expect(logged).toContain(forgotten.id);
+    expect(logged).toContain(forgotten.data.scopeId);
+    expect(logged).toContain(failed.id);
+    expect(logged).not.toContain('PRIVATE ERROR');
+    expect(logged).not.toContain('/keys/private');
+    expect(await readMemoryFactIds(storage.db, root.silo, root.scopeId)).toEqual([]);
+    expect(await readMemoryFactIds(storage.db, independent.silo, independent.scopeId))
+      .toEqual(['independent']);
+    await runtime.stop();
+    const repaired = memoryCleanupHandler(nats.store, keys);
+    const retry = new HandlerRuntime({ db: storage.db, logger, silo: 'test',
+      handlers: [repaired], retryLimit: 0 });
+    await retry.start();
+    await retry.work(1);
+    await retry.replay('cleanup-memory', failed.id);
+    async function completed() {
+      return (await completions()).some((record) => record.data.outcome === 'completed');
+    }
+    await until(completed);
+    await retry.stop();
+    expect(keys.status(child)).toBe('destroyed');
+    expect((await completions()).map((record) => record.data.outcome))
+      .toEqual(['unavailable', 'completed']);
+  }, 30_000);
+
+it('rebuilds pending cleanup after both job tables are lost without touching keys',
+  async function lostJobs() {
+    await runner.run(projection);
+    const reaction = handler();
+    const logger = createLogger('cleanup-recovery-test');
+    const options = { db: storage.db, logger, silo: 'test', handlers: [reaction] };
+    const first = new HandlerRuntime(options);
+    await first.start();
+    async function enqueue(transaction: Parameters<typeof reaction.handle>[1]) {
+      await first.enqueue(reaction, forgotten, transaction);
+    }
+    await storage.db.transaction(enqueue);
+    await first.stop();
+    await storage.db.query('DROP SCHEMA pgboss CASCADE');
+    await storage.db.query('DROP TABLE handler_receipts');
+    const provision = vi.spyOn(keys, 'provision');
+    const deletion = vi.spyOn(keys, 'delete');
+    const decryption = vi.spyOn(keys, 'decrypt');
+    const fetchCall = vi.spyOn(globalThis, 'fetch');
+    const restarted = new HandlerRuntime(options);
+    await restarted.start();
+    await recoverMemoryCleanup(restarted, nats.reader, await nats.store.head());
+    expect(provision).not.toHaveBeenCalled();
+    expect(deletion).not.toHaveBeenCalled();
+    expect(decryption).not.toHaveBeenCalled();
+    expect(fetchCall).not.toHaveBeenCalled();
+    const jobs = await storage.db.query("SELECT id FROM pgboss.job WHERE name='cleanup-memory'");
+    expect(jobs.rows).toHaveLength(1);
+    await restarted.work(1);
+    async function completed() {
+      return (await completions()).length === 1;
+    }
+    await until(completed);
+    await restarted.stop();
+    expect((await completions()).map((record) => record.data.outcome)).toEqual(['completed']);
+  }, 30_000);
