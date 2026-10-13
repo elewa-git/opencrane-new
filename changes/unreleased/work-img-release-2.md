@@ -1,0 +1,1 @@
+- Fix private chat startup by running the pinned Codex JavaScript wrapper with Node debugging disabled. Update image probes to use protected credential delivery and check the newly built image.

@@ -587,7 +587,8 @@ per-thread gateway grants. Tokens never enter events, replies, logs or the PVC.
 Trusted Node launches use fixed arguments with `--disable-sigusr1`. The image command,
 credential installer and pipe connectors remove `NODE_OPTIONS` before starting Node.
 The bridge, desktop helper and both Codex wrappers receive environments without Node
-options. The model and MCP proxies run inside the protected bridge process. The root
+options. Both wrappers use `/usr/local/bin/codex`, the pinned JavaScript entrypoint.
+Node must not receive the native vendor executable as a script. The model and MCP proxies run inside the protected bridge process. The root
 supervisor also starts native executors and Python stop helpers; those are not Node
 processes. No launch copies `process.execArgv` or accepts extra Node flags.
 
@@ -599,7 +600,11 @@ sends SIGUSR1 from UID 1000 to the bridge and memory-free Codex wrapper, UID 100
 the desktop helper, and UID 1003 to the private Codex wrapper. It checks that port 9229
 stays closed, forged authentication fails and the live server stays connected. Another
 case supplies `NODE_OPTIONS=--inspect=0.0.0.0:9229` at container startup. The fixture
-uses the current Dockerfile command and mounts current sources. These local checks
+uses the current Dockerfile command and mounts current sources.
+`COMPUTER_TEST_IMAGE` selects the image for these disposable server fixtures; the
+image build sets it to `ocn-computer-runtime` for the custom exec check.
+The private-turn image probe installs a signed throwaway pass through root Pod exec
+and standard input. It does not use the removed public credential endpoint. These local checks
 use Docker runc. Fresh-install gVisor qualification remains NOT RUN.
 
 Deploy the new computer image before the worker and server. Old images lack the

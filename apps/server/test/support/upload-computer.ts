@@ -61,7 +61,7 @@ export async function uploadComputer(deliverCredential = true, nodeOptions = '')
       container = await docker('run', '-d', '--name', `upload-computer-${randomUUID()}`, '-p', '127.0.0.1::8081',
         '--cap-drop=ALL', '--cap-add=SETUID', '--cap-add=SETGID', '--cap-add=CHOWN', '--cap-add=DAC_OVERRIDE',
         '-v', `${disk}:/home/agent`, '-v', `${resolve('apps/computer/src')}:/app/src:ro`, '-e', 'POD_UID=fixture', '-e', `GATEWAY=http://${gateway}:${relay!.port}`, '-e', `NODE_OPTIONS=${nodeOptions}`,
-        'ocn-upload-computer:test', ...command);
+        process.env['COMPUTER_TEST_IMAGE'] ?? 'ocn-upload-computer:test', ...command);
       const port = Number((await docker('port', container, '8081/tcp')).split(':')[1]);
       url = `http://127.0.0.1:${port}`;
     };

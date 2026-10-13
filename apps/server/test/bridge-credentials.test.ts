@@ -157,15 +157,12 @@ async function rotatesWithStubProvider() {
 it('rotates the bridge pass and completes a turn with the stub provider',
   rotatesWithStubProvider, 60_000);
 
-const pinnedCodexBinary = '/spike/node_modules/@openai/codex-linux-x64/vendor/'
-  + 'x86_64-unknown-linux-musl/bin/codex';
-
 const inspectorCases = [
   { name: 'bridge and proxy', path: '/app/src/bridge.ts', uid: 1000, nodeOptions: '' },
   { name: 'desktop helper', path: '/app/src/desktop.ts', uid: 1002, nodeOptions: '' },
   { name: 'memory-free Codex wrapper', path: '/usr/local/bin/codex', uid: 1000,
     nodeOptions: '' },
-  { name: 'private Codex process', path: pinnedCodexBinary, uid: 1003,
+  { name: 'private Codex wrapper', path: '/usr/local/bin/codex', uid: 1003,
     nodeOptions: '' },
   { name: 'inherited inspector options', path: '/app/src/bridge.ts', uid: 1000,
     nodeOptions: '--inspect=0.0.0.0:9229' },
@@ -199,6 +196,10 @@ while not processes and time.monotonic() < deadline:
     time.sleep(0.02)
 assert len(processes) == 1, processes
 pid = processes[0]
+arguments = pathlib.Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\x00')
+assert b'--disable-sigusr1' in arguments
+environment = pathlib.Path(f'/proc/{pid}/environ').read_bytes().split(b'\x00')
+assert not any(value.startswith(b'NODE_OPTIONS=') for value in environment)
 status = pathlib.Path(f'/proc/{pid}/status').read_text()
 assert 'Uid:\t${testCase.uid}\t${testCase.uid}\t${testCase.uid}\t${testCase.uid}' in status
 os.setgroups([])

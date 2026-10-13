@@ -96,7 +96,7 @@ template = json.loads(path.read_text())
 template['spec']['podTemplate']['spec']['containers'][0]['image'] = Path('.state/image.txt').read_text().strip()
 path.write_text(json.dumps(template, indent=2) + '\n')
 PYTHON
-run node --experimental-strip-types test/exec-host.mjs
+run env COMPUTER_TEST_IMAGE=ocn-computer-runtime node --experimental-strip-types test/exec-host.mjs
 run node test/run.mjs
 run node test/private-turns.mjs
 docker tag ocn-computer-runtime "$push_registry"/opencrane/computer:p2-1
