@@ -1108,7 +1108,8 @@ async function refusesRemovedBridgeRequester(testCase: typeof removedBridgeCases
   const test = await privateServerFixture(name, testCase.personal);
   try {
     await append('budget-test', 'budget.ceiling_set', {
-      scope: 'global', ceilingCents: 20000, setBy: 'owner', defaultPayingGroupId: 'sales',
+      scope: 'global', dailyCeilingCents: 2000, ceilingCents: 20000,
+      setBy: 'owner', defaultPayingGroupId: 'sales',
     });
     await test.post('alice', turnId);
     const start = { threadId: 'removed-thread',

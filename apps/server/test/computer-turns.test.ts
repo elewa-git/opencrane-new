@@ -44,7 +44,8 @@ async function setup(kind: 'personal' | 'team' = 'personal') {
     } },
     computerEvent('ready', 'computer.ready', { ...identity, generation: 1 }),
     { ...event('budget', 'budget-test', 'budget.ceiling_set'), data: {
-      scope: 'global', ceilingCents: 20000, setBy: 'alice', defaultPayingGroupId: 'personal',
+      scope: 'global', dailyCeilingCents: 2000, ceilingCents: 20000,
+      setBy: 'alice', defaultPayingGroupId: 'personal',
     } },
   ]);
 }

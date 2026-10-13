@@ -2413,6 +2413,8 @@ Fresh-install qualification and real model/tool calls: NOT RUN.
 `turnBudgetStop` shares the models budget fold and compares the original computer
 admission position with applicable stops, including recovered limits. It reads the
 budget history before the two-second membership check and only new rows afterwards.
+Membership is checked before reporting a spending refusal, including after the final
+budget read. Closed turns and conflicting thread requesters keep their access refusals.
 A refusal closes the turn through the existing lifecycle command. No pass is returned.
 Other payers remain usable. New personal-payer admission keeps its existing summary
 and at most two new budget rows in its volume test.

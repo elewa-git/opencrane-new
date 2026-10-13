@@ -118,19 +118,25 @@ async function startAuthority(store: EventStore, context: TurnContext, conversat
   if (started) {
     const work = { ...data, assistantId: context.assistantId };
     const admittedAt = started.sequence;
-    async function checkBudget(deadline: number) {
-      const stop = await turnBudgetStop(store, context.silo, work, admittedAt, deadline);
-      if (stop !== undefined) throw new TurnAdmissionRejected('Turn stopped by a spending cap');
-    }
-    await checkBudget(performance.now() + 10_000);
+    const stop = await turnBudgetStop(store, context.silo, work, admittedAt,
+      performance.now() + 10_000);
     const authority = await requireTurnMember(store, context.silo, data.requesterId);
+    // Load history before the short access check, but reveal spending only to current members.
+    requireNoBudgetStop(stop);
     async function fresh() {
-      await checkBudget(authority.deadline);
       await authority();
+      const currentStop = await turnBudgetStop(store, context.silo, work, admittedAt,
+        authority.deadline);
+      await authority();
+      requireNoBudgetStop(currentStop);
     }
     return { fresh, payer: undefined };
   }
   return admitTurn(store, context, conversation, facts, data, requested, mode);
+}
+
+function requireNoBudgetStop(stop: string | undefined) {
+  if (stop !== undefined) throw new TurnAdmissionRejected('Turn stopped by a spending cap');
 }
 
 async function saveTurn(store: EventStore, facts: ComputerFacts,
