@@ -166,7 +166,6 @@ export async function admitDescendant(store: EventStore, access: Binding,
   throw new Error('Descendant admission contention or deadline');
 }
 
-
 async function readDelegationStart(store: EventStore, delegationId: string, deadline: number) {
   try {
     for await (const row of store.readStream(`delegation-${delegationId}`, 1, deadline)) {
@@ -175,6 +174,7 @@ async function readDelegationStart(store: EventStore, delegationId: string, dead
     return undefined;
   } catch (error) {
     if (error instanceof Error && error.message === 'Invalid stored event') {
+      // eslint-disable-next-line preserve-caught-error -- Keep stored event details out of refusals.
       throw new Error('Admission conflict');
     }
     refuseAgreementRead();
