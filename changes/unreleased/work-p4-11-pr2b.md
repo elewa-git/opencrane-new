@@ -1,0 +1,1 @@
+- Save a separate delegation start beside each internal child admission. Retries recover both original records, and a read refuses missing, closed or conflicting records. Native tasks and spending remain disabled.

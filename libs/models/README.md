@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks calls, holds and spending stops; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves spending, checks connection changes together, saves instance reports and child admissions| store["libs/event-store<br/>event log"]
+  models -->|saves spending, checks connection changes together, saves instance reports and matching child admission records| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -137,6 +137,7 @@ Other hosted images still need image admission.
   Calls through saved provider choices are not available yet.
 - Save internal child admissions for private turns with a fixed model and provider.
   Check the signed decision, parent, narrowed model access and server limits first.
+  Save a separate delegation start from the computer record and require both to agree.
   These records cannot start native tasks, issue their passes or hold money.
 - Refuse native child model calls before holding money. Older delegation records
   grant no call authority either.
@@ -182,6 +183,9 @@ even if a later check succeeds before the approval is read.
 An internal child admission saves a checked parent and model scope. Competing servers
 share the same saved limits. Each reply returns the saved admission. A retry with
 changed details is refused, including when two servers submit it together.
+Each admission has a separate delegation start that copies the saved computer record.
+Retries add only a missing start. A read checks that both records agree and that the
+computer admission is still open. Missing, older or conflicting records refuse the check.
 Native execution remains disabled.
 
 An isolated gateway test opens a CONNECT tunnel after the decision is saved and
