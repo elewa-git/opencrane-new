@@ -89,7 +89,7 @@ unfinished/lost request text, deltas, reasoning, tool results, approvals and pri
 files. Select records by their server-recorded content class.
 
 Run each sender in a fresh requester-bound restricted process/thread. Record and
-sign `contextClass: shared_only` separately from `executionMode: restricted`.
+sign `sharingClass: shared_only` separately from `executionMode: restricted`.
 Never resume another sender's private thread or use `privateContext` as a shared
 history reader. Exclude personal memory, preferences, profiles' private content and
 shared persistent workspace/browser state. A label or prompt cannot establish this.

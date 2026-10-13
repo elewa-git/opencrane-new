@@ -81,6 +81,28 @@ async function reportReplayMakesNoAppend() {
 }
 it('checks report repeats before an append that opts into historyChecked', reportReplayMakesNoAppend);
 
+async function refusesAClaimedSharedClassOnAPrivateSession() {
+  await setup();
+  const forged = {
+    sequence: 1,
+    previousSequence: 0,
+    conversationId: 'chat',
+    turnId: 'message',
+    assistantId: 'assistant',
+    requesterId: 'alice',
+    threadId: 'private-thread',
+    executionMode: 'restricted',
+    sharingClass: 'shared_only',
+    type: 'agent.turn_started',
+  };
+  await expect(recordReport(nats.store, keys, context, forged))
+    .rejects.toThrow('Turn context class mismatch');
+  const rows = await chatHistory(nats.store, 'test', 'chat');
+  expect(rows).toHaveLength(2);
+}
+it('refuses a forged shared context class on a private session',
+  refusesAClaimedSharedClassOnAPrivateSession);
+
 async function seedAssistant() {
   await nats.seed([
     { ...event('assistant', 'assistant.created', {

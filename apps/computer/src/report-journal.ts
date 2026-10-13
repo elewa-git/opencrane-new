@@ -22,12 +22,14 @@ export interface BridgeReport {
   messageId?: string;
   text?: string;
   executionMode?: 'restricted' | 'memory_free';
+  sharingClass?: 'shared_only';
   reason?: 'restricted_tool_refused' | 'unsupported_native_consent';
   memoryOnly?: boolean;
 }
 
 interface ReportInput {
   executionMode?: 'restricted' | 'memory_free';
+  sharingClass?: 'shared_only';
   id: string;
   conversationId: string;
   assistantId: string;
@@ -183,6 +185,18 @@ export function reportJournal(driver: JournalDriver) {
     };
     if (input.requesterId) report.requesterId = input.requesterId;
     if (input.executionMode === 'restricted') report.executionMode = 'restricted';
+    if (input.sharingClass === 'shared_only') {
+      if (type === 'agent.turn_started') {
+        report.sharingClass = 'shared_only';
+      } else {
+        function isTurnStart(saved: BridgeReport) {
+          return saved.turnId === turnId && saved.conversationId === input.conversationId
+            && saved.type === 'agent.turn_started';
+        }
+        const start = reports.find(isTurnStart);
+        if (start?.threadId) report.threadId = start.threadId;
+      }
+    }
     if (input.executionMode === 'restricted' && report.text !== undefined) report.memoryOnly = true;
     const serializedReport = storedLine(report);
     const reportLine = `${serializedReport}\n`;
@@ -237,6 +251,7 @@ export function wireReport(report: BridgeReport): BridgeReport {
   };
   if (report.previousSequence !== undefined) lost.previousSequence = report.previousSequence;
   if (report.requesterId !== undefined) lost.requesterId = report.requesterId;
+  if (report.threadId !== undefined) lost.threadId = report.threadId;
   return lost;
 }
 
@@ -245,6 +260,13 @@ function readStorageDetails(value: Record<string, unknown>, report: BridgeReport
   if (mode !== undefined) {
     if (mode !== 'restricted' && mode !== 'memory_free') throw new Error('Invalid journal mode');
     report.executionMode = mode;
+  }
+  const sharingClass = value['sharingClass'];
+  if (sharingClass !== undefined) {
+    if (sharingClass !== 'shared_only' || mode !== 'restricted') {
+      throw new Error('Invalid journal context class');
+    }
+    report.sharingClass = 'shared_only';
   }
   const reason = value['reason'];
   if (reason !== undefined) {

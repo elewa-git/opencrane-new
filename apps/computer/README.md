@@ -9,6 +9,11 @@ volume, which can still be written to disk by swap. The live check covers tempor
 processes and their files. Memory features stay off until private replies, memory
 tools and access changes also pass their checks.
 
+The computer keeps a server-recorded shared-only label on restricted child turns.
+It saves the label with the start report and refuses to run that start again after
+a restart. It includes the admitted thread id with child output so the server can
+check where each reply came from.
+
 ## Where it fits
 
 This is the personal computers layer. `apps/ops` starts and pauses computers. `apps/server` sends chat turns and files and can show a read-only desktop view. The computer sends model requests through agentgateway, the AI gateway in the server's models process.
@@ -17,7 +22,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes| computer
-  server["apps/server<br/>the back end"] <-->|turns, models, approvals, dispatch and consent reports| computer
+  server["apps/server<br/>the back end"] <-->|turns, models, approvals and reports with child thread ids| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer --> supervisor["Root supervisor<br/>protected launch, admission and exit checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]

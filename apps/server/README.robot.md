@@ -7,6 +7,20 @@ renewal while an approval is unread. The existing approval reader saves cancella
 a late Approve cannot send a call. An unchanged check alone preserves approval.
 Gateway restart is covered; no watch worker is added by #48 PR 3's first part.
 
+## Shared child output admission
+
+Every new child output report must name the thread from its first server-owned
+`computer.turn_started`. That saved start must have `sharingClass: shared_only`
+and `executionMode: restricted`, and match the computer, assistant, conversation,
+turn and message author. Missing, private, closed or substituted turns are refused
+before encryption and append. The report class still belongs only on start reports.
+The saved start supplies the class for later output.
+
+Reports use the computer summary with a separate ten-second history deadline.
+They add no conversation stream to an access check. Exact saved report retries
+keep their digest check and can be acknowledged after the computer turn closes.
+`test/shared-child-reports.test.ts` covers these refusals and closure retries.
+
 ## Computer credential delivery
 
 The bridge connection caller and lifecycle worker share `SandboxClient.credentials`.
@@ -1172,6 +1186,20 @@ history budget. It contains only the requester's earlier completed exchanges,
 up to 24 KiB, and time-only records of unfinished work. It is never stored.
 The [HTTP contract](../../docs/api/shared-assistants.md#private-turns-and-memory-free-turns)
 and [check record](../../docs/process/p4-14-private-turns-evidence.md) give the details.
+
+## Shared child turns
+
+The server derives `sharingClass: shared_only` from the saved child creation and
+records it on the child start report and `computer.turn_started`, separately from
+`executionMode: restricted`.
+The start report must carry that class; a private conversation cannot claim it and
+a child cannot start without it. The server signs the class into the turn pass, and
+the models process checks it against the saved start. Shared turns cannot call MCP
+or memory routes.
+
+The bridge journal keeps the class with its start report. On restart, an unfinished
+restricted start is failed and is not dispatched again. A new human message is
+needed to start new work.
 
 ## Personal paying group summary
 

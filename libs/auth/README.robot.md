@@ -78,6 +78,13 @@ and rotated token id. The signed `thread` must match the actual Codex `session-i
 `conversation`, `requester`, `task` and allowed `model` are also signed. Issuance
 requires `threadId`, `task` and the model chosen by the server from its routing
 table. Model admission refuses a request whose model differs from the grant.
+Shared child passes also sign `sharingClass: shared_only` separately from the
+restricted execution mode. The issuer validates this optional claim before signing;
+unknown values are refused. Initial and renewed passes use the same issuer.
+`libs/models/test/shared-child-credentials.test.ts` exercises signing, verification,
+model calls and MCP/memory refusal for both passes with real service fixtures.
+The models process compares it with the saved computer
+start before allowing a call, and refuses shared turns on MCP and memory routes.
 An optional active turn token id further narrows `check`; model admission
 requires a server-owned first `computer.turn_started` and refuses a
 `computer.turn_closed` from any source

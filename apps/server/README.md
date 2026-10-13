@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
-  server -->|delivers passes, turns, files, stops, models, tools and approvals; receives dispatch, consent, reports and progress| computer["apps/computer<br/>personal or group assistant"]
+  server -->|delivers passes, turns, files, stops, models, tools and approvals; checks admitted child output; receives dispatch, consent and progress| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -74,6 +74,9 @@ have not been checked. Unrelated read receipts do not require reading the event 
   Refuse old reviews and changes to another connection.
 
 - Read recorded child participants without reading the whole conversation.
+- Match child output to the server-admitted computer turn and thread before saving it.
+- Record the shared-only class for restricted child turns and verify it on each
+  start report.
 
 - Returns missing approval details and accepts requester retries after verified non-dispatch.
 - Lets admins review a departure, remove access and recover the saved removal receipt.

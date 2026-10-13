@@ -1,7 +1,12 @@
+import { z } from 'zod';
 import { optionalProviderTurnBindingSchema } from '@opencrane/events';
 import { readFile } from 'node:fs/promises';
 import { createPublicKey, randomUUID } from 'node:crypto';
 import { createLocalJWKSet, exportJWK, importPKCS8, importSPKI, jwtVerify, SignJWT, type JSONWebKeySet, type JWTPayload } from 'jose';
+
+const turnClaimsSchema = optionalProviderTurnBindingSchema.safeExtend({
+  sharingClass: z.literal('shared_only').optional(),
+});
 
 const algorithm = 'ES256';
 export const computerTokenAudience = 'agentgateway';
@@ -86,12 +91,14 @@ export async function tokenIssuer(options: TokenOptions) {
       silo: string; conversationId: string; turnId: string; requesterId: string;
       threadId: string; task: string; model: string; assistantId: string;
       computerTokenId?: string; delegation?: string[];
+      sharingClass?: 'shared_only' | undefined;
       providerId?: string | undefined; bindingSequence?: number | undefined;
     }) {
-      const choice = { providerId: input.providerId, bindingSequence: input.bindingSequence };
-      const checkedChoice = optionalProviderTurnBindingSchema.parse(choice);
+      const claims = { providerId: input.providerId, bindingSequence: input.bindingSequence,
+        sharingClass: input.sharingClass };
+      const checkedClaims = turnClaimsSchema.parse(claims);
       const payload = {
-        ...checkedChoice, typ: 'turn', silo: input.silo,
+        ...checkedClaims, typ: 'turn', silo: input.silo,
         conversation: input.conversationId, thread: input.threadId,
         task: input.task, model: input.model, computerTokenId: input.computerTokenId,
         turn: input.turnId, requester: input.requesterId, assistant: input.assistantId,

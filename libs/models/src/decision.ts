@@ -1,5 +1,4 @@
 import { mcpDispatch, type McpDispatchOptions } from './mcp-dispatch.ts';
-import { providerTurnBindingSchema } from '@opencrane/events';
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
   type ProviderVerificationOptions } from './provider-verification.ts';
 import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
@@ -10,6 +9,10 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
+import { requireCurrentComputer, requireRecordedActiveTurn, requireSharedTurnTools,
+  requireTurnDelegation } from './turn-binding-check.ts';
+import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims }
+  from './decision-turn-token.ts';
 import { mcpPolicy, parseMcpCall, requireMcpThread } from './mcp.ts';
 import { MemoryPersonScopeOnly, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -35,26 +38,6 @@ function decisionError(error: unknown) {
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
 const computerSchema = z.object({ ...common, typ: z.literal('computer'), computer: id, generation: z.int().nonnegative() });
-const legacyTurnSchema = z.object({
-  ...common, typ: z.literal('turn'), conversation: id, turn: id, requester: id, thread: id,
-  task: z.string().min(1), model: z.string().min(1), delegation: z.array(id).length(1),
-  providerId: id.optional(), bindingSequence: z.int().positive().optional(),
-});
-const turnSchema = legacyTurnSchema.extend(providerTurnBindingSchema.shape);
-
-function parseTurnToken(raw: unknown) {
-  const token = legacyTurnSchema.parse(raw);
-  if (token.providerId !== undefined || token.bindingSequence !== undefined) {
-    return turnSchema.parse(raw);
-  }
-  return token;
-}
-function requireManagedTurnClaims(raw: unknown, enabled: boolean) {
-  if (enabled) {
-    turnSchema.parse(raw);
-  }
-}
-
 const textContent = z.object({ type: z.enum(['input_text', 'output_text']), text: z.string() }).strict();
 const message = z.object({ type: z.literal('message').optional(), id: z.string().nullable().optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
   content: z.union([z.string(), z.array(textContent)]), phase: z.enum(['commentary', 'final_answer']).nullable().optional() }).strict();
@@ -124,8 +107,12 @@ async function context(actor: BudgetActor, binding: Binding,
   const payingGroupId = data(turn.event)['payingGroupId'];
   if (typeof payingGroupId !== 'string') throw new RequestRefused('Paying group unavailable; ask an Owner or Admin to configure work attribution');
   if (data(assistant.event)['kind'] === 'team') {
-    if (data(created.event)['createdBy'] !== turnToken.requester) throw new Error('Private requester refused');
-    if (data(created.event)['payingGroupId'] !== payingGroupId ||
+    const createdData = data(created.event);
+    const sharedChild = createdData['contextKind'] === 'shared_child';
+    if (!sharedChild && createdData['createdBy'] !== turnToken.requester) {
+      throw new Error('Private requester refused');
+    }
+    if (createdData['payingGroupId'] !== payingGroupId ||
         data(assistant.event)['payingGroupId'] !== payingGroupId) {
       throw new RequestRefused('Shared payer binding mismatch');
     }
@@ -158,41 +145,6 @@ function activeTurn(turnToken: z.infer<typeof legacyTurnSchema>,
   return requireRecordedActiveTurn(turnToken, facts.firstStart, facts.firstClose);
 }
 
-function requireTurnDelegation(turnToken: z.infer<typeof legacyTurnSchema>) {
-  if (turnToken.task === 'native_descendant') throw new Error('Native delegation is disabled');
-  if (turnToken.delegation[0] !== turnToken.requester) throw new Error('Delegation refused');
-}
-
-function requireCurrentComputer(
-  computer: Awaited<ReturnType<typeof decisionActivity>>['computer']['lifecycle'],
-  computerSequence: number,
-) {
-  // Check the same ready computer that supplied the token's current identity.
-  // Refuse a suspension or replacement saved between those two reads.
-  if (computer?.event.type !== 'computer.ready' || computer.sequence !== computerSequence) {
-    throw new Error('Computer changed');
-  }
-}
-
-function requireRecordedActiveTurn(
-  turnToken: z.infer<typeof legacyTurnSchema>,
-  turn: Awaited<ReturnType<typeof decisionActivity>>['computer']['firstStart'],
-  firstClose: Awaited<ReturnType<typeof decisionActivity>>['computer']['firstClose'],
-): StoredEvent {
-  if (!turn || firstClose || turn.event.source !== 'opencrane-server') {
-    throw new Error('Turn is not active');
-  }
-  const recorded = data(turn.event);
-  if (recorded['threadId'] !== turnToken.thread ||
-      recorded['conversationId'] !== turnToken.conversation ||
-      recorded['requesterId'] !== turnToken.requester || recorded['task'] !== turnToken.task ||
-      recorded['providerId'] !== turnToken.providerId ||
-      recorded['bindingSequence'] !== turnToken.bindingSequence ||
-      (recorded['model'] !== undefined && recorded['model'] !== turnToken.model)) {
-    throw new Error('Turn is not active');
-  }
-  return turn;
-}
 function requireActiveConversationTurn(conversation: StoredEvent[], turnId: string) {
   function closesCurrentTurn(row: StoredEvent) {
     return closesDecisionTurn(row.event, turnId);
@@ -301,6 +253,7 @@ export async function startDecision(
       contextDigest = digestContext([computer, turnToken]);
       const raw = await readBody(req);
       async function memoryDecision() {
+        requireSharedTurnTools(turnToken.sharingClass);
         if (!identity.memory) throw new Error('Memory signing unavailable');
         const claims = { silo: actor.silo, requester: turnToken.requester,
           assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
@@ -330,6 +283,7 @@ export async function startDecision(
         return;
       }
       if (route === 'mcp') {
+        requireSharedTurnTools(turnToken.sharingClass);
         const parsed = parseMcpCall(raw);
         callId = parsed.call.params._meta.callId;
         requireMcpThread(parsed.call, turnToken.thread);

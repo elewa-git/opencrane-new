@@ -86,6 +86,8 @@ Other hosted images still need image admission.
   A thread can read the person's own facts, its assistant's notes and that assistant's group facts.
   It can save facts only in the requester’s own memory, with a separate write grant.
   These calls need saved grants, current permissions and an explicitly recorded private turn.
+- Checks a shared child turn's signed context class against its saved start. It allows
+  model calls but refuses MCP and memory calls for that turn.
 - After managed calls are switched on, uses the assistant's saved provider choice or the
   silo default for each new turn. A running turn keeps its original choice. An assistant's
   own pause stops new model work. No command switches this on yet, so existing installs

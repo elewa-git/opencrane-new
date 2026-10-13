@@ -101,7 +101,11 @@ its scope is the principal and entity subject, as [principle 7](../../docs/archi
 
 Private-turn reports add `agent.output_lost` to the conversation stream. Message
 commands may request `executionMode: "memory_free"`; agent and computer start
-events record the optional restricted/memory-free mode. A private tool refusal
+events record the optional restricted/memory-free mode. Child start reports and
+computer start events also record `sharingClass: "shared_only"`; the server derives
+it from saved child creation and checks the computer's report. It is separate from
+execution mode.
+A private tool refusal
 uses `restricted_tool_refused`. See the [event catalogue](../../docs/architecture/events.md#conversations-and-agent-activity).
 
 ## Tool call events

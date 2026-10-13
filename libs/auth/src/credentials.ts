@@ -62,6 +62,7 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
     async turn(input: {
       assistantId: string; conversationId: string; turnId: string; requesterId: string;
       threadId: string; task: string; model: string;
+      sharingClass?: 'shared_only' | undefined;
       providerId?: string | undefined; bindingSequence?: number | undefined;
     }) {
       if (input.task === 'native_descendant') throw new Error('Native delegation is disabled');
