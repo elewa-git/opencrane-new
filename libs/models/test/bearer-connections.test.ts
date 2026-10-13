@@ -9,6 +9,7 @@ import { pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
 import { saveBearerConnection, foldConnection, changePersonalConnection }
   from '../src/bearer-connections.ts';
+import { reconcileConnectionStage } from '../src/connection-reconciliation.ts';
 import type { ConnectionStage, connectionCustody } from '../src/connection-custody.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -83,7 +84,7 @@ function fixture(memberId = 'alice') {
   }
   const custody: Pick<ReturnType<typeof connectionCustody>, 'stage'> = { stage };
   async function save(command: unknown = input, supplied = material) {
-    return saveBearerConnection(nats.store, binding, memberId, custody, command, supplied);
+    return saveBearerConnection(nats.store, binding, memberId, custody, command, supplied, pgDb(storage.queue));
   }
   return { input, subject, custody, save };
 }
@@ -176,7 +177,7 @@ it('saves only one of two competing rotations', concurrentRotations);
 async function refusesForeign() {
   const test = fixture();
   await expect(saveBearerConnection(nats.store, binding, 'outsider', test.custody,
-    test.input, material)).rejects.toThrow();
+    test.input, material, pgDb(storage.queue))).rejects.toThrow();
   const foreign = { ...test.input, connectionId: 'foreign' };
   await expect(test.save(foreign)).rejects.toThrow('Connection server unavailable');
   expect(await nats.store.head(test.subject)).toBe(0);
@@ -504,3 +505,59 @@ async function losesMembershipDuringHistory(change: typeof membershipChanges[num
 it.each(membershipChanges)(
   'rechecks membership after profile history for $action (retry: $retry)',
   losesMembershipDuringHistory);
+
+async function lateAppendCannotFollowDeletion() {
+  const test = fixture();
+  const created = await test.save();
+  const rotation = { ...test.input, action: 'rotate', changeRef: 'late',
+    expectedSequence: created.sequence, expectedGeneration: 1 };
+  const stage = test.custody.stage;
+  let candidate: ConnectionStage | undefined;
+  let staged: Awaited<ReturnType<typeof stage>> | undefined;
+  async function captureStage(input: ConnectionStage, supplied: string) {
+    candidate = input;
+    staged = await stage(input, supplied);
+    return staged;
+  }
+  test.custody.stage = captureStage;
+  const append = nats.store.append.bind(nats.store);
+  let delayed: AppendCommand | undefined;
+  async function loseAppend(command: AppendCommand) {
+    delayed = command;
+    return { status: 'unavailable' as const, cause: new Error(material) };
+  }
+  const fault = vi.spyOn(nats.store, 'append');
+  fault.mockImplementationOnce(loseAppend);
+  await expect(test.save(rotation)).rejects.toThrow('Connection append unconfirmed');
+  fault.mockRestore();
+  let deletes = 0;
+  async function recover() {
+    return { ...staged!, status: 'recovered' as const };
+  }
+  async function remove() {
+    // Deliver the lost publish just before deletion; the saved revoke must already refuse it.
+    const result = await append(delayed!);
+    expect(result.status).toBe('conflict');
+    deletes += 1;
+    return { status: 'deleted' as const };
+  }
+  const custody = { recover, remove };
+  const db = pgDb(storage.queue);
+  expect(await reconcileConnectionStage(nats.store, db, custody, candidate!))
+    .toEqual({ status: 'retained' });
+  const revoke = controlInput(test, created.sequence);
+  await changePersonalConnection(nats.store, binding, 'alice', revoke);
+  const now = vi.spyOn(Date, 'now');
+  now.mockReturnValue(candidate!.appendUntil + 1);
+  try {
+    expect(await reconcileConnectionStage(nats.store, db, custody, candidate!))
+      .toEqual({ status: 'deleted' });
+  } finally {
+    now.mockRestore();
+  }
+  expect(deletes).toBe(1);
+  expect(foldConnection(await history(nats.store, test.subject, 'test')).status)
+    .toBe('unavailable');
+}
+it('blocks a delayed conditional append before deleting its staged material',
+  lateAppendCannotFollowDeletion);
