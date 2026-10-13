@@ -480,11 +480,16 @@ it is not evidence of erasure. It verifies caught-up rows contain no searchable 
 search vectors or encrypted values before one conditional `memory.cleanup_recorded` append.
 Duplicate delivery and lost replies use saved completion without decrypting old text.
 A failed verification or append leaves the fact hidden and the job available for retry.
+When retries run out, the dead-letter copy records `unavailable` with the fixed
+`retry_exhausted` code and logs only change, scope and original job ids. The failed
+original stays in place. Operator `replay('cleanup-memory', originalJobId)` can record
+`completed` after repair. Completion is terminal for the change; unavailable is not.
+Before workers start, the dispatcher scans saved events in groups of 256 through its
+checkpoint and restores missing personal cleanup jobs. It skips completed changes,
+legacy and non-person tombstones. This scan does not use keys, the projection or models.
 No model endpoint is used. Offline replay still runs no reaction and changes no keys.
 
-This is the first split of the remaining P4-13 row 2, under the 600-line budget.
-HTTP forget/status, unavailable evidence on retry exhaustion and rebuilding pending jobs
-after losing job tables remain required before any forget route can be enabled.
+HTTP forget and status remain disabled for every scope.
 `test/memory-cleanup.test.ts` uses real NATS/PostgreSQL and the handler queue. It covers
 key/index/append failure, duplicate delivery, a lost completion reply, replay without
 hidden decryption and completion evidence surviving loss of the job tables.

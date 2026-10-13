@@ -15,7 +15,7 @@ flowchart LR
   ops -->|records departure changes| nats
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
-  ops -->|updates tables and jobs; checks database sessions| postgres["PostgreSQL<br/>read tables"]
+  ops -->|updates tables and jobs; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
   ops -->|updates computers and delivers passes| kube["Kubernetes<br/>computer manager"]
 ```
@@ -40,6 +40,7 @@ flowchart LR
   Readers and workers stay stopped during this process.
 - Destroy forgotten personal memory keys and dependent copies when configured.
   Record completion only after checking key deletion and removal of searchable text.
+  Record when cleanup is unavailable after retries run out, and rebuild lost jobs from events.
 - Lists failed reaction jobs and records an operator’s chosen cancellation.
 - Runs one-off upgrades for model access, the default budget group and handler subscriptions.
 
@@ -91,6 +92,10 @@ A member leaves. The dispatcher checks their saved removal and current resources
 It records group removal, personal grant revocation and assistant deactivation.
 Retries keep one outcome per resource. Computer cleanup and a complete departure
 status are not available yet. Rebuilding read tables never runs this cleanup.
+
+When cleanup fails repeatedly, the original job stays available for an operator to retry.
+The fact and its dependent copies stay hidden. The dispatcher restores pending cleanup jobs
+from saved events before its workers resume if the job tables were lost.
 
 ## How to run or test it
 

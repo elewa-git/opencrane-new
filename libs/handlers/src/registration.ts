@@ -11,6 +11,8 @@ export interface Handler {
   // Write SQL through this transaction. External calls need their own safe
   // retry rule because a local receipt cannot make them part of this commit.
   handle(event: EventEnvelope, transaction: Query): Promise<void>;
+  // Handle exhaustion only when the reaction saves durable failure evidence.
+  exhausted?(event: EventEnvelope): Promise<boolean>;
 }
 export function registerHandler(
   name: HandlerName,

@@ -29,9 +29,10 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks startup, saved turn references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, subscriptions and nightly memory records| events["libs/events<br/>checks records<br/>previews dates"]
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, subscriptions, nightly memory records and cleanup results| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, turns and spending| events
   computer["apps/computer<br/>report text check"] -.-> events
+  events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
 
 Tool catalogue records keep exact definitions and the dates of successful or failed checks.
@@ -131,8 +132,9 @@ They contain no memory text and grant no spending or computer access.
 
 A memory tombstone records a fact id and its next revision without any private text.
 The projection uses it to hide the fact and dependent copies before reading their keys.
-The cleanup completion record confirms that the dispatcher checked key destruction
-and removal of searchable text. It names the original change without private text.
+The cleanup record reports completed deletion or unavailable cleanup after retries run out.
+It names the original change without private text. An operator can retry the failed job;
+a later completion then confirms key destruction and removal of searchable text.
 The HTTP forget command is not built yet.
 
 1. **The event store checks an event before saving it.** It passes the event to

@@ -1,19 +1,23 @@
 import { createHash } from 'node:crypto';
 import { setImmediate } from 'node:timers/promises';
-import { memoryForgottenEventSchema, memoryCleanupRecordedEventSchema,
+import { memoryForgottenEventSchema, memoryForgottenDataSchema,
+  memoryCleanupRecordedEventSchema, memoryCleanupRecordedDataSchema,
   type EventEnvelope, type MemoryIdentity } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { registerHandler } from '@opencrane/handlers';
 import { memoryIdentity, memoryErasureHistory, type memoryKeys,
-  type Query } from '@opencrane/projections';
+  readEvents, type EventSource, type Query } from '@opencrane/projections';
+import type { HandlerRuntime } from '@opencrane/handlers';
 
 type Keys = ReturnType<typeof memoryKeys>;
 type Tombstone = ReturnType<typeof memoryForgottenEventSchema.parse>;
 
-function completedFor(event: EventEnvelope, saved: Tombstone) {
+function recordedFor(event: EventEnvelope, saved: Tombstone,
+  outcome: 'completed' | 'unavailable') {
   if (event.type !== 'memory.cleanup_recorded' || !('schemaVersion' in saved.data)) return false;
   const record = memoryCleanupRecordedEventSchema.parse(event);
-  return record.data.changeId === saved.id && record.data.scopeId === saved.data.scopeId &&
+  return record.data.outcome === outcome &&
+    record.data.changeId === saved.id && record.data.scopeId === saved.data.scopeId &&
     record.data.scopeKind === saved.data.scopeKind && record.data.ownerId === saved.data.ownerId;
 }
 
@@ -25,6 +29,7 @@ async function cleanupHistory(store: EventStore, trigger: EventEnvelope) {
   const rows: StoredEvent[] = [];
   let original: Tombstone | undefined;
   let completed = false;
+  let unavailable = false;
   const deadline = performance.now() + 10_000;
   for await (const row of store.readStream(saved.subject, 1, deadline)) {
     if (row.event.silo !== saved.silo || row.event.subject !== saved.subject ||
@@ -35,15 +40,48 @@ async function cleanupHistory(store: EventStore, trigger: EventEnvelope) {
     if (row.event.id === saved.id && row.event.type === 'memory.forgotten') {
       original = memoryForgottenEventSchema.parse(row.event);
     }
-    if (completedFor(row.event, saved)) completed = true;
+    if (recordedFor(row.event, saved, 'completed')) completed = true;
+    if (recordedFor(row.event, saved, 'unavailable')) unavailable = true;
   }
   // Require the saved deletion target. A queue message cannot choose another fact.
   if (!original || JSON.stringify(original) !== JSON.stringify(saved)) {
     throw new Error('Memory tombstone was not saved');
   }
-  const erasure = await memoryErasureHistory(rows);
-  const hidden = erasure.hidden(saved.silo, saved.data.scopeId);
-  return { saved, data: saved.data, rows, hidden, completed };
+  return { saved, data: saved.data, rows, completed, unavailable };
+}
+
+function cleanupRecord(saved: Tombstone, outcome: 'completed' | 'unavailable') {
+  const target = memoryForgottenDataSchema.parse(saved.data);
+  const reference = [saved.silo, saved.id, 'memory.cleanup_recorded'];
+  if (outcome === 'unavailable') reference.push('unavailable');
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(reference));
+  const id = hash.digest('hex');
+  const data: ReturnType<typeof memoryCleanupRecordedDataSchema.parse> = {
+    schemaVersion: 1, scopeId: target.scopeId,
+    scopeKind: target.scopeKind, ownerId: target.ownerId,
+    changeId: saved.id, outcome };
+  if (outcome === 'unavailable') {
+    data.failureCode = 'retry_exhausted';
+  }
+  const event = { id, commandId: id, type: 'memory.cleanup_recorded',
+    source: 'opencrane-worker', subject: saved.subject, silo: saved.silo,
+    time: new Date().toISOString(), principal: { kind: 'system', id: 'opencrane-worker' },
+    correlation: {}, data };
+  return memoryCleanupRecordedEventSchema.parse(event);
+}
+
+async function appendRecord(
+  store: EventStore,
+  saved: Tombstone,
+  outcome: 'completed' | 'unavailable',
+  sequence: number,
+) {
+  const event = cleanupRecord(saved, outcome);
+  const command = { event, expectedSequence: sequence, historyChecked: true as const,
+    deadline: performance.now() + 2000 };
+  const result = await store.append(command);
+  if (result.status !== 'appended') throw new Error('Memory cleanup result was not saved');
 }
 
 function cleanupIdentities(rows: StoredEvent[], hidden: Set<string>) {
@@ -112,32 +150,80 @@ export function memoryCleanupHandler(store: EventStore, keys: Keys) {
   async function cleanup(trigger: EventEnvelope, db: Query) {
     const state = await cleanupHistory(store, trigger);
     if (state.completed) return;
-    const targets = cleanupIdentities(state.rows, state.hidden);
+    const erasure = await memoryErasureHistory(state.rows);
+    const hidden = erasure.hidden(state.saved.silo, state.data.scopeId);
+    const targets = cleanupIdentities(state.rows, hidden);
     await destroyKeys(keys, targets.identities, true);
     await destroyKeys(keys, targets.candidates, false);
     const sequence = state.rows.at(-1)?.sequence ?? 0;
     const data = state.data;
-    await verifySearchRemoval(db, state.saved.silo, data.scopeId, state.hidden, sequence);
-    const hash = createHash('sha256');
-    const reference = [state.saved.silo, state.saved.id, 'memory.cleanup_recorded'];
-    const encodedReference = JSON.stringify(reference);
-    hash.update(encodedReference);
-    const id = hash.digest('hex');
-    const event = {
-      id, commandId: id, type: 'memory.cleanup_recorded', source: 'opencrane-worker',
-      subject: state.saved.subject, silo: state.saved.silo, time: new Date().toISOString(),
-      principal: { kind: 'system', id: 'opencrane-worker' }, correlation: {},
-      data: { schemaVersion: 1, scopeId: data.scopeId, scopeKind: data.scopeKind,
-        ownerId: data.ownerId, changeId: state.saved.id, outcome: 'completed' },
-    };
-    const completion = memoryCleanupRecordedEventSchema.parse(event);
+    await verifySearchRemoval(db, state.saved.silo, data.scopeId, hidden, sequence);
     // Refuse completion if content moved after the checked history. Retry from events.
-    const command = { event: completion, expectedSequence: sequence, historyChecked: true as const,
-      deadline: performance.now() + 2000 };
-    const result = await store.append(command);
-    if (result.status !== 'appended') {
-      throw new Error('Memory cleanup completion was not saved');
+    await appendRecord(store, state.saved, 'completed', sequence);
+  }
+  async function exhausted(trigger: EventEnvelope): Promise<boolean> {
+    const state = await cleanupHistory(store, trigger);
+    if (state.completed || state.unavailable) return false;
+    const sequence = state.rows.at(-1)?.sequence ?? 0;
+    await appendRecord(store, state.saved, 'unavailable', sequence);
+    return true;
+  }
+  return { ...registerHandler('cleanup-memory', cleanup), exhausted };
+}
+
+/** Rebuild missing queue work from events before the dispatcher starts its workers. */
+export async function recoverMemoryCleanup(runtime: HandlerRuntime, source: EventSource,
+  checkpoint: number): Promise<number> {
+  function isCleanup(candidate: typeof runtime.options.handlers[number]) {
+    return candidate.name === 'cleanup-memory';
+  }
+  const handler = runtime.options.handlers.find(isCleanup);
+  if (!handler) return 0;
+  const cleanupHandler = handler;
+  const pending = new Map<string, Tombstone>();
+  const head = await source.head();
+  if (head < checkpoint) throw new Error('Cleanup recovery checkpoint exceeds history');
+  for (let start = 1; start <= head; start += 256) {
+    const end = Math.min(start + 255, head);
+    for await (const row of readEvents(source, start, end)) {
+      const event = row.event;
+      if (event.silo !== runtime.options.silo) throw new Error('Cleanup recovery silo mismatch');
+      if (event.type === 'memory.forgotten') {
+        const result = memoryForgottenEventSchema.safeParse(event);
+        if (!result.success || !('schemaVersion' in result.data.data)) continue;
+        if (row.sequence <= checkpoint && result.data.data.scopeKind === 'person') {
+          pending.set(event.id, result.data);
+        }
+      }
+      if (event.type === 'memory.cleanup_recorded') {
+        const result = memoryCleanupRecordedEventSchema.parse(event);
+        const original = pending.get(result.data.changeId);
+        if (original && recordedFor(event, original, 'completed')) {
+          pending.delete(result.data.changeId);
+        }
+      }
     }
   }
-  return registerHandler('cleanup-memory', cleanup);
+  const saved = [...pending.values()];
+  let queued = 0;
+  for (let start = 0; start < saved.length; start += 256) {
+    const batch = saved.slice(start, start + 256);
+    async function enqueuePending(tx: Query) {
+      for (const event of batch) {
+        const exists = await tx.query(
+          "SELECT 1 FROM pgboss.job WHERE name='cleanup-memory' AND data->>'id'=$1 LIMIT 1",
+          [event.id],
+        );
+        const receipt = await tx.query(
+          "SELECT 1 FROM handler_receipts WHERE handler='cleanup-memory' AND event_id=$1",
+          [event.id],
+        );
+        if (exists.rows.length || receipt.rows.length) continue;
+        await runtime.enqueue(cleanupHandler, event, tx);
+        queued += 1;
+      }
+    }
+    await runtime.options.db.transaction(enqueuePending);
+  }
+  return queued;
 }
