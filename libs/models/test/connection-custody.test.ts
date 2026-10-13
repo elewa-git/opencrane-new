@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
-import { pgDb } from '@opencrane/projections';
+import { type Db, pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
 import { foldConnection } from '../src/bearer-connections.ts';
-import { reconcileConnectionStage, withConnectionStage } from '../src/connection-reconciliation.ts';
+import { reconcileConnectionStage } from '../src/connection-reconciliation.ts';
+import { withConnectionStage } from '../src/connection-stage-lock.ts';
 import { z } from 'zod';
 import { connectionCustody, type ConnectionStage } from '../src/connection-custody.ts';
 
@@ -406,10 +407,11 @@ async function stopReconciliation() {
 beforeAll(startReconciliation, 120_000);
 afterAll(stopReconciliation);
 
-async function candidateFixture() {
+async function candidateFixture(appendUntil = stage.appendUntil) {
   const store = await fixture();
   candidateCount += 1;
-  const input = { ...stage, siloId: 'test', profileId: `candidate-${candidateCount}` };
+  const input = { ...stage, siloId: 'test', profileId: `candidate-${candidateCount}`,
+    operationId: `operation-${candidateCount}`, appendUntil };
   const subject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
   const saved = await store.custody.stage(input, material);
   const db = pgDb(storage.queue);
@@ -492,14 +494,17 @@ async function keepsFailedReconciliation(failure: 'custody' | 'history' | 'lock'
   const test = await candidateFixture();
   await test.invalidate();
   const faults = [];
-  async function fail(): Promise<never> {
+  function fail(): Promise<never> {
+    return Promise.reject(new Error(material));
+  }
+  function failHistory(): never {
     throw new Error(material);
   }
   if (failure === 'custody') {
     test.store.failReads();
   } else if (failure === 'history') {
     const fault = vi.spyOn(events.store, 'readStream');
-    fault.mockImplementation(fail);
+    fault.mockImplementation(failHistory);
     faults.push(fault);
   } else {
     const fault = vi.spyOn(test.db, 'lock');
@@ -522,19 +527,36 @@ it.each(['custody', 'history', 'lock'] as const)(
 async function rechecksUnderCoordination() {
   const test = await candidateFixture();
   const lock = test.db.lock!.bind(test.db);
-  let changed = false;
+  const readStream = events.store.readStream.bind(events.store);
+  let held = false;
+  const reads: boolean[] = [];
+  function observeRead(...parameters: Parameters<typeof readStream>) {
+    reads.push(held);
+    return readStream(...parameters);
+  }
   async function lockAfterActivation<Result>(name: string,
-    work: Parameters<NonNullable<typeof test.db.lock>>[1]): Promise<Result> {
-    if (!changed) {
-      changed = true;
-      await test.activate();
+    work: (db: Db) => Promise<Result>): Promise<Result> {
+    await test.activate();
+    async function execute(db: Db) {
+      held = true;
+      try {
+        return await work(db);
+      } finally {
+        held = false;
+      }
     }
-    return lock(name, work) as Promise<Result>;
+    return lock(name, execute);
   }
   test.db.lock = lockAfterActivation;
-  expect(await test.reconcile()).toEqual({ status: 'retained' });
-  expect(changed).toBe(true);
-  expect(test.store.deletes).toBe(0);
+  const reading = vi.spyOn(events.store, 'readStream');
+  reading.mockImplementation(observeRead);
+  try {
+    expect(await test.reconcile()).toEqual({ status: 'retained' });
+    expect(reads).toEqual([true]);
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    reading.mockRestore();
+  }
 }
 it('reads the current reference again after acquiring cleanup coordination', rechecksUnderCoordination);
 
@@ -549,3 +571,12 @@ async function excludesConcurrentStage() {
   expect(await test.reconcile()).toEqual({ status: 'deleted' });
 }
 it('keeps material while another worker holds staging coordination', excludesConcurrentStage);
+
+async function keepsUnexpiredStage() {
+  const test = await candidateFixture(Date.now() + 60_000);
+  await test.invalidate();
+  expect(await test.reconcile()).toEqual({ status: 'retained' });
+  expect(test.store.deletes).toBe(0);
+}
+it('keeps a staged secret before its append deadline even with a conflicting event',
+  keepsUnexpiredStage);

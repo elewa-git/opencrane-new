@@ -9,6 +9,7 @@ import { pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
 import { saveBearerConnection, foldConnection, changePersonalConnection }
   from '../src/bearer-connections.ts';
+import { withConnectionStage } from '../src/connection-stage-lock.ts';
 import { reconcileConnectionStage } from '../src/connection-reconciliation.ts';
 import type { ConnectionStage, connectionCustody } from '../src/connection-custody.ts';
 
@@ -84,7 +85,8 @@ function fixture(memberId = 'alice') {
   }
   const custody: Pick<ReturnType<typeof connectionCustody>, 'stage'> = { stage };
   async function save(command: unknown = input, supplied = material) {
-    return saveBearerConnection(nats.store, binding, memberId, custody, command, supplied, pgDb(storage.queue));
+    const db = pgDb(storage.queue);
+    return saveBearerConnection(nats.store, binding, memberId, custody, command, supplied, db);
   }
   return { input, subject, custody, save };
 }
@@ -507,7 +509,8 @@ it.each(membershipChanges)(
   losesMembershipDuringHistory);
 
 async function lateAppendCannotFollowDeletion() {
-  const test = fixture();
+  await joinMember('late-append');
+  const test = fixture('late-append');
   const created = await test.save();
   const rotation = { ...test.input, action: 'rotate', changeRef: 'late',
     expectedSequence: created.sequence, expectedGeneration: 1 };
@@ -522,17 +525,19 @@ async function lateAppendCannotFollowDeletion() {
   test.custody.stage = captureStage;
   const append = nats.store.append.bind(nats.store);
   let delayed: AppendCommand | undefined;
-  async function loseAppend(command: AppendCommand) {
+  function loseAppend(command: AppendCommand) {
     delayed = command;
-    return { status: 'unavailable' as const, cause: new Error(material) };
+    const result = { status: 'unavailable' as const, cause: new Error(material) };
+    return Promise.resolve(result);
   }
   const fault = vi.spyOn(nats.store, 'append');
   fault.mockImplementationOnce(loseAppend);
   await expect(test.save(rotation)).rejects.toThrow('Connection append unconfirmed');
   fault.mockRestore();
   let deletes = 0;
-  async function recover() {
-    return { ...staged!, status: 'recovered' as const };
+  function recover() {
+    const result = { ...staged!, status: 'recovered' as const };
+    return Promise.resolve(result);
   }
   async function remove() {
     // Deliver the lost publish just before deletion; the saved revoke must already refuse it.
@@ -545,8 +550,8 @@ async function lateAppendCannotFollowDeletion() {
   const db = pgDb(storage.queue);
   expect(await reconcileConnectionStage(nats.store, db, custody, candidate!))
     .toEqual({ status: 'retained' });
-  const revoke = controlInput(test, created.sequence);
-  await changePersonalConnection(nats.store, binding, 'alice', revoke);
+  const revoke = { ...controlInput(test, created.sequence), userId: 'late-append' };
+  await changePersonalConnection(nats.store, binding, 'late-append', revoke);
   const now = vi.spyOn(Date, 'now');
   now.mockReturnValue(candidate!.appendUntil + 1);
   try {
@@ -561,3 +566,19 @@ async function lateAppendCannotFollowDeletion() {
 }
 it('blocks a delayed conditional append before deleting its staged material',
   lateAppendCannotFollowDeletion);
+
+async function saveUsesCleanupLock() {
+  await joinMember('save-lock');
+  const test = fixture('save-lock');
+  const profile = { siloId: 'test', userId: 'save-lock', serverId: 'server',
+    profileId: test.input.profileId };
+  const staged = vi.spyOn(test.custody, 'stage');
+  async function cleanupInProgress() {
+    await expect(test.save()).rejects.toThrow('Connection coordination unavailable');
+    expect(staged).not.toHaveBeenCalled();
+  }
+  await withConnectionStage(pgDb(storage.queue), profile, cleanupInProgress);
+  expect(await nats.store.head(test.subject)).toBe(0);
+  expect((await test.save()).status).toBe('saved_unverified');
+}
+it('refuses staging while another worker holds the cleanup lock', saveUsesCleanupLock);
