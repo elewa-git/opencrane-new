@@ -342,3 +342,22 @@ async function creationReceipt() {
   expect(await setup.nats.store.head()).toBe(before);
 }
 it('requires the provider creation receipt even when manage permission already exists', creationReceipt);
+
+async function legacyDuringReads() {
+  const command = await input();
+  const before = await setup.nats.store.head();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  let saved = false;
+  async function* changedRead(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === 'provider-*' && !saved) {
+      saved = true;
+      await setup.append('computer-assistant', 'computer.turn_started', turn);
+    }
+  }
+  vi.spyOn(setup.nats.store, 'readStream').mockImplementation(changedRead);
+  expect((await request(command)).statusCode).toBe(409);
+  expect(saved).toBe(true);
+  expect(await setup.nats.store.head()).toBe(before + 1);
+}
+it('reports a conflict when a legacy start arrives between the history reads', legacyDuringReads);
