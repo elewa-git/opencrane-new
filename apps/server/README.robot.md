@@ -2428,11 +2428,24 @@ The summary copies its result and counts retained evidence against its existing 
 The first test commit failed 25 tests before implementation. The focused tests cover
 schema refusals, mixed-scope accounting, generation changes, recall/reference bounds,
 terminal expiry metadata, concurrent summary reads and real NATS conditional append
-races with a discarded reply. They do not prove append-before-delivery or live expiry.
-Remaining row 2 work: the production writer, append reconciliation before delivery,
-generation-bound recall proofs, complete derived-write checks and validation before
-every dispatch. Those must reuse the existing one-use pass. Native memory remains
-disabled and selective-proof writes remain refused. No public feed response changes.
+races with a discarded reply.
+
+The next part connects governed MCP recall to these same events. It appends prepared
+once, then loaded before returning each complete reply, including its proof. Each append
+uses the checked conversation position. A conflict or uncertain result returns 403 with
+no text or proof; there is no automatic retry or resend. Saved references remain loaded
+even if the response is withheld or lost. The existing one-use dispatch digest and a
+hash of callId prevent replay. Empty replies count towards the four-recall limit.
+The writer checks current page references, supporting keys, expiry, scope position,
+projection generation and current access before saving and again before release.
+It reads chat and scope history before the final short access checks.
+
+This is a size-limited split of row 2. Remaining work: bind proofs to input generation,
+validate the complete accumulated reference set before every model/tool dispatch and
+grant renewal, and admit only complete same-scope derived writes. Current proofs already
+bind computer generation, turn and scope, but selective-proof writes remain refused.
+This part checks the page being delivered, not every earlier loaded scope. Native memory
+remains disabled. Public feed responses remain unchanged.
 Fresh-install qualification and real model/tool calls: NOT RUN.
 
 ## Renewal after budget stops (P3-14 PR 3; Part of #55)

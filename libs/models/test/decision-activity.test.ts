@@ -203,3 +203,43 @@ async function boundsRetainedDecisionRows() {
 }
 it('bounds retained decision rows without forgetting old approval activity',
   boundsRetainedDecisionRows);
+
+const memoryChanges = [
+  { action: 'prepared', turnId: 'turn', refused: false },
+  { action: 'loaded', turnId: 'turn', refused: false },
+  { action: 'invalidated', turnId: 'turn', refused: true },
+  { action: 'ended', turnId: 'turn', refused: true },
+  { action: 'invalidated', turnId: 'other', refused: false },
+];
+async function memoryEvidence(change: typeof memoryChanges[number]) {
+  const nats = await natsFixture();
+  try {
+    const activity = await decisionActivity(nats.store, 'test', 'assistant', 'chat', 'turn',
+      Infinity);
+    const saved = activityEvent('evidence', 'conversation-chat', 'agent.memory_context_recorded');
+    saved.source = 'opencrane-server';
+    const data = { ...saved.data, ...change, conversationId: 'chat' };
+    const { refused: _refused, ...fields } = data;
+    if (change.action === 'loaded') {
+      const loaded = { delivery: 'recall', callDigest: 'a'.repeat(64),
+        dispatchDigest: 'b'.repeat(64) };
+      Object.assign(fields, loaded);
+    } else if (change.action === 'invalidated') {
+      const reason = { reason: 'expired' };
+      Object.assign(fields, reason);
+    } else if (change.action === 'ended') {
+      const reason = { reason: 'ended' };
+      Object.assign(fields, reason);
+    }
+    const evidence = { ...saved, data: fields };
+    await nats.seed([evidence]);
+    if (change.refused) {
+      await expect(activity.confirm(Infinity, false)).rejects.toThrow('Authority changed');
+    } else {
+      await expect(activity.confirm(Infinity, false)).resolves.toBe(true);
+    }
+  } finally {
+    await nats.close();
+  }
+}
+it.each(memoryChanges)('checks $action memory evidence for $turnId', memoryEvidence);

@@ -272,9 +272,10 @@ async function refusesReplayAfterRestart() {
     const request = { method: 'POST' as const, url: route, headers: requestHeaders, payload: call };
     const response = await restarted.inject(request);
     expect(response.statusCode).toBe(403);
-    const fresh = await signedRecall(setup);
+    const nextCall = recallCall('after-restart');
+    const fresh = await signedRecall(setup, {}, nextCall);
     const freshHeaders = { ...headers, 'x-memory-context': fresh };
-    const freshRequest = { ...request, headers: freshHeaders };
+    const freshRequest = { ...request, headers: freshHeaders, payload: nextCall };
     const allowed = await restarted.inject(freshRequest);
     expect(allowed.statusCode, allowed.body).toBe(200);
   } finally {
@@ -383,7 +384,8 @@ async function seedRecallFact() {
     expiresAt: null, sources: [], dependsOn: [], ...keys.encrypt(identity, 'Private canary') };
   const { silo: _silo, ...fields } = data;
   await setup.append(`scope-${scopeId}`, 'memory.written', fields);
-  const projection = memoryProjection({ decrypt: keys.decrypt });
+  const projectionOptions = { decrypt: keys.decrypt };
+  const projection = memoryProjection(projectionOptions);
   await setup.runner.run(projection);
 }
 async function recordsBeforeDelivery() {
@@ -398,7 +400,8 @@ async function recordsBeforeDelivery() {
     }
     return append(command);
   }
-  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(observe);
+  const spy = vi.spyOn(setup.nats.store, 'append');
+  spy.mockImplementation(observe);
   try {
     const response = await directRecall('first');
     expect(response.statusCode, response.body).toBe(200);
@@ -429,7 +432,8 @@ async function uncertainEvidence(stage: 'prepared' | 'loaded' | 'saved') {
     }
     return append(command);
   }
-  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(lose);
+  const spy = vi.spyOn(setup.nats.store, 'append');
+  spy.mockImplementation(lose);
   try {
     const response = await directRecall('uncertain');
     expect(response.statusCode).toBe(403);
@@ -460,7 +464,7 @@ it('counts empty replies and refuses repeats and a fifth recall', refusesRepeate
 async function changesAfterLoad(change: 'key' | 'expiry' | 'close') {
   await seedRecallFact();
   const append = setup.nats.store.append.bind(setup.nats.store);
-  let clock: ReturnType<typeof vi.spyOn> | undefined;
+  let restoreClock: (() => void) | undefined;
   async function changeAfterAppend(command: Parameters<typeof append>[0]) {
     const saved = await append(command);
     const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
@@ -471,7 +475,13 @@ async function changesAfterLoad(change: 'key' | 'expiry' | 'close') {
           ownerId: 'alice', memoryId: 'private-fact', revision: 1 };
         keys.delete(identity);
       } else if (change === 'expiry') {
-        clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 3000);
+        const expired = Date.now() + 3000;
+        const clock = vi.spyOn(Date, 'now');
+        clock.mockReturnValue(expired);
+        function restore() {
+          clock.mockRestore();
+        }
+        restoreClock = restore;
       } else {
         const closed = { conversationId: 'conversation', closedBy: 'alice' };
         await setup.append('participation-conversation', 'conversation.closed', closed);
@@ -479,7 +489,8 @@ async function changesAfterLoad(change: 'key' | 'expiry' | 'close') {
     }
     return saved;
   }
-  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(changeAfterAppend);
+  const spy = vi.spyOn(setup.nats.store, 'append');
+  spy.mockImplementation(changeAfterAppend);
   try {
     const response = await directRecall('changed');
     expect(response.statusCode).toBe(403);
@@ -487,8 +498,40 @@ async function changesAfterLoad(change: 'key' | 'expiry' | 'close') {
     expect((await savedContext()).memoryContext?.references).toHaveLength(1);
   } finally {
     spy.mockRestore();
-    clock?.mockRestore();
+    restoreClock?.();
   }
 }
 it.each(['key', 'expiry', 'close'] as const)(
   'withholds a saved recall when %s changes before release', changesAfterLoad);
+
+async function waitsForEvidence() {
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function holdLoaded(command: Parameters<typeof append>[0]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success && parsed.data.data.action === 'loaded') {
+      entered.resolve();
+      await release.promise;
+    }
+    return append(command);
+  }
+  let delivered = false;
+  function received(response: Awaited<ReturnType<typeof directRecall>>) {
+    delivered = true;
+    return response;
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append');
+  spy.mockImplementation(holdLoaded);
+  const pending = directRecall('pending').then(received);
+  try {
+    await entered.promise;
+    expect(delivered).toBe(false);
+    release.resolve();
+    expect((await pending).statusCode).toBe(200);
+  } finally {
+    release.resolve();
+    spy.mockRestore();
+  }
+}
+it('waits for the loaded append before completing the recall reply', waitsForEvidence);

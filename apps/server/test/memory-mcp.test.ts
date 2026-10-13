@@ -374,7 +374,11 @@ async function grantMemory(target: typeof setup, kind: string, granteeId: string
 }
 
 async function isolatedBackend(target: typeof setup) {
-  const memory = { silo: 'test', store: target.nats.store, db: setup.db,
+  const custody = memoryKeys(dirname(target.options.configFile));
+  const projectionOptions = { decrypt: custody.decrypt };
+  const emptyProjection = memoryProjection(projectionOptions);
+  await target.runner.initialise(emptyProjection);
+  const memory = { silo: 'test', store: target.nats.store, db: target.db,
     binding: target.binding, feed: { memberId }, identity: target.identity,
     dispatchGeneration: 'memory-instance', keyDirectory: dirname(target.options.configFile) };
   const backend = buildServer(testAuthConfig(), { memory });
@@ -1421,7 +1425,7 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
     const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
       computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
       thread: 'thread', operation: 'recall', scopes: [selectedId], contentAccess: 'private',
-      bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId,
+      bodyDigest: parsed.bodyDigest, callId: recallBody.params._meta.callId,
       requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
     const dispatch = await memoryBinding(target);
     const recalledToken = await target.tokens.memoryContext({ ...claims, dispatch }, Date.now() + 2000);
@@ -1709,7 +1713,7 @@ it('rechecks stale grants at the backend and refuses an ended turn upstream', as
       turnId: 'turn', requesterId: 'alice', task: 'chat_turn',
       payingGroupId: 'personal-default', status: 'completed' });
     const ended = await app.inject({ method: 'POST', url: route,
-      headers: { ...headers, 'x-memory-context': active }, payload: call });
+      headers: { ...headers, 'x-memory-context': active }, payload: restored });
     expect(ended.statusCode).toBe(403);
     capability = '';
     expect((await setup.call(headers, call, route)).status).toBe(403);

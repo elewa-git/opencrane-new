@@ -12,7 +12,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks startup, member and child access, indexed departures, final tool and memory sends, renewal access before spending stops, memory setup, fact links, tool reviews, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
-  server -->|records changes, authenticated instance observations and stops, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -->|records changes, authenticated instance observations and stops, control intent, memory facts, recall references and choices, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -->|records changes, authenticated instance observations and stops, control intent, memory facts, recall references and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
@@ -30,7 +31,9 @@ checks each signed context once and keeps the existing scope and write-proof rul
 Turn summaries can also rebuild saved memory reference records without loading fact text.
 They keep personal and shared references separate and cannot restart a turn or grant access.
 Closing the conversation also ends its memory context, while keeping those references.
-Recording these events during recall is not connected yet; native memory stays disabled.
+Recall saves its references before returning text. A failed or uncertain save returns no
+text or proof. A lost reply keeps its saved references and cannot be sent again.
+Native memory and agent-derived writes stay disabled.
 
 ## What it is responsible for
 
