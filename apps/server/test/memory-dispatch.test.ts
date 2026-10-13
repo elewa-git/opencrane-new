@@ -8,6 +8,8 @@ import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from '@open
 import { parseMemoryRequest, readToolPolicy } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
+import { readChatFacts } from '../src/chat/chat-summary.ts';
+import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 let setup: Awaited<ReturnType<typeof fixture>>;
@@ -80,7 +82,9 @@ async function prepare() {
     generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' as const };
   setup.options.mcpRoutes.push(configured);
   await setup.restart();
-  await setup.call(headers, call, route);
+  const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
+  const discovery = { ...call, method: 'tools/list', params: { _meta: metadata } };
+  await setup.call(discoveryHeaders, discovery, route);
 }
 async function close() {
   await app?.close();
@@ -102,13 +106,13 @@ async function memoryBinding(target: typeof setup) {
   return { permitDigest: bytes.toString('hex'), backendGeneration: 'memory-instance',
     schemaDigest: memoryCatalogue.schemaDigest, policyRevision: policy.policyRevision };
 }
-async function signedRecall(target: typeof setup, overrides = {}) {
-  const parsed = parseMemoryRequest(JSON.stringify(call), headers);
+async function signedRecall(target: typeof setup, overrides = {}, body = call) {
+  const parsed = parseMemoryRequest(JSON.stringify(body), headers);
   const dispatch = await memoryBinding(target);
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
     computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
     thread: 'thread', operation: 'recall', scopes: [scopeId], contentAccess: 'private',
-    bodyDigest: parsed.bodyDigest, callId: metadata.callId, dispatch,
+    bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId, dispatch,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0, ...overrides };
   return target.tokens.memoryContext(claims, Date.now() + 2000);
 }
@@ -261,7 +265,7 @@ async function refusesReplayAfterRestart() {
   const captured = capability;
   const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
     binding: setup.binding, feed: { memberId }, identity: setup.identity,
-    dispatchGeneration: 'memory-instance' };
+    dispatchGeneration: 'memory-instance', keyDirectory: dirname(setup.options.configFile) };
   const restarted = buildServer(testAuthConfig(), { memory });
   try {
     const requestHeaders = { ...headers, 'x-memory-context': captured };
@@ -294,7 +298,8 @@ async function consumesConcurrentContextOnce() {
 it('consumes concurrent copies of one signed context only once', consumesConcurrentContextOnce);
 
 async function allowsConcurrentMemory() {
-  const passes = await Promise.all([memoryPass(call, 'recall'), memoryPass(call, 'recall')]);
+  const secondCall = recallCall('concurrent-second');
+  const passes = await Promise.all([memoryPass(call, 'recall'), memoryPass(secondCall, 'recall')]);
   const first = passes[0];
   const second = passes[1];
   const append = setup.nats.store.append.bind(setup.nats.store);
@@ -315,10 +320,13 @@ async function allowsConcurrentMemory() {
   delayed.mockImplementation(overlap);
   const before = backendRequests;
   try {
-    const replies = await Promise.all([dispatchMemory(first, call), dispatchMemory(second, call)]);
+    const replies = await Promise.all([dispatchMemory(first, call), dispatchMemory(second, secondCall)]);
+    const statuses = [];
     for (const reply of replies) {
-      expect(reply.status, await reply.text()).toBe(200);
+      statuses.push(reply.status);
     }
+    expect(statuses).toContain(200);
+    expect(statuses.every(allowedOrConflict)).toBe(true);
     expect(admissions).toBe(3);
     expect(backendRequests).toBe(before + 2);
   } finally {
@@ -326,7 +334,10 @@ async function allowsConcurrentMemory() {
     delayed.mockRestore();
   }
 }
-it('admits two concurrent memory calls on the same tool', allowsConcurrentMemory);
+function allowedOrConflict(status: number) {
+  return status === 200 || status === 403;
+}
+it('serialises evidence for concurrent memory calls on the same tool', allowsConcurrentMemory);
 
 async function refusesStoppedMemory() {
   const permit = await memoryPass(call, 'recall');
@@ -348,3 +359,136 @@ async function refusesStoppedMemory() {
   expect(backendRequests).toBe(before);
 }
 it('stops memory before the shared gate and keeps the renewed turn stopped', refusesStoppedMemory);
+
+function recallCall(callId: string) {
+  const selectedMetadata = { ...metadata, callId };
+  return { ...call, params: { ...call.params, _meta: selectedMetadata } };
+}
+async function directRecall(callId: string) {
+  const body = recallCall(callId);
+  const token = await signedRecall(setup, {}, body);
+  const requestHeaders = { ...headers, 'x-memory-context': token };
+  const request = { method: 'POST' as const, url: route, headers: requestHeaders, payload: body };
+  return app.inject(request);
+}
+async function savedContext() {
+  return readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+}
+async function seedRecallFact() {
+  const keys = memoryKeys(dirname(setup.options.configFile));
+  const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
+    ownerId: 'alice', memoryId: 'private-fact', revision: 1 };
+  keys.provision(identity);
+  const data = { ...identity, schemaVersion: 1, kind: 'fact', pinned: false,
+    expiresAt: null, sources: [], dependsOn: [], ...keys.encrypt(identity, 'Private canary') };
+  const { silo: _silo, ...fields } = data;
+  await setup.append(`scope-${scopeId}`, 'memory.written', fields);
+  const projection = memoryProjection({ decrypt: keys.decrypt });
+  await setup.runner.run(projection);
+}
+async function recordsBeforeDelivery() {
+  await seedRecallFact();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const stages: string[] = [];
+  async function observe(command: Parameters<typeof append>[0]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success) {
+      stages.push(parsed.data.data.action);
+      expect(JSON.stringify(command.event)).not.toContain('Private canary');
+    }
+    return append(command);
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(observe);
+  try {
+    const response = await directRecall('first');
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain('Private canary');
+    expect(stages).toEqual(['prepared', 'loaded']);
+    const expected = { memoryContext: { recallCalls: 1, references: [
+      { scopeId, memoryId: 'private-fact', revision: 1 }], executionAvailable: false } };
+    expect(await savedContext()).toMatchObject(expected);
+    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
+    expect(await readChatFacts(cold, 'test', 'conversation', 'turn')).toMatchObject(expected);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it('records complete text-free evidence before returning recalled text', recordsBeforeDelivery);
+
+async function uncertainEvidence(stage: 'prepared' | 'loaded' | 'saved') {
+  await seedRecallFact();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  async function lose(command: Parameters<typeof append>[0]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    const action = parsed.success ? parsed.data.data.action : undefined;
+    if (action === stage || (stage === 'saved' && action === 'loaded')) {
+      if (stage === 'saved') {
+        await append(command);
+      }
+      return { status: 'unavailable' as const, cause: new Error('Lost append reply') };
+    }
+    return append(command);
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(lose);
+  try {
+    const response = await directRecall('uncertain');
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain('Private canary');
+    expect(response.body).not.toContain('recallProof');
+  } finally {
+    spy.mockRestore();
+  }
+  if (stage === 'saved') {
+    expect((await savedContext()).memoryContext?.references).toHaveLength(1);
+    expect((await directRecall('uncertain')).statusCode).toBe(403);
+  }
+}
+it.each(['prepared', 'loaded', 'saved'] as const)(
+  'releases no text or proof after uncertain %s evidence', uncertainEvidence);
+
+async function refusesRepeatedCalls() {
+  for (let index = 0; index < 4; index++) {
+    const response = await directRecall(`empty-${index}`);
+    expect(response.statusCode, response.body).toBe(200);
+  }
+  expect((await directRecall('empty-0')).statusCode).toBe(403);
+  expect((await directRecall('empty-4')).statusCode).toBe(403);
+  expect((await savedContext()).memoryContext?.recallCalls).toBe(4);
+}
+it('counts empty replies and refuses repeats and a fifth recall', refusesRepeatedCalls);
+
+async function changesAfterLoad(change: 'key' | 'expiry' | 'close') {
+  await seedRecallFact();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let clock: ReturnType<typeof vi.spyOn> | undefined;
+  async function changeAfterAppend(command: Parameters<typeof append>[0]) {
+    const saved = await append(command);
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success && parsed.data.data.action === 'loaded') {
+      if (change === 'key') {
+        const keys = memoryKeys(dirname(setup.options.configFile));
+        const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
+          ownerId: 'alice', memoryId: 'private-fact', revision: 1 };
+        keys.delete(identity);
+      } else if (change === 'expiry') {
+        clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 3000);
+      } else {
+        const closed = { conversationId: 'conversation', closedBy: 'alice' };
+        await setup.append('participation-conversation', 'conversation.closed', closed);
+      }
+    }
+    return saved;
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(changeAfterAppend);
+  try {
+    const response = await directRecall('changed');
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain('Private canary');
+    expect((await savedContext()).memoryContext?.references).toHaveLength(1);
+  } finally {
+    spy.mockRestore();
+    clock?.mockRestore();
+  }
+}
+it.each(['key', 'expiry', 'close'] as const)(
+  'withholds a saved recall when %s changes before release', changesAfterLoad);
