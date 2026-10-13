@@ -261,7 +261,8 @@ has already finished an event).
    it waits on changed subscriptions; the operator stops them here.
 3. After unfinished jobs finish, stop all dispatchers, workers and decision services.
    Close every other connection to the handlers database, including idle operator
-   clients. The command refuses a held dispatcher lock or another database session.
+   clients. The command refuses a held dispatcher lock or another client session.
+   PostgreSQL's own maintenance workers do not block it.
    Failed originals are reported and retained; they do not block the upgrade.
 4. Install the new release. Set `DATABASE_URL`, `SILO_ID` and the NATS projection
    reader settings listed above. Keep `MODEL_DECISION_URL` set exactly as it will

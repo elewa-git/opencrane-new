@@ -63,6 +63,17 @@ function upgradeCrashDb(database: Db): Db {
     async function run(tx: Query) {
       async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
         const result = await tx.query<Row>(sql, values);
+        function isClientSession(row: Row) {
+          return row['backend_type'] === 'client backend';
+        }
+        if (sql.startsWith('SELECT backend_type FROM pg_stat_activity') &&
+          result.rows.some(isClientSession)) {
+          const sessions = await tx.query(
+            'SELECT application_name, state, query FROM pg_stat_activity ' +
+              'WHERE datname = current_database() AND pid <> pg_backend_pid()');
+          const diagnostic = { mode, otherDatabaseSessions: sessions.rows };
+          console.error(JSON.stringify(diagnostic));
+        }
         if (sql.startsWith('UPDATE pgboss.job AS job') && mode === 'upgrade-inside-chunk') {
           await barrier();
         }

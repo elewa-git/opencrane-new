@@ -10,11 +10,14 @@ export interface SubscriptionChange {
 }
 
 export async function requireOnlySession(db: Query): Promise<void> {
-  const sessions = await db.query(
-    'SELECT pid FROM pg_stat_activity WHERE datname = current_database() ' +
+  const sessions = await db.query<{ backend_type: string | null }>(
+    'SELECT backend_type FROM pg_stat_activity WHERE datname = current_database() ' +
     'AND pid <> pg_backend_pid()',
   );
-  if (sessions.rows.length) {
+  function isClientSession(session: { backend_type: string | null }) {
+    return session.backend_type === 'client backend';
+  }
+  if (sessions.rows.some(isClientSession)) {
     throw new Error('There are other database sessions connected to the handlers database; ' +
       'stop every worker, dispatcher and database client before upgrading');
   }

@@ -78,8 +78,13 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
     await until(idleConnectionsClosed);
   }
   async function waitForConnectionsClosed() {
-    await closeIdleConnections();
     async function closed() {
+      // Close clients that become idle after the previous check.
+      await closeIdleConnections();
+      // Wait for clients that are still connecting, even before PostgreSQL lists them.
+      if (pool.totalCount > 0 || pool.waitingCount > 0) {
+        return false;
+      }
       const connections = await admin.query(
         "SELECT pid FROM pg_stat_activity WHERE datname = $1",
         [name],
@@ -95,6 +100,17 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
     connectionString,
     waitForConnectionsClosed,
     closeIdleConnections,
+    async otherSessions() {
+      const sessions = await admin.query<{
+        application_name: string;
+        state: string | null;
+        query: string | null;
+      }>(
+        'SELECT application_name, state, query FROM pg_stat_activity WHERE datname = $1',
+        [name],
+      );
+      return sessions.rows;
+    },
     async runtime(
       handlers: Handler[],
       options: { retryLimit?: number; expireInSeconds?: number } = {},

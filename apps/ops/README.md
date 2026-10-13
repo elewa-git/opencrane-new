@@ -15,7 +15,7 @@ flowchart LR
   ops -->|records departure changes| nats
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
-  ops -->|updates tables, task relationships, jobs, configured memory, nightly jobs and retains failed nights| postgres["PostgreSQL<br/>read tables"]
+  ops -->|updates tables and jobs; checks client sessions| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
   ops -->|updates computers and delivers passes| kube["Kubernetes<br/>computer manager"]
 ```
@@ -78,6 +78,8 @@ survey progress into read tables. Rebuilding those tables changes no keys.
 
 5. **A release adds a reaction or event type.** With writers and workers stopped,
    the handler upgrade tool adds jobs for the new subscriptions from saved events.
+   It refuses other database clients, including idle ones. PostgreSQL's own
+   maintenance workers do not block the upgrade.
    It keeps the notes of finished jobs, so those reactions do not run again.
    The dispatcher names changed subscriptions and waits for this upgrade before
    starting its workers. Computers stay in their current state while it waits.
