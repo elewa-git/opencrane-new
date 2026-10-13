@@ -22,14 +22,16 @@ async function choice(patch: Record<string, unknown> = {}, automatic = false) {
     previousBindingSequence: 0, ...patch };
   const record = { ...event(`choice-${++counter}`, `provider-${String(data.providerId)}`),
     type: 'provider.model_binding_set', data };
-  if (automatic) record.commandId = 'system:seed-provider-default';
+  if (automatic) {
+    record.commandId = 'system:seed-provider-default';
+  }
   await setup.nats.seed([record]);
 }
 async function drain(draining = true) {
   const data = { ...provider, draining, expectedProviderSequence: 0, expectedDrainSequence: 0 };
   await setup.append('provider-primary', 'provider.managed_calls_drain_set', data);
 }
-async function initialise() {
+async function initialise(withDefault = true) {
   setup = await fixture();
   await setup.append('computer-assistant', 'computer.turn_closed',
     { ...turn, turnId: 'turn', status: 'completed' });
@@ -43,7 +45,9 @@ async function initialise() {
     { ...provider, revision: 2, kind: 'reachability', attemptId: 'check', outcome: 'pass' });
   await setup.append('provider-primary', 'provider.models_selected',
     { ...provider, models: ['gpt-6-luna', 'gpt-6.1-sol'] });
-  await choice();
+  if (withDefault) {
+    await choice();
+  }
   await drain();
   function memberId(_silo: string, _issuer: string, sub: string) {
     return Promise.resolve(sub);
@@ -52,7 +56,10 @@ async function initialise() {
     db: setup.db, feed: { memberId } };
   app = buildServer(config, { providers: options });
 }
-beforeEach(initialise, 120_000);
+async function initialFixture() {
+  await initialise();
+}
+beforeEach(initialFixture, 120_000);
 async function close() {
   vi.restoreAllMocks();
   await app?.close();
@@ -91,6 +98,12 @@ async function noDrain() {
   await refused(403);
 }
 it('requires an active drain', noDrain);
+async function missingDefault() {
+  await close();
+  await initialise(false);
+  await refused(403);
+}
+it('requires a saved silo default', missingDefault);
 async function invalidDefault(patch: Record<string, unknown>, automatic: boolean) {
   if (patch['providerId'] === 'other') {
     await setup.append('provider-other', 'provider.created', { providerId: 'other', revision: 1,
@@ -108,14 +121,20 @@ async function invalidConnection(kind: string) {
     provider: 'openai', name: 'Other' };
   await setup.append('provider-other', 'provider.created', created);
   if (kind !== 'missing key') {
-    await setup.append('provider-other', 'provider.key_saved', { ...created, provider: undefined,
-      name: undefined, revision: 2, secretRef: providerSecretRef('test', 'other', 'saved') });
+    await setup.append('provider-other', 'provider.key_saved', { providerId: 'other', changedBy: 'alice',
+      revision: 2, secretRef: providerSecretRef('test', 'other', 'saved') });
+  }
+  if (kind === 'disabled model') {
+    await setup.append('provider-other', 'provider.verification_recorded', {
+      providerId: 'other', revision: 2, changedBy: 'alice', kind: 'reachability',
+      attemptId: 'check', outcome: 'pass',
+    });
   }
   await choice({ providerId: 'other', revision: kind === 'missing key' ? 1 : 2,
     kind: 'assistant', dependantId: 'assistant' });
   await refused(403);
 }
-it.each(['missing key', 'missing reachability'])('refuses active bindings with %s', invalidConnection);
+it.each(['missing key', 'missing reachability', 'disabled model'])('refuses active bindings with %s', invalidConnection);
 async function legacy(end: string) {
   await setup.append('computer-assistant', 'computer.turn_started', turn);
   await refused(403);
@@ -130,20 +149,30 @@ async function legacy(end: string) {
 }
 it.each(['closed', 'lost', 'retired', 'claimed'])('waits for legacy work to be %s', legacy);
 async function denied(reason: string) {
+  const command = await input();
   let sub = 'alice';
   let origin = 'https://app.example.test';
   let orgId = 'org-acme';
-  if (reason === 'member') sub = 'bob';
-  if (reason === 'origin') origin = 'https://forged.test';
-  if (reason === 'silo') orgId = 'foreign';
+  if (reason === 'member') {
+    sub = 'bob';
+    const joined = await setup.append('member-bob', 'member.joined', {
+      memberId: 'bob', email: 'bob@example.test', displayName: 'Bob', role: 'member',
+    });
+    await setup.auth.handler.handle(joined, setup.db);
+  }
+  if (reason === 'origin') {
+    origin = 'https://forged.test';
+  }
+  if (reason === 'silo') {
+    orgId = 'foreign';
+  }
   if (reason === 'departed') {
     await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' });
   }
   if (reason === 'revoked') {
     await setup.append('member-alice', 'member.role_changed',
-      { memberId: 'alice', role: 'member', changedBy: 'owner' });
+      { memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'owner' });
   }
-  const command = await input();
   const before = await setup.nats.store.head();
   const response = await request(command, 'switch-on', sub, origin, orgId);
   expect(response.statusCode).toBe(403);
@@ -160,12 +189,27 @@ async function recovers() {
   const command = await input();
   const before = await setup.nats.store.head();
   const append = setup.nats.store.append.bind(setup.nats.store);
-  async function lost(change: Parameters<typeof append>[0]) {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function lost(change: Parameters<typeof append>[0]): Promise<never> {
+    entered.resolve();
+    await release.promise;
     await append(change);
     throw new Error('Lost reply');
   }
   vi.spyOn(setup.nats.store, 'append').mockImplementationOnce(lost);
-  expect((await request(command)).statusCode).toBe(503);
+  const pending = request(command).then(received);
+  function received(response: Awaited<ReturnType<typeof request>>) {
+    return response;
+  }
+  try {
+    await Promise.race([entered.promise, pending]);
+    expect((await request(undefined, `changes/${command.commandId}`)).json()).toEqual(
+      { status: 'not_found' });
+  } finally {
+    release.resolve();
+  }
+  expect((await pending).statusCode).toBe(503);
   const saved = await request(command);
   expect(saved.statusCode).toBe(200);
   expect(saved.json()).toMatchObject({ operation: 'provider.managed_calls_enabled' });
@@ -189,9 +233,15 @@ async function races(kind: string) {
     const parsed = parseEventByType(change.event);
     if (parsed.success && parsed.event.type === 'provider.managed_calls_enabled' && !intercepted) {
       intercepted = true;
-      if (kind === 'cancel') await drain(false);
-      if (kind === 'pause') await choice({ state: 'paused', reason: 'Paused by an administrator' });
-      if (kind === 'legacy') await setup.append('computer-assistant', 'computer.turn_started', turn);
+      if (kind === 'cancel') {
+        await drain(false);
+      }
+      if (kind === 'pause') {
+        await choice({ state: 'paused', reason: 'Paused by an administrator' });
+      }
+      if (kind === 'legacy') {
+        await setup.append('computer-assistant', 'computer.turn_started', turn);
+      }
       if (kind === 'reservation') {
         await setup.actor.reserve({ model: 'gpt-6-luna', priceTableId,
           computerId: 'computer', assistantId: 'assistant', requesterId: 'alice',
@@ -215,7 +265,7 @@ async function lateStart() {
   await drain(false);
   const message = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorId: 'alice', authorKind: 'human', contentType: 'text',
-    ciphertext: 'ZmFrZQ==', keyId: 'key:1',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1',
   });
   const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
   const start = { conversationId: 'conversation', turnId: message.id,
@@ -251,3 +301,37 @@ async function lateStart() {
   expect(setup.received()).toBe(0);
 }
 it('refuses a legacy admission released after drain and switch-on before any hold or send', lateStart);
+
+async function newChoice(kind: 'assistant' | 'silo_default') {
+  if (kind === 'assistant') {
+    await choice({ kind, dependantId: 'assistant', model: 'gpt-6.1-sol' });
+    const changed = await setup.append('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'owner', newRole: 'admin', changedBy: 'alice',
+    });
+    await setup.auth.handler.handle(changed, setup.db);
+  }
+  expect((await request(await input())).statusCode).toBe(200);
+  const message = await setup.append('conversation-conversation', 'message.posted', {
+    conversationId: 'conversation', authorId: 'alice', authorKind: 'human', contentType: 'text',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1',
+  });
+  const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
+  const start = { conversationId: 'conversation', turnId: message.id,
+    threadId: 'new-thread', status: 'started' as const };
+  const admitted = await turnCommand(setup.nats.store, context, start);
+  const model = kind === 'assistant' ? 'gpt-6.1-sol' : 'gpt-6-luna';
+  expect(admitted).toMatchObject({ providerId: 'primary', model });
+}
+it.each(['assistant', 'silo_default'] as const)('new turns use the %s choice', newChoice);
+
+async function creationReceipt() {
+  const rows = await Array.fromAsync(setup.nats.store.readStream('provider-primary'));
+  const createdId = rows[0]?.event.id;
+  const applied = setup.auth.applied.bind(setup.auth);
+  async function withoutProviderReceipt(eventId: string) {
+    return eventId !== createdId && await applied(eventId);
+  }
+  vi.spyOn(setup.auth, 'applied').mockImplementation(withoutProviderReceipt);
+  await refused(403);
+}
+it('requires the provider creation receipt even when manage permission already exists', creationReceipt);
