@@ -1,3 +1,4 @@
+import { captureDispatchCatalogue } from './integrations/watch-capture.ts';
 import { conversationKeys } from './chat/keys.ts';
 // The lease chooses which process runs this worker. Budget decisions still only
 // append events to NATS.
@@ -7,7 +8,7 @@ import { resolve } from 'node:path';
 import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { connectProjectionDb } from '@opencrane/projections';
 import { providerSecrets, BudgetActor, startDecision, startGateway,
-  ingestUsage, mcpDispatchRouteSchema } from '@opencrane/models';
+  ingestUsage, mcpDispatchRouteSchema, mcpCatalogueWatch } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import type { JSONWebKeySet } from 'jose';
@@ -74,7 +75,25 @@ try {
       if (stop.signal.aborted) throw new Error('Models process stopped');
       await locked.query('SELECT 1');
     }
-    const dispatchOptions = { routes: mcpRoutes, requireLeader: requireDispatchLeader };
+    function serverId(route: typeof mcpRoutes[number]) {
+      return route.serverId;
+    }
+    async function capture(serverId: string, signal: AbortSignal) {
+      function matches(route: typeof mcpRoutes[number]) {
+        return route.serverId === serverId;
+      }
+      const route = mcpRoutes.find(matches);
+      if (!route) throw new Error('Catalogue route unavailable');
+      return captureDispatchCatalogue(route, signal);
+    }
+    const watchOptions = { serverIds: mcpRoutes.map(serverId), capture,
+      requireLeader: requireDispatchLeader };
+    const watch = mcpCatalogueWatch(events.store, silo, watchOptions);
+    function watchFailed() {
+      logger.error('MCP catalogue watch unavailable; calls remain held');
+    }
+    const dispatchOptions = { routes: mcpRoutes, requireLeader: requireDispatchLeader,
+      requireCatalogue: watch.requireCurrent };
     const decisionPort = Number(required('MODEL_DECISION_PORT'));
     const decision = await startDecision(actor, identity, binding, decisionPort,
       keys, verification, dispatchOptions);
@@ -91,6 +110,7 @@ try {
       let eventStoreUnavailableErrorName: string | undefined;
       while (!stop.signal.aborted) {
         await locked.query('SELECT 1'); // Lease connection loss must stop admission.
+        watch.tick(watchFailed);
         if (!gateway.healthy()) throw new Error('Gateway stopped');
         let budgetTickSucceeded = false;
         try {
@@ -114,7 +134,7 @@ try {
         }
         await delay(100, undefined, { signal: stop.signal });
       }
-    } finally { await gateway?.stop(); await decision.close(); }
+    } finally { watch.close(); await gateway?.stop(); await decision.close(); }
   });
 } catch (error) {
   if (!stop.signal.aborted) throw error;

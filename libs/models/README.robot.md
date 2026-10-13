@@ -1675,3 +1675,29 @@ between them to prove that the call never reaches upstream.
 `turnBudgetStop` uses the same budget fold for renewal. Its first history read runs
 before the short membership check; later checks read only new budget events.
 The personal-payer summary and both authority test limits remain unchanged.
+## Catalogue watch and dispatch holds (#48 PR 3b, first split)
+
+`mcpCatalogueWatch` runs beside the active models dispatcher. Startup holds every
+configured server and records a failed check before recapture, invalidating old approval
+revisions. One check per server runs at a time, for at most 32 distinct servers.
+`tick` schedules checks 30 seconds before expiry, at least one second apart. Each attempt
+has a 30-second deadline, followed by at most two seconds to save failure. Three
+consecutive failures stop automatic retries; attempts wait five seconds between failures.
+Replacing the process creates a closed watch and recaptures, including the same digest.
+Stopping aborts discovery. Late results cannot append success or release its hold.
+Dispatch also checks expiry by time, without depending on a running timer.
+
+The watch closes dispatch before appending drift or failure. A failed drift append leaves
+that process held. Successful unchanged checks can recover a freshness pause only after
+failure was saved; they retain the newer approval revision. Saved drift and local drift
+holds never clear here. Existing `mcp.tools_changed` records retain both snapshots.
+The models process retains its existing database leader check. No conversation access
+stream, authority implementation or authority test is changed.
+
+This split does not implement in-process configuration reload, pending approval cancellation
+on reload, instance-start observation, configuration acknowledgement or restoration.
+The current routes reload by restarting the models process; its startup invalidates old
+approvals. Recapture of an independently restarted backend still needs instance lifecycle
+wiring. No exact acknowledgement event or completed #45 publication path exists on this
+base, so there is no restoration path or late-ack acceptance path to test.
+Fresh-install qualification is NOT RUN. The rest of row 3 remains PARTIAL.

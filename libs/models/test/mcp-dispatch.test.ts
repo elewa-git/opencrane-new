@@ -652,57 +652,97 @@ async function checksAdmissionOrder(stopped: boolean) {
 it.each([false, true])('orders budget before tool admission and checks Stop between them: %s',
   checksAdmissionOrder);
 
-async function watchesCatalogue(failure: 'drift append' | 'failed' | 'stalled' | 'replacement') {
+async function watchesCatalogue(failure: 'drift append' | 'drift saved' | 'failed' | 'stalled' | 'replacement') {
   const setup = await fixture();
   let watch: ReturnType<typeof mcpCatalogueWatch> | undefined;
+  let expectedCalls = 0;
   try {
     const headers = await prepare(setup);
     const value = await permit(setup, headers);
     const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
     const capture = vi.fn().mockResolvedValue(before.catalogue);
-    const options = { serverIds: ['fixture'], capture, requireLeader: setup.dispatchOptions.requireLeader };
+    const options = { serverIds: ['fixture'], capture, requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
     watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
     setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
     expect((await send(setup, value)).status).toBe(403);
-    await watch.check('fixture');
+    const startup = watch.check('fixture');
+    expect(watch.check('fixture')).toBe(startup);
+    await startup;
     expect(capture).toHaveBeenCalledTimes(1);
     const freshPermit = await permit(setup, headers);
     if (failure === 'replacement') {
+      const started = Promise.withResolvers<void>();
+      const late = Promise.withResolvers<NonNullable<typeof before.catalogue>>();
+      function pendingCapture() {
+        started.resolve();
+        return late.promise;
+      }
+      capture.mockImplementation(pendingCapture);
+      const checking = watch.check('fixture');
+      const cancelled = expect(checking).rejects.toThrow();
+      await started.promise;
       watch.close();
+      await cancelled;
+      capture.mockResolvedValue(before.catalogue);
       watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
       setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
       expect((await send(setup, freshPermit)).status).toBe(403);
       await watch.check('fixture');
-      expect(capture).toHaveBeenCalledTimes(2);
+      expect(capture).toHaveBeenCalledTimes(3);
+      const current = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+      late.resolve(before.catalogue!);
+      await pause(0);
+      const afterLateResult = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+      expect(afterLateResult.sequence).toBe(current.sequence);
     } else {
       const append = setup.nats.store.append.bind(setup.nats.store);
+      let driftAppendAttempted = false;
+      const captureStarted = Promise.withResolvers<void>();
+      const stalled = Promise.withResolvers<NonNullable<typeof before.catalogue>>();
       async function failDriftAppend(command: AppendCommand) {
         const event = z.object({ type: z.string() }).parse(command.event);
         if (event.type === 'mcp.tools_changed') {
+          driftAppendAttempted = true;
           expect((await send(setup, freshPermit)).status).toBe(403);
           throw new Error('Event store unavailable');
         }
         return append(command);
       }
-      if (failure === 'drift append') {
-        const added = toolEvidence({ name: 'another', costCents: 0 });
+      if (failure === 'drift append' || failure === 'drift saved') {
+        const added = toolEvidence({ name: 'another', reviewed: false, costCents: 0 });
         capture.mockResolvedValue({ ...before.catalogue, ...catalogueEvidence([tool, added]) });
-        vi.spyOn(setup.nats.store, 'append').mockImplementation(failDriftAppend);
+        if (failure === 'drift append') {
+          vi.spyOn(setup.nats.store, 'append').mockImplementation(failDriftAppend);
+        }
       } else if (failure === 'failed') {
         capture.mockRejectedValue(new Error('Upstream unavailable'));
       } else {
-        const stalled = Promise.withResolvers<NonNullable<typeof before.catalogue>>();
-        capture.mockReturnValue(stalled.promise);
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        function stallCapture() {
+          captureStarted.resolve();
+          return stalled.promise;
+        }
+        capture.mockImplementation(stallCapture);
       }
       const checking = watch.check('fixture');
-      const refused = expect(checking).rejects.toThrow();
-      if (failure === 'stalled') await vi.advanceTimersByTimeAsync(30_001);
+      let refused: Promise<unknown>;
+      if (failure === 'drift saved') refused = checking;
+      else refused = expect(checking).rejects.toThrow();
+      if (failure === 'stalled') {
+        await captureStarted.promise;
+      }
       await refused;
-      vi.useRealTimers();
+      if (failure === 'drift append') expect(driftAppendAttempted).toBe(true);
+      if (failure === 'stalled') {
+        stalled.resolve(before.catalogue!);
+        await pause(0);
+      }
       expect((await send(setup, freshPermit)).status).toBe(403);
       expect(() => watch!.requireCurrent('fixture')).toThrow();
-      if (failure !== 'drift append') {
+      if (failure === 'drift saved') {
+        const held = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+        expect(held.driftHeld).toBe(true);
+        expect(held.previousCatalogue).toEqual(before.catalogue);
+      } else if (failure !== 'drift append') {
         const failed = await readToolPolicy(setup.nats.store, 'test', 'fixture');
         expect(failed.expiresAt).toBeNull();
         expect(failed.policyRevision).toBeGreaterThan(before.policyRevision);
@@ -710,15 +750,17 @@ async function watchesCatalogue(failure: 'drift append' | 'failed' | 'stalled' |
         await watch.check('fixture');
         const recovered = await readToolPolicy(setup.nats.store, 'test', 'fixture');
         expect(recovered.policyRevision).toBeGreaterThan(before.policyRevision);
+        const newPermit = await permit(setup, headers);
+        expect((await send(setup, newPermit)).status).toBe(200);
+        expectedCalls = 1;
       }
     }
-    expect(setup.received()).toBe(0);
+    expect(setup.received()).toBe(expectedCalls);
   } finally {
-    vi.useRealTimers();
     vi.restoreAllMocks();
     watch?.close();
     await setup.close();
   }
 }
-it.each(['drift append', 'failed', 'stalled', 'replacement'] as const)(
-  'holds recording upstream through %s and recaptures on worker replacement', watchesCatalogue);
+it.each(['drift append', 'drift saved', 'failed', 'stalled', 'replacement'] as const)(
+  'holds recording upstream through %s and recaptures on worker replacement', watchesCatalogue, 60_000);

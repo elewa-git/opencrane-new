@@ -1,0 +1,1 @@
+Tool calls now pause while the models process recaptures their catalogue after a restart, and when bounded checks fail or find changed definitions. Drift stays held if saving the change fails; acknowledged restoration remains unavailable.

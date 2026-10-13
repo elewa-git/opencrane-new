@@ -56,3 +56,5 @@ export { mcpInstanceWorkerRegistration, mcpInstanceObservation }
   from './mcp-instance-observation.ts';
 
 export { saveBearerConnection, foldConnection } from './bearer-connections.ts';
+
+export { mcpCatalogueWatch } from './mcp-catalogue-watch.ts';

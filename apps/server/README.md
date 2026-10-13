@@ -17,6 +17,7 @@ flowchart LR
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
   server -->|delivers passes, turns, files, stops, models, tools and approvals; checks admitted child output; receives dispatch, consent and progress| computer["apps/computer<br/>personal or group assistant"]
+  server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -192,6 +193,10 @@ computer and tool call is still planned. Switching on managed provider calls rem
 unavailable.
 
 ## Processes it handles
+
+The models process checks each configured tool server at startup and before its saved
+list expires. Calls pause when a check fails or finds a change. A changed server stays
+paused until the publication work can confirm a new configuration; that part is not built yet.
 
 The person who set up nightly memory upkeep can read its blocked and missed history.
 These reads contain dates and fact references, with no saved memory text or new work.
