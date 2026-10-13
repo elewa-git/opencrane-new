@@ -1,5 +1,5 @@
 import { TimeoutError } from '@nats-io/transport-node';
-import { EventStore } from '../src/index.ts';
+import { EventStore, type AppendCommand } from '../src/index.ts';
 import { afterEach, expect, it, vi } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
 import { JetStreamApiError, jetstream, jetstreamManager } from "@nats-io/jetstream";
@@ -352,7 +352,7 @@ async function stopsWhenBackoffUsesRemainingPermission() {
     return Promise.reject(new TimeoutError());
   }
   client.publish = failPublish;
-  const command = { event: event('backoff-uses-permission'), expectedSequence: 0,
+  const command: AppendCommand = { event: event('backoff-uses-permission'), expectedSequence: 0,
     historyChecked: true, deadline: started + 10 };
   try {
     const result = await store.append(command);
