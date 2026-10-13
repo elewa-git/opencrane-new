@@ -49,7 +49,9 @@ expected subject sequence, `rejected` for invalid input or an unrelated
 duplicate id, or `unavailable` after bounded backoff. Timeouts and server
 unavailability retry for ten seconds; its history reads share that deadline.
 An optional append `deadline` uses `performance.now()` and can shorten that limit.
-An expired deadline stops further attempts and returns unavailable.
+An expired deadline stops further attempts and returns unavailable. If a retry wait
+uses all remaining time, append returns unavailable after that wait even when the
+timer wakes a fraction early. It never shortens the wait to squeeze in another publish.
 An optional append `signal` stops retry backoff and prevents further publishes after
 cancellation, including when cancellation arrives during a history read or failed publish.
 Cancellation returns unavailable. It cannot withdraw a publish already sent to NATS.
