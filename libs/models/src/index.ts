@@ -58,3 +58,4 @@ export { mcpInstanceWorkerRegistration, mcpInstanceObservation }
 export { saveBearerConnection, foldConnection } from './bearer-connections.ts';
 
 export { mcpCatalogueWatch } from './mcp-catalogue-watch.ts';
+export { providerSwitchOn, providerSwitchOnChange } from './provider-switch-on.ts';

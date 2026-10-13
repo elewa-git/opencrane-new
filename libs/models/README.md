@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks calls, holds and spending stops; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves spending, checks connection changes together, saves instance reports and matching child admission records| store["libs/event-store<br/>event log"]
+  models -->|saves spending and provider switch-on, checks connection changes together, saves instance reports and matching child admission records| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -90,8 +90,9 @@ Other hosted images still need image admission.
   model calls but refuses MCP and memory calls for that turn.
 - After managed calls are switched on, uses the assistant's saved provider choice or the
   silo default for each new turn. A running turn keeps its original choice. An assistant's
-  own pause stops new model work. No command switches this on yet, so existing installs
-  keep their current path.
+  own pause stops new model work. An owner or admin can switch this on after
+  choosing an explicit default and draining legacy turns. Calls then stay refused
+  until the managed gateway is available.
   Reads the personal paying group and switch-on state together, once per new spending event.
 - Pause new model turns with a saved drain command while running turns finish.
   An administrator can cancel the drain with another saved command.

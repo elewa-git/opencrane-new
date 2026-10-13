@@ -225,3 +225,27 @@ uses a reserved internal command id that user requests cannot supply. It chooses
 first verified provider only when there is no saved default or pause, and waits for that
 provider to enable the chat model. An administrator can explicitly choose any eligible
 verified provider as the initial default.
+
+## Switching on managed calls
+
+`POST /api/org/providers/:providerId/switch-on` takes `commandId`, `expectedRevision`,
+`expectedProviderSequence` and `expectedDrainSequence`. The drain GET supplies these
+positions and the revision. Current Owner/Admin access, provider management permission,
+an applied creation receipt and the configured Origin are required.
+
+Switch-on requires an active drain, an explicit active silo default on this connection,
+and a saved key, successful reachability evidence and an enabled supported model for
+every active binding. Automatic defaults need an explicit administrator choice first.
+Legacy chat turns must have closed or have a later computer loss, retirement or claim.
+Success saves one `provider.managed_calls_enabled` event on `budget-<silo>` and ends draining.
+
+The existing changes GET returns its original receipt. A missing receipt remains
+`not_found`: the outcome is unknown while a request is in flight. Retrying the same
+id and body returns the original receipt, including after a lost reply. Changed retry
+input or stale positions return 409. Missing prerequisites, denied access and a new
+switch-on id after success return 403. Refusals save nothing. Any event saved between
+the initial history position and the append causes 409; reload before trying a new id.
+
+New turns use their own or the silo default choice. Calls stay refused after switch-on
+until PR 5 supplies managed gateway startup and fallback-key refusal. Switch-off,
+retirement and screens remain unavailable. This command never reads a key or calls a provider.

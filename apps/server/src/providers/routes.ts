@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig, type tokenIssuer } from '@opencrane/auth';
 import { readProviders } from '@opencrane/projections';
 import { providerAuthority, providerCommand, providerReceipt,
-  providerDrainCommand, providerDrainStatus,
+  providerDrainCommand, providerDrainStatus, providerSwitchOn, providerSwitchOnChange,
   readActiveMember, MemberAccessRefused, providerBindingCommand, providerDependencies,
   ProviderRefused, ProviderUnpriced, ProviderConflict, providerHistory, providerSecretRef,
   type ProviderSecrets, requestProviderVerification, providerTestQuote,
@@ -35,6 +35,7 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
   app.get('/api/org/providers/:providerId', handlerFor(read));
   app.get('/api/org/providers/:providerId/drain', handlerFor(drain));
   app.post('/api/org/providers/:providerId/drain', { bodyLimit: 4096 }, handlerFor(drain));
+  app.post('/api/org/providers/:providerId/switch-on', { bodyLimit: 4096 }, handlerFor(switchOn));
   app.get('/api/org/providers/:providerId/bindings', handlerFor(bindings));
   app.post('/api/org/providers/:providerId/bindings', { bodyLimit: 4096 }, handlerFor(bindings));
   app.get('/api/org/providers/:providerId/changes/:commandId', handlerFor(readStatus));
@@ -158,7 +159,7 @@ async function readStatus(request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) {
   const input = changeParameters.parse(request.params);
   const deadline = performance.now() + 10_000;
-  const result = await readChange(options, input.providerId, input.commandId, deadline);
+  const result = await readChange(options, input.providerId, input.commandId, deadline, memberId);
   await readActiveMember(options.store, options.binding, memberId, 'admin');
   return reply.code(result.status === 'not_found' ? 404 : 200).send(result);
 }
@@ -177,14 +178,18 @@ async function readQuote(request: FastifyRequest, reply: FastifyReply,
   return reply.send(quote);
 }
 async function readChange(options: ProviderOptions, providerId: string,
-  commandId: string, deadline: number) {
+  commandId: string, deadline: number, memberId: string) {
   const current = await providerHistory(options.store, options.silo, providerId, deadline);
   function matches(row: (typeof current.rows)[number]) {
     return row.event.commandId === commandId;
   }
-  const row = current.rows.find(matches);
+  const row = current.rows.find(matches) ??
+    await providerSwitchOnChange(options.store, options.silo, providerId, commandId, deadline);
   if (!row) {
     return { status: 'not_found' as const };
+  }
+  if (row.event.type === 'provider.managed_calls_enabled') {
+    await providerPermission(options.binding, memberId, current.rows);
   }
   const checkpoint = await options.db.query<{ sequence: string }>(
     'SELECT sequence FROM projection_checkpoints WHERE name = $1', ['providers']);
@@ -313,4 +318,12 @@ async function drain(request: FastifyRequest, reply: FastifyReply,
   }
   const status = await providerDrainStatus(options.store, options.binding, memberId, providerId);
   return reply.send(status);
+}
+
+async function switchOn(request: FastifyRequest, reply: FastifyReply,
+  options: ProviderOptions, memberId: string) {
+  const { providerId } = providerParameters.parse(request.params);
+  const receipt = await providerSwitchOn(options.store, options.binding,
+    memberId, providerId, request.body);
+  return reply.send(receipt);
 }

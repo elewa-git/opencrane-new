@@ -1676,6 +1676,26 @@ between them to prove that the call never reaches upstream.
 before the short membership check; later checks read only new budget events.
 The personal-payer summary and both authority test limits remain unchanged.
 
+## Safe provider switch-on (P4-22 PR 4e; Part of #104)
+
+`providerSwitchOn` is the only production writer of `provider.managed_calls_enabled`.
+It captures the global position, then reads incremental provider, budget and computer
+summaries before starting the short authority check. It validates all active bindings
+outside that check. One conditional budget append uses `historyChecked` and
+`expectedGlobalSequence`. Any intervening event conflicts, including a reservation.
+The event schema is unchanged. The saved provider position also identifies the drain
+used for a retry: no drain change can save after switch-on.
+
+A legacy start already waiting to append can finish after switch-on. Existing decision
+and budget checks refuse its claimless pass before any hold or upstream send. A drain
+alone is not proof that every pending admission has finished. Summaries read no keys
+and perform no provider requests. Calls remain refused until the managed gateway arrives.
+
+The new HTTP tests use real NATS, PostgreSQL, OpenFGA and a recording gateway upstream.
+The last requested bullet, testing existing hold settlement and replay through this new
+command, is split into follow-up work to keep this change small. Existing hold regressions
+are rerun after rebasing. Fresh-install qualification, paid calls and a journey are NOT RUN.
+
 ## Catalogue watch and dispatch holds (#48 PR 3b, first split)
 
 `mcpCatalogueWatch` runs beside the active models dispatcher. Startup holds every

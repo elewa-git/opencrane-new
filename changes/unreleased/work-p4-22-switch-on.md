@@ -1,0 +1,1 @@
+Owners and admins can record provider switch-on after choosing an explicit default and draining legacy turns. Concurrent changes refuse the switch, and retries recover the saved receipt. Calls remain refused until the managed gateway is available.
