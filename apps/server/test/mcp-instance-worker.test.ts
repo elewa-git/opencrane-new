@@ -7,6 +7,13 @@ import { buildServer } from '../src/server.ts';
 import { registerMcpInstanceWorkerRoutes } from '../src/integrations/instance-worker.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
+// Keep real promise timers except when a test controls the retry backoff.
+async function promiseTimers(importOriginal: () => Promise<typeof import('node:timers/promises')>) {
+  const timers = await importOriginal();
+  return { ...timers, setTimeout: vi.fn(timers.setTimeout) };
+}
+vi.mock('node:timers/promises', promiseTimers);
+
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let app: ReturnType<typeof buildServer>;
 let workers: ReturnType<typeof registerMcpInstanceWorkerRoutes>;
@@ -269,22 +276,40 @@ async function expectUnchangedInstance(fixture: Awaited<ReturnType<typeof start>
 async function expiresDuringPublishRetry(stage: 'publish' | 'backoff') {
   const fixture = await start();
   const worker = await workers.register(fixture.registration);
-  const clock = vi.spyOn(Date, 'now');
-  // Leave ten milliseconds of permission when append starts, regardless of history read speed.
-  clock.mockReturnValue(worker.expiresAt - 10);
-  async function failFirstPublish() {
+  const started = performance.now();
+  const wallClock = vi.spyOn(Date, 'now');
+  const retryClock = vi.spyOn(performance, 'now');
+  // Advance both clocks together so host scheduling cannot shorten or extend permission.
+  wallClock.mockReturnValue(worker.expiresAt - 10);
+  retryClock.mockReturnValue(started);
+  function expirePermission() {
+    wallClock.mockReturnValue(worker.expiresAt);
+    retryClock.mockReturnValue(started + 10);
+  }
+  function expireDuringBackoff() {
+    expirePermission();
+    return Promise.resolve();
+  }
+  function failFirstPublish() {
     if (stage === 'publish') {
-      await delay(30);
+      expirePermission();
+    } else {
+      // Expire only after the failed publish has entered append's retry wait.
+      vi.mocked(delay).mockImplementationOnce(expireDuringBackoff);
     }
+    return Promise.resolve();
   }
   failures.failNextPublish(failFirstPublish);
   try {
     const response = await observe(fixture.registration.instanceId,
       worker.authorization, fixture.payload);
+    expect.soft(Date.now()).toBe(worker.expiresAt);
     expect.soft(response.statusCode).toBe(503);
     expect.soft(failures.publishAttempts()).toBe(1);
   } finally {
-    clock.mockRestore();
+    wallClock.mockRestore();
+    retryClock.mockRestore();
+    vi.mocked(delay).mockReset();
   }
   await expectUnchangedInstance(fixture);
 }
