@@ -4,6 +4,7 @@ import type { Binding } from '@opencrane/authz';
 import { optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
 import {
   authorityFence,
+  turnBudgetStop,
   groupMembership,
   PayingGroupRefused,
   MemberAccessRefused,
@@ -113,11 +114,29 @@ function startExecutionMode(facts: ComputerFacts, input: TurnInput) {
 
 async function startAuthority(store: EventStore, context: TurnContext, conversation: ChatFacts,
   facts: ComputerFacts, data: TurnBinding, requested: unknown, mode: ExecutionMode) {
-  if (facts.turn?.hasStart) {
-    const fresh = await requireTurnMember(store, context.silo, data.requesterId);
+  const started = facts.turn?.firstStart;
+  if (started) {
+    const work = { ...data, assistantId: context.assistantId };
+    const admittedAt = started.sequence;
+    const stop = await turnBudgetStop(store, context.silo, work, admittedAt,
+      performance.now() + 10_000);
+    const authority = await requireTurnMember(store, context.silo, data.requesterId);
+    // Load history before the short access check, but reveal spending only to current members.
+    requireNoBudgetStop(stop);
+    async function fresh() {
+      await authority();
+      const currentStop = await turnBudgetStop(store, context.silo, work, admittedAt,
+        authority.deadline);
+      await authority();
+      requireNoBudgetStop(currentStop);
+    }
     return { fresh, payer: undefined };
   }
   return admitTurn(store, context, conversation, facts, data, requested, mode);
+}
+
+function requireNoBudgetStop(stop: string | undefined) {
+  if (stop !== undefined) throw new TurnAdmissionRejected('Turn stopped by a spending cap');
 }
 
 async function saveTurn(store: EventStore, facts: ComputerFacts,

@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { getEventDefinition } from '@opencrane/events';
+import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 import { fixture } from './fixture.ts';
 
 async function keepsDelegationDisabled() {
@@ -29,6 +30,12 @@ async function keepsDelegationDisabled() {
     const nativeToken = await context.sign(nativeClaims, 'decision-service');
     const nativeHeaders = { 'x-turn-token': nativeToken, 'session-id': 'child-thread' };
     expect((await context.call(nativeHeaders)).status).toBe(403);
+    const stop = { scope: 'global', ceilingCents: 0, setBy: 'alice' };
+    await context.actor.configure(stop);
+    const inheritedHeaders = { ...nativeHeaders, ...capture.headers };
+    const inherited = await context.call(inheritedHeaders, capture.body, '/mcp/fixture/installed');
+    expect(inherited.status).toBe(403);
+    expect(context.actor.state.dispatches).toEqual([]);
     const input = { assistantId: 'assistant', conversationId: 'chat', turnId: 'child-turn',
       threadId: 'child-thread', requesterId: 'alice', task: 'native_descendant',
       model: 'gpt-6-luna' };

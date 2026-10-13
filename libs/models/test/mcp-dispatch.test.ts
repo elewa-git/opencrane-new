@@ -3,12 +3,15 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
-import { readToolPolicy, setToolPolicy } from '../src/index.ts';
+import { decideApproval, history, priceTableId, readApproval, readToolPolicy,
+  setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
-const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0 });
+const review = { action: 'Write note', consequence: 'The order note changes.',
+  targetArgument: 'order', fields: ['order', 'note'], stepUp: false };
+const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0, review });
 const catalogue = catalogueEvidence([tool]);
 const body = JSON.stringify(capture.body);
 
@@ -446,3 +449,204 @@ async function refusesPublicationAfterDrift(recapture: boolean) {
 }
 it.each([false, true])('keeps reviewed tools held through publication and gateway restart (recapture %s)',
   refusesPublicationAfterDrift);
+async function stopBudget(setup: Fixture, scopeId = 'personal-default') {
+  const limit = { scope: 'paying_group', scopeId, ceilingCents: 0, setBy: 'alice' };
+  await setup.actor.configure(limit);
+}
+
+const budgetChanges = ['old pass', 'renewed token', 'other payer', 'recovered limit'] as const;
+async function checksBudgetBeforeToolSend(change: typeof budgetChanges[number]) {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    await stopBudget(setup, change === 'other payer' ? 'other' : 'personal-default');
+    if (change === 'recovered limit') {
+      const limit = { scope: 'paying_group', scopeId: 'personal-default',
+        ceilingCents: 20000, setBy: 'alice' };
+      await setup.actor.configure(limit);
+    }
+    let response: Response;
+    if (change === 'renewed token') {
+      const input = { assistantId: 'assistant', conversationId: 'conversation', turnId: 'dispatch',
+        threadId: capture.body.params._meta.threadId, requesterId: 'alice',
+        task: 'chat_turn', model: 'gpt-6-luna' };
+      const renewed = await setup.credentials.turn(input);
+      const renewedHeaders = { ...headers, 'x-turn-token': renewed.value };
+      const request = { method: 'POST', headers: renewedHeaders, body };
+      response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
+        request);
+    } else {
+      response = await send(setup, value);
+    }
+    const allowed = change === 'other payer';
+    const expected = allowed ? [200] : [402, 403];
+    expect(expected, await response.text()).toContain(response.status);
+    expect(setup.received()).toBe(allowed ? 1 : 0);
+    expect(setup.actor.state.reservations).toEqual([]);
+    expect(setup.actor.state.dispatches).toHaveLength(allowed ? 1 : 0);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(budgetChanges)('checks zero-cost MCP spending stops for %s', checksBudgetBeforeToolSend);
+
+const approvalStops = ['before approval', 'after approval.used', 'before Ask'] as const;
+async function stopsWaitingApproval(point: typeof approvalStops[number]) {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
+      toolRevision: tool.revision, mode: 'ask', setBy: 'alice' };
+    await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+    const publication = { serverId: 'fixture', publishedBy: 'alice' };
+    await setup.append('mcp-fixture', 'mcp.server_published', publication);
+    const request = { method: 'POST', headers, body };
+    const url = `http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`;
+    if (point === 'before Ask') await stopBudget(setup);
+    const asked = await fetch(url, request);
+    const answer = z.object({ approvalId: z.string().optional() }).parse(await asked.json());
+    if (point === 'before Ask') {
+      expect(answer.approvalId).toBeUndefined();
+      expect(setup.received()).toBe(0);
+      return;
+    }
+    const approvalId = z.string().parse(answer.approvalId);
+    if (point === 'before approval') {
+      const call = { model: 'gpt-6-luna', priceTableId, computerId: 'computer',
+        assistantId: 'assistant', requesterId: 'alice', conversationId: 'conversation',
+        turnId: 'exhausting', threadId: 'thread', payingGroupId: 'personal-default',
+        contextDigest: '0'.repeat(64) };
+      await expect(setup.actor.reserve(call, 20001)).rejects.toThrow('spending cap');
+    }
+    async function fresh() {}
+    const current = await readApproval(setup.nats.store, 'test', approvalId);
+    const approved = await decideApproval(setup.nats.store, 'test', approvalId,
+      'alice', 'approved', true, fresh, current, setup.actor.now());
+    expect(approved.status).toBe('appended');
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    async function pauseAfterUse(command: AppendCommand) {
+      const result = await append(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'approval.used' && point === 'after approval.used') {
+        await stopBudget(setup);
+      }
+      return result;
+    }
+    const writer = vi.spyOn(setup.nats.store, 'append');
+    writer.mockImplementation(pauseAfterUse);
+    try {
+      const retryHeaders = { ...headers, 'x-opencrane-approval-id': approvalId };
+      const retry = { ...request, headers: retryHeaders };
+      const response = await fetch(url, retry);
+      expect(response.status, await response.text()).not.toBe(200);
+      expect(setup.received()).toBe(0);
+      expect(setup.actor.state.dispatches).toEqual([]);
+      expect(setup.actor.state.reservations).toEqual([]);
+      const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+      function isUse(row: (typeof rows)[number]) {
+        return row.event.type === 'approval.used';
+      }
+      expect(rows.filter(isUse)).toHaveLength(point === 'after approval.used' ? 1 : 0);
+    } finally {
+      writer.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it.each(approvalStops)('refuses stopped Ask calls %s without sending upstream', stopsWaitingApproval);
+
+const recoveryCalls = ['refused MCP pass', 'untouched turn', 'renewed token'] as const;
+async function refusesModelAfterFreeTurnStop(attempt: typeof recoveryCalls[number]) {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    await stopBudget(setup);
+    if (attempt === 'refused MCP pass') {
+      const refused = await send(setup, value);
+      expect(refused.status, await refused.text()).toBe(403);
+    }
+    const limit = { scope: 'paying_group', scopeId: 'personal-default',
+      ceilingCents: 20000, setBy: 'alice' };
+    await setup.actor.configure(limit);
+    if (attempt === 'renewed token') {
+      const input = { assistantId: 'assistant', conversationId: 'conversation', turnId: 'dispatch',
+        threadId: capture.body.params._meta.threadId, requesterId: 'alice',
+        task: 'chat_turn', model: 'gpt-6-luna' };
+      const renewed = await setup.credentials.turn(input);
+      headers['x-turn-token'] = renewed.value;
+    }
+    const response = await setup.call(headers);
+    expect.soft(response.status, response.text).toBe(402);
+    expect.soft(setup.received()).toBe(0);
+    expect.soft(setup.actor.state.reservations).toEqual([]);
+    expect.soft(setup.actor.state.dispatches).toEqual([]);
+
+    const turn = { assistantId: 'assistant', computerId: 'computer',
+      conversationId: 'conversation', turnId: 'fresh', threadId: 'fresh-thread',
+      requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default' };
+    await setup.append('computer-assistant', 'computer.turn_started', turn);
+    const started = { conversationId: 'conversation', assistantId: 'assistant', turnId: 'fresh' };
+    await setup.append('conversation-conversation', 'agent.turn_started', started);
+    const claims = { ...setup.t, turn: 'fresh', thread: 'fresh-thread' };
+    const token = await setup.sign(claims, 'decision-service');
+    const freshHeaders = { 'x-turn-token': token, 'session-id': 'fresh-thread' };
+    const fresh = await setup.call(freshHeaders);
+    expect(fresh.status, fresh.text).toBe(200);
+    expect(setup.received()).toBe(1);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.dispatches).toHaveLength(1);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(recoveryCalls)('keeps a stopped free turn from model sends after recovery: %s',
+  refusesModelAfterFreeTurnStop);
+
+async function checksAdmissionOrder(stopped: boolean) {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    const order: string[] = [];
+    async function stopAfterBudgetAdmission(command: AppendCommand) {
+      const result = await append(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (result.status !== 'appended') return result;
+      if (event.type === 'mcp.dispatch_admitted') order.push(event.type);
+      if (event.type === 'budget.call_dispatch_admitted') {
+        order.push(event.type);
+        if (stopped) {
+          const stop = { conversationId: 'conversation', turnId: 'dispatch', requestedBy: 'alice' };
+          await setup.append('conversation-conversation', 'agent.turn_stop_requested', stop);
+          order.push('agent.turn_stop_requested');
+        }
+      }
+      return result;
+    }
+    const writer = vi.spyOn(setup.nats.store, 'append');
+    writer.mockImplementation(stopAfterBudgetAdmission);
+    try {
+      const response = await send(setup, value);
+      if (stopped) {
+        expect(response.status, await response.text()).toBe(403);
+        expect(order).toEqual(['budget.call_dispatch_admitted', 'agent.turn_stop_requested']);
+        expect(setup.received()).toBe(0);
+      } else {
+        expect(response.status, await response.text()).toBe(200);
+        expect(order).toEqual(['budget.call_dispatch_admitted', 'mcp.dispatch_admitted']);
+        expect(setup.received()).toBe(1);
+      }
+      expect(setup.actor.state.reservations).toEqual([]);
+    } finally {
+      writer.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it.each([false, true])('orders budget before tool admission and checks Stop between them: %s',
+  checksAdmissionOrder);

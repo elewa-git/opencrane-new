@@ -122,7 +122,7 @@ Model sends and provider checks use `BudgetActor.admitDispatch`. It saves one
 and current access. It changes no cents and never counts a hold twice.
 The [event contract](../../docs/architecture/events.md#budgets-single-writer-actor-per-silo) lists its fields.
 Reachability checks need no hold. Managed model calls remain disabled.
-Tool and memory callers follow in PR 3.
+Tool and memory sends use this same gate, with `model: mcp-zero-cost` and no hold.
 
 A retry of a provider check never sends it again. It returns the original receipt
 without writing while the first check may still be running. Recovery can finish
@@ -1398,8 +1398,8 @@ including zero ceilings, several causes, unrelated work and replay after recover
 
 `reserve` and `admitDispatch` check stops in the actor queue. Admin summaries
 include saved stops and known turns. Rebuild projections on upgrade.
-The shared final gate covers model sends and provider verification checks.
-Tools, cancellation, queued messages and participant notices follow later.
+The shared final gate covers models, tools, memory and provider verification checks.
+Cancellation, queued messages and participant notices follow later.
 
 `test/budget-stop.test.ts` proves isolation, lowered/zero ceilings, relevant
 recovery, unchanged edits, settlement, rollover and replay with real NATS. It also
@@ -1417,7 +1417,7 @@ access subject. `approvalActivity` shares the turn and control checks for approv
 and retry. It does not read spending history or provider mode. Model and memory
 admission keep their provider-mode checks through `decisionActivity`; this split
 does not change their money checks. Explicit denial remains allowed. Tool and memory
-integration with the final dispatch gate remains unfinished.
+sends also pass through the budget actor before tool-rule admission.
 Memory discovery checks recall once and uses the same checked catalogue to decide
 whether to list remember. `toolDecision` supplies the existing review, mode and zero-cost
 rules for both. The backend repeats its own access check; write confirmations still
@@ -1615,3 +1615,35 @@ staging, operation closure and deletion reactions remain unimplemented. Unknown 
 current references, late appends and exact delete conflicts still need reconciler tests
 in that follow-up. No broker, release, selection, API or UI is added here. Fresh-install
 qualification is NOT RUN; this first part does not complete #49.
+
+## Free tool calls and stopped renewals (P3-14 PR 3; Part of #55)
+
+Every MCP send, including memory discovery, recall and remember, obtains
+`budget.call_dispatch_admitted` through the existing actor queue. Only reviewed
+zero-cost tools qualify for `model: mcp-zero-cost`; no reservation is created.
+The one-use pass holds the decision id, body hash and recorded turn's payer,
+requester, assistant and generation. The existing conditional tool-rule admission
+still follows budget admission. Both must succeed before the sender writes upstream.
+A budget stop before budget admission refuses the send. A later budget stop cannot
+recall that permission. A user Stop or Block before tool-rule admission still refuses it.
+
+Ask checks budget stops before opening or consuming an approval. Stop after
+`approval.used` burns that approval and receives no budget send permission.
+The saved computer turn's stream position also checks earlier applicable stops,
+even after rollover or a ceiling increase. It comes from server admission, never
+from the caller's token. Native descendant calls remain disabled.
+
+Model calls pass that same original position to `reserve` and `admitDispatch`.
+The actor checks it inside the reservation queue before holding money. This also
+refuses free turns that never attempted a call while their spending limit was stopped.
+Renewing a token does not change the original position. A new turn started after
+the limit rises can obtain its own hold and send permission.
+
+`mcp-dispatch.test.ts` exercises refused free passes, untouched free turns and renewed
+tokens through `/v1/responses`, using the real gateway and a recording upstream.
+It also records budget admission before tool-rule admission and saves a user Stop
+between them to prove that the call never reaches upstream.
+
+`turnBudgetStop` uses the same budget fold for renewal. Its first history read runs
+before the short membership check; later checks read only new budget events.
+The personal-payer summary and both authority test limits remain unchanged.

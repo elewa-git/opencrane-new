@@ -48,7 +48,8 @@ async function setup() {
     assistantId: 'assistant', computerId: 'computer', generation: 1,
   });
   await save('budget-test', 'budget.ceiling_set', {
-    scope: 'global', ceilingCents: 20000, setBy: 'alice', defaultPayingGroupId: 'personal',
+    scope: 'global', dailyCeilingCents: 2000, ceilingCents: 20000,
+      setBy: 'alice', defaultPayingGroupId: 'personal',
   });
   await save('provider-primary', 'provider.created', {
     ...provider, provider: 'openai', name: 'Primary',

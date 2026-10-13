@@ -14,11 +14,11 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals including private reviews, saved fact references, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
-  models -->|sends admitted calls, including memory| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks spending before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|checks calls and holds; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks calls, holds and spending stops; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|saves spending, checks connection changes together, saves instance reports and child admissions| store["libs/event-store<br/>event log"]
 ```
@@ -30,7 +30,8 @@ A change to the tools or their rules ends that approval.
 Configured tool servers need an atomic revision check: they compare the approved tool
 list and running instance before executing a call. The models process checks a one-use
 pass before sending the original request. Servers without this contract are refused.
-Before sending, it saves one admission record on the server's tool-rule stream.
+Before sending, it obtains one budget permission without holding money for a free tool.
+It then saves one admission record on the server's tool-rule stream.
 Block saved first refuses admission. Admission saved first allows that call;
 Block applies to later calls. It checks the small access streams within two seconds.
 Built-in memory uses the same send check. Its signed context also identifies the one-use
@@ -101,7 +102,10 @@ Other hosted images still need image admission.
   budget period can allow new work, while previously stopped work stays stopped.
   Name the cap that stopped the turn in its refusal, using the saved reasons.
   Save each refused turn before replying, including turns refused by an existing
-  stop. Applying the stop to every tool and running computer is still planned.
+  stop. Tool and memory calls use the same budget check. Stopping running computers
+  is still planned.
+  Check when the turn first started before holding money for a model call. A free
+  turn stopped by an earlier limit cannot switch to paid calls after that limit rises.
 - Hold money before an AI call and settle the charge when usage is reported.
   Keep the budget state in memory after replay, so saving each change does not
   read all the old spending events again.
@@ -110,9 +114,11 @@ Other hosted images still need image admission.
   Check current access again before saving the resolution.
 - List spending from the saved budget and call records, without reading chat history.
   Keep calls with an unknown outcome in the list alongside settled calls.
-- Save one final permission before each model send or provider check.
+- Save one budget permission before each model, tool or memory send or provider check.
   Check spending stops and access again after the call waits in the queue.
   Return permission only once. Keep the money held if the reply is lost.
+  Refuse stopped Ask calls before opening or using an approval. A saved turn stays
+  stopped after a limit increase, including when its access pass is renewed.
 - Release an expired new hold only when no send permission or other call evidence
   was saved. Keep older holds for review because their senders used older rules.
 - Stop new holds after provider switch-on while settling or releasing existing holds.

@@ -277,8 +277,11 @@ export class EventStore {
         try {
           const remaining = deadline - performance.now();
           const waitMs = Math.max(0, Math.min(backoff, remaining));
-          // Round up so a fractional timeout cannot start another attempt before backoff ends.
           await delay(Math.ceil(waitMs), undefined, options);
+          // Stop after the final wait even if its timer wakes a fraction early.
+          if (remaining <= backoff) {
+            break;
+          }
         } catch (error) {
           if (!command.signal?.aborted) {
             throw error;

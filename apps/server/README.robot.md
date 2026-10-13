@@ -2406,3 +2406,19 @@ generation-bound recall proofs, complete derived-write checks and validation bef
 every dispatch. Those must reuse the existing one-use pass. Native memory remains
 disabled and selective-proof writes remain refused. No public feed response changes.
 Fresh-install qualification and real model/tool calls: NOT RUN.
+
+## Renewal after budget stops (P3-14 PR 3; Part of #55)
+
+`turnCommand` checks the saved turn and immutable payer before returning a renewal.
+`turnBudgetStop` shares the models budget fold and compares the original computer
+admission position with applicable stops, including recovered limits. It reads the
+budget history before the two-second membership check and only new rows afterwards.
+Membership is checked before reporting a spending refusal, including after the final
+budget read. Closed turns and conflicting thread requesters keep their access refusals.
+A refusal closes the turn through the existing lifecycle command. No pass is returned.
+Other payers remain usable. New personal-payer admission keeps its existing summary
+and at most two new budget rows in its volume test.
+
+The memory integration test checks the real shared sender and memory HTTP backend:
+a stopped pass reaches neither the backend nor a new budget admission, and a
+renewed pass cannot reopen the stopped turn. Native execution remains disabled.

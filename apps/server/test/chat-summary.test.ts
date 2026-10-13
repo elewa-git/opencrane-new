@@ -90,7 +90,8 @@ async function seedAssistant() {
       assistantId: 'assistant', computerId: 'computer', generation: 1,
     }), subject: 'computer-assistant' },
     { ...event('budget', 'budget.ceiling_set', {
-      scope: 'global', ceilingCents: 20000, setBy: 'alice', defaultPayingGroupId: 'personal',
+      scope: 'global', dailyCeilingCents: 2000, ceilingCents: 20000,
+      setBy: 'alice', defaultPayingGroupId: 'personal',
     }), subject: 'budget-test' },
   ]);
 }
