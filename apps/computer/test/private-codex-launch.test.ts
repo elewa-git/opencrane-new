@@ -3,8 +3,7 @@ import { privateCodexLaunch } from '../src/private-codex.ts';
 
 function launchesPinnedCodexWithDebuggingDisabled() {
   const launch = privateCodexLaunch('/home/private/turn-4', 'caller-token');
-  const binary = '/spike/node_modules/@openai/codex-linux-x64/vendor/'
-    + 'x86_64-unknown-linux-musl/bin/codex';
+  const wrapper = '/usr/local/bin/codex';
 
   expect(launch.command).toBe('/usr/bin/setpriv');
   expect(launch.args).toEqual([
@@ -15,7 +14,7 @@ function launchesPinnedCodexWithDebuggingDisabled() {
     '--',
     '/usr/local/bin/node',
     '--disable-sigusr1',
-    binary,
+    wrapper,
     'app-server',
     '--stdio',
   ]);

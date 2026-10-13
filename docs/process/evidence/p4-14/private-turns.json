@@ -1,6 +1,6 @@
 {
-  "namespace": "p414-private-eb6a63d8",
-  "date": "2026-10-12T17:48:57.792Z",
+  "namespace": "p414-private-e70399a9",
+  "date": "2026-10-13T00:08:54.187Z",
   "result": "PASS",
   "memoryAdmission": "DISABLED",
   "checks": {
@@ -35,13 +35,13 @@
     "private release probe-1": {
       "result": "PASS",
       "detail": {
-        "elapsed": 853.7651889999979
+        "elapsed": 590.3161710000022
       }
     },
     "private release probe-2": {
       "result": "PASS",
       "detail": {
-        "elapsed": 1008.4140320000006
+        "elapsed": 566.9186789999985
       }
     },
     "reply and reasoning delivered": {
@@ -61,25 +61,16 @@
     "private release probe-5": {
       "result": "PASS",
       "detail": {
-        "elapsed": 833.7513919999983
+        "elapsed": 672.0864299999994
       }
     },
     "J2 held scans": {
       "result": "PASS",
       "detail": {
         "podHits": [],
-        "privateHomeHits": [
-          {
-            "path": "/home/private/turn-3/codex/logs_2.sqlite-wal",
-            "kind": "message"
-          }
-        ],
+        "privateHomeHits": [],
         "nodeHits": [],
-        "privateNodeHits": [
-          "message",
-          "context",
-          "alice"
-        ],
+        "privateNodeHits": [],
         "logHits": [],
         "crashHits": []
       }
@@ -87,13 +78,13 @@
     "private release probe-3": {
       "result": "PASS",
       "detail": {
-        "elapsed": 976.7290539999958
+        "elapsed": 685.8765639999983
       }
     },
     "private release probe-4": {
       "result": "PASS",
       "detail": {
-        "elapsed": 1013.1887779999961
+        "elapsed": 638.5773030000055
       }
     },
     "J2 scans": {
@@ -121,7 +112,7 @@
     "private release probe-6": {
       "result": "PASS",
       "detail": {
-        "elapsed": 2038.6222149999958
+        "elapsed": 578.930591999997
       }
     },
     "J3 Stop failed terminal": {
@@ -169,7 +160,7 @@
     "private release probe-7": {
       "result": "PASS",
       "detail": {
-        "elapsed": 948.6937010000111
+        "elapsed": 746.671285000004
       }
     },
     "J4 SIGKILL failed terminal": {
@@ -181,7 +172,7 @@
     "private release probe-8": {
       "result": "PASS",
       "detail": {
-        "elapsed": 791.3978989999741
+        "elapsed": 612.3967960000009
       }
     },
     "J4 SIGKILL no repeat": {
@@ -212,7 +203,7 @@
     "private release probe-9": {
       "result": "PASS",
       "detail": {
-        "elapsed": 1055.868397000013
+        "elapsed": 579.0440579999995
       }
     },
     "J5 scans": {
@@ -240,7 +231,7 @@
     "private release probe-10": {
       "result": "PASS",
       "detail": {
-        "elapsed": 863.6438550000021
+        "elapsed": 588.4026190000004
       }
     },
     "J6 false lost output": {
@@ -252,7 +243,7 @@
     "private release probe-11": {
       "result": "PASS",
       "detail": {
-        "elapsed": 797.04089199999
+        "elapsed": 602.1084610000107
       }
     },
     "J6 false scans": {
@@ -280,7 +271,7 @@
     "private release probe-12": {
       "result": "PASS",
       "detail": {
-        "elapsed": 708.3758760000055
+        "elapsed": 579.3497860000061
       }
     },
     "J6 true lost output": {
@@ -292,7 +283,7 @@
     "private release probe-13": {
       "result": "PASS",
       "detail": {
-        "elapsed": 733.4657719999959
+        "elapsed": 565.5588870000065
       }
     },
     "J6 true scans": {
@@ -309,7 +300,7 @@
     "private release probe-14": {
       "result": "PASS",
       "detail": {
-        "elapsed": 723.8629049999872
+        "elapsed": 659.0929409999953
       }
     },
     "J7 exec_command scans": {
@@ -329,7 +320,7 @@
     "private release probe-15": {
       "result": "PASS",
       "detail": {
-        "elapsed": 856.0316830000083
+        "elapsed": 546.178688999993
       }
     },
     "J7 apply_patch scans": {
@@ -349,7 +340,7 @@
     "private release probe-16": {
       "result": "PASS",
       "detail": {
-        "elapsed": 847.082276000001
+        "elapsed": 510.2014369999815
       }
     },
     "J7 exec scans": {
@@ -369,7 +360,7 @@
     "private release probe-17": {
       "result": "PASS",
       "detail": {
-        "elapsed": 745.2211049999751
+        "elapsed": 607.7870330000005
       }
     },
     "J7 request_user_input scans": {
@@ -443,117 +434,117 @@
       "result": "PASS",
       "detail": [
         {
-          "thread": "01a1313b-a5ca-73e2-be90-0d5c2784e647",
+          "thread": "01a13297-7573-73a1-a2c3-7f50ec1ac204",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313b-b80f-7503-9e57-3bb0500b4ee0",
+          "thread": "01a13297-7f47-7453-b93d-50cac6cbd7e9",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313b-d7ea-7512-b90b-c084588d0ebc",
+          "thread": "01a13297-930e-7d43-aa42-663cd27880e7",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313b-e5ea-7d50-9bee-1b5ac455d6c5",
+          "thread": "01a13297-9a87-7af3-bbfd-d071e6c033f7",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313b-eddb-75d1-b990-5883e72e84af",
+          "thread": "01a13297-9fec-7e90-836d-168bcfdc8ece",
           "memoryFree": true,
           "names": []
         },
         {
-          "thread": "01a1313c-47d7-7852-9c4c-cb389d1ffe15",
+          "thread": "01a13297-da6c-72f1-bbd5-1aa3bfa70884",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313c-858f-73a1-9560-174ef30d8240",
+          "thread": "01a13297-fbd9-7cc0-8635-d2028f274263",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313c-92f1-7660-9155-193b1acda3ec",
+          "thread": "01a13298-0427-7a72-9380-4a5bfdcf5158",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313d-8a10-78d3-86d2-07bbcd903572",
+          "thread": "01a13298-92c3-74d2-bc98-7135c70698ff",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313d-b99e-7300-bc2a-f899dfd31d2c",
+          "thread": "01a13298-b0ef-7623-be81-70a11a02a5b2",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313d-ef31-7ea1-93f4-325c720c4836",
+          "thread": "01a13298-d9bf-76c2-bd47-41cf2ba8e51a",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-09d5-7983-a3a2-55c47de38d60",
+          "thread": "01a13298-ed73-7ca1-8ca6-fc7300b86ce4",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-42e5-7a32-8354-c959820297fe",
+          "thread": "01a13299-1c91-7113-abaf-c9b50796f9df",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-5c09-74f0-90e9-4263097f938d",
+          "thread": "01a13299-30f0-7781-8f4c-206bf9520a63",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-5c09-74f0-90e9-4263097f938d",
+          "thread": "01a13299-30f0-7781-8f4c-206bf9520a63",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-77de-7f91-b172-46183ace342d",
+          "thread": "01a13299-45a2-76e3-ac02-653c01b029b6",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-77de-7f91-b172-46183ace342d",
+          "thread": "01a13299-45a2-76e3-ac02-653c01b029b6",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-9444-7310-b5ad-bec40cf9194b",
+          "thread": "01a13299-5996-74e1-8f19-571a76e8ea61",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-9444-7310-b5ad-bec40cf9194b",
+          "thread": "01a13299-5996-74e1-8f19-571a76e8ea61",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-afe8-7de0-b77e-fc5be1f6620f",
+          "thread": "01a13299-6cc9-7cb0-84e7-002e72a58bd4",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-afe8-7de0-b77e-fc5be1f6620f",
+          "thread": "01a13299-6cc9-7cb0-84e7-002e72a58bd4",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-c77e-73b3-9dd2-b270db18fc60",
+          "thread": "01a13299-7ef7-79a0-b3ff-862452e7065a",
           "memoryFree": false,
           "names": []
         },
         {
-          "thread": "01a1313e-c77e-73b3-9dd2-b270db18fc60",
+          "thread": "01a13299-7ef7-79a0-b3ff-862452e7065a",
           "memoryFree": false,
           "names": []
         }
@@ -567,7 +558,7 @@
           "assistantId": "probe",
           "turnId": "probe-1",
           "type": "agent.turn_started",
-          "threadId": "01a1313b-a5ca-73e2-be90-0d5c2784e647",
+          "threadId": "01a13297-7573-73a1-a2c3-7f50ec1ac204",
           "previousSequence": 0,
           "sequence": 1,
           "requesterId": "alice",
@@ -579,7 +570,7 @@
           "turnId": "probe-1",
           "type": "agent.message_delta",
           "messageId": "msg_resp_1",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 1,
           "sequence": 2,
           "requesterId": "alice",
@@ -591,7 +582,7 @@
           "turnId": "probe-1",
           "type": "agent.message_completed",
           "messageId": "msg_resp_1",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 2,
           "sequence": 3,
           "requesterId": "alice",
@@ -617,7 +608,7 @@
           "assistantId": "probe",
           "turnId": "probe-2",
           "type": "agent.turn_started",
-          "threadId": "01a1313b-b80f-7503-9e57-3bb0500b4ee0",
+          "threadId": "01a13297-7f47-7453-b93d-50cac6cbd7e9",
           "previousSequence": 0,
           "sequence": 5,
           "requesterId": "alice",
@@ -628,7 +619,7 @@
           "assistantId": "probe",
           "turnId": "probe-2",
           "type": "agent.reasoning_summarised",
-          "text": "P414_reasoning_a4c2954046934f055b6ecce389a94bab9384d625388d38b5",
+          "text": "P414_reasoning_a67839b0e0f3ca18d4e6f5929a963eaca863a1c11c8649f4",
           "previousSequence": 5,
           "sequence": 6,
           "requesterId": "alice",
@@ -640,7 +631,7 @@
           "turnId": "probe-2",
           "type": "agent.message_delta",
           "messageId": "msg_resp_2",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 6,
           "sequence": 7,
           "requesterId": "alice",
@@ -652,7 +643,7 @@
           "turnId": "probe-2",
           "type": "agent.message_completed",
           "messageId": "msg_resp_2",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 7,
           "sequence": 8,
           "requesterId": "alice",
@@ -678,7 +669,7 @@
           "assistantId": "probe",
           "turnId": "probe-3",
           "type": "agent.turn_started",
-          "threadId": "01a1313b-d7ea-7512-b90b-c084588d0ebc",
+          "threadId": "01a13297-930e-7d43-aa42-663cd27880e7",
           "previousSequence": 0,
           "sequence": 10,
           "requesterId": "alice",
@@ -690,7 +681,7 @@
           "turnId": "probe-3",
           "type": "agent.message_delta",
           "messageId": "msg_resp_3",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 10,
           "sequence": 11,
           "requesterId": "alice",
@@ -702,7 +693,7 @@
           "turnId": "probe-3",
           "type": "agent.message_completed",
           "messageId": "msg_resp_3",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 11,
           "sequence": 18,
           "requesterId": "alice",
@@ -728,7 +719,7 @@
           "assistantId": "probe",
           "turnId": "probe-4",
           "type": "agent.turn_started",
-          "threadId": "01a1313b-e5ea-7d50-9bee-1b5ac455d6c5",
+          "threadId": "01a13297-9a87-7af3-bbfd-d071e6c033f7",
           "previousSequence": 0,
           "sequence": 12,
           "requesterId": "bob",
@@ -740,7 +731,7 @@
           "turnId": "probe-4",
           "type": "agent.message_delta",
           "messageId": "msg_resp_4",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 12,
           "sequence": 13,
           "requesterId": "bob",
@@ -752,7 +743,7 @@
           "turnId": "probe-4",
           "type": "agent.message_completed",
           "messageId": "msg_resp_4",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 13,
           "sequence": 20,
           "requesterId": "bob",
@@ -778,7 +769,7 @@
           "assistantId": "probe",
           "turnId": "probe-5",
           "type": "agent.turn_started",
-          "threadId": "01a1313b-eddb-75d1-b990-5883e72e84af",
+          "threadId": "01a13297-9fec-7e90-836d-168bcfdc8ece",
           "previousSequence": 0,
           "sequence": 14,
           "requesterId": "alice"
@@ -824,7 +815,7 @@
           "assistantId": "probe",
           "turnId": "probe-6",
           "type": "agent.turn_started",
-          "threadId": "01a1313c-47d7-7852-9c4c-cb389d1ffe15",
+          "threadId": "01a13297-da6c-72f1-bbd5-1aa3bfa70884",
           "previousSequence": 0,
           "sequence": 22,
           "requesterId": "alice",
@@ -836,7 +827,7 @@
           "turnId": "probe-6",
           "type": "agent.message_delta",
           "messageId": "msg_resp_6",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 22,
           "sequence": 23,
           "requesterId": "alice",
@@ -862,7 +853,7 @@
           "assistantId": "probe",
           "turnId": "probe-7",
           "type": "agent.turn_started",
-          "threadId": "01a1313c-858f-73a1-9560-174ef30d8240",
+          "threadId": "01a13297-fbd9-7cc0-8635-d2028f274263",
           "previousSequence": 0,
           "sequence": 25,
           "requesterId": "alice",
@@ -874,7 +865,7 @@
           "turnId": "probe-7",
           "type": "agent.message_delta",
           "messageId": "msg_resp_7",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 25,
           "sequence": 26,
           "requesterId": "alice",
@@ -900,7 +891,7 @@
           "assistantId": "probe",
           "turnId": "probe-8",
           "type": "agent.turn_started",
-          "threadId": "01a1313c-92f1-7660-9155-193b1acda3ec",
+          "threadId": "01a13298-0427-7a72-9380-4a5bfdcf5158",
           "previousSequence": 0,
           "sequence": 27,
           "requesterId": "bob",
@@ -912,7 +903,7 @@
           "turnId": "probe-8",
           "type": "agent.message_delta",
           "messageId": "msg_resp_8",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 27,
           "sequence": 28,
           "requesterId": "bob",
@@ -924,7 +915,7 @@
           "turnId": "probe-8",
           "type": "agent.message_completed",
           "messageId": "msg_resp_8",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 28,
           "sequence": 30,
           "requesterId": "bob",
@@ -950,7 +941,7 @@
           "assistantId": "probe",
           "turnId": "probe-9",
           "type": "agent.turn_started",
-          "threadId": "01a1313d-8a10-78d3-86d2-07bbcd903572",
+          "threadId": "01a13298-92c3-74d2-bc98-7135c70698ff",
           "previousSequence": 0,
           "sequence": 32,
           "requesterId": "alice",
@@ -962,7 +953,7 @@
           "turnId": "probe-9",
           "type": "agent.message_delta",
           "messageId": "msg_resp_9",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 32,
           "sequence": 33,
           "requesterId": "alice",
@@ -974,7 +965,7 @@
           "turnId": "probe-9",
           "type": "agent.message_completed",
           "messageId": "msg_resp_9",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 33,
           "sequence": 34,
           "requesterId": "alice",
@@ -1000,7 +991,7 @@
           "assistantId": "probe",
           "turnId": "probe-10",
           "type": "agent.turn_started",
-          "threadId": "01a1313d-b99e-7300-bc2a-f899dfd31d2c",
+          "threadId": "01a13298-b0ef-7623-be81-70a11a02a5b2",
           "previousSequence": 0,
           "sequence": 36,
           "requesterId": "alice",
@@ -1012,7 +1003,7 @@
           "turnId": "probe-10",
           "type": "agent.message_delta",
           "messageId": "msg_resp_10",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 36,
           "sequence": 37,
           "requesterId": "alice",
@@ -1047,7 +1038,7 @@
           "assistantId": "probe",
           "turnId": "probe-11",
           "type": "agent.turn_started",
-          "threadId": "01a1313d-ef31-7ea1-93f4-325c720c4836",
+          "threadId": "01a13298-d9bf-76c2-bd47-41cf2ba8e51a",
           "previousSequence": 0,
           "sequence": 39,
           "requesterId": "alice",
@@ -1059,7 +1050,7 @@
           "turnId": "probe-11",
           "type": "agent.message_delta",
           "messageId": "msg_resp_11",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 39,
           "sequence": 40,
           "requesterId": "alice",
@@ -1071,7 +1062,7 @@
           "turnId": "probe-11",
           "type": "agent.message_completed",
           "messageId": "msg_resp_11",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 40,
           "sequence": 41,
           "requesterId": "alice",
@@ -1097,7 +1088,7 @@
           "assistantId": "probe",
           "turnId": "probe-12",
           "type": "agent.turn_started",
-          "threadId": "01a1313e-09d5-7983-a3a2-55c47de38d60",
+          "threadId": "01a13298-ed73-7ca1-8ca6-fc7300b86ce4",
           "previousSequence": 0,
           "sequence": 43,
           "requesterId": "alice",
@@ -1109,7 +1100,7 @@
           "turnId": "probe-12",
           "type": "agent.message_delta",
           "messageId": "msg_resp_12",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 43,
           "sequence": 44,
           "requesterId": "alice",
@@ -1144,7 +1135,7 @@
           "assistantId": "probe",
           "turnId": "probe-13",
           "type": "agent.turn_started",
-          "threadId": "01a1313e-42e5-7a32-8354-c959820297fe",
+          "threadId": "01a13299-1c91-7113-abaf-c9b50796f9df",
           "previousSequence": 0,
           "sequence": 46,
           "requesterId": "alice",
@@ -1156,7 +1147,7 @@
           "turnId": "probe-13",
           "type": "agent.message_delta",
           "messageId": "msg_resp_13",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 46,
           "sequence": 47,
           "requesterId": "alice",
@@ -1168,7 +1159,7 @@
           "turnId": "probe-13",
           "type": "agent.message_completed",
           "messageId": "msg_resp_13",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 47,
           "sequence": 48,
           "requesterId": "alice",
@@ -1194,7 +1185,7 @@
           "assistantId": "probe",
           "turnId": "probe-14",
           "type": "agent.turn_started",
-          "threadId": "01a1313e-5c09-74f0-90e9-4263097f938d",
+          "threadId": "01a13299-30f0-7781-8f4c-206bf9520a63",
           "previousSequence": 0,
           "sequence": 50,
           "requesterId": "alice",
@@ -1206,7 +1197,7 @@
           "turnId": "probe-14",
           "type": "agent.message_delta",
           "messageId": "msg_resp_15",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 50,
           "sequence": 51,
           "requesterId": "alice",
@@ -1218,7 +1209,7 @@
           "turnId": "probe-14",
           "type": "agent.message_completed",
           "messageId": "msg_resp_15",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 51,
           "sequence": 52,
           "requesterId": "alice",
@@ -1244,7 +1235,7 @@
           "assistantId": "probe",
           "turnId": "probe-15",
           "type": "agent.turn_started",
-          "threadId": "01a1313e-77de-7f91-b172-46183ace342d",
+          "threadId": "01a13299-45a2-76e3-ac02-653c01b029b6",
           "previousSequence": 0,
           "sequence": 54,
           "requesterId": "alice",
@@ -1256,7 +1247,7 @@
           "turnId": "probe-15",
           "type": "agent.message_delta",
           "messageId": "msg_resp_17",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 54,
           "sequence": 55,
           "requesterId": "alice",
@@ -1268,7 +1259,7 @@
           "turnId": "probe-15",
           "type": "agent.message_completed",
           "messageId": "msg_resp_17",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 55,
           "sequence": 56,
           "requesterId": "alice",
@@ -1294,7 +1285,7 @@
           "assistantId": "probe",
           "turnId": "probe-16",
           "type": "agent.turn_started",
-          "threadId": "01a1313e-9444-7310-b5ad-bec40cf9194b",
+          "threadId": "01a13299-5996-74e1-8f19-571a76e8ea61",
           "previousSequence": 0,
           "sequence": 58,
           "requesterId": "alice",
@@ -1306,7 +1297,7 @@
           "turnId": "probe-16",
           "type": "agent.message_delta",
           "messageId": "msg_resp_19",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 58,
           "sequence": 59,
           "requesterId": "alice",
@@ -1318,7 +1309,7 @@
           "turnId": "probe-16",
           "type": "agent.message_completed",
           "messageId": "msg_resp_19",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 59,
           "sequence": 60,
           "requesterId": "alice",
@@ -1344,7 +1335,7 @@
           "assistantId": "probe",
           "turnId": "probe-17",
           "type": "agent.turn_started",
-          "threadId": "01a1313e-afe8-7de0-b77e-fc5be1f6620f",
+          "threadId": "01a13299-6cc9-7cb0-84e7-002e72a58bd4",
           "previousSequence": 0,
           "sequence": 62,
           "requesterId": "alice",
@@ -1356,7 +1347,7 @@
           "turnId": "probe-17",
           "type": "agent.message_delta",
           "messageId": "msg_resp_21",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 62,
           "sequence": 63,
           "requesterId": "alice",
@@ -1368,7 +1359,7 @@
           "turnId": "probe-17",
           "type": "agent.message_completed",
           "messageId": "msg_resp_21",
-          "text": "P414_reply_bd33291f5b2ca0693e969572f4bb2243fe08d9227b825e9f",
+          "text": "P414_reply_724787912a4f36a950f87b1d198da88dc67dded9967d75fb",
           "previousSequence": 63,
           "sequence": 64,
           "requesterId": "alice",
@@ -1398,7 +1389,7 @@
     "privateNodeMount": {
       "result": "PASS",
       "value": [
-        "tmpfs /var/lib/kubelet/pods/6615503d-1c2e-4d1f-aaa6-9e21822b1058/volumes/kubernetes.io~empty-dir/private tmpfs rw,relatime,size=16384k,inode64,noswap 0 0"
+        "tmpfs /var/lib/kubelet/pods/0bd1eb58-f151-4be3-997b-e38b7b3f93c7/volumes/kubernetes.io~empty-dir/private tmpfs rw,relatime,size=16384k,inode64,noswap 0 0"
       ]
     },
     "privateStatfs": {
@@ -1442,7 +1433,7 @@
           "/home/private/turn-3/codex/skills/.system/skill-installer/scripts",
           "/home/private/turn-3/codex/tmp",
           "/home/private/turn-3/codex/tmp/arg0",
-          "/home/private/turn-3/codex/tmp/arg0/codex-arg0fkJbXq",
+          "/home/private/turn-3/codex/tmp/arg0/codex-arg0whdowf",
           "/home/private/turn-3/tmp",
           "/home/private/turn-3/work",
           "/home/private/turn-4",
@@ -1472,7 +1463,7 @@
           "/home/private/turn-4/codex/skills/.system/skill-installer/scripts",
           "/home/private/turn-4/codex/tmp",
           "/home/private/turn-4/codex/tmp/arg0",
-          "/home/private/turn-4/codex/tmp/arg0/codex-arg0Nbg6SP",
+          "/home/private/turn-4/codex/tmp/arg0/codex-arg0qNqYEA",
           "/home/private/turn-4/tmp",
           "/home/private/turn-4/work",
           "/dev/shm"
@@ -1546,7 +1537,7 @@
           "/home/private/turn-3/codex/state_5.sqlite",
           "/home/private/turn-3/codex/state_5.sqlite-shm",
           "/home/private/turn-3/codex/state_5.sqlite-wal",
-          "/home/private/turn-3/codex/tmp/arg0/codex-arg0fkJbXq/.lock",
+          "/home/private/turn-3/codex/tmp/arg0/codex-arg0whdowf/.lock",
           "/home/private/turn-4/codex/.sandbox_migration",
           "/home/private/turn-4/codex/config.toml",
           "/home/private/turn-4/codex/environments.toml",
@@ -1615,7 +1606,7 @@
           "/home/private/turn-4/codex/state_5.sqlite",
           "/home/private/turn-4/codex/state_5.sqlite-shm",
           "/home/private/turn-4/codex/state_5.sqlite-wal",
-          "/home/private/turn-4/codex/tmp/arg0/codex-arg0Nbg6SP/.lock"
+          "/home/private/turn-4/codex/tmp/arg0/codex-arg0qNqYEA/.lock"
         ],
         "excluded": [
           "/proc (process interface)",
@@ -1633,12 +1624,12 @@
     },
     "swapCgroups": {
       "result": "ACCEPTED",
-      "value": "/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/memory.swap.max max\n/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/9a4542776c4b9e3de2cc821b2b098cf87bb1edd1ba7423e58432ccb0b489f8a2/memory.swap.max max\n/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f/memory.swap.max max",
+      "value": "/sys/fs/cgroup/kubepods/burstable/pod0bd1eb58-f151-4be3-997b-e38b7b3f93c7/memory.swap.max max\n/sys/fs/cgroup/kubepods/burstable/pod0bd1eb58-f151-4be3-997b-e38b7b3f93c7/e34e887946729f7a82cdf1c189a4a98ea394b6ee974d824a44ad02e458d4527b/memory.swap.max max\n/sys/fs/cgroup/kubepods/burstable/pod0bd1eb58-f151-4be3-997b-e38b7b3f93c7/4e3945f3c1100f213624b9dd689f28f72d8b29b1a466cc6b44eb68a074550b1f/memory.swap.max max",
       "reason": "Host swap is accepted on this dev box for the MVP; see #366."
     },
     "nodeSwaps": {
       "result": "ACCEPTED",
-      "value": "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swapfile                               file\t\t8388604\t\t2901844\t\t-2",
+      "value": "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swapfile                               file\t\t8388604\t\t2907104\t\t-2",
       "reason": "Host swap is accepted on this dev box for the MVP; see #366."
     },
     "hostCorePattern": {
@@ -1657,25 +1648,25 @@
       "result": "PASS",
       "value": {
         "samples": [
-          750.8219189999945,
-          780.9497679999986,
-          800.5162669999991,
-          843.9464049999951,
-          847.563387000002,
-          851.9028719999988,
-          858.9103069999983,
-          875.701592999998,
-          934.0988720000023,
-          955.8468540000031
+          540.9901709999976,
+          568.8764230000015,
+          576.7606029999952,
+          583.2345080000014,
+          587.5279830000036,
+          593.3102370000051,
+          597.2100399999981,
+          610.077115,
+          646.3851890000005,
+          697.8451329999953
         ],
-        "p50": 847.563387000002,
-        "p95": 955.8468540000031,
+        "p50": 587.5279830000036,
+        "p95": 697.8451329999953,
         "method": "Private socket connection request to initialise result, including process spawn"
       }
     },
     "twoTurnPeakMemory": {
       "result": "PASS",
-      "value": "/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/9a4542776c4b9e3de2cc821b2b098cf87bb1edd1ba7423e58432ccb0b489f8a2/memory.peak 497397760\n/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/memory.peak 497438720\n/sys/fs/cgroup/kubepods/burstable/pod6615503d-1c2e-4d1f-aaa6-9e21822b1058/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f/memory.peak 0"
+      "value": "/sys/fs/cgroup/kubepods/burstable/pod0bd1eb58-f151-4be3-997b-e38b7b3f93c7/e34e887946729f7a82cdf1c189a4a98ea394b6ee974d824a44ad02e458d4527b/memory.peak 0\n/sys/fs/cgroup/kubepods/burstable/pod0bd1eb58-f151-4be3-997b-e38b7b3f93c7/4e3945f3c1100f213624b9dd689f28f72d8b29b1a466cc6b44eb68a074550b1f/memory.peak 451993600\n/sys/fs/cgroup/kubepods/burstable/pod0bd1eb58-f151-4be3-997b-e38b7b3f93c7/memory.peak 452034560"
     },
     "runscOptions": {
       "result": "PASS",
@@ -1698,7 +1689,7 @@
             "Seccomp": "0",
             "coreLimit": "0                    0                    bytes     ",
             "cwd": "/home/private/turn-6/work",
-            "environmentSha256": "14c599cf2782e69e0ef8bed8ea58afd112f14f93d00aa5d566d4d879dfb69a1c"
+            "environmentSha256": "2800e25ad7324bceefe1c75d336034acc41326ea4efd9180e02d07d588b47f96"
           },
           "helper": {
             "Uid": "1003\t1003\t1003\t1003",
@@ -1713,7 +1704,7 @@
             "Seccomp": "0",
             "coreLimit": "0                    0                    bytes     ",
             "cwd": "/home/private/turn-6/work",
-            "environmentSha256": "14c599cf2782e69e0ef8bed8ea58afd112f14f93d00aa5d566d4d879dfb69a1c"
+            "environmentSha256": "2800e25ad7324bceefe1c75d336034acc41326ea4efd9180e02d07d588b47f96"
           },
           "code": null,
           "signal": "SIGSEGV"
@@ -1750,7 +1741,7 @@
             "/home/private/turn-6/codex/skills/.system/skill-installer/scripts",
             "/home/private/turn-6/codex/tmp",
             "/home/private/turn-6/codex/tmp/arg0",
-            "/home/private/turn-6/codex/tmp/arg0/codex-arg0mBB6M4",
+            "/home/private/turn-6/codex/tmp/arg0/codex-arg0fJuwFG",
             "/home/private/turn-6/tmp",
             "/home/private/turn-6/work",
             "/home/private/turn-7",
@@ -1780,7 +1771,7 @@
             "/home/private/turn-7/codex/skills/.system/skill-installer/scripts",
             "/home/private/turn-7/codex/tmp",
             "/home/private/turn-7/codex/tmp/arg0",
-            "/home/private/turn-7/codex/tmp/arg0/codex-arg0BiCm3x",
+            "/home/private/turn-7/codex/tmp/arg0/codex-arg0nGj0s2",
             "/home/private/turn-7/tmp",
             "/home/private/turn-7/work",
             "/dev/shm"
@@ -1854,7 +1845,7 @@
             "/home/private/turn-6/codex/state_5.sqlite",
             "/home/private/turn-6/codex/state_5.sqlite-shm",
             "/home/private/turn-6/codex/state_5.sqlite-wal",
-            "/home/private/turn-6/codex/tmp/arg0/codex-arg0mBB6M4/.lock",
+            "/home/private/turn-6/codex/tmp/arg0/codex-arg0fJuwFG/.lock",
             "/home/private/turn-7/codex/.sandbox_migration",
             "/home/private/turn-7/codex/config.toml",
             "/home/private/turn-7/codex/environments.toml",
@@ -1923,7 +1914,7 @@
             "/home/private/turn-7/codex/state_5.sqlite",
             "/home/private/turn-7/codex/state_5.sqlite-shm",
             "/home/private/turn-7/codex/state_5.sqlite-wal",
-            "/home/private/turn-7/codex/tmp/arg0/codex-arg0BiCm3x/.lock"
+            "/home/private/turn-7/codex/tmp/arg0/codex-arg0nGj0s2/.lock"
           ],
           "excluded": [
             "/proc (process interface)",
@@ -1965,12 +1956,12 @@
             "/proc/34205/root/var/crash": false,
             "/proc/34205/root/var/lib/systemd/coredump": false,
             "/proc/34205/root/tmp": true,
-            "/proc/34205/root/var/log/pods/p414-private-eb6a63d8_private_6615503d-1c2e-4d1f-aaa6-9e21822b1058": true,
-            "/proc/34205/root/run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f": true,
-            "/proc/34205/root/var/lib/rancher/k3s/agent/containerd/io.containerd.runtime.v2.task/k8s.io/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f": true,
+            "/proc/34205/root/var/log/pods/p414-private-e70399a9_private_0bd1eb58-f151-4be3-997b-e38b7b3f93c7": true,
+            "/proc/34205/root/run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/e34e887946729f7a82cdf1c189a4a98ea394b6ee974d824a44ad02e458d4527b": true,
+            "/proc/34205/root/var/lib/rancher/k3s/agent/containerd/io.containerd.runtime.v2.task/k8s.io/e34e887946729f7a82cdf1c189a4a98ea394b6ee974d824a44ad02e458d4527b": true,
             "/var/lib/docker/containers/6964f10e0e7c63d16b4878d57a7c20044b8c71f3a1b0413fd6cc0aba18785444/6964f10e0e7c63d16b4878d57a7c20044b8c71f3a1b0413fd6cc0aba18785444-json.log": true
           },
-          "files": 22489,
+          "files": 22490,
           "directories": 2633
         },
         "afterNode": {
@@ -1984,23 +1975,23 @@
             "/proc/34205/root/var/crash": false,
             "/proc/34205/root/var/lib/systemd/coredump": false,
             "/proc/34205/root/tmp": true,
-            "/proc/34205/root/var/log/pods/p414-private-eb6a63d8_private_6615503d-1c2e-4d1f-aaa6-9e21822b1058": true,
-            "/proc/34205/root/run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f": true,
-            "/proc/34205/root/var/lib/rancher/k3s/agent/containerd/io.containerd.runtime.v2.task/k8s.io/245b0cfc174d9c7f04ded52d5aa960e32c265bab7812b9928515e577d38aca2f": true,
+            "/proc/34205/root/var/log/pods/p414-private-e70399a9_private_0bd1eb58-f151-4be3-997b-e38b7b3f93c7": true,
+            "/proc/34205/root/run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/e34e887946729f7a82cdf1c189a4a98ea394b6ee974d824a44ad02e458d4527b": true,
+            "/proc/34205/root/var/lib/rancher/k3s/agent/containerd/io.containerd.runtime.v2.task/k8s.io/e34e887946729f7a82cdf1c189a4a98ea394b6ee974d824a44ad02e458d4527b": true,
             "/var/lib/docker/containers/6964f10e0e7c63d16b4878d57a7c20044b8c71f3a1b0413fd6cc0aba18785444/6964f10e0e7c63d16b4878d57a7c20044b8c71f3a1b0413fd6cc0aba18785444-json.log": true
           },
-          "files": 22489,
+          "files": 22490,
           "directories": 2633
         },
         "scope": "Native helper in the same Pod and private RAM home. Codex SIGSEGV handler is not executed.",
-        "inventoryArchiveSha256": "fcc044a85ecb0e57c9bf81d65b179c0950b0ae0875fa2bc37e7dcb4844a28106"
+        "inventoryArchiveSha256": "a42f00c0698ffad60e889845fe5492d1475a3237ce3e44cb9618e3b35bc72609"
       }
     }
   },
   "conditions": {
     "F1": {
       "result": "ACCEPTED (dev box, owner 12 Oct, #366)",
-      "hostSwaps": "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swapfile                               file\t\t8388604\t\t2901588\t\t-2\n",
+      "hostSwaps": "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swapfile                               file\t\t8388604\t\t2907616\t\t-2\n",
       "reason": "Host swap is a post-MVP gap tracked in #366."
     },
     "F2": {
@@ -2021,53 +2012,6 @@
     "The PVC holds memory-free content and text-free private outlines by design.",
     "Outline counts expose reply size and timing; ids are chosen by the client."
   ],
-  "sourceCommit": "7310240f11ca5c8c96aad00ce18865d8117d40eb",
-  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:3bb44be151ce4b91c8dcadcf6b78a3bd1bc8e09f7ec93a423e25543e6007735a",
-  "codexCrashHandler": {
-    "sourceInspection": "PASS",
-    "liveFaultInCodex": "NOT RUN",
-    "binarySha256": "1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e",
-    "codexVersion": "0.159.2",
-    "codexSource": "https://github.com/openai/codex/tree/8b9fa496bbf2c47aebd62e85a080b9a522a455b5",
-    "rustSource": "https://github.com/rust-lang/rust/blob/59807616e1fa2540724bfbac14d7976d7e4a3860/library/std/src/sys/pal/unix/stack_overflow.rs#L101-L143",
-    "observation": "The stripped pinned binary contains source paths for this exact Rust commit and its Unix stack-overflow handler. The Codex source tag selects Rust 1.95.0 and has no explicit SIGSEGV handler in its Rust sources.",
-    "handlerBehaviour": "The Rust standard handler checks whether the fault address is in the thread stack guard. A stack overflow prints a message and aborts. Other faults restore SIG_DFL and return, so a real invalid instruction faults again under the default action. An external signal has no faulting instruction to repeat.",
-    "limit": "This identifies the expected Rust handler from the pinned source and binary paths. It does not prove the active handler address or execute Codex's stack-overflow or other SIGSEGV paths. The native helper proves gVisor fault termination and dump controls under matching process conditions only. Pinned Codex SIGKILL and Stop cleanup are checked separately.",
-    "earlierSignalObservation": "The saved after-signal SigCgt mask was 0x4040. It no longer included SIGSEGV (bit 10, 0x400), which is consistent with the standard handler restoring SIG_DFL. The process remained sleeping because no memory access had faulted."
-  },
-  "memoryAdmissionRequirements": [
-    "Fix the unauthenticated credentials route (#200, PR #371).",
-    "Keep memory-derived reply text volatile; reports.ts still encrypts it with conversation keys.",
-    "Qualify invalidation and memory-tool journeys required by the accepted design (#326)."
-  ],
-  "earlierAttempts": [
-    {
-      "result": "FAIL",
-      "reason": "Client-side apply exceeded the ConfigMap annotation limit. Server-side apply fixed this fixture error. Promotion stopped."
-    },
-    {
-      "result": "FAIL",
-      "reason": "gVisor does not expose /proc/sys/kernel/core_pattern. The optional observation now records that absence. The required core-limit check stays unchanged."
-    },
-    {
-      "result": "FAIL",
-      "reason": "The replacement Pod was briefly absent. Polling now handles that expected gap and still requires a new UID and readiness."
-    }
-  ],
-  "sourceChecks": {
-    "lint": "PASS",
-    "typecheck": "PASS",
-    "check:events": "PASS",
-    "knip": "PASS",
-    "lint:changelog": "PASS",
-    "changedTests": {
-      "result": "PASS",
-      "tests": 27,
-      "runs": 2
-    },
-    "fullRootSuite": {
-      "result": "NOT RUN",
-      "reason": "Not requested for this fix; changed tests ran twice."
-    }
-  }
+  "sourceCommit": "2b4d7358fc0729821766e866d6e23de5c193565b",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:2a0fe2d8c956f0b03d4267c476aa514239697d18ca7473dea6674f22c0e78be6"
 }

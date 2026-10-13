@@ -1,0 +1,1 @@
+- Fix private chat startup while keeping Node debugging disabled and credential delivery protected. Publish the checked computer image after gVisor and lifecycle checks, including keeping home files through image upgrades.

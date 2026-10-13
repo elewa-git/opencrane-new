@@ -80,3 +80,58 @@ The PR records findings 1 and 2 as confirmed, with the reviewed code and
 [controller source](https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.4/controllers/sandbox_controller.go).
 The source handles PVCs before Pods and re-adopts a detached PVC that retains
 its tracking label. Updating in place removes that detach/delete sequence.
+
+## 13 October 2026 — computer image release
+
+Source: `2b4d7358fc0729821766e866d6e23de5c193565b`, based on main `5b3e324c3830c8530004487424f56e365444000c`.
+The final commit adds release records and splits unchanged test token setup into named steps.
+The image is `k3d-ocn-registry:5000/opencrane/computer@sha256:2a0fe2d8c956f0b03d4267c476aa514239697d18ca7473dea6674f22c0e78be6`. The registry's `qualification` and `p2-1` tags
+match that digest. The full build moved `p2-1` only after every probe passed.
+The licence scan accepted all 385 packages and checked 92 installed notices.
+The updated inventory, SBOM and results are in
+[the image evidence](../../apps/computer/evidence.json).
+
+Round 1 failed because the final change in #368 replaced the JavaScript wrapper
+path with Codex's native ELF executable while keeping Node in front of it.
+The protected wrapper launch added by #371 was valid. The exact startup lines were:
+
+```text
+/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex:1
+SyntaxError: Invalid or unexpected token
+Node.js v22.23.1
+```
+
+Round 1 stopped after 116.76 s. The gate reproduced `Error: Codex connection closed`. This was a real startup
+defect. Restoring `/usr/local/bin/codex` as the Node script fixed it without changing
+capabilities, mounts or writable paths. Debugging stays disabled and inherited Node
+options cannot enable it. The later private-turn fixture now uses the root-only
+credential installer; its old `POST /credentials` call had also become obsolete.
+
+The new image's bridge was checked for `--disable-sigusr1` and absent `NODE_OPTIONS`,
+including startup with hostile inspector options. `POST /credentials` returned 404.
+Credential rotation and a local stub turn passed. No real model calls were made.
+Two early attempts at the added environment assertion hit `/proc` access restrictions;
+the final assertion reads the bridge environment as its own user. All eight checks passed.
+
+| Check | Result | Duration |
+| --- | --- | --- |
+| Original private-capabilities gate | FAIL before fix | 9.31 s |
+| Failing-first launcher regression | FAIL before fix | 1.44 s |
+| Corrected private-capabilities gate | PASS | 1.40 s |
+| Launcher and private Codex unit tests (6 tests) | PASS | 1.95 s |
+| Complete build.sh, every gate; 81 private-turn checks | PASS | 458.32 s |
+| Credential and debugger tests against the new image (8 tests) | PASS | 45.01 s |
+| Complete lifecycle file (11 cases, one worker) | PASS | 584.13 s |
+| Full root suite (4,318 passed, 18 skipped; two workers) | PASS | 3160.29 s |
+| Lint | PASS | 309.36 s |
+| Typecheck | PASS | 187.78 s |
+| Event catalogue (130 event types) | PASS | 0.83 s |
+| Final Markdown, local links and changelog checks | PASS | 6.80 s |
+| GitHub CI | NOT RUN at receipt; the PR checks report the pushed commit | — |
+| Real model calls, managed cluster and full-stack browser journey | NOT RUN | — |
+
+The lifecycle file ran once with `DEV_STACK_ID=1`, `LIFECYCLE_K3D=1`, a private
+throwaway `PG_TEST_URL`, `--maxWorkers=1` and `nice -n 10`. All 11 cases passed.
+The tests removed their namespaces and admission policies. Slot 1 was released and
+the throwaway database was removed with its volume. The owner stack was untouched.
+Local logs and command timings are in `/tmp/img-release-2/` on the builder host.

@@ -3,6 +3,8 @@ import { createInterface } from 'node:readline';
 import { connect } from 'node:net';
 import { request } from 'node:http';
 import { once } from 'node:events';
+import { execFileSync } from 'node:child_process';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { codexConnection } from '/app/src/codex-connection.ts';
 
@@ -32,12 +34,31 @@ function receiveReport(raw) {
   }
   socket.send(JSON.stringify(acknowledgement));
 }
+function fixtureCredential() {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const claims = { typ: 'computer', jti: 'probe', iat: issuedAt, exp: issuedAt + 600 };
+  const headerFields = { alg: 'ES256', typ: 'JWT' };
+  const headerJson = JSON.stringify(headerFields);
+  const header = Buffer.from(headerJson);
+  const payloadJson = JSON.stringify(claims);
+  const payload = Buffer.from(payloadJson);
+  const content = `${header.toString('base64url')}.${payload.toString('base64url')}`;
+  const keyOptions = { namedCurve: 'P-256' };
+  const keyPair = generateKeyPairSync('ec', keyOptions);
+  const signingOptions = { key: keyPair.privateKey, dsaEncoding: 'ieee-p1363' };
+  const signingBytes = Buffer.from(content);
+  const signature = sign('sha256', signingBytes, signingOptions);
+  const value = `${content}.${signature.toString('base64url')}`;
+  return { id: claims.jti, value, expiresAt: claims.exp * 1000 };
+}
+
 async function open() {
-  const credential = { id: 'probe', value: 'probe-computer',
-    expiresAt: Date.now() + 600_000 };
-  const options = { method: 'POST', body: JSON.stringify(credential) };
-  const response = await fetch('http://127.0.0.1:8081/credentials', options);
-  if (!response.ok) throw new Error('Probe credential refused');
+  // Deliver through the root process started by authenticated Pod exec, as the server does.
+  const credential = fixtureCredential();
+  const argumentsForInstaller = ['-u', 'NODE_OPTIONS', '/usr/local/bin/node',
+    '--disable-sigusr1', '--experimental-strip-types', '/app/src/install-credential.ts'];
+  const installerOptions = { input: JSON.stringify(credential), stdio: ['pipe', 'ignore', 'ignore'] };
+  execFileSync('/usr/bin/env', argumentsForInstaller, installerOptions);
   const headers = { 'x-bridge-token': credential.value };
   socket = new WebSocket('ws://127.0.0.1:8081/bridge', { headers });
   socket.on('error', socketFailed);
