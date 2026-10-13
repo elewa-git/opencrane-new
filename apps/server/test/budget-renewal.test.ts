@@ -55,3 +55,34 @@ async function checksRenewal(scope: typeof scopes[number]) {
   expect(actor.state.dispatches).toEqual([]);
 }
 it.each(scopes)('checks the saved turn before renewing after a %s stop', checksRenewal);
+
+const accessRefusals = [
+  { state: 'removed member', message: 'Active silo membership required' },
+  { state: 'other requester', message: 'Thread belongs to another requester or conversation' },
+  { state: 'closed turn', message: 'Turn is closed' },
+] as const;
+
+async function refusesAccessBeforeSpending(test: typeof accessRefusals[number]) {
+  const actor = await seedTurn();
+  const limit = { scope: 'paying_group', scopeId: 'personal-default',
+    ceilingCents: 0, setBy: 'alice' };
+  await actor.configure(limit);
+  if (test.state === 'removed member') {
+    const removed = envelope('test', 'member-alice', 'member.removed', {
+      memberId: 'alice', removedBy: 'admin' });
+    await nats.seed([removed]);
+  } else if (test.state === 'other requester') {
+    const otherTurn = envelope('test', 'computer-assistant', 'computer.turn_started', {
+      assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+      turnId: 'other', threadId: 'thread', requesterId: 'bob', task: 'chat_turn' });
+    await nats.seed([otherTurn]);
+  } else {
+    const closeInput = { ...input, status: 'completed' as const };
+    await turnCommand(nats.store, context, closeInput);
+  }
+  await expect(turnCommand(nats.store, context, input)).rejects.toThrow(test.message);
+  expect(actor.state.reservations).toEqual([]);
+  expect(actor.state.dispatches).toEqual([]);
+}
+it.each(accessRefusals)('refuses a $state before revealing a spending stop',
+  refusesAccessBeforeSpending);
