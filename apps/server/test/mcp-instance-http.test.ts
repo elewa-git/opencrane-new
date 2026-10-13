@@ -21,15 +21,17 @@ async function initialise() {
   storage = await databases();
   const binding = await createStore(fga.apiUrl, 'test');
   const authorisation = memberAuthorisation(binding);
-  for (const memberId of ['alice', 'bob']) {
-    const data = { memberId, role: 'member', email: `${memberId}@example.test`,
+  for (const memberId of ['alice', 'bob', 'carol', 'dave']) {
+    const role = memberId === 'carol' ? 'admin' : memberId === 'dave' ? 'owner' : 'member';
+    const data = { memberId, role, email: `${memberId}@example.test`,
       displayName: memberId };
     const joined = envelope('test', `member-${memberId}`, 'member.joined', data);
     await nats.store.append({ event: joined, expectedSequence: 0 });
     await authorisation.handler.handle(joined, pgDb(storage.queue));
   }
   function memberId(_silo: string, _issuer: string, subject: string) {
-    return Promise.resolve(['alice', 'bob'].includes(subject) ? subject : undefined);
+    return Promise.resolve(['alice', 'bob', 'carol', 'dave'].includes(subject)
+      ? subject : undefined);
   }
   const mcpInstances = { silo: 'test', store: nats.store, binding,
     db: pgDb(storage.queue), feed: { memberId } };
@@ -332,3 +334,61 @@ async function memberCannotObserve() {
   expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
 }
 it('registers observations but refuses a member session without a worker pass', memberCannotObserve);
+
+function adminUrl(reference: Awaited<ReturnType<typeof start>>['reference'], action: string) {
+  return `/api/org/integrations/${reference.serverId}/instances/${reference.instanceId}${action}`;
+}
+
+async function adminRoutes() {
+  const fixture = await start();
+  const url = adminUrl(fixture.reference, '/stop');
+  const payload = { ...fixture.stop, profileId: fixture.reference.profileId };
+  const request = { method: 'POST' as const, url, headers: headers('carol'), payload };
+  const saved = await app.inject(request);
+  expect(saved.statusCode).toBe(200);
+  expect(saved.headers['cache-control']).toBe('no-store');
+  expect(saved.json()).toEqual({ status: 'applied', changeRef: payload.changeRef,
+    sequence: fixture.sequence + 1, runGeneration: 1, reason: 'admin_stop' });
+  const ownerStatus = await app.inject({ url: instanceUrl(fixture.reference), headers: headers() });
+  expect(ownerStatus.json()).toMatchObject({ state: 'stopping', reason: 'admin_stop' });
+  const change = adminUrl(fixture.reference,
+    `/changes/${payload.changeRef}?profileId=${fixture.reference.profileId}`);
+  expect((await app.inject({ url: change, headers: headers('carol') })).json())
+    .toEqual(saved.json());
+  const missing = adminUrl(fixture.reference,
+    `/changes/${fixture.data.changeRef}?profileId=${fixture.reference.profileId}`);
+  expect((await app.inject({ url: missing, headers: headers('carol') })).json())
+    .toEqual({ status: 'unknown' });
+  expect((await app.inject(request)).json()).toEqual(saved.json());
+  expect((await app.inject({ ...request, payload: { ...payload,
+    expectedSequence: fixture.sequence + 1 } })).statusCode).toBe(409);
+  expect(await history(nats.store, fixture.event.subject, 'test')).toHaveLength(2);
+}
+it('lets an admin stop another member’s instance and read only their change', adminRoutes);
+
+async function adminMemberRefusals() {
+  const fixture = await start();
+  const url = adminUrl(fixture.reference, '/stop');
+  const payload = { ...fixture.stop, profileId: fixture.reference.profileId };
+  const read = vi.spyOn(nats.store, 'readStream');
+  try {
+    for (const memberId of ['alice', 'bob']) {
+      const response = await app.inject({ method: 'POST', url,
+        headers: headers(memberId), payload });
+      expect(response.statusCode).toBe(403);
+    }
+    expect(read).not.toHaveBeenCalledWith(fixture.event.subject,
+      expect.anything(), expect.anything());
+  } finally {
+    read.mockRestore();
+  }
+  for (const action of ['', '/stop', '/wake']) {
+    const requestUrl = instanceUrl(fixture.reference, action);
+    const response = await app.inject({ method: action ? 'POST' : 'GET',
+      url: requestUrl, headers: headers('carol'), payload: action ? fixture.stop : undefined });
+    expect(response.statusCode).toBe(404);
+  }
+  expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
+}
+it('refuses members before reading history and hides owner routes from admins',
+  adminMemberRefusals);
