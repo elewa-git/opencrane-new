@@ -187,6 +187,9 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
     await fresh();
     return providerReceipt(spending.marker);
   }
+  if (await store.head(undefined, fresh.deadline) !== globalSequence) {
+    throw new ProviderConflict();
+  }
   if (providerCommandExists) {
     throw new ProviderConflict();
   }
