@@ -199,7 +199,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     generation?: string; revisionHeader?: 'x-opencrane-mcp-revision' }[] = [{ serverId: 'fixture', connectionId: 'installed',
     upstream: `127.0.0.1:${address.port}`, generation: 'instance-1',
     revisionHeader: 'x-opencrane-mcp-revision' as const }];
-  const dispatchOptions = { routes: mcpRoutes, requireLeader: async function requireLeader() {} };
+  const dispatchOptions = { routes: mcpRoutes, requireLeader: async function requireLeader() {},
+    requireCatalogue: function requireCatalogue(_serverId: string) {} };
   const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
     binding, 0, keys, undefined, dispatchOptions);
   let options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),

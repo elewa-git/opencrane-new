@@ -2,6 +2,7 @@ import type { AppendCommand } from '@opencrane/event-store';
 import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
+import { mcpCatalogueWatch } from '../src/mcp-catalogue-watch.ts';
 import { grantStream } from '@opencrane/authz';
 import { decideApproval, history, priceTableId, readApproval, readToolPolicy,
   setToolPolicy } from '../src/index.ts';
@@ -650,3 +651,74 @@ async function checksAdmissionOrder(stopped: boolean) {
 }
 it.each([false, true])('orders budget before tool admission and checks Stop between them: %s',
   checksAdmissionOrder);
+
+async function watchesCatalogue(failure: 'drift append' | 'failed' | 'stalled' | 'replacement') {
+  const setup = await fixture();
+  let watch: ReturnType<typeof mcpCatalogueWatch> | undefined;
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const capture = vi.fn().mockResolvedValue(before.catalogue);
+    const options = { serverIds: ['fixture'], capture, requireLeader: setup.dispatchOptions.requireLeader };
+    watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+    setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+    expect((await send(setup, value)).status).toBe(403);
+    await watch.check('fixture');
+    expect(capture).toHaveBeenCalledTimes(1);
+    const freshPermit = await permit(setup, headers);
+    if (failure === 'replacement') {
+      watch.close();
+      watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+      setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+      expect((await send(setup, freshPermit)).status).toBe(403);
+      await watch.check('fixture');
+      expect(capture).toHaveBeenCalledTimes(2);
+    } else {
+      const append = setup.nats.store.append.bind(setup.nats.store);
+      async function failDriftAppend(command: AppendCommand) {
+        const event = z.object({ type: z.string() }).parse(command.event);
+        if (event.type === 'mcp.tools_changed') {
+          expect((await send(setup, freshPermit)).status).toBe(403);
+          throw new Error('Event store unavailable');
+        }
+        return append(command);
+      }
+      if (failure === 'drift append') {
+        const added = toolEvidence({ name: 'another', costCents: 0 });
+        capture.mockResolvedValue({ ...before.catalogue, ...catalogueEvidence([tool, added]) });
+        vi.spyOn(setup.nats.store, 'append').mockImplementation(failDriftAppend);
+      } else if (failure === 'failed') {
+        capture.mockRejectedValue(new Error('Upstream unavailable'));
+      } else {
+        const stalled = Promise.withResolvers<NonNullable<typeof before.catalogue>>();
+        capture.mockReturnValue(stalled.promise);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      }
+      const checking = watch.check('fixture');
+      const refused = expect(checking).rejects.toThrow();
+      if (failure === 'stalled') await vi.advanceTimersByTimeAsync(30_001);
+      await refused;
+      vi.useRealTimers();
+      expect((await send(setup, freshPermit)).status).toBe(403);
+      expect(() => watch!.requireCurrent('fixture')).toThrow();
+      if (failure !== 'drift append') {
+        const failed = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+        expect(failed.expiresAt).toBeNull();
+        expect(failed.policyRevision).toBeGreaterThan(before.policyRevision);
+        capture.mockResolvedValue(before.catalogue);
+        await watch.check('fixture');
+        const recovered = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+        expect(recovered.policyRevision).toBeGreaterThan(before.policyRevision);
+      }
+    }
+    expect(setup.received()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    watch?.close();
+    await setup.close();
+  }
+}
+it.each(['drift append', 'failed', 'stalled', 'replacement'] as const)(
+  'holds recording upstream through %s and recaptures on worker replacement', watchesCatalogue);
