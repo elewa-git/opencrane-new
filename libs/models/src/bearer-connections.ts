@@ -203,6 +203,8 @@ async function appendConnection(store: EventStore, binding: Binding, memberId: s
   const controlSubject = `connection-control-${memberId}-${input.serverId}`;
   const subjects = [`member-${memberId}`, controlSubject];
   const fresh = await authorityFence(store, performance.now(), subjects);
+  // Include profile writes and admin blocks in one native append condition.
+  const connectionSequence = await store.head('connection-*', fresh.deadline);
   const options = { requiredRole: 'member' as const, fresh };
   await activeMember(store, binding, memberId, options);
   await requireConnectionEnabled(store, memberId, input.serverId, fresh.deadline);
@@ -215,10 +217,14 @@ async function appendConnection(store: EventStore, binding: Binding, memberId: s
       await store.head(`mcp-${input.serverId}`, fresh.deadline) !== server.sequence) {
     throw new Error('Connection conflict');
   }
+  // Check after capturing the category position so a later profile change also conflicts.
+  if (await store.head(event.subject, fresh.deadline) !== input.expectedSequence) {
+    throw new Error('Connection append unconfirmed');
+  }
   await fresh();
   const deadline = Math.min(fresh.deadline, performance.now() + appendUntil - Date.now());
-  const command = { event, expectedSequence: input.expectedSequence,
-    historyChecked: true as const, deadline };
+  const command = { event, expectedSequence: connectionSequence,
+    expectedSubject: 'connection-*', historyChecked: true as const, deadline };
   const result = await store.append(command);
   if (result.status !== 'appended') {
     throw new Error('Connection append unconfirmed');

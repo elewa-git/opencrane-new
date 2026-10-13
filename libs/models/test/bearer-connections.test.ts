@@ -351,7 +351,8 @@ it('keeps an admin disable across staging, owner revoke and a new profile', admi
 async function joinMember(memberId: string, role: 'member' | 'admin' = 'member') {
   const data = { memberId, role, email: `${memberId}@example.test`, displayName: memberId };
   const event = envelope('test', `member-${memberId}`, 'member.joined', data);
-  const result = await nats.store.append({ event, expectedSequence: 0 });
+  const command = { event, expectedSequence: 0 };
+  const result = await nats.store.append(command);
   expect(result.status).toBe('appended');
   const auth = memberAuthorisation(binding);
   await auth.handler.handle(event, pgDb(storage.queue));

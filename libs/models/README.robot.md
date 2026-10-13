@@ -1562,7 +1562,7 @@ The orchestration reads history and checks membership before staging with PR 1 c
 It then starts a fresh membership check and calls the append-only command. This command
 makes one conditional append; it never writes custody or a read table. It checks the
 saved server revision again and stops append retries at the earliest access, stage or catalogue expiry.
-Only member and ownership streams participate in the short access check.
+Only member, ownership and member/server control streams participate in the short access check.
 
 The operation id hashes silo, subject and changeRef. History retains retry identity beyond
 NATS deduplication. A retry must recover the same private material and exact identity and
@@ -1594,7 +1594,21 @@ Each command makes one conditional append. The original change reference recover
 confirmed receipt after a lost reply, but changed retry details conflict. Membership is
 checked again on retries. No token is read or returned, and neither command deletes one.
 Save checks the control stream before staging and again in its short access check.
-Profile history stays outside that check. Conversation access checks are unchanged.
+It captures the `connection-*` category position before the final control and profile
+revision checks. Its one native conditional append requires that category position to
+stay unchanged. The category includes both profile writes and admin blocks, so a disable
+that commits first refuses a later save, including create and new-profile reconnect.
+A save that commits first remains covered by a later disable. The profile revision check
+follows the category read, so competing rotations and owner revoke still refuse stale saves.
+A concurrent change to any other connection also refuses this save; the caller can retry.
+Other event categories do not cause an append conflict. This uses the existing store
+contract without another event, a process lock or a new event-store API.
+Profile history stays outside the short access check. Conversation access checks are unchanged.
+
+Regression tests pause the real append after the final check, finish disable, and then
+resume create, rotation or reconnect. Separate tests disable after the final blocker read
+and remove the owner or demote the admin during profile reads, on first attempts and retries.
+The fixtures use real NATS, OpenFGA and PostgreSQL. Custody stays behind a test adapter.
 
 The approximately 600-line limit splits row 3. Orphan enumeration, coordination with
 staging, operation closure and deletion reactions remain unimplemented. Unknown appends,

@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks calls and holds; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves spending, personal connection references and blocks, instance reports and child admissions| store["libs/event-store<br/>event log"]
+  models -->|saves spending, checks connection changes together, saves instance reports and child admissions| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -192,6 +192,9 @@ Owners can revoke their own profiles. Admins can block a member's personal conne
 to one server, including later reconnects with a new profile. Both changes keep the
 stored token until a separate cleanup process can prove deletion is safe.
 That cleanup process is not built yet.
+The event store checks profile changes and admin blocks together when it saves a profile.
+If the block is saved first, the profile save is refused, even if its access check has finished.
+A simultaneous change to another connection can also refuse the save; the caller can retry.
 
 1. **A person sends a chat message.** The server and the computer pick the model for the task. The computer sends the AI call to agentgateway. agentgateway asks the models process, which checks the passes, permissions and budget and holds the money. The models process saves one final send permission. agentgateway then sends the call once to the AI provider.
 2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the full amount stays held for review. A later report of an unknown result restores money released before an allowed call was sent.
