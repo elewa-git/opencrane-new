@@ -40,7 +40,7 @@ async function grant(granteeKind: string, granteeId: string, resourceId = 'test-
   });
 }
 
-beforeEach(async function setup() {
+async function setup() {
   nats = await natsFixture();
   storage = await database('pg');
   fga = await openfga();
@@ -75,19 +75,23 @@ beforeEach(async function setup() {
     memberId: 'alice', removedBy: 'owner', reviewRevision: 'a'.repeat(64),
   });
   await runner.run(members);
-});
+}
+beforeEach(setup);
 
-afterEach(async function close() {
+async function close() {
   vi.restoreAllMocks();
   await fga?.close();
   await storage?.close();
   await nats?.close();
-});
+}
+afterEach(close);
 
 async function deliver() {
   expect(dispatcherHandlerNames({})).toContain('cleanup-departure');
   const module = await import('../src/departure-cleanup.ts');
-  function clock() { return Date.parse('2026-10-13T12:00:00Z'); }
+  function clock() {
+    return Date.parse('2026-10-13T12:00:00Z');
+  }
   const handler = module.departureCleanupHandler(nats.store, clock);
   await handler.handle(removal, storage.db);
 }
@@ -100,139 +104,146 @@ async function applyPermissions() {
   }
 }
 
+async function currentResources() {
+  await group('late');
+  await grant('team', 'late');
+  await grant('member', 'alice', 'later-model');
+  await runner.run(members);
+  await deliver();
+  const removals = [];
+  const revocations = [];
+  for await (const row of readEvents(nats.store, 1, await nats.store.head())) {
+    if (row.event.type === 'team.member_removed') removals.push(row.event.data);
+    if (row.event.type === 'grant.revoked') revocations.push(row.event.data);
+  }
+  expect(removals).toEqual([
+    { teamId: 'early', memberId: 'alice', removedBy: 'opencrane-worker' },
+    { teamId: 'late', memberId: 'alice', removedBy: 'opencrane-worker' },
+  ]);
+  expect(revocations).toHaveLength(3);
+  expect(revocations).toEqual(expect.arrayContaining([
+    expect.objectContaining({ granteeKind: 'member', granteeId: 'alice' }),
+    expect.objectContaining({ granteeKind: 'assistant', granteeId: 'personal' }),
+  ]));
+  const personal = await history(nats.store, 'assistant-personal');
+  expect(personal.at(-1)?.event.data).toEqual({ assistantId: 'personal',
+    active: false, changedFields: ['active'], changedBy: 'opencrane-worker' });
+  expect(await history(nats.store, 'assistant-shared')).toHaveLength(1);
+  expect(await history(nats.store, 'assistant-other')).toHaveLength(1);
+  expect(await history(nats.store, 'computer-*')).toHaveLength(2);
+  expect(await history(nats.store, 'connection-*')).toHaveLength(1);
+  expect(await history(nats.store, 'memberaudit-*')).toEqual([]);
+  await applyPermissions();
+  expect(await auth.team('alice', 'late')).toMatchObject({ allowed: false });
+  expect(await auth.team('bob', 'late')).toMatchObject({ allowed: true });
+  expect(await auth.use('assistant', 'personal', 'model', 'test-model'))
+    .toMatchObject({ allowed: false });
+  expect(await auth.use('assistant', 'shared', 'model', 'test-model'))
+    .toMatchObject({ allowed: true });
+}
 it('cleans current groups and personal grants, leaving shared and other member access intact',
-  async function currentResources() {
-    await group('late');
-    await grant('team', 'late');
-    await grant('member', 'alice', 'later-model');
-    await runner.run(members);
-    await deliver();
-    const removals = [];
-    const revocations = [];
-    for await (const row of readEvents(nats.store, 1, await nats.store.head())) {
-      if (row.event.type === 'team.member_removed') removals.push(row.event.data);
-      if (row.event.type === 'grant.revoked') revocations.push(row.event.data);
-    }
-    expect(removals).toEqual([
-      { teamId: 'early', memberId: 'alice', removedBy: 'opencrane-worker' },
-      { teamId: 'late', memberId: 'alice', removedBy: 'opencrane-worker' },
-    ]);
-    expect(revocations).toHaveLength(3);
-    expect(revocations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ granteeKind: 'member', granteeId: 'alice' }),
-      expect.objectContaining({ granteeKind: 'assistant', granteeId: 'personal' }),
-    ]));
-    const personal = await history(nats.store, 'assistant-personal');
-    expect(personal.at(-1)?.event.data).toEqual({ assistantId: 'personal',
-      active: false, changedFields: ['active'], changedBy: 'opencrane-worker' });
-    expect(await history(nats.store, 'assistant-shared')).toHaveLength(1);
-    expect(await history(nats.store, 'assistant-other')).toHaveLength(1);
-    expect(await history(nats.store, 'computer-*')).toHaveLength(2);
-    expect(await history(nats.store, 'connection-*')).toHaveLength(1);
-    expect(await history(nats.store, 'memberaudit-*')).toEqual([]);
-    await applyPermissions();
-    expect(await auth.team('alice', 'late')).toMatchObject({ allowed: false });
-    expect(await auth.team('bob', 'late')).toMatchObject({ allowed: true });
-    expect(await auth.use('assistant', 'personal', 'model', 'test-model'))
-      .toMatchObject({ allowed: false });
-    expect(await auth.use('assistant', 'shared', 'model', 'test-model'))
-      .toMatchObject({ allowed: true });
-  });
+  currentResources);
 
+async function retries() {
+  const appendCommand = nats.store.append.bind(nats.store);
+  async function loseReply(command: Parameters<typeof appendCommand>[0]): Promise<never> {
+    await appendCommand(command);
+    throw new Error('Reply lost');
+  }
+  const failing = vi.spyOn(nats.store, 'append');
+  failing.mockImplementationOnce(loseReply);
+  await expect(deliver()).rejects.toThrow('Reply lost');
+  failing.mockRestore();
+  await runner.run(members);
+  await Promise.allSettled([deliver(), deliver()]);
+  await runner.run(members);
+  await deliver();
+  const saved = await nats.store.head();
+  await append('assistant-personal', 'assistant.settings_changed', {
+    assistantId: 'personal', changedBy: 'owner', changedFields: ['persona'],
+  });
+  await runner.run(members);
+  await deliver();
+  expect(await nats.store.head()).toBe(saved + 1);
+  const outcomes = [];
+  for await (const row of readEvents(nats.store, 1, saved)) {
+    if (row.event.source !== 'opencrane-worker') continue;
+    expect(row.event.id).toMatch(/^[a-f0-9]{64}$/u);
+    expect(row.event.commandId).toBe(row.event.id);
+    expect(row.event.time).toBe('2026-10-13T12:00:00.000Z');
+    outcomes.push(row.event);
+  }
+  expect(outcomes).toHaveLength(4);
+  expect(new Set(outcomes.map(eventId)).size).toBe(4);
+}
 it('keeps one outcome across concurrent delivery, a lost reply and later unrelated settings',
-  async function retries() {
-    const appendCommand = nats.store.append.bind(nats.store);
-    async function loseReply(command: Parameters<typeof appendCommand>[0]): Promise<never> {
-      await appendCommand(command);
-      throw new Error('Reply lost');
-    }
-    const failing = vi.spyOn(nats.store, 'append');
-    failing.mockImplementationOnce(loseReply);
-    await expect(deliver()).rejects.toThrow('Reply lost');
-    failing.mockRestore();
-    await runner.run(members);
-    await Promise.allSettled([deliver(), deliver()]);
-    await runner.run(members);
-    await deliver();
-    const saved = await nats.store.head();
-    await append('assistant-personal', 'assistant.settings_changed', {
-      assistantId: 'personal', changedBy: 'owner', changedFields: ['persona'],
-    });
-    await runner.run(members);
-    await deliver();
-    expect(await nats.store.head()).toBe(saved + 1);
-    const outcomes = [];
-    for await (const row of readEvents(nats.store, 1, saved)) {
-      if (row.event.source !== 'opencrane-worker') continue;
-      expect(row.event.id).toMatch(/^[a-f0-9]{64}$/u);
-      expect(row.event.commandId).toBe(row.event.id);
-      expect(row.event.time).toBe('2026-10-13T12:00:00.000Z');
-      outcomes.push(row.event);
-    }
-    expect(outcomes).toHaveLength(4);
-    expect(new Set(outcomes.map(eventId)).size).toBe(4);
-  });
-function eventId(record: EventEnvelope) { return record.id; }
+  retries);
+function eventId(record: EventEnvelope) {
+  return record.id;
+}
 
+async function unavailable(mode: string) {
+  if (mode === 'behind') await group('unprojected');
+  if (mode === 'missing') await storage.db.query('DELETE FROM inventory_inputs_backfill');
+  if (mode === 'limits') {
+    for (let index = 0; index < 100; index++) await group(`extra-${index}`);
+    await runner.run(members);
+  }
+  if (mode === 'append') {
+    const failure = { status: 'unavailable' as const, cause: new Error('Append unavailable') };
+    vi.spyOn(nats.store, 'append').mockResolvedValue(failure);
+  }
+  if (mode === 'read') {
+    vi.spyOn(nats.store, 'head').mockRejectedValue(new Error('Read unavailable'));
+  }
+  const before = await nats.reader.head();
+  await expect(deliver()).rejects.toThrow();
+  expect(await nats.reader.head()).toBe(before);
+}
 it.each(['behind', 'missing', 'limits', 'append', 'read'])(
-  'saves no result when inventory or storage is unavailable: %s', async function unavailable(mode) {
-    if (mode === 'behind') await group('unprojected');
-    if (mode === 'missing') await storage.db.query('DELETE FROM inventory_inputs_backfill');
-    if (mode === 'limits') {
-      for (let index = 0; index < 100; index++) await group(`extra-${index}`);
-      await runner.run(members);
-    }
-    if (mode === 'append') {
-      const failure = { status: 'unavailable' as const, cause: new Error('Append unavailable') };
-      vi.spyOn(nats.store, 'append').mockResolvedValue(failure);
-    }
-    if (mode === 'read') {
-      vi.spyOn(nats.store, 'head').mockRejectedValue(new Error('Read unavailable'));
-    }
-    const before = await nats.reader.head();
-    await expect(deliver()).rejects.toThrow();
-    expect(await nats.reader.head()).toBe(before);
-  });
+  'saves no result when inventory or storage is unavailable: %s', unavailable);
 
+async function oldRemoval() {
+  const before = await nats.store.head();
+  removal = { ...removal, data: { memberId: 'alice', removedBy: 'owner' } };
+  await deliver();
+  expect(await nats.store.head()).toBe(before);
+  removal = await append('member-alice', 'member.removed', removal.data);
+  await append('member-alice', 'member.role_changed', {
+    memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+  });
+  await deliver();
+  expect(await nats.store.head()).toBe(before + 2);
+  removal = { ...removal, id: 'not-saved', data: {
+    memberId: 'alice', removedBy: 'owner', reviewRevision: 'b'.repeat(64),
+  } };
+  await expect(deliver()).rejects.toThrow('Departure removal was not saved');
+  expect(await nats.store.head()).toBe(before + 2);
+}
 it('ignores an old unreviewed removal after later events and refuses an unsaved departure',
-  async function oldRemoval() {
-    const before = await nats.store.head();
-    removal = { ...removal, data: { memberId: 'alice', removedBy: 'owner' } };
-    await deliver();
-    expect(await nats.store.head()).toBe(before);
-    removal = await append('member-alice', 'member.removed', removal.data);
-    await append('member-alice', 'member.role_changed', {
-      memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
-    });
-    await deliver();
-    expect(await nats.store.head()).toBe(before + 2);
-    removal = { ...removal, id: 'not-saved', data: {
-      memberId: 'alice', removedBy: 'owner', reviewRevision: 'b'.repeat(64),
-    } };
-    await expect(deliver()).rejects.toThrow('Departure removal was not saved');
-    expect(await nats.store.head()).toBe(before + 2);
-  });
+  oldRemoval);
 
+async function replayAndUpgrade() {
+  const before = await nats.store.head();
+  await runner.rebuild(members);
+  expect(await nats.store.head()).toBe(before);
+  const options = { db: storage.db, logger: createLogger('upgrade-test'),
+    silo: 'test', handlers: [] };
+  const runtime = new HandlerRuntime(options);
+  await runtime.start();
+  await runtime.stop();
+  await storage.db.query(`CREATE TABLE handler_dispatcher (
+    id INTEGER PRIMARY KEY, silo TEXT, manifest TEXT, sequence BIGINT)`);
+  await storage.db.query("INSERT INTO handler_dispatcher VALUES (1, 'test', '[]', $1)", [before]);
+  const current = await storage.db.query<{ name: string }>('SELECT current_database() AS name');
+  const url = new URL(process.env['PG_TEST_URL']!);
+  url.pathname = `/${current.rows[0]!.name}`;
+  const env = { ...process.env, ...nats.env('projection'), DATABASE_URL: url.href, SILO_ID: 'test' };
+  const execute = promisify(execFile);
+  const preview = await execute('npm', ['run', 'ops', '--', 'upgrade-handlers', '--dry-run'], { env });
+  expect(preview.stdout).toContain('cleanup-departure');
+  expect(preview.stdout).toContain('member.removed');
+  expect(await nats.store.head()).toBe(before);
+}
 it('rebuilds without effects and previews the added subscription without running cleanup',
-  async function replayAndUpgrade() {
-    const before = await nats.store.head();
-    await runner.rebuild(members);
-    expect(await nats.store.head()).toBe(before);
-    const options = { db: storage.db, logger: createLogger('upgrade-test'),
-      silo: 'test', handlers: [] };
-    const runtime = new HandlerRuntime(options);
-    await runtime.start();
-    await runtime.stop();
-    await storage.db.query(`CREATE TABLE handler_dispatcher (
-      id INTEGER PRIMARY KEY, silo TEXT, manifest TEXT, sequence BIGINT)`);
-    await storage.db.query("INSERT INTO handler_dispatcher VALUES (1, 'test', '[]', $1)", [before]);
-    const current = await storage.db.query<{ name: string }>('SELECT current_database() AS name');
-    const url = new URL(process.env['PG_TEST_URL']!);
-    url.pathname = `/${current.rows[0]!.name}`;
-    const env = { ...process.env, ...nats.env('projection'), DATABASE_URL: url.href, SILO_ID: 'test' };
-    const execute = promisify(execFile);
-    const preview = await execute('npm', ['run', 'ops', '--', 'upgrade-handlers', '--dry-run'], { env });
-    expect(preview.stdout).toContain('cleanup-departure');
-    expect(preview.stdout).toContain('member.removed');
-    expect(await nats.store.head()).toBe(before);
-  });
+  replayAndUpgrade);
