@@ -327,9 +327,11 @@ it.each(['assistant', 'silo_default'] as const)('new turns use the %s choice', n
 
 async function creationReceipt() {
   const command = await input();
-  const rows = setup.nats.store.readStream('provider-primary');
-  const createdId = (await rows.next()).value?.event.id;
-  await rows.return(undefined);
+  let createdId: string | undefined;
+  for await (const row of setup.nats.store.readStream('provider-primary')) {
+    createdId = row.event.id;
+    break;
+  }
   const applied = setup.auth.applied.bind(setup.auth);
   async function withoutProviderReceipt(eventId: string) {
     return eventId !== createdId && await applied(eventId);

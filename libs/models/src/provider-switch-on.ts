@@ -17,15 +17,17 @@ const inputSchema = z.object({
 }).strict();
 type Choice = z.infer<typeof providerBindingSchema> & { automatic: boolean };
 type Configuration = {
-  providers: Map<string, ProviderState>; creations: Map<string, StoredEvent>;
+  providers: Map<string, ProviderState>; creations: Map<string, StoredEvent>; ids: Set<string>;
   choices: Map<string, Choice>; draining: boolean; drainSequence: number;
 };
 function emptyConfiguration(): Configuration {
-  return { providers: new Map(), creations: new Map(), choices: new Map(),
+  return { providers: new Map(), creations: new Map(), ids: new Set(), choices: new Map(),
     draining: false, drainSequence: 0 };
 }
 function addConfiguration(summary: Configuration, row: StoredEvent) {
   const event = row.event;
+  const changeIdentity = JSON.stringify([event.subject, event.commandId]);
+  summary.ids.add(changeIdentity);
   const providerId = event.subject.slice('provider-'.length);
   const state = applyProvider(summary.providers.get(providerId), event, row.sequence);
   summary.providers.set(providerId, state);
@@ -137,6 +139,15 @@ function validChoices(current: Configuration, silo: string, providerId: string) 
   }
   return true;
 }
+function requirePositions(current: Configuration & { sequence: number },
+  input: z.infer<typeof inputSchema>, providerId: string) {
+  if (current.sequence !== input.expectedProviderSequence ||
+    current.drainSequence !== input.expectedDrainSequence ||
+    current.providers.get(providerId)?.revision !== input.expectedRevision) {
+    throw new ProviderConflict();
+  }
+}
+
 export async function providerSwitchOn(store: EventStore, binding: Binding,
   memberId: string, providerId: string, raw: unknown) {
   providerIdSchema.parse(providerId);
@@ -154,6 +165,8 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
     budget, deadline, takeBudget);
   const activeLegacy = await readStreamSummary(store, binding.silo, 'computer-*',
     legacy, deadline, hasLegacy);
+  const identity = JSON.stringify([`provider-${providerId}`, input.commandId]);
+  const providerCommandExists = current.ids.has(identity);
   const choicesValid = validChoices(current, binding.silo, providerId);
   const fresh = await providerAuthority(store, binding, memberId);
   const created = current.creations.get(providerId);
@@ -174,14 +187,13 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
     await fresh();
     return providerReceipt(spending.marker);
   }
+  if (providerCommandExists) {
+    throw new ProviderConflict();
+  }
   if (spending.marker || !current.draining || activeLegacy) {
     throw new ProviderRefused();
   }
-  if (current.sequence !== input.expectedProviderSequence ||
-    current.drainSequence !== input.expectedDrainSequence ||
-    current.providers.get(providerId)?.revision !== input.expectedRevision) {
-    throw new ProviderConflict();
-  }
+  requirePositions(current, input, providerId);
   if (!choicesValid) {
     throw new ProviderRefused();
   }

@@ -183,8 +183,13 @@ async function readChange(options: ProviderOptions, providerId: string,
   function matches(row: (typeof current.rows)[number]) {
     return row.event.commandId === commandId;
   }
-  const row = current.rows.find(matches) ??
-    await providerSwitchOnChange(options.store, options.silo, providerId, commandId, deadline);
+  async function findSavedChange() {
+    const switched = await providerSwitchOnChange(
+      options.store, options.silo, providerId, commandId, deadline);
+    // Keep the original switch-on receipt when a later provider edit reuses its id.
+    return switched ?? current.rows.find(matches);
+  }
+  const row = await findSavedChange();
   if (!row) {
     return { status: 'not_found' as const };
   }

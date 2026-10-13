@@ -1252,12 +1252,11 @@ receipt and status read. A failed step resumes by that id; it does not repeat ea
 steps or alter grants. An automatic first-provider default is not proof of the
 old deployment key's identity. The operator must record the intended choice.
 
-Remaining work: safe switch-on must prove that all legacy admissions and turns
-have finished before saving the marker, including admission already waiting to
-append when draining began. It must also check reservations and migration choices.
-The switch-on command, managed gateway startup, fallback-key refusal and recorded
-switch-off are not built here. Retirement remains unavailable. Fresh-install
-migration and managed dispatch are NOT RUN; this is source preparation only.
+The safe switch-on command below now checks legacy turns and migration choices.
+A pending legacy admission can still append later, but cannot reserve or send after
+switch-on. Concurrent reservations refuse switch-on. Managed gateway startup,
+fallback-key refusal and switch-off remain unbuilt. Retirement remains unavailable.
+Fresh-install migration and managed dispatch are NOT RUN.
 
 Source receipt, 10 October 2026: `fe7bf89d3113cdac4f446f8c6aa9bf7d9634c085`.
 Linux worktree after `npm ci`; disposable NATS, PostgreSQL and OpenFGA;
