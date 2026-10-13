@@ -805,3 +805,30 @@ model delivery and a fresh-install chat journey remain NOT RUN.
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
+
+## Bridge work gate (P3-17 PR 2b, first split)
+
+The authenticated socket accepts `bridge_gate` before or after resume. It carries
+`takeoverId`, a positive integer `generation` and at most 64 unique `affectedTurnIds`.
+Only identifier characters are accepted. Unknown fields and a different request
+close the socket. An identical request retains the process-local `epoch` and checks
+again. There is no reopen operation. The gate is not saved across process restarts.
+
+The gate stops preparing and running memory-free and restricted turns, removes
+catalogues and grants, and cancels held approvals. An action already being sent keeps
+its own answer path. A matching terminal Codex reply is required for each executing
+turn; interrupt replies, thread closure, EOF and socket loss do not prove completion.
+The receipt also waits for pending preparation, renewal, cleanup and approval sends,
+and checks unloaded threads. A failed cleanup leaves proof unavailable.
+
+`bridge_quiet` binds the request, epoch and `interruptedTurnIds`. Its
+`preparingTurnIds`, `runningTurnIds`, `loadedThreadIds` and `heldApprovalIds` are empty.
+`executorProof` and `browserProof` are always `unavailable`. No content or passes
+appear in either receipt. `bridge_unavailable` returns the request and epoch if proof
+fails or takes 30 seconds. Neither receipt grants desktop control.
+
+Not in this PR: server delivery from saved intent (including idle computers and
+reconnect ordering), server receipt validation, supervisor calls, takeover events,
+event-backed hold cancellation, budget reservation release, automation closure,
+crash recovery, writer access and fresh-install qualification. The local tests use
+real authenticated sockets and stub Codex replies; they do not qualify a live computer.

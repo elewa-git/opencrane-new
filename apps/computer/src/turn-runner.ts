@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Keep approval renewal and release beside the turn state they share. */
+import { BridgeGate } from './bridge-gate.ts';
 import type { approvalHolds } from './approval-holds.ts';
 import { modelForTask } from '@opencrane/models/routing';
 import type { WorkspaceFile } from './files.ts';
@@ -9,7 +10,7 @@ export { parseTurn } from './turn-frame.ts';
 export type { Turn } from './turn-frame.ts';
 import { itemReport } from './item-reports.ts';
 import { turnInput, privateTurnInput } from './turn-input.ts';
-import { threadLoads, ThreadLoadFailed, type ThreadLoadDriver } from './thread-loads.ts';
+import { threadLoads, unload, ThreadLoadFailed, type ThreadLoadDriver } from './thread-loads.ts';
 
 const MAX_PRIVATE_TURNS = 2;
 const PRIVATE_ITEM_TYPES = new Set(['userMessage', 'agentMessage', 'reasoning', 'contextCompaction']);
@@ -86,10 +87,13 @@ function readAcknowledgedGrant(value: Record<string, unknown>,
 }
 
 class TurnRunner {
+  readonly gate = new BridgeGate();
+  private preparingCount = 0;
   private readonly turnModels = new Map<string, string>();
   private readonly renewals = new Map<string, Promise<void>>();
   private readonly driver: TurnDriver;
-  private readonly approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'> | undefined;
+  private readonly approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'>
+    & Partial<Pick<ReturnType<typeof approvalHolds>, 'stop' | 'size'>> | undefined;
   private readonly loads: ReturnType<typeof threadLoads>;
   private readonly journal: ReturnType<typeof reportJournal>;
   private readonly send: (report: BridgeReport) => void;
@@ -111,7 +115,8 @@ class TurnRunner {
     send: (report: BridgeReport) => void,
     closeCurrentSocket: (code: number, reason: string) => void,
     signal: (value: Record<string, unknown>) => void,
-    approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'> | undefined,
+    approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'>
+    & Partial<Pick<ReturnType<typeof approvalHolds>, 'stop' | 'size'>> | undefined,
   ) {
     this.driver = driver;
     this.approvals = approvals;
@@ -159,7 +164,7 @@ class TurnRunner {
       if (model !== this.turnModels.get(turn.id)) {
         throw new Error('Turn model changed');
       }
-      await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt);
+      await this.installGrant(thread, turn, grant);
     } finally { clearTimeout(timer); }
   }
 
@@ -268,6 +273,7 @@ class TurnRunner {
   }
 
   async start(input: Turn) {
+    if (this.gate.closed) return;
     if (this.isFinished(input.id) || this.isActiveTurn(input.id)) {
       return;
     }
@@ -285,16 +291,68 @@ class TurnRunner {
     }
     // Reserve the conversation before thread/start so concurrent delivery cannot start it twice.
     this.state.preparing.set(input.conversationId, input);
+    this.preparingCount++;
     try {
       await this.prepareAndRun(input);
     } catch (error) {
-      if (error instanceof ThreadLoadFailed) {
+      if (error instanceof ThreadLoadFailed && !this.gate.closed) {
         const text = 'The tools for this conversation could not be reloaded. '
           + 'Send your message again.';
         this.appendReport(input, 'agent.message_completed', { messageId: input.id, text });
       }
       this.failTurn(input);
+    } finally {
+      this.preparingCount--;
     }
+  }
+
+  stopBridge(value: Record<string, unknown>) {
+    this.gate.close(value);
+    this.approvals?.stop?.();
+    void this.gate.track(this.loads.stop());
+    for (const input of this.state.preparing.values()) this.state.cancelled.add(input.id);
+    for (const [threadId, input] of this.state.running) {
+      this.state.cancelled.add(input.id);
+      if (this.journal.executions.has(input.id)) {
+        this.gate.interrupted.add(input.id);
+        this.gate.awaitingTerminal.add(input.id);
+      }
+      void this.gate.track(this.dropAccess(threadId, input));
+      const stop = { turnId: input.id, conversationId: input.conversationId };
+      void this.gate.track(this.interrupt(stop));
+    }
+    for (const settle of this.state.waiting.values()) settle(new Error('Turn ended'));
+    this.state.waiting.clear();
+    return this.gate.receipt(this.bridgeQuiet.bind(this));
+  }
+
+  private async installGrant(thread: string, turn: Turn, grant: Grant) {
+    try {
+      await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt);
+    } finally {
+      // Remove a late installation even if thread closure already released the turn.
+      if (this.gate.closed) await this.gate.track(this.dropAccess(thread, turn));
+    }
+  }
+
+  private async dropAccess(threadId: string, input: Turn) {
+    await releaseLoad(this.loads, this.driver, threadId, input.conversationId);
+  }
+
+  private async unloadPrivate(session: PrivateSession, threadId: string) {
+    try {
+      await unload(session, threadId);
+    } finally {
+      session.close();
+    }
+  }
+
+  private async bridgeQuiet() {
+    if (this.gate.failed || this.gate.pending || this.gate.awaitingTerminal.size
+      || this.preparingCount || this.renewals.size || this.state.preparing.size
+      || this.state.running.size || this.approvals?.size) return false;
+    await this.loads.quiet();
+    return true;
   }
 
   private privateTurnCount() {
@@ -326,14 +384,17 @@ class TurnRunner {
     this.state.refusedTools.delete(turnId);
     const session = this.state.sessions.get(turnId);
     this.state.sessions.delete(turnId);
-    session?.close();
+    if (this.gate.closed && threadId && turn && session) {
+      const cleanup = this.unloadPrivate(session, threadId);
+      void this.gate.track(cleanup);
+    } else session?.close();
     for (const [sequence, settle] of this.state.waiting) {
       if (this.journal.reports[sequence - 1]?.turnId !== turnId) continue;
       this.state.waiting.delete(sequence);
       settle(new Error('Turn ended'));
     }
     if (threadId && turn) {
-      void releaseLoad(this.loads, this.driver, threadId, turn.conversationId);
+      void this.gate.track(this.dropAccess(threadId, turn));
     }
   }
 
@@ -347,7 +408,10 @@ class TurnRunner {
   }
 
   private privateSessionClosed(input: Turn) {
-    if (this.isActiveTurn(input.id)) this.failTurn(input);
+    if (this.isActiveTurn(input.id)) {
+      if (this.gate.closed) this.gate.failed = true;
+      this.failTurn(input);
+    }
   }
 
   private async preparePrivateThread(input: Turn) {
@@ -383,6 +447,10 @@ class TurnRunner {
     }
     this.state.preparing.delete(input.conversationId);
     this.state.running.set(threadValue, input);
+    if (this.gate.closed) {
+      this.failTurn(input);
+      return;
+    }
     await this.runThread(input, threadValue);
   }
 
@@ -405,13 +473,13 @@ class TurnRunner {
     }
 
     const grant = await this.waitForGrant(sequence, previousStart);
-    if (!this.isActiveTurn(input.id)) return;
+    if (!this.isActiveTurn(input.id) || this.gate.closed) throw new Error('Turn ended');
     // Keep the server's admitted model for every call and renewal in this turn.
     const model = grant.model ?? modelForTask(input.taskKind);
     this.turnModels.set(input.id, model);
-    await this.driver.grant(threadId, input.conversationId, grant.token, grant.expiresAt);
+    await this.installGrant(threadId, input, grant);
     if (!this.isActiveTurn(input.id)) return;
-    if (this.state.cancelled.has(input.id)) {
+    if (this.gate.closed || this.state.cancelled.has(input.id)) {
       this.failTurn(input);
       await this.driver.grant(threadId, input.conversationId, '', 0);
       return;
@@ -419,8 +487,10 @@ class TurnRunner {
 
     const inputText = await this.inputFor(input, grant.context);
     if (!this.isActiveTurn(input.id)) return;
+    if (this.gate.closed) throw new Error('Turn ended');
     // Mark execution after validating the input. Memory-free prepared turns can still retry.
     this.journal.recordExecution(input.id);
+    this.gate.awaitingTerminal.add(input.id);
     const turnParams = {
       threadId,
       model,
@@ -525,7 +595,7 @@ class TurnRunner {
 
   private releaseClosedThread(threadId: string, input: Turn | undefined) {
     if (input) this.failTurn(input);
-    else void releaseLoad(this.loads, this.driver, threadId, '');
+    else void this.gate.track(releaseLoad(this.loads, this.driver, threadId, ''));
   }
 
   complete(value: unknown) {
@@ -582,8 +652,17 @@ class TurnRunner {
     void this.rpcFor(input)('turn/interrupt', params).catch(interruptFailed);
   }
 
+  private confirmedTerminal(input: Turn, terminal: Record<string, unknown>) {
+    const expected = this.state.codexTurns.get(input.id);
+    if (this.gate.closed && (terminal['id'] !== expected
+      || !['completed', 'interrupted', 'failed'].includes(String(terminal['status'])))) return false;
+    this.gate.awaitingTerminal.delete(input.id);
+    return true;
+  }
+
   private completeTurn(input: Turn, _threadId: string, params: Record<string, unknown>) {
     const turn = record(params['turn']);
+    if (!this.confirmedTerminal(input, turn)) return;
     if (this.state.refusedTools.has(input.id) || turn['status'] !== 'completed') {
       this.failTurn(input);
       return;
@@ -595,23 +674,9 @@ class TurnRunner {
 
 async function releaseLoad(loads: ReturnType<typeof threadLoads>, driver: TurnDriver,
   threadId: string, conversationId: string) {
-  // Start revocation before waiting so a slow catalogue drop does not delay it.
-  const revoking = revokeGrant(driver, threadId, conversationId);
-  try {
-    await loads.forget(threadId);
-  } catch {
-    // Keep the independent grant revocation and catalogue expiry after a failed drop.
-  } finally {
-    await revoking;
-  }
-}
-
-async function revokeGrant(driver: TurnDriver, threadId: string, conversationId: string) {
-  try {
-    await driver.grant(threadId, conversationId, '', 0);
-  } catch {
-    // The completed report is durable; a later grant refresh cannot revive the finished turn.
-  }
+  const revoking = driver.grant(threadId, conversationId, '', 0);
+  const dropping = loads.forget(threadId);
+  await Promise.all([revoking, dropping]);
 }
 
 export function turnRunner(
@@ -620,7 +685,8 @@ export function turnRunner(
   send: (report: BridgeReport) => void,
   closeCurrentSocket: (code: number, reason: string) => void,
   signal: (value: Record<string, unknown>) => void = ignoreSignal,
-  approvals?: Pick<ReturnType<typeof approvalHolds>, 'endThread'>,
+  approvals?: Pick<ReturnType<typeof approvalHolds>, 'endThread'>
+    & Partial<Pick<ReturnType<typeof approvalHolds>, 'stop' | 'size'>>,
 ) {
   return new TurnRunner(driver, journal, send, closeCurrentSocket, signal, approvals);
 }

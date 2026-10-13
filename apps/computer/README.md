@@ -22,7 +22,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes| computer
-  server["apps/server<br/>the back end"] <-->|turns, models, approvals and reports with child thread ids| computer
+  server["apps/server<br/>the back end"] <-->|turns, files, stop requests and reports| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer --> supervisor["Root supervisor<br/>protected launch, admission and exit checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
@@ -38,6 +38,8 @@ flowchart LR
 - Accepts new server passes only through authenticated Kubernetes access as root.
   Local Codex and desktop processes cannot replace them.
 - Runs the bridge that receives chat turns and sends progress reports to the server.
+- Stops all bridge work when an authenticated server closes its work gate. Waits for
+  terminal turn replies and empty thread lists before reporting the bridge quiet.
 - Disables Node debugging in trusted processes so local programs cannot use a debugger
   to read their passes or change their access checks.
 - Runs each turn with the model the server confirms. Keeps that model when renewing
@@ -76,6 +78,10 @@ server whether it can wait for approval. Older computers receive Allow tools onl
    and stops tools and private Codex processes. It checks every worker thread, including
    workers whose main thread has exited, and detached children. If work keeps running,
    it refuses an exit receipt. Its receipt cannot grant desktop control.
+
+The bridge stop request also refuses later turns and file deliveries. It cancels held
+approvals and removes tool lists and model passes. It cannot prove that executors or
+browser automation have stopped. The server does not send this request yet.
 
 The local HTTP listener allows up to 17 minutes to receive a request. This setting
 does not limit how long its reply can wait. Approval waits have their own 15-minute limit.
