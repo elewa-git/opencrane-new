@@ -3,12 +3,15 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
-import { readToolPolicy, setToolPolicy } from '../src/index.ts';
+import { decideApproval, history, priceTableId, readApproval, readToolPolicy,
+  setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
-const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0 });
+const review = { action: 'Write note', consequence: 'The order note changes.',
+  targetArgument: 'order', fields: ['order', 'note'], stepUp: false };
+const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0, review });
 const catalogue = catalogueEvidence([tool]);
 const body = JSON.stringify(capture.body);
 
