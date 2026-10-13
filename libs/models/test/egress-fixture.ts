@@ -1,3 +1,4 @@
+import { guardRelay } from './egress-guard-relay.ts';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, request, type ServerResponse, IncomingMessage } from 'node:http';
@@ -23,7 +24,7 @@ const call = {
 export type EgressScenario = 'allow' | 'deny' | 'stop' | 'revoke' | 'audit-outage' |
   'gate-outage' | 'missing-relay' | 'foreign-relay';
 
-export async function egressFixture(enabled = true) {
+export async function egressFixture(enabled = true, guarded = false) {
   const directory = await mkdtemp(`${tmpdir()}/egress-gateway-`);
   const nats = await natsFixture();
   const actor = new BudgetActor(nats.store, 'test');
@@ -62,6 +63,8 @@ export async function egressFixture(enabled = true) {
   const relayAddress = relay.address();
   if (!relayAddress || typeof relayAddress === 'string') throw new Error('No relay');
   const relayPort = relayAddress.port;
+  let targetPort = relayPort;
+  if (guarded) targetPort = await guardRelay(relayPort);
 
   async function append(subject: string, type: string, data: unknown) {
     const event = envelope('test', subject, type, data);
@@ -112,7 +115,7 @@ export async function egressFixture(enabled = true) {
     await actor.admitDispatch(dispatch, fresh);
     order.push('dispatch');
     if (scenario !== 'missing-relay') {
-      let target = `127.0.0.1:${relayPort}`;
+      let target = `127.0.0.1:${targetPort}`;
       if (scenario === 'foreign-relay') target = 'registry.npmjs.org:443';
       response.setHeader('x-egress-relay', target);
     }
@@ -166,7 +169,8 @@ export async function egressFixture(enabled = true) {
     jwt.setExpirationTime(Math.floor(Date.now() / 1000) + expires);
     return jwt.sign(pair.privateKey);
   }
-  async function tunnel(bearer = '', authority = 'registry.npmjs.org:443') {
+  async function tunnel(bearer = '', authority = 'registry.npmjs.org:443',
+    payload: Buffer = Buffer.from('native-binary-tunnel')) {
     const headers = { host: authority, 'proxy-authorization': `Bearer ${bearer}`,
       authorization: 'Bearer secret-canary', 'x-turn-token': 'secret-canary',
       'x-egress-relay': `127.0.0.1:${relayPort}`, 'x-requester-id': 'secret-canary' };
@@ -187,8 +191,10 @@ export async function egressFixture(enabled = true) {
     }
     socket.on('error', ignoreSocketError);
     if (response.statusCode === 200) {
-      const payload = Buffer.from('native-binary-tunnel');
-      const echoed = once(socket, 'data');
+      let echoed = once(socket, 'data');
+      if (guarded) {
+        echoed = Promise.race([echoed, once(socket, 'close')]);
+      }
       socket.write(payload);
       await echoed;
     }

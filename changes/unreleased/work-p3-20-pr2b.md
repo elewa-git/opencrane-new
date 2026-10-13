@@ -1,0 +1,1 @@
+- Add tested TLS hostname and public DNS checks before an egress connection, sharing the existing remote tool address policy. Relay registration and lifetime controls remain unfinished; startup networking stays off.

@@ -1,31 +1,13 @@
 import { once } from 'node:events';
-import { connect, createServer, type Socket } from 'node:net';
+import { connect, createServer, Socket } from 'node:net';
 import { connect as connectTls } from 'node:tls';
 import { expect, it, onTestFinished } from 'vitest';
+import { clientHello } from './egress-hello-fixture.ts';
 import { connectEgressDestination } from '../src/egress-guard.ts';
 
 const destination = { host: 'registry.npmjs.org', port: 8443 };
 const publicAnswers = [{ address: '1.1.1.1', family: 4 },
   { address: '2606:4700:4700::1111', family: 6 }];
-
-function vector(bytes: Buffer, width = 2) {
-  const length = Buffer.alloc(width);
-  length.writeUIntBE(bytes.length, 0, width);
-  return Buffer.concat([length, bytes]);
-}
-function serverName(host: string) {
-  return Buffer.concat([Buffer.from([0]), vector(Buffer.from(host))]);
-}
-function clientHello(names = [destination.host], extra = Buffer.alloc(0)) {
-  const entries = names.map(serverName);
-  const list = vector(Buffer.concat(entries));
-  const extension = Buffer.concat([Buffer.from([0, 0]), vector(list)]);
-  const extensions = Buffer.concat([extension, extra]);
-  const body = Buffer.concat([Buffer.from([3, 3]), Buffer.alloc(32),
-    Buffer.from([0, 0, 2, 0x13, 1, 1, 0]), vector(extensions)]);
-  const handshake = Buffer.concat([Buffer.from([1]), vector(body, 3)]);
-  return Buffer.concat([Buffer.from([22, 3, 1]), vector(handshake)]);
-}
 
 async function fixture(answers = publicAnswers, stalled = false) {
   const sockets = new Set<Socket>();
@@ -48,9 +30,10 @@ async function fixture(answers = publicAnswers, stalled = false) {
   const accepted = once(listener, 'connection');
   const client = connect(relayAddress.port, '127.0.0.1');
   sockets.add(client);
-  const [incoming]: unknown[] = await accepted;
-  if (!(incoming instanceof Object) || !('destroy' in incoming)) throw new Error('No socket');
-  const socket = incoming as Socket;
+  const acceptedValues: unknown[] = await accepted;
+  const incoming = acceptedValues[0];
+  if (!(incoming instanceof Socket)) throw new Error('No socket');
+  const socket = incoming;
   sockets.add(socket);
   const requests: { address: string; port: number }[] = [];
   const lookups: string[] = [];
@@ -79,14 +62,17 @@ async function fixture(answers = publicAnswers, stalled = false) {
     upstream.close();
     await Promise.all(closed);
   }
-  return { client, begin, requests, lookups, connections: () => connections };
+  return { client, incoming: socket, begin, requests, lookups, connections: () => connections };
 }
 
 async function acceptsFragmentedHello() {
   const setup = await fixture();
   const pending = setup.begin();
   const bytes = clientHello();
+  const firstFragment = once(setup.incoming, 'data');
   setup.client.write(bytes.subarray(0, 2));
+  await firstFragment;
+  expect(setup.requests).toHaveLength(0);
   setup.client.write(bytes.subarray(2, 17));
   setup.client.write(bytes.subarray(17));
   const result = await pending;
@@ -107,7 +93,10 @@ async function acceptsNodeTls() {
     // Stop before TLS negotiation; this test checks the real outgoing ClientHello.
   }
   tls.on('error', ignoreShutdown);
-  onTestFinished(tls.destroy.bind(tls));
+  function stopTls() {
+    tls.destroy();
+  }
+  onTestFinished(stopTls);
   const result = await pending;
   expect(result.initialData[0]).toBe(22);
   expect(setup.requests).toHaveLength(1);
@@ -185,3 +174,28 @@ async function refusesInvalidDestination(host: string, port: number) {
 it.each([['127.0.0.1', 443], ['localhost', 443], ['https://example.com', 443],
   ['example.com', 0], ['example.com', 65536], ['example.com', 1.5]])(
   'validates destination %s:%s before reading or connecting', refusesInvalidDestination);
+
+async function rechecksDns() {
+  const answers = [...publicAnswers];
+  const first = await fixture(answers);
+  const connected = first.begin();
+  first.client.write(clientHello());
+  await connected;
+  answers.splice(0, answers.length, { address: '127.0.0.1', family: 4 });
+  const second = await fixture(answers);
+  const refused = expect(second.begin()).rejects.toThrow('egress_dns_refused');
+  second.client.write(clientHello());
+  await refused;
+  expect(second.lookups).toEqual(['registry.npmjs.org']);
+  expect(second.requests).toHaveLength(0);
+}
+it('resolves a new connection again and refuses a rebound private answer', rechecksDns);
+
+async function refusesMalformedHello(offset: number, value: number) {
+  const bytes = clientHello();
+  bytes[offset] = value;
+  await refusesHello('malformed ClientHello', bytes);
+}
+it.each([[0, 23], [5, 2], [8, 1], [9, 2], [43, 33], [45, 1], [50, 255],
+  [53, 23], [58, 1], [60, 255]])(
+  'refuses malformed TLS fields at byte %s', refusesMalformedHello);

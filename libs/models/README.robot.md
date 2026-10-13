@@ -2,6 +2,36 @@
 
 For people, read [README.md](README.md) first.
 
+## Egress socket checks
+
+P3-20 #61 PR 2b is split again to keep this change near 600 lines.
+`src/egress-guard.ts` provides `connectEgressDestination` for a future relay owner.
+It validates host/port with `egressDestinationSchema`, reads a TLS ClientHello,
+resolves every address, checks all answers, then connects to the first checked IP.
+The caller receives the paused incoming socket's buffered bytes and the connected
+upstream socket. It must forward those bytes and own both sockets afterwards.
+There is no fallback or connection pool. Each call resolves again.
+
+Each read, DNS lookup and connection attempt has a one-second deadline. A ClientHello
+must fit in one TLS record and at most 16 KiB of buffered input. TCP fragmentation
+is supported; a ClientHello split across TLS records is conservatively refused.
+Exactly one visible SNI name must equal the approved, normalised hostname. Missing
+or repeated names, duplicate extensions, malformed lengths and ECH are refused.
+Errors use fixed reasons and never include bytes, DNS replies or underlying messages.
+The production defaults use `lookup({ all: true })` and `net.connect` with a checked IP.
+Tests inject both functions and map that IP to a recording loopback upstream.
+
+The shared `address-policy.ts` moved unchanged from server integrations. Both remote
+MCP discovery and this guard now use it through the models package.
+The existing gateway assertions remain. Additional cases use these socket checks
+behind real gateway/NATS fixtures and check exact bytes without outer credentials.
+
+NOT BUILT in this split: single-use permit registration, relay expiry, closing by
+permit/destination/all, close records, checked-set fallback, or production wiring.
+Capabilities, admission rules, durable receipts and watchdogs remain later work.
+CONNECT stays off at startup. Fresh-install egress qualification remains NOT RUN.
+Own checks are recorded in [the receipt](../../docs/process/p3-20-pr2b-guard.md).
+
 ## Native egress route qualification
 
 P3-20 #61 PR 2 is split at the gateway prerequisite to stay below 600 changed lines.
@@ -26,14 +56,15 @@ to extAuthz. Production egress admission is not implemented by this part.
 `test/egress-gateway.test.ts` uses real disposable NATS and the checksum-verified
 gateway with a recording loopback relay. The control service is a test fixture.
 It also verifies tokens strictly; the gateway JWT check alone permits clock skew.
-The fixture is not a production capability issuer, policy reader or socket guard.
+The fixture is not a production capability issuer or policy reader. Its optional
+guard listener tests only the socket checks described above.
 
 Remaining PR 2 work: complete operation-bound capability checks, all three rules,
-bounded DNS and pinned public sockets, TLS SNI checks, active closure, watchdogs and
+single-use relays with the socket checks above, active closure, watchdogs and
 durable outage/open/close receipts. The binary removes raw Host before extAuthz;
 authority/Host disagreement still needs proof or the accepted broker fallback.
-Mixed/rebound DNS, forbidden address/protocol coverage, expiry of an open tunnel
-and fresh-install journeys are NOT RUN here. No worker or browser uses this route.
+The first routing-only receipt did not cover DNS or TLS checks. Open-tunnel expiry
+and fresh-install journeys remain NOT RUN. No worker or browser uses this route.
 The [receipt](../../docs/process/p3-20-pr2-gateway.md) records this limited proof.
 
 ## Dated MCP catalogue evidence

@@ -6,7 +6,7 @@ import type { IncomingMessage, ClientRequest } from 'node:http';
 import type { RequestOptions } from 'node:https';
 import { losslessJson } from '@opencrane/models';
 import { z } from 'zod';
-import { isPublicAddress, remoteEndpoint } from './address-policy.ts';
+import { isPublicAddress, remoteEndpoint } from '@opencrane/models';
 
 export const version = '2026-07-28';
 export interface RemoteNetwork {
