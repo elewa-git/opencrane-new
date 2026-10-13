@@ -340,7 +340,17 @@ adds separate content and IAM progress. Revoked access does not wait for either.
 An exact retry returns the original receipt; changed arguments return
 `command_id_reused`. Status reads save nothing. Removed callers receive 403,
 including for status. An Admin who removes themselves and loses the reply
-learns the result from that 403. Cleanup remains unavailable.
+learns the result from that 403. Cleanup status remains unavailable.
+
+The dispatcher reacts to reviewed removals by removing current group memberships,
+revoking direct and personal-assistant grants, and deactivating personal assistants.
+It discovers resources when it runs, including grants added after the review.
+It requires the inventory index to be current, then reads exact resource streams.
+Missing or oversized inventory and failed writes leave the job for retry.
+Old removals without `reviewRevision` cause no cleanup writes.
+Group grants, shared assistants, computers, connections and other members are untouched.
+Computer suspension, a completion event and `cleanup: applying|unknown` status are
+still pending. No successful job in this first part means that departure is complete.
 
 ## Access and departure inventory
 

@@ -29,7 +29,7 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks startup, saved turn references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance records and revisions| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|reads assistant and provider choices, drain changes and spending mode; checks nightly memory records| events["libs/events<br/>checks records<br/>previews dates"]
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records and subscriptions| events["libs/events<br/>checks records<br/>previews dates"]
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks tool admission, personal connection references and blocks, control, turns and spending| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
@@ -71,6 +71,7 @@ value calculated from those definitions. Older records remain readable for repla
 
 - Defines tool dispatch records, unsupported consent refusals, requester retries and safe invitation refusal records.
 - Records the departure review used for a member removal. Older removals still replay.
+  Names the reaction that removes groups and personal grants after reviewed removal.
 - Defines owner appointment requests and confirmations on member records.
 
 - Define records for pausing new model turns, cancelling that pause and switching on managed calls.

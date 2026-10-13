@@ -136,6 +136,7 @@ NATS, PostgreSQL and OpenFGA where those services hold the result.
 
 | Handler | Event type | Current-state check | Test |
 | --- | --- | --- | --- |
+| cleanup-departure | member.removed | Require the saved reviewed removal; read current indexed resources; keep one removal outcome per resource. Computer cleanup and completion remain pending. | departure-cleanup |
 | prepare-personal-key | member.joined | Check current membership; retain the existing private key, including for none. | personal-keys |
 | prepare-personal-key | silo.owner_bootstrapped | Skip a removed owner; retain the existing private key. | personal-keys |
 | create-assistant | member.joined | Skip a removed member or an existing assistant. | assistant-choice |

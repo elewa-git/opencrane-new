@@ -509,3 +509,29 @@ No model, tool, computer or budget port is available to the scan.
 
 Tests: `apps/ops/test/nightly-memory.test.ts` uses real PostgreSQL and NATS,
 including two child processes. Live fresh-install qualification remains NOT RUN.
+
+## Departure cleanup, first part
+
+`cleanup-departure` subscribes to `member.removed`. The saved removal must carry
+`reviewRevision`; historical unreviewed removals append nothing. The handler checks
+the member stream again before each conditional resource append. It uses the
+member inventory index and exact team, assistant and grant streams, with a ten-second
+read/write deadline, 10,000-event total bound and the index's existing resource limits.
+A behind, missing or rebuilding index, failed read or failed append leaves the job
+unfinished. Each command id hashes the silo, removal id, operation, stream and resource.
+The event time comes from an injectable clock.
+
+Groups lose only the removed member. Direct and personal-assistant grants are revoked;
+personal assistants become inactive. Group grants, shared assistants, computers,
+connections and other members are untouched. Existing OpenFGA handlers apply the saved
+changes. This part writes no completion event and makes no IAM-completion claim.
+Computer suspension, the lost-computer claim guard, receipt-confirmed completion and
+bounded applying/unknown status remain for the next part of #85 row 10.
+The [handler upgrade procedure](#handler-subscription-upgrade) enables the new pair.
+Read-table rebuild runs no reactions.
+
+`test/departure-cleanup.test.ts` uses real disposable NATS, PostgreSQL and OpenFGA.
+It covers current resources, retries, incomplete inventory, legacy removal, rebuild
+and the upgrade dry-run. Run with `PG_TEST_URL` and `nice -n 10 npx vitest run
+apps/ops/test/departure-cleanup.test.ts --maxWorkers=2` from the root.
+Fresh-install departure and return qualification: NOT RUN.

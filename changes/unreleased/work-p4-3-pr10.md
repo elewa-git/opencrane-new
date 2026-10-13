@@ -1,0 +1,1 @@
+After a reviewed member removal, background cleanup removes their group memberships and personal grants and deactivates their personal assistant. Computer cleanup and completion status remain pending.
