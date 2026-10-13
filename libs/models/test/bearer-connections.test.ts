@@ -62,12 +62,12 @@ async function close() {
 }
 beforeAll(initialise, 120_000);
 afterAll(close);
-function fixture() {
+function fixture(memberId = 'alice') {
   counter += 1;
   const input = { action: 'create' as const, serverId: 'server', connectionId: 'installed',
     profileId: `profile${counter}`, changeRef: `change${counter}`, expectedSequence: 0,
     expectedGeneration: 0, appendUntil: Date.now() + 60_000 };
-  const subject = `connection-alice-server-${input.profileId}`;
+  const subject = `connection-${memberId}-server-${input.profileId}`;
   const staged = new Map<string, string>();
   function stage(request: ConnectionStage, supplied: string) {
     const previous = staged.get(request.operationId);
@@ -83,7 +83,7 @@ function fixture() {
   }
   const custody: Pick<ReturnType<typeof connectionCustody>, 'stage'> = { stage };
   async function save(command: unknown = input, supplied = material) {
-    return saveBearerConnection(nats.store, binding, 'alice', custody, command, supplied);
+    return saveBearerConnection(nats.store, binding, memberId, custody, command, supplied);
   }
   return { input, subject, custody, save };
 }
@@ -347,3 +347,159 @@ async function adminDisable() {
   expect(JSON.stringify({ rows, retry })).not.toContain(material);
 }
 it('keeps an admin disable across staging, owner revoke and a new profile', adminDisable);
+
+async function joinMember(memberId: string, role: 'member' | 'admin' = 'member') {
+  const data = { memberId, role, email: `${memberId}@example.test`, displayName: memberId };
+  const event = envelope('test', `member-${memberId}`, 'member.joined', data);
+  const result = await nats.store.append({ event, expectedSequence: 0 });
+  expect(result.status).toBe('appended');
+  const auth = memberAuthorisation(binding);
+  await auth.handler.handle(event, pgDb(storage.queue));
+}
+
+async function disableBeforeSaveAppend(action: 'create' | 'rotate' | 'reconnect') {
+  const memberId = `commit-${action}`;
+  await joinMember(memberId);
+  const existing = fixture(memberId);
+  const created = await existing.save();
+  const disable = { ...controlInput(existing, 0), action: 'disable', userId: memberId };
+  if (action === 'reconnect') {
+    const old = fixture(memberId);
+    const saved = await old.save();
+    const revoke = { ...controlInput(old, saved.sequence), userId: memberId };
+    await changePersonalConnection(nats.store, binding, memberId, revoke);
+  }
+  let target = existing;
+  let input: unknown = { ...existing.input, action: 'rotate', changeRef: 'rotation',
+    expectedSequence: created.sequence, expectedGeneration: 1 };
+  let expectedSequence = created.sequence;
+  if (action !== 'rotate') {
+    target = fixture(memberId);
+    input = target.input;
+    expectedSequence = 0;
+  }
+  const append = nats.store.append.bind(nats.store);
+  let disabledSequence = 0;
+  async function disableThenAppend(command: AppendCommand) {
+    // Pause the save after its last check, then let the real disable finish first.
+    fault.mockRestore();
+    const disabled = await changePersonalConnection(nats.store, binding, 'admin', disable);
+    disabledSequence = disabled.sequence;
+    return append(command);
+  }
+  const fault = vi.spyOn(nats.store, 'append');
+  fault.mockImplementationOnce(disableThenAppend);
+  try {
+    await expect(target.save(input)).rejects.toThrow('Connection append unconfirmed');
+  } finally {
+    fault.mockRestore();
+  }
+  expect(disabledSequence).toBeGreaterThan(created.sequence);
+  expect(await nats.store.head(target.subject)).toBe(expectedSequence);
+  const blocked = await history(nats.store, `connection-control-${memberId}-server`, 'test');
+  expect(blocked).toHaveLength(1);
+  expect(blocked[0]!.sequence).toBe(disabledSequence);
+  expect(JSON.stringify(blocked)).not.toContain(material);
+}
+it.each(['create', 'rotate', 'reconnect'] as const)(
+  'refuses %s when disable commits after the last save check', disableBeforeSaveAppend);
+
+async function disableDuringFinalSaveCheck() {
+  const memberId = 'final-control-watch';
+  await joinMember(memberId);
+  const test = fixture(memberId);
+  const created = await test.save();
+  const disable = { ...controlInput(test, 0), action: 'disable', userId: memberId };
+  const rotate = { ...test.input, action: 'rotate', changeRef: 'final-check',
+    expectedSequence: created.sequence, expectedGeneration: 1 };
+  const head = nats.store.head.bind(nats.store);
+  const stage = test.custody.stage;
+  let staged = false;
+  async function finishStage(request: ConnectionStage, supplied: string) {
+    const result = await stage(request, supplied);
+    staged = true;
+    return result;
+  }
+  async function disableAfterBlockerRead(subject?: string, deadline?: number) {
+    if (staged && subject === 'mcp-server') {
+      staged = false;
+      await changePersonalConnection(nats.store, binding, 'admin', disable);
+    }
+    return head(subject, deadline);
+  }
+  test.custody.stage = finishStage;
+  const fault = vi.spyOn(nats.store, 'head');
+  fault.mockImplementation(disableAfterBlockerRead);
+  try {
+    await expect(test.save(rotate)).rejects.toThrow('Authority changed');
+  } finally {
+    fault.mockRestore();
+  }
+  expect(await nats.store.head(test.subject)).toBe(created.sequence);
+  const blocked = await history(nats.store, `connection-control-${memberId}-server`, 'test');
+  expect(blocked).toHaveLength(1);
+}
+it('watches the control stream after the final blocker read', disableDuringFinalSaveCheck);
+
+const membershipChanges = [
+  { action: 'disable', retry: false },
+  { action: 'disable', retry: true },
+  { action: 'revoke', retry: false },
+  { action: 'revoke', retry: true },
+] as const;
+async function losesMembershipDuringHistory(change: typeof membershipChanges[number]) {
+  const memberId = `history-${change.action}-${String(change.retry)}`;
+  const adminId = `admin-${memberId}`;
+  await joinMember(memberId);
+  await joinMember(adminId, 'admin');
+  const test = fixture(memberId);
+  const created = await test.save();
+  let actorId = memberId;
+  let subject = test.subject;
+  let expectedSequence = created.sequence;
+  if (change.action === 'disable') {
+    actorId = adminId;
+    subject = `connection-control-${memberId}-server`;
+    expectedSequence = 0;
+  }
+  const input = { ...controlInput(test, expectedSequence),
+    action: change.action, userId: memberId };
+  if (change.retry) {
+    const saved = await changePersonalConnection(nats.store, binding, actorId, input);
+    expectedSequence = saved.sequence;
+  }
+  const readStream = nats.store.readStream.bind(nats.store);
+  let changed = false;
+  async function* changeDuringHistory(stream: string, from?: number, deadline?: number) {
+    yield* readStream(stream, from, deadline);
+    if (stream !== test.subject || changed) {
+      return;
+    }
+    changed = true;
+    let type = 'member.removed';
+    let data: unknown = { memberId: actorId, removedBy: 'admin' };
+    if (change.action === 'disable') {
+      type = 'member.role_changed';
+      data = { memberId: actorId, previousRole: 'admin', newRole: 'member', changedBy: 'admin' };
+    }
+    const event = envelope('test', `member-${actorId}`, type, data);
+    await nats.seed([event]);
+  }
+  const fault = vi.spyOn(nats.store, 'readStream');
+  fault.mockImplementation(changeDuringHistory);
+  let refusal = 'Active silo membership required';
+  if (change.action === 'disable') {
+    refusal = 'Owner or Admin required';
+  }
+  try {
+    await expect(changePersonalConnection(nats.store, binding, actorId, input))
+      .rejects.toThrow(refusal);
+  } finally {
+    fault.mockRestore();
+  }
+  expect(changed).toBe(true);
+  expect(await nats.store.head(subject)).toBe(expectedSequence);
+}
+it.each(membershipChanges)(
+  'rechecks membership after profile history for $action (retry: $retry)',
+  losesMembershipDuringHistory);
