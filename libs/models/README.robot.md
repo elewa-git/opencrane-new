@@ -120,7 +120,9 @@ The future minting caller must also check current root, access and spending rule
 History and grant summaries load before the two-second access check. That check watches
 only the existing small authority streams. Later root activity is read incrementally.
 `test/descendant-admission.test.ts` uses real NATS, PostgreSQL, OpenFGA and gateway
-fixtures. `test/delegation.test.ts` retains the refusal of native credentials and calls.
+fixtures. The duplicate-window test uses the already installed Apache-2.0 NATS client
+(`@nats-io/jetstream` 3.4.0), declared as a test dependency.
+`test/delegation.test.ts` retains the refusal of native credentials and calls.
 The tests cover lost replies at either append, retries after NATS duplicate expiry,
 competing starts, changed bindings and references, missing/legacy/closed records,
 unavailable reads and projection replay. These records grant no call authority and

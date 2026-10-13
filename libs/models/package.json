@@ -25,5 +25,8 @@
     "@opencrane/protocol": "0.1.0"
   },
   "license": "AGPL-3.0-or-later",
-  "description": "The AI access and spending library for OpenCrane."
+  "description": "The AI access and spending library for OpenCrane.",
+  "devDependencies": {
+    "@nats-io/jetstream": "3.4.0"
+  }
 }
