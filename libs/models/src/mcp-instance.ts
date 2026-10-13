@@ -14,6 +14,8 @@ const referenceSchema = z.strictObject({ instanceId: z.string().regex(/^[a-f0-9]
   profileId: id, serverId: id });
 const commandSchema = z.strictObject({ action: z.enum(['wake', 'stop']), changeRef: id,
   expectedSequence: z.int().nonnegative(), runGeneration: z.int().positive().optional() });
+const adminStopSchema = z.strictObject({ changeRef: id,
+  expectedSequence: z.int().nonnegative() });
 
 export class McpInstanceRefused extends Error {
   readonly reason: 'reference' | 'conflict' | 'profile_or_admission_unavailable';
@@ -170,4 +172,82 @@ export async function mcpInstanceCommand(store: EventStore, binding: Binding,
   if (!saved) throw new Error('Saved instance change unavailable');
   reconcileStop(saved, event);
   return receipt(saved);
+}
+
+function adminReceipt(row: StoredEvent) {
+  const stop = mcpInstanceStopSchema.parse(row.event.data);
+  return { status: 'applied' as const, changeRef: stop.changeRef,
+    sequence: row.sequence, runGeneration: stop.runGeneration, reason: stop.reason };
+}
+
+function adminChange(rows: StoredEvent[], changeRef: string, adminId: string) {
+  const original = findChange(rows, changeRef);
+  if (!original) return undefined;
+  if (original.event.type !== 'mcp.instance_stop_requested') return undefined;
+  const stop = mcpInstanceStopSchema.parse(original.event.data);
+  if (stop.reason !== 'admin_stop' || stop.requestedBy !== adminId) return undefined;
+  return original;
+}
+
+function findChange(rows: StoredEvent[], changeRef: string) {
+  function hasChange(row: StoredEvent) {
+    return matchesChange(row, changeRef);
+  }
+  return rows.find(hasChange);
+}
+
+export async function mcpAdminInstanceChange(store: EventStore, binding: Binding,
+  adminId: string, reference: unknown, changeRef: string) {
+  id.parse(changeRef);
+  // Check the role before loading another member's instance history.
+  await readActiveMember(store, binding, adminId, 'admin');
+  const current = await readMcpInstance(store, binding.silo, reference);
+  const original = adminChange(current.rows, changeRef, adminId);
+  if (!original) return { status: 'unknown' as const };
+  return adminReceipt(original);
+}
+
+export async function mcpAdminInstanceStop(store: EventStore, binding: Binding,
+  adminId: string, reference: unknown, raw: unknown) {
+  const input = adminStopSchema.parse(raw);
+  // Check the role before loading another member's instance history.
+  await readActiveMember(store, binding, adminId, 'admin');
+  const current = await readMcpInstance(store, binding.silo, reference);
+  const fresh = await authorityFence(store, performance.now(), [`member-${adminId}`]);
+  await activeMember(store, binding, adminId, { requiredRole: 'admin', fresh });
+  const original = findChange(current.rows, input.changeRef);
+  if (original) {
+    if (original.event.type !== 'mcp.instance_stop_requested') {
+      throw new McpInstanceRefused('conflict', 'Instance change payload mismatch');
+    }
+    const saved = mcpInstanceStopSchema.parse(original.event.data);
+    if (saved.reason !== 'admin_stop' || saved.requestedBy !== adminId ||
+        saved.expectedSequence !== input.expectedSequence) {
+      throw new McpInstanceRefused('conflict', 'Instance change payload mismatch');
+    }
+    await fresh();
+    return adminReceipt(original);
+  }
+  if (input.expectedSequence !== current.state.sequence ||
+      current.state.phase === 'sleeping' || current.state.phase === 'stopping') {
+    throw new McpInstanceRefused('conflict', 'Instance revision or run mismatch');
+  }
+  const data = { instanceId: current.state.start.instanceId,
+    runGeneration: current.state.start.runGeneration,
+    startChangeRef: current.state.start.changeRef, changeRef: input.changeRef,
+    expectedSequence: input.expectedSequence, requestedBy: adminId,
+    reason: 'admin_stop' as const };
+  const subject = `mcp-instance-${current.state.start.instanceId}`;
+  const event = { id: randomUUID(), commandId: input.changeRef,
+    silo: binding.silo, subject, type: 'mcp.instance_stop_requested', data,
+    time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
+    principal: { kind: 'human' as const, id: adminId } };
+  await fresh();
+  const result = await store.append({ event, expectedSequence: current.state.sequence,
+    historyChecked: true, deadline: fresh.deadline });
+  if (result.status !== 'appended') throw new Error('Instance append unconfirmed');
+  const saved = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
+  if (!saved) throw new Error('Saved instance change unavailable');
+  reconcileStop(saved, event);
+  return adminReceipt(saved);
 }

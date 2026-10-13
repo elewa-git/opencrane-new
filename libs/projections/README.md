@@ -25,7 +25,7 @@ flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, tool review and publication, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
   projections -->|saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
-  store["libs/event-store<br/>saved events"] -->|ordered events, nightly records, tool holds and checked private instance revisions| projections
+  store["libs/event-store<br/>saved events"] -->|ordered events, nightly records, tool holds and private instance stops and reports| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
 ```
@@ -39,6 +39,8 @@ the chat read table, so history pages and live chat show only public rows.
 
 The optional private tool-instance table keeps each recorded run and its status.
 It checks each new observation against the preceding saved revision.
+An admin stop shows its reason to the instance owner. An owner stop must come from
+that owner.
 Rebuilding it starts no process and releases no credentials. Its worker is not enabled yet.
 
 The tool catalogue keeps exact tool definitions and their check and expiry dates.

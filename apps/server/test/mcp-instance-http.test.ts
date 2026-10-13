@@ -54,9 +54,9 @@ function headers(memberId = 'alice', orgId = 'org-test') {
     origin: new URL(config.redirectUri).origin };
 }
 
-async function start(siloId = 'test') {
+async function start(siloId = 'test', userId = 'alice') {
   counter += 1;
-  const identity = { siloId, userId: 'alice', profileId: `profile-${counter}`,
+  const identity = { siloId, userId, profileId: `profile-${counter}`,
     serverId: 'server-id', startupAccessGeneration: 1 };
   const instanceId = mcpInstanceId(identity);
   const requestedAt = new Date().toISOString();
@@ -340,7 +340,7 @@ function adminUrl(reference: Awaited<ReturnType<typeof start>>['reference'], act
 }
 
 async function adminRoutes() {
-  const fixture = await start();
+  const fixture = await start('test', 'bob');
   const url = adminUrl(fixture.reference, '/stop');
   const payload = { ...fixture.stop, profileId: fixture.reference.profileId };
   const request = { method: 'POST' as const, url, headers: headers('carol'), payload };
@@ -349,7 +349,8 @@ async function adminRoutes() {
   expect(saved.headers['cache-control']).toBe('no-store');
   expect(saved.json()).toEqual({ status: 'applied', changeRef: payload.changeRef,
     sequence: fixture.sequence + 1, runGeneration: 1, reason: 'admin_stop' });
-  const ownerStatus = await app.inject({ url: instanceUrl(fixture.reference), headers: headers() });
+  const ownerStatus = await app.inject({ url: instanceUrl(fixture.reference),
+    headers: headers('bob') });
   expect(ownerStatus.json()).toMatchObject({ state: 'stopping', reason: 'admin_stop' });
   const change = adminUrl(fixture.reference,
     `/changes/${payload.changeRef}?profileId=${fixture.reference.profileId}`);
@@ -359,6 +360,12 @@ async function adminRoutes() {
     `/changes/${fixture.data.changeRef}?profileId=${fixture.reference.profileId}`);
   expect((await app.inject({ url: missing, headers: headers('carol') })).json())
     .toEqual({ status: 'unknown' });
+  const absent = { ...fixture.reference, instanceId: 'f'.repeat(64) };
+  const absentChange = adminUrl(absent,
+    `/changes/${payload.changeRef}?profileId=${fixture.reference.profileId}`);
+  const unknown = await app.inject({ url: absentChange, headers: headers('carol') });
+  expect(unknown.statusCode).toBe(404);
+  expect(unknown.json()).toEqual({ status: 'unknown' });
   expect((await app.inject(request)).json()).toEqual(saved.json());
   expect((await app.inject({ ...request, payload: { ...payload,
     expectedSequence: fixture.sequence + 1 } })).statusCode).toBe(409);
@@ -377,6 +384,9 @@ async function adminMemberRefusals() {
         headers: headers(memberId), payload });
       expect(response.statusCode).toBe(403);
     }
+    const otherOrganisation = await app.inject({ method: 'POST', url,
+      headers: headers('carol', 'foreign'), payload });
+    expect(otherOrganisation.statusCode).toBe(403);
     expect(read).not.toHaveBeenCalledWith(fixture.event.subject,
       expect.anything(), expect.anything());
   } finally {
@@ -384,8 +394,14 @@ async function adminMemberRefusals() {
   }
   for (const action of ['', '/stop', '/wake']) {
     const requestUrl = instanceUrl(fixture.reference, action);
-    const response = await app.inject({ method: action ? 'POST' : 'GET',
-      url: requestUrl, headers: headers('carol'), payload: action ? fixture.stop : undefined });
+    let response;
+    if (action) {
+      response = await app.inject({ method: 'POST', url: requestUrl,
+        headers: headers('carol'), payload: fixture.stop });
+    } else {
+      response = await app.inject({ method: 'GET', url: requestUrl,
+        headers: headers('carol') });
+    }
     expect(response.statusCode).toBe(404);
   }
   expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);

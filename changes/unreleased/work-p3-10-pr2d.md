@@ -1,0 +1,1 @@
+Owners and admins can stop another member's private tool instance and check their own original stop result. Members cannot use these organisation commands. Stopping records intent; it does not start or release an instance.

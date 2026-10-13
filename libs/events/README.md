@@ -27,13 +27,11 @@ the hash of encrypted survey bytes.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end"] -.->|checks startup, saved turn references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
-  store["libs/event-store<br/>saved event log"] -.->|checks instance records and revisions| events
+  store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, subscriptions and nightly memory records| events["libs/events<br/>checks records<br/>previews dates"]
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, turns and spending| events
   computer["apps/computer<br/>report text check"] -.-> events
-  events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
-  events -.-> zones["Intl<br/>built-in time zone rules"]
 ```
 
 Tool catalogue records keep exact definitions and the dates of successful or failed checks.
@@ -48,7 +46,7 @@ Define publication requests and ordered gateway records without private review t
   Check each saved answer’s hash without reading a private key. A hash is a
   fixed-length value calculated from the encrypted bytes.
 
-- Define private tool-instance starts, observations and owner stop requests.
+- Define private tool-instance starts, observations, and owner or admin stop requests.
   Require a system writer and change reference for new worker observations.
   These records contain identity and timing details, with no credentials or callable status.
   A counter names the version of startup access material, separately from process starts.

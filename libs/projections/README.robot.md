@@ -524,6 +524,9 @@ the run generation by one. Changed UID/spec or late old-run records refuse repla
 New observations must name the preceding saved sequence. Older observations without
 `expectedSequence` retain their run and Pod checks.
 No phase grants callable access. A late starting observation cannot undo a stop.
+An `owner_stop` must name the instance owner. An `admin_stop` keeps its reason in
+the owner's status. The command checks the admin role; this fold checks the saved
+stop against the exact run and preceding sequence.
 `ProjectionRunner.rebuild(mcpInstances)` rebuilds this table without external work.
 The ops worker and replay CLI do not register this projection yet.
 

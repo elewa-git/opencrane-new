@@ -16,7 +16,7 @@ export const mcpInstanceStartSchema = identitySchema.extend({
 export const mcpInstanceStopSchema = z.strictObject({
   instanceId: digest, runGeneration: z.int().positive(), startChangeRef: id,
   changeRef: id, expectedSequence: z.int().nonnegative(), requestedBy: id,
-  reason: z.literal('owner_stop'),
+  reason: z.enum(['owner_stop', 'admin_stop']),
 });
 const observation = z.strictObject({
   instanceId: digest, runGeneration: z.int().positive(), startChangeRef: id,
@@ -70,6 +70,6 @@ export const mcpInstanceEvents = [
     mcpInstanceStartSchema, startExample),
   event('mcp.instance_observed', 'mcp-instance', 'A worker recorded an exact instance run.',
     mcpInstanceObservedSchema, observedExample),
-  event('mcp.instance_stop_requested', 'mcp-instance', 'The owner requested an instance stop.',
+  event('mcp.instance_stop_requested', 'mcp-instance', 'An owner or admin requested a stop.',
     mcpInstanceStopSchema, stopExample),
 ];

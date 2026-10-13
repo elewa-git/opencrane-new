@@ -246,7 +246,8 @@ it('refuses stale runs, replacement Pods and callable claims; a 404 remains unkn
 
 async function adminStopAndRead() {
   const fixture = await start();
-  const command = { ...fixture.stop };
+  const command = { changeRef: fixture.stop.changeRef,
+    expectedSequence: fixture.stop.expectedSequence };
   const saved = await mcpAdminInstanceStop(nats.store, binding, 'carol', fixture.reference, command);
   expect(saved).toEqual({ status: 'applied', changeRef: command.changeRef,
     sequence: fixture.sequence + 1, runGeneration: 1, reason: 'admin_stop' });
@@ -264,17 +265,21 @@ async function adminStopAndRead() {
     .rejects.toThrow();
   await expect(mcpAdminInstanceStop(nats.store, binding, 'carol', fixture.reference,
     { ...command, expectedSequence: saved.sequence })).rejects.toThrow();
+  await expect(mcpAdminInstanceStop(nats.store, binding, 'carol', fixture.reference,
+    { ...command, changeRef: fixture.data.changeRef })).rejects.toThrow();
   expect(await history(nats.store, fixture.event.subject, 'test')).toHaveLength(2);
 }
 it('saves one admin stop and exposes only that admin’s original change', adminStopAndRead);
 
 async function adminRefusals() {
   const fixture = await start();
+  const command = { changeRef: fixture.stop.changeRef,
+    expectedSequence: fixture.stop.expectedSequence };
   const read = vi.spyOn(nats.store, 'readStream');
   try {
     for (const memberId of ['alice', 'bob']) {
       await expect(mcpAdminInstanceStop(nats.store, binding, memberId,
-        fixture.reference, fixture.stop)).rejects.toThrow();
+        fixture.reference, command)).rejects.toThrow();
     }
     expect(read).not.toHaveBeenCalledWith(fixture.event.subject,
       expect.anything(), expect.anything());
@@ -285,23 +290,133 @@ async function adminRefusals() {
     { ...fixture.reference, serverId: 'foreign' },
     { ...fixture.reference, profileId: 'My account' }]) {
     await expect(mcpAdminInstanceStop(nats.store, binding, 'carol', reference,
-      fixture.stop)).rejects.toThrow();
+      command)).rejects.toThrow();
   }
   await expect(mcpAdminInstanceStop(nats.store, { ...binding, silo: 'foreign' },
-    'carol', fixture.reference, fixture.stop)).rejects.toThrow();
+    'carol', fixture.reference, command)).rejects.toThrow();
   await expect(mcpAdminInstanceStop(nats.store, binding, 'carol', fixture.reference,
-    { ...fixture.stop, expectedSequence: 0 })).rejects.toThrow();
+    { ...command, expectedSequence: 0 })).rejects.toThrow();
   expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
 }
 it('refuses member, foreign identity and stale admin commands without an event', adminRefusals);
 
+async function refusesDemotedAdmin() {
+  const fixture = await start();
+  const command = { changeRef: fixture.stop.changeRef,
+    expectedSequence: fixture.stop.expectedSequence };
+  const originalRead = nats.store.readStream.bind(nats.store);
+  let changed = false;
+  async function* demoteDuringHistory(subject: string, from?: number, deadline?: number) {
+    yield* originalRead(subject, from, deadline);
+    if (subject !== fixture.event.subject || changed) return;
+    changed = true;
+    const event = envelope('test', 'member-carol', 'member.role_changed', {
+      memberId: 'carol', previousRole: 'admin', newRole: 'member', changedBy: 'dave' });
+    await nats.seed([event]);
+  }
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(demoteDuringHistory);
+  try {
+    await expect(mcpAdminInstanceStop(nats.store, binding, 'carol', fixture.reference,
+      command)).rejects.toThrow();
+  } finally {
+    read.mockRestore();
+  }
+  expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
+}
+it('checks the admin role again after instance history is loaded', refusesDemotedAdmin);
+
+async function adminRetryAfterLaterRun() {
+  const fixture = await start();
+  const observation = { instanceId: fixture.reference.instanceId, runGeneration: 1,
+    startChangeRef: fixture.data.changeRef, podUid: 'admin-pod',
+    workloadSpecDigest: fixture.data.workloadSpecDigest, state: 'starting' };
+  const observed = envelope('test', fixture.event.subject, 'mcp.instance_observed', observation);
+  const starting = await nats.store.append({ event: observed,
+    expectedSequence: fixture.sequence });
+  if (starting.status !== 'appended') throw new Error('Observation fixture failed');
+  const command = { changeRef: fixture.stop.changeRef,
+    expectedSequence: starting.sequence };
+  const saved = await mcpAdminInstanceStop(nats.store, binding, 'dave', fixture.reference, command);
+  let projected: ReturnType<typeof applyMcpInstance>;
+  const rows = await history(nats.store, fixture.event.subject, 'test');
+  for (const row of rows) {
+    projected = applyMcpInstance(projected, row.event, row.sequence);
+  }
+  const lateStarting = envelope('test', fixture.event.subject,
+    'mcp.instance_observed', observation);
+  expect(applyMcpInstance(projected, lateStarting, saved.sequence + 1))
+    .toMatchObject({ phase: 'stopping', reason: 'admin_stop' });
+  await expect(mcpAdminInstanceStop(nats.store, binding, 'dave', fixture.reference,
+    { ...command, changeRef: 'while-stopping' })).rejects.toThrow();
+  const absent = envelope('test', fixture.event.subject, 'mcp.instance_observed',
+    { ...observation, state: 'absent' });
+  const sleeping = await nats.store.append({ event: absent,
+    expectedSequence: saved.sequence });
+  if (sleeping.status !== 'appended') throw new Error('Absence fixture failed');
+  await expect(mcpAdminInstanceStop(nats.store, binding, 'dave', fixture.reference,
+    { ...command, changeRef: 'while-sleeping',
+      expectedSequence: sleeping.sequence })).rejects.toThrow();
+  const next = envelope('test', fixture.event.subject, 'mcp.instance_start_requested',
+    { ...fixture.data, runGeneration: 2, changeRef: 'later-run' });
+  await nats.store.append({ event: next, expectedSequence: sleeping.sequence });
+  expect(await mcpAdminInstanceStop(nats.store, binding, 'dave', fixture.reference, command))
+    .toEqual(saved);
+  const append = vi.spyOn(nats.store, 'append');
+  try {
+    const runner = new ProjectionRunner(pgDb(storage.queue), nats.reader,
+      createLogger('admin-stops', { level: 'silent' }));
+    await runner.initialise(mcpInstances);
+    await runner.rebuild(mcpInstances);
+    expect(await mcpAdminInstanceChange(nats.store, binding, 'dave', fixture.reference,
+      command.changeRef)).toEqual(saved);
+    expect(await mcpAdminInstanceChange(nats.store, binding, 'dave', fixture.reference,
+      'missing-change')).toEqual({ status: 'unknown' });
+    expect(append).not.toHaveBeenCalled();
+  } finally {
+    append.mockRestore();
+  }
+}
+it('keeps the admin receipt after a later run and refuses sleeping or stopping runs',
+  adminRetryAfterLaterRun);
+
+async function concurrentAdminStops() {
+  const fixture = await start();
+  const command = { changeRef: fixture.stop.changeRef,
+    expectedSequence: fixture.stop.expectedSequence };
+  const attempts = [
+    mcpAdminInstanceStop(nats.store, binding, 'dave', fixture.reference, command),
+    mcpAdminInstanceStop(nats.store, binding, 'dave', fixture.reference, command),
+  ];
+  const receipts = await Promise.all(attempts);
+  expect(receipts[1]).toEqual(receipts[0]);
+  expect(await history(nats.store, fixture.event.subject, 'test')).toHaveLength(2);
+}
+it('saves only one event for concurrent unchanged admin requests', concurrentAdminStops);
+
+async function ownerChangeCannotBecomeAdminChange() {
+  const fixture = await start();
+  const ownerStop = await mcpInstanceCommand(nats.store, binding, 'alice',
+    fixture.reference, fixture.stop);
+  const command = { changeRef: fixture.stop.changeRef,
+    expectedSequence: fixture.stop.expectedSequence };
+  await expect(mcpAdminInstanceStop(nats.store, binding, 'dave', fixture.reference,
+    command)).rejects.toThrow();
+  expect(await mcpAdminInstanceChange(nats.store, binding, 'dave', fixture.reference,
+    command.changeRef)).toEqual({ status: 'unknown' });
+  expect(await nats.store.head(fixture.event.subject)).toBe(ownerStop.sequence);
+}
+it('does not adopt an owner’s stop under the admin’s change reference',
+  ownerChangeCannotBecomeAdminChange);
+
 async function foldRejectsForeignOwnerStop() {
   const fixture = await start();
   const current = applyMcpInstance(undefined, fixture.event, fixture.sequence)!;
-  const event = envelope('test', fixture.event.subject, 'mcp.instance_stop_requested', {
+  const event = { ...fixture.event, type: 'mcp.instance_stop_requested',
+    principal: { kind: 'human' as const, id: 'carol' }, data: {
     instanceId: fixture.reference.instanceId, runGeneration: 1,
     startChangeRef: fixture.data.changeRef, changeRef: 'bad-owner',
-    expectedSequence: fixture.sequence, requestedBy: 'carol', reason: 'owner_stop' });
+    expectedSequence: fixture.sequence, requestedBy: 'carol', reason: 'owner_stop' } };
   expect(() => applyMcpInstance(current, event, fixture.sequence + 1)).toThrow();
 }
 it('refuses an owner stop requested by someone else', foldRejectsForeignOwnerStop);

@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks calls, holds and spending stops; tests private CONNECT routing and public address checks| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending before provider switch-on; saves publication, gateway, spending, connection, instance and child admission records| store["libs/event-store<br/>event log"]
+  models -->|checks open spending before provider switch-on; saves publication, gateway, spending, connection and instance stops; records matching child admissions| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -57,6 +57,9 @@ Other hosted images still need image admission.
   Derive the run for browser commands and keep retries tied to their original run.
   Check the saved stop before returning its receipt, so a concurrent retry cannot
   claim success for different details under the same request id.
+- Let owners and admins stop another member's private tool instance. Check their role
+  before reading that instance, then again before saving. Show each admin only their
+  own original stop changes.
 - Check a worker against one saved private tool run and record its observations.
   Stop retrying a report when the worker pass expires or is replaced.
   Refuse old runs, different Pods and changed retries. Missing workloads stay unknown.

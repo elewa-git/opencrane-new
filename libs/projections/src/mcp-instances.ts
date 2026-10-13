@@ -18,7 +18,7 @@ export interface McpInstanceState {
   sequence: number;
   phase: 'waking' | 'stopping' | 'sleeping' | 'unavailable' | 'unknown';
   podUid?: string;
-  reason?: ReturnType<typeof mcpInstanceObservedSchema.parse>['reason'];
+  reason?: ReturnType<typeof mcpInstanceObservedSchema.parse>['reason'] | 'admin_stop';
 }
 const types = new Set(['mcp.instance_start_requested', 'mcp.instance_stop_requested',
   'mcp.instance_observed']);
@@ -40,10 +40,12 @@ export function applyMcpInstance(current: McpInstanceState | undefined,
   }
   if (event.type === 'mcp.instance_stop_requested') {
     const stop = mcpInstanceStopSchema.parse(data);
-    if (stop.requestedBy !== current.start.userId || stop.expectedSequence !== current.sequence) {
+    if ((stop.reason === 'owner_stop' && stop.requestedBy !== current.start.userId) ||
+        stop.expectedSequence !== current.sequence) {
       throw new Error('Instance stop mismatch');
     }
-    return { ...current, sequence, phase: 'stopping' };
+    const reason = stop.reason === 'admin_stop' ? 'admin_stop' : undefined;
+    return { ...current, sequence, phase: 'stopping', reason };
   }
   return applyObservation(current, event, sequence);
 }
@@ -67,8 +69,18 @@ function applyObservation(current: McpInstanceState, event: EventEnvelope,
   if (observed.state === 'unknown') phase = 'unknown';
   if (observed.state === 'stopping') phase = 'stopping';
   if (observed.state === 'absent') phase = 'sleeping';
+  const reason = observationReason(current, phase, observed.reason);
   // Keep late starting reports from undoing stop or confirmed absence.
-  return { ...current, sequence, phase, podUid: observed.podUid, reason: observed.reason };
+  return { ...current, sequence, phase, podUid: observed.podUid, reason };
+}
+
+function observationReason(current: McpInstanceState, phase: McpInstanceState['phase'],
+  reported: McpInstanceState['reason']) {
+  // Keep the admin's stop reason when a late report has no new reason.
+  if (phase === 'stopping' && current.reason === 'admin_stop' && !reported) {
+    return current.reason;
+  }
+  return reported;
 }
 
 function applyStart(current: McpInstanceState | undefined, event: EventEnvelope,

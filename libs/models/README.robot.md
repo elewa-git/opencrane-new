@@ -1510,6 +1510,13 @@ Commands may omit `runGeneration`; a new command uses the current run and an
 unchanged retry uses its saved original run. Explicit runs remain checked for internal callers.
 `McpInstanceRefused` distinguishes foreign or missing references, conflicting input
 and unavailable profile/admission prerequisites. Unexpected dependency errors stay unavailable.
+`mcpAdminInstanceStop` checks the owner or admin role before reading another member's
+instance. It loads the instance history before a two-second check on `member-<adminId>`.
+The event records `admin_stop` and the admin's human principal. One conditional append
+saves it. An unchanged retry returns the saved run and sequence after later runs.
+`mcpAdminInstanceChange` checks the role once, then returns only stops made by that
+admin. An owner's start or stop and another admin's stop remain unknown to the reader.
+Both admin routes accept opaque ids only; the server supplies silo, actor and run.
 `mcpInstanceWorkerRegistration` checks the fixed identity, original start, run,
 workload digest, known Pod UID and exact revision before issuing a worker pass.
 `mcpInstanceObservation` accepts the checked registration separately from report input.
