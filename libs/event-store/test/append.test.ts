@@ -332,3 +332,36 @@ async function stopsRetriesAtTheCallerDeadline() {
   expect(await fixture.store.head()).toBe(0);
 }
 it('stops append retries at the caller access deadline', stopsRetriesAtTheCallerDeadline);
+
+async function stopsWhenBackoffUsesRemainingPermission() {
+  fixture = await natsFixture();
+  const client = jetstream(fixture.connection);
+  const manager = await jetstreamManager(fixture.connection);
+  const store = new EventStore(client, manager);
+  const started = performance.now();
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
+  let attempts = 0;
+  function failPublish(): Promise<never> {
+    attempts += 1;
+    if (attempts === 1) {
+      // Reproduce a timer waking just before the last fraction of permission expires.
+      clock.mockReturnValue(started + 9.75);
+    } else {
+      clock.mockReturnValue(started + 11);
+    }
+    return Promise.reject(new TimeoutError());
+  }
+  client.publish = failPublish;
+  const command = { event: event('backoff-uses-permission'), expectedSequence: 0,
+    historyChecked: true, deadline: started + 10 };
+  try {
+    const result = await store.append(command);
+    expect(result.status).toBe('unavailable');
+    expect(attempts).toBe(1);
+  } finally {
+    clock.mockRestore();
+  }
+  expect(await fixture.store.head()).toBe(0);
+}
+it('does not publish again when backoff uses the last fraction of permission time',
+  stopsWhenBackoffUsesRemainingPermission);
