@@ -1,1 +1,1 @@
-- Fix private chat startup by running the pinned Codex JavaScript wrapper with Node debugging disabled. Update image probes to use protected credential delivery and check the newly built image.
+- Fix private chat startup while keeping Node debugging disabled and credential delivery protected. Publish the checked computer image after gVisor and lifecycle checks, including keeping home files through image upgrades.

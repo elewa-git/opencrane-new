@@ -37,12 +37,17 @@ function receiveReport(raw) {
 function fixtureCredential() {
   const issuedAt = Math.floor(Date.now() / 1000);
   const claims = { typ: 'computer', jti: 'probe', iat: issuedAt, exp: issuedAt + 600 };
-  const header = Buffer.from(JSON.stringify({ alg: 'ES256', typ: 'JWT' }));
-  const payload = Buffer.from(JSON.stringify(claims));
+  const headerFields = { alg: 'ES256', typ: 'JWT' };
+  const headerJson = JSON.stringify(headerFields);
+  const header = Buffer.from(headerJson);
+  const payloadJson = JSON.stringify(claims);
+  const payload = Buffer.from(payloadJson);
   const content = `${header.toString('base64url')}.${payload.toString('base64url')}`;
-  const keyPair = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const keyOptions = { namedCurve: 'P-256' };
+  const keyPair = generateKeyPairSync('ec', keyOptions);
   const signingOptions = { key: keyPair.privateKey, dsaEncoding: 'ieee-p1363' };
-  const signature = sign('sha256', Buffer.from(content), signingOptions);
+  const signingBytes = Buffer.from(content);
+  const signature = sign('sha256', signingBytes, signingOptions);
   const value = `${content}.${signature.toString('base64url')}`;
   return { id: claims.jti, value, expiresAt: claims.exp * 1000 };
 }
