@@ -31,7 +31,8 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   let next: ToolPolicy = { ...state, ...identity, sequence, policyRevision: sequence };
   if (event.type === 'mcp.server_registered') {
     const startupReviewRequired = requiresStartupReview(data);
-    next = { ...emptyToolPolicy(), ...identity, sequence, policyRevision: sequence, startupReviewRequired };
+    next = { ...emptyToolPolicy(), ...identity, sequence, policyRevision: sequence,
+      startupReviewRequired, driftHeld: state.driftHeld === true };
   }
   if (event.type === 'mcp.server_discovered') {
     const catalogue = mcpServerDiscoveredDataSchema.parse(parsed);
@@ -41,7 +42,8 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     next = applyReview(next, state, event);
   }
   if (event.type === 'mcp.server_published') {
-    next.published = state.startupReviewRequired !== true;
+    // Keep drift held until the publication path can confirm the exact applied revision.
+    next.published = state.startupReviewRequired !== true && state.driftHeld !== true;
   }
   if (event.type === 'mcp.server_rejected' && isStartupRefusal(data)) {
     next.startupReviewRequired = true;
@@ -50,6 +52,7 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     next.published = false;
   }
   if (event.type === 'mcp.tools_changed') {
+    next.driftHeld = true;
     next = applyChange(next, state, data);
   }
   if (event.type === 'mcp.tool_mode_set') {
@@ -143,7 +146,8 @@ function applyMode(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy
 
 function applyCheck(state: ToolPolicy, data: Record<string, unknown>, sequence: number) {
   if (data['outcome'] === 'failed') {
-    return { ...state, sequence, expiresAt: null };
+    // End old approvals even if a successful check arrives before anyone reads them.
+    return { ...state, sequence, policyRevision: sequence, expiresAt: null };
   }
   if (!state.catalogue || data['schemaDigest'] !== state.catalogue.schemaDigest) {
     throw new Error('Catalogue check does not match the saved snapshot');
@@ -193,7 +197,7 @@ function applyChange(next: ToolPolicy, state: ToolPolicy, data: Record<string, u
 }
 
 export function isToolPolicyAvailable(policy: ToolPolicy, now = Date.now()) {
-  if (policy.startupReviewRequired === true) {
+  if (policy.startupReviewRequired === true || policy.driftHeld === true) {
     return false;
   }
   return policy.published && policy.catalogue !== null && policy.checkedAt !== null &&

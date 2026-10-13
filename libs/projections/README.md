@@ -24,8 +24,8 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, tool admission, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
-  projections -->|saves public chat rows, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
-  store["libs/event-store<br/>saved events"] -->|ordered events, nightly records and checked private instance revisions| projections
+  projections -->|saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
+  store["libs/event-store<br/>saved events"] -->|ordered events, nightly records, tool holds and checked private instance revisions| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
 ```
@@ -46,6 +46,10 @@ match their hashes before review choices are kept. A hash is a fixed-length valu
 calculated from the definitions. Checks renew only the same server in the same silo.
 A fresh catalogue check does not approve startup credentials. Required startup review
 keeps calls blocked.
+
+A saved tool change holds the whole server, including tools whose definitions stayed
+the same. Fresh checks, another review and restarting a worker cannot lift that hold.
+Restoration needs a confirmed publication path, which is not built yet.
 
 - Keep dated tool snapshots and the earlier list after a change.
 

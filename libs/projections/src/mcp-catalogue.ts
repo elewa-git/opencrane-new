@@ -80,21 +80,22 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
       const data: unknown = getEventDefinition(event.type)?.dataSchema.parse(event.data);
       const serverId = field(data, 'serverId');
       if (event.subject !== `mcp-${serverId}`) throw new Error('MCP subject mismatch');
+      const existing = await db.query(
+        `SELECT server_id, policy FROM ${tables.catalogue} WHERE silo = $1 AND server_id = $2`,
+        [event.silo, serverId]);
+      const savedPolicy = existing.rows[0]?.['policy'];
+      const current = savedPolicy ? toolPolicySchema.parse(savedPolicy) : emptyToolPolicy();
+      const policy = applyToolPolicy(current, event, position);
       if (event.type === 'mcp.server_registered') {
         await db.query(`INSERT INTO ${tables.catalogue} (silo, server_id, source_kind, locator, catalogue_ref, server_name, server_version, tool_count, lifecycle, changed_at, position, policy) VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, 'registered', $6, $7, $8)
         ON CONFLICT (silo, server_id) DO UPDATE SET source_kind = $3, locator = $4,
         catalogue_ref = $5, server_name = NULL, server_version = NULL,
         tool_count = NULL, policy = $8, lifecycle = 'registered', changed_at = $6, position = $7`,
         [event.silo, serverId, field(data, 'kind'), field(data, 'locator'), optionalField(data, 'catalogueRef'),
-          event.time, position, JSON.stringify(applyToolPolicy(emptyToolPolicy(), event, position))]);
+          event.time, position, JSON.stringify(policy)]);
         return;
       }
-      const existing = await db.query(`SELECT server_id, policy FROM ${tables.catalogue} WHERE silo = $1 AND server_id = $2`,
-        [event.silo, serverId]);
       if (!existing.rows.length) throw new Error('MCP event requires a registered server');
-      const savedPolicy = existing.rows[0]?.['policy'];
-      const current = savedPolicy ? toolPolicySchema.parse(savedPolicy) : emptyToolPolicy();
-      const policy = applyToolPolicy(current, event, position);
       await db.query(`UPDATE ${tables.catalogue} SET policy = $3 WHERE silo = $1 AND server_id = $2`, [event.silo, serverId, JSON.stringify(policy)]);
       if (policyOnlyEvents.has(event.type)) return;
       if (event.type === 'mcp.tool_mode_set') {

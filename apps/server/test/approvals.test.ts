@@ -94,6 +94,62 @@ async function exactReviewFixture() {
 }
 it('starts approval tests with an exact saved review and a published Ask tool', exactReviewFixture);
 
+const checkOutcomes = ['unchanged', 'failed', 'drift'] as const;
+async function checksApprovalAfterRenewal(outcome: typeof checkOutcomes[number]) {
+  const setup = await approvalFixture();
+  try {
+    expect((await setup.call()).text).toContain('approvalId');
+    const session = setup.headers();
+    const { cards, csrf } = await setup.read(session);
+    const approvalId = cards[0]!.approvalId;
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    let snapshot = before.catalogue!;
+    const checkedAt = new Date().toISOString();
+    const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+    if (outcome === 'failed') {
+      const failure = { serverId: 'fixture', outcome, checkedAt, reason: 'discovery_timeout' };
+      await setup.append('mcp-fixture', 'mcp.catalogue_checked', failure);
+    }
+    if (outcome === 'drift') {
+      const added = toolEvidence({ name: 'another', reviewed: false, costCents: 0 });
+      const evidence = catalogueEvidence([...snapshot.tools!, added]);
+      snapshot = { ...snapshot, ...evidence };
+      const change = { serverId: 'fixture', previousSchemaDigest: before.catalogue!.schemaDigest,
+        newSchemaDigest: snapshot.schemaDigest, catalogue: snapshot };
+      await setup.append('mcp-fixture', 'mcp.tools_changed', change);
+      const publication = { serverId: 'fixture', publishedBy: 'alice' };
+      await setup.append('mcp-fixture', 'mcp.server_published', publication);
+    }
+    const renewal = { serverId: 'fixture', outcome: 'unchanged', checkedAt, expiresAt,
+      schemaDigest: snapshot.schemaDigest };
+    await setup.append('mcp-fixture', 'mcp.catalogue_checked', renewal);
+    // Leave the approval unread during failure and recovery, as when its worker is stopped.
+    await setup.restart();
+    const decision = { method: 'POST' as const, url: '/api/conversations/conversation/approvals',
+      headers: { ...session, 'x-csrf-token': csrf },
+      payload: { approvalId, decision: 'approved' } };
+    const response = await setup.app.inject(decision);
+    if (outcome === 'unchanged') {
+      expect(response.statusCode, response.body).toBe(200);
+      expect((await setup.call()).status).toBe(200);
+      expect(setup.received()).toBe(1);
+    } else {
+      expect(response.statusCode, response.body).toBe(409);
+      const current = await readApproval(setup.nats.store, 'test', approvalId);
+      expect(current.state).toBe('cancelled');
+      const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+      expect(rows.at(-1)?.event.type).toBe('approval.cancelled');
+      const headers = { 'x-opencrane-approval-id': approvalId };
+      expect((await setup.call(undefined, headers)).status).toBe(403);
+      expect(setup.received()).toBe(0);
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it.each(checkOutcomes)('checks waiting approval after %s and renewal',
+  checksApprovalAfterRenewal);
+
 it('opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart', async () => {
   const f = await approvalFixture();
   try {

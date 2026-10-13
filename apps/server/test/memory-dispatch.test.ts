@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
 import { dirname } from 'node:path';
 import { decodeJwt } from 'jose';
@@ -92,9 +92,9 @@ async function renewCredentials() {
   const renewed = await setup.issue();
   Object.assign(setup.headers, renewed);
 }
-beforeAll(prepare, 120_000);
+beforeEach(prepare, 120_000);
 beforeEach(renewCredentials);
-afterAll(close);
+afterEach(close);
 
 async function memoryBinding(target: typeof setup) {
   const policy = await readToolPolicy(target.nats.store, 'test', 'memory');
@@ -161,9 +161,7 @@ async function refusesChangedMemory(change: typeof dispatchChanges[number], oper
       } else {
         const outcome = 'failed';
         const checkedAt = new Date().toISOString();
-        const expiresAt = new Date(Date.now() + 300_000).toISOString();
-        const check = { serverId: 'memory', outcome, checkedAt, expiresAt,
-          schemaDigest: memoryCatalogue.schemaDigest };
+        const check = { serverId: 'memory', outcome, checkedAt, reason: 'discovery_timeout' };
         await setup.append('mcp-memory', 'mcp.catalogue_checked', check);
       }
     }
@@ -179,6 +177,10 @@ async function refusesChangedMemory(change: typeof dispatchChanges[number], oper
     expect(response.status).toBe(403);
     expect(capability).toBe('');
     expect(backendRequests).toBe(0);
+    if (change === 'hold') {
+      const policy = await readToolPolicy(setup.nats.store, 'test', 'memory');
+      expect(policy.expiresAt).toBeNull();
+    }
   } finally {
     delayed.mockRestore();
     if (generation === undefined) {
@@ -187,6 +189,10 @@ async function refusesChangedMemory(change: typeof dispatchChanges[number], oper
       configured.generation = generation;
     }
     await govern(setup);
+    if (change === 'catalogue') {
+      const held = await readToolPolicy(setup.nats.store, 'test', 'memory');
+      expect(held.published).toBe(false);
+    }
   }
 }
 async function refusesChangedRecall(change: typeof dispatchChanges[number]) {

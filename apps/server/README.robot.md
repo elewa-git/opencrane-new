@@ -2,6 +2,11 @@
 
 For people, read [README.md](README.md) first.
 
+`test/approvals.test.ts` covers saved drift and a failed catalogue check followed by
+renewal while an approval is unread. The existing approval reader saves cancellation;
+a late Approve cannot send a call. An unchanged check alone preserves approval.
+Gateway restart is covered; no watch worker is added by #48 PR 3's first part.
+
 ## Computer credential delivery
 
 The bridge connection caller and lifecycle worker share `SandboxClient.credentials`.
