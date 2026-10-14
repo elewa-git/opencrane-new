@@ -5,7 +5,7 @@ export const bridgeEvents = [
   event(
     'agent.turn_stop_requested',
     'conversation',
-    'A member requested interruption; retain text recorded before this event.',
+    'A member or spending stop requested interruption; retain earlier recorded text.',
     data.agentTurnStopRequestedDataSchema,
     { conversationId: 'conv_1', turnId: 'turn_1', requestedBy: 'mem_1' },
   ),

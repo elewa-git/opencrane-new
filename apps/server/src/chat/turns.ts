@@ -70,6 +70,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
     requested.requesterId, requested.sharingClass);
   if (!data) return;
   let fresh: WriteAuthority | undefined;
+  let confirmBudget: WriteAuthority | undefined;
   let status = input.status;
   let refusal: TurnAdmissionRejected | undefined;
   requireThreadOwner(facts, data);
@@ -82,6 +83,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
         requested.executionMode, executionMode);
       if (admission.payer) data.payingGroupId = admission.payer;
       fresh = admission.fresh;
+      confirmBudget = admission.confirmBudget;
     } catch (error) {
       if (!isFinalAdmissionRefusal(error)) throw error;
       refusal = new TurnAdmissionRejected(error.message, { cause: error });
@@ -105,10 +107,16 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   await fresh?.();
   await saveTurn(store, facts, event, data);
   if (refusal) throw refusal;
-  if (input.status === 'started') return { ...data, threadId: z.string().parse(data.threadId),
+  // Check stops saved while the separate computer append was waiting before returning a pass.
+  await confirmBudget?.();
+  if (input.status === 'started') return admittedTurn(data, executionMode);
+  return undefined;
+}
+
+function admittedTurn(data: TurnBinding, executionMode: ExecutionMode | undefined) {
+  return { ...data, threadId: z.string().parse(data.threadId),
     executionMode: executionMode ?? 'memory_free',
     ...(data.sharingClass ? { sharingClass: data.sharingClass } : {}) };
-  return undefined;
 }
 
 function startExecutionMode(facts: ComputerFacts, input: TurnInput) {
@@ -121,7 +129,7 @@ async function startAuthority(store: EventStore, context: TurnContext, conversat
   const started = facts.turn?.firstStart;
   if (started) {
     const work = { ...data, assistantId: context.assistantId };
-    const admittedAt = started.sequence;
+    const admittedAt = conversation.message!.position;
     const stop = await turnBudgetStop(store, context.silo, work, admittedAt,
       performance.now() + 10_000);
     const authority = await requireTurnMember(store, context.silo, data.requesterId);
@@ -134,7 +142,7 @@ async function startAuthority(store: EventStore, context: TurnContext, conversat
       await authority();
       requireNoBudgetStop(currentStop);
     }
-    return { fresh, payer: undefined };
+    return { fresh, payer: undefined, confirmBudget: fresh };
   }
   return admitTurn(store, context, conversation, facts, data, requested, mode);
 }
@@ -353,21 +361,35 @@ async function admitTurn(store: EventStore, context: TurnContext, conversation: 
   const required = requiredExecutionMode(details.kind, requested);
   if (mode !== required) throw new TurnAdmissionRejected('Execution mode mismatch');
   requireFreshPrivateThread(facts, data, mode);
-  // Read provider configuration before starting the short access check.
+  const queued = { conversationId: data.conversationId, turnId: data.turnId,
+    position: conversation.message!.position,
+    payingGroupId: details.kind === 'team'
+      ? sessionDetails.parse(conversation.created).payingGroupId : undefined };
+  // Read provider and budget history before starting the short access check.
   const admission = await providerTurnAdmission(store, context.silo,
-    context.assistantId, performance.now() + 10_000);
+    context.assistantId, performance.now() + 10_000, queued);
   applyProviderChoice(data, admission);
   const payer = await payingGroup(store, context, conversation, data.requesterId, details,
     admission.defaultPayingGroupId);
+  requireNoBudgetStop(admission.stopId);
   const deadline = payer.fresh?.deadline ?? performance.now() + 2000;
   async function confirmAdmission() {
-    const current = await providerTurnAdmission(store, context.silo, context.assistantId, deadline);
+    const current = await providerTurnAdmission(
+      store, context.silo, context.assistantId, deadline, queued);
+    requireNoBudgetStop(current.stopId);
     if (current.enabled !== admission.enabled || current.draining !== admission.draining) {
       throw new TurnAdmissionRejected('Provider setup changed; try again');
     }
     await payer.fresh?.();
   }
-  return { payer: payer.payer, fresh: confirmAdmission };
+  async function confirmSavedBudget() {
+    const current = await providerTurnAdmission(
+      store, context.silo, context.assistantId, deadline, queued);
+    await payer.fresh?.();
+    requireNoBudgetStop(current.stopId);
+  }
+  // Keep provider switch-on refusal at its existing send gate after a start was saved.
+  return { payer: payer.payer, fresh: confirmAdmission, confirmBudget: confirmSavedBudget };
 }
 
 

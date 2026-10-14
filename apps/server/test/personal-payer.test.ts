@@ -18,7 +18,7 @@ function event(id: string, subject: string, type: string) {
 function ceiling(id: string, scope: string, defaultPayingGroupId?: string): EventEnvelope {
   const base = event(id, 'budget-test', 'budget.ceiling_set');
   return { ...base, data: { scope, ceilingCents: 20000, setBy: 'alice',
-    ...(scope === 'global' ? {} : { scopeId: 'group' }),
+    ...(scope === 'global' ? { dailyCeilingCents: 20000 } : { scopeId: 'group' }),
     ...(defaultPayingGroupId ? { defaultPayingGroupId } : {}) } };
 }
 async function start(id: string) {

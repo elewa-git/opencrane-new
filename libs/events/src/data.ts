@@ -311,7 +311,7 @@ export const agentTurnStartedDataSchema = z
 export const agentOutputLostDataSchema = z.object({ conversationId: id, turnId: id }).strict();
 
 export const agentTurnCompletedDataSchema = z.object({ conversationId: id, turnId: id }).strict();
-export const agentTurnStopRequestedDataSchema = z.object({ conversationId: id, turnId: id, requestedBy: id }).strict();
+export { agentTurnStopRequestedDataSchema } from './turn-stop.ts';
 
 export const agentTurnFailedDataSchema = z
   .object({ conversationId: id, turnId: id, reason: reasonCodeSchema })

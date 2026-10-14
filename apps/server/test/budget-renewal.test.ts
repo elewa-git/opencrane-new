@@ -86,3 +86,31 @@ async function refusesAccessBeforeSpending(test: typeof accessRefusals[number]) 
 }
 it.each(accessRefusals)('refuses a $state before revealing a spending stop',
   refusesAccessBeforeSpending);
+
+async function refusesQueuedStartAfterRecovery() {
+  const actor = await seedTurn();
+  const queued = envelope('test', 'conversation-conversation', 'message.posted', {
+    conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' }, 'queued');
+  await nats.seed([queued]);
+  const limit = { scope: 'paying_group', scopeId: 'personal-default', setBy: 'alice' };
+  await actor.configure({ ...limit, ceilingCents: 0 });
+  await actor.configure({ ...limit, ceilingCents: 20000 });
+  const queuedStart = { ...input, turnId: 'queued', threadId: 'queued-thread' };
+  await expect(turnCommand(nats.store, context, queuedStart)).rejects.toThrow('spending');
+}
+it('refuses a queued start after recovery before the stop handler has run',
+  refusesQueuedStartAfterRecovery);
+
+async function refusesNewMessageDuringStop() {
+  const actor = await seedTurn();
+  await actor.configure({ scope: 'paying_group', scopeId: 'personal-default',
+    ceilingCents: 0, setBy: 'alice' });
+  const queued = envelope('test', 'conversation-conversation', 'message.posted', {
+    conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' }, 'new');
+  await nats.seed([queued]);
+  const newStart = { ...input, turnId: 'new', threadId: 'new-thread' };
+  await expect(turnCommand(nats.store, context, newStart)).rejects.toThrow('spending');
+}
+it('refuses a new message while the spending stop is already active', refusesNewMessageDuringStop);

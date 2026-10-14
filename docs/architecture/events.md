@@ -285,7 +285,7 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `message.posted` | person, or the system for routines | messages | browser delivery (WebSocket) in every mode; only `agent_session` dispatches to its assistant's computer and wakes it if suspended |
 | `agent.memory_context_recorded` | server (trusted) | private turn identity, generations, reference additions, scope positions and bounded byte counts; no text; excluded from the public conversation feed | server turn summary; replay creates no dispatch permission |
 | `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity (`executionMode` on starts; `restricted_tool_refused` on failures) | browser (WebSocket); notify on failure |
-| `agent.turn_stop_requested` | member command | activity; freeze partial text at this position | bridge interrupts an active turn; queued turns do not start; browser keeps partial text on replay |
+| `agent.turn_stop_requested` | member command or stop-budget-turns | activity; freeze partial text at this position | bridge interrupts an active turn; queued turns do not start; browser keeps partial text on replay |
 | `agent.message_delta` | bridge (reported) | messages | encrypted text deltas; browser replay with positions and generations |
 | `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Encrypted deltas are retained for gap-free replay |
 | `agent.output_lost` | bridge (reported) | activity | browser (WebSocket); never replayed into context |
@@ -393,7 +393,7 @@ counts process starts for that fixed identity.
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `budget.ceiling_set` | admin | budgets | — |
+| `budget.ceiling_set` | admin | budgets, stop-budget-turns | zero or binding lowered ceilings request affected turn stops |
 | `budget.root_allowance_set` | budget actor | budgets | — |
 | `budget.root_stopped` | budget actor | budgets | — |
 | `budget.reserved` | budget actor (inside `ext_authz`) | budgets | — |
@@ -401,7 +401,7 @@ counts process starts for that fixed identity.
 | `budget.call_dispatch_admitted` | budget actor at the final gateway check | budgets | — |
 | `budget.settled` | budget actor (on `effect.observed` or admission rejected before dispatch) | budgets, usage | — |
 | `budget.period_started` | timer (00:00 UTC on the 1st) | budgets | — |
-| `budget.exhausted` | budget actor | budgets | notify admins; stop affected work (hard stop cascades) |
+| `budget.exhausted` | budget actor | budgets, stop-budget-turns | request affected turn stops; computer interruption delivery is separate |
 
 A root is one turn's fixed allowance. `budget.root_allowance_set` binds rootId,
 requesterId, conversationId, turnId, threadId, assistantId, computerId, generation,
@@ -677,6 +677,7 @@ events. Desktop admission additionally requires an explicit member
 | --- | --- |
 | `cleanup-departure` | `member.removed` |
 | `cleanup-memory` | `memory.forgotten` |
+| `stop-budget-turns` | `budget.ceiling_set`, `budget.exhausted` |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
 | `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |
 | `update-openfga` | `provider.created`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
@@ -836,3 +837,9 @@ changes; preparation rereads after conflicts. Each member names one exact review
 its original change and its source position. Later source events make the record stale.
 These are preparation inputs; the full route renderer and fixed model/memory routes remain
 for the next part. No worker prepares records on replay, and no record establishes Ready.
+
+Budget turn stops use `reason: budget` and `stopId`, referring to the saved budget
+record. They contain no spending amounts or payer ids. Member stops retain their
+original `requestedBy` shape. The dispatcher waits for the conversations projection
+to reach the source position, then checks exact histories and conditionally appends
+one stop per unfinished affected turn. Projection replay never runs this reaction.

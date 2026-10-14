@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|builds configuration; checks calls, holds and spending stops; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|builds configuration; checks calls, holds and stops against queued work; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on; saves publication, gateway, root allowance, overrun, spending, connection and instance stops; records matching child admissions| store["libs/event-store<br/>event log"]
 ```
@@ -196,6 +196,12 @@ Older holds keep their money because their senders used older rules.
 Later confirmed usage can still settle their cost.
 
 ## Processes it handles
+
+A saved spending stop makes the dispatcher record Stop for each affected unfinished
+turn and queued message. It checks the conversation index has caught up first.
+The record ends waiting approvals and survives a later limit increase. Queued messages
+keep the payer selected when they were saved, even if the default payer changes.
+Renewal and send checks use that message's position in the event log.
 
 The catalogue watch starts with calls paused and reads the tool list again. The models
 process uses its result before issuing a pass and immediately before sending a call.

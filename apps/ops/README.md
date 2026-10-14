@@ -12,7 +12,7 @@ This is the background workers layer. `apps/server` records events, and these wo
 flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events, departures and owner appointments| ops["apps/ops<br/>workers and memory replay"]
-  ops -->|records departure changes| nats
+  ops -->|records departure changes and spending turn stops| nats
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables and jobs; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
@@ -45,6 +45,10 @@ flowchart LR
 - Runs one-off upgrades for model access, the default budget group and handler subscriptions.
 
 ## Processes it handles
+
+A spending stop creates durable jobs on the existing dispatcher. Each job checks
+saved admissions and records Stop for affected turns, even with no computer connected.
+A delayed conversation index makes the job retry. Rebuilding tables sends no stops.
 
 The dispatcher also uses PostgreSQL's job queue to check enabled memory scopes each night.
 It records why a dirty scope is blocked or missed. Failed triggers keep their original night

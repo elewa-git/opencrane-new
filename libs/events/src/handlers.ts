@@ -3,6 +3,7 @@
 export const handlerSubscriptions = {
   "cleanup-departure": ["member.removed"],
   "cleanup-memory": ["memory.forgotten"],
+  "stop-budget-turns": ["budget.ceiling_set", "budget.exhausted"],
   "settle-budget": ["effect.observed", "effect.resolved", "computer.lost"],
   "update-members": [
     "member.invited",

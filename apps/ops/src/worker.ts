@@ -1,5 +1,5 @@
 import { budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
-  providerDefaultHandler, initialiseBudgetProjection } from '@opencrane/models';
+  providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
@@ -116,7 +116,7 @@ try {
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),
       issuer: required('TOKEN_ISSUER') });
     const available = [authorisation.handler, ownershipSeedHandler(commands.store),
-      ownershipConfirmationHandler(commands.store),
+      ownershipConfirmationHandler(commands.store), budgetStopHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
       ...lifecycleHandlers(commands.store), departureCleanupHandler(commands.store)];
     const personalDirectory = process.env['PERSONAL_KEY_DIRECTORY']?.trim();

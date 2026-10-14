@@ -547,3 +547,12 @@ It covers current resources, retries, incomplete inventory, legacy removal, rebu
 and the upgrade dry-run. Run with `PG_TEST_URL` and `nice -n 10 npx vitest run
 apps/ops/test/departure-cleanup.test.ts --maxWorkers=2` from the root.
 Fresh-install departure and return qualification: NOT RUN.
+
+## Durable spending stop jobs
+
+The dispatcher always registers `stop-budget-turns` from `libs/models`.
+The handler uses the existing conversations projection checkpoint and exact saved
+histories; missing or delayed projection data fails the job for retry. Deployments
+must upgrade dispatcher subscriptions using the existing handler upgrade command.
+Conversation rebuild still requires readers and workers to be stopped.
+Bridge delivery ordering is separate follow-up work.

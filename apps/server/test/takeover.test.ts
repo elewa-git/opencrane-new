@@ -28,7 +28,8 @@ async function setup() {
     granteeKind: 'member', grantedBy: 'owner',
   }, true);
   await fixture.append('budget-test', 'budget.ceiling_set', {
-    scope: 'global', ceilingCents: 20000, setBy: 'alice', defaultPayingGroupId: 'personal',
+    scope: 'global', ceilingCents: 20000, dailyCeilingCents: 20000,
+    setBy: 'alice', defaultPayingGroupId: 'personal',
   });
   const rows = [];
   for await (const row of fixture.nats.store.readStream('conversation-chat')) rows.push(row);
