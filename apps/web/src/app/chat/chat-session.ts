@@ -8,7 +8,8 @@ import { WebSocketService } from '../core/websocket.service';
 import { conversationStatus, isActiveTurn, isBudgetStop, lastConfirmedTurnAt,
   recoveredLostTurn, transcript, uploadedFile } from './chat-state';
 import { shortTime } from './file-presentation';
-import { displayAgentSessions, isSelectedConversation, isTeamConversation, resumeAgentSession }
+import { displayAgentSessions, includeRequestedConversation, isSelectedConversation,
+  isTeamConversation, resumeAgentSession }
   from './conversations-data';
 
 class ReadFailure extends Error {
@@ -134,13 +135,8 @@ export class ChatSession implements OnDestroy {
           this.requestedUnavailable.set(true);
           return;
         }
-        const matchesRequested = isSelectedConversation.bind(null, id);
-        const listed = this.conversations().some(matchesRequested);
-        if (!listed) {
-          const rows: ChatConversation[] = [...this.conversations()];
-          rows.push(requested.row);
-          this.conversations.set(rows);
-        }
+        const conversations = includeRequestedConversation(this.conversations(), requested.row);
+        this.conversations.set(conversations);
         this.requestedUnavailable.set(false);
         this.requestedLookupFailed.set(false);
         await this.select(id);

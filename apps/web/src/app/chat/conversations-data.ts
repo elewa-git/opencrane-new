@@ -182,6 +182,15 @@ export function isTeamConversation(row: ChatConversation | undefined): boolean {
   return row?.mode === 'agent_session' && row.assistantKind === 'team';
 }
 
+export function includeRequestedConversation(
+  rows: ChatConversation[], requested: ChatConversation,
+): ChatConversation[] {
+  for (const row of rows) {
+    if (row.conversationId === requested.conversationId) return rows;
+  }
+  return [...rows, requested];
+}
+
 export function isSelectedConversation(conversationId: string, row: ChatConversation): boolean {
   return row.conversationId === conversationId;
 }
