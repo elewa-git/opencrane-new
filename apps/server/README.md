@@ -17,8 +17,9 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
-  server -->|delivers turns, shared history, files, passes and public keys; sends saved spending stops before files, turns and approval replies; checks reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|delivers turns, shared history, files, passes and public keys; sends individual stops; checks reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
+  server -.->|sends spending Stops before files, turns and approval replies| computer
 ```
 
 Tool discovery records the exact definitions and how long the check remains valid.
