@@ -4,6 +4,7 @@ import {
 } from '@opencrane/protocol';
 import type { ChatRow } from '@opencrane/protocol';
 import { z } from 'zod';
+import { findConversation } from './conversations-data';
 
 export type DirectFailure = 'access_changed' | 'refused' | 'invalid' | 'conflict'
   | 'unavailable' | 'access_applying' | 'not_found';
@@ -18,6 +19,27 @@ export async function fetchChatContext(signal: AbortSignal) {
 
 export async function fetchDirectConversations(signal: AbortSignal) {
   return read('/api/conversations', signal, chatListSchema);
+}
+
+export async function fetchDirectPageAndRequested(requestedId: string, signal: AbortSignal) {
+  const page = await fetchDirectConversations(signal);
+  if (page.kind !== 'ok') return page;
+  let requested = page.value.rows.find(row => row.conversationId === requestedId);
+  if (requestedId && !requested) {
+    try {
+      requested = await findConversation(requestedId, fetch, signal) ?? undefined;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'access_changed') {
+        return { kind: 'access_changed' as const };
+      }
+      const lookupFailure = error instanceof Error && error.message === 'list_changed'
+        ? 'changed' as const : 'unavailable' as const;
+      return { kind: 'ok' as const, value: {
+        ...page.value, requested: undefined, lookupFailure,
+      } };
+    }
+  }
+  return { kind: 'ok' as const, value: { ...page.value, requested, lookupFailure: false } };
 }
 
 export async function searchColleagues(query: string, signal: AbortSignal, after = '') {

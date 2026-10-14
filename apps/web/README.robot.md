@@ -6,6 +6,15 @@ This Angular app provides the organisation settings shell, MCP register and Memo
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
+`/workspace/conversations` reads the server's Recent list. `?section=archived` reads
+Archived. Search stays in memory and uses at most 100 characters. Each request uses
+20 rows and the returned cursor. A changed list reloads page one once. Temporary
+failure keeps loaded rows and offers a read-only retry. A 401 or 403 clears them.
+Links use each row's mode to open the workspace or direct chat. A saved link missing
+from page one searches Recent, then Archived, with up to five 50-row pages per section.
+If either list changes during the search, it starts again at Recent page one once.
+A second change offers Retry. An exhausted search shows the generic unavailable screen;
+an outage can be retried.
 The Integrations register searches and filters that read. Its detail page reads the
 register first, then reads the matching server's tool policy. It shows a server row as soon
 as the register read succeeds. A failed list refresh keeps the row, says that availability

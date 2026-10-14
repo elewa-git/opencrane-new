@@ -9,6 +9,7 @@ import { IntegrationDetail } from './integrations/integration-detail';
 import { ToolPolicyScreen } from './tool-policy/tool-policy';
 import { Workspace } from './chat/workspace';
 import { DirectChat } from './chat/direct-chat';
+import { Conversations } from './chat/conversations';
 import { SignIn } from './sign-in/sign-in';
 import { SharedState } from './shared-state/shared-state';
 import { StateSpecimen } from './shared-state/state-specimen';
@@ -28,7 +29,8 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
 @Component({
   selector: 'app-root',
   imports: [
-    Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, DirectChat, ToolPolicyScreen,
+    Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, DirectChat, Conversations,
+    ToolPolicyScreen,
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, IntegrationDetail,
     OrganisationShell,
     AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen,
@@ -38,7 +40,7 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    '[class.workspace-root]': 'workspacePage || directChatPage',
+    '[class.workspace-root]': 'workspacePage || directChatPage || conversationsPage',
     '[class.settings-root]': 'accountPath',
   },
 })
@@ -47,6 +49,7 @@ export class App {
   protected readonly claimPage = this.pathname === '/claim';
   protected readonly workspacePage = this.pathname === '/workspace';
   protected readonly directChatPage = this.pathname === '/workspace/direct';
+  protected readonly conversationsPage = this.pathname === '/workspace/conversations';
   protected readonly sharedAssistantPickerPage = this.pathname === '/workspace/shared';
   protected readonly orgPage = this.pathname === '/org' || this.pathname.startsWith('/org/');
   protected readonly settingsPage = personalSettingsPage(this.pathname);

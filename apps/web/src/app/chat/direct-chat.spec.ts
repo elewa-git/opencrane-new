@@ -1054,6 +1054,121 @@ async function showsUnavailableForMissingRequestedConversation(): Promise<void> 
 it('shows an unavailable state for a missing requested conversation',
   showsUnavailableForMissingRequestedConversation);
 
+it('opens an archived group missing from the first direct list page', async () => {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  function archivedGroup(request: RequestRecord): Response | undefined {
+    const url = new URL(request.url, location.origin);
+    if (url.pathname !== '/api/conversations' || request.method !== 'GET') return undefined;
+    if (url.searchParams.get('section') === 'archived') {
+      return reply({ rows: [{ conversationId: 'group-chat', mode: 'group',
+        createdAt: '2026-10-06T09:00:00Z', participantIds: ['alice', 'bob', 'carol'],
+        title: 'Planning next week' }], nextCursor: null });
+    }
+    return reply({ rows: [], nextCursor: null });
+  }
+  api.override(archivedGroup);
+  const fixture = await mountWithoutReady(api, 'group-chat');
+  await waitForText(fixture, 'Hello everyone');
+  expect(root(fixture).querySelector('h1')?.textContent).not.toContain('Unavailable');
+  expect(root(fixture).textContent).not.toContain('No direct conversations yet');
+  fixture.destroy();
+});
+
+it('does not call an unfinished direct list empty', async () => {
+  const api = createFetchFixture();
+  function unfinished(request: RequestRecord): Response | undefined {
+    if (request.url === '/api/conversations') {
+      return reply({ rows: [], nextCursor: 'next' });
+    }
+    return undefined;
+  }
+  api.override(unfinished);
+  const fixture = await mountWithoutReady(api);
+  expect(root(fixture).textContent).not.toContain('No direct conversations yet');
+  fixture.destroy();
+});
+
+it('keeps listed chats and offers retry when resume lookup is unavailable', async () => {
+  const api = createFetchFixture();
+  function unavailableLookup(request: RequestRecord): Response | undefined {
+    if (request.url.startsWith('/api/conversations?')) return reply({}, 503);
+    return undefined;
+  }
+  api.override(unavailableLookup);
+  const fixture = await mountWithoutReady(api, 'older-chat');
+  await waitForText(fixture, 'Try again');
+  expect(root(fixture).textContent).toContain('Grace Achieng');
+  expect(root(fixture).textContent).toContain('Try again');
+  expect(root(fixture).textContent).not.toContain('Conversation not found or unavailable');
+  fixture.destroy();
+});
+
+it('opens a saved chat after one list change during lookup', async () => {
+  const api = createFetchFixture();
+  let lookupCount = 0;
+  function changedThenFound(request: RequestRecord): Response | undefined {
+    if (!request.url.startsWith('/api/conversations?')) return undefined;
+    lookupCount += 1;
+    if (lookupCount === 1) return reply({ status: 'list_changed' }, 409);
+    return reply({ rows: [conversation('older-chat', 'bob')], nextCursor: null });
+  }
+  api.override(changedThenFound);
+
+  const fixture = await mountWithoutReady(api, 'older-chat');
+  await vi.waitFor(() => expect(lookupCount).toBe(2));
+  fixture.detectChanges();
+  expect(fixture.componentInstance['selectedConversationId']()).toBe('older-chat');
+  expect(root(fixture).querySelector('textarea')).not.toBeNull();
+  expect(lookupCount).toBe(2);
+  fixture.destroy();
+});
+
+it('offers Retry after two list changes during saved-chat lookup', async () => {
+  const api = createFetchFixture();
+  let lookupCount = 0;
+  function changedLookup(request: RequestRecord): Response | undefined {
+    if (!request.url.startsWith('/api/conversations?')) return undefined;
+    lookupCount += 1;
+    return reply({ status: 'list_changed' }, 409);
+  }
+  api.override(changedLookup);
+
+  const fixture = await mountWithoutReady(api, 'older-chat');
+  await vi.waitFor(() => expect(lookupCount).toBe(2));
+  fixture.detectChanges();
+  expect(lookupCount).toBe(2);
+  expect(root(fixture).textContent).toContain('Conversation list changed again');
+  expect(root(fixture).textContent).not.toContain('Direct conversations are unavailable right now');
+  expect(buttonNamed(fixture, 'Try again')).not.toBeNull();
+  fixture.destroy();
+});
+
+it('ignores a saved-chat lookup reply after the screen is destroyed', async () => {
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  const held = deferredReply();
+  function holdLookup(request: RequestRecord): Promise<Response> | undefined {
+    if (request.url.startsWith('/api/conversations?')) return held.promise;
+    return undefined;
+  }
+  api.override(holdLookup);
+  history.replaceState({}, '', '/workspace/direct?conversation=older-chat');
+  buttonNamed(fixture, 'Refresh').click();
+  await vi.waitFor(() => {
+    expect(api.requests.some(request => request.url.startsWith('/api/conversations?'))).toBe(true);
+  });
+
+  const socketCount = api.sockets.length;
+  fixture.destroy();
+  held.release(reply({ rows: [conversation('older-chat', 'bob')], nextCursor: null }));
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(api.requests.some(request => request.url.includes('/older-chat/messages'))).toBe(false);
+  expect(api.sockets).toHaveLength(socketCount);
+});
+
 async function clearsAfterRealRefusal(): Promise<void> {
   const api = createFetchFixture();
   const fixture = await mount(api);

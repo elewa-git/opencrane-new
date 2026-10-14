@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>chat, participant changes, saved drafts and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>chat, paged conversation lists and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
@@ -43,6 +43,9 @@ flowchart LR
   shows uploaded files and the assistant's desktop.
 - Keeps the conversation list available when a saved chat link is missing and says
   that the selected chat cannot be opened.
+- Shows Recent and Archived conversations at `/workspace/conversations`. People can
+  search titles, load more results and open an older chat from its saved link. If the
+  list changes during that search, the website starts it again once.
 - Gives admins pages for People & groups at `/org/people`,
   `/org/people/groups/<id>` and `/org/people/owners`, an integration register and detail at
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting

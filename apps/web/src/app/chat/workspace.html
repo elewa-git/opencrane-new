@@ -14,7 +14,9 @@
       <div class="header-title">
         <div class="header-main">
           @if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }
-          <h1 [class.draft-title]="!chat.selected()">{{ title() }}</h1>
+          <h1 [class.draft-title]="!chat.selected()">
+            {{ chat.requestedUnavailable() || chat.requestedLookupFailed() ? 'Unavailable' : title() }}
+          </h1>
         </div>
         <span class="header-status" [class.waiting-status]="approvalWaiting() && chat.selected() && !chat.denied()"
           aria-live="polite">
@@ -62,7 +64,13 @@
             message="You don't have access to this conversation's files"
             detail="Nothing from this conversation is shown." [showAction]="false" />
         }
-        @if (!chat.selected() && !chat.loading() && !chat.railUnavailable() && !chat.denied()) {
+        @if (chat.requestedUnavailable()) {
+          <oc-shared-state kind="failed" message="Conversation not found or unavailable"
+            detail="Choose a conversation from the list to continue." [showAction]="false" />
+        }
+        @if (!chat.selected() && !chat.loading() && !chat.railUnavailable()
+          && !chat.denied() && !chat.requestedUnavailable()
+          && !chat.requestedLookupFailed()) {
           <section class="draft" [class.no-agent]="!chat.assistantId()" aria-label="Session recipients">
             <a class="shared-assistant-link" href="/workspace/shared">Use a shared assistant</a>
             <div class="to-line"><span class="to-label">To:</span>
@@ -161,6 +169,7 @@
         }
       </div>
     </section>
+    @if (!chat.requestedUnavailable() && !chat.requestedLookupFailed()) {
     <div class="composer-dock">
       <div class="progress" role="status" aria-live="polite">@if (chat.waiting()) { <div class="connection-strip" [class.waking]="chat.waiting() === 'starting'"><oc-icon [name]="chat.waiting() === 'starting' ? 'agent' : 'working'" /><span>@if (chat.waiting() === 'queued') { We couldn't tell whether your message was recorded. Retry checks its status before sending again. Reference: {{ chat.queuedReference() }}. Reload discards this draft. } @else if (chat.waiting() === 'starting') { Starting your computer… Your message is saved and will run when it is ready. } @else { Reconnecting — your conversation is saved. Unsent text stays on this page. }</span><small>{{ chat.waitSeconds() }}s</small>@if (chat.waiting() === 'queued') { <button type="button" [disabled]="chat.busy() || chat.computer() === 'recovering'"
         [title]="chat.computer() === 'recovering' ? 'Sending is paused until your computer is ready' : ''" (click)="send(draft())">Retry</button> } @else if (chat.waiting() === 'reconnecting') { <button type="button" (click)="chat.reconnect()">Retry</button> }</div> }</div>
@@ -197,6 +206,7 @@
         }
       </p>
     </div>
+    }
   </main>
   @if (desktop() && panel()) {
     <aside class="session-panel desktop-panel" aria-label="Session panel">
@@ -245,6 +255,7 @@
         <oc-icon name="agent" /> Ask your agent <kbd>⌘⇧A</kbd>
       </button>
       <a class="new-direct" href="/workspace/direct">New direct chat</a>
+      <a class="new-direct" href="/workspace/conversations">Recent conversations</a>
       <h2>Projects</h2>
       <p class="empty-rail">No project sessions</p>
       @if (teamConversations().length) {
@@ -297,11 +308,7 @@
           </span>
         </button>
       }
-      <button type="button" class="archive" [attr.aria-expanded]="archived()"
-        (click)="archived.set(!archived())">
-        {{ archived() ? '⌄' : '›' }} Archived · 0
-      </button>
-      @if (archived()) { <p class="empty-rail">No archived sessions</p> }
+      <a class="archive" href="/workspace/conversations?section=archived">Archived</a>
     </div>
   </ng-template>
   <ng-template #railStatus>
@@ -324,7 +331,7 @@
         <p>Your account is in, but no agent is provisioned yet.</p>
         <small>pod: … · waiting</small>
       </div>
-    } @else if (!chat.conversations().length && !chat.denied()) {
+    } @else if (!chat.conversations().length && !chat.listHasMore() && !chat.denied()) {
       <div class="rail-card rail-empty">
         <svg width="36" height="28" viewBox="0 0 32 24" aria-hidden="true">
           <path d="m3 5 10 10 3-12 3 12 11-8-8 13-5 1-6-5Z" fill="#9fdde8"/>

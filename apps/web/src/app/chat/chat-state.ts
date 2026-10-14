@@ -36,6 +36,25 @@ export function isActiveTurn(turn: Turn): boolean {
   return turn.author === 'agent' && (turn.state === 'working' || turn.state === 'stopping');
 }
 
+export function recoveredLostTurn(recovered: boolean, lostAt: string, turns: Turn[]): boolean {
+  if (!recovered || !lostAt) return false;
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index]!;
+    if (turn.author !== 'agent') continue;
+    if (turn.state !== 'lost' && turn.state !== 'failed') return false;
+    return Boolean(turn.endedAt && Date.parse(turn.endedAt) >= Date.parse(lostAt));
+  }
+  return false;
+}
+
+export function lastConfirmedTurnAt(turns: Turn[]): string {
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index]!;
+    if (turn.author === 'agent' && turn.state === 'done') return turn.endedAt ?? '';
+  }
+  return '';
+}
+
 export function isBudgetStop(row: ChatRow): boolean {
   return row.type === 'decision.recorded' && row.data['reason'] === 'budget_exhausted';
 }

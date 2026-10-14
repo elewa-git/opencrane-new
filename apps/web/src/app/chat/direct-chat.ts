@@ -1,5 +1,5 @@
 // Keep the chat read and send flow together. Participant commands live in their own file.
-/* eslint max-lines: ["error", { max: 600, skipBlankLines: true, skipComments: true }] */
+/* eslint max-lines: ["error", { max: 625, skipBlankLines: true, skipComments: true }] */
 import {
   ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, effect, inject,
   signal, viewChild, type OnDestroy, type OnInit,
@@ -31,7 +31,8 @@ import {
   trapDirectDialogFocus,
 } from './direct-chat-display';
 import {
-  fetchChatContext, fetchDirectConversations, fetchDirectHistory, searchColleagues,
+  fetchChatContext, fetchDirectConversations, fetchDirectHistory, fetchDirectPageAndRequested,
+  searchColleagues,
   type DirectFailure,
 } from './direct-chat-api';
 
@@ -62,6 +63,7 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly colleagueState = signal<ReadState>('loading');
   protected readonly historyState = signal<ReadState>('idle');
   protected readonly listState = signal<ReadState>('loading');
+  protected readonly listHasMore = signal(false);
   protected readonly knownColleagues = signal<Colleague[]>([]);
   protected readonly navigationOpen = signal(false);
   protected readonly colleagueQuery = signal('');
@@ -154,7 +156,8 @@ export class DirectChat implements OnInit, OnDestroy {
     this.currentMemberId = context.value.memberId;
     await this.loadColleagues(this.colleagueQuery());
     if (!this.canReadPage()) return;
-    const conversations = await fetchDirectConversations(this.lifetime.signal);
+    const requestedId = requestedDirectConversationId();
+    const conversations = await fetchDirectPageAndRequested(requestedId, this.lifetime.signal);
     if (!this.canReadPage()) return;
     this.refreshing.set(false);
     if (conversations.kind !== 'ok') {
@@ -163,26 +166,44 @@ export class DirectChat implements OnInit, OnDestroy {
       return;
     }
     this.conversations.set(directConversations(conversations.value.rows));
+    this.listHasMore.set(Boolean(conversations.value.nextCursor));
     this.listState.set('ready');
     this.pageState.set('ready');
     this.hasLoadedData = true;
     this.pageError.set('');
-    const requestedId = requestedDirectConversationId();
-    if (requestedId) {
-      const requestedConversation = directConversationById(this.conversations(), requestedId);
-      if (!requestedConversation) {
-        this.pageState.set('not_found');
-        this.selectedConversationId.set('');
-        updateDirectConversationAddress('');
-        this.pageError.set('That conversation was not found or is unavailable.');
-        this.statusText.set(this.pageError());
-        return;
+    if (conversations.value.lookupFailure) {
+      if (conversations.value.lookupFailure === 'changed') {
+        this.pageError.set('Conversation list changed again. Try again.');
+        this.announceRead(this.pageError());
+      } else {
+        this.handleReadFailure('unavailable');
       }
-      await this.selectConversation(requestedId);
+      this.pageState.set('failed');
+      return;
+    }
+    if (requestedId) {
+      await this.openRequested(requestedId, conversations.value.requested);
     } else {
       this.announceRead('Direct conversations loaded.');
     }
     this.focusAfterRefresh();
+  }
+
+  private async openRequested(
+    requestedId: string, requestedConversation: ChatConversation | undefined,
+  ): Promise<void> {
+    if (!requestedConversation || requestedConversation.mode === 'agent_session') {
+      this.pageState.set('not_found');
+      this.selectedConversationId.set('');
+      updateDirectConversationAddress('');
+      this.pageError.set('That conversation was not found or is unavailable.');
+      this.statusText.set(this.pageError());
+      return;
+    }
+    if (!directConversationById(this.conversations(), requestedId)) {
+      this.conversations.set([...this.conversations(), requestedConversation]);
+    }
+    await this.selectConversation(requestedId);
   }
 
   private finishPageFailure(kind: DirectFailure): void {
@@ -550,7 +571,11 @@ export class DirectChat implements OnInit, OnDestroy {
       this.handleReadFailure(result.kind);
       return;
     }
-    this.conversations.set(directConversations(result.value.rows));
+    const listed = directConversations(result.value.rows);
+    const selected = directConversationById(this.conversations(), this.selectedConversationId());
+    if (selected && !directConversationById(listed, selected.conversationId)) listed.push(selected);
+    this.conversations.set(listed);
+    this.listHasMore.set(Boolean(result.value.nextCursor));
   }
 
   private subscribeWhenConnected(): void {

@@ -231,7 +231,7 @@ export function directConversationTitle(
     for (const participantId of conversation.participantIds) {
       if (participantId === memberId) continue;
       const colleague = directColleagueById(colleagues, participantId);
-      names.push(colleague?.displayName?.trim() || participantId);
+      names.push(colleague?.displayName?.trim() || 'Group member');
     }
     return names.join(', ') || 'Group conversation';
   }
@@ -239,7 +239,7 @@ export function directConversationTitle(
   const otherId = otherParticipant(conversation.participantIds, memberId);
   if (!otherId) return 'Direct conversation';
   const colleague = directColleagueById(colleagues, otherId);
-  return colleague?.displayName?.trim() || otherId;
+  return colleague?.displayName?.trim() || conversation.title || 'Direct conversation';
 }
 
 export async function scrollDirectTranscript(

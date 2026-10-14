@@ -11,12 +11,18 @@
       <a class="rail-action active" href="/workspace/direct"
         [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
         (click)="protectPendingNavigation($event)">New direct chat</a>
+      <a class="rail-action" href="/workspace/conversations"
+        [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+        (click)="protectPendingNavigation($event)">Recent conversations</a>
+      <a class="rail-action" href="/workspace/conversations?section=archived"
+        [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+        (click)="protectPendingNavigation($event)">Archived</a>
       <h2>Direct conversations</h2>
       @if (listState() === 'loading' && conversations().length === 0) {
         <p class="empty-rail">Loading direct conversations…</p>
       } @else if (listState() === 'failed' && conversations().length === 0) {
         <p class="empty-rail">Direct conversations could not be loaded.</p>
-      } @else if (listState() === 'ready' && conversations().length === 0) {
+      } @else if (listState() === 'ready' && conversations().length === 0 && !listHasMore()) {
         <p class="empty-rail">No direct conversations yet.</p>
       } @else {
         @for (conversation of conversations(); track conversation.conversationId) {
@@ -187,7 +193,7 @@
           <oc-shared-state kind="failed" message="Conversation not found or unavailable"
             detail="Choose a conversation from the list to continue." [showAction]="false" />
         } @else if (pageState() === 'failed') {
-          <oc-shared-state kind="failed" message="Direct conversations are unavailable right now"
+          <oc-shared-state kind="failed" [message]="pageError()"
             detail="Reading again is safe." [showAction]="false" />
           <button class="button secondary retry-page" type="button"
             [attr.aria-disabled]="refreshing()" (click)="load()">Try again</button>
@@ -296,6 +302,8 @@
   <a href="/workspace/direct"
     [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
         (click)="protectPendingNavigation($event)">New direct chat</a>
+  <a href="/workspace/conversations">Recent conversations</a>
+  <a href="/workspace/conversations?section=archived">Archived</a>
   @for (conversation of conversations(); track conversation.conversationId) {
     @if (conversation.mode === 'direct' || conversation.mode === 'group') {
       <button class="conversation-row" type="button"
