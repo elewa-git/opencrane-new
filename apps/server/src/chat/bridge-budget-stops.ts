@@ -38,4 +38,3 @@ export function sendBudgetStops(link: StopLink, stops: BudgetStop[]) {
     link.sentStops.set(stop.turnId, now);
   }
 }
-
