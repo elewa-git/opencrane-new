@@ -15,6 +15,8 @@ import { catalogueEvidence, fixture, reviewCatalogue,
 import { envelope, memoryRights, parseMemoryRequest, readToolPolicy, startDecision,
   verifyMemoryContext } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
+import { readChatFacts } from '../src/chat/chat-summary.ts';
+import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { checkRecallProof } from '../src/memory/recall-proof.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -1720,3 +1722,134 @@ it('rechecks stale grants at the backend and refuses an ended turn upstream', as
     expect(capability).toBe('');
   } finally { database.mockRestore(); }
 });
+
+async function loadedWrite(commandId = 'complete-lineage') {
+  const body = await recalledRemember(commandId);
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  const dependsOn = [...chat.memoryContext!.references];
+  dependsOn.reverse();
+  const argumentsValue = { ...body.params.arguments, dependsOn };
+  return { ...body, params: { ...body.params, arguments: argumentsValue } };
+}
+async function contextRecord() {
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  const first = chat.memoryContext!.events.values().next().value!;
+  return memoryContextRecordedEventSchema.parse(JSON.parse(first)).data;
+}
+async function refusesWithoutFact(body: Awaited<ReturnType<typeof recalledRemember>>) {
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  const response = await backendRemember(body);
+  expect(response.statusCode, response.body).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+}
+async function completeLoadedWrite() {
+  const body = await loadedWrite();
+  const secondMetadata = { ...metadata, callId: 'second-recall' };
+  const argumentsValue = { scopeId, query: 'exactly' };
+  const secondCall = { ...call, params: { ...call.params,
+    arguments: argumentsValue, _meta: secondMetadata } };
+  expect((await setup.call(headers, secondCall, route)).status).toBe(200);
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  body.params.arguments.dependsOn = [...chat.memoryContext!.references].reverse();
+  const first = await backendRemember(body);
+  expect(first.statusCode, first.body).toBe(200);
+  const saved = rememberedSchema.parse(first.json()).result.structuredContent;
+  const retry = await backendRemember(body);
+  expect(retry.json()).toEqual(first.json());
+  const rows = [];
+  for await (const row of setup.nats.store.readStream(`scope-${scopeId}`)) {
+    if (row.event.id === saved.memoryId) rows.push(row);
+  }
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.event.data).toMatchObject({ dependsOn: body.params.arguments.dependsOn });
+  const custody = vi.spyOn(keys, 'provision');
+  const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
+  expect((await readChatFacts(cold, 'test', 'conversation', 'turn')).memoryContext)
+    .toEqual(chat.memoryContext);
+  expect(custody).not.toHaveBeenCalled();
+  custody.mockRestore();
+  body.params.arguments.dependsOn.pop();
+  await refusesWithoutFact(body);
+}
+it('saves complete lineage across recalls in any order and returns a lost receipt once',
+  completeLoadedWrite);
+
+async function firstProofGeneration() {
+  const body = await loadedWrite();
+  const data = await contextRecord();
+  const token = await signedRemember(body);
+  const parsed = parseMemoryRequest(JSON.stringify(body), rememberHeaders);
+  const context = await verifyMemoryContext(token, setup.identity, parsed);
+  checkRecallProof(testAuthConfig().cookieSecret, context, body.params.arguments.recallProof,
+    body.params.arguments.dependsOn, data.inputGeneration);
+  const { recallProof } = await import('../src/memory/recall-proof.ts');
+  body.params.arguments.recallProof = recallProof(testAuthConfig().cookieSecret, context,
+    body.params.arguments.dependsOn, 'another-input');
+  await refusesWithoutFact(body);
+}
+it('binds the first proof to its prepared input generation', firstProofGeneration);
+
+async function changedLoadedContext(change: string) {
+  const body = await loadedWrite();
+  const prepared = await contextRecord();
+  if (change === 'superset') {
+    body.params.arguments.dependsOn.push({ scopeId, memoryId: 'fact_22', revision: 1 });
+  } else {
+    let data = { ...prepared, action: 'invalidated', reason: 'changed' };
+    if (change === 'ended') data = { ...data, action: 'ended', reason: 'ended' };
+    if (change === 'group' || change === 'assistant_notes') {
+      const otherScope = memoryScopeId('test', change, 'sales');
+      const additions = [{ scopeId: otherScope, memoryId: 'shared-fact', revision: 1 }];
+      Object.assign(data, { action: 'loaded', reason: 'none', delivery: 'recall',
+        callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64), additions,
+        scopePositions: [{ scopeId: otherScope, position: 0 }], byteCount: 1 });
+    }
+    await setup.append('conversation-conversation', 'agent.memory_context_recorded', data);
+  }
+  await refusesWithoutFact(body);
+}
+it.each(['superset', 'invalidated', 'ended', 'group', 'assistant_notes'])(
+  'refuses complete person lineage when the loaded context has %s', changedLoadedContext);
+
+async function racesLoadedContext(change: string) {
+  const body = await loadedWrite();
+  const prepared = await contextRecord();
+  const original = setup.nats.store.readStream.bind(setup.nats.store);
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  let changed = false;
+  let sawIncrement = false;
+  async function* read(subject: string, from?: number, deadline?: number,
+    includeCloses?: boolean) {
+    if (subject === `scope-${scopeId}` && !changed) {
+      changed = true;
+      if (change === 'closed') {
+        await setup.append('participation-conversation', 'conversation.closed',
+          { conversationId: 'conversation', closedBy: 'alice' });
+      } else {
+        const data = { ...prepared, action: 'invalidated', reason: 'changed' };
+        if (change === 'loaded') {
+          Object.assign(data, { action: 'loaded', reason: 'none', delivery: 'recall',
+            callDigest: 'e'.repeat(64), dispatchDigest: 'f'.repeat(64), byteCount: 1,
+            additions: [{ scopeId, memoryId: 'fact_22', revision: 1 }] });
+        }
+        await setup.append('conversation-conversation', 'agent.memory_context_recorded', data);
+      }
+    }
+    if (changed && subject === 'conversation-conversation') {
+      expect(from).toBeGreaterThan(chat.sequence);
+      sawIncrement = true;
+    }
+    yield* original(subject, from, deadline, includeCloses);
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(read);
+  try {
+    await refusesWithoutFact(body);
+    expect(changed).toBe(true);
+    expect(sawIncrement).toBe(true);
+  } finally {
+    reads.mockRestore();
+  }
+}
+it.each(['loaded', 'invalidated', 'closed'])(
+  'refuses %s after reading evidence using only new conversation rows', racesLoadedContext);

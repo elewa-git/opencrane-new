@@ -13,17 +13,20 @@ const context: MemoryContext = { silo: 'test', requester: 'alice', assistant: 'a
   requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 1, iat: 1, exp: 3 };
 const fact = { memoryId: 'fact', revision: 1 };
 const dependency = { scopeId: context.scopes[0]!, ...fact };
-const proof = recallProof(secret, context, [fact]);
+const inputGeneration = 'saved-input';
+const proof = recallProof(secret, context, [fact], inputGeneration);
 
 function check(value: string, selected = context, dependencies = [dependency]) {
   return function verify() {
-    checkRecallProof(secret, selected, value, dependencies);
+    checkRecallProof(secret, selected, value, dependencies, inputGeneration);
   };
 }
 function completeEvidence() {
-  expect(check(proof)).toThrow('Complete memory evidence unavailable');
+  expect(check(proof)).not.toThrow();
+  const earlier = { ...dependency, memoryId: 'earlier-page' };
+  expect(check(proof, context, [earlier, dependency])).not.toThrow();
 }
-it('refuses a valid selective proof without complete memory evidence', completeEvidence);
+it('accepts a page proof within the full loaded dependency set', completeEvidence);
 
 function hmac() {
   const [encoded, signed] = proof.split('.');
@@ -55,7 +58,7 @@ it.each(bindings)('binds recalled references independently to %j', refusesBindin
 
 function refusesPlaceholder(reason: string) {
   const unavailable = { ...fact, reason };
-  const excludedProof = recallProof(secret, context, [unavailable]);
+  const excludedProof = recallProof(secret, context, [unavailable], inputGeneration);
   expect(check(excludedProof)).toThrow('Recall proof dependency not returned');
 }
 it.each(['page_limit', 'destroyed', 'quarantined'])('excludes %s references', refusesPlaceholder);
@@ -121,3 +124,9 @@ function decodedBounds() {
   expect(check(oversized)).toThrow('Recall proof byte limit exceeded');
 }
 it('bounds decoded proof bytes even with valid JSON and bindings', decodedBounds);
+
+function refusesInputGeneration() {
+  const stale = recallProof(secret, context, [fact], 'another-input');
+  expect(check(stale)).toThrow('Recall proof thread mismatch');
+}
+it('refuses a valid signature for another input generation', refusesInputGeneration);
