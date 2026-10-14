@@ -23,6 +23,7 @@ interface ApprovalDriver {
 export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMIT_MS) {
   const groups = new Map<string, Group>();
   let supported = false;
+  let stopped = false;
 
   function answer(group: Group, text: string) {
     group.first.answer(text);
@@ -58,12 +59,16 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
         answer(group, refusalMessage(state));
       }
     } catch {
-      answer(group, 'The turn could not get a new pass. Nothing was sent.');
+      if (!group.ended) answer(group, 'The turn could not get a new pass. Nothing was sent.');
     }
     group.ended = true;
   }
 
   function add(hold: Hold) {
+    if (stopped) {
+      hold.answer(STOPPED);
+      return;
+    }
     if (!supported) {
       hold.answer('This server cannot wait for approval. Nothing was sent.');
       return;
@@ -91,15 +96,35 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
     if (!driver.waiting(hold.thread, hold.approvalId)) end(group, STOPPED);
   }
 
+  function stop() {
+    stopped = true;
+    for (const [approvalId, group] of groups) {
+      // Keep an action already being sent on its original answer path.
+      if (group.sending) continue;
+      if (!group.ended) end(group, STOPPED);
+      groups.delete(approvalId);
+    }
+  }
+
+  function heldCount() {
+    let count = 0;
+    for (const group of groups.values()) {
+      if (!group.ended) count++;
+    }
+    return count;
+  }
+
   function endThread(thread: string) {
     for (const [approvalId, group] of groups) {
       if (group.first.thread !== thread) continue;
+      if (stopped && group.sending) continue;
       end(group, STOPPED);
       groups.delete(approvalId);
     }
   }
 
   function resume(value: boolean) {
+    if (stopped) return;
     supported = value;
     for (const group of groups.values()) {
       if (group.ended) continue;
@@ -118,7 +143,7 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
     return deadline;
   }
 
-  return { add, settle, endThread, resume, until };
+  return { add, settle, endThread, resume, until, stop, get size() { return heldCount(); } };
 }
 
 function refusalMessage(state: string) {

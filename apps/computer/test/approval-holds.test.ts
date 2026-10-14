@@ -87,3 +87,30 @@ function refusesUnsupportedAndWrongThread() {
 }
 it('requires support on every resume and refuses another thread sharing an id',
   refusesUnsupportedAndWrongThread);
+
+async function stopsHoldsWithoutReplacingSentAnswers() {
+  const test = fixture();
+  const sent = Promise.withResolvers<void>();
+  test.send.mockReturnValue(sent.promise);
+  test.holds.add(test.input);
+  const sending = test.holds.settle(approvalId, 'approved');
+  await vi.waitFor(sendStarted);
+  function sendStarted() { expect(test.send).toHaveBeenCalledOnce(); }
+  const heldAnswer = vi.fn();
+  const heldSend = vi.fn();
+  const held = { ...test.input, approvalId: 'b'.repeat(64), answer: heldAnswer, send: heldSend };
+  test.holds.add(held);
+  test.holds.stop();
+  test.holds.endThread('thread');
+  test.holds.resume(false);
+  expect(heldAnswer).toHaveBeenCalledExactlyOnceWith('This turn was stopped. Nothing was sent.');
+  await test.holds.settle(held.approvalId, 'approved');
+  expect(heldSend).not.toHaveBeenCalled();
+  expect(test.answer).not.toHaveBeenCalled();
+  expect(test.holds.size).toBe(1);
+  sent.resolve();
+  await sending;
+  expect(test.holds.size).toBe(0);
+}
+it('stops held approvals but leaves an action already sending on its own answer path',
+  stopsHoldsWithoutReplacingSentAnswers);

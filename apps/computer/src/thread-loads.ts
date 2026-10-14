@@ -25,18 +25,37 @@ function threadToolsConfig(turn: Turn, loadKey: string) {
 }
 
 export function threadLoads(driver: ThreadLoadDriver) {
+  let stopped = false;
+  const keys = new Set<string>();
   const loaded = new Map<string, { fingerprint?: string; loadKey: string }>();
 
   async function register(input: Turn, loadKey: string, thread?: string) {
+    if (stopped) throw new Error('Thread loading stopped');
+    keys.add(loadKey);
     if (driver.catalogue) {
       await driver.catalogue(loadKey, input.conversationId, input.tools ?? [], thread);
     } else if (input.tools?.length) throw new Error('Tool catalogue unavailable');
+    if (stopped) {
+      await drop(loadKey);
+      throw new Error('Thread loading stopped');
+    }
+  }
+
+  async function drop(loadKey: string) {
+    await driver.dropCatalogue?.(loadKey);
+    keys.delete(loadKey);
+  }
+
+  async function stop() {
+    stopped = true;
+    const pending = [...keys].map(drop);
+    await Promise.all(pending);
   }
 
   async function forget(thread: string) {
     const previous = loaded.get(thread);
     loaded.delete(thread);
-    if (previous) await driver.dropCatalogue?.(previous.loadKey);
+    if (previous) await drop(previous.loadKey);
   }
 
   async function requireDiscovery(input: Turn, loadKey: string) {
@@ -74,7 +93,7 @@ export function threadLoads(driver: ThreadLoadDriver) {
     try {
       await unload(driver, thread);
     } finally {
-      if (previousLoad) await driver.dropCatalogue?.(previousLoad.loadKey);
+      if (previousLoad) await drop(previousLoad.loadKey);
     }
   }
 
@@ -82,7 +101,7 @@ export function threadLoads(driver: ThreadLoadDriver) {
     try {
       if (orphanThread) await unload(driver, orphanThread);
     } finally {
-      await driver.dropCatalogue?.(loadKey);
+      await drop(loadKey);
     }
   }
 
@@ -127,7 +146,24 @@ export function threadLoads(driver: ThreadLoadDriver) {
       throw new ThreadLoadFailed('Tools could not be reloaded', { cause: error });
     }
   }
-  return { load, forget, get size() { return loaded.size; } };
+  async function quiet() {
+    const params = {};
+    const result = record(await driver.rpc('thread/loaded/list', params));
+    const threads = result['data'];
+    if (!Array.isArray(threads) || !threads.every(isThreadId) || result['nextCursor']) {
+      throw new Error('Loaded threads could not be checked');
+    }
+    for (const thread of threads) {
+      await forget(thread);
+      await unload(driver, thread);
+    }
+    const remaining = record(await driver.rpc('thread/loaded/list', params));
+    if (!Array.isArray(remaining['data']) || remaining['data'].length || remaining['nextCursor']) {
+      throw new Error('Threads remain loaded');
+    }
+    if (loaded.size || keys.size) throw new Error('Catalogues remain loaded');
+  }
+  return { load, forget, quiet, stop, get size() { return loaded.size; } };
 }
 
 async function resumeLoadedThread(driver: ThreadLoadDriver, threadId: string) {
@@ -138,7 +174,7 @@ async function resumeLoadedThread(driver: ThreadLoadDriver, threadId: string) {
   return parsed;
 }
 
-async function unload(driver: ThreadLoadDriver, threadId: string) {
+export async function unload(driver: Pick<ThreadLoadDriver, 'rpc'>, threadId: string) {
   const deadline = Date.now() + RELOAD_LIMIT_MS;
   const unsubscribeParams = { threadId };
   const unsubscribing = driver.rpc('thread/unsubscribe', unsubscribeParams);
