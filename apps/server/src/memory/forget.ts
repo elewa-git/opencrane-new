@@ -57,7 +57,8 @@ function originalForget(row: StoredEvent, rows: StoredEvent[], input: Input, mem
     saved.data.expectedRevision !== input.expectedRevision) {
     throw new MemoryConflict();
   }
-  return forgottenReceipt(row, rows, { kind: 'person', ownerId: scope.ownerId });
+  const audience = { kind: 'person', ownerId: scope.ownerId };
+  return forgottenReceipt(row, rows, audience);
 }
 async function requireTarget(rows: StoredEvent[], options: MemoryOptions, scope: Scope,
   memoryId: string, expectedRevision: number) {
@@ -132,7 +133,8 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   fresh: Awaited<ReturnType<typeof authorityFence>>, reference: string) {
   const journal = commandJournal(options.keyDirectory!, reference);
   const fingerprint = createHash('sha256');
-  fingerprint.update(JSON.stringify({ operation: 'forget', memoryId, ...input }));
+  const metadata = { operation: 'forget', memoryId, ...input };
+  fingerprint.update(JSON.stringify(metadata));
   const inputDigest = fingerprint.digest('hex');
   function recoveredReceipt(row: StoredEvent, rows: StoredEvent[]) {
     const receipt = originalForget(row, rows, input, memoryId, scope);
@@ -190,9 +192,11 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   }
   if (result.status === 'appended') {
     journal.remove();
-    return forgottenReceipt({ event, sequence: result.sequence }, [],
-      { kind: 'person', ownerId: requester });
+    const saved = { event, sequence: result.sequence };
+    const audience = { kind: 'person', ownerId: requester };
+    return forgottenReceipt(saved, [], audience);
   }
-  journal.save({ ...entry, stage: 'failed' });
+  const failed = { ...entry, stage: 'failed' as const };
+  journal.save(failed);
   return reconcile();
 }
