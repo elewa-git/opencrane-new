@@ -407,11 +407,12 @@ async function stopReconciliation() {
 beforeAll(startReconciliation, 120_000);
 afterAll(stopReconciliation);
 
-async function candidateFixture(appendUntil = stage.appendUntil) {
+async function candidateFixture(appendUntil = stage.appendUntil,
+  expectedSequence = 0, generation = 1) {
   const store = await fixture();
   candidateCount += 1;
   const input = { ...stage, siloId: 'test', profileId: `candidate-${candidateCount}`,
-    operationId: `operation-${candidateCount}`, appendUntil };
+    operationId: `operation-${candidateCount}`, appendUntil, expectedSequence, generation };
   const subject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
   const saved = await store.custody.stage(input, material);
   const db = pgDb(storage.queue);
@@ -446,6 +447,45 @@ async function keepsUnknownAppend() {
   expect(test.store.deletes).toBe(0);
 }
 it('retains an unknown append even after its deadline without a conflicting event', keepsUnknownAppend);
+
+async function keepsExpiredRotationWithoutLaterEvent() {
+  const test = await candidateFixture(stage.appendUntil, 1, 2);
+  const previousOperationId = `previous-${test.input.operationId}`;
+  const previousReference = 'secret:previous-generation';
+  const previousActivation = {
+    connectionId: test.input.connectionId, ownerKind: 'personal', purpose: 'personal',
+    generation: 1, uid: 'previous-uid', resourceVersion: 'previous-version',
+    endpointDigest: test.input.endpointDigest, operationId: previousOperationId,
+    changedBy: test.input.userId, expectedSequence: 0,
+    appendUntil: test.input.appendUntil, reason: 'bearer_create',
+  };
+  const previousData = {
+    userId: test.input.userId, serverId: test.input.serverId, profile: test.input.profileId,
+    secretRef: previousReference, activation: previousActivation,
+  };
+  const previousEvent = envelope('test', test.subject, 'connection.created', previousData,
+    previousOperationId);
+  previousEvent.principal = { kind: 'human', id: test.input.userId };
+  await events.seed([previousEvent]);
+
+  const rows = await history(events.store, test.subject, 'test');
+  const savedProfile = foldConnection(rows);
+  const custody = test.store.restart();
+  const removal = vi.spyOn(custody, 'remove');
+  const recovered = await custody.recover(test.input);
+  expect(savedProfile.status).toBe('saved_unverified');
+  expect(savedProfile.sequence).toBe(test.input.expectedSequence);
+  expect(savedProfile.data?.secretRef).not.toBe(`secret:${recovered.identity?.reference}`);
+  expect(test.input.appendUntil).toBeLessThan(Date.now());
+
+  const result = await reconcileConnectionStage(events.store, test.db, custody, test.input);
+  expect(result).toEqual({ status: 'retained' });
+  expect(removal).not.toHaveBeenCalled();
+  expect(test.store.secret).toBeDefined();
+  expect(test.store.deletes).toBe(0);
+}
+it('retains an expired rotation while its expected profile position is still current',
+  keepsExpiredRotationWithoutLaterEvent);
 
 async function keepsCurrentAndReplay() {
   const test = await candidateFixture();
