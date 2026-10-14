@@ -1987,7 +1987,8 @@ these refusals. Compatible contracts show `pending_review` without a process,
 credential release, discovery request or normal call. Hosted per-call contracts
 remain for the separate hosted installer. Existing reviewed per-call connections,
 including memory records without startup evidence, keep their inventory and calls.
-New hosted registrations without evidence are still refused before discovery.
+Older hosted registrations without evidence are still refused before discovery.
+New credential-free installation requests follow the checking rule documented below.
 
 The [accepted design](../../docs/specs/phase-3/p3-10-startup-mcps.md) defines the later
 qualification, delivery and lifecycle work. Contract fields are review inputs, not
@@ -2545,6 +2546,36 @@ organisation, admin and Origin checks. Input is commandId, expectedSequence and 
 Success returns status and the original saved sequence. Changed retry input conflicts.
 The server computes fragmentDigest, saves one MCP event and writes no grants or approvals.
 Only credential-free, current reviewed catalogues qualify. No preparation worker is connected.
+
+## Hosted registration — first part of P3-6 PR 4
+
+`POST /api/org/integrations` accepts a strict hosted body: kind `hosted`, locator,
+platform (`linux/amd64` or `linux/arm64`), upstream `{ host, port }` and commandId.
+The upstream uses egressDestinationSchema; omitted port means 443. Tags, including
+tags alongside a digest, are refused. Only SHA-256 image locators are accepted.
+Success is 202 with status appended, serverId and `chg_<commandId>` as changeRef.
+Changed input or another admin reusing the command returns 409.
+`GET /api/org/integrations/changes/:commandId` returns applied with the original
+sequence and registeredAt, or unknown. Both routes require current admin access.
+The GET checks access once without starting a two-second write deadline.
+New credential-free installation requests remain checking; the worker saves no
+rejection and performs no discovery or network request. Older hosted records and
+built-in memory retain their existing rules.
+
+Remaining: dated receipts, admission GET and recheck commands. Evidence storage is
+P3-6 PR 4b. Image fetch, scans, deployment and evidence bytes are outside this part.
+Fresh-install qualification: NOT RUN.
+
+Own checks, 14 October 2026: PASS — 39 selected tests twice across
+`hosted-registration.test.ts`, `startup-mcp.test.ts` and `memory-startup.test.ts`.
+The event security suite also passed. Tests used disposable NATS, PostgreSQL,
+OpenFGA and gateway fixtures. Catalogue replay used the apps/ops command.
+The first memory run lacked the gateway binary; both complete runs passed after
+the pinned fixture tool was installed. No full root suite or live journey ran.
+After the final route and test-helper cleanup, all 14 hosted registration tests
+passed twice again. Full workspace typechecking and the final server typecheck passed.
+PASS — full lint (including Knip and changelog validation) and check:events.
+Typed lint reported existing function-length warnings only.
 
 ## Queued admission after a spending stop
 

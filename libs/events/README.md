@@ -26,7 +26,7 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks startup, saved turn references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
+  server["apps/server<br/>back end"] -.->|checks hosted registration, startup, saved turn references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, subscriptions, nightly memory records and cleanup results| events
@@ -129,6 +129,9 @@ Archive and read choices name one person and their join. They contain no chat te
 Budget turn stops carry only their reason kind and a reference to the saved spending
 stop. Participants can read them without seeing amounts or payer ids. Member stops
 keep their original shape.
+
+Hosted image requests name one platform, a public upstream and the first check attempt.
+These records contain no check result or report bytes.
 
 Personal connection records can name an exact stored generation and the person who
 saved it. A replacement names the expected stream version. Old records still replay,

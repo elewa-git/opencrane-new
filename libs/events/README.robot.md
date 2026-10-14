@@ -521,6 +521,17 @@ Requester, turn-ended and access-revoked stop commands follow in the next part.
 Trusted call ids, grant/dispatch checks and the child dispatcher remain in row 5.
 There is no route, caller, running-turn fan-out or model call in this part.
 
+## Hosted registration — first part of P3-6 PR 4
+
+Hosted registration may carry a complete `installation`: attemptId 1, platform
+(`linux/amd64` or `linux/arm64`) and upstream host/port. It cannot also carry a
+credentialContract. Older hosted records still parse. The existing parser binds
+serverId to the MCP stream subject. No new event types are added in this split.
+
+Remaining: dated receipts, admission GET and recheck commands. Evidence storage is
+P3-6 PR 4b. Image fetch, scans, deployment and evidence bytes are outside this part.
+Fresh-install qualification: NOT RUN.
+
 ## Safe budget turn stop records
 
 `agent.turn_stop_requested` accepts either the unchanged member fields or

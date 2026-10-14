@@ -365,7 +365,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `mcp.server_registered` | admin | catalogue (draft; transport kind and optional catalogue reference) | validate (SSRF / image scan) → `mcp.server_discovered` or `mcp.server_rejected` |
+| `mcp.server_registered` | admin | catalogue (draft; transport kind and optional catalogue reference) | remote: validate SSRF and discover; hosted installation: wait for image checks (not built); older hosted: review startup contract |
 | `mcp.server_discovered` | reaction | catalogue (exact tool snapshots, digests, check and expiry dates, server identity and rejection reasons; old undated records remain unavailable) | — |
 | `mcp.server_reviewed` | Owner/Admin | exact catalogue, connection, account mode and tool review digests with chosen modes | restrictions apply immediately; widening disables publication |
 | `mcp.catalogue_checked` | models catalogue watch | catalogue (checked saved definitions for the exact server and silo; unchanged checks preserve policyRevision, failed checks advance it and clear expiry) | old approvals cancel on their next read after a failure, even if evidence was renewed meanwhile |
@@ -843,3 +843,11 @@ record. They contain no spending amounts or payer ids. Member stops retain their
 original `requestedBy` shape. The dispatcher waits for the conversations projection
 to reach the source position, then checks exact histories and conditionally appends
 one stop per unfinished affected turn. Projection replay never runs this reaction.
+
+Hosted registration can include `installation` with attemptId 1, one platform
+(`linux/amd64` or `linux/arm64`) and a public upstream host/port. This complete
+request declares a credential-free installation and cannot include credentialContract.
+It remains checking without discovery, rejection or network contact. The event time
+records when it queued. No image check receipt or admission is implied. Registration
+uses the original commandId, a serverId derived from silo and commandId, and one
+conditional append. Lost replies recover that event; absence remains unknown.

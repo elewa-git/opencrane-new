@@ -1,4 +1,5 @@
 import { hostedCredentialContractSchema } from './startup-credentials.ts';
+import { hostedImageInstallationSchema } from './hosted-image.ts';
 import { optionalProviderTurnBindingSchema } from './turn-binding.ts';
 import { groupConversationSchema, sharedChildConversationSchema,
   childParticipantAddedSchema, childParticipantRemovedSchema } from './conversation.ts';
@@ -436,8 +437,13 @@ export const mcpServerRegisteredDataSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('remote'), locator: remoteLocatorSchema, ...mcpServerRegisteredFields }).strict(),
   z.object({ kind: z.literal('hosted'), locator: hostedLocatorSchema,
     credentialContract: hostedCredentialContractSchema.optional(),
-    ...mcpServerRegisteredFields }).strict(),
+    installation: hostedImageInstallationSchema.optional(),
+    ...mcpServerRegisteredFields }).strict().refine(credentialFreeInstallation),
 ]);
+
+function credentialFreeInstallation(data: { installation?: unknown; credentialContract?: unknown }) {
+  return data.installation === undefined || data.credentialContract === undefined;
+}
 
 const catalogueDates = {
   checkedAt: z.iso.datetime(), expiresAt: z.iso.datetime(),

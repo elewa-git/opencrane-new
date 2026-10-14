@@ -91,7 +91,10 @@ export function installWorker(app: FastifyInstance, store: EventStore, silo: str
 async function reviewHostedRegistration(store: EventStore, silo: string, serverId: string,
   row: StoredEvent) {
   const registration = z.object({ locator: z.string(),
-    credentialContract: z.unknown().optional() }).parse(row.event.data);
+    credentialContract: z.unknown().optional(), installation: z.unknown().optional() })
+    .parse(row.event.data);
+  // Leave new credential-free requests checking until image admission is available.
+  if (registration.installation !== undefined && registration.credentialContract === undefined) return;
   const reason = startupContractRejection(registration.locator, registration.credentialContract);
   // Leave compatible contracts for review without scheduling or releasing material.
   if (!reason) return;

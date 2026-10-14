@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|builds configuration; checks calls, holds and stops against queued work; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks open spending before provider switch-on; saves publication, gateway, root allowance, overrun, spending, connection and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
+  models -->|checks open spending before provider switch-on; saves hosted registration, publication, gateway, root allowance, overrun, spending, connection and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -202,6 +202,10 @@ turn and queued message. It checks the conversation index has caught up first.
 The record ends waiting approvals and survives a later limit increase. Queued messages
 keep the payer selected when they were saved, even if the default payer changes.
 Renewal and send checks use that message's position in the event log.
+
+An owner or admin can register a hosted image pinned by its SHA-256 digest.
+The library saves one request and recovers it by its original command id.
+Registration grants no access and starts no image checks.
 
 The catalogue watch starts with calls paused and reads the tool list again. The models
 process uses its result before issuing a pass and immediately before sending a call.
