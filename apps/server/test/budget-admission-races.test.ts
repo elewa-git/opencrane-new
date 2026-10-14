@@ -46,13 +46,13 @@ async function expectNoSend() {
   expect(setup.actor.state.reservations).toEqual([]);
   expect(setup.actor.state.dispatches).toEqual([]);
 }
-async function closedRecords() {
+async function turnRecords(type: 'computer.turn_started' | 'computer.turn_closed') {
   const rows = await history(setup.nats.store, 'computer-assistant', 'test');
-  function closesQueued(row: typeof rows[number]) {
+  function matchesQueued(row: typeof rows[number]) {
     const fields = z.object({ turnId: z.string().optional() }).parse(row.event.data);
-    return row.event.type === 'computer.turn_closed' && fields.turnId === input.turnId;
+    return row.event.type === type && fields.turnId === input.turnId;
   }
-  return rows.filter(closesQueued);
+  return rows.filter(matchesQueued);
 }
 
 async function refusesChangedDefault() {
@@ -111,7 +111,7 @@ async function refusesLateStartRenewal(check: typeof lateStartChecks[number]) {
   expect(setup.actor.state.stoppedWork).toEqual([]);
   if (check === 'renewal') {
     await expect(turnCommand(setup.nats.store, context, input)).rejects.toThrow('spending');
-    expect(await closedRecords()).toHaveLength(1);
+    expect(await turnRecords('computer.turn_closed')).toHaveLength(1);
   }
   await expectNoSend();
 }
@@ -122,7 +122,7 @@ async function initialCheckClosesRefusedTurn() {
   await stopped();
   await expect(turnCommand(setup.nats.store, context, input)).rejects.toThrow('spending');
   // Require the initial refusal to save closure; a later refusal alone cannot do this.
-  const closed = await closedRecords();
+  const closed = await turnRecords('computer.turn_closed');
   expect(closed).toHaveLength(1);
   expect(closed[0]!.event.data).toMatchObject({ status: 'failed' });
   await expectNoSend();
@@ -145,8 +145,32 @@ async function finalCheckSeesNewStop() {
   headSpy.mockImplementation(insertStop);
   await expect(turnCommand(setup.nats.store, context, input)).rejects.toThrow('spending');
   expect(inserted).toBe(true);
-  expect(await closedRecords()).toEqual([]);
+  expect(await turnRecords('computer.turn_started')).toEqual([]);
+  expect(await turnRecords('computer.turn_closed')).toEqual([]);
   await expectNoSend();
 }
 it('rechecks a stop saved after the initial budget read during the access check',
   finalCheckSeesNewStop);
+
+async function keepsProviderSwitchSendRefusal() {
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let switched = false;
+  async function switchDuringAppend(command: Parameters<typeof append>[0]) {
+    const candidate = z.object({ type: z.string() }).parse(command.event);
+    if (candidate.type === 'computer.turn_started' && !switched) {
+      switched = true;
+      await setup.append('budget-test', 'provider.managed_calls_enabled', {
+        providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0 });
+    }
+    return append(command);
+  }
+  const appendSpy = vi.spyOn(setup.nats.store, 'append');
+  appendSpy.mockImplementation(switchDuringAppend);
+  const admitted = await turnCommand(setup.nats.store, context, input);
+  expect(switched).toBe(true);
+  expect(admitted).toMatchObject({ payingGroupId: 'personal-default' });
+  expect(admitted).not.toHaveProperty('providerId');
+  await expectNoSend();
+}
+it('keeps the saved legacy binding while a provider switch refuses its send',
+  keepsProviderSwitchSendRefusal);
