@@ -174,7 +174,7 @@ async function selectsOnlyEarlierHumanMessages() {
     conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
     ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
   await setup.append('conversation-conversation', 'message.posted', {
-    conversationId: 'conversation', authorKind: 'assistant', authorId: 'assistant',
+    conversationId: 'conversation', authorKind: 'agent', authorId: 'assistant',
     ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
   const event = await stop();
   await setup.append('conversation-conversation', 'message.posted', {
