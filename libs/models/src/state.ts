@@ -176,7 +176,9 @@ export function applyBudget(state: BudgetState, event: EventEnvelope, sequence =
 }
 function applyRoot(state: BudgetState, event: EventEnvelope, sequence: number) {
   if (event.type === 'budget.root_allowance_set') {
-    state.roots.push({ ...budgetRootAllowanceSetDataSchema.parse(event.data), position: sequence });
+    const allowance = budgetRootAllowanceSetDataSchema.parse(event.data);
+    const root = { ...allowance, position: sequence };
+    state.roots.push(root);
   } else if (event.type === 'budget.root_stopped') {
     const stop = budgetRootStoppedDataSchema.parse(event.data);
     function matches(root: BudgetState['roots'][number]) {
