@@ -1,0 +1,1 @@
+- Add internal cleanup for one staged personal connection secret. Keep current and uncertain references, coordinate with saves, and delete only an exact stored version after a conflicting event proves the old save cannot succeed. Automatic scanning and closure of idle expired saves remain planned; tool access stays closed.

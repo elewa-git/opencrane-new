@@ -1386,8 +1386,8 @@ identity for the deletion check before DELETE. `deleted` requires a later GET re
 `unknown`. After restart, a pending deletion only checks absence. It never repeats DELETE
 or adopts the version changed by a finaliser. A failed request also leaves deletion
 unresolved; a later absence check can finish it. Conflicts and unknown outcomes retain
-material. A 404 never proves failed activation. The later orphan reconciler must prevent
-late appends before cleanup. No routes, event writes or material releases are registered.
+material. A 404 never proves failed activation. The candidate reconciler described below requires
+a conflicting profile event to prevent late appends before cleanup. No routes, event writes or material releases are registered.
 
 Checks adapt OC1 commit `10abd0ef6`, `kubernetes-mcp-connection-secret-store.ts` and
 `mcp-connection-material-verifier.ts`. [The original AGPL-3.0-or-later notice](src/connection-custody.NOTICE)
@@ -1577,7 +1577,7 @@ Logs: `/tmp/p3-6-pr2-order-red-final.log`,
 
 ## Personal bearer commands (P3-8 PR 2, part of #49)
 
-`saveBearerConnection(store, binding, memberId, custody, input, material)` is internal
+`saveBearerConnection(store, binding, memberId, custody, input, material, db)` is internal
 orchestration, with no HTTP route. `memberId` comes from authenticated server context.
 Input names `action` (create/rotate), serverId, connectionId, profileId, changeRef,
 expectedSequence, expectedGeneration and a fixed appendUntil UTC millisecond deadline.
@@ -1594,8 +1594,8 @@ Only member, ownership and member/server control streams participate in the shor
 The operation id hashes silo, subject and changeRef. History retains retry identity beyond
 NATS deduplication. A retry must recover the same private material and exact identity and
 match the saved payload. Confirmed appends are read back and compared before returning.
-Unknown appends retain custody; these commands never delete it. Orphan closure and cleanup
-remain a follow-up to row 3's first part. `foldConnection` keeps old or incomplete records unavailable and new profiles
+Unknown appends retain custody; these commands never delete it. Explicit candidate cleanup
+is described below. Scanning and closing expired operations remain planned. `foldConnection` keeps old or incomplete records unavailable and new profiles
 `saved_unverified`. It reads no secret store and starts no work.
 
 The existing `profile` event field holds the opaque profileId, never an editable label.
@@ -1629,7 +1629,8 @@ A save that commits first remains covered by a later disable. The profile revisi
 follows the category read, so competing rotations and owner revoke still refuse stale saves.
 A concurrent change to any other connection also refuses this save; the caller can retry.
 Other event categories do not cause an append conflict. This uses the existing store
-contract without another event, a process lock or a new event-store API.
+contract without another event or a new event-store API. The shared database lock now
+also keeps staging and cleanup apart; the event-store condition still stops late publishes.
 Profile history stays outside the short access check. Conversation access checks are unchanged.
 
 Regression tests pause the real append after the final check, finish disable, and then
@@ -1637,11 +1638,40 @@ resume create, rotation or reconnect. Separate tests disable after the final blo
 and remove the owner or demote the admin during profile reads, on first attempts and retries.
 The fixtures use real NATS, OpenFGA and PostgreSQL. Custody stays behind a test adapter.
 
-The approximately 600-line limit splits row 3. Orphan enumeration, coordination with
-staging, operation closure and deletion reactions remain unimplemented. Unknown appends,
-current references, late appends and exact delete conflicts still need reconciler tests
-in that follow-up. No broker, release, selection, API or UI is added here. Fresh-install
-qualification is NOT RUN; this first part does not complete #49.
+## Staged connection candidate cleanup (P3-8 PR 3b, Part of #49)
+
+`reconcileConnectionStage(store, db, custody, stage)` checks one supplied private stage.
+It returns only `retained` or `deleted`. It is an internal live maintenance entry point;
+no timer, event reaction or replay path calls it. It performs no provider call or release.
+
+Saving and cleanup both use `withConnectionStage` with the same silo/member/server/profile
+lock name. The existing PostgreSQL advisory lock waits at most 100 ms for acquisition.
+It stores no business state. Missing or failed coordination refuses staging and retains
+cleanup candidates. Profile history, custody work and lock waiting precede the save's
+short access check. The authority implementation and volume tests are unchanged.
+
+Under the lock, cleanup recovers the exact identity from the private journal, verifies
+all custody bindings and reads fresh profile history. A current reference is always kept.
+An expired append deadline alone proves nothing. Cleanup also requires a later profile
+position than the stage's expected sequence, with a valid current generation or a saved
+revocation. That saved conflict makes a delayed conditional save impossible, even after
+a worker loses its lock. A current generation with another reference or a revocation can
+therefore retire an old stage. The custody adapter still sends both UID and resourceVersion
+preconditions. A conflict, missing record or failed read returns `retained`, without
+copying dependency errors or adopting a replacement identity.
+
+This is the first bounded cleanup part under the approximately 600-line review target.
+Candidate scanning, journal reconstruction from custody enumeration, conditional closure
+of expired operations without a conflicting event, automatic revoke/rotation reactions
+and tracking future active credential injections remain planned. Idle uncertain stages
+are deliberately retained. All credentialed routes stay closed. The caller must supply
+a trusted private stage, never browser input. No new dependency or event is introduced.
+
+Tests use real NATS and PostgreSQL with a local HTTP Secret fixture. They cover exact
+removal, changed UID/version, unknown and current references, lock contention, fresh
+reads under the lock, store/read failures and a delayed publish delivered at deletion.
+Fresh-install, live Kubernetes and provider qualification are NOT RUN. This does not
+complete row 3 or #49.
 
 ## Free tool calls and stopped renewals (P3-14 PR 3; Part of #55)
 

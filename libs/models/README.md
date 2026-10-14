@@ -19,7 +19,7 @@ flowchart LR
   models -->|checks spending before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
-  models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
+  models -->|stages credentials and checks safe cleanup| custody["Kubernetes<br/>private credentials"]
   models <-->|checks calls, holds and spending stops; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on, saves spending, checks connection changes together, saves instance reports and matching child admission records| store["libs/event-store<br/>event log"]
@@ -213,8 +213,11 @@ The stream keeps only references and exact storage identities. Saved profiles re
 unavailable for tool calls until their upstream account identity can be checked.
 Owners can revoke their own profiles. Admins can block a member's personal connections
 to one server, including later reconnects with a new profile. Both changes keep the
-stored token until a separate cleanup process can prove deletion is safe.
-That cleanup process is not built yet.
+stored token until cleanup can prove deletion is safe.
+A live maintenance function checks one staged secret while holding the same lock as
+staging and saving. It keeps current references and uncertain saves. After the save
+deadline, a conflicting event can prove the old save cannot succeed; only then can
+cleanup delete that exact stored version. Automatic scanning is still planned.
 The event store checks profile changes and admin blocks together when it saves a profile.
 If the block is saved first, the profile save is refused, even if its access check has finished.
 A simultaneous change to another connection can also refuse the save; the caller can retry.

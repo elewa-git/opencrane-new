@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import type { Db } from '@opencrane/projections';
+import { withConnectionStage } from './connection-stage-lock.ts';
 import type { Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { connectionCreatedDataSchema, type EventEnvelope } from '@opencrane/events';
@@ -148,13 +150,22 @@ async function stageMaterial(custody: Custody, stage: ConnectionStage, material:
 
 /** Stage outside the append-only command, then check current access before saving a reference. */
 export async function saveBearerConnection(store: EventStore, binding: Binding,
-  memberId: string, custody: Custody, raw: unknown, material: string) {
+  memberId: string, custody: Custody, raw: unknown, material: string, db: Pick<Db, 'lock'>) {
   const parsed = commandSchema.safeParse(raw);
   if (!parsed.success || !id.safeParse(memberId).success || typeof material !== 'string' ||
       Buffer.byteLength(material) === 0 || Buffer.byteLength(material) > 8192) {
     throw new Error('Connection input invalid');
   }
   const input = parsed.data;
+  const profile = { siloId: binding.silo, userId: memberId,
+    serverId: input.serverId, profileId: input.profileId };
+  async function save() {
+    return saveLocked(store, binding, memberId, custody, input, material);
+  }
+  return withConnectionStage(db, profile, save);
+}
+async function saveLocked(store: EventStore, binding: Binding, memberId: string,
+  custody: Custody, input: Command, material: string) {
   const subject = `connection-${memberId}-${input.serverId}-${input.profileId}`;
   const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
   const state = foldConnection(rows);
