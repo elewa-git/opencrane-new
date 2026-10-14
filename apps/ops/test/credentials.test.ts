@@ -38,7 +38,8 @@ it('agentgateway enforces committed computer and per-turn credentials across rac
     const tokens = await tokenIssuer({ privateKeyPath, issuer: 'https://test.invalid', now: () => now });
     const credentials = computerCredentials(fixture.store, tokens, 'test');
     const assistantId = 'assistant-test';
-    const assistant = event('assistant-created', `assistant-${assistantId}`, 'assistant.created');
+    const assistant: EventEnvelope = event('assistant-created', `assistant-${assistantId}`,
+      'assistant.created');
     assistant.data = { assistantId, ownerId: 'alice', kind: 'personal' };
     await fixture.seed([assistant]);
     let computerId = 'computer-test';
