@@ -282,13 +282,14 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   }
   // Remember delivery only for this socket; reconnecting must send pending turns again.
   const sentTurns = new Map<string, TurnDelivery>();
+  const sentStops = new Map<string, number>();
   async function settled() {
     const reportsDone = reports.settled();
     await approvals.settled();
     return reportsDone;
   }
   return {
-    socket, deliver, delivered, sentTurns, approvals, approvalWaiting,
+    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting,
     get rejection() { return rejection; },
     settled,
   };

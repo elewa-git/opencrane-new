@@ -551,6 +551,8 @@ Fresh-install qualification: NOT RUN.
 The conversation contains no cents, ceiling, payer or copied budget reasons.
 `stop-budget-turns` receives ceiling changes and exhaustion, including per-turn stops.
 No root event is added. Stop schemas live outside the near-full `data.ts`.
+The package exports `agentTurnStopRequestedDataSchema` for bridge delivery.
+
 
 ## Expired bearer save closure
 

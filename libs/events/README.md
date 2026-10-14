@@ -26,7 +26,7 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks child requests, hosted registration, startup, saved turn references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
+  server["apps/server<br/>back end"] -.->|checks child requests, hosted registration, startup, saved turn and spending stop references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, subscriptions, nightly memory records and cleanup results| events
@@ -135,7 +135,8 @@ These records let live cleanup prove a delayed save can no longer succeed.
 
 Budget turn stops carry only their reason kind and a reference to the saved spending
 stop. Participants can read them without seeing amounts or payer ids. Member stops
-keep their original shape.
+keep their original shape. The bridge uses the same data checks as the event log
+before delivering these Stops to a computer.
 
 A child-chat request records the source id, chosen people, assistant and spending
 upper bound. It contains no message text and must name the requesting person.

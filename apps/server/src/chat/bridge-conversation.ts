@@ -1,7 +1,8 @@
 import { chatMembership } from './participation.ts';
 import { isComputerLifecycle, readComputerControl } from '@opencrane/auth';
 import type { Client } from 'minio/dist/esm/minio.mjs';
-import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
+import { agentTurnStopRequestedDataSchema, fileDeliveredDataSchema, fileUploadedDataSchema }
+  from '@opencrane/events';
 import type { WebSocket } from 'ws';
 import type { connectMcpCatalogue, listConversations } from '@opencrane/projections';
 import { memberAuthorisation } from '@opencrane/authz';
@@ -33,6 +34,7 @@ type BridgeLink = {
   socket: WebSocket;
   delivered: Set<string>;
   sentTurns: Map<string, TurnDelivery>;
+  sentStops: Map<string, number>;
   deliver: (file: Upload, bytes: Buffer, controlPending?: ControlCheck) => Promise<void>;
 };
 type ControlCheck = () => Promise<boolean>;
@@ -52,6 +54,7 @@ function pendingMessage(rows: ChatRows) {
   const completed = new Set<string>();
   const started = new Set<string>();
   const stopped = new Set<string>();
+  const budgetStopped = new Set<string>();
   for (const row of rows) {
     if (['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) {
       completed.add(turnIdData.parse(row.event.data).turnId);
@@ -60,11 +63,14 @@ function pendingMessage(rows: ChatRows) {
       started.add(turnIdData.parse(row.event.data).turnId);
     }
     if (row.event.type === 'agent.turn_stop_requested') {
-      stopped.add(turnIdData.parse(row.event.data).turnId);
+      const stop = agentTurnStopRequestedDataSchema.parse(row.event.data);
+      stopped.add(stop.turnId);
+      if ('reason' in stop) budgetStopped.add(stop.turnId);
     }
   }
   function isPending(row: ChatRows[number]) {
     return row.event.type === 'message.posted' && !completed.has(row.event.id) &&
+      !budgetStopped.has(row.event.id) &&
       (!stopped.has(row.event.id) || started.has(row.event.id));
   }
   return rows.find(isPending);
@@ -163,22 +169,25 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
   agentSession(rows);
   const message = pendingMessage(rows);
+  const stops = pendingBudgetStops(rows, assistant.closed);
+  const waitingWork = message !== undefined || stops.length > 0;
   function isConversationClosed(row: ChatRows[number]) {
     return row.event.type === 'conversation.closed';
   }
   if (rows.some(isConversationClosed)) return { pending: false, retry: false };
   const current = assistant.current;
   if (!current) {
-    const pending = computerHistoryUnavailable && message !== undefined;
+    const pending = computerHistoryUnavailable && waitingWork;
     return { pending, retry: pending };
   }
-  if (!assistant.kind) return { pending: message !== undefined, retry: message !== undefined };
+  if (!assistant.kind) return { pending: waitingWork, retry: waitingWork };
   const computer = computerData.parse(current.data);
   await recoverTerminalTurns(options, computer.computerId, conversation.assistantId,
     conversation.conversationId, rows, assistant.closed);
   const allUploads = conversationUploads(rows, assistant.kind);
   const uploads = pendingUploads(rows, allUploads, computer.computerId);
-  if (!message && !uploads.length) return { pending: false, retry: false };
+  const pendingDeliveries = uploads.length + stops.length;
+  if (!message && pendingDeliveries === 0) return { pending: false, retry: false };
   if (current.type === 'computer.suspended') {
     await resumeComputer(options.store, tokens, options.silo, conversation.assistantId);
     return { pending: true, retry: true };
@@ -187,6 +196,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
     return { pending: true, retry: true };
   }
   const link = await connection(computer.computerId, conversation.assistantId);
+  sendBudgetStops(link, stops);
   const control = await controlPending();
   if (control) {
     // Keep explicit stops available while control holds new turns and uploads.
@@ -199,9 +209,14 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
       assistant.kind, assistant.started, controlPending);
     sendStop(link.socket, rows, message, conversation.conversationId);
   }
-  const unacceptedMessage = message !== undefined && !assistant.started.has(message.event.id);
-  const retry = uploads.length > 0 || unacceptedMessage;
+  const retry = needsDeliveryRetry(message, assistant.started, pendingDeliveries);
   return { pending: true, retry, connectionId: link.connectionId };
+}
+
+function needsDeliveryRetry(message: ChatRows[number] | undefined,
+  started: Set<string>, pendingDeliveries: number) {
+  const unacceptedMessage = message !== undefined && !started.has(message.event.id);
+  return pendingDeliveries > 0 || unacceptedMessage;
 }
 
 async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
@@ -359,6 +374,36 @@ function conversationUploads(rows: ChatRows, assistantKind: string) {
     return fileUploadedDataSchema.parse(row.event.data);
   }
   return uploads.map(uploadedFile);
+}
+
+type BudgetStop = Extract<z.infer<typeof agentTurnStopRequestedDataSchema>, { reason: 'budget' }>;
+
+function pendingBudgetStops(rows: ChatRows, closed: Set<string>) {
+  const finished = new Set(closed);
+  const stops = new Map<string, BudgetStop>();
+  for (const row of rows) {
+    if (['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) {
+      finished.add(turnIdData.parse(row.event.data).turnId);
+    }
+    if (row.event.type !== 'agent.turn_stop_requested') continue;
+    const stop = agentTurnStopRequestedDataSchema.parse(row.event.data);
+    if ('reason' in stop && !stops.has(stop.turnId)) stops.set(stop.turnId, stop);
+  }
+  for (const turnId of finished) stops.delete(turnId);
+  return [...stops.values()];
+}
+
+function sendBudgetStops(link: BridgeLink, stops: BudgetStop[]) {
+  for (const stop of stops) {
+    const previous = link.sentStops.get(stop.turnId);
+    const now = performance.now();
+    if (previous !== undefined && now - previous < 1000) continue;
+    // Retry without a new event: a sent frame does not prove the computer stopped.
+    const frame = { type: 'stop', turnId: stop.turnId, conversationId: stop.conversationId,
+      reason: stop.reason, stopId: stop.stopId };
+    link.socket.send(JSON.stringify(frame));
+    link.sentStops.set(stop.turnId, now);
+  }
 }
 
 function sendStop(socket: WebSocket, rows: ChatRows,

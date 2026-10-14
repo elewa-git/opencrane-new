@@ -53,7 +53,7 @@ export { assistantGrantSchema, assistantCreatedDataSchema,
   assistantSettingsChangedDataSchema,
   conversationCreatedDataSchema, conversationParticipantIds, hasDirectParticipants } from './data.ts';
 
-export { agentOutputLostDataSchema } from './data.ts';
+export { agentOutputLostDataSchema, agentTurnStopRequestedDataSchema } from './data.ts';
 export { agentToolCallStartedDataSchema, agentToolCallFinishedDataSchema } from './data.ts';
 
 export { computerTurnStartedDataSchema, computerTurnClosedDataSchema } from './data.ts';

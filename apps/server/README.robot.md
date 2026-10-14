@@ -2618,7 +2618,22 @@ append confirms spending and membership. Provider switch-on retains its existing
 gateway refusal for a legacy start that was already being saved.
 A saved budget turn stop also closes that turn in the chat summary. Legacy member
 stops retain their previous fold. Read and viewer authority checks are unchanged.
-Bridge stop-first delivery is deferred to P3-14 PR 4b.
+The bridge sends saved budget Stops before that chat's uploads or turn frames.
+It excludes every budget-stopped message from turn delivery, including after a
+limit increase or reconnect. It keeps the first saved stopId and sends only type,
+turnId, conversationId, reason and stopId. Member Stop frames keep their old shape.
+
+Per-socket timestamps space budget Stop retries at least one second apart. A new
+socket sends Stop on its first conversation pass after the resume handshake.
+A saved terminal report or computer turn close ends retries. The bridge never
+appends a Stop. Pending Stops use the existing polling retry path and the same
+chat history read as an unaccepted turn; they add no budget read or access check.
+
+P3-14 PR 4b tests use real NATS, PostgreSQL and OpenFGA, plus the real computer
+channel for different saved payers on one team computer. PR 4c still needs to
+keep the watcher reading Stops while another chat's file transfer is held open
+and prove delivery within two seconds. Fresh-install qualification is NOT RUN.
+Computer grant removal, status APIs and screens remain outside this part.
 
 ## Reviewed child participant commands (#91, first part)
 

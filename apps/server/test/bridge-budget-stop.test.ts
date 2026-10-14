@@ -36,25 +36,25 @@ async function budgetBridge(realChannel = false) {
   const view = await viewFixture(noDesktop);
   const directory = await mkdtemp(`${tmpdir()}/budget-bridge-`);
   const keyOptions = { namedCurve: 'P-256',
-    privateKeyEncoding: { type: 'pkcs8', format: 'pem' } } as const;
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' } } as const;
   const key = generateKeyPairSync('ec', keyOptions);
   const privateKeyPath = `${directory}/key.pem`;
   await writeFile(privateKeyPath, key.privateKey, { mode: 0o600 });
-  const tokens = await tokenIssuer({ privateKeyPath, issuer: 'https://bridge.test/' });
+  const issuerOptions = { privateKeyPath, issuer: 'https://bridge.test/' };
+  const tokens = await tokenIssuer(issuerOptions);
   const actor = new BudgetActor(view.nats.store, 'test');
   await actor.start(2000, 20000, 'personal');
   const assistantId = realChannel ? 'team-assistant' : 'assistant';
   const kind = realChannel ? 'team' : 'personal';
   if (realChannel) {
-    await view.append(`assistant-${assistantId}`, 'assistant.created', {
-      assistantId, ownerId: 'team', kind, payingGroupId: 'payer-a',
-    });
-    await view.append(`computer-${assistantId}`, 'computer.claimed', {
-      assistantId, computerId: 'desktop', sandboxUid: 'sandbox', generation: 1, tokenId: 'token:test',
-    });
-    await view.append(`computer-${assistantId}`, 'computer.ready', {
-      assistantId, computerId: 'desktop', generation: 1, podUid: 'fixture',
-    });
+    const assistant = { assistantId, ownerId: 'team', kind, payingGroupId: 'payer-a' };
+    await view.append(`assistant-${assistantId}`, 'assistant.created', assistant);
+    const claim = { assistantId, computerId: 'desktop', sandboxUid: 'sandbox',
+      generation: 1, tokenId: 'token:test' };
+    await view.append(`computer-${assistantId}`, 'computer.claimed', claim);
+    const ready = { assistantId, computerId: 'desktop', generation: 1, podUid: 'fixture' };
+    await view.append(`computer-${assistantId}`, 'computer.ready', ready);
   }
   const server = createServer();
   const frames: Frame[] = [];
@@ -78,7 +78,8 @@ async function budgetBridge(realChannel = false) {
   }
   const driver = { rpc, grant, credential, journal: `${directory}/reports` };
   const channel = realChannel ? bridgeChannel(server, driver) : undefined;
-  const computers = realChannel ? undefined : new WebSocketServer({ server });
+  const socketOptions = { server };
+  const computers = realChannel ? undefined : new WebSocketServer(socketOptions);
   function connected(socket: WebSocket) {
     function receive(bytes: Buffer) {
       const frame = z.record(z.string(), z.unknown()).parse(JSON.parse(bytes.toString()));
@@ -109,7 +110,8 @@ async function budgetBridge(realChannel = false) {
     }
     vi.spyOn(link.socket, 'send').mockImplementation(recordSend);
   }
-  const objects = new Client({ endPoint: '127.0.0.1', useSSL: false });
+  const objectOptions = { endPoint: '127.0.0.1', useSSL: false };
+  const objects = new Client(objectOptions);
   const bytes = Buffer.from('file contents');
   const hash = createHash('sha256');
   const sha256 = hash.update(bytes).digest('hex');
@@ -128,34 +130,30 @@ async function budgetBridge(realChannel = false) {
     connectionId, createLogger('budget-bridge-test'));
   const sessions: AgentSession[] = [];
   async function message(conversationId: string, payer = 'personal') {
-    await view.append(`conversation-${conversationId}`, 'conversation.created', {
-      conversationId, assistantId, createdBy: 'alice', mode: 'agent_session',
-      payingGroupId: payer,
-    });
+    const created = { conversationId, assistantId, createdBy: 'alice',
+      mode: 'agent_session', payingGroupId: payer };
+    await view.append(`conversation-${conversationId}`, 'conversation.created', created);
     view.keys.provision('test', conversationId);
     const encrypted = view.keys.encrypt('test', conversationId, 'Keep working');
-    const saved = await view.append(`conversation-${conversationId}`, 'message.posted', {
-      conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text',
-      executionMode: 'memory_free', ...encrypted,
-    });
-    sessions.push({ conversationId, assistantId, createdBy: 'alice', mode: 'agent_session',
-      createdAt: saved.time, assistantKind: kind });
+    const posted = { conversationId, authorId: 'alice', authorKind: 'human',
+      contentType: 'text', executionMode: 'memory_free', ...encrypted };
+    const saved = await view.append(`conversation-${conversationId}`, 'message.posted', posted);
+    const session: AgentSession = { conversationId, assistantId, createdBy: 'alice',
+      mode: 'agent_session', createdAt: saved.time, assistantKind: kind };
+    sessions.push(session);
     return { conversationId, turnId: saved.id };
   }
   type Turn = Awaited<ReturnType<typeof message>>;
   async function start(turn: Turn, payer = 'personal', threadId = 'thread-1') {
-    await view.append(`conversation-${turn.conversationId}`, 'agent.turn_started', {
-      ...turn, assistantId, threadId,
-    });
-    await view.append(`computer-${assistantId}`, 'computer.turn_started', {
-      ...turn, assistantId, threadId, requesterId: 'alice', computerId: 'desktop',
-      task: 'chat_turn', payingGroupId: payer, executionMode: 'memory_free',
-    });
+    const started = { ...turn, assistantId, threadId };
+    await view.append(`conversation-${turn.conversationId}`, 'agent.turn_started', started);
+    const admitted = { ...started, requesterId: 'alice', computerId: 'desktop',
+      task: 'chat_turn', payingGroupId: payer, executionMode: 'memory_free' };
+    await view.append(`computer-${assistantId}`, 'computer.turn_started', admitted);
   }
   async function stop(turn: Turn, stopId = 'first-stop') {
-    await view.append(`conversation-${turn.conversationId}`, 'agent.turn_stop_requested', {
-      ...turn, reason: 'budget', stopId,
-    });
+    const stopped = { ...turn, reason: 'budget', stopId };
+    await view.append(`conversation-${turn.conversationId}`, 'agent.turn_stop_requested', stopped);
   }
   async function process(conversationId?: string) {
     function selected(session: AgentSession) {
@@ -175,11 +173,10 @@ async function budgetBridge(realChannel = false) {
     frames.length = 0;
   }
   async function upload(turn: Turn) {
-    await view.append(`conversation-${turn.conversationId}`, 'file.uploaded', {
-      conversationId: turn.conversationId, fileId: 'upload', uploadedBy: 'alice',
-      name: 'upload.txt', size: bytes.length, sha256, mime: 'text/plain',
-      objectKey: `test/${turn.conversationId}/upload`,
-    });
+    const uploaded = { conversationId: turn.conversationId, fileId: 'upload',
+      uploadedBy: 'alice', name: 'upload.txt', size: bytes.length, sha256, mime: 'text/plain',
+      objectKey: `test/${turn.conversationId}/upload` };
+    await view.append(`conversation-${turn.conversationId}`, 'file.uploaded', uploaded);
   }
   async function close() {
     link.socket.terminate();
@@ -263,9 +260,14 @@ async function retriesUntilTerminal(terminal: string) {
   expect(fixture.frames.filter(isTurn)).toEqual([]);
   const subject = terminal === 'computer.turn_closed'
     ? `computer-${fixture.assistantId}` : 'conversation-first';
-  await fixture.append(subject, terminal, { ...turn, assistantId: fixture.assistantId,
-    computerId: 'desktop', requesterId: 'alice', task: 'chat_turn',
-    status: 'completed', reason: 'interrupted' });
+  let data: Frame = turn;
+  if (terminal === 'computer.turn_closed') {
+    data = { ...turn, assistantId: fixture.assistantId, computerId: 'desktop',
+      requesterId: 'alice', task: 'chat_turn', status: 'completed' };
+  } else if (terminal === 'agent.turn_failed') {
+    data = { ...turn, reason: 'bridge_interrupted' };
+  }
+  await fixture.append(subject, terminal, data);
   fixture.frames.length = 0;
   await delay(1050);
   await fixture.process();
@@ -337,8 +339,9 @@ async function isolatesRealTurns() {
   expect(typeof acknowledgement?.['token']).toBe('string');
   expect(acknowledgement?.['expiresAt']).toBeGreaterThan(Date.now());
   expect(acknowledgement?.['refused']).toBeUndefined();
-  test.channel!.notification({ method: 'turn/completed',
-    params: { threadId: 'thread-2', turn: { status: 'completed' } } });
+  const completion = { method: 'turn/completed',
+    params: { threadId: 'thread-2', turn: { status: 'completed' } } };
+  test.channel!.notification(completion);
   async function secondCompleted() {
     const rows = await chatHistory(test.store, 'test', 'second');
     function completed(row: typeof rows[number]) {

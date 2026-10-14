@@ -1,0 +1,1 @@
+- Send saved spending Stops before files and turns in the same chat. Retry unfinished Stops after loss or reconnect, and never resend stopped work after a limit increase. Other turns on the computer can continue.
