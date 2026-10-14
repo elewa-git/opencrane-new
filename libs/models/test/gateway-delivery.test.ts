@@ -388,7 +388,7 @@ async function restrictsDeliveredControlRoute() {
       headers['forwarded'] = 'for=127.0.0.1';
     }
     await new Promise<void>(send);
-    function send(resolve: () => void, reject: (error: Error) => void) {
+    function send(resolve: () => void, reject: (error: unknown) => void) {
       const options = { localAddress: '127.0.0.2', headers };
       const outgoing = request(url, options, received);
       function received(response: import('node:http').IncomingMessage) {
@@ -402,7 +402,7 @@ async function restrictsDeliveredControlRoute() {
             expect(body).not.toContain(setup.record.recordDigest);
             resolve();
           } catch (error) {
-            reject(error as Error);
+            reject(error);
           }
         }
         response.on('data', chunk);

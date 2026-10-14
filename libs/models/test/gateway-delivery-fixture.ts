@@ -96,4 +96,3 @@ export async function gatewayFixture() {
   const pass = await signer.sign(pair.privateKey);
   return { options, gateway, child: child!, logs, traffic, pass };
 }
-
