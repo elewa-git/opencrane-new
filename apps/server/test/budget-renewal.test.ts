@@ -101,3 +101,16 @@ async function refusesQueuedStartAfterRecovery() {
 }
 it('refuses a queued start after recovery before the stop handler has run',
   refusesQueuedStartAfterRecovery);
+
+async function refusesNewMessageDuringStop() {
+  const actor = await seedTurn();
+  await actor.configure({ scope: 'paying_group', scopeId: 'personal-default',
+    ceilingCents: 0, setBy: 'alice' });
+  const queued = envelope('test', 'conversation-conversation', 'message.posted', {
+    conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' }, 'new');
+  await nats.seed([queued]);
+  const newStart = { ...input, turnId: 'new', threadId: 'new-thread' };
+  await expect(turnCommand(nats.store, context, newStart)).rejects.toThrow('spending');
+}
+it('refuses a new message while the spending stop is already active', refusesNewMessageDuringStop);
