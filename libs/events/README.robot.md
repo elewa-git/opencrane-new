@@ -517,3 +517,11 @@ Tests in `libs/models/test/root-budget.test.ts` use real NATS and PostgreSQL.
 Requester, turn-ended and access-revoked stop commands follow in the next part.
 Trusted call ids, grant/dispatch checks and the child dispatcher remain in row 5.
 There is no route, caller, running-turn fan-out or model call in this part.
+
+## Safe budget turn stop records
+
+`agent.turn_stop_requested` accepts either the unchanged member fields or
+`conversationId`, `turnId`, `reason: budget`, `stopId`. Both alternatives are strict.
+The conversation contains no cents, ceiling, payer or copied budget reasons.
+`stop-budget-turns` receives ceiling changes and exhaustion, including per-turn stops.
+No root event is added. Stop schemas live outside the near-full `data.ts`.

@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks public tool addresses, startup, member and child access, indexed departures, final tool and memory sends, renewal access before spending stops, memory setup, fact links, tool reviews, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -.->|checks public tool addresses, startup, member and child access, indexed departures, final tool and memory sends, queued admission and renewal spending stops, memory setup, fact links, tool reviews, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes, authenticated instance observations and stops, owner and admin stops, control intent, memory facts, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -206,6 +206,10 @@ A person continues a shared child chat. The server gives the assistant completed
 exchanges from that child, including replies to other people. It leaves out parent
 history, private sessions, files and unfinished text. A first turn uses only the
 reviewed source message already saved in the child.
+
+A queued message cannot start after an applicable spending stop, even if the limit
+has since risen. Admission checks its saved position before issuing a turn pass.
+These checks do not change access to read the chat or view the desktop.
 
 The models process checks each configured tool server at startup and before its saved
 list expires. Calls pause when a check fails or finds a change. A changed server stays

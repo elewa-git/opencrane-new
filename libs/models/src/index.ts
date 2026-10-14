@@ -1,3 +1,4 @@
+export { budgetStopHandler } from './budget-stop-handler.ts';
 export { turnBudgetStop } from './budget-turn.ts';
 export { settlementHandler } from './settlement-handler.ts';
 export { BudgetActor, envelope, history, migrateBudgetDefault } from './actor.ts';

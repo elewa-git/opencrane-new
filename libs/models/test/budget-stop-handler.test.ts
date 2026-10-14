@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { conversations } from '@opencrane/projections';
+import { z } from 'zod';
 import type { EventEnvelope } from '@opencrane/events';
-import { budgetStopHandler, history } from '../src/index.ts';
+import { budgetStopHandler, history, priceTableId } from '../src/index.ts';
 import { fixture } from './fixture.ts';
 
 let setup: Awaited<ReturnType<typeof fixture>>;
@@ -46,7 +47,8 @@ async function otherTurn(assistantId = 'assistant', payer = 'other') {
 const scopes = ['paying_group', 'assistant', 'global'] as const;
 async function isolatesScope(scope: typeof scopes[number]) {
   const assistantId = scope === 'assistant' ? 'other-assistant' : 'assistant';
-  await otherTurn(assistantId);
+  const payer = scope === 'assistant' ? 'personal-default' : 'other';
+  await otherTurn(assistantId, payer);
   const scopeId = scope === 'assistant' ? 'assistant' : 'personal-default';
   const event = await stop(scope, scopeId);
   await deliver(event);
@@ -77,12 +79,16 @@ async function waitsForIndex() {
 it('retries while the conversation index has not passed the stop', waitsForIndex);
 
 async function queuesAndRecovers() {
-  await setup.append('conversation-conversation', 'message.posted', {
+  const queued = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
     ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
   const event = await stop();
   await setup.actor.configure({ scope: 'paying_group', scopeId: 'personal-default',
     ceilingCents: 20000, setBy: 'alice' });
+  await setup.append('computer-assistant', 'computer.turn_started', {
+    assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+    turnId: queued.id, threadId: 'late', requesterId: 'alice', task: 'chat_turn',
+    payingGroupId: 'personal-default' });
   await deliver(event);
   const saved = await records();
   expect(saved).toHaveLength(2);
@@ -96,11 +102,12 @@ it('keeps queued messages stopped after recovery, replay and redelivery', queues
 const races = ['member', 'completed', 'failed', 'lost-reply', 'two-stops'] as const;
 async function handlesRaces(race: typeof races[number]) {
   const event = await stop();
+  const second = await stop('assistant', 'assistant');
   await setup.runner.run(conversations);
   const append = setup.nats.store.append.bind(setup.nats.store);
   let intercepted = false;
   async function raceAppend(command: Parameters<typeof append>[0]) {
-    const candidate = command.event as EventEnvelope;
+    const candidate = z.object({ type: z.string() }).parse(command.event);
     if (candidate.type !== 'agent.turn_stop_requested' || intercepted) return append(command);
     intercepted = true;
     if (race === 'lost-reply') {
@@ -108,17 +115,19 @@ async function handlesRaces(race: typeof races[number]) {
       throw new Error('Reply lost');
     }
     if (race === 'two-stops') {
-      await deliver(event);
+      await deliver(second);
     } else {
       const type = race === 'member' ? 'agent.turn_stop_requested' : `agent.turn_${race}`;
       const data = race === 'member'
         ? { conversationId: 'conversation', turnId: 'turn', requestedBy: 'alice' }
-        : { conversationId: 'conversation', turnId: 'turn' };
+        : { conversationId: 'conversation', turnId: 'turn',
+          ...(race === 'failed' ? { reason: 'model_error' } : {}) };
       await setup.append('conversation-conversation', type, data);
     }
     return append(command);
   }
-  vi.spyOn(setup.nats.store, 'append').mockImplementation(raceAppend);
+  const appendSpy = vi.spyOn(setup.nats.store, 'append');
+  appendSpy.mockImplementation(raceAppend);
   const handler = budgetStopHandler(setup.nats.store);
   if (race === 'lost-reply') {
     await expect(handler.handle(event, setup.db)).rejects.toThrow('Reply lost');
@@ -131,15 +140,23 @@ async function handlesRaces(race: typeof races[number]) {
 }
 it.each(races)('keeps one stop or the earlier terminal report during %s', handlesRaces);
 
-async function exhaustionAndPerTurn() {
+const causes = ['exhaustion', 'lowered', 'per-turn'] as const;
+async function recordsEverySavedStop(cause: typeof causes[number]) {
+  const call = { model: 'gpt-6-luna', priceTableId, computerId: 'computer',
+    assistantId: 'assistant', requesterId: 'alice', conversationId: 'conversation',
+    turnId: 'turn', threadId: 'thread', payingGroupId: 'personal-default',
+    contextDigest: '0'.repeat(64) };
+  if (cause === 'lowered') await setup.actor.reserve(call, 1);
   await setup.actor.configure({ scope: 'paying_group', scopeId: 'personal-default',
     ceilingCents: 1, setBy: 'alice' });
-  expect((await setup.call({}, { max_output_tokens: 100000 })).status).toBe(402);
-  const rows = await history(setup.nats.store, 'budget-test', 'test');
-  for (const row of rows) {
-    if (row.event.type === 'budget.exhausted') await deliver(row.event);
+  if (cause !== 'lowered') {
+    const refused = { ...call, turnId: 'refused' };
+    await expect(setup.actor.reserve(refused, 2)).rejects.toThrow('spending');
+    if (cause === 'per-turn') await expect(setup.actor.reserve(call, 1)).rejects.toThrow('spending');
   }
+  const rows = await history(setup.nats.store, 'budget-test', 'test');
+  await deliver(rows.at(-1)!.event);
   expect(await records()).toHaveLength(1);
   expect(setup.received()).toBe(0);
 }
-it('handles scope exhaustion and its repeated per-turn records', exhaustionAndPerTurn);
+it.each(causes)('records a turn stop from %s', recordsEverySavedStop);

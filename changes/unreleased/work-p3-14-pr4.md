@@ -1,0 +1,1 @@
+Spending stops now save a Stop reference without spending details for affected unfinished turns and queued messages. A queued message stays refused after a limit increase, and waiting approvals cannot resume stopped work. Stop-first computer delivery follows separately.

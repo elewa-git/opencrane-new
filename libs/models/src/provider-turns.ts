@@ -1,15 +1,13 @@
+import { applyBudget, budgetStopId, emptyBudget, type BudgetState } from './state.ts';
 import { providerBindingSchema, providerDrainSchema } from '@opencrane/events';
-import { z } from 'zod';
 import { readStreamSummary, type EventStore, type StoredEvent,
   type SummaryKind } from '@opencrane/event-store';
 
 type Choice = { providerId: string; bindingSequence: number; model: string; state: 'active' | 'paused' };
 type Routing = { draining: boolean; choices: Map<string, Choice> };
-type Mode = { enabled: boolean; defaultPayingGroupId?: string };
-
-const budgetDetails = z.object({
-  scope: z.string(), defaultPayingGroupId: z.string().optional(),
-});
+type Mode = { enabled: boolean; budget: BudgetState };
+type QueuedWork = { conversationId: string; turnId: string; position: number;
+  payingGroupId?: string | undefined };
 
 function choiceKey(kind: string, dependantId: string) {
   return JSON.stringify([kind, dependantId, 'chat_turn']);
@@ -40,19 +38,14 @@ const providerRouting: SummaryKind<Routing> = {
 };
 
 function emptyMode(): Mode {
-  return { enabled: false };
+  return { enabled: false, budget: emptyBudget() };
 }
 
 function addMode(summary: Mode, row: StoredEvent) {
   if (row.event.type === 'provider.managed_calls_enabled') {
     summary.enabled = true;
   }
-  if (row.event.type === 'budget.ceiling_set') {
-    const details = budgetDetails.parse(row.event.data);
-    if (details.scope === 'global' && details.defaultPayingGroupId) {
-      summary.defaultPayingGroupId = details.defaultPayingGroupId;
-    }
-  }
+  applyBudget(summary.budget, row.event, row.sequence);
 }
 
 const providerMode: SummaryKind<Mode> = {
@@ -63,17 +56,26 @@ function takeEnabled(summary: Mode) {
   return summary.enabled;
 }
 
-function takeBudgetAdmission(summary: Mode) {
-  return { enabled: summary.enabled, defaultPayingGroupId: summary.defaultPayingGroupId };
-}
-
 export function managedProviderCallsEnabled(store: EventStore, silo: string, deadline: number) {
   // Read the silo's spending stream so legacy calls never scan provider connections.
   return readStreamSummary(store, silo, `budget-${silo}`, providerMode, deadline, takeEnabled);
 }
 
 export async function providerTurnAdmission(store: EventStore, silo: string,
-  assistantId: string, deadline: number) {
+  assistantId: string, deadline: number, queued?: QueuedWork) {
+  function takeBudgetAdmission(summary: Mode) {
+    const defaultPayingGroupId = summary.budget.defaultPayingGroupId;
+    let stopId: string | undefined;
+    if (queued) {
+      const work = { ...queued, assistantId,
+        payingGroupId: queued.payingGroupId ?? defaultPayingGroupId };
+      // Keep queued work terminal when a stop followed its message.
+      // Leave current capacity checks at the shared call dispatch gate.
+      const historicalStops = { ...summary.budget, limits: [] };
+      stopId = budgetStopId(historicalStops, work, new Date(), queued.position);
+    }
+    return { enabled: summary.enabled, defaultPayingGroupId, stopId };
+  }
   function takeAdmission(summary: Routing) {
     const own = summary.choices.get(choiceKey('assistant', assistantId));
     const fallback = summary.choices.get(choiceKey('silo_default', silo));
@@ -87,5 +89,5 @@ export async function providerTurnAdmission(store: EventStore, silo: string,
     store, silo, 'provider-*', providerRouting, deadline, takeAdmission);
   const draining = admission.draining && !budget.enabled;
   return { enabled: budget.enabled, defaultPayingGroupId: budget.defaultPayingGroupId,
-    choice: admission.choice, draining };
+    choice: admission.choice, draining, stopId: budget.stopId };
 }

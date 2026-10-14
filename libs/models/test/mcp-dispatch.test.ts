@@ -767,7 +767,7 @@ async function watchesCatalogue(failure: 'drift append' | 'drift saved' | 'faile
 it.each(['drift append', 'drift saved', 'failed', 'stalled', 'replacement'] as const)(
   'holds recording upstream through %s and recaptures on worker replacement', watchesCatalogue, 60_000);
 
-async function grantToolApproval(setup: Fixture, headers: Record<string, string>) {
+async function grantToolApproval(setup: Fixture, headers: Record<string, string>, approve = true) {
   const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
     toolRevision: tool.revision, mode: 'ask', setBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
@@ -778,6 +778,7 @@ async function grantToolApproval(setup: Fixture, headers: Record<string, string>
     request);
   const answer = z.object({ approvalId: z.string() }).parse(await response.json());
   const current = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  if (!approve) return answer.approvalId;
   async function fresh() {}
   const result = await decideApproval(setup.nats.store, 'test', answer.approvalId,
     'alice', 'approved', true, fresh, current, setup.actor.now());
@@ -986,7 +987,8 @@ async function budgetHandlerEndsApproval() {
   const setup = await fixture();
   try {
     const headers = await prepare(setup);
-    const approvalId = await grantToolApproval(setup, headers);
+    const approvalId = await grantToolApproval(setup, headers, false);
+    const waiting = await readApproval(setup.nats.store, 'test', approvalId);
     await setup.actor.configure({ scope: 'paying_group', scopeId: 'personal-default',
       ceilingCents: 0, setBy: 'alice' });
     const rows = await history(setup.nats.store, 'budget-test', 'test');
@@ -998,6 +1000,10 @@ async function budgetHandlerEndsApproval() {
       ceilingCents: 20000, setBy: 'alice' });
     const approval = await readApproval(setup.nats.store, 'test', approvalId);
     expect(approval.state).toBe('cancelled');
+    async function fresh() {}
+    const late = await decideApproval(setup.nats.store, 'test', approvalId,
+      'alice', 'approved', true, fresh, waiting);
+    expect(late.status).toBe('conflict');
     const response = await approvalPermit(setup, headers, approvalId);
     expect(response.status).not.toBe(200);
     expect(setup.received()).toBe(0);

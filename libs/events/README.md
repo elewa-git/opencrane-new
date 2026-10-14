@@ -30,7 +30,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, subscriptions, nightly memory records and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, turns, root allowances, overruns and spending| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, turns, root allowances, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
@@ -124,6 +124,10 @@ events keep their original reading rules.
 Archive and read choices name one person and their join. They contain no chat text.
 
 ## Processes it handles
+
+Budget turn stops carry only their reason kind and a reference to the saved spending
+stop. Participants can read them without seeing amounts or payer ids. Member stops
+keep their original shape.
 
 Personal connection records can name an exact stored generation and the person who
 saved it. A replacement names the expected stream version. Old records still replay,

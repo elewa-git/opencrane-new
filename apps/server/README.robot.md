@@ -2544,3 +2544,12 @@ organisation, admin and Origin checks. Input is commandId, expectedSequence and 
 Success returns status and the original saved sequence. Changed retry input conflicts.
 The server computes fragmentDigest, saves one MCP event and writes no grants or approvals.
 Only credential-free, current reviewed catalogues qualify. No preparation worker is connected.
+
+## Queued admission after a spending stop
+
+New turn admission passes the saved human message position and the payer selection
+into the existing provider/budget summary. It checks before returning a token and
+again within the existing short write check, reading only new budget events there.
+A saved budget turn stop also closes that turn in the chat summary. Legacy member
+stops retain their previous fold. Read and viewer authority checks are unchanged.
+Bridge stop-first delivery is deferred to P3-14 PR 4b.

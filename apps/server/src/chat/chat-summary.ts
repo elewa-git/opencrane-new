@@ -4,7 +4,7 @@ import { readStreamSummary, WrongSiloError, type EventStore,
 import { z } from 'zod';
 import { memoryContextRecordedEventSchema } from '@opencrane/events';
 
-type Message = { authorId: unknown; executionMode: unknown };
+type Message = { authorId: unknown; executionMode: unknown; position: number };
 type ComputerReports = { lastSequence: number; positions: Map<number, number> };
 type ChatSummary = {
   latestHuman?: { id: string; authorId: unknown } | undefined;
@@ -43,14 +43,17 @@ function addChat(summary: ChatSummary, row: StoredEvent) {
     data = z.record(z.string(), z.unknown()).parse(event.data);
   }
   let closedTurnId: string | undefined;
-  if (event.type === 'agent.turn_completed' || event.type === 'agent.turn_failed') {
+  const budgetStopped = event.type === 'agent.turn_stop_requested' &&
+    z.object({ reason: z.string().optional() }).parse(event.data).reason === 'budget';
+  if (event.type === 'agent.turn_completed' || event.type === 'agent.turn_failed' || budgetStopped) {
     closedTurnId = closedTurn.parse(event.data).turnId;
   }
   if (event.type === 'conversation.created' && summary.created === undefined) {
     summary.created = data;
   }
   if (event.type === 'message.posted' && data && !summary.messages.has(event.id)) {
-    const message = { authorId: data['authorId'], executionMode: data['executionMode'] };
+    const message = { authorId: data['authorId'], executionMode: data['executionMode'],
+      position: row.sequence };
     summary.messages.set(event.id, message);
   }
   addRequester(summary, row, data);

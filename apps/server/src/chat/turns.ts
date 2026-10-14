@@ -353,15 +353,22 @@ async function admitTurn(store: EventStore, context: TurnContext, conversation: 
   const required = requiredExecutionMode(details.kind, requested);
   if (mode !== required) throw new TurnAdmissionRejected('Execution mode mismatch');
   requireFreshPrivateThread(facts, data, mode);
-  // Read provider configuration before starting the short access check.
+  const queued = { conversationId: data.conversationId, turnId: data.turnId,
+    position: conversation.message!.position,
+    payingGroupId: details.kind === 'team'
+      ? sessionDetails.parse(conversation.created).payingGroupId : undefined };
+  // Read provider and budget history before starting the short access check.
   const admission = await providerTurnAdmission(store, context.silo,
-    context.assistantId, performance.now() + 10_000);
+    context.assistantId, performance.now() + 10_000, queued);
   applyProviderChoice(data, admission);
   const payer = await payingGroup(store, context, conversation, data.requesterId, details,
     admission.defaultPayingGroupId);
+  requireNoBudgetStop(admission.stopId);
   const deadline = payer.fresh?.deadline ?? performance.now() + 2000;
   async function confirmAdmission() {
-    const current = await providerTurnAdmission(store, context.silo, context.assistantId, deadline);
+    const current = await providerTurnAdmission(
+      store, context.silo, context.assistantId, deadline, queued);
+    requireNoBudgetStop(current.stopId);
     if (current.enabled !== admission.enabled || current.draining !== admission.draining) {
       throw new TurnAdmissionRejected('Provider setup changed; try again');
     }

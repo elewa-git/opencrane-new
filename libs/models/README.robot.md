@@ -1902,3 +1902,25 @@ Tests in `libs/models/test/root-budget.test.ts` use real NATS and PostgreSQL.
 Requester, turn-ended and access-revoked stop commands follow in the next part.
 Trusted call ids, grant/dispatch checks and the child dispatcher remain in row 5.
 There is no route, caller, running-turn fan-out or model call in this part.
+
+## Durable budget turn stops (P3-14 PR 4a; Part of #55)
+
+`stop-budget-turns` subscribes to `budget.ceiling_set` and `budget.exhausted`.
+It folds through the source event and requires the conversations checkpoint to
+reach that position. It reads saved computer admissions with their original payer
+and position. Queued human messages use the personal default or session payer.
+`budgetStopId` selects affected work. Each conditional conversation append uses
+a deterministic id from silo, stop id, conversation and turn. Conflicts reread;
+lost replies retry without a second stop. Existing Stop and terminal reports win.
+Waiting approvals use the existing turn-stop invalidation. No computer is required.
+Replay updates tables only. Jobs can retry cleanup but cannot reopen stopped work.
+
+The provider admission summary now folds spending stops while reading its existing
+budget history. First admission checks for stops after the queued message position; renewed turns
+retain the first computer admission position. Current capacity still guards every send.
+Both history loads precede the short
+access check. Reader authority streams are unchanged.
+
+Tests use real NATS, PostgreSQL, OpenFGA and a recording model gateway. Bridge
+stop-first delivery and reconnect coverage are deferred to PR 4b. Computer grant
+removal, status APIs, screens and fresh-install qualification are NOT RUN here.
