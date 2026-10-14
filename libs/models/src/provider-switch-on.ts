@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import { computerTurnStartedDataSchema, computerTurnClosedDataSchema,
-  providerBindingSchema, providerDrainSchema, providerIdSchema,
+  providerBindingSchema, providerDrainSchema, providerIdSchema, parseEventByType,
   type EventEnvelope } from '@opencrane/events';
 import { readEventAt, readStreamSummary, type EventStore, type StoredEvent,
   type SummaryKind } from '@opencrane/event-store';
 import { applyProvider, type ProviderState } from '@opencrane/projections';
-import { models } from './state.ts';
+import { data, models } from './state.ts';
 import { ProviderConflict, ProviderRefused, providerAuthority, providerPermission,
   providerReceipt, reconcileProvider } from './providers.ts';
 
@@ -88,9 +88,11 @@ function hasLegacy(summary: Legacy) {
 const legacy: SummaryKind<Legacy> = {
   name: 'provider-switch-legacy', keep: 4, empty: emptyLegacy, add: addLegacy,
 };
-type Budget = { marker?: StoredEvent; ids: Set<string> };
+type Budget = {
+  marker?: StoredEvent; ids: Set<string>; reservations: Set<string>; dispatches: Set<string>;
+};
 function emptyBudget(): Budget {
-  return { ids: new Set() };
+  return { ids: new Set(), reservations: new Set(), dispatches: new Set() };
 }
 function addBudget(summary: Budget, row: StoredEvent) {
   if (row.event.commandId) {
@@ -98,6 +100,30 @@ function addBudget(summary: Budget, row: StoredEvent) {
   }
   if (row.event.type === 'provider.managed_calls_enabled') {
     summary.marker = row;
+  }
+  const parsed = parseEventByType(row.event);
+  if (!parsed.success) {
+    throw new Error('Invalid spending event');
+  }
+  const event = parsed.event;
+  const payload = data(event);
+  if (event.type === 'budget.reserved') {
+    summary.reservations.add(z.string().parse(payload['reservationId']));
+  }
+  if (event.type === 'budget.call_dispatch_admitted') {
+    const reservationId = z.string().optional().parse(payload['reservationId']);
+    const callId = z.string().parse(payload['callId']);
+    summary.dispatches.add(reservationId ?? callId);
+  }
+  // Keep expired holds and unknown outcomes open even after their computer or turn ends.
+  if (event.type === 'budget.settled') {
+    const reservationId = z.string().parse(payload['reservationId']);
+    if (payload['outcome'] === 'unknown') {
+      summary.reservations.add(reservationId);
+    } else {
+      summary.reservations.delete(reservationId);
+      summary.dispatches.delete(reservationId);
+    }
   }
 }
 const budget: SummaryKind<Budget> = {
@@ -159,7 +185,8 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
     configuration, deadline, takeConfiguration);
   function takeBudget(summary: Budget, sequence: number) {
     return { marker: structuredClone(summary.marker), sequence,
-      duplicate: summary.ids.has(input.commandId) };
+      duplicate: summary.ids.has(input.commandId),
+      openSpending: summary.reservations.size > 0 || summary.dispatches.size > 0 };
   }
   const spending = await readStreamSummary(store, binding.silo, `budget-${binding.silo}`,
     budget, deadline, takeBudget);
@@ -193,7 +220,7 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
   if (providerCommandExists) {
     throw new ProviderConflict();
   }
-  if (spending.marker || !current.draining || activeLegacy) {
+  if (spending.marker || !current.draining || activeLegacy || spending.openSpending) {
     throw new ProviderRefused();
   }
   requirePositions(current, input, providerId);

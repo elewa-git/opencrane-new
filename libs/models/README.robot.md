@@ -1682,6 +1682,11 @@ It captures the global position, then reads incremental provider, budget and com
 summaries before starting the short authority check. It validates all active bindings
 outside that check. One conditional budget append uses `historyChecked` and
 `expectedGlobalSequence`. Any intervening event conflicts, including a reservation.
+The budget summary also keeps unresolved reservation and dispatch identities.
+Computer loss, turn closure and reservation expiry do not clear them.
+Only a confirmed settlement or zero-cost release clears a hold or send; an unknown
+outcome keeps switch-on refused. A send without a reservation also needs saved
+settlement or release evidence. These history reads precede the short access check.
 The event schema is unchanged. The saved provider position also identifies the drain
 used for a retry: no drain change can save after switch-on.
 
@@ -1694,6 +1699,14 @@ The new HTTP tests use real NATS, PostgreSQL, OpenFGA and a recording gateway up
 The last requested bullet, testing existing hold settlement and replay through this new
 command, is split into follow-up work to keep this change small. Existing hold regressions
 are rerun after rebasing. Fresh-install qualification, paid calls and a journey are NOT RUN.
+
+The HTTP tests use real NATS, PostgreSQL, OpenFGA and a recording gateway upstream.
+They refuse open holds after computer loss and admitted sends after turn closure,
+including sends without a reservation. Expired holds and unknown settlements stay refused.
+A released hold and a settled paid send each allow the command to complete.
+The paid-send test keeps the original tariff and payer and charges one integer cent.
+Settlement redelivery and restart/replay through this command remain follow-up work.
+Fresh-install qualification, paid provider calls and a journey are NOT RUN.
 
 ## Catalogue watch and dispatch holds (#48 PR 3b, first split)
 

@@ -628,7 +628,7 @@ allocate no allowance and reserve or spend nothing. See the
 | `provider.models_selected` | Owner/Admin command | provider metadata | Registry selection only; grants belong to P4-22. |
 | `provider.model_binding_set` | Owner/Admin command | provider metadata and model bindings | Record one assistant or silo default choice or pause. No key rotation, grant or ordinary call. The default reaction records the first verified connection once the chat model is enabled. |
 | `provider.managed_calls_drain_set` | Owner/Admin drain command | provider metadata | Stop new model turns while running turns keep their old path. Cancellation is another event. Neither action switches on managed calls or changes spending. |
-| `provider.managed_calls_enabled` | Switch-on command (not built yet) | provider metadata | Record managed-call mode on `budget-<silo>` so decisions read only their exact spending stream. Advancing that stream stops an old budget writer from saving another hold. Existing holds still settle, release or expire without restarting the actor; only the switch-on marker can be passed when retrying their writes. Another budget writer still stops the old actor. Switch-on ends draining. New turns require an own or silo default choice. Refuse old passes before holding money. No command or reaction can switch on yet; safe migration and gateway activation remain separate work. |
+| `provider.managed_calls_enabled` | Owner/Admin switch-on command after a checked drain | provider metadata | Record managed-call mode on `budget-<silo>` after checking the active drain, explicit default, active provider choices, ended legacy turns and saved spending records. Refuse while any hold or admitted send lacks settlement or release, including after computer loss or turn closure. Refuse uncertain settlements too. One conditional append requires the captured global position to remain unchanged. Advancing the budget stream stops an old writer from saving another hold; later settlement writes can pass only the switch-on marker. Switch-on ends draining. New turns require an own or silo default choice. Refuse old passes before holding money. Ordinary chat remains refused until the managed gateway in PR 5. |
 | `provider.verification_requested` | Owner/Admin command | provider metadata | Explicit live check only; no replay dispatch. |
 | `provider.verification_dispatched` | authenticated gateway admission | provider metadata | Consume one check, with existing budget reservation for paid tests. |
 | `provider.verification_recorded` | live verification reaction or explicit skip | provider metadata | Dated original-attempt outcome, including late results. No dispatch means unknown and zero-cost release; never raw responses or credentials. |
@@ -641,9 +641,9 @@ provider/position pair. Old records without these fields retain their old meanin
 and settle at their recorded model, tariff and payer.
 
 The turn pass signs the provider and binding position. A provider-bound model pass
-is refused on the deployment-key gateway before money is held. Selecting saved
-bindings at turn admission, recording the safe switch-on command and managed
-provider dispatch are not enabled by these optional event fields.
+is refused on the deployment-key gateway before money is held. The switch-on command
+enables saved binding selection at turn admission.
+Managed provider dispatch remains unavailable until PR 5.
 
 ## Named handler subscriptions
 
