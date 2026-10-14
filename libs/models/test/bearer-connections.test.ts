@@ -132,6 +132,8 @@ async function rotationAndReplay() {
   expect(publicData).not.toContain(material);
   expect(publicData).not.toContain('synthetic-replacement');
   expect(await test.save()).toEqual(created);
+  const changedRetry = { ...test.input, expectedGeneration: 1 };
+  await expect(test.save(changedRetry)).rejects.toThrow('Connection conflict');
   expect(await nats.store.head(test.subject)).toBe(rotated.sequence);
 }
 it('rotates once, refuses stale generations and replays only custody references', rotationAndReplay);
