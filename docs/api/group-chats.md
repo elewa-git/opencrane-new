@@ -30,4 +30,41 @@ updates. Wait for creation permissions before sending the separate first message
 Group rows retain `mode: "group"` and recorded participants. Feed replies report
 `computerState: "not_applicable"`. Plain text, including literal `@agent`, creates
 no turn, wake, upstream call or spending reservation. Stop and execution-mode fields
-are refused. Participant editing and the browser group picker are separate work.
+are refused. The [participant routes](direct-chats.md#group-participants) provide
+creator edits and self-leave.
+
+## Child-only invitations
+
+The same participants GET and POST routes support shared child chats. GET returns
+current recorded participants and `accessPosition`. Only the recorded creator,
+with current inherited child read access and OpenFGA `manage_participants`, can
+invite or remove others. An admin has no bypass. Other participants can leave.
+
+An addition requires `{id, action: "add", participantId, expectedAccessPosition,
+historyReleaseAcknowledged: true}`. The acknowledgement confirms release of all
+shared child history from creation, including the first shared input. It grants
+no parent messages, participants, files, approvals or other resource permissions.
+Ordinary group requests keep their existing shape and reject this acknowledgement.
+
+The server records `participant.added` with `contextKind: "shared_child"`,
+`joinKind: "explicit_child"` and `reviewPosition` equal to the reviewed
+`expectedAccessPosition`. Remove and leave keep their existing request shapes;
+their events carry `contextKind` and `reviewPosition`, without `joinKind`.
+
+A missing or false acknowledgement returns 400. A stale review, an already recorded
+target, a full audience of 97 or a closed child returns 409. Inactive targets and
+unauthorised callers receive the generic 403 refusal. Permissions outages return 503.
+History loads within ten seconds before a separate two-second write check watches
+only member and participation streams. No conversation content stream is watched.
+
+Retrying the same id and payload returns the original sequence without another
+append. Changed saved payloads return 409. An authenticated active silo member can
+recover their own saved self-removal through the same POST after leaving. This returns
+only the saved result; messages, participants, files, approvals and sockets remain
+unavailable. Another caller cannot recover that self-removal. The existing `changes/:id`
+route confirms the join and whether content and IAM have caught up. New joins wait for their IAM
+receipt; removals end HTTP and socket access within two seconds, before IAM catches up.
+Joining the parent later cannot restore a removed child join. A new explicit
+invitation is required. An explicit child join survives parent or creator departure.
+
+Child creation, origin and summary routes are not provided by this change.

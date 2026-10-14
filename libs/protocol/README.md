@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
-  server["apps/server<br/>back end"] -.->|access replies, publication facts and saved chat choices| protocol
+  server["apps/server<br/>back end"] -.->|access replies, child invitations, publication facts and saved chat choices| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list shapes"]
@@ -44,7 +44,7 @@ Describe saved publication requests separately from tool availability.
   Keep unknown history separate from a checked absence.
   Keep member headers separate from the admin directory.
 - Check own-group picker pages, reviewed member snapshots and human group chat rows.
-- Check group chat participant edits and the current people list.
+- Check group and child chat participant edits and the current people list.
 - Check archive and read requests, and each person's saved choice in chat lists.
 - Check flat group rows and create or remove commands for the People & groups screen.
 - Carry a tool server's saved hold after its catalogue changes.
@@ -56,7 +56,8 @@ Describe saved publication requests separately from tool availability.
    Conversation lists include a continuation for loading another visible page.
    Ordinary late joiners receive their join time and current participants, without
    earlier creation details. Older replies still load.
-   Group participant requests carry the last access position so stale edits can be refused.
+   Participant requests carry the last access position so stale edits can be refused.
+   Child invitations also acknowledge that all shared child history will be released.
    Archive and read requests name the current join. Replies let another device
    use the same saved choice and check an uncertain request by its original id.
 3. **A person reviews the history of changes.** The server filters the response, then both sides use the same shapes for the request and result.

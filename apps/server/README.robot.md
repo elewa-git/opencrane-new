@@ -1915,7 +1915,8 @@ and the remaining live qualification. No full root suite ran.
 
 The participation reader recognises shared-child initial joins and returns a separate
 `historyPosition` from child creation. `joinPosition` and `joinEventId` remain authority facts.
-Effective inherited access and public child commands are later work. No child emitter exists.
+Effective inherited access and participant commands are described below.
+No child creation emitter exists.
 `test/shared-child.test.ts` checks real NATS/PostgreSQL/OpenFGA replay and delayed creation.
 
 ## Private turn memory preview
@@ -2438,8 +2439,8 @@ reads conversation history or watches conversation activity.
 Feed replies select display fields before decrypting text. Shared child creation and
 list rows omit origin and parent join references. Unrecognised feed event types
 return 503 without rows until they have a safe display contract. Lists retain the bounded scan,
-visible activity, title search and join-time rules from #352. There is no child
-creation, invitation, origin or summary API in this change.
+visible activity, title search and join-time rules from #352. Child invitations use
+the participant routes described below. Child creation, origin and summary APIs remain planned.
 
 `test/chat-access-regression.test.ts` covers stale IAM parent removal, creator parent
 and silo departure, removal/rejoin, explicit child history, blocked socket delivery,
@@ -2559,3 +2560,23 @@ gateway refusal for a legacy start that was already being saved.
 A saved budget turn stop also closes that turn in the chat summary. Legacy member
 stops retain their previous fold. Read and viewer authority checks are unchanged.
 Bridge stop-first delivery is deferred to P3-14 PR 4b.
+
+## Reviewed child participant commands (#91, first part)
+
+The [child invitation contract](../../docs/api/group-chats.md#child-only-invitations)
+defines acknowledgement, saved retries and removals. The command reuses group
+participant handling and the existing explicit-child event, projection and IAM shapes.
+Its final write check includes `inheritedChildSubjects` alongside caller, target
+and child participation streams. `test/child-participants.test.ts` uses real NATS,
+PostgreSQL and OpenFGA to check invitations, refusals, replay, saved retries and
+socket removal. The fixture follows `childSession` in the access regression tests.
+The tests declare the existing OpenFGA SDK 0.9.7, licensed Apache-2.0, as a development dependency.
+Origin, summaries, child creation and fresh-install qualification remain NOT RUN.
+
+Saved child self-removal retries are checked before conversation participation. Only the
+active silo member who saved the removal can recover it. Matching input returns the
+original sequence; changed child review positions return 409. Recovery appends nothing
+and grants no conversation access. HTTP tests also check refusal of another caller,
+messages, participants, files, approvals and a new socket subscription after recovery.
+The guard tests cover direct/private routes, a non-creator with OpenFGA management
+permission, absent removal targets, and changed saved subjects and principals.

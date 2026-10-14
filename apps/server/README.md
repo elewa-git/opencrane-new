@@ -11,8 +11,9 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks public tool addresses, startup, member and child access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, fact links, tool reviews, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, fact links, tool reviews, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes, authenticated instance observations and stops, owner and admin stops, control intent, memory facts, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  nats -->|saved child leave results| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
@@ -169,6 +170,7 @@ have not been checked. Unrelated read receipts do not require reading the event 
   without starting assistant work. Offers only groups they belong to.
 - Lets group chat creators add or remove people, and lets other participants leave.
   Refuses stale edits and keeps saved retries from adding someone again.
+  Lets people recover their own saved child chat leave result without reopening the chat.
 - Lets two silo members exchange private messages without starting assistant work.
   Tells the browser when a new chat is waiting for its permissions, so it can keep the draft.
 - Runs a separate models process. It keeps AI budgets, approves or refuses each AI request,
@@ -201,6 +203,11 @@ switch-on after choosing a default and draining legacy turns. Calls then stay re
 until the managed gateway is available.
 
 ## Processes it handles
+
+A shared child chat's creator can invite someone after acknowledging that all shared
+history will be visible. The invite gives access only to that child. The creator can
+remove others, and others can leave. Saved removals stop reads and live connections
+before the permissions service catches up.
 
 A person continues a shared child chat. The server gives the assistant completed
 exchanges from that child, including replies to other people. It leaves out parent
