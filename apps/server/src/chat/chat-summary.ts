@@ -2,6 +2,7 @@ import { foldMemoryContext, type MemoryContextState } from './memory-context-fol
 import { readStreamSummary, WrongSiloError, type EventStore,
   type StoredEvent, type SummaryKind } from '@opencrane/event-store';
 import { z } from 'zod';
+import { memoryContextRecordedEventSchema } from '@opencrane/events';
 
 type Message = { authorId: unknown; executionMode: unknown };
 type ComputerReports = { lastSequence: number; positions: Map<number, number> };
@@ -35,8 +36,10 @@ function emptyChat(): ChatSummary {
 function addChat(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
   if (event.type === 'agent.memory_context_recorded') {
-    const turnId = closedTurn.parse(event.data).turnId;
-    if (summary.conversationClosed || summary.closedTurnIds.has(turnId)) {
+    const data = memoryContextRecordedEventSchema.parse(event).data;
+    const turnId = data.turnId;
+    const lateInitialLoad = summary.conversationClosed && data.delivery === 'initial';
+    if (lateInitialLoad || summary.closedTurnIds.has(turnId)) {
       throw new Error('Memory evidence arrived after the turn closed');
     }
     const previous = summary.memoryContexts.get(turnId);
@@ -71,12 +74,16 @@ function closeMemoryContexts(summary: ChatSummary, turnId: string | undefined) {
       context.reason = 'ended';
     }
   }
-  if (summary.conversationClosed) {
-    for (const context of summary.memoryContexts.values()) {
-      context.status = 'ended';
-      context.reason = 'ended';
-    }
+}
+function memoryContextFacts(summary: ChatSummary, turnId: string) {
+  const context = structuredClone(summary.memoryContexts.get(turnId));
+  if (context && summary.conversationClosed) {
+    // Keep closure separate from evidence: a recall append can finish after the
+    // participation stream closes. Retain its accounting, but never reopen the context.
+    context.status = 'ended';
+    context.reason = 'ended';
   }
+  return context;
 }
 function addRequester(summary: ChatSummary, row: StoredEvent,
   data: Record<string, unknown> | undefined) {
@@ -134,7 +141,7 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
       conversationClosed: summary.conversationClosed,
       lastReportSequence: reports?.lastSequence ?? 0,
       reportPosition, sequence,
-      memoryContext: structuredClone(summary.memoryContexts.get(turnId)),
+      memoryContext: memoryContextFacts(summary, turnId),
     };
   }
   try {

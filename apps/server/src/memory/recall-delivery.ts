@@ -114,6 +114,7 @@ export async function recordRecall(options: MemoryOptions, context: MemoryContex
     additions, byteCount, hasOmissions };
   await confirm();
   await appendRecord(options, context, loaded, previous, sequence);
-  // Retain saved references even when the reply is withheld or its connection is lost.
+  // Refuse delivery if the participation stream closed during the append.
+  // Keep saved references as ended accounting when the summary reads that close.
   await confirm();
 }

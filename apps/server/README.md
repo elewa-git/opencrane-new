@@ -155,6 +155,8 @@ have not been checked. Unrelated read receipts do not require reading the event 
   A failed catalogue check ends old approvals even if a later check succeeds first.
   Reads each approval separately, so a slow read leaves other chats free to continue.
   Spaces out failed reads and tells the computer when it cannot accept another wait.
+- Keeps recall references readable when a conversation closes during their save.
+  The context stays ended, and the recall returns no facts or proof.
 - Records streamed replies using a chat summary. After its first use, it reads only
   new events and checks one saved event. It handles repeats without saving them again.
 - Starts, closes and replays turns using the shared computer summary. It reads new

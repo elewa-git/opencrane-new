@@ -2421,7 +2421,12 @@ backwards. Call and dispatch digests cannot be reused. Repeated identical event 
 are harmless; conflicting data is refused. Invalidated and ended contexts retain
 references. Closing the turn also ends its context. Replay creates no execution permission.
 The summary also reads conversation closes saved on the participation stream.
-It ends the context and keeps its references on both a fresh read and a cached read.
+It reports the context as ended and keeps its references on both a fresh read and a cached read.
+A participation-stream close can arrive during a conditional conversation append.
+The summary still checks and retains late preparation and recall records as accounting.
+Closure stays separate from those records, so a cached read cannot stop later replay.
+Every returned context stays ended. Initial loads after closure, loads after a turn
+completion, and invalid or repeated evidence still fail their existing checks.
 The history read has its own time limit; access checks keep their small stream set.
 The summary copies its result and counts retained evidence against its existing RAM cap.
 
@@ -2439,6 +2444,9 @@ hash of callId prevent replay. Empty replies count towards the four-recall limit
 The writer checks current page references, supporting keys, expiry, scope position,
 projection generation and current access before saving and again before release.
 It reads chat and scope history before the final short access checks.
+The production route tests close the conversation before preparation, between preparation
+and loading, and after loading. Each returns only a refusal, then reads the ended
+accounting through both the cached summary and cold replay. A later recall is also refused.
 
 This is a size-limited split of row 2. Remaining work: bind proofs to input generation,
 validate the complete accumulated reference set before every model/tool dispatch and
