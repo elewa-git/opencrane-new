@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
+import { requireBridgeGateAuthority } from './bridge-gate-authority.ts';
 
 function identifier(value: unknown): string {
   if (typeof value !== 'string' || !/^[\w-]{1,200}$/u.test(value)) {
@@ -40,6 +41,7 @@ export class BridgeGate {
   get closed() { return this.binding !== undefined; }
 
   close(value: Record<string, unknown>) {
+    requireBridgeGateAuthority();
     const next = request(value);
     if (this.binding && JSON.stringify(this.binding) !== JSON.stringify(next)) {
       throw new Error('Different bridge gate');

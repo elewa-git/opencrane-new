@@ -47,7 +47,8 @@ async function refusesFirstGate(input: typeof requests[number]) {
       return socket.readyState === socket.CLOSED;
     }
     await until(socketClosed, 1000);
-    const [code, reason] = await closed;
+    const closeValues: unknown[] = await closed;
+    const [code, reason] = closeValues;
     expect(code).toBe(1008);
     expect(String(reason)).toBe('Invalid bridge message');
     expect(test.calls).toEqual(callsBefore);

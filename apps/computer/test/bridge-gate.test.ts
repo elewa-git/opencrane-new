@@ -3,6 +3,13 @@ import { expect, it, vi } from 'vitest';
 import { until } from '@opencrane/authz/testing';
 import { fixture } from './bridge-gate-fixture.ts';
 
+// Exercise stop and cleanup with a test-only authority fixture. Keep real authority
+// refusal in bridge-gate-authority.test.ts, which does not replace this check.
+function gateAuthorityFixture() {
+  return { requireBridgeGateAuthority: vi.fn() };
+}
+vi.mock('../src/bridge-gate-authority.ts', gateAuthorityFixture);
+
 const gate = { type: 'bridge_gate', takeoverId: 'takeover', generation: 1,
   affectedTurnIds: ['first', 'second'] };
 
