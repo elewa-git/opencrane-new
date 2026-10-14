@@ -1,9 +1,17 @@
-import { ChildProcess } from 'node:child_process';
+import { ChildProcess, execFile } from 'node:child_process';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
+import { promisify } from 'node:util';
+import { databases } from '@opencrane/authz/testing';
+import { createLogger } from '@opencrane/observability';
+import { pgDb, ProjectionRunner, mcpCatalogue } from '@opencrane/projections';
 import { expect, it, onTestFinished } from 'vitest';
-import { gatewayObservationSchema } from '@opencrane/events';
+import { gatewayObservationSchema, getEventDefinition } from '@opencrane/events';
 import { lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
+import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
+import { losslessJson } from '@opencrane/events/lossless-json';
+import { toolPolicyFromRows } from '../src/tool-policy.ts';
+import { publicationEntry } from '../src/publication.ts';
 import { envelope, history } from '../src/actor.ts';
 import { publicationDigest } from '../src/publication.ts';
 import { gatewayConfigurationCurrent, prepareGatewayConfiguration }
@@ -20,17 +28,36 @@ async function fixture() {
   onTestFinished(closeNats);
   const setup = await gatewayFixture();
   const faulty = await lostReplyStore(nats.connection);
-  const digest = 'a'.repeat(64);
-  const entry = { serverId: 'alpha', connectionId: 'installed', accountMode: 'none' as const,
-    reviewRevision: 1, catalogueDigest: digest, tools: [
-      { name: 'read', mode: 'allow' as const, revision: digest, reviewDigest: digest },
-      { name: 'delete', mode: 'block' as const, revision: digest, reviewDigest: digest },
-    ] };
-  await nats.seed([envelope('test', 'mcp-alpha', 'mcp.server_discovered',
-    { serverId: 'alpha', toolCount: 0, schemaDigest: digest,
-      discoverResult: 'CATALOGUE-CANARY' })]);
-  await nats.seed([envelope('test', 'mcp-alpha', 'mcp.server_published',
-    { serverId: 'alpha', publishedBy: 'admin' })]);
+  function declaration(name: string) {
+    const definition = JSON.stringify({ name, inputSchema: { type: 'object' } });
+    return { name, definition, revision: losslessJson(definition).digest,
+      reviewed: false, costCents: 0 as const };
+  }
+  const tools = ['read', 'delete'].map(declaration);
+  const now = Date.now();
+  const catalogue = { serverId: 'alpha', connectionId: 'installed', accountMode: 'none',
+    toolCount: 2, tools, schemaDigest: catalogueDigest(tools),
+    checkedAt: new Date(now).toISOString(), expiresAt: new Date(now + 300_000).toISOString() };
+  await nats.seed([envelope('test', 'mcp-alpha', 'mcp.server_registered',
+    { serverId: 'alpha', kind: 'remote', locator: 'https://fixture.example.test',
+      registeredBy: 'admin' })]);
+  await nats.seed([envelope('test', 'mcp-alpha', 'mcp.server_discovered', catalogue)]);
+  function choice(tool: typeof tools[number]) {
+    const mode = tool.name === 'read' ? 'allow' : 'block';
+    return { name: tool.name, revision: tool.revision, mode, reviewDigest: toolReviewDigest(tool) };
+  }
+  const review = { serverId: 'alpha', connectionId: 'installed', accountMode: 'none',
+    catalogueDigest: catalogue.schemaDigest, policyRevision: await nats.store.head('mcp-alpha'),
+    reviewedBy: 'admin', tools: tools.map(choice) };
+  const reviewed = envelope('test', 'mcp-alpha', 'mcp.server_reviewed', review);
+  reviewed.principal = { kind: 'human', id: 'admin' };
+  await nats.seed([reviewed]);
+  const policy = toolPolicyFromRows(await history(nats.store, 'mcp-alpha', 'test'));
+  const entry = publicationEntry(policy)!;
+  const intent = { serverId: 'alpha', publishedBy: 'admin', commandId: 'publish-alpha',
+    expectedSequence: policy.sequence, reviewRevision: policy.reviewRevision,
+    fragmentDigest: publicationDigest(entry) };
+  await nats.seed([envelope('test', 'mcp-alpha', 'mcp.server_published', intent)]);
   const member = { entry, sourceSequence: await nats.store.head('mcp-alpha'),
     fragmentDigest: publicationDigest(entry), changeRef: 'publish-alpha' };
   const saved = { changeRef: 'publish-alpha', generation: 1, rendererVersion: '1' as const,
@@ -94,6 +121,7 @@ async function recordsOnlyLiveAcknowledgement() {
   const first = gatewayObservationSchema.parse(rows[1]!.event.data);
   const second = gatewayObservationSchema.parse(later[2]!.event.data);
   expect(second.processRef).not.toBe(first.processRef);
+  expect(await memberReceipts(setup)).toHaveLength(1);
   await setup.nats.seed([envelope('test', 'mcp-alpha', 'mcp.server_unpublished',
     { serverId: 'alpha', unpublishedBy: 'admin' })]);
   expect(await replacement.observe()).toBeNull();
@@ -149,7 +177,7 @@ async function enforcesRenderedRules() {
   expect(setup.traffic.filter(dispatched)).toHaveLength(1);
   const identity = { 'x-opencrane-gateway-generation': '1',
     'x-opencrane-record-digest': setup.record.recordDigest, 'x-opencrane-server-id': 'alpha',
-    'x-opencrane-connection-id': 'installed', 'x-opencrane-review-revision': '1' };
+    'x-opencrane-connection-id': 'installed', 'x-opencrane-review-revision': String(setup.record.members[0]!.entry.reviewRevision) };
   for (const copies of [1, 2]) {
     const spoofed = [...allowed, 'x-private-canary', 'CLIENT-HEADER-CANARY'];
     for (const name of Object.keys(identity)) {
@@ -255,7 +283,16 @@ async function refusesObservationRace(race: typeof observationRaces[number]) {
   let armed = false;
   let changed = false;
   const append = setup.options.store.append.bind(setup.options.store);
-  const readStream = setup.options.store.readStream.bind(setup.options.store);
+  async function* readStream(subject: string, from = 1, deadline = Infinity) {
+    const rows = [];
+    for await (const row of setup.options.store.readStream(subject, from, deadline)) {
+      rows.push(row);
+    }
+    if (armed && race.during === 'source read' && subject === 'mcp-alpha') {
+      await change();
+    }
+    yield* rows;
+  }
   const store = { append, readStream, head, readEvent };
   const options = { ...setup.options, store };
   const delivery = gatewayDelivery(options);
@@ -281,9 +318,6 @@ async function refusesObservationRace(race: typeof observationRaces[number]) {
   }
   async function head(subject?: string) {
     const position = await setup.options.store.head(subject);
-    if (armed && race.during === 'source read' && subject === 'mcp-alpha') {
-      await change();
-    }
     return position;
   }
   async function readEvent(sequence: number) {
@@ -303,6 +337,7 @@ async function refusesObservationRace(race: typeof observationRaces[number]) {
   const receipt = await delivery.observe();
   expect(changed).toBe(true);
   expect(receipt).toBeNull();
+  expect(await memberReceipts(setup)).toHaveLength(race.cached ? 1 : 0);
   if (race.change === 'withdrawal' || race.change === 'preparation') {
     expect(await gatewayConfigurationCurrent(setup.nats.store, 'test', setup.record)).toBe(false);
     expect(await delivery.observe()).toBeNull();
@@ -434,3 +469,115 @@ function validatesObservationFields() {
   }
 }
 it('rejects malformed observation fields and unknown fields', validatesObservationFields);
+
+async function memberReceipts(setup: Awaited<ReturnType<typeof fixture>>) {
+  const rows = await history(setup.nats.store, 'mcp-alpha', 'test');
+  function receipt(row: typeof rows[number]) {
+    return row.event.type === 'mcp.configuration_observed';
+  }
+  return rows.filter(receipt);
+}
+
+async function savesOneReceiptPerOperation() {
+  const setup = await fixture();
+  await waitForDeliveredWitness(setup);
+  const before = toolPolicyFromRows(await history(setup.nats.store, 'mcp-alpha', 'test'));
+  await Promise.all([setup.delivery.observe(), setup.delivery.observe()]);
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  const receipts = await memberReceipts(setup);
+  expect(receipts).toHaveLength(1);
+  const member = setup.record.members[0]!;
+  expect(receipts[0]!.event.data).toMatchObject({ serverId: 'alpha',
+    changeRef: member.changeRef, fragmentDigest: member.fragmentDigest,
+    reviewRevision: member.entry.reviewRevision, sourceSequence: member.sourceSequence,
+    generation: 1, recordDigest: setup.record.recordDigest });
+  const after = toolPolicyFromRows(await history(setup.nats.store, 'mcp-alpha', 'test'));
+  expect(after).toMatchObject({ policyRevision: before.policyRevision,
+    reviewRevision: before.reviewRevision, published: false,
+    configurationObservation: receipts[0]!.event.data });
+  expect(await gatewayConfigurationCurrent(setup.nats.store, 'test', setup.record)).toBe(true);
+  const { recordDigest: _digest, ...previous } = setup.record;
+  const saved = { ...previous, generation: 2, changeRef: 'another-operation' };
+  const next = { ...saved, recordDigest: publicationDigest(saved) };
+  await setup.nats.seed([envelope('test', 'gateway-config-test',
+    'gateway.configuration_requested', next)]);
+  await setup.delivery.deliver(next);
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  expect(await memberReceipts(setup)).toEqual(receipts);
+}
+it('saves one receipt per operation under concurrent observation and unchanged generations',
+  savesOneReceiptPerOperation);
+
+async function recoversLostMemberReply() {
+  const setup = await fixture();
+  let lost = false;
+  async function append(command: Parameters<typeof setup.options.store.append>[0]) {
+    if (!lost && command.event.type === 'mcp.configuration_observed') {
+      lost = true;
+      setup.faulty.loseNextReply();
+    }
+    return setup.options.store.append(command);
+  }
+  const store = { append, head: setup.options.store.head.bind(setup.options.store),
+    readStream: setup.options.store.readStream.bind(setup.options.store),
+    readEvent: setup.options.store.readEvent.bind(setup.options.store) };
+  const delivery = gatewayDelivery({ ...setup.options, store });
+  await delivery.deliver(setup.record);
+  await waitForDeliveredWitness(setup);
+  expect(await delivery.observe()).toBeNull();
+  expect(lost).toBe(true);
+  const receipts = await memberReceipts(setup);
+  expect(receipts).toHaveLength(1);
+  expect(await delivery.observe()).not.toBeNull();
+  expect(await memberReceipts(setup)).toEqual(receipts);
+}
+it('recovers a saved member receipt after its append reply is lost', recoversLostMemberReply);
+
+function validatesMemberReceipt() {
+  const schema = getEventDefinition('mcp.configuration_observed')?.dataSchema;
+  expect(schema).toBeDefined();
+  const valid = { serverId: 'alpha', changeRef: 'publish-alpha', reviewRevision: 3,
+    sourceSequence: 4, fragmentDigest: 'a'.repeat(64), generation: 1,
+    recordDigest: 'b'.repeat(64), configDigest: 'c'.repeat(64),
+    processRef: '00000000-0000-4000-8000-000000000001', observedAt: new Date().toISOString() };
+  expect(schema!.safeParse(valid).success).toBe(true);
+  const invalid = [{ serverId: '' }, { changeRef: '' }, { reviewRevision: 0 },
+    { sourceSequence: -1 }, { generation: 1.5 }, { fragmentDigest: 'bad' },
+    { recordDigest: 'z'.repeat(64) }, { configDigest: 'bad' }, { processRef: 'bad' },
+    { observedAt: 'yesterday' }, { commandId: 'forbidden' }, { extra: true }];
+  for (const fields of invalid) {
+    expect(schema!.safeParse({ ...valid, ...fields }).success).toBe(false);
+  }
+}
+it('checks every member receipt field and rejects extra fields', validatesMemberReceipt);
+
+async function rebuildsReceiptsWithoutEffects() {
+  const setup = await fixture();
+  const storage = await databases();
+  onTestFinished(storage.close);
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  const logger = createLogger('receipt-replay', { level: 'silent' });
+  const runner = new ProjectionRunner(pgDb(storage.queue), setup.nats.reader, logger);
+  await runner.initialise(mcpCatalogue);
+  await runner.run(mcpCatalogue);
+  const before = await storage.queue.query('SELECT policy FROM mcp_catalogue');
+  const receipts = await memberReceipts(setup);
+  expect(before.rows[0]?.['policy']).toMatchObject({
+    configurationObservation: receipts[0]!.event.data, published: false });
+  const position = await setup.nats.store.head();
+  const bytes = await readFile(setup.options.configFile);
+  const replay = gatewayDelivery({ ...setup.options, mode: 'replay' });
+  await replay.deliver(setup.record);
+  expect(await replay.observe()).toBeNull();
+  const execute = promisify(execFile);
+  const env = { ...process.env, ...setup.nats.env('projection'),
+    DATABASE_URL: storage.queue.options.connectionString };
+  const result = await execute('npm', ['run', 'replay', '--', 'mcp-catalogue', '--verify'],
+    { env, timeout: 10_000 });
+  expect(result.stdout).toContain('rebuilt state matched the live projection');
+  expect((await storage.queue.query('SELECT policy FROM mcp_catalogue')).rows).toEqual(before.rows);
+  expect(await setup.nats.store.head()).toBe(position);
+  expect(await readFile(setup.options.configFile)).toEqual(bytes);
+}
+it('rebuilds member receipts with the replay CLI without delivery or new events',
+  rebuildsReceiptsWithoutEffects);

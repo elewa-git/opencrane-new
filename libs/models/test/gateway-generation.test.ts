@@ -126,3 +126,86 @@ async function preparesReplacementIntents() {
   expect(await history(store, 'gateway-config-test', 'test')).toHaveLength(4);
 }
 it('prepares both replacement intents as separate serial generations', preparesReplacementIntents);
+
+const invalidations = ['unpublish', 'review', 'mode', 'tools', 'rejection', 'failed check',
+  'new intent'] as const;
+async function invalidatesChangedPolicy(change: typeof invalidations[number]) {
+  const store = conditionalStore();
+  await saveIntent(store, 'alpha', 'alpha-1', 'allow');
+  const record = await prepareGatewayConfiguration(store, 'test', 'alpha', 'alpha-1');
+  const before = toolPolicyFromRows(await history(store, 'mcp-alpha', 'test'));
+  const tool = before.tools[0]!;
+  const changes = {
+    unpublish: ['mcp.server_unpublished', { serverId: 'alpha', unpublishedBy: 'admin' }],
+    mode: ['mcp.tool_mode_set', { serverId: 'alpha', connectionId: before.connectionId,
+      toolName: tool.name, toolRevision: tool.revision, mode: 'block', setBy: 'admin' }],
+    tools: ['mcp.tools_changed', { serverId: 'alpha',
+      previousSchemaDigest: before.catalogue!.schemaDigest, newSchemaDigest: 'b'.repeat(64) }],
+    rejection: ['mcp.server_rejected', { serverId: 'alpha', reason: 'connection_required' }],
+    'failed check': ['mcp.catalogue_checked', { serverId: 'alpha', outcome: 'failed',
+      checkedAt: new Date().toISOString(), reason: 'discovery_timeout' }],
+    'new intent': ['mcp.server_published', { ...before.publication!, commandId: 'alpha-2' }],
+  } as const;
+  if (change === 'review') {
+    await saveIntent(store, 'alpha', 'alpha-2', 'allow');
+  } else {
+    const [type, data] = changes[change];
+    await save(store, envelope('test', 'mcp-alpha', type, data));
+  }
+  expect(await gatewayConfigurationCurrent(store, 'test', record)).toBe(false);
+}
+it.each(invalidations)('invalidates a prepared member after %s', invalidatesChangedPolicy);
+
+async function retainsCurrentPolicy() {
+  const store = conditionalStore();
+  await saveIntent(store, 'alpha', 'alpha-1', 'allow');
+  const record = await prepareGatewayConfiguration(store, 'test', 'alpha', 'alpha-1');
+  const before = toolPolicyFromRows(await history(store, 'mcp-alpha', 'test'));
+  const tool = before.tools[0]!;
+  const events = [
+    envelope('test', 'mcp-alpha', 'mcp.catalogue_checked', { serverId: 'alpha',
+      schemaDigest: before.catalogue!.schemaDigest, outcome: 'unchanged',
+      checkedAt: before.checkedAt, expiresAt: before.expiresAt }),
+    envelope('test', 'mcp-alpha', 'mcp.dispatch_admitted', { serverId: 'alpha',
+      connectionId: before.connectionId, requestId: 'call', toolName: tool.name,
+      toolRevision: tool.revision, schemaDigest: before.catalogue!.schemaDigest,
+      generation: 'instance-1' }),
+  ];
+  for (const event of events) {
+    await save(store, event);
+    expect(await gatewayConfigurationCurrent(store, 'test', record)).toBe(true);
+  }
+  const after = toolPolicyFromRows(await history(store, 'mcp-alpha', 'test'));
+  expect(after.policyRevision).toBe(before.policyRevision);
+}
+it('keeps members current after unchanged checks and call admission', retainsCurrentPolicy);
+
+async function refusesUnrelatedReceipts() {
+  const store = conditionalStore();
+  await saveIntent(store, 'alpha', 'alpha-1', 'allow');
+  const record = await prepareGatewayConfiguration(store, 'test', 'alpha', 'alpha-1');
+  const member = record.members[0]!;
+  const valid = { serverId: 'alpha', changeRef: member.changeRef,
+    reviewRevision: member.entry.reviewRevision, fragmentDigest: member.fragmentDigest,
+    sourceSequence: member.sourceSequence, generation: record.generation,
+    recordDigest: record.recordDigest, configDigest: 'a'.repeat(64),
+    processRef: '00000000-0000-4000-8000-000000000001', observedAt: new Date().toISOString() };
+  for (const fields of [{ changeRef: 'old' }, { fragmentDigest: 'b'.repeat(64) },
+    { reviewRevision: 1 }, { sourceSequence: 1 }, { sourceSequence: 1000 }]) {
+    await save(store, envelope('test', 'mcp-alpha', 'mcp.configuration_observed',
+      { ...valid, ...fields }));
+    const policy = toolPolicyFromRows(await history(store, 'mcp-alpha', 'test'));
+    expect(policy).not.toHaveProperty('configurationObservation');
+  }
+  await save(store, envelope('test', 'mcp-bravo', 'mcp.configuration_observed',
+    { ...valid, serverId: 'bravo' }));
+  const other = toolPolicyFromRows(await history(store, 'mcp-bravo', 'test'));
+  expect(other).not.toHaveProperty('configurationObservation');
+  await save(store, envelope('test', 'mcp-alpha', 'mcp.server_unpublished',
+    { serverId: 'alpha', unpublishedBy: 'admin' }));
+  await save(store, envelope('test', 'mcp-alpha', 'mcp.configuration_observed', valid));
+  const late = toolPolicyFromRows(await history(store, 'mcp-alpha', 'test'));
+  expect(late.configurationObservation).toBeUndefined();
+  expect(await gatewayConfigurationCurrent(store, 'test', record)).toBe(false);
+}
+it('ignores old, unrelated and late member receipts', refusesUnrelatedReceipts);
