@@ -170,9 +170,9 @@ it('clears a loaded directory after a 401', async () => {
 it('checks a denied status before reading its body', async () => {
   let bodyReads = 0;
   const denied = response({ status: 'refused' }, 403);
-  denied.json = async () => {
+  denied.json = () => {
     bodyReads += 1;
-    throw new Error('Denied body must not be read');
+    return Promise.reject(new Error('Denied body must not be read'));
   };
   const fixture = await mount(() => denied);
   expect(root(fixture).textContent).toContain('Your access changed');
