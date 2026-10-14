@@ -479,3 +479,10 @@ expectedSequence and the fixed `admin_disabled` reason. Its member/server contro
 covers all personal profiles, including new ones; profile names the reviewed target.
 Neither event contains material or a material-derived hash. Disable has no registered
 reaction, and no enable or cleanup command is supplied in this first part of P3-8 row 3.
+
+## Departure cleanup subscription
+
+`cleanup-departure` receives `member.removed`. The dispatcher only acts on saved
+removals with `reviewRevision`. It reuses `team.member_removed`, `grant.revoked`
+and `assistant.settings_changed`; this first part adds no event fields or completion
+record. Computer cleanup and receipt-confirmed completion remain pending.

@@ -11,7 +11,8 @@ This is the background workers layer. `apps/server` records events, and these wo
 ```mermaid
 flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
-  nats -->|new events and owner appointments| ops["apps/ops<br/>workers and memory replay"]
+  nats -->|new events, departures and owner appointments| ops["apps/ops<br/>workers and memory replay"]
+  ops -->|records departure changes| nats
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables, task relationships, jobs, configured memory, nightly jobs and retains failed nights| postgres["PostgreSQL<br/>read tables"]
@@ -29,6 +30,7 @@ flowchart LR
   history tables up to date. Keeps memory current when its key directory is configured.
 - Copies delegated task relationships and outcomes with the `delegations` worker.
   This worker starts no tasks and changes no permissions or spending.
+- Removes a departed member’s groups and personal grants and deactivates their assistant.
 - Updates permissions and sets up a new member's assistant and computer when requested.
 - Starts computers, gives them short-lived access keys through authenticated
   Kubernetes access as root, and pauses idle ones.
@@ -81,6 +83,11 @@ survey progress into read tables. Rebuilding those tables changes no keys.
    starting its workers. Computers stay in their current state while it waits.
    The tool saves progress, so an interrupted scan can continue. The [upgrade procedure](README.robot.md#handler-subscription-upgrade)
    explains how to stop services, check the plan and restart them.
+
+A member leaves. The dispatcher checks their saved removal and current resources.
+It records group removal, personal grant revocation and assistant deactivation.
+Retries keep one outcome per resource. Computer cleanup and a complete departure
+status are not available yet. Rebuilding read tables never runs this cleanup.
 
 ## How to run or test it
 

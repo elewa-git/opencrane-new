@@ -144,12 +144,12 @@ the personal default.
 | `silo.owner_bootstrapped` | authenticated installation-token claim | members, identities | OpenFGA owner/member; seed ownership; emit `assistant.created` (personal); seed model `grant.given`; prepare private personal key |
 | `member.joined` | invitation accepted | members | OpenFGA `member`; emit personal `assistant.created` unless `personalAssistant: none`; seed model `grant.given`; prepare private personal key |
 | `member.role_changed` | non-owner role command | members | OpenFGA role tuples |
-| `member.removed` | reviewed non-owner removal command; optional `reviewRevision` for old events | members | OpenFGA delete; deny access immediately from events; departure cleanup is pending |
+| `member.removed` | reviewed non-owner removal command; optional `reviewRevision` for old events | members | OpenFGA delete; deny access immediately from events; `cleanup-departure` removes groups and personal grants and deactivates personal assistants; computer cleanup and completion are pending |
 | `ownership.seeded` | fenced installation migration or bootstrap reaction | current owner set | OpenFGA seed receipt after existing owner tuples converge |
 | `ownership.transferred` | Owner command | request only when `awaitingConfirmation: true`; older events add the owner | confirm active successor on their member stream; OpenFGA request receipt |
 | `member.ownership_confirmed` | appointment reaction | successor role and owner set | OpenFGA owner tuple and receipt |
 | `ownership.stepped_down` | current Owner command | actor becomes Admin; owner set retains at least one owner | OpenFGA delete owner role, retain member/add Admin and atomic receipt |
-| `team.created` / `team.member_added` / `team.member_removed` | Owner/Admin command, or supplied identity-provider membership | flat group names, membership and grant-source views | OpenFGA `team#member` tuples and atomic receipts |
+| `team.created` / `team.member_added` / `team.member_removed` | Owner/Admin command, supplied identity-provider membership, or departure removal reaction | flat group names, membership and grant-source views | OpenFGA `team#member` tuples and atomic receipts |
 
 Ownership commands save requests on `ownership-<silo>`. New appointments count only
 after `member.ownership_confirmed` is saved on the successor’s member stream.
@@ -241,7 +241,7 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `assistant.created` | reaction or admin | assistants (owner, kind, scope, fixed team payer) | OpenFGA `acts_for`; claim one computer; personal model defaults or explicit team resource `grant.given` |
-| `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
+| `assistant.settings_changed` | owner, admin or departure deactivation reaction | assistants (model, persona, tools, active) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
 | `computer.turn_started` / `computer.turn_closed` | server turn command | chat admission and idle-suspend checks; native computer-root read indexes and internal admission limits | chat starts bind the message, thread and `executionMode`, with optional provider/model identity; native starts bind root and ancestry without granting authority; closed is permanent |
@@ -376,7 +376,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.instance_start_requested` | reserved lifecycle command; wake is refused for now | exact personal instance identity, installed image, run and original change; 20-second deadline | none; no workload or release handler |
 | `mcp.instance_observed` | authenticated, run-bound lifecycle worker | matching run, Pod UID, checked workload and expected sequence; system principal and change id for new reports; starting, failed, stopping, absent or unknown; no callable state | none |
 | `mcp.instance_stop_requested` | current owner command | close the exact run with its original start and stop references | none; no workload handler |
-| `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade | grants | OpenFGA tuples |
+| `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade; departure revocation reaction | grants | OpenFGA tuples |
 | `connection.created` | personal bearer create command after private staging | connection fold (exact reference and generation; identity unverified) | planned cleanup verifies that an orphan cannot become current before deleting its exact UID/version |
 | `connection.refreshed` | personal bearer rotate command after private staging; planned OAuth refresh | connection fold replaces the exact reference at the expected generation and revision | planned orphan cleanup; never release on replay |
 | `connection.revoked` | personal profile owner command | connection fold invalidates the profile at its expected revision | retain material; safe cleanup is a separate planned reaction |
@@ -656,6 +656,7 @@ events. Desktop admission additionally requires an explicit member
 
 | Handler | Subscribed events |
 | --- | --- |
+| `cleanup-departure` | `member.removed` |
 | `cleanup-memory` | `memory.forgotten` |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
 | `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |

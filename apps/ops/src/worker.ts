@@ -16,6 +16,7 @@ import { scanNightlyMemory } from './nightly-memory.ts';
 import { SandboxClient } from './kubernetes.ts';
 import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
 import { personalKeyHandler } from './personal-keys.ts';
+import { departureCleanupHandler } from './departure-cleanup.ts';
 import { memoryCleanupHandler } from './memory-cleanup.ts';
 import { dispatcherHandlerNames } from './dispatcher-handlers.ts';
 import type { Handler } from '@opencrane/handlers';
@@ -117,7 +118,7 @@ try {
     const available = [authorisation.handler, ownershipSeedHandler(commands.store),
       ownershipConfirmationHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
-      ...lifecycleHandlers(commands.store)];
+      ...lifecycleHandlers(commands.store), departureCleanupHandler(commands.store)];
     const personalDirectory = process.env['PERSONAL_KEY_DIRECTORY']?.trim();
     if (personalDirectory) {
       const keys = conversationKeys(personalDirectory);
