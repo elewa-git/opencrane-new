@@ -2415,7 +2415,11 @@ it.each(['lost', 'delayed', 'throw'])(
       expect((await forget(memoryId, commandId, 2)).statusCode).toBe(409);
       expect((await forget('own', commandId)).statusCode).toBe(409);
       expect((await remember('bob', 'person', commandId)).statusCode).toBe(409);
-      if (mode === 'delayed') expect((await original(delayed!)).status).toBe('appended');
+      if (mode === 'delayed') {
+        // Commit the publish already waiting at NATS after the caller has timed out.
+        const { deadline: _deadline, ...serverCommand } = delayed!;
+        expect((await original(serverCommand)).status).toBe('appended');
+      }
       const status = await get(`${path('bob')}/changes/${commandId}`);
       expect(status.json()).toMatchObject({ outcome: 'accepted', hidden: true });
       expect((await forget(memoryId, commandId)).json()).toEqual(status.json());
