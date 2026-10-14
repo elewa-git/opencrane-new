@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
 import { parseEventByType, budgetExhaustedDataSchema, budgetStopReasonSchema,
-  budgetCallDispatchAdmittedDataSchema,
+  budgetCallDispatchAdmittedDataSchema, budgetRootAllowanceSetDataSchema,
+  budgetRootStoppedDataSchema,
   optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
 import type { Projection, Query } from '@opencrane/projections';
 
@@ -97,7 +98,7 @@ const callSchema = optionalProviderTurnBindingSchema.safeExtend({
 });
 export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
-  call: callSchema, dispatchGate: z.literal(1).optional(),
+  rootId: z.string().optional(), call: callSchema, dispatchGate: z.literal(1).optional(),
   expired: z.literal(true).optional(),
   settledCents: z.int().nonnegative().optional(), outcomeUnknown: z.boolean().optional() });
 const ceilingsSchema = z.array(z.object({ scope: z.enum(['paying_group', 'assistant']), scopeId: z.string(), ceilingCents: z.int().nonnegative() }));
@@ -105,9 +106,12 @@ const stopSchema = z.object({ id: z.string(), position: z.int().nonnegative(),
   reasons: z.array(budgetStopReasonSchema) });
 const stoppedWorkSchema = z.object({ conversationId: z.string(), turnId: z.string(),
   stopId: z.string() });
+const rootSchema = budgetRootAllowanceSetDataSchema.extend({
+  position: z.int().nonnegative(), stop: budgetRootStoppedDataSchema.optional(),
+});
 const stateSchema = z.object({ dailyCeilingCents: z.int().nonnegative(), ceilingCents: z.int().nonnegative(),
   periodStart: z.string().optional(), defaultPayingGroupId: z.string().optional(), ceilings: ceilingsSchema.default([]), sequence: z.int().nonnegative().default(0),
-  reservations: z.array(reservationSchema), limits: z.array(budgetStopReasonSchema).default([]),
+  roots: z.array(rootSchema).default([]), reservations: z.array(reservationSchema), limits: z.array(budgetStopReasonSchema).default([]),
   dispatches: z.array(budgetCallDispatchAdmittedDataSchema).default([]),
   stops: z.array(stopSchema).default([]), stoppedWork: z.array(stoppedWorkSchema).default([]) });
 export type BudgetState = z.infer<typeof stateSchema>;
@@ -133,11 +137,12 @@ export function requireDispatchReservation(state: BudgetState,
     throw new Error('Reservation binding changed');
   }
 }
-export const emptyBudget = (): BudgetState => ({ dailyCeilingCents: 0, ceilingCents: 0, ceilings: [], sequence: 0, reservations: [], dispatches: [], limits: [], stops: [], stoppedWork: [] });
+export const emptyBudget = (): BudgetState => ({ dailyCeilingCents: 0, ceilingCents: 0, ceilings: [], sequence: 0, roots: [], reservations: [], dispatches: [], limits: [], stops: [], stoppedWork: [] });
 export function applyBudget(state: BudgetState, event: EventEnvelope, sequence = state.sequence): void {
   if (!event.type.startsWith('budget.')) return;
   state.sequence = sequence;
   const d = data(event);
+  applyRoot(state, event, sequence);
   if (event.type === 'budget.ceiling_set') {
     applyStopConfiguration(state, event);
     applyCeiling(state, d);
@@ -148,6 +153,7 @@ export function applyBudget(state: BudgetState, event: EventEnvelope, sequence =
     state.reservations.push({ id: z.string().parse(d['reservationId']), time: event.time,
       amountCents: z.int().nonnegative().parse(d['amountCents']),
       dispatchGate: z.literal(1).optional().parse(d['dispatchGate']),
+      rootId: z.string().optional().parse(d['rootId']),
       call: callSchema.parse({ ...data({ ...event, data: d['modelCall'] }), payingGroupId: d['payingGroupId'] }) });
   } else if (event.type === 'budget.reservation_expired') {
     function matchesReservation(reservation: BudgetState['reservations'][number]) {
@@ -166,6 +172,19 @@ export function applyBudget(state: BudgetState, event: EventEnvelope, sequence =
     if (!reservation) throw new Error('Unknown reservation');
     reservation.settledCents = Math.max(reservation.settledCents ?? 0, z.int().nonnegative().parse(d['settledCents']));
     reservation.outcomeUnknown = d['outcome'] === 'unknown';
+  }
+}
+function applyRoot(state: BudgetState, event: EventEnvelope, sequence: number) {
+  if (event.type === 'budget.root_allowance_set') {
+    state.roots.push({ ...budgetRootAllowanceSetDataSchema.parse(event.data), position: sequence });
+  } else if (event.type === 'budget.root_stopped') {
+    const stop = budgetRootStoppedDataSchema.parse(event.data);
+    function matches(root: BudgetState['roots'][number]) {
+      return root.rootId === stop.rootId;
+    }
+    const root = state.roots.find(matches);
+    if (!root) throw new Error('Unknown root');
+    root.stop ??= stop;
   }
 }
 function applyCeiling(state: BudgetState, d: Record<string, unknown>) {
@@ -415,7 +434,7 @@ function scopeStopId(state: BudgetState, call: BudgetWork, now: Date, admittedAt
   }
   return undefined;
 }
-export function exceededReasons(state: BudgetState, call: ModelCall, now: Date,
+export function exceededReasons(state: BudgetState, call: BudgetWork, now: Date,
   attemptedBoundCents: number): StopReason[] {
   const reasons: StopReason[] = [];
   for (const limit of state.limits) {

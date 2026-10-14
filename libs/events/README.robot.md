@@ -498,3 +498,18 @@ Extended `mcp.server_published` data requires commandId, expectedSequence, revie
 and fragmentDigest together. Legacy records remain readable. `gateway.configuration_requested`
 records reviewed entries, original change references, source positions and a SHA-256 digest.
 Header names belong to the later renderer constants; no header values or definitions are saved here.
+
+## Root spending allowance (P4-8 PR 4, first part; #90 and #93)
+
+`BudgetActor.setRootAllowance(binding, firstCallBoundCents)` saves the reviewed bound
+only when every remaining cap and the first call fit. It derives rootId as SHA-256
+of JSON `[silo, conversationId, turnId]`. Identical retries return the saved record.
+`reserve` takes optional rootId as its fifth argument; rooted turns must supply it
+and match every saved identity field. The saved root position replaces admittedAt.
+`rootTotals` uses the existing reservations, BigInt sums and lifetime settlement.
+Roots stay out of `budgetSummary`. Refusals contain fixed reasons and availableCents.
+Allowance and ceiling stops are permanent; settlement and replay still work.
+Tests in `libs/models/test/root-budget.test.ts` use real NATS and PostgreSQL.
+Requester, turn-ended and access-revoked stop commands follow in the next part.
+Trusted call ids, grant/dispatch checks and the child dispatcher remain in row 5.
+There is no route, caller, running-turn fan-out or model call in this part.

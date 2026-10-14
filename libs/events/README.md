@@ -30,7 +30,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, subscriptions, nightly memory records and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, turns and spending| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, turns, root allowances and spending| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
@@ -40,6 +40,9 @@ The back end checks tool hashes against their saved definitions. A hash is a fix
 value calculated from those definitions. Older records remain readable for replay.
 
 ## What it is responsible for
+
+Root allowance records fix one turn's spending bound. Root stop records prevent
+further holds without refunding earlier calls. These records start no work.
 
 Define publication requests and ordered gateway records without private review text.
 

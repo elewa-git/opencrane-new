@@ -16,7 +16,9 @@ let clock: Date;
 const binding = { requesterId: 'alice', conversationId: 'conversation', turnId: 'turn',
   threadId: 'thread', assistantId: 'assistant', computerId: 'computer', generation: 1,
   payingGroupId: 'group', allowanceCents: 1000 };
-const call = { ...binding, allowanceCents: undefined, model: 'gpt-6-luna', priceTableId,
+const call = { requesterId: 'alice', conversationId: 'conversation', turnId: 'turn',
+  threadId: 'thread', assistantId: 'assistant', computerId: 'computer', generation: 1,
+  payingGroupId: 'group', model: 'gpt-6-luna', priceTableId,
   contextDigest: '0'.repeat(64) };
 function now() { return clock; }
 async function setup() {
@@ -61,7 +63,8 @@ async function refusesOnlyRoot() {
   expect(await nats.store.head()).toBe(before + 1);
   const other = { ...binding, turnId: 'other', threadId: 'other' };
   const second = await actor.setRootAllowance(other, 1);
-  await actor.reserve({ ...call, ...other }, 1, undefined, undefined, second.rootId);
+  await actor.reserve({ ...call, turnId: 'other', threadId: 'other' }, 1,
+    undefined, undefined, second.rootId);
   expect(budgetSummary(actor.state, clock)).not.toHaveProperty('roots');
 }
 it('saves only a root stop for 651 cents and lets another root use the payer', refusesOnlyRoot);
@@ -76,11 +79,15 @@ async function fitsExactly() {
 }
 it('accepts 650 and counts each call once at every scope', fitsExactly);
 async function checksAdmission() {
-  await actor.configure({ scope: 'global', dailyCeilingCents: 500, ceilingCents: 900,
+  const earlier = { ...call, turnId: 'earlier' };
+  const reservation = await actor.reserve(earlier, 20);
+  await settle(reservation, 10);
+  await actor.reserve(earlier, 30);
+  await actor.configure({ scope: 'global', dailyCeilingCents: 540, ceilingCents: 940,
     setBy: 'owner' });
-  await actor.configure({ scope: 'paying_group', scopeId: 'group', ceilingCents: 250,
+  await actor.configure({ scope: 'paying_group', scopeId: 'group', ceilingCents: 290,
     setBy: 'owner' });
-  await actor.configure({ scope: 'assistant', scopeId: 'assistant', ceilingCents: 180,
+  await actor.configure({ scope: 'assistant', scopeId: 'assistant', ceilingCents: 220,
     setBy: 'owner' });
   const before = await nats.store.head();
   await expect(actor.setRootAllowance(binding, 1)).rejects.toMatchObject({ availableCents: 180 });
@@ -88,7 +95,7 @@ async function checksAdmission() {
     .rejects.toMatchObject({ availableCents: 180 });
   expect(await nats.store.head()).toBe(before);
   await actor.setRootAllowance({ ...binding, allowanceCents: 180 }, 180);
-  expect(totals(actor.state, clock)).toMatchObject({ monthCents: 0, reservedCents: 0 });
+  expect(totals(actor.state, clock)).toMatchObject({ monthCents: 10, reservedCents: 30 });
   await actor.configure({ scope: 'assistant', scopeId: 'assistant', ceilingCents: 0,
     setBy: 'owner' });
   await expect(actor.setRootAllowance({ ...binding, turnId: 'new', allowanceCents: 1 }, 1))
@@ -106,6 +113,7 @@ async function concurrentCalls() {
 it('serialises competing holds and keeps the first stop', concurrentCalls);
 async function matchesBinding() {
   const root = await actor.setRootAllowance(binding, 1);
+  await actor.configure({ scope: 'global', ceilingCents: 30_000, setBy: 'owner' });
   const before = await nats.store.head();
   expect(await actor.setRootAllowance(binding, 1)).toEqual(root);
   for (const field of ['requesterId', 'threadId', 'assistantId', 'computerId', 'generation',
@@ -153,6 +161,8 @@ async function replaysLifetime() {
   expect(rootTotals(actor.state, root.rootId)).toEqual({
     settledCents: 330, heldCents: 110, availableCents: 560 });
   await expect(reserve(root.rootId, 561)).rejects.toThrow();
+  await actor.configure({ scope: 'global', ceilingCents: 30_000, dailyCeilingCents: 30_000,
+    setBy: 'owner' });
   clock = new Date('2026-11-01T12:00:00Z');
   await actor.period();
   actor = new BudgetActor(nats.store, 'test', now);
@@ -201,14 +211,32 @@ async function recoversLostReply() {
   expect(await nats.store.head()).toBe(before);
 }
 it('recovers a lost reply beyond NATS deduplication without another allocation', recoversLostReply);
-async function rejectsOldLeader() {
+async function rejectsOldLeader(operation: string) {
   const root = await actor.setRootAllowance(binding, 1);
   const old = actor;
   actor = new BudgetActor(nats.store, 'test', now);
   await actor.start();
   const before = await nats.store.head();
-  await expect(old.reserve(call, 1001, undefined, undefined, root.rootId)).rejects.toThrow('fence');
-  await expect(old.setRootAllowance({ ...binding, turnId: 'new' }, 1)).rejects.toThrow();
+  if (operation === 'stop') {
+    await expect(old.reserve(call, 1001, undefined, undefined, root.rootId)).rejects.toThrow('fence');
+  } else {
+    await expect(old.setRootAllowance({ ...binding, turnId: 'new' }, 1)).rejects.toThrow('fence');
+  }
   expect(await nats.store.head()).toBe(before);
 }
-it('prevents a replaced leader from stopping or setting a root', rejectsOldLeader);
+it.each(['stop', 'set'])('prevents a replaced leader from saving a root %s', rejectsOldLeader);
+
+async function rejectsInvalidAllowance(allowanceCents: number) {
+  const before = await nats.store.head();
+  await expect(actor.setRootAllowance({ ...binding, allowanceCents }, 1))
+    .rejects.toThrow('Invalid root allowance');
+  expect(await nats.store.head()).toBe(before);
+}
+it.each([0, 1001, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+  'refuses an invalid allowance of %s without writing', rejectsInvalidAllowance);
+
+async function refusesLateAllocation() {
+  await actor.reserve(call, 100);
+  await expect(actor.setRootAllowance(binding, 1)).rejects.toThrow('Root binding conflict');
+}
+it('refuses an allowance after that turn already held money without a root', refusesLateAllocation);

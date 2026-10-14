@@ -394,12 +394,24 @@ counts process starts for that fixed identity.
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `budget.ceiling_set` | admin | budgets | — |
+| `budget.root_allowance_set` | budget actor | budgets | — |
+| `budget.root_stopped` | budget actor | budgets | — |
 | `budget.reserved` | budget actor (inside `ext_authz`) | budgets | — |
 | `budget.reservation_expired` | budget actor at expiry | budgets | — |
 | `budget.call_dispatch_admitted` | budget actor at the final gateway check | budgets | — |
 | `budget.settled` | budget actor (on `effect.observed` or admission rejected before dispatch) | budgets, usage | — |
 | `budget.period_started` | timer (00:00 UTC on the 1st) | budgets | — |
 | `budget.exhausted` | budget actor | budgets | notify admins; stop affected work (hard stop cascades) |
+
+A root is one turn's fixed allowance. `budget.root_allowance_set` binds rootId,
+requesterId, conversationId, turnId, threadId, assistantId, computerId, generation,
+payingGroupId and allowanceCents (1–1,000). Allocation holds no money.
+`budget.reserved.rootId` optionally links the call's sole hold to that root.
+Root totals count those calls over their whole lifetime, across budget periods.
+`budget.root_stopped` records either allowance_exhausted with attemptedBoundCents
+and availableCents, or ceiling_stop with the existing budget stopId. The first stop
+wins and refunds nothing. External stop reasons and dispatch checks follow separately.
+These internal records have no caller, route or reaction yet.
 
 The Phase 2 model actor records the global monthly `ceilingCents` and
 `dailyCeilingCents` together. Reservations include `modelCall`: model, pinned

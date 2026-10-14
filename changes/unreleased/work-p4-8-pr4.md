@@ -1,0 +1,1 @@
+- Add internal turn spending allowances with shared per-call holds and permanent allowance or ceiling stops. Child chat dispatch is not enabled yet.
