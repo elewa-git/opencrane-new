@@ -1,0 +1,1 @@
+People can forget their own saved memory facts over HTTP and check the result after a lost reply or restart. Forgotten facts stay hidden while cleanup is pending or unavailable; completed cleanup includes its recorded time.

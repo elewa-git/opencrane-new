@@ -118,7 +118,8 @@ async function readContent(request: FastifyRequest, options: MemoryOptions, requ
     return await maintenanceStatus(options, scope, requester);
   }
   if (request.routeOptions.url?.endsWith('/:memoryId')) {
-    return await readDetail(request, options, requester, scope);
+    const detail = await readDetail(request, options, requester, scope);
+    return { ...detail, canForget: access.canForget };
   }
   const query = readInput.parse(request.query);
   return await listFacts(options, requester, scope, query, secret);

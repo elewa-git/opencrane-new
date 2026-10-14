@@ -566,7 +566,7 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 | `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | Native scheduling records intent only; no dispatch or spending |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
 | `memory.corrected` | OpenCrane memory MCP (planned); nightly dreaming job (planned) | Postgres memory projection (planned) | correction cleanup is planned |
-| `memory.forgotten` | Person HTTP command (planned); other scopes disabled | Postgres memory projection hides the fact and all dependent facts | `cleanup-memory` destroys person revision and candidate keys and verifies search removal |
+| `memory.forgotten` | Person HTTP forget command; other scopes disabled | Postgres memory projection hides the fact and all dependent facts | `cleanup-memory` destroys person revision and candidate keys and verifies search removal |
 | `memory.cleanup_recorded` | Configured cleanup worker after verified deletion or exhausted retries | Memory projection checks the fixed `completed` or `unavailable` outcome without changing fact rows; scope history retains both | — |
 | `memory.consolidated` | Reserved for later use; not emitted by MVP dreaming | Postgres memory projection for that scope | — |
 | `scope.promotion_requested` / `scope.promoted` | person / approver | scopes | OpenFGA viewer tuples; copy to the target dataset |

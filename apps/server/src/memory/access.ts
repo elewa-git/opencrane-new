@@ -111,12 +111,12 @@ export async function scopeAccess(options: MemoryOptions, requester: string, sco
       throw new MemoryRefused();
     }
     return { ...scope, audience: { kind: 'person', ownerId: requester },
-      canRead: true, canWrite: true };
+      canRead: true, canWrite: true, canForget: true };
   }
   if (scope.scopeKind === 'group') {
     await checks.group(scope.ownerId);
     return { ...scope, audience: { kind: 'group', ownerId: scope.ownerId },
-      canRead: true, canWrite: true };
+      canRead: true, canWrite: true, canForget: false };
   }
   return notesAccess(options, requester, scope, describeRights, checks, writeOnly);
 }
@@ -157,7 +157,7 @@ async function notesAccess(options: MemoryOptions, requester: string, scope: Sco
     audienceKind = 'group';
   }
   return { ...scope, audience: { kind: audienceKind, ownerId: assistant.ownerId },
-    canRead, canWrite };
+    canRead, canWrite, canForget: false };
 }
 
 export async function readAssistant(options: MemoryOptions, assistantId: string) {

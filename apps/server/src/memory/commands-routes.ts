@@ -6,6 +6,7 @@ import { sessionFor } from '../members/routes.ts';
 import { scopeAccess, resolveScope, memoryAccessChecks, MemoryRefused,
   type MemoryOptions } from './access.ts';
 import { remember, readCommand, changeParams, reconcileCommands } from './commands.ts';
+import { forget } from './forget.ts';
 import { bindMaintenance } from './maintenance.ts';
 import { MemoryBusy } from './admission.ts';
 import { MemoryConflict, readParams } from './reads.ts';
@@ -31,6 +32,7 @@ export function registerMemoryCommands(app: FastifyInstance, config: AuthConfig,
   app.get('/api/memory/:scopeId/changes/:commandId', handle);
   const postOptions = { bodyLimit: 16384, errorHandler: invalidCommandBody };
   app.post('/api/memory/:scopeId/facts', postOptions, handle);
+  app.post('/api/memory/:scopeId/facts/:memoryId/forget', postOptions, handle);
   app.post('/api/memory/:scopeId/maintenance/binding', postOptions, handle);
 
   async function handle(request: FastifyRequest, reply: FastifyReply) {
@@ -81,6 +83,9 @@ export function registerMemoryCommands(app: FastifyInstance, config: AuthConfig,
 
 async function handleCommand(request: FastifyRequest, options: MemoryOptions, requester: string,
   checks: ReturnType<typeof memoryAccessChecks>) {
+  if (request.routeOptions.url?.endsWith('/forget')) {
+    return { status: 200, body: await forget(options, requester, request.params, request.body) };
+  }
   const path = readParams.strip().parse(request.params);
   const scope = await resolveScope(options, requester, path.scopeId);
   if (request.method === 'POST') {
