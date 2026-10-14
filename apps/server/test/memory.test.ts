@@ -2785,3 +2785,167 @@ async function repeatedExpiry() {
     vi.useRealTimers();
   }
 }
+
+function forget(memoryId: string, commandId: string, expectedRevision = 1,
+  owner = 'bob', member = 'bob', extra: Record<string, unknown> = {}) {
+  const session = { sub: `idp-${member}`, orgId: 'org-acme', roles: ['owner', 'admin'],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+    origin: new URL(config.redirectUri).origin };
+  const payload = { commandId, expectedRevision, ...extra };
+  return app.inject({ method: 'POST',
+    url: `${path(owner)}/facts/${memoryId}/forget`, headers, payload });
+}
+async function forgetTarget(label: string) {
+  const response = await remember('bob', 'person', `store-${label}`);
+  expect(response.statusCode).toBe(200);
+  await runner.run(projection);
+  return response.json<{ memoryId: string }>().memoryId;
+}
+it('forgets from metadata after key destruction and reports terminal cleanup without custody',
+  async function forgetReceipt() {
+    const memoryId = await forgetTarget('forget-receipt');
+    const scopeId = memoryScopeId('acme', 'person', 'bob');
+    keys.delete({ silo: 'acme', scopeId, scopeKind: 'person', ownerId: 'bob', memoryId, revision: 1 });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const appendSpy = vi.spyOn(nats.store, 'append');
+    let response;
+    try {
+      response = await forget(memoryId, 'forget-receipt');
+      expect(response.statusCode).toBe(200);
+      expect(appendSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      appendSpy.mockRestore();
+      fetchSpy.mockRestore();
+    }
+    const receipt = response.json<{ changeId: string }>();
+    expect(receipt).toMatchObject({ operation: 'forget', outcome: 'accepted', memoryId,
+      scopeId, audience: { kind: 'person', ownerId: 'bob' }, revision: 2,
+      hidden: true, cleanupStatus: 'pending', acceptedAt: expect.any(String) });
+    for (const field of ['text', 'ciphertext', 'keyId']) expect(receipt).not.toHaveProperty(field);
+    const rows = [];
+    for await (const row of nats.store.readStream(`scope-${scopeId}`)) {
+      if (row.event.id === receipt.changeId) rows.push(row);
+    }
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.event).toMatchObject({ type: 'memory.forgotten',
+      data: { schemaVersion: 1, memoryId, expectedRevision: 1, revision: 2 } });
+    await runner.run(projection);
+    const detail = await get(`${path('bob')}/facts/${memoryId}`);
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({ status: 'unavailable', reason: 'forgotten' });
+    const statusPath = `${path('bob')}/changes/forget-receipt`;
+    for (const [changeId, outcome, expected] of [
+      ['another-change', 'completed', 'pending'],
+      [receipt.changeId, 'unavailable', 'unavailable'],
+      [receipt.changeId, 'completed', 'forgotten'],
+      [receipt.changeId, 'unavailable', 'forgotten'],
+    ]) {
+      const id = `cleanup-http-${++count}`;
+      const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'bob',
+        changeId, outcome, ...(outcome === 'unavailable' ? { failureCode: 'retry_exhausted' } : {}) };
+      const record = { ...event(id, `scope-${scopeId}`, 'memory.cleanup_recorded'),
+        silo: 'acme', source: 'opencrane-worker', commandId: id,
+        principal: { kind: 'system' as const, id: 'opencrane-worker' }, data };
+      await nats.store.append({ event: record, expectedSequence: await nats.store.head(record.subject) });
+      const withoutCustody: MemoryOptions = { ...memory };
+      delete withoutCustody.keyDirectory;
+      await app.close();
+      app = buildServer(config, { memory: withoutCustody });
+      const status = await get(statusPath);
+      expect(status.statusCode).toBe(200);
+      expect(status.json()).toMatchObject({ ...receipt, hidden: true, cleanupStatus: expected });
+      if (expected === 'forgotten') expect(status.json()).toHaveProperty('forgottenAt');
+    }
+    await app.close();
+    app = buildServer(config, { memory });
+  });
+it.each(['lost', 'delayed'])(
+  'recovers a %s forget reply across restart without another append', async function retryForget(mode) {
+    const memoryId = await forgetTarget(`forget-${mode}`);
+    const commandId = `forget-${mode}`;
+    const original = nats.store.append.bind(nats.store);
+    let delayed: Parameters<typeof original>[0] | undefined;
+    async function lose(command: Parameters<typeof original>[0]) {
+      delayed = command;
+      if (mode === 'lost') await original(command);
+      return { status: 'unavailable' as const, cause: new Error('Lost reply') };
+    }
+    const spy = vi.spyOn(nats.store, 'append').mockImplementation(lose);
+    try {
+      expect((await forget(memoryId, commandId)).json()).toMatchObject({ outcome: 'unknown' });
+      await app.close();
+      app = buildServer(config, { memory });
+      await app.ready();
+      const retry = await forget(memoryId, commandId);
+      expect(retry.json()).toMatchObject({ outcome: mode === 'lost' ? 'accepted' : 'unknown' });
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect((await forget(memoryId, commandId, 2)).statusCode).toBe(409);
+      expect((await remember('bob', 'person', commandId)).statusCode).toBe(409);
+      if (mode === 'delayed') expect((await original(delayed!)).status).toBe('appended');
+      const status = await get(`${path('bob')}/changes/${commandId}`);
+      expect(status.json()).toMatchObject({ outcome: 'accepted', hidden: true });
+      expect((await forget(memoryId, commandId)).json()).toEqual(status.json());
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+it('refuses stale, reused and hidden forget targets without appending', async function forgetConflicts() {
+  const memoryId = await forgetTarget('forget-conflict');
+  const otherId = await forgetTarget('forget-other');
+  const spy = vi.spyOn(nats.store, 'append');
+  try {
+    expect((await forget(memoryId, 'forget-stale', 2)).statusCode).toBe(409);
+    expect((await forget(memoryId, 'store-forget-conflict')).statusCode).toBe(409);
+    expect(spy).not.toHaveBeenCalled();
+    expect((await forget(memoryId, 'forget-conflict')).statusCode).toBe(200);
+    expect((await forget(memoryId, 'forget-again')).statusCode).toBe(409);
+    expect((await forget(otherId, 'forget-conflict')).statusCode).toBe(409);
+    expect(spy).toHaveBeenCalledTimes(1);
+  } finally { spy.mockRestore(); }
+});
+it('refuses foreign and malformed forget targets before reading scope history', async function forgetDenials() {
+  const original = nats.store.readStream.bind(nats.store);
+  async function* checked(subject: string, from?: number, deadline?: number) {
+    expect(subject.startsWith('scope-')).toBe(false);
+    yield* original(subject, from, deadline);
+  }
+  const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(checked);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  try {
+    for (const [owner, member, memoryId] of [
+      ['owner', 'bob', 'private'], ['bob', 'admin', 'own'], ['bob', 'owner', 'own'],
+      ['unknown', 'bob', 'own'], ['bob', 'bob', 'unknown'], ['bob', 'bob', 'foreign'],
+      ['bob', 'bob', 'bad.id'],
+    ]) {
+      expect((await forget(memoryId!, 'denied-forget', 1, owner, member)).statusCode).toBe(404);
+    }
+    expect(appendSpy).not.toHaveBeenCalled();
+  } finally {
+    readSpy.mockRestore();
+    appendSpy.mockRestore();
+  }
+});
+it('exposes forget rights only for personal memory', async function forgetRights() {
+  await runner.run(projection);
+  const response = await get('/api/memory/scopes?groupId=sales&assistantId=personal');
+  const scopes = response.json<{ scopes: { scopeKind: string; canForget: boolean }[] }>().scopes;
+  for (const scope of scopes) expect(scope.canForget).toBe(scope.scopeKind === 'person');
+  const detail = await get(`${path('bob')}/facts/own`);
+  expect(detail.json()).toHaveProperty('canForget', true);
+});
+it('validates forget input and refuses missing sessions and foreign origins', async function forgetBoundary() {
+  const memoryId = await forgetTarget('forget-validation');
+  expect((await forget(memoryId, 'invalid-forget', 1, 'bob', 'bob', { text: 'private' })).statusCode)
+    .toBe(422);
+  expect((await forget(memoryId, 'invalid-forget', 1, 'bob', 'bob', { text: 'a'.repeat(17000) }))
+    .statusCode).toBe(422);
+  const url = `${path('bob')}/facts/${memoryId}/forget`;
+  const payload = { commandId: 'invalid-forget', expectedRevision: 1 };
+  expect((await app.inject({ method: 'POST', url, payload })).statusCode).toBe(401);
+  const session = { sub: 'idp-bob', orgId: 'org-acme', roles: [], authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`, origin: 'https://wrong.test' };
+  expect((await app.inject({ method: 'POST', url, payload, headers })).statusCode).toBe(403);
+});
