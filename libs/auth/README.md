@@ -31,6 +31,8 @@ flowchart LR
 - Refuse identity exceptions at production startup. Development and tests can name
   exact sign-in identities from another organisation.
 - Keep return links on the same website and end the Zitadel browser session at sign-out.
+- Sign stop requests that expire after thirty seconds and cannot be used for AI calls.
+  Sending these requests to computers is not built yet.
 - Sign and check short-lived passes for computers and individual chat turns.
   Keep a saved provider choice and the server-recorded shared context class in a
   turn pass and each renewed pass, then refuse a different choice.

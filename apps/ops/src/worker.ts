@@ -167,7 +167,7 @@ try {
       }
       await dispatcherRuntime.startNightly(scanNightly);
       function deliverCredentials(id: string, token: import('@opencrane/auth').IssuedToken) {
-        return kube.credentials(id, token);
+        return kube.credentials(id, token, tokens.jwks.keys[0]);
       }
       watcher = watchComputers(commandStore, kube, tokens, deliverCredentials,
         silo, idleMs, stop.signal);

@@ -22,7 +22,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 ```mermaid
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
-  ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes| computer
+  ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes and public keys| computer
   server["apps/server<br/>the back end"] <-->|turns, files, shared history, individual stops and reports| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer --> supervisor["Root supervisor<br/>protected launch, admission and exit checks"]
@@ -37,7 +37,9 @@ flowchart LR
 
 - Builds the container image with Codex, a browser, a remote desktop and document tools.
 - Accepts new server passes only through authenticated Kubernetes access as root.
-  Local Codex and desktop processes cannot replace them.
+  Check each pass with the supplied public key before saving the key and computer
+  identity. Codex can read the key, but cannot use it to sign requests or change it.
+  Older deliveries without a key still work; computer-wide stop requests stay refused.
 - Runs the bridge that receives chat turns and sends progress reports to the server.
 - Refuses computer-wide bridge stop requests until it can check the signed request
   against this computer and its current saved takeover.
@@ -80,7 +82,7 @@ server whether it can wait for approval. Older computers receive Allow tools onl
    workers whose main thread has exited, and detached children. If work keeps running,
    it refuses an exit receipt. Its receipt cannot grant desktop control.
 
-The computer-wide bridge work gate stays off until the server sender and trusted
+The computer-wide bridge work gate stays off until its signature and identity
 checks are built. Every gate request is refused without stopping turns or returning
 a receipt. A valid bridge connection alone cannot authorise a takeover. The prepared
 stop code cannot prove that executors or browser automation have stopped.

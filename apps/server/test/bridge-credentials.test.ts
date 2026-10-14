@@ -88,7 +88,7 @@ async function protectsStoredCredential() {
     const other = generateKeyPairSync('ec', { namedCurve: 'P-256' });
     const wrongCurve = generateKeyPairSync('ec', { namedCurve: 'P-384' });
     const invalidKeys = [
-      { ...computer.credential.verifier, d: 'private-key-canary' },
+      computer.privateVerifier,
       other.publicKey.export({ format: 'jwk' }),
       wrongCurve.publicKey.export({ format: 'jwk' }),
     ];

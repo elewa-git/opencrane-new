@@ -590,13 +590,20 @@ Kubernetes authentication and root access authorise every delivery, including th
 first one and recovery after expiry. No bootstrap bearer or new permission is needed.
 The installer caps input at 16 KiB and lifetime at the issuer's ten minutes. It checks
 that the supplied expiry matches the signed token's `exp`, and checks `iat`, `jti`
-and computer type. It trusts the issuer reached through Pod exec; it does not verify
-the signature again. The gateway still verifies signed credentials on model requests.
+and computer type. When delivery includes `verifier`, the installer requires a public
+P-256 JWK and checks the ES256 signature, `kid: lifecycle` and `agentgateway` audience
+using only `node:crypto`. It refuses private keys, other curves and mismatched keys.
+The root Pod exec caller supplies the trusted public key. No socket request can
+replace it. Deliveries without a key keep working and save no trusted identity.
+The gateway still verifies signed credentials on model requests.
 
 `/run/executor/credentials` is root-owned, mode 0750, group 1000. Its atomically
-replaced `computer.json` contains only a SHA-256 digest and expiry, mode 0440,
-owner root, group 1000. Codex can read the digest but cannot use it as a pass or
-change it. Desktop, tool and private Codex users cannot traverse the directory.
+replaced `computer.json` contains a SHA-256 digest and expiry, mode 0440,
+owner root, group 1000. Verified delivery also saves `verifier`, `issuer`, `silo`,
+`computer`, `assistant`, positive integer `generation` and the local `POD_UID`
+as `podUid`. The signed claims supply the identity; root's environment supplies
+the Pod UID. Codex can read the digest and public key but cannot use either to
+sign requests or change the file. Desktop, tool and private Codex users cannot traverse the directory.
 The bridge compares incoming token hashes in constant time before replacing any
 live connection. It retains the authenticated server's token only in memory for
 per-thread gateway grants. Tokens never enter events, replies, logs or the PVC.
@@ -611,7 +618,8 @@ processes. No launch copies `process.execArgv` or accepts extra Node flags.
 
 `apps/server/test/bridge-credentials.test.ts` uses the existing disposable computer
 fixture, exact template capabilities, UIDs 1000–1003, signed fixture credentials and
-the stub provider. It covers unauthorised replacement, file changes, issuer expiry,
+the stub provider. It covers public-key and identity storage, private/wrong-curve/
+mismatched key refusal, legacy delivery, unauthorised replacement, file changes, issuer expiry,
 forged connections and rotation followed by a real Codex turn. The debugger regression
 sends SIGUSR1 from UID 1000 to the bridge and memory-free Codex wrapper, UID 1002 to
 the desktop helper, and UID 1003 to the private Codex wrapper. It checks that port 9229
@@ -815,9 +823,9 @@ The [approval API](../../docs/api/approvals.md) explains tool failure records an
 
 ## Bridge work gate (P3-17 PR 2b, first split)
 
-The bridge work gate stays off until the server sender lands with trusted checks.
-The computer currently stores only a bridge pass digest and expiry. It has no trusted
-gate signing key, current computer/generation binding or saved current takeover.
+The bridge work gate stays off until its signature and identity checks are connected.
+Root credential delivery saves the public key and identity for that later check.
+The bridge does not yet read them or check signed gates against them.
 `BridgeGate.close` therefore refuses every request before setting its binding or
 stopping anything, with `Bridge gate authority unavailable`. The socket returns the
 fixed close code 1008 and reason `Invalid bridge message`, before or after resume.
@@ -858,3 +866,11 @@ fixture and retain their existing assertions. Separate refusal tests use the rea
 authority check. Stale generations, old takeovers, foreign takeovers, unsigned requests
 and caller-supplied proof are sent first on fresh authenticated connections while two
 turns run. Each must be refused without stopping work or returning any gate receipt.
+
+### Trusted key delivery split (P3-17 PR 2c, first part)
+
+This part adds gate issuance and root-only delivery of the public key and checked
+computer identity. The bridge reader and unconditional gate refusal are unchanged.
+The next part must replace the test-only authority mock with real signed gates
+and prove first-request refusal before and after resume for every invalid binding.
+No takeover or live control capability is claimed here.

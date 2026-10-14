@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
-import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { createPrivateKey, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { until } from '@opencrane/authz/testing';
 import { tcpProxy } from '@opencrane/event-store/testing';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
@@ -37,6 +37,8 @@ export async function uploadComputer(deliverCredential = true, nodeOptions = '')
       privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
       publicKeyEncoding: { type: 'spki', format: 'pem' } });
     await writeFile(`${capture}/key`, key.privateKey, { mode: 0o600 });
+    const signingKey = createPrivateKey(key.privateKey);
+    const privateVerifier = signingKey.export({ format: 'jwk' });
     async function issue(tokenId = `token:${randomUUID()}`, lifetime = 600) {
       const options = { privateKeyPath: `${capture}/key`, issuer: 'fixture',
         computerTtlSeconds: lifetime };
@@ -86,7 +88,7 @@ export async function uploadComputer(deliverCredential = true, nodeOptions = '')
     };
     await ready();
     if (deliverCredential) await credentials();
-    return { get url() { return url; }, close, install, issue, credential, requests: () => readFile(`${capture}/requests.jsonl`, 'utf8'), async restart() { await docker('rm', '-f', '-v', container!); await start(); await credentials(); },
+    return { get url() { return url; }, close, install, issue, credential, privateVerifier, requests: () => readFile(`${capture}/requests.jsonl`, 'utf8'), async restart() { await docker('rm', '-f', '-v', container!); await start(); await credentials(); },
       exec: (...args: string[]) => docker('exec', container!, ...args),
       pause: () => docker('pause', container!), resume: () => docker('unpause', container!),
       read: (path: string) => docker('exec', container!, 'cat', path),
