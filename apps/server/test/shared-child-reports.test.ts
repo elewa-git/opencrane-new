@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { conversationKeys } from '../src/chat/keys.ts';
 import { recordReport } from '../src/chat/reports.ts';
+import { sharedContext } from '../src/chat/shared-context.ts';
 import { chatHistory } from '../src/chat/commands.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -85,3 +86,82 @@ async function acceptsOutputAndReplay() {
 }
 it('saves admitted shared output and only accepts its exact replay after closure',
   acceptsOutputAndReplay);
+
+async function selectsCompletedSharedExchanges() {
+  const keys = await setup(admitted);
+  const rows = await chatHistory(nats.store, 'test', 'child');
+  let sequence = rows.at(-1)!.sequence;
+  function save(type: string, turnId: string, text?: string, authorId = 'bob') {
+    const data = { conversationId: 'child', turnId, authorId, authorKind: 'human',
+      contentType: 'text', ...keys.encrypt('test', 'child', text ?? 'excluded-canary') };
+    sequence++;
+    const id = type === 'message.posted' ? turnId : `history-${sequence}`;
+    const saved = { ...event(id, 'conversation-child', type), data };
+    const row = { sequence, event: saved };
+    rows.push(row);
+  }
+  save('agent.message_completed', 'input', 'Shared answer');
+  save('agent.turn_completed', 'input');
+  for (const type of ['agent.message_delta', 'agent.reasoning_summarised', 'agent.command_ran',
+    'agent.tool_call_finished', 'approval.decided', 'file.uploaded']) {
+    save(type, 'input');
+  }
+  for (const type of ['unfinished', 'agent.turn_failed', 'agent.turn_stop_requested',
+    'agent.output_lost']) {
+    save('message.posted', type);
+    save('agent.message_completed', type);
+    if (type !== 'unfinished') {
+      save(type, type);
+      save('agent.turn_completed', type);
+    }
+  }
+  save('message.posted', 'next', 'New input');
+  save('agent.turn_started', 'next');
+  function decrypt(data: unknown) {
+    const text = keys.decrypt('test', 'child', data);
+    expect(text).not.toContain('excluded-canary');
+    return text;
+  }
+  function isCurrent(row: typeof rows[number]) {
+    return row.event.id === 'next';
+  }
+  const message = rows.find(isCurrent)!;
+  const expected = sharedContext(rows, message, decrypt);
+  expect(expected?.exchanges[0]).toMatchObject({ member: 'Shared question',
+    assistant: ['Shared answer'] });
+  expect(expected?.exchanges).toHaveLength(5);
+  for (const exchange of expected!.exchanges.slice(1)) {
+    expect(Object.keys(exchange)).toEqual(['at', 'outcome']);
+    expect(exchange).toMatchObject({ outcome: 'not_completed' });
+  }
+  save('agent.message_completed', 'input', 'excluded-canary-late');
+  const rebuilt = structuredClone(rows);
+  expect(sharedContext(rebuilt, message, decrypt)).toEqual(expected);
+  expect(sharedContext(rows, rows[1]!, decrypt)).toBeUndefined();
+}
+it('rebuilds completed shared exchanges and time-only unfinished records at the saved start',
+  selectsCompletedSharedExchanges);
+
+async function boundsSharedExchanges() {
+  const keys = await setup(admitted);
+  const rows = await chatHistory(nats.store, 'test', 'child');
+  const first = rows[1]!;
+  for (let index = 0; index < 4; index++) {
+    const id = `large-${index}`;
+    const content = keys.encrypt('test', 'child', `${index}${'界'.repeat(3000)}`);
+    const message = { ...first, sequence: index * 3 + 10,
+      event: { ...first.event, id, data: { conversationId: 'child', authorId: 'bob',
+        authorKind: 'human', contentType: 'text', ...content } } };
+    rows.push(message, { sequence: index * 3 + 11,
+      event: { ...event(`done-${index}`, 'conversation-child', 'agent.turn_completed'),
+        data: { turnId: id } } });
+  }
+  const current = { ...first, sequence: 30, event: { ...first.event, id: 'current' } };
+  function decrypt(data: unknown) { return keys.decrypt('test', 'child', data); }
+  const result = sharedContext(rows, current, decrypt);
+  expect(result?.omittedExchanges).toBe(3);
+  expect(result?.exchanges).toHaveLength(2);
+  expect(result?.exchanges[0]).toMatchObject({ member: `2${'界'.repeat(3000)}` });
+  expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(24 * 1024);
+}
+it('keeps newest whole shared exchanges within 24 KiB and counts omissions', boundsSharedExchanges);

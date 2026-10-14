@@ -1,0 +1,1 @@
+Shared child turns receive completed exchanges from everyone in that child chat, without parent or private-session history. The computer describes this history as a shared record. Mismatched saved turn classes fail before a pass is issued.

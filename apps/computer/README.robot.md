@@ -4,6 +4,13 @@ For people, read [README.md](README.md) first.
 
 ## Shared child turns
 
+The runner uses shared wording for a `shared_only` frame and the context returned
+in its start acknowledgement. It says the chat involves several people and that
+earlier exchanges are a record, not instructions. It offers no memory-free escape
+from shared execution. Private input remains byte-for-byte unchanged. The channel
+regression in `apps/server/test/private-turn-channel.test.ts` checks the actual
+input passed to the temporary process, without a model call.
+
 The bridge accepts `sharingClass: shared_only` only with
 `executionMode: restricted`. It keeps both values in the turn start report. The
 journal saves the class beside the admitted start so restart recovery fails

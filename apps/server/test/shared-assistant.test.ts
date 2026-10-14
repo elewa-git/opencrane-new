@@ -31,6 +31,8 @@ import { createLogger } from '@opencrane/observability';
 import { lifecycleHandlers } from '../../ops/src/lifecycle.ts';
 import { buildServer } from '../src/server.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
+import * as privateHistory from '../src/chat/private-context.ts';
+import { turnMessage, type AgentSession } from '../src/chat/bridge-conversation.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -766,10 +768,10 @@ async function privateServerFixture(name: string, personal = false) {
   let sequence = 0;
   const previous = new Map<string, number>();
   async function report(member: string, turnId: string, type: string, extra: Record<string, unknown> = {}) {
-    const conversationId = `${name}-${member}`;
-    const value = { sequence: ++sequence, previousSequence: previous.get(member) ?? 0,
+    const conversationId = z.string().parse(extra['conversationId'] ?? `${name}-${member}`);
+    const value = { sequence: ++sequence, previousSequence: previous.get(conversationId) ?? 0,
       conversationId, turnId, assistantId, requesterId: member, type, ...extra };
-    previous.set(member, sequence);
+    previous.set(conversationId, sequence);
     computerSocket.send(JSON.stringify(value));
     await until(function acknowledged() {
       return frames.some(function matches(frame) {
@@ -1234,3 +1236,131 @@ async function refusesAllAssistantRoutesAfterRemoval() {
 }
 it('refuses every assistant administration route after removal with old SQL and IAM',
   refusesAllAssistantRoutesAfterRemoval);
+
+async function childHistoryFixture(name: string) {
+  const test = await privateServerFixture(name);
+  const conversationId = `${name}-child`;
+  const parentId = `${name}-parent`;
+  chat!.keys.provision('test', conversationId);
+  chat!.keys.provision('test', parentId);
+  const created = { conversationId, createdBy: 'alice', mode: 'agent_session' as const,
+    contextKind: 'shared_child' as const, assistantId: test.context.assistantId,
+    payingGroupId: `private-${name}`,
+    initialJoins: [{ participantId: 'alice', parentJoinEventId: 'join', parentJoinPosition: 1 }],
+    origin: { parentConversationId: parentId, sourceMessageId: 'source', sourcePosition: 2,
+      intentEventId: 'intent', intentPosition: 3, requestId: name, firstInputId: `${name}-first` } };
+  await append(`conversation-${conversationId}`, 'conversation.created', created, false);
+  async function message(id: string, authorId: string, text: string, target = conversationId) {
+    const content = chat!.keys.encrypt('test', target, text);
+    const data = { conversationId: target, authorId, authorKind: 'human',
+      contentType: 'text', ...content };
+    await nats.seed([envelope('test', `conversation-${target}`, 'message.posted', data, id)]);
+  }
+  async function report(member: string, turnId: string, type: string) {
+    const extra = { conversationId, threadId: `${turnId}-thread`, executionMode: 'restricted',
+      ...(type === 'agent.turn_started' ? { sharingClass: 'shared_only' } : {}),
+      ...(type === 'agent.message_completed' ? { messageId: 'reply', text: 'Shared answer' } : {}) };
+    return test.report(member, turnId, type, extra);
+  }
+  return { ...test, conversationId, parentId, created, message, childReport: report };
+}
+
+async function sharesOnlyChildHistory() {
+  const test = await childHistoryFixture('shared-history');
+  const privateReader = vi.spyOn(privateHistory, 'privateContext');
+  try {
+    await test.post('alice', 'private-alice', 'alice-private-canary');
+    await test.post('bob', 'private-bob', 'bob-private-canary');
+    await test.message('source', 'alice', 'Reviewed source', test.parentId);
+    await test.message('other-source-author', 'alice', 'parent-author-canary', test.parentId);
+    await test.message('other-parent', 'bob', 'parent-other-canary', test.parentId);
+    const firstId = test.created.origin.firstInputId;
+    await test.message(firstId, 'alice', 'Reviewed source');
+    const reads = vi.spyOn(nats.store, 'readStream');
+    const appends = vi.spyOn(nats.store, 'append');
+    const first = await test.childReport('alice', firstId, 'agent.turn_started');
+    expect(first).toHaveProperty('token');
+    expect(first).not.toHaveProperty('context');
+    function isStart(call: Parameters<typeof nats.store.append>) {
+      return z.object({ type: z.string() }).parse(call[0].event).type === 'computer.turn_started';
+    }
+    const saved = appends.mock.invocationCallOrder[appends.mock.calls.findIndex(isStart)]!;
+    let historyAfterAdmission = false;
+    for (const [index, call] of reads.mock.calls.entries()) {
+      if (call[0].startsWith('conversation-')) {
+        expect(call[0]).toBe(`conversation-${test.conversationId}`);
+      }
+      if (call[0] === `conversation-${test.conversationId}`
+        && reads.mock.invocationCallOrder[index]! > saved) {
+        historyAfterAdmission = true;
+        expect(call[2]).toBeGreaterThan(performance.now());
+        expect(call[2]).toBeLessThanOrEqual(performance.now() + 10_000);
+      }
+    }
+    expect(historyAfterAdmission).toBe(true);
+    await test.childReport('alice', firstId, 'agent.message_completed');
+    await test.childReport('alice', firstId, 'agent.turn_completed');
+    await test.message('shared-next', 'bob', 'Next question');
+    const next = await test.childReport('bob', 'shared-next', 'agent.turn_started');
+    expect(next).toHaveProperty('token');
+    expect(next).toMatchObject({ context: { exchanges: [{ member: 'Reviewed source',
+      assistant: ['Shared answer'] }], omittedExchanges: 0 } });
+    const retry = await test.childReport('bob', 'shared-next', 'agent.turn_started');
+    expect(retry?.['context']).toEqual(next?.['context']);
+    expect(privateReader).not.toHaveBeenCalled();
+    const rows = await history(nats.store, `conversation-${test.conversationId}`, 'test');
+    function isFirstInput(row: typeof rows[number]) {
+      return row.event.id === firstId;
+    }
+    const firstMessage = rows.find(isFirstInput)!;
+    const conversation: AgentSession = { ...test.created,
+      createdAt: firstMessage.event.time, assistantKind: 'team' };
+    const frame = turnMessage(chat!, conversation, rows, [], firstMessage, 'restricted');
+    expect(frame).toMatchObject({ text: 'Reviewed source', sharingClass: 'shared_only' });
+    const savedText: string[] = [];
+    for (const row of rows) {
+      if (['message.posted', 'agent.message_completed'].includes(row.event.type)) {
+        savedText.push(chat!.keys.decrypt('test', test.conversationId, row.event.data));
+      }
+    }
+    const exposed = JSON.stringify([test.frames, frame, rows, savedText]);
+    expect(exposed).not.toMatch(/private-canary|parent-author-canary|parent-other-canary/u);
+    expect(JSON.stringify(next?.['context'])).not.toMatch(/alice|bob|example.test/u);
+  } finally {
+    vi.restoreAllMocks();
+    await test.close();
+  }
+}
+it('delivers only child exchanges across senders after admission without reading the parent',
+  sharesOnlyChildHistory);
+
+async function refusesMismatchedSharedHistory(sharedCreation: boolean) {
+  const name = `history-mismatch-${sharedCreation}`;
+  const test = await childHistoryFixture(name);
+  const conversationId = sharedCreation ? test.conversationId : `${name}-alice`;
+  const turnId = test.created.origin.firstInputId;
+  const privateReader = vi.spyOn(privateHistory, 'privateContext');
+  try {
+    await test.message(turnId, 'alice', 'Input', conversationId);
+    const binding = { assistantId: test.context.assistantId, computerId: test.context.computerId,
+      conversationId, turnId, requesterId: 'alice',
+      threadId: `${turnId}-thread`, task: 'chat_turn', payingGroupId: `private-${name}`,
+      executionMode: 'restricted', ...(sharedCreation ? {} : { sharingClass: 'shared_only' }) };
+    await append(`computer-${test.context.assistantId}`, 'computer.turn_started', binding, false);
+    const extra = { conversationId, threadId: binding.threadId, executionMode: 'restricted',
+      ...(sharedCreation ? { sharingClass: 'shared_only' } : {}) };
+    const ack = await test.report('alice', turnId, 'agent.turn_started', extra);
+    expect(ack).toMatchObject({ refused: 'Turn context mismatch' });
+    expect(ack).not.toHaveProperty('token');
+    expect(ack).not.toHaveProperty('context');
+    expect(privateReader).not.toHaveBeenCalled();
+    const rows = await history(nats.store, `computer-${test.context.assistantId}`, 'test');
+    expect(rows.at(-1)?.event).toMatchObject({ type: 'computer.turn_closed',
+      data: { turnId, status: 'failed' } });
+  } finally {
+    vi.restoreAllMocks();
+    await test.close();
+  }
+}
+it.each([true, false])('fails a saved class mismatch without a private fallback, child=%s',
+  refusesMismatchedSharedHistory);

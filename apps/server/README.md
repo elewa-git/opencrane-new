@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
-  server -->|delivers passes, turns, files, stops, models, tools and approvals; checks admitted child output; receives dispatch, consent and progress| computer["apps/computer<br/>personal or group assistant"]
+  server -->|delivers turns, shared history and files; sends individual stops; checks reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
 ```
 
@@ -201,6 +201,11 @@ switch-on after choosing a default and draining legacy turns. Calls then stay re
 until the managed gateway is available.
 
 ## Processes it handles
+
+A person continues a shared child chat. The server gives the assistant completed
+exchanges from that child, including replies to other people. It leaves out parent
+history, private sessions, files and unfinished text. A first turn uses only the
+reviewed source message already saved in the child.
 
 The models process checks each configured tool server at startup and before its saved
 list expires. Calls pause when a check fails or finds a change. A changed server stays
