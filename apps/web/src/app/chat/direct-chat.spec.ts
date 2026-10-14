@@ -1104,6 +1104,42 @@ it('keeps listed chats and offers retry when resume lookup is unavailable', asyn
   fixture.destroy();
 });
 
+it('opens a saved chat after one list change during lookup', async () => {
+  const api = createFetchFixture();
+  let lookupCount = 0;
+  function changedThenFound(request: RequestRecord): Response | undefined {
+    if (!request.url.startsWith('/api/conversations?')) return undefined;
+    lookupCount += 1;
+    if (lookupCount === 1) return reply({ status: 'list_changed' }, 409);
+    return reply({ rows: [conversation('older-chat', 'bob')], nextCursor: null });
+  }
+  api.override(changedThenFound);
+
+  const fixture = await mountWithoutReady(api, 'older-chat');
+  expect(fixture.componentInstance['selectedConversationId']()).toBe('older-chat');
+  expect(root(fixture).querySelector('textarea')).not.toBeNull();
+  expect(lookupCount).toBe(2);
+  fixture.destroy();
+});
+
+it('offers Retry after two list changes during saved-chat lookup', async () => {
+  const api = createFetchFixture();
+  let lookupCount = 0;
+  function changedLookup(request: RequestRecord): Response | undefined {
+    if (!request.url.startsWith('/api/conversations?')) return undefined;
+    lookupCount += 1;
+    return reply({ status: 'list_changed' }, 409);
+  }
+  api.override(changedLookup);
+
+  const fixture = await mountWithoutReady(api, 'older-chat');
+  expect(lookupCount).toBe(2);
+  expect(root(fixture).textContent).toContain('Conversation list changed again');
+  expect(root(fixture).textContent).not.toContain('Direct conversations are unavailable right now');
+  expect(buttonNamed(fixture, 'Try again')).not.toBeNull();
+  fixture.destroy();
+});
+
 it('ignores a saved-chat lookup reply after the screen is destroyed', async () => {
   const api = createFetchFixture();
   const fixture = await mount(api);
