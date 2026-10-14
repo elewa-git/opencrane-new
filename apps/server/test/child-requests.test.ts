@@ -47,7 +47,7 @@ async function initialise() {
   runner = new ProjectionRunner(db, nats.reader, createLogger('child-test'));
   await runner.initialise(computers);
   await runner.initialise(conversations);
-  for (const memberId of ['alice', 'bob', 'carol']) {
+  for (const memberId of ['alice', 'bob', 'carol', 'dave']) {
     await save(`member-${memberId}`, 'member.joined', { memberId, role: 'member',
       email: `${memberId}@example.test`, displayName: memberId });
   }
@@ -102,13 +102,14 @@ async function refusesChoices(patch: object) {
   await expect(requestChild(options, 'alice', input)).rejects.toThrow();
   expect(await nats.store.head()).toBe(before);
 }
-it.each([{ participantIds: ['bob'] }, { participantIds: ['alice', 'unknown'] },
+it.each([{ participantIds: ['bob'] }, { participantIds: ['alice', 'dave'] },
   { participantIds: Array(98).fill('alice') }, { payingGroupId: 'owners' },
   { sourceMessageId: 'guessed' }, { conversationId: 'guessed' },
   { assistantId: 'guessed' }, { allowanceBoundCents: 1001 }])(
   'refuses invalid review %j', refusesChoices);
 async function refusesChangedAccess(kind: string) {
   const input = await parent();
+  await requestChild(options, 'alice', input);
   if (kind === 'closed') {
     await save(`participation-${input.conversationId}`, 'conversation.closed',
       { conversationId: input.conversationId, closedBy: 'alice' });
@@ -120,6 +121,7 @@ async function refusesChangedAccess(kind: string) {
   }
   const before = await nats.store.head();
   await expect(requestChild(options, 'alice', input)).rejects.toThrow();
+  await expect(createRequestedChild(options, 'alice', input)).rejects.toThrow();
   expect(await nats.store.head()).toBe(before);
 }
 it.each(['closed', 'rejoined'])('refuses a %s parent', refusesChangedAccess);
