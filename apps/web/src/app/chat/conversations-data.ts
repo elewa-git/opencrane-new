@@ -15,12 +15,13 @@ function conversationUrl(
 async function readPage(url: string, fetcher: Fetcher, signal?: AbortSignal) {
   const init: RequestInit = signal ? { signal } : {};
   const response = await fetcher(url, init);
+  // Clear protected conversations as soon as the server refuses access.
+  if (response.status === 401 || response.status === 403) throw new Error('access_changed');
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
     if (response.status === 409 && hasStatus(body, 'list_changed')) {
       throw new Error('list_changed');
     }
-    if (response.status === 401 || response.status === 403) throw new Error('access_changed');
     throw new Error('unavailable');
   }
   const body: unknown = await response.json();
@@ -141,6 +142,23 @@ function conversationId(row: ChatConversation): string {
 export async function findConversation(
   conversationId: string, fetcher: Fetcher = fetch, signal?: AbortSignal,
 ): Promise<ChatConversation | null> {
+  let changedOnce = false;
+  while (true) {
+    try {
+      return await searchConversationSections(conversationId, fetcher, signal);
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'list_changed' || changedOnce) {
+        throw error;
+      }
+      // Restart at Recent page one because all old cursors may now point at another list.
+      changedOnce = true;
+    }
+  }
+}
+
+async function searchConversationSections(
+  conversationId: string, fetcher: Fetcher, signal?: AbortSignal,
+): Promise<ChatConversation | null> {
   const sections: ConversationSection[] = ['recent', 'archived'];
   for (const section of sections) {
     let cursor: string | undefined;
@@ -179,7 +197,8 @@ export function displayAgentSessions(rows: ChatConversation[]): ChatConversation
 }
 
 type AgentResume = { kind: 'found'; row: ChatConversation }
-  | { kind: 'missing' } | { kind: 'denied' } | { kind: 'unavailable' };
+  | { kind: 'missing' } | { kind: 'denied' } | { kind: 'unavailable' }
+  | { kind: 'changed' };
 
 export async function resumeAgentSession(
   conversationId: string, known: ChatConversation[],
@@ -191,6 +210,9 @@ export async function resumeAgentSession(
     } catch (error) {
       if (error instanceof Error && error.message === 'access_changed') {
         return { kind: 'denied' };
+      }
+      if (error instanceof Error && error.message === 'list_changed') {
+        return { kind: 'changed' };
       }
       return { kind: 'unavailable' };
     }

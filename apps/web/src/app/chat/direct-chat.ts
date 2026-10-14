@@ -172,7 +172,12 @@ export class DirectChat implements OnInit, OnDestroy {
     this.hasLoadedData = true;
     this.pageError.set('');
     if (conversations.value.lookupFailure) {
-      this.handleReadFailure('unavailable');
+      if (conversations.value.lookupFailure === 'changed') {
+        this.pageError.set('Conversation list changed again. Try again.');
+        this.announceRead(this.pageError());
+      } else {
+        this.handleReadFailure('unavailable');
+      }
       this.pageState.set('failed');
       return;
     }

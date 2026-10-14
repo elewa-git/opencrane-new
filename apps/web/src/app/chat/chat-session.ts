@@ -125,6 +125,11 @@ export class ChatSession implements OnDestroy {
           this.requestedLookupFailed.set(true);
           throw new Error('Conversation lookup unavailable');
         }
+        if (requested.kind === 'changed') {
+          this.requestedLookupFailed.set(true);
+          this.error.set('Conversation list changed again. Retry.');
+          return;
+        }
         if (requested.kind === 'missing') {
           this.requestedUnavailable.set(true);
           return;

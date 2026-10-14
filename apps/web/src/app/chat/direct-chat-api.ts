@@ -32,8 +32,10 @@ export async function fetchDirectPageAndRequested(requestedId: string, signal: A
       if (error instanceof Error && error.message === 'access_changed') {
         return { kind: 'access_changed' as const };
       }
+      const lookupFailure = error instanceof Error && error.message === 'list_changed'
+        ? 'changed' as const : 'unavailable' as const;
       return { kind: 'ok' as const, value: {
-        ...page.value, requested: undefined, lookupFailure: true,
+        ...page.value, requested: undefined, lookupFailure,
       } };
     }
   }
