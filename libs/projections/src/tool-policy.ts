@@ -32,11 +32,14 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   if (event.type === 'mcp.server_registered') {
     const startupReviewRequired = requiresStartupReview(data);
     next = { ...emptyToolPolicy(), ...identity, sequence, policyRevision: sequence,
-      startupReviewRequired, driftHeld: state.driftHeld === true };
+      startupReviewRequired, driftHeld: state.driftHeld === true, rejected: state.rejected === true };
   }
   if (event.type === 'mcp.server_discovered') {
     const catalogue = mcpServerDiscoveredDataSchema.parse(parsed);
     next = applyCapture(next, state.catalogue, catalogue);
+    if (catalogue.checkedAt !== undefined) {
+      next.rejected = false;
+    }
   }
   if (event.type === 'mcp.server_reviewed') {
     next = applyReview(next, state, event);
@@ -49,8 +52,12 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     // Keep drift held until the publication path can confirm the exact applied revision.
     next.published = state.startupReviewRequired !== true && state.driftHeld !== true;
   }
-  if (event.type === 'mcp.server_rejected' && isStartupRefusal(data)) {
-    next.startupReviewRequired = true;
+  if (event.type === 'mcp.server_rejected') {
+    // Keep rejection through review until a checked discovery validates this server again.
+    next.rejected = true;
+    if (isStartupRefusal(data)) {
+      next.startupReviewRequired = true;
+    }
   }
   if (['mcp.server_unpublished', 'mcp.server_rejected', 'mcp.tools_changed'].includes(event.type)) {
     next.published = false;
@@ -202,7 +209,8 @@ function applyChange(next: ToolPolicy, state: ToolPolicy, data: Record<string, u
 }
 
 export function isToolPolicyAvailable(policy: ToolPolicy, now = Date.now()) {
-  if (policy.startupReviewRequired === true || policy.driftHeld === true) {
+  if (policy.rejected === true || policy.startupReviewRequired === true ||
+      policy.driftHeld === true) {
     return false;
   }
   return policy.published && policy.catalogue !== null && policy.checkedAt !== null &&
