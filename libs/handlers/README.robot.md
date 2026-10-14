@@ -63,6 +63,10 @@ also has a diagnostic copy in `<handler>-dead` (14-day queued retention).
 `cleanup-memory` handles its copy after confirming that the original is failed.
 Its callback records one durable unavailable result. The runtime then logs only the
 change id, scope id and original job id. Duplicate copies cannot add another result.
+The ops recovery pass checks the same retained failed original after restart. If the
+callback exhausted its retries while the event store was down, recovery records the
+missing result and logs the same safe alert. A saved completion or unavailable result
+prevents another report. The failed original stays available for operator replay.
 Repair with `runtime.replay(name, originalJobId)`: it retries the original
 head once, preserving order. Never redrive the diagnostic copy. An operator can deliberately cancel a failed
 original with `npm run ops -- jobs --cancel <id>`. This records a cancelled job,

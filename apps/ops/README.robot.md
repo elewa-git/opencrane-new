@@ -463,8 +463,7 @@ The root test suite was not run. CI and live qualification remain separate gates
 Memory catch-up and offline replay now read tombstones and historical dependency links
 through a fixed event position before preparing any text. Hidden facts are not decrypted.
 This includes replay with keys still present, so pending physical cleanup cannot reveal
-old text during rebuild. The dispatcher still has no memory cleanup reaction; HTTP forget
-remains disabled until erasure, completion evidence and restart recovery land together.
+old text during rebuild. HTTP forget remains disabled.
 
 ## Verified memory key cleanup
 
@@ -486,14 +485,19 @@ original stays in place. Operator `replay('cleanup-memory', originalJobId)` can 
 `completed` after repair. Completion is terminal for the change; unavailable is not.
 Before workers start, the dispatcher scans saved events in groups of 256 through its
 checkpoint and restores missing personal cleanup jobs. It skips completed changes,
-legacy and non-person tombstones. This scan does not use keys, the projection or models.
+legacy and non-person tombstones. A retained failed original with no saved result
+gets an unavailable result and the same safe alert, even when its diagnostic copy
+has exhausted its own retries. A repeated scan records no second result. The failed
+original remains available for operator replay. This scan does not use keys, the
+projection or models.
 No model endpoint is used. Offline replay still runs no reaction and changes no keys.
 
 HTTP forget and status remain disabled for every scope.
 `test/memory-cleanup.test.ts` uses real NATS/PostgreSQL and the handler queue. It covers
 key/index/append failure, duplicate delivery, a lost completion reply, replay without
 hidden decryption and completion evidence surviving loss of the job tables.
-Pending-job recovery and a fresh-install HTTP journey are NOT RUN.
+The test also covers lost reporting after all diagnostic retries and a completed
+change with a retained failed original. A fresh-install HTTP journey is NOT RUN.
 
 ## Nightly memory intent worker
 

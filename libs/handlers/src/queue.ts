@@ -165,21 +165,36 @@ export class HandlerRuntime {
         handlerJobKey(handler.name, parsed.event) !== job.singletonKey) {
       throw new Error('Invalid cleanup dead-letter job');
     }
+    await this.reportFailedOriginal(handler, parsed.event, originalId, job.data);
+  }
+
+  /** Report a retained failed job, including when its diagnostic copy also failed. */
+  async reportFailedOriginal(
+    handler: Handler,
+    event: EventEnvelope,
+    originalId: string,
+    expectedData: unknown = event,
+  ): Promise<boolean> {
+    if (handler.name !== 'cleanup-memory' || event.type !== 'memory.forgotten' ||
+        event.silo !== this.options.silo) {
+      throw new Error('Invalid cleanup original');
+    }
     const original = await this.options.db.query<{ state: string; data: unknown }>(
       'SELECT state, data FROM pgboss.job WHERE name=$1 AND id=$2',
       [handler.name, originalId],
     );
     const saved = original.rows[0];
-    if (saved?.state !== 'failed' || !isDeepStrictEqual(saved.data, job.data)) {
-      return;
+    if (saved?.state !== 'failed' || !isDeepStrictEqual(saved.data, expectedData)) {
+      return false;
     }
     if (!handler.exhausted) throw new Error('Cleanup exhaustion handler missing');
-    const appended = await handler.exhausted(parsed.event);
+    const appended = await handler.exhausted(event);
     if (appended) {
-      const fields = { changeId: parsed.event.id,
-        scopeId: parsed.event.subject.slice('scope-'.length), jobId: originalId };
+      const fields = { changeId: event.id,
+        scopeId: event.subject.slice('scope-'.length), jobId: originalId };
       this.options.logger.error(fields, 'Memory cleanup retries exhausted');
     }
+    return appended;
   }
 
   private async apply(

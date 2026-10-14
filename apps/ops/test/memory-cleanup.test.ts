@@ -381,9 +381,13 @@ it('recovers a lost exhaustion report from the failed original after restart',
     expect(failed).toBeDefined();
     expect(await completions()).toEqual([]);
     expect(append).toHaveBeenCalledTimes(3);
+    expect(alerts).not.toHaveBeenCalled();
     await runtime.stop();
     append.mockRestore();
 
+    const provision = vi.spyOn(keys, 'provision');
+    const deletion = vi.spyOn(keys, 'delete');
+    const decryption = vi.spyOn(keys, 'decrypt');
     const restarted = new HandlerRuntime({ db: storage.db, logger, silo: 'test',
       handlers: [handler()], retryLimit: 0 });
     await restarted.start();
@@ -396,7 +400,12 @@ it('recovers a lost exhaustion report from the failed original after restart',
     }
     expect((await restarted.deadLetters('cleanup-memory')).map(jobId))
       .toContain(failed.id);
+    expect(alerts).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(alerts.mock.calls)).toContain(failed.id);
+    expect(JSON.stringify(alerts.mock.calls)).not.toContain('PRIVATE ERROR');
+    expect(provision).not.toHaveBeenCalled();
+    expect(deletion).not.toHaveBeenCalled();
+    expect(decryption).not.toHaveBeenCalled();
     await restarted.stop();
   }, 30_000);
 

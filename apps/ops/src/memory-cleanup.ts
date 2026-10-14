@@ -7,7 +7,7 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { registerHandler } from '@opencrane/handlers';
 import { memoryIdentity, memoryErasureHistory, type memoryKeys,
   readEvents, type EventSource, type Query } from '@opencrane/projections';
-import type { HandlerRuntime } from '@opencrane/handlers';
+import type { Handler, HandlerRuntime } from '@opencrane/handlers';
 
 type Keys = ReturnType<typeof memoryKeys>;
 type Tombstone = ReturnType<typeof memoryForgottenEventSchema.parse>;
@@ -171,6 +171,39 @@ export function memoryCleanupHandler(store: EventStore, keys: Keys) {
   return { ...registerHandler('cleanup-memory', cleanup), exhausted };
 }
 
+async function restoreCleanupBatch(runtime: HandlerRuntime, handler: Handler,
+  batch: Tombstone[]): Promise<number> {
+  const failedOriginals: { event: Tombstone; id: string }[] = [];
+  let queued = 0;
+  async function enqueuePending(tx: Query) {
+    for (const event of batch) {
+      const existing = await tx.query<{ id: string; state: string }>(
+        "SELECT id, state FROM pgboss.job " +
+        "WHERE name='cleanup-memory' AND data->>'id'=$1 LIMIT 1",
+        [event.id],
+      );
+      const receipt = await tx.query(
+        "SELECT 1 FROM handler_receipts WHERE handler='cleanup-memory' AND event_id=$1",
+        [event.id],
+      );
+      const original = existing.rows[0];
+      if (original?.state === 'failed') {
+        failedOriginals.push({ event, id: original.id });
+        continue;
+      }
+      if (receipt.rows.length || original) continue;
+      await runtime.enqueue(handler, event, tx);
+      queued += 1;
+    }
+  }
+  await runtime.options.db.transaction(enqueuePending);
+  for (const original of failedOriginals) {
+    // Report after the SQL transaction, so the event store can append one outcome.
+    await runtime.reportFailedOriginal(handler, original.event, original.id);
+  }
+  return queued;
+}
+
 /** Rebuild missing queue work from events before the dispatcher starts its workers. */
 export async function recoverMemoryCleanup(runtime: HandlerRuntime, source: EventSource,
   checkpoint: number): Promise<number> {
@@ -208,22 +241,7 @@ export async function recoverMemoryCleanup(runtime: HandlerRuntime, source: Even
   let queued = 0;
   for (let start = 0; start < saved.length; start += 256) {
     const batch = saved.slice(start, start + 256);
-    async function enqueuePending(tx: Query) {
-      for (const event of batch) {
-        const exists = await tx.query(
-          "SELECT 1 FROM pgboss.job WHERE name='cleanup-memory' AND data->>'id'=$1 LIMIT 1",
-          [event.id],
-        );
-        const receipt = await tx.query(
-          "SELECT 1 FROM handler_receipts WHERE handler='cleanup-memory' AND event_id=$1",
-          [event.id],
-        );
-        if (exists.rows.length || receipt.rows.length) continue;
-        await runtime.enqueue(cleanupHandler, event, tx);
-        queued += 1;
-      }
-    }
-    await runtime.options.db.transaction(enqueuePending);
+    queued += await restoreCleanupBatch(runtime, cleanupHandler, batch);
   }
   return queued;
 }

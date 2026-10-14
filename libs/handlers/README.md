@@ -68,7 +68,8 @@ the memory worker catches up.
    other things carry on. An operator can repair the cause and retry the failed
    job, or deliberately cancel a failed original with the ops command.
    For forgotten memory, the failed copy records that cleanup is unavailable.
-   The original remains ready for an operator retry.
+   The original remains ready for an operator retry. If reporting also fails,
+   startup recovery checks the original and records the missing result.
 
 3. **A release changes subscriptions.** The dispatcher reports which reactions and
    event types changed and waits for shutdown. With writers and workers stopped,

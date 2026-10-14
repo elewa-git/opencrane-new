@@ -95,7 +95,8 @@ status are not available yet. Rebuilding read tables never runs this cleanup.
 
 When cleanup fails repeatedly, the original job stays available for an operator to retry.
 The fact and its dependent copies stay hidden. The dispatcher restores pending cleanup jobs
-from saved events before its workers resume if the job tables were lost.
+from saved events before its workers resume if the job tables were lost. If a failed job's
+unavailable report was lost, the dispatcher records it after the event store recovers.
 
 ## How to run or test it
 
