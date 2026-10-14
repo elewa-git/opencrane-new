@@ -1756,3 +1756,11 @@ Row 3 remains PARTIAL for the omissions above.
 Logs: `/tmp/p3-6-pr3b-tests-{1,2,3}.log`, `/tmp/p3-6-pr3b-lint-final.log`,
 `/tmp/p3-6-pr3b-typecheck.log`, `/tmp/p3-6-pr3b-{models,server}-typecheck-final.log`,
 `/tmp/p3-6-pr3b-{events,knip,changelog}.log` and `/tmp/p3-6-pr3b-capture-final-{1,2}.log`.
+
+## Recall evidence during an access check
+
+`decisionActivity` accepts prepared and loaded `agent.memory_context_recorded` events
+as progress. Invalidated or ended evidence for the checked turn refuses its next
+confirmation; another turn's evidence does not. The server records recall evidence
+before replying through the existing one-use memory dispatch. No access streams are
+added. Complete loaded-reference checks on every dispatch remain separate work.

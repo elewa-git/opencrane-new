@@ -8,6 +8,8 @@ import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from '@open
 import { parseMemoryRequest, readToolPolicy } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
+import { readChatFacts } from '../src/chat/chat-summary.ts';
+import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 let setup: Awaited<ReturnType<typeof fixture>>;
@@ -80,7 +82,9 @@ async function prepare() {
     generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' as const };
   setup.options.mcpRoutes.push(configured);
   await setup.restart();
-  await setup.call(headers, call, route);
+  const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
+  const discovery = { ...call, method: 'tools/list', params: { _meta: metadata } };
+  await setup.call(discoveryHeaders, discovery, route);
 }
 async function close() {
   await app?.close();
@@ -102,13 +106,13 @@ async function memoryBinding(target: typeof setup) {
   return { permitDigest: bytes.toString('hex'), backendGeneration: 'memory-instance',
     schemaDigest: memoryCatalogue.schemaDigest, policyRevision: policy.policyRevision };
 }
-async function signedRecall(target: typeof setup, overrides = {}) {
-  const parsed = parseMemoryRequest(JSON.stringify(call), headers);
+async function signedRecall(target: typeof setup, overrides = {}, body = call) {
+  const parsed = parseMemoryRequest(JSON.stringify(body), headers);
   const dispatch = await memoryBinding(target);
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
     computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
     thread: 'thread', operation: 'recall', scopes: [scopeId], contentAccess: 'private',
-    bodyDigest: parsed.bodyDigest, callId: metadata.callId, dispatch,
+    bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId, dispatch,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0, ...overrides };
   return target.tokens.memoryContext(claims, Date.now() + 2000);
 }
@@ -261,16 +265,17 @@ async function refusesReplayAfterRestart() {
   const captured = capability;
   const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
     binding: setup.binding, feed: { memberId }, identity: setup.identity,
-    dispatchGeneration: 'memory-instance' };
+    dispatchGeneration: 'memory-instance', keyDirectory: dirname(setup.options.configFile) };
   const restarted = buildServer(testAuthConfig(), { memory });
   try {
     const requestHeaders = { ...headers, 'x-memory-context': captured };
     const request = { method: 'POST' as const, url: route, headers: requestHeaders, payload: call };
     const response = await restarted.inject(request);
     expect(response.statusCode).toBe(403);
-    const fresh = await signedRecall(setup);
+    const nextCall = recallCall('after-restart');
+    const fresh = await signedRecall(setup, {}, nextCall);
     const freshHeaders = { ...headers, 'x-memory-context': fresh };
-    const freshRequest = { ...request, headers: freshHeaders };
+    const freshRequest = { ...request, headers: freshHeaders, payload: nextCall };
     const allowed = await restarted.inject(freshRequest);
     expect(allowed.statusCode, allowed.body).toBe(200);
   } finally {
@@ -294,7 +299,8 @@ async function consumesConcurrentContextOnce() {
 it('consumes concurrent copies of one signed context only once', consumesConcurrentContextOnce);
 
 async function allowsConcurrentMemory() {
-  const passes = await Promise.all([memoryPass(call, 'recall'), memoryPass(call, 'recall')]);
+  const secondCall = recallCall('concurrent-second');
+  const passes = await Promise.all([memoryPass(call, 'recall'), memoryPass(secondCall, 'recall')]);
   const first = passes[0];
   const second = passes[1];
   const append = setup.nats.store.append.bind(setup.nats.store);
@@ -315,10 +321,13 @@ async function allowsConcurrentMemory() {
   delayed.mockImplementation(overlap);
   const before = backendRequests;
   try {
-    const replies = await Promise.all([dispatchMemory(first, call), dispatchMemory(second, call)]);
+    const replies = await Promise.all([dispatchMemory(first, call), dispatchMemory(second, secondCall)]);
+    const statuses = [];
     for (const reply of replies) {
-      expect(reply.status, await reply.text()).toBe(200);
+      statuses.push(reply.status);
     }
+    expect(statuses).toContain(200);
+    expect(statuses.every(allowedOrConflict)).toBe(true);
     expect(admissions).toBe(3);
     expect(backendRequests).toBe(before + 2);
   } finally {
@@ -326,7 +335,10 @@ async function allowsConcurrentMemory() {
     delayed.mockRestore();
   }
 }
-it('admits two concurrent memory calls on the same tool', allowsConcurrentMemory);
+function allowedOrConflict(status: number) {
+  return status === 200 || status === 403;
+}
+it('serialises evidence for concurrent memory calls on the same tool', allowsConcurrentMemory);
 
 async function refusesStoppedMemory() {
   const permit = await memoryPass(call, 'recall');
@@ -348,3 +360,244 @@ async function refusesStoppedMemory() {
   expect(backendRequests).toBe(before);
 }
 it('stops memory before the shared gate and keeps the renewed turn stopped', refusesStoppedMemory);
+
+function recallCall(callId: string) {
+  const selectedMetadata = { ...metadata, callId };
+  return { ...call, params: { ...call.params, _meta: selectedMetadata } };
+}
+async function directRecall(callId: string) {
+  const body = recallCall(callId);
+  const token = await signedRecall(setup, {}, body);
+  const requestHeaders = { ...headers, 'x-memory-context': token };
+  const request = { method: 'POST' as const, url: route, headers: requestHeaders, payload: body };
+  return app.inject(request);
+}
+async function savedContext() {
+  return readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+}
+async function seedRecallFact() {
+  const keys = memoryKeys(dirname(setup.options.configFile));
+  const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
+    ownerId: 'alice', memoryId: 'private-fact', revision: 1 };
+  keys.provision(identity);
+  const data = { ...identity, schemaVersion: 1, kind: 'fact', pinned: false,
+    expiresAt: null, sources: [], dependsOn: [], ...keys.encrypt(identity, 'Private canary') };
+  const { silo: _silo, ...fields } = data;
+  await setup.append(`scope-${scopeId}`, 'memory.written', fields);
+  const projectionOptions = { decrypt: keys.decrypt };
+  const projection = memoryProjection(projectionOptions);
+  await setup.runner.run(projection);
+}
+async function recordsBeforeDelivery() {
+  await seedRecallFact();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const stages: string[] = [];
+  async function observe(command: Parameters<typeof append>[0]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success) {
+      stages.push(parsed.data.data.action);
+      expect(JSON.stringify(command.event)).not.toContain('Private canary');
+    }
+    return append(command);
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append');
+  spy.mockImplementation(observe);
+  try {
+    const response = await directRecall('first');
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain('Private canary');
+    expect(stages).toEqual(['prepared', 'loaded']);
+    const expected = { memoryContext: { recallCalls: 1, references: [
+      { scopeId, memoryId: 'private-fact', revision: 1 }], executionAvailable: false } };
+    expect(await savedContext()).toMatchObject(expected);
+    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
+    expect(await readChatFacts(cold, 'test', 'conversation', 'turn')).toMatchObject(expected);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it('records complete text-free evidence before returning recalled text', recordsBeforeDelivery);
+
+async function uncertainEvidence(stage: 'prepared' | 'loaded' | 'saved') {
+  await seedRecallFact();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  async function lose(command: Parameters<typeof append>[0]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    const action = parsed.success ? parsed.data.data.action : undefined;
+    if (action === stage || (stage === 'saved' && action === 'loaded')) {
+      if (stage === 'saved') {
+        await append(command);
+      }
+      return { status: 'unavailable' as const, cause: new Error('Lost append reply') };
+    }
+    return append(command);
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append');
+  spy.mockImplementation(lose);
+  try {
+    const response = await directRecall('uncertain');
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain('Private canary');
+    expect(response.body).not.toContain('recallProof');
+  } finally {
+    spy.mockRestore();
+  }
+  if (stage === 'saved') {
+    expect((await savedContext()).memoryContext?.references).toHaveLength(1);
+    expect((await directRecall('uncertain')).statusCode).toBe(403);
+  }
+}
+it.each(['prepared', 'loaded', 'saved'] as const)(
+  'releases no text or proof after uncertain %s evidence', uncertainEvidence);
+
+async function refusesRepeatedCalls() {
+  for (let index = 0; index < 4; index++) {
+    const response = await directRecall(`empty-${index}`);
+    expect(response.statusCode, response.body).toBe(200);
+  }
+  expect((await directRecall('empty-0')).statusCode).toBe(403);
+  expect((await directRecall('empty-4')).statusCode).toBe(403);
+  expect((await savedContext()).memoryContext?.recallCalls).toBe(4);
+}
+it('counts empty replies and refuses repeats and a fifth recall', refusesRepeatedCalls);
+
+async function changesAfterLoad(change: 'key' | 'expiry' | 'close') {
+  await seedRecallFact();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let restoreClock: (() => void) | undefined;
+  async function changeAfterAppend(command: Parameters<typeof append>[0]) {
+    const saved = await append(command);
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success && parsed.data.data.action === 'loaded') {
+      if (change === 'key') {
+        const keys = memoryKeys(dirname(setup.options.configFile));
+        const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
+          ownerId: 'alice', memoryId: 'private-fact', revision: 1 };
+        keys.delete(identity);
+      } else if (change === 'expiry') {
+        const expired = Date.now() + 3000;
+        const clock = vi.spyOn(Date, 'now');
+        clock.mockReturnValue(expired);
+        function restore() {
+          clock.mockRestore();
+        }
+        restoreClock = restore;
+      } else {
+        const closed = { conversationId: 'conversation', closedBy: 'alice' };
+        await setup.append('participation-conversation', 'conversation.closed', closed);
+      }
+    }
+    return saved;
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append');
+  spy.mockImplementation(changeAfterAppend);
+  try {
+    const response = await directRecall('changed');
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain('Private canary');
+    expect((await savedContext()).memoryContext?.references).toHaveLength(1);
+  } finally {
+    spy.mockRestore();
+    restoreClock?.();
+  }
+}
+it.each(['key', 'expiry', 'close'] as const)(
+  'withholds a saved recall when %s changes before release', changesAfterLoad);
+
+async function waitsForEvidence() {
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function holdLoaded(command: Parameters<typeof append>[0]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success && parsed.data.data.action === 'loaded') {
+      entered.resolve();
+      await release.promise;
+    }
+    return append(command);
+  }
+  let delivered = false;
+  function received(response: Awaited<ReturnType<typeof directRecall>>) {
+    delivered = true;
+    return response;
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append');
+  spy.mockImplementation(holdLoaded);
+  const pending = directRecall('pending').then(received);
+  try {
+    await entered.promise;
+    expect(delivered).toBe(false);
+    release.resolve();
+    expect((await pending).statusCode).toBe(200);
+  } finally {
+    release.resolve();
+    spy.mockRestore();
+  }
+}
+it('waits for the loaded append before completing the recall reply', waitsForEvidence);
+
+const closeOrders = ['before prepared', 'before loaded', 'after loaded'] as const;
+async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]) {
+  await seedRecallFact();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const stages: string[] = [];
+  let closed = false;
+  async function closeConversation() {
+    const data = { conversationId: 'conversation', closedBy: 'alice' };
+    await setup.append('participation-conversation', 'conversation.closed', data);
+    closed = true;
+    stages.push('closed');
+    expect(await savedContext()).toMatchObject({ closed: true, conversationClosed: true });
+  }
+  async function raceClose(command: Parameters<typeof append>[0]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (!parsed.success) {
+      return append(command);
+    }
+    const action = parsed.data.data.action;
+    if (order === `before ${action}`) {
+      await closeConversation();
+    }
+    const saved = await append(command);
+    expect(saved.status).toBe('appended');
+    stages.push(action);
+    if (order === 'after loaded' && action === 'loaded') {
+      await closeConversation();
+    }
+    return saved;
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append');
+  spy.mockImplementation(raceClose);
+  try {
+    const response = await directRecall('closing');
+    expect(closed).toBe(true);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(response.body).not.toContain('Private canary');
+    expect(response.body).not.toContain('recallProof');
+    let expectedStages = ['prepared', 'loaded', 'closed'];
+    let references = [{ scopeId, memoryId: 'private-fact', revision: 1 }];
+    let recallCalls = 1;
+    if (order === 'before prepared') {
+      expectedStages = ['closed', 'prepared'];
+      references = [];
+      recallCalls = 0;
+    } else if (order === 'before loaded') {
+      expectedStages = ['prepared', 'closed', 'loaded'];
+    }
+    expect(stages).toEqual(expectedStages);
+    const expected = { closed: true, conversationClosed: true, memoryContext: {
+      status: 'ended', reason: 'ended', references, recallCalls, executionAvailable: false } };
+    // Use the writer's cached summary and a separate store identity for cold replay.
+    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
+    await expect.soft(savedContext()).resolves.toMatchObject(expected);
+    await expect.soft(readChatFacts(cold, 'test', 'conversation', 'turn'))
+      .resolves.toMatchObject(expected);
+    expect((await directRecall('after-close')).json()).toEqual({ status: 'refused' });
+    expect(stages).toEqual(expectedStages);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it.each(closeOrders)('retains ended recall accounting when closure lands %s',
+  replaysRecallClosedDuringAppend);

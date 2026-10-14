@@ -1,0 +1,2 @@
+- Governed memory recall saves text-free references before returning facts or a proof. Uncertain saves return no content, and repeated or over-limit calls are refused. Native memory and agent-derived writes remain disabled.
+- Closing a conversation during a recall save keeps its references readable as ended accounting, including after a restart. No facts or proof are returned after closure.

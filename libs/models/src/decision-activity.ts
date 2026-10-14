@@ -114,6 +114,11 @@ function changesDecisionActivity(event: EventEnvelope, turnId: string, needsAppr
   }
   if (needsApproval && invalidatesApproval(event, turnId)) return true;
   if (closesDecisionTurn(event, turnId)) return true;
+  if (event.type === 'agent.memory_context_recorded') {
+    const fields = data(event);
+    const terminal = fields['action'] === 'invalidated' || fields['action'] === 'ended';
+    return terminal && fields['turnId'] === turnId;
+  }
   if (harmlessConversationTypes.includes(event.type)) return false;
   const olderTurnEnded = [
     'agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested',

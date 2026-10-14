@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import * as crypto from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
@@ -28,7 +28,6 @@ vi.mock('node:crypto', cryptoModule);
 let setup: Awaited<ReturnType<typeof fixture>>;
 let app: ReturnType<typeof buildServer>;
 let capability = '';
-let isolateRecoveryServices = false;
 let keys: ReturnType<typeof memoryKeys>;
 const scopeId = memoryScopeId('test', 'person', 'alice');
 const route = '/mcp/memory/server';
@@ -128,7 +127,9 @@ async function prepare() {
     generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
   await setup.restart();
   // Warm service clients. Cold calls may correctly refuse when the access deadline expires.
-  await setup.call(headers, call, route);
+  const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
+  const discovery = { ...call, method: 'tools/list', params: { _meta: metadata } };
+  await setup.call(discoveryHeaders, discovery, route);
 }
 function memberId() {
   return Promise.resolve('alice');
@@ -164,16 +165,9 @@ async function renewGatewayCredentials() {
   // Keep catalogue expiry from hiding the memory check each test intends to exercise.
   await setup.append('mcp-memory', 'mcp.catalogue_checked', check);
 }
-async function prepareTestServices() {
-  if (isolateRecoveryServices) {
-    await prepareRecoveryServices();
-  }
-  await renewGatewayCredentials();
-}
-
-beforeAll(prepare, 120_000);
-beforeEach(prepareTestServices);
-afterAll(close);
+beforeEach(prepare, 120_000);
+beforeEach(renewGatewayCredentials);
+afterEach(close);
 
 function scopedRequester(team: boolean, kind: MemoryIdentity['scopeKind']) {
   if (team && kind !== 'person') {
@@ -238,7 +232,7 @@ async function scopedRecall(team: boolean) {
     const scopes = await seedScopedFacts(target, team);
     const memory = { silo: 'test', store: target.nats.store, db: target.db,
       binding: target.binding, feed: { memberId }, identity: target.identity,
-      dispatchGeneration: 'memory-instance' };
+      dispatchGeneration: 'memory-instance', keyDirectory: dirname(target.options.configFile) };
     backend = buildServer(testAuthConfig(), { memory });
     let issued = '';
     function captureScoped(request: import('fastify').FastifyRequest,
@@ -256,7 +250,9 @@ async function scopedRecall(team: boolean) {
     for (const scope of scopes) {
       const selectedId = memoryScopeId('test', scope.scopeKind, scope.ownerId);
       const argumentsValue = { scopeId: selectedId, query: '' };
-      const body = { ...call, params: { ...call.params, arguments: argumentsValue } };
+      const scopedMetadata = { ...metadata, callId: selectedId };
+      const body = { ...call, params: { ...call.params, arguments: argumentsValue,
+        _meta: scopedMetadata } };
       const response = await target.call(headers, body, route);
       expect(response.status, `${scope.scopeKind}: ${response.text}`).toBe(200);
       const result: unknown = JSON.parse(response.text);
@@ -378,9 +374,13 @@ async function grantMemory(target: typeof setup, kind: string, granteeId: string
 }
 
 async function isolatedBackend(target: typeof setup) {
-  const memory = { silo: 'test', store: target.nats.store, db: setup.db,
+  const custody = memoryKeys(dirname(target.options.configFile));
+  const projectionOptions = { decrypt: custody.decrypt };
+  const emptyProjection = memoryProjection(projectionOptions);
+  await target.runner.initialise(emptyProjection);
+  const memory = { silo: 'test', store: target.nats.store, db: target.db,
     binding: target.binding, feed: { memberId }, identity: target.identity,
-    dispatchGeneration: 'memory-instance' };
+    dispatchGeneration: 'memory-instance', keyDirectory: dirname(target.options.configFile) };
   const backend = buildServer(testAuthConfig(), { memory });
   const address = await backend.listen({ host: '127.0.0.1', port: 0 });
   const upstream = new URL(address).host;
@@ -403,7 +403,7 @@ async function signedRecall(target: typeof setup, overrides = {}, body = call) {
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
     computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
     thread: 'thread', operation: 'recall', scopes: [scopeId], contentAccess: 'private',
-    bodyDigest: parsed.bodyDigest, callId: metadata.callId,
+    bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
   const dispatch = await memoryBinding(target);
   return target.tokens.memoryContext({ ...claims, dispatch, ...overrides }, Date.now() + 2000);
@@ -560,12 +560,16 @@ it('replaces caller context and returns bounded facts as data through the real g
     expect(capability).not.toBe(headers['x-memory-context']);
     const argumentsValue = { ...call.params.arguments,
       cursor: result.result.structuredContent.nextCursor };
-    const second = { ...call, params: { ...call.params, arguments: argumentsValue } };
+    const secondMetadata = { ...metadata, callId: 'second-page' };
+    const second = { ...call, params: { ...call.params, arguments: argumentsValue,
+      _meta: secondMetadata } };
     const page = await setup.call(headers, second, route);
     expect(page.status, page.text).toBe(200);
     expect(page.text).toContain('"returnedCount":3');
     expect(setup.actor.state.reservations).toHaveLength(0);
-    const escapedId = { ...call, id: '\u0001'.repeat(200) };
+    const boundedMetadata = { ...metadata, callId: 'bounded-page' };
+    const escapedId = { ...call, id: '\u0001'.repeat(200),
+      params: { ...call.params, _meta: boundedMetadata } };
     const large = '\n'.repeat(1950);
     await setup.db.query('UPDATE memory_facts SET search_text=$1 WHERE scope_id=$2', [large, scopeId]);
     const bounded = await setup.call(headers, escapedId, route);
@@ -946,7 +950,7 @@ async function signedRemember(body: Awaited<ReturnType<typeof recalledRemember>>
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
     computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
     thread: 'thread', operation: 'remember', scopes: [scopeId], contentAccess: 'private',
-    bodyDigest: parsed.bodyDigest, callId: metadata.callId,
+    bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
   const dispatch = await memoryBinding(setup);
   return setup.tokens.memoryContext({ ...claims, dispatch, ...overrides }, Date.now() + 2000);
@@ -1421,7 +1425,7 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
     const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
       computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
       thread: 'thread', operation: 'recall', scopes: [selectedId], contentAccess: 'private',
-      bodyDigest: parsed.bodyDigest, callId: metadata.callId,
+      bodyDigest: parsed.bodyDigest, callId: recallBody.params._meta.callId,
       requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
     const dispatch = await memoryBinding(target);
     const recalledToken = await target.tokens.memoryContext({ ...claims, dispatch }, Date.now() + 2000);
@@ -1616,18 +1620,7 @@ async function dependencyRace() {
 }
 it('rechecks dependencies after preparing the new revision key', dependencyRace);
 
-async function prepareRecoveryServices() {
-  // Keep earlier grant and catalogue histories out of the timed recovery write.
-  // Give later cases their own services because NATS stops when each test finishes.
-  await close();
-  await prepare();
-}
-
 async function recoveryCleanup(stage: 'prepared' | 'unknown' | 'legacy') {
-  if (!isolateRecoveryServices) {
-    isolateRecoveryServices = true;
-    await prepareRecoveryServices();
-  }
   const body = await recalledRemember(`agent-recovery-${stage}`);
   const unavailable = { status: 'unavailable' as const, cause: new Error('Unavailable') };
   const append = vi.spyOn(setup.nats.store, 'append').mockResolvedValueOnce(unavailable);
@@ -1711,14 +1704,16 @@ it('rechecks stale grants at the backend and refuses an ended turn upstream', as
       resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'assistant',
       granteeId: 'assistant', grantedBy: 'alice' });
     await setup.auth.handler.handle(grant, setup.db);
-    expect((await setup.call(headers, call, route)).status).toBe(200);
+    const restoredMetadata = { ...metadata, callId: 'restored-access' };
+    const restored = { ...call, params: { ...call.params, _meta: restoredMetadata } };
+    expect((await setup.call(headers, restored, route)).status).toBe(200);
     const active = capability;
     await setup.append('computer-assistant', 'computer.turn_closed', {
       assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
       turnId: 'turn', requesterId: 'alice', task: 'chat_turn',
       payingGroupId: 'personal-default', status: 'completed' });
     const ended = await app.inject({ method: 'POST', url: route,
-      headers: { ...headers, 'x-memory-context': active }, payload: call });
+      headers: { ...headers, 'x-memory-context': active }, payload: restored });
     expect(ended.statusCode).toBe(403);
     capability = '';
     expect((await setup.call(headers, call, route)).status).toBe(403);
