@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { execFile } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
@@ -8,7 +9,7 @@ import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition, parseEventByType } from '@opencrane/events';
-import { envelope, history } from '@opencrane/models';
+import { envelope, history, hostedRegistrationChange } from '@opencrane/models';
 import { emptyToolPolicy, mcpCatalogue, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { registerIntegrationRoutes } from '../src/integrations/routes.ts';
@@ -82,9 +83,9 @@ async function register(payload: Record<string, unknown> = command, sub = 'alice
   return app.inject({ method: 'POST', url: '/api/org/integrations',
     headers: headers(sub, origin), payload });
 }
-async function status(commandId: string) {
+async function status(commandId: string, sub = 'alice') {
   return app.inject({ method: 'GET', url: `/api/org/integrations/changes/${commandId}`,
-    headers: headers() });
+    headers: headers(sub) });
 }
 async function registrations() {
   const rows = [];
@@ -140,6 +141,40 @@ async function recoversLostAppendReply() {
 }
 it('recovers a saved append when its acknowledgement is lost', recoversLostAppendReply);
 
+async function readsAppliedReceiptAfterTwoSeconds() {
+  expect((await register()).statusCode).toBe(202);
+  const applied = auth.applied.bind(auth);
+  async function delayedApplied(eventId: string) {
+    await delay(2_100);
+    return applied(eventId);
+  }
+  const receiptRead = vi.spyOn(auth, 'applied').mockImplementation(delayedApplied);
+  const response = await status(command.commandId);
+  expect(receiptRead).toHaveBeenCalled();
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'applied', operation: 'register' });
+}
+it('reads an applied registration after a slow access receipt', readsAppliedReceiptAfterTwoSeconds);
+
+async function refusesUnauthorisedStatusReads() {
+  expect((await register()).statusCode).toBe(202);
+  expect((await status(command.commandId, 'bob')).statusCode).toBe(403);
+  const wrongSiloSession = { sub: 'alice', orgId: 'another-org', roles: ['owner'],
+    authTime: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 };
+  const cookie = `${config.cookieName}=${encodeSession(config, wrongSiloSession)}`;
+  const wrongSilo = await app.inject({ method: 'GET',
+    url: `/api/org/integrations/changes/${command.commandId}`, headers: { cookie } });
+  expect(wrongSilo.statusCode).toBe(403);
+  const demotion = envelope('test', 'member-alice', 'member.role_changed',
+    { memberId: 'alice', previousRole: 'admin', newRole: 'member', changedBy: 'amina' },
+    'demote-before-read');
+  const expectedSequence = await nats.store.head('member-alice');
+  expect((await nats.store.append({ event: demotion, expectedSequence })).status)
+    .toBe('appended');
+  expect((await status(command.commandId)).statusCode).toBe(403);
+}
+it('refuses member, wrong silo and demoted admin status reads', refusesUnauthorisedStatusReads);
+
 async function refusesUnappliedRole() {
   const fields = { memberId: 'alice', previousRole: 'admin', newRole: 'admin',
     changedBy: 'amina' };
@@ -160,12 +195,31 @@ const invalid = [
   { upstream: { host: 'metadata.internal', port: 443 } },
   { upstream: { host: '127.0.0.1', port: 443 } },
   { extra: true },
+  { commandId: 'bad.command' },
+  { commandId: 'c'.repeat(201) },
+  { locator: `ghcr.io/${'a'.repeat(1969)}@sha256:${'a'.repeat(64)}` },
 ];
 async function rejectsInvalidInput(patch: object) {
   expect((await register({ ...command, ...patch })).statusCode).toBe(400);
   expect(await registrations()).toHaveLength(0);
 }
 it.each(invalid)('refuses invalid input %j without appending', rejectsInvalidInput);
+
+async function refusesInvalidStatusCommandIds() {
+  expect((await status('bad.command')).statusCode).toBe(400);
+  await expect(hostedRegistrationChange(nats.store, 'test', 'c'.repeat(201)))
+    .rejects.toThrow();
+}
+it('refuses invalid status command ids', refusesInvalidStatusCommandIds);
+
+function refusesOtherInstallationAttempts() {
+  const schema = getEventDefinition('mcp.server_registered')!.dataSchema;
+  const installation = { attemptId: 2, platform: command.platform, upstream: command.upstream };
+  const registration = { serverId: 'test-server', registeredBy: 'alice', kind: 'hosted',
+    locator: command.locator, installation };
+  expect(schema.safeParse(registration).success).toBe(false);
+}
+it('refuses a hosted installation attempt other than one', refusesOtherInstallationAttempts);
 
 async function refusesAccess() {
   expect((await register(command, 'bob')).statusCode).toBe(403);
