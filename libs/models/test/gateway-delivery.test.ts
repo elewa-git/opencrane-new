@@ -1,5 +1,5 @@
-import type { ChildProcess } from 'node:child_process';
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { ChildProcess } from 'node:child_process';
+import { readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { expect, it, onTestFinished } from 'vitest';
 import { gatewayObservationSchema } from '@opencrane/events';
@@ -224,3 +224,213 @@ async function wrongWitness() {
   expect(await history(setup.nats.store, 'gateway-config-test', 'test')).toHaveLength(1);
 }
 it('refuses wrong generation, either digest or process identity from the live listener', wrongWitness);
+
+async function waitForDeliveredWitness(setup: Awaited<ReturnType<typeof fixture>>) {
+  const bytes = await readFile(setup.options.configFile, 'utf8');
+  const path = /\/configuration\/1\/[a-f0-9-]+/u.exec(bytes)![0];
+  async function servesWitness() {
+    const url = `http://127.0.0.1:${setup.options.controlPort}${path}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(1000) });
+    expect(response.status).toBe(200);
+    const segments = path.split('/');
+    const expected = { generation: 1, recordDigest: setup.record.recordDigest,
+      processRef: segments.at(-1) };
+    expect(await response.json()).toMatchObject(expected);
+  }
+  await expect.poll(servesWitness, { timeout: 5000 }).toBeUndefined();
+}
+
+const observationRaces = [
+  { change: 'withdrawal', during: 'source read', cached: false },
+  { change: 'preparation', during: 'source read', cached: false },
+  { change: 'withdrawal', during: 'readback', cached: false },
+  { change: 'preparation', during: 'readback', cached: false },
+  { change: 'child exit', during: 'readback', cached: false },
+  { change: 'replacement delivery', during: 'readback', cached: false },
+  { change: 'withdrawal', during: 'source read', cached: true },
+] as const;
+
+async function refusesObservationRace(race: typeof observationRaces[number]) {
+  const setup = await fixture();
+  let armed = false;
+  let changed = false;
+  const append = setup.options.store.append.bind(setup.options.store);
+  const readStream = setup.options.store.readStream.bind(setup.options.store);
+  const store = { append, readStream, head, readEvent };
+  const options = { ...setup.options, store };
+  const delivery = gatewayDelivery(options);
+  async function change() {
+    changed = true;
+    armed = false;
+    if (race.change === 'withdrawal') {
+      const event = envelope('test', 'mcp-alpha', 'mcp.server_unpublished',
+        { serverId: 'alpha', unpublishedBy: 'admin' });
+      await setup.nats.seed([event]);
+    } else if (race.change === 'preparation') {
+      const { recordDigest: _digest, ...previous } = setup.record;
+      const saved = { ...previous, generation: 2, changeRef: 'second' };
+      const record = { ...saved, recordDigest: publicationDigest(saved) };
+      const event = envelope('test', 'gateway-config-test',
+        'gateway.configuration_requested', record);
+      await setup.nats.seed([event]);
+    } else if (race.change === 'child exit') {
+      await setup.gateway.stop('SIGKILL');
+    } else {
+      await delivery.deliver(setup.record);
+    }
+  }
+  async function head(subject?: string) {
+    const position = await setup.options.store.head(subject);
+    if (armed && race.during === 'source read' && subject === 'mcp-alpha') {
+      await change();
+    }
+    return position;
+  }
+  async function readEvent(sequence: number) {
+    const row = await setup.options.store.readEvent(sequence);
+    if (armed && race.during === 'readback' &&
+        row.event.type === 'gateway.configuration_observed') {
+      await change();
+    }
+    return row;
+  }
+  await delivery.deliver(setup.record);
+  await waitForDeliveredWitness(setup);
+  if (race.cached) {
+    expect(await delivery.observe()).not.toBeNull();
+  }
+  armed = true;
+  const receipt = await delivery.observe();
+  expect(changed).toBe(true);
+  expect(receipt).toBeNull();
+  if (race.change === 'withdrawal' || race.change === 'preparation') {
+    expect(await gatewayConfigurationCurrent(setup.nats.store, 'test', setup.record)).toBe(false);
+    expect(await delivery.observe()).toBeNull();
+  }
+  const rows = await history(setup.nats.store, 'gateway-config-test', 'test');
+  function observed(row: typeof rows[number]) {
+    return row.event.type === 'gateway.configuration_observed';
+  }
+  const observations = rows.filter(observed);
+  if (race.change === 'preparation' && race.during === 'source read') {
+    expect(observations).toHaveLength(0);
+  } else {
+    expect(observations).toHaveLength(1);
+  }
+}
+it.each(observationRaces)(
+  'refuses $change during $during (saved receipt: $cached)', refusesObservationRace);
+
+async function replacesPrivateFile() {
+  const setup = await fixture();
+  const before = await stat(setup.options.configFile);
+  expect(before.mode & 0o777).toBe(0o600);
+  await setup.delivery.deliver(setup.record);
+  const after = await stat(setup.options.configFile);
+  expect(after.mode & 0o777).toBe(0o600);
+  expect(after.ino).not.toBe(before.ino);
+  await waitForDeliveredWitness(setup);
+}
+it('replaces the delivered file with a new private inode', replacesPrivateFile);
+
+async function refusesUnavailableDelivery() {
+  const setup = await fixture();
+  const unspawnedOptions = { ...setup.options, child: new ChildProcess() };
+  const unspawned = gatewayDelivery(unspawnedOptions);
+  await expect(unspawned.deliver(setup.record)).rejects.toThrow('Gateway delivery unavailable');
+  const first = setup.delivery.deliver(setup.record);
+  const second = setup.delivery.deliver(setup.record);
+  await expect(second).rejects.toThrow('Gateway delivery unavailable');
+  await first;
+  await setup.gateway.stop('SIGKILL');
+  await expect(setup.delivery.deliver(setup.record)).rejects.toThrow('Gateway delivery unavailable');
+}
+it('refuses delivery to an unspawned or stopped child and during another write',
+  refusesUnavailableDelivery);
+
+async function refusesInvalidControlPort() {
+  const setup = await fixture();
+  const before = await readFile(setup.options.configFile);
+  for (const controlPort of [0, -1, 65536, 1.5]) {
+    const options = { ...setup.options, controlPort };
+    const delivery = gatewayDelivery(options);
+    await expect(delivery.deliver(setup.record)).rejects.toThrow(/^Gateway delivery unavailable$/u);
+    expect(await readFile(setup.options.configFile)).toEqual(before);
+  }
+  const configFile = `${setup.options.configFile}/SECRET-PATH-CANARY`;
+  const options = { ...setup.options, configFile };
+  const delivery = gatewayDelivery(options);
+  await expect(delivery.deliver(setup.record)).rejects.toThrow(/^Gateway delivery unavailable$/u);
+  expect(await delivery.observe()).toBeNull();
+}
+it('rejects invalid control ports and hides file error details', refusesInvalidControlPort);
+
+async function restrictsDeliveredControlRoute() {
+  const setup = await fixture();
+  await waitForDeliveredWitness(setup);
+  const bytes = await readFile(setup.options.configFile, 'utf8');
+  const path = /\/configuration\/1\/[a-f0-9-]+/u.exec(bytes)![0];
+  const url = `http://127.0.0.1:${setup.options.controlPort}${path}`;
+  const wrongPath = await fetch(`${url}/extra`);
+  expect(wrongPath.status).toBe(404);
+  await wrongPath.text();
+  const wrongMethod = await fetch(url, { method: 'POST' });
+  expect(wrongMethod.status).toBe(404);
+  await wrongMethod.text();
+  const wrongListener = await fetch(`http://127.0.0.1:${setup.options.settings.port}${path}`);
+  expect(wrongListener.status).toBe(404);
+  await wrongListener.text();
+  for (const spoofed of [false, true]) {
+    const headers: Record<string, string> = {};
+    if (spoofed) {
+      headers['host'] = '127.0.0.1';
+      headers['x-forwarded-for'] = '127.0.0.1';
+      headers['forwarded'] = 'for=127.0.0.1';
+    }
+    await new Promise<void>(send);
+    function send(resolve: () => void, reject: (error: Error) => void) {
+      const options = { localAddress: '127.0.0.2', headers };
+      const outgoing = request(url, options, received);
+      function received(response: import('node:http').IncomingMessage) {
+        let body = '';
+        function chunk(value: Buffer) {
+          body += value.toString('utf8');
+        }
+        function completed() {
+          try {
+            expect(response.statusCode).toBe(403);
+            expect(body).not.toContain(setup.record.recordDigest);
+            resolve();
+          } catch (error) {
+            reject(error as Error);
+          }
+        }
+        response.on('data', chunk);
+        response.on('end', completed);
+      }
+      outgoing.on('error', reject);
+      outgoing.end();
+    }
+  }
+}
+it('restricts the delivered witness to its exact GET path, listener and source address',
+  restrictsDeliveredControlRoute);
+
+function validatesObservationFields() {
+  const valid = { generation: 1, recordDigest: 'a'.repeat(64), configDigest: 'b'.repeat(64),
+    processRef: '00000000-0000-4000-8000-000000000001', outcome: 'loaded',
+    observedAt: '2026-10-14T00:00:00.000Z' };
+  expect(gatewayObservationSchema.safeParse(valid).success).toBe(true);
+  const invalid = [
+    { generation: 0 }, { generation: -1 }, { generation: 1.5 },
+    { recordDigest: 'a'.repeat(63) }, { recordDigest: 'z'.repeat(64) },
+    { configDigest: 'b'.repeat(63) }, { configDigest: 'z'.repeat(64) },
+    { processRef: 'not-a-uuid' }, { observedAt: 'yesterday' },
+    { outcome: 'ready' }, { extra: true },
+  ];
+  for (const fields of invalid) {
+    const candidate = { ...valid, ...fields };
+    expect(gatewayObservationSchema.safeParse(candidate).success).toBe(false);
+  }
+}
+it('rejects malformed observation fields and unknown fields', validatesObservationFields);
