@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -1043,6 +1043,35 @@ async function iamUnavailableReadReturns503() {
   }
 }
 it('GET model access returns unavailable when IAM cannot be reached', iamUnavailableReadReturns503);
+
+async function readsAfterSlowMembershipRead(url: string) {
+  const now = performance.now.bind(performance);
+  const clock = vi.spyOn(performance, 'now');
+  const originalRead = nats.store.readStream.bind(nats.store);
+  async function* slowMembershipRead(...args: Parameters<typeof originalRead>) {
+    yield* originalRead(...args);
+    if (args[0] === 'member-owner') {
+      clock.mockReturnValue(now() + 2100);
+    }
+  }
+  const reader = vi.spyOn(nats.store, 'readStream').mockImplementation(slowMembershipRead);
+  try {
+    const response = await request(url);
+    expect(response.statusCode, `${url}: ${response.body}`).toBe(200);
+    if (url.endsWith('/candidates')) {
+      expect(modelAccessCandidatesResponseSchema.safeParse(response.json()).success).toBe(true);
+    } else {
+      expect(response.json()).toMatchObject({ modelId: 'gpt-6-luna', canManage: true });
+    }
+  } finally {
+    reader.mockRestore();
+    clock.mockRestore();
+  }
+}
+const slowMembershipUrls = ['/api/org/models/gpt-6-luna/access',
+  '/api/org/models/gpt-6-luna/access/candidates'];
+it.each(slowMembershipUrls)('allows %s when membership takes over two seconds to read',
+  readsAfterSlowMembershipRead);
 
 async function aReadUsesTheAuthorityCheckedWhenItStarted() {
   let startGrantRead!: () => void;
