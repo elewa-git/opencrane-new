@@ -9,6 +9,8 @@ import { prepareGatewayConfiguration, gatewayConfigurationCurrent } from '../src
 import { publicationDigest, publicationEntry } from '../src/publication.ts';
 import { toolPolicyFromRows } from '../src/tool-policy.ts';
 
+type ConfigurationStore = Pick<EventStore, 'append' | 'head' | 'readEvent' | 'readStream'>;
+
 function conditionalStore() {
   const rows: StoredEvent[] = [];
   function position(subject?: string) {
@@ -37,6 +39,7 @@ function conditionalStore() {
   }
   async function* readStream(subject: string, fromSequence = 1) {
     for (const row of rows) {
+      await Promise.resolve();
       if (row.event.subject === subject && row.sequence >= fromSequence) {
         yield row;
       }
@@ -50,17 +53,16 @@ function conditionalStore() {
     return Promise.resolve(row);
   }
   const store = { append, head, readStream, readEvent };
-  // Implement only the event-store operations used by preparation.
-  return store as EventStore;
+  return store;
 }
 
-async function save(store: EventStore, event: EventEnvelope) {
+async function save(store: ConfigurationStore, event: EventEnvelope) {
   const expectedSequence = await store.head(event.subject);
   const result = await store.append({ event, expectedSequence });
   expect(result.status).toBe('appended');
 }
 
-async function saveIntent(store: EventStore, serverId: string, changeRef: string,
+async function saveIntent(store: ConfigurationStore, serverId: string, changeRef: string,
   mode: 'allow' | 'block') {
   const subject = `mcp-${serverId}`;
   if (await store.head(subject) === 0) {
@@ -68,9 +70,10 @@ async function saveIntent(store: EventStore, serverId: string, changeRef: string
     const tool = { name: 'read', definition, revision: losslessJson(definition).digest,
       reviewed: false, costCents: 0 as const };
     const tools = [tool];
+    const now = Date.now();
     const catalogue = { serverId, connectionId: `installed-${serverId}`, accountMode: 'none',
       toolCount: 1, tools, schemaDigest: catalogueDigest(tools),
-      checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 300_000).toISOString() };
+      checkedAt: new Date(now).toISOString(), expiresAt: new Date(now + 300_000).toISOString() };
     await save(store, envelope('test', subject, 'mcp.server_discovered', catalogue));
   }
   const rows = await history(store, subject, 'test');

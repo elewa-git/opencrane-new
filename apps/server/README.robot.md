@@ -2500,6 +2500,7 @@ That includes the present memory backend; this change adds no memory or Odoo exc
 Per-call capture for zero TTL, discovery credentials and hosted instance lifecycle wiring
 remain unfinished. A models-process restart always recaptures; this does not prove capture
 on every independently restarted MCP process. No live capability completion is claimed.
+
 ## Publication preparation (P3-4 PR 2a; Part of #45)
 
 `POST /api/org/integrations/:serverId/publication` uses the review route’s session,

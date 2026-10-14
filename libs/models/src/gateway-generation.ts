@@ -5,6 +5,7 @@ import { toolPolicyFromRows } from './tool-policy.ts';
 import { publicationDigest, publicationEntry } from './publication.ts';
 
 type Configuration = ReturnType<typeof gatewayConfigurationSchema.parse>;
+type ConfigurationStore = Pick<EventStore, 'append' | 'head' | 'readEvent' | 'readStream'>;
 
 function configurationFromRow(row: StoredEvent): Configuration {
   if (row.event.type !== 'gateway.configuration_requested') {
@@ -19,7 +20,8 @@ function exactMcpSubject(serverId: string) {
   return subject;
 }
 
-async function currentMember(store: EventStore, silo: string, serverId: string, changeRef: string) {
+async function currentMember(store: ConfigurationStore, silo: string, serverId: string,
+  changeRef: string) {
   const subject = exactMcpSubject(serverId);
   const rows = await history(store, subject, silo);
   const state = toolPolicyFromRows(rows);
@@ -33,7 +35,7 @@ async function currentMember(store: EventStore, silo: string, serverId: string, 
   return { entry, changeRef, sourceSequence: state.sequence, fragmentDigest: intent.fragmentDigest };
 }
 
-export async function gatewayConfigurationCurrent(store: EventStore, silo: string,
+export async function gatewayConfigurationCurrent(store: ConfigurationStore, silo: string,
   record: Configuration) {
   const configurationSubject = `gateway-config-${silo}`;
   wireSubject(configurationSubject);
@@ -53,7 +55,7 @@ export async function gatewayConfigurationCurrent(store: EventStore, silo: strin
   return latest.event.silo === silo && configurationFromRow(latest).recordDigest === recordDigest;
 }
 
-export async function prepareGatewayConfiguration(store: EventStore, silo: string,
+export async function prepareGatewayConfiguration(store: ConfigurationStore, silo: string,
   serverId: string, changeRef: string): Promise<Configuration> {
   const subject = `gateway-config-${silo}`;
   wireSubject(subject);
@@ -79,8 +81,8 @@ export async function prepareGatewayConfiguration(store: EventStore, silo: strin
       if (member.entry.serverId === serverId) {
         continue;
       }
-      const current = await currentMember(store, silo, member.entry.serverId, member.changeRef);
-      members.push(current);
+      // Keep the review used by the last generation while another intent awaits preparation.
+      members.push(member);
     }
     const changed = await currentMember(store, silo, serverId, changeRef);
     members.push(changed);

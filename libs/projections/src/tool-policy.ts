@@ -53,11 +53,7 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     next.published = state.startupReviewRequired !== true && state.driftHeld !== true;
   }
   if (event.type === 'mcp.server_rejected') {
-    // Keep rejection through review until a checked discovery validates this server again.
-    next.rejected = true;
-    if (isStartupRefusal(data)) {
-      next.startupReviewRequired = true;
-    }
+    next = applyRejection(next, data);
   }
   if (['mcp.server_unpublished', 'mcp.server_rejected', 'mcp.tools_changed'].includes(event.type)) {
     next.published = false;
@@ -71,6 +67,14 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     next.published = keepsPublication(state, next.tools);
   }
   return toolPolicySchema.parse(next);
+}
+
+function applyRejection(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy {
+  // Keep rejection through review until a checked discovery validates this server again.
+  if (isStartupRefusal(data)) {
+    return { ...state, rejected: true, startupReviewRequired: true };
+  }
+  return { ...state, rejected: true };
 }
 
 function applyReview(next: ToolPolicy, state: ToolPolicy, event: EventEnvelope): ToolPolicy {

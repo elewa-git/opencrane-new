@@ -486,6 +486,7 @@ reaction, and no enable or cleanup command is supplied in this first part of P3-
 removals with `reviewRevision`. It reuses `team.member_removed`, `grant.revoked`
 and `assistant.settings_changed`; this first part adds no event fields or completion
 record. Computer cleanup and receipt-confirmed completion remain pending.
+
 ## Publication preparation (P3-4 PR 2a; Part of #45)
 
 Extended `mcp.server_published` data requires commandId, expectedSequence, reviewRevision

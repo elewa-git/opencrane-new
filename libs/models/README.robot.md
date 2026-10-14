@@ -1834,3 +1834,6 @@ It saves reviewed MCP entries, source positions and a digest on `gateway-config-
 It rereads after competing conditional appends. The renderer, fixed model/memory routes,
 delivery and acknowledgement are deferred to the next parts. Replay calls no preparation.
 `gatewayConfigurationCurrent` rejects changed sources or a replaced gateway record.
+Each new generation keeps the other servers' entries from the last saved generation.
+Only the server being prepared needs its latest intent. This lets two replacement
+intents prepare in order even when both were saved before either preparation.
