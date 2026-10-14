@@ -210,7 +210,7 @@ async function keepsQueuedPayerBeforeDefaultChange() {
   await deliver(event);
   const saved = await records();
   expect(saved).toHaveLength(2);
-  expect(saved[1]!.event.data).toMatchObject({ turnId: queued.id, stopId: event.id });
+  expect(saved[0]!.event.data).toMatchObject({ turnId: queued.id, stopId: event.id });
 }
 it('keeps the message payer when the default changes before the stop',
   keepsQueuedPayerBeforeDefaultChange);
