@@ -2,7 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
 import { z } from 'zod';
 import { MemberAccessRefused, McpInstanceRefused,
-  mcpInstanceStatus, mcpInstanceChange, mcpInstanceCommand } from '@opencrane/models';
+  mcpInstanceStatus, mcpInstanceChange, mcpInstanceCommand,
+  mcpAdminInstanceStop, mcpAdminInstanceChange } from '@opencrane/models';
 import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import type { ChatOptions } from '../chat/access.ts';
 
@@ -15,6 +16,11 @@ const changeParams = z.strictObject({ changeRef: id });
 const changeQuery = instanceParams.extend({ instanceId });
 const commandBody = z.strictObject({ changeRef: id, expectedSequence: z.int().nonnegative() });
 const instancePath = '/api/my/tools/:serverId/profiles/:profileId/instance';
+const adminPath = '/api/org/integrations/:serverId/instances/:instanceId';
+const adminParams = z.strictObject({ serverId: id, instanceId });
+const adminChangeParams = adminParams.extend({ changeRef: id });
+const adminQuery = z.strictObject({ profileId: id });
+const adminBody = commandBody.extend({ profileId: id });
 
 export function registerMcpInstanceRoutes(app: FastifyInstance, config: AuthConfig,
   options?: McpInstanceOptions) {
@@ -23,6 +29,8 @@ export function registerMcpInstanceRoutes(app: FastifyInstance, config: AuthConf
   const postOptions = { bodyLimit: 4096, errorHandler: invalidBody };
   app.post(`${instancePath}/stop`, postOptions, handler);
   app.post(`${instancePath}/wake`, postOptions, handler);
+  app.post(`${adminPath}/stop`, postOptions, handler);
+  app.get(`${adminPath}/changes/:changeRef`, handler);
 
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
@@ -30,6 +38,25 @@ export function registerMcpInstanceRoutes(app: FastifyInstance, config: AuthConf
       const checks = { write: request.method === 'POST' };
       const context = await requireMember(request, reply, config, options, checks);
       const configured = context.options;
+      if (request.routeOptions.url === `${adminPath}/stop` ||
+          request.routeOptions.url === `${adminPath}/changes/:changeRef`) {
+        if (request.method === 'POST') {
+          const parameters = adminParams.parse(request.params);
+          const body = adminBody.parse(request.body);
+          const reference = { ...parameters, profileId: body.profileId };
+          const command = { changeRef: body.changeRef,
+            expectedSequence: body.expectedSequence };
+          return await mcpAdminInstanceStop(configured.store, configured.binding,
+            context.memberId, reference, command);
+        }
+        const query = adminQuery.parse(request.query);
+        const parameters = adminChangeParams.parse(request.params);
+        const { changeRef } = parameters;
+        const reference = { serverId: parameters.serverId,
+          instanceId: parameters.instanceId, ...query };
+        return await mcpAdminInstanceChange(configured.store, configured.binding,
+          context.memberId, reference, changeRef);
+      }
       if (request.routeOptions.url === '/api/my/tools/changes/:changeRef') {
         const reference = changeQuery.parse(request.query);
         const { changeRef } = changeParams.parse(request.params);

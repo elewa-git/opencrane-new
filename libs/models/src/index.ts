@@ -48,6 +48,7 @@ export { providerDrainCommand, providerDrainStatus } from './provider-drain.ts';
 export { approvalActivity } from './decision-activity.ts';
 export { mcpInstanceCommand, mcpInstanceStatus, mcpInstanceChange, McpInstanceRefused }
   from './mcp-instance.ts';
+export { mcpAdminInstanceStop, mcpAdminInstanceChange } from './mcp-instance.ts';
 
 export { admitDescendant, descendantId, readDescendantAgreement } from './descendant-admission.ts';
 

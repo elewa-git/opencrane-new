@@ -153,9 +153,21 @@ on an owned instance returns 200 with `status: unknown`. Neither is terminal pro
 Invalid input returns 400, changed retries and stale revisions return 409,
 and unavailable dependencies return 503 without internal response details.
 
-This is the HTTP part of #51 design row 2, split to keep this change under 600 lines.
-Admin commands remain next. There is no workload worker, wake, credential release,
-callable instance or new installer.
+`POST /api/org/integrations/:serverId/instances/:instanceId/stop` takes only
+`profileId`, `changeRef` and `expectedSequence`. The server supplies the silo,
+actor and current run. `GET` on the same path with `/changes/:changeRef?profileId=…`
+returns only that admin's original stops. It never changes an instance.
+Owners and admins can use these routes for another member's instance. A plain member
+is refused before that instance's history is read. Writes check the admin role again
+after history and before the conditional append. Membership and ownership histories
+load with a ten-second limit before the two-second write check starts. That check
+watches the actor's member stream; a caller using the Owner role also watches the
+silo's ownership stream. Another person's ownership change cannot refuse an Admin's
+stop, while an acting admin's demotion still refuses it. Responses contain only status,
+change reference, sequence, run generation and reason. Both routes use the same
+4,096-byte POST limit, strict ids, `no-store` and safe error replies as member routes.
+
+There is no workload start, wake, credential release, callable instance or new installer.
 Every MCP still installs through the shared hosted path.
 
 ### Authenticated worker observations
@@ -180,7 +192,7 @@ Replies and parser errors use no-store and hide internal errors.
 The normal server registers the route when instance dependencies are configured.
 No process registers a live workload worker yet. Pod creation and confirmation against
 Kubernetes remain design row 3. Reports cannot wake, release material or claim callable
-readiness. Admin commands and their refusal tests remain the next split of row 2.
+readiness.
 
 ### Worker credential correction checks, 12 October 2026
 

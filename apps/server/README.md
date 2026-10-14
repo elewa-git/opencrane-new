@@ -12,13 +12,12 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks public tool addresses, startup, member and child access, indexed departures, final tool and memory sends, renewal access before spending stops, memory setup, fact links, tool reviews, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
-  server -->|records changes, authenticated instance observations and stops, control intent, memory facts, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -->|records changes, authenticated instance observations and stops, owner and admin stops, control intent, memory facts, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
   server -->|delivers passes, turns, files, stops, models, tools and approvals; checks admitted child output; receives dispatch, consent and progress| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
-  server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
 Tool discovery records the exact definitions and how long the check remains valid.
@@ -59,6 +58,8 @@ have not been checked. Unrelated read receipts do not require reading the event 
   Saves an explicit owner stop request. Accepts reports from a registered worker for
   one exact run. Keeps only a digest of each worker pass and removes it at expiry.
   Expiry and replacement stop observation retries. Starting an instance remains unavailable.
+- Lets owners and admins stop another member's private tool instance and read only
+  their own original stop changes. A member cannot use these organisation routes.
 
 - Let owners and admins save one destination rule and read its original receipt.
   A change reference keeps its original rule and arguments when a request is repeated.

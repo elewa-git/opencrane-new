@@ -409,7 +409,9 @@ Observations bind the original start, run, Pod UID and workload digest.
 New reports include `expectedSequence` and require a system principal and command id.
 Older saved observations may omit the revision. No bearer value enters an event.
 A `not_found` reason requires `unknown`; callable claims and secret fields are refused.
-Stop records require a human principal matching `requestedBy`.
+Stop records require a human principal matching `requestedBy`. `owner_stop` requires
+the instance owner in the fold. `admin_stop` records an owner or admin command on
+the same event type and makes the owner's status read show why the run is stopping.
 These events have no registered reaction and grant no permission or credential release.
 
 ## Expired spending holds
