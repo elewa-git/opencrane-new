@@ -1,0 +1,79 @@
+<div class="conversations-screen">
+  <aside class="rail" aria-label="Workspace navigation">
+    <a class="brand" href="/workspace"><strong>Open<span>Crane</span></strong></a>
+    <nav aria-label="Workspace">
+      <a href="/workspace">Ask your assistant</a>
+      <a href="/workspace/direct">New direct chat</a>
+      <a href="/workspace/conversations" [attr.aria-current]="list.section() === 'recent' ? 'page' : null">
+        Recent
+      </a>
+      <a href="/workspace/conversations?section=archived"
+        [attr.aria-current]="list.section() === 'archived' ? 'page' : null">Archived</a>
+    </nav>
+    <footer><a href="/account">Account</a></footer>
+  </aside>
+  <main>
+    <header class="screen-header">
+      <button #navigationOpener type="button" class="menu-toggle"
+        aria-label="Open navigation" [attr.aria-expanded]="navigationOpen()"
+        (click)="navigationOpen.set(true)"><oc-icon name="menu" /></button>
+      <h1>Conversations</h1>
+    </header>
+    <div class="content">
+      <nav class="sections" aria-label="Conversation sections">
+        <button type="button" [attr.aria-current]="list.section() === 'recent' ? 'page' : null"
+          (click)="choose('recent')">Recent</button>
+        <button type="button" [attr.aria-current]="list.section() === 'archived' ? 'page' : null"
+          (click)="choose('archived')">Archived</button>
+      </nav>
+      <label for="conversation-search">Search conversations</label>
+      <input id="conversation-search" type="search" maxlength="100" autocomplete="off"
+        [value]="list.query()" (input)="searchChanged($event)" />
+      <p class="sr-only" role="status" aria-live="polite">{{ list.announcement() }}</p>
+      @if (list.denied()) {
+        <div class="notice" role="alert">Access to conversations changed.</div>
+      } @else {
+        @if (list.error()) {
+          <div class="notice" role="alert">
+            <span>{{ list.error() }}</span>
+            <button type="button" (click)="list.loadMore()">Retry</button>
+          </div>
+        }
+        @if (list.empty()) {
+          <div class="empty">
+            @if (list.noMatches()) {
+              <h2>No matches</h2>
+              <p>Try a different search.</p>
+              <button type="button" (click)="clearSearch()">Clear search</button>
+            } @else {
+              <h2>No conversations here</h2>
+            }
+          </div>
+        }
+        <ul class="conversation-list">
+          @for (row of list.rows(); track row.conversationId) {
+            <li><a [href]="href(row)">
+              <oc-icon [name]="glyph(row)" />
+              <span><small>{{ mode(row) }}</small><strong>{{ row.title || 'Untitled conversation' }}</strong></span>
+              <oc-icon name="chevron" />
+            </a></li>
+          }
+        </ul>
+        @if (list.loading()) {
+          <p class="loading">{{ list.rows().length ? 'Loading more…' : 'Loading conversations…' }}</p>
+        }
+        @if (list.cursor() && !list.loading()) {
+          <button class="load-more" type="button" (click)="list.loadMore()">Load more</button>
+        }
+      }
+    </div>
+  </main>
+</div>
+<oc-navigation-menu [open]="navigationOpen()" label="Workspace navigation"
+  [returnFocusTo]="menuOpener()?.nativeElement" (closed)="navigationOpen.set(false)">
+  <a href="/workspace">Ask your assistant</a>
+  <a href="/workspace/direct">New direct chat</a>
+  <a href="/workspace/conversations">Recent</a>
+  <a href="/workspace/conversations?section=archived">Archived</a>
+  <a href="/account">Account</a>
+</oc-navigation-menu>

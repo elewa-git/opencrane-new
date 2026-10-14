@@ -1,4 +1,3 @@
-import type { ChatConversation } from '@opencrane/protocol';
 import { ConversationList, findConversation } from './conversations-data';
 
 function row(id: string, mode: 'agent_session' | 'group' = 'agent_session') {
@@ -102,14 +101,15 @@ describe('resume lookup', () => {
       .mockResolvedValueOnce(reply([row('group', 'group')]));
     const team = await findConversation('team', fetcher);
     const group = await findConversation('group', fetcher);
-    expect((team as ChatConversation).conversationId).toBe('team');
-    expect((group as ChatConversation).mode).toBe('group');
+    expect(team?.conversationId).toBe('team');
+    expect(group?.mode).toBe('group');
     expect(fetcher.mock.calls[1]?.[0]).toContain('cursor=next');
     expect(fetcher.mock.calls[3]?.[0]).toContain('section=archived');
   });
 
   it('stops after five pages in each section and treats outages as retryable', async () => {
-    const fetcher = vi.fn().mockResolvedValue(reply([row('other')], 'next'));
+    const fetcher = vi.fn().mockImplementation(() =>
+      Promise.resolve(reply([row('other')], 'next')));
     expect(await findConversation('missing', fetcher)).toBeNull();
     expect(fetcher).toHaveBeenCalledTimes(10);
     fetcher.mockReset().mockResolvedValue(new Response('{}', { status: 503 }));

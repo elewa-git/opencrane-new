@@ -1054,6 +1054,56 @@ async function showsUnavailableForMissingRequestedConversation(): Promise<void> 
 it('shows an unavailable state for a missing requested conversation',
   showsUnavailableForMissingRequestedConversation);
 
+it('opens an archived group missing from the first direct list page', async () => {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  function archivedGroup(request: RequestRecord): Response | undefined {
+    const url = new URL(request.url, location.origin);
+    if (url.pathname !== '/api/conversations' || request.method !== 'GET') return undefined;
+    if (url.searchParams.get('section') === 'archived') {
+      return reply({ rows: [{ conversationId: 'group-chat', mode: 'group',
+        createdAt: '2026-10-06T09:00:00Z', participantIds: ['alice', 'bob', 'carol'],
+        title: 'Planning next week' }], nextCursor: null });
+    }
+    return reply({ rows: [], nextCursor: null });
+  }
+  api.override(archivedGroup);
+  const fixture = await mountWithoutReady(api, 'group-chat');
+  await waitForText(fixture, 'Hello everyone');
+  expect(root(fixture).querySelector('h1')?.textContent).not.toContain('Unavailable');
+  expect(root(fixture).textContent).not.toContain('No direct conversations yet');
+  fixture.destroy();
+});
+
+it('does not call an unfinished direct list empty', async () => {
+  const api = createFetchFixture();
+  function unfinished(request: RequestRecord): Response | undefined {
+    if (request.url === '/api/conversations') {
+      return reply({ rows: [], nextCursor: 'next' });
+    }
+    return undefined;
+  }
+  api.override(unfinished);
+  const fixture = await mountWithoutReady(api);
+  expect(root(fixture).textContent).not.toContain('No direct conversations yet');
+  fixture.destroy();
+});
+
+it('keeps listed chats and offers retry when resume lookup is unavailable', async () => {
+  const api = createFetchFixture();
+  function unavailableLookup(request: RequestRecord): Response | undefined {
+    if (request.url.startsWith('/api/conversations?')) return reply({}, 503);
+    return undefined;
+  }
+  api.override(unavailableLookup);
+  const fixture = await mountWithoutReady(api, 'older-chat');
+  await waitForText(fixture, 'Try again');
+  expect(root(fixture).textContent).toContain('Grace Achieng');
+  expect(root(fixture).textContent).toContain('Try again');
+  expect(root(fixture).textContent).not.toContain('Conversation not found or unavailable');
+  fixture.destroy();
+});
+
 async function clearsAfterRealRefusal(): Promise<void> {
   const api = createFetchFixture();
   const fixture = await mount(api);

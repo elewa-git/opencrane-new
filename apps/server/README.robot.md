@@ -811,7 +811,9 @@ member activity index and a fixed limit. A second bounded read checks allowed po
 before release. Visible changes reset pages with 409 `list_changed`. Unrelated private
 or denied activity leaves a complete scan's cursor unchanged. Read markers and token deltas do not reset pages.
 Readers check access once per candidate; they never watch conversation content for access.
-The existing website still parses the rows and loads only the first page until its update.
+The website's conversations screen follows the cursor for Recent, Archived and title
+search. Its workspace and direct rails show the first page and link to that screen for
+older chats. Saved links search both sections within a fixed page limit.
 Upgrades require the offline conversation replay before restarting readers and workers.
 
 The [direct chat API](../../docs/api/direct-chats.md) supplies two-person creation,

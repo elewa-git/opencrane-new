@@ -78,7 +78,6 @@ export class Workspace implements OnInit {
   protected readonly desktop = signal(globalThis.innerWidth >= 1100);
   protected readonly panel = signal(this.desktop());
   protected readonly panelExpanded = computed(this.isPanelExpanded.bind(this));
-  protected readonly archived = signal(false);
   protected readonly preview = signal('');
   protected readonly search = signal('');
   protected readonly transcriptElement = viewChild<ElementRef<HTMLElement>>('transcript');

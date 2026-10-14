@@ -5,8 +5,11 @@ import { z } from 'zod';
 import { sessionSlug, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import type { ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
-import { conversationStatus, isActiveTurn, isBudgetStop, transcript, uploadedFile } from './chat-state';
+import { conversationStatus, isActiveTurn, isBudgetStop, lastConfirmedTurnAt,
+  recoveredLostTurn, transcript, uploadedFile } from './chat-state';
 import { shortTime } from './file-presentation';
+import { displayAgentSessions, isSelectedConversation, isTeamConversation, resumeAgentSession }
+  from './conversations-data';
 
 class ReadFailure extends Error {
   readonly status: number;
@@ -28,11 +31,15 @@ export class ChatSession implements OnDestroy {
   readonly memoryAdmission = signal<MemoryAdmission>({
     state: 'disabled', failing: ['Private memory checks have not all passed.'],
   });
-  readonly recoveredLostTurn = computed(this.hasRecoveredLostTurn.bind(this));
+  readonly recoveredLostTurn = computed(() =>
+    recoveredLostTurn(this.computerRecovered(), this.computerLostAt(), this.turns()));
   readonly executionMode = signal<'restricted' | 'memory_free'>('restricted');
   readonly loading = signal(true);
   readonly railLoading = signal(true);
   readonly railUnavailable = signal(false);
+  readonly listHasMore = signal(false);
+  readonly requestedUnavailable = signal(false);
+  readonly requestedLookupFailed = signal(false);
   readonly retryIn = signal(6);
   readonly waitSeconds = signal(0);
   readonly waiting = computed(() => this.queued() ? 'queued' : this.active() && this.computer() !== 'ready' ? 'starting' : this.selected() && !this.connected() && !this.loading() ? 'reconnecting' : '');
@@ -53,7 +60,7 @@ export class ChatSession implements OnDestroy {
     this.conversations().find(row => row.conversationId === this.selected()));
   readonly teamSession = computed(this.isTeamSession.bind(this));
   readonly selectedAssistantId = computed(this.assistantForSelectedSession.bind(this));
-  readonly lastConfirmedTurnAt = computed(this.confirmedTurnAt.bind(this));
+  readonly lastConfirmedTurnAt = computed(() => lastConfirmedTurnAt(this.turns()));
   readonly active = computed(() => this.turns().filter(isActiveTurn).at(-1));
   readonly attachments = computed(() => this.rows().flatMap(row => { const file = uploadedFile(row); return file ? [file] : []; }));
   readonly uploadName = signal('');
@@ -111,13 +118,39 @@ export class ChatSession implements OnDestroy {
       if (context.memoryAdmission) this.memoryAdmission.set(context.memoryAdmission);
       await this.list();
       const id = new URL(location.href).searchParams.get('conversation');
-      if (id) await this.select(id);
+      if (id) {
+        const requested = await resumeAgentSession(id, this.conversations());
+        if (requested.kind === 'denied') throw new ReadFailure(403);
+        if (requested.kind === 'unavailable') {
+          this.requestedLookupFailed.set(true);
+          throw new Error('Conversation lookup unavailable');
+        }
+        if (requested.kind === 'missing') {
+          this.requestedUnavailable.set(true);
+          return;
+        }
+        const matchesRequested = isSelectedConversation.bind(null, id);
+        const listed = this.conversations().some(matchesRequested);
+        if (!listed) {
+          const rows: ChatConversation[] = [...this.conversations()];
+          rows.push(requested.row);
+          this.conversations.set(rows);
+        }
+        this.requestedUnavailable.set(false);
+        this.requestedLookupFailed.set(false);
+        await this.select(id);
+      }
       else if (this.conversations()[0]) await this.select(this.conversations()[0]!.conversationId);
-    } catch (error) { this.fail(error); this.railUnavailable.set(!this.denied()); }
+    } catch (error) {
+      this.fail(error);
+      this.railUnavailable.set(!this.denied() && !this.requestedLookupFailed());
+    }
     finally { this.loading.set(false); this.railLoading.set(false); }
   }
   async select(id: string): Promise<void> {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
+    this.requestedUnavailable.set(false);
+    this.requestedLookupFailed.set(false);
     const revision = ++this.revision;
     this.sawReconnecting = false;
     this.conversationReady = false;
@@ -129,7 +162,7 @@ export class ChatSession implements OnDestroy {
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(id); this.rows.set([]); this.position = 0; this.generation = 0;
     const conversation = this.conversations().find(row => row.conversationId === id);
-    const isTeam = this.isTeamConversation(conversation);
+    const isTeam = isTeamConversation(conversation);
     this.executionMode.set(isTeam ? 'restricted' : 'memory_free');
     this.error.set(''); this.loading.set(true); this.computer.set('ready');
     this.computerRecovered.set(false);
@@ -160,6 +193,8 @@ export class ChatSession implements OnDestroy {
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
+    this.requestedUnavailable.set(false);
+    this.requestedLookupFailed.set(false);
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
     this.computerRecovered.set(false);
     this.computerLostAt.set('');
@@ -260,44 +295,16 @@ export class ChatSession implements OnDestroy {
 
   private async list(): Promise<void> {
     const value = chatListSchema.parse(await this.request('/api/conversations'));
-    const agentSessions = value.rows.filter(this.isAgentSession.bind(this));
-    const conversations = agentSessions.map(this.addDisplayTitle.bind(this));
-    this.conversations.set(conversations);
-  }
-  private isAgentSession(row: ChatConversation): row is Extract<ChatConversation,
-  { mode: 'agent_session' }> {
-    return row.mode === 'agent_session';
-  }
-  private addDisplayTitle(row: Extract<ChatConversation, { mode: 'agent_session' }>) {
-    let title = 'New session';
-    if (row.title) title = sessionSlug(row.title);
-    return { ...row, title };
-  }
-  private isTeamConversation(row: ChatConversation | undefined): boolean {
-    return row?.mode === 'agent_session' && row.assistantKind === 'team';
+    this.listHasMore.set(Boolean(value.nextCursor));
+    this.conversations.set(displayAgentSessions(value.rows));
   }
   private isTeamSession(): boolean {
-    return this.isTeamConversation(this.selectedConversation());
+    return isTeamConversation(this.selectedConversation());
   }
   private assistantForSelectedSession(): string | null {
     const conversation = this.selectedConversation();
     if (conversation?.mode === 'agent_session') return conversation.assistantId;
     return this.assistantId();
-  }
-  private hasRecoveredLostTurn(): boolean {
-    if (!this.computerRecovered() || !this.computerLostAt()) return false;
-    const agentTurns = this.turns().filter(isAgentTurn);
-    const lastTurn = agentTurns.at(-1);
-    if (!lastTurn || (lastTurn.state !== 'lost' && lastTurn.state !== 'failed')) return false;
-    if (!lastTurn.endedAt) return false;
-    return Date.parse(lastTurn.endedAt) >= Date.parse(this.computerLostAt());
-  }
-  private isConfirmedTurn(turn: ReturnType<typeof transcript>[number]): boolean {
-    return turn.author === 'agent' && turn.state === 'done';
-  }
-  private confirmedTurnAt(): string {
-    const completed = this.turns().filter(this.isConfirmedTurn.bind(this));
-    return completed.at(-1)?.endedAt ?? '';
   }
   private subscribeWhenConnected(): void {
     const state = this.socket.state();
@@ -500,15 +507,4 @@ export class ChatSession implements OnDestroy {
       this.error.set('⊘ Access unavailable. Sign in with an account invited to this workspace.');
     } else this.error.set(this.pending ? '↻ Offline or unavailable — message queued on this page. Retry to send it once.' : '× Could not load the conversation. Retry when the connection returns.');
   }
-}
-
-function isSelectedConversation(
-  conversationId: string,
-  row: ReturnType<typeof chatListSchema.parse>['rows'][number],
-): boolean {
-  return row.conversationId === conversationId;
-}
-
-function isAgentTurn(turn: ReturnType<typeof transcript>[number]): boolean {
-  return turn.author === 'agent';
 }

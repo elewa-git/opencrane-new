@@ -24,6 +24,7 @@ async function createCaptureWorkspace(
   approvalCards: Record<string, unknown>[] | ((path: string) => Record<string, unknown>[]) = [],
   assistantKind?: 'team',
   computerState = 'ready',
+  listPlacement?: 'recent-page-two' | 'archived',
 ): Promise<CaptureWorkspace> {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const rows = [...initialRows];
@@ -58,6 +59,18 @@ async function createCaptureWorkspace(
       return Promise.resolve(new Response(JSON.stringify({ cards: currentCards, csrf: 'fixture' })));
     }
     if (pathname === '/api/conversations' && init?.method !== 'POST') {
+      if (listPlacement) {
+        const query = new URL(path, location.origin).searchParams;
+        const section = query.get('section');
+        const cursor = query.get('cursor');
+        const found = listPlacement === 'archived' ? section === 'archived'
+          : section === 'recent' && cursor === 'next';
+        const nextCursor = listPlacement === 'recent-page-two'
+          && section === 'recent' && !cursor ? 'next' : null;
+        return Promise.resolve(new Response(JSON.stringify({
+          rows: found ? conversations : [], nextCursor,
+        })));
+      }
       return Promise.resolve(new Response(JSON.stringify({ rows: conversations })));
     }
     if (pathname === '/api/conversations' && init?.method === 'POST'
@@ -472,6 +485,9 @@ it.each([500, 503, 403])('does not show empty states after a %s conversation rea
       body = { memberId: 'me', assistantId: 'assistant' };
     } else if (path.endsWith('/approvals')) {
       body = { cards: [], csrf: 'fixture' };
+    } else if (path === '/api/conversations') {
+      body = { rows: [{ conversationId: 'chat', createdBy: 'me', assistantId: 'assistant',
+        createdAt: '2026-10-02T10:00:00Z', mode: 'agent_session' }] };
     } else {
       body = { rows: [] };
     }
@@ -504,7 +520,8 @@ it('renders streamed replies and shows a stopped partial when the server ends th
     { id: 'message', position: 2, type: 'message.posted', time: '2026-10-02T10:00:00Z', data: { text: 'Hi', authorId: 'me' } }];
   vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
     const path = input instanceof Request ? input.url : String(input);
-    const body = path === '/auth/me' ? { authenticated: true, user: { name: 'Alex Morgan' } } : path === '/api/chat' ? { memberId: 'me', assistantId: 'assistant' } : path.endsWith('/approvals') ? { cards: [], csrf: 'fixture' } : path === '/api/conversations' ? { rows: [] }
+    const body = path === '/auth/me' ? { authenticated: true, user: { name: 'Alex Morgan' } } : path === '/api/chat' ? { memberId: 'me', assistantId: 'assistant' } : path.endsWith('/approvals') ? { cards: [], csrf: 'fixture' } : path === '/api/conversations' ? { rows: [{ ...creation,
+      createdAt: '2026-10-02T10:00:00Z', mode: 'agent_session' }] }
       : { rows, position: 2, generation: 1, computerState: 'starting' };
     return Promise.resolve(new Response(JSON.stringify(body)));
   });
@@ -554,7 +571,9 @@ it('uploads with progress, retries the same bytes and key, and replays attached 
     return Promise.resolve(new Response(JSON.stringify(path === '/auth/me' ? { authenticated: true, user: { name: 'Alex' } }
       : path === '/api/chat' ? { memberId: 'me', assistantId: 'assistant' }
       : path.endsWith('/approvals') ? { cards: [], csrf: 'fixture' }
-      : path === '/api/conversations' ? { rows: [] } : { rows, position: 1, generation: 1, computerState: 'ready' })));
+      : path === '/api/conversations' ? { rows: [{ ...creation,
+        createdAt: '2026-10-03T10:00:00Z', mode: 'agent_session' }] }
+        : { rows, position: 1, generation: 1, computerState: 'ready' })));
   });
   const socket: SocketLike = { readyState: 1, onopen: null, onclose: null, onerror: null, onmessage: null, send: vi.fn(), close: vi.fn() };
   TestBed.configureTestingModule({ providers: [{ provide: SOCKET_FACTORY, useValue: () => socket }] });
@@ -1381,6 +1400,45 @@ it('shows the saved paying group id in a private team session', async () => {
     capture.fixture.destroy();
   }
 });
+
+it('does not call an unfinished workspace list empty', async () => {
+  history.replaceState({}, '', '/workspace');
+  function unfinished(input: RequestInfo | URL): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    let body: object = {};
+    if (path === '/api/chat') body = { memberId: 'me', assistantId: 'assistant' };
+    if (path === '/auth/me') body = { authenticated: true, user: { name: 'Alex' } };
+    if (path === '/api/conversations') body = { rows: [], nextCursor: 'next' };
+    return Promise.resolve(new Response(JSON.stringify(body)));
+  }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(unfinished);
+  const socket: SocketLike = { readyState: 1, onopen: null, onclose: null, onerror: null,
+    onmessage: null, send: vi.fn(), close: vi.fn() };
+  TestBed.configureTestingModule({ providers: [{ provide: SOCKET_FACTORY,
+    useValue: () => socket }] });
+  const fixture = TestBed.createComponent(Workspace);
+  await fixture.whenStable();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No workspace root');
+  expect(root.textContent).not.toContain('No conversations yet');
+  fixture.destroy();
+});
+
+it.each(['recent-page-two', 'archived'] as const)(
+  'resumes a %s team session with its own assistant in restricted mode', async placement => {
+    const capture = await createCaptureWorkspace([], [], 'team', 'ready', placement);
+    try {
+      const chat = capture.fixture.componentInstance['chat'];
+      expect(chat.selected()).toBe('chat');
+      expect(chat.teamSession()).toBe(true);
+      expect(chat.executionMode()).toBe('restricted');
+      expect(chat.selectedAssistantId()).toBe('assistant');
+      expect(capture.calls.some(call => call.includes('limit=50'))).toBe(true);
+    } finally {
+      capture.fixture.destroy();
+    }
+  },
+);
 
 function isDisabledModeButton(button: HTMLButtonElement): boolean {
   return button.disabled;
