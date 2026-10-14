@@ -245,16 +245,22 @@ async function participationClose(lateDelivery: 'initial' | 'recall') {
       ? { ...loaded, delivery: 'initial', callDigest: null, dispatchDigest: null }
       : { ...loaded, callDigest: 'e'.repeat(64), dispatchDigest: 'f'.repeat(64) };
     await append(event('late-load', lateLoad));
-    await expect(readChatFacts(nats.store, 'test', 'chat', 'turn')).rejects
-      .toThrow('Memory evidence arrived after the turn closed');
-    await expect(readChatFacts(coldStore, 'test', 'chat', 'turn')).rejects
-      .toThrow('Memory evidence arrived after the turn closed');
+    for (const store of [nats.store, coldStore]) {
+      const reading = readChatFacts(store, 'test', 'chat', 'turn');
+      if (lateDelivery === 'initial') {
+        await expect(reading).rejects.toThrow('Memory evidence arrived after the turn closed');
+      } else {
+        await expect(reading).resolves.toMatchObject({ closed: true, conversationClosed: true,
+          memoryContext: { status: 'ended', reason: 'ended', references: [personal],
+            recallCalls: 2, recallBytes: 200, executionAvailable: false } });
+      }
+    }
   } finally {
     await nats.close();
   }
 }
 it.each(['initial', 'recall'] as const)(
-  'ends retained memory on a participation close and refuses a later %s load',
+  'keeps a participation close terminal when later %s evidence arrives',
   participationClose);
 
 async function savedAppendRace() {

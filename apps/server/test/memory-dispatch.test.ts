@@ -535,3 +535,69 @@ async function waitsForEvidence() {
   }
 }
 it('waits for the loaded append before completing the recall reply', waitsForEvidence);
+
+const closeOrders = ['before prepared', 'before loaded', 'after loaded'] as const;
+async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]) {
+  await seedRecallFact();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const stages: string[] = [];
+  let closed = false;
+  async function closeConversation() {
+    const data = { conversationId: 'conversation', closedBy: 'alice' };
+    await setup.append('participation-conversation', 'conversation.closed', data);
+    closed = true;
+    stages.push('closed');
+    expect(await savedContext()).toMatchObject({ closed: true, conversationClosed: true });
+  }
+  async function raceClose(command: Parameters<typeof append>[0]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (!parsed.success) {
+      return append(command);
+    }
+    const action = parsed.data.data.action;
+    if (order === `before ${action}`) {
+      await closeConversation();
+    }
+    const saved = await append(command);
+    expect(saved.status).toBe('appended');
+    stages.push(action);
+    if (order === 'after loaded' && action === 'loaded') {
+      await closeConversation();
+    }
+    return saved;
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append');
+  spy.mockImplementation(raceClose);
+  try {
+    const response = await directRecall('closing');
+    expect(closed).toBe(true);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(response.body).not.toContain('Private canary');
+    expect(response.body).not.toContain('recallProof');
+    let expectedStages = ['prepared', 'loaded', 'closed'];
+    let references = [{ scopeId, memoryId: 'private-fact', revision: 1 }];
+    let recallCalls = 1;
+    if (order === 'before prepared') {
+      expectedStages = ['closed', 'prepared'];
+      references = [];
+      recallCalls = 0;
+    } else if (order === 'before loaded') {
+      expectedStages = ['prepared', 'closed', 'loaded'];
+    }
+    expect(stages).toEqual(expectedStages);
+    const expected = { closed: true, conversationClosed: true, memoryContext: {
+      status: 'ended', reason: 'ended', references, recallCalls, executionAvailable: false } };
+    // Use the writer's cached summary and a separate store identity for cold replay.
+    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
+    await expect.soft(savedContext()).resolves.toMatchObject(expected);
+    await expect.soft(readChatFacts(cold, 'test', 'conversation', 'turn'))
+      .resolves.toMatchObject(expected);
+    expect((await directRecall('after-close')).json()).toEqual({ status: 'refused' });
+    expect(stages).toEqual(expectedStages);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it.each(closeOrders)('retains ended recall accounting when closure lands %s',
+  replaysRecallClosedDuringAppend);
