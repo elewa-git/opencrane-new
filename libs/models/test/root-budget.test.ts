@@ -242,8 +242,8 @@ async function refusesLateAllocation() {
 }
 it('refuses an allowance after that turn already held money without a root', refusesLateAllocation);
 
-async function noWritesDuringReplay() {
-  throw new Error('Replay must not append');
+function noWritesDuringReplay() {
+  return Promise.reject(new Error('Replay must not append'));
 }
 async function replayStoppedRoot(rootId: string, reason: string) {
   const storage = await databases();
