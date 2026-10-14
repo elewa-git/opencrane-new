@@ -1252,12 +1252,11 @@ receipt and status read. A failed step resumes by that id; it does not repeat ea
 steps or alter grants. An automatic first-provider default is not proof of the
 old deployment key's identity. The operator must record the intended choice.
 
-Remaining work: safe switch-on must prove that all legacy admissions and turns
-have finished before saving the marker, including admission already waiting to
-append when draining began. It must also check reservations and migration choices.
-The switch-on command, managed gateway startup, fallback-key refusal and recorded
-switch-off are not built here. Retirement remains unavailable. Fresh-install
-migration and managed dispatch are NOT RUN; this is source preparation only.
+The safe switch-on command below now checks legacy turns and migration choices.
+A pending legacy admission can still append later, but cannot reserve or send after
+switch-on. Concurrent reservations refuse switch-on. Managed gateway startup,
+fallback-key refusal and switch-off remain unbuilt. Retirement remains unavailable.
+Fresh-install migration and managed dispatch are NOT RUN.
 
 Source receipt, 10 October 2026: `fe7bf89d3113cdac4f446f8c6aa9bf7d9634c085`.
 Linux worktree after `npm ci`; disposable NATS, PostgreSQL and OpenFGA;
@@ -1675,6 +1674,39 @@ between them to prove that the call never reaches upstream.
 `turnBudgetStop` uses the same budget fold for renewal. Its first history read runs
 before the short membership check; later checks read only new budget events.
 The personal-payer summary and both authority test limits remain unchanged.
+
+## Safe provider switch-on (P4-22 PR 4e; Part of #104)
+
+`providerSwitchOn` is the only production writer of `provider.managed_calls_enabled`.
+It captures the global position, then reads incremental provider, budget and computer
+summaries before starting the short authority check. It validates all active bindings
+outside that check. One conditional budget append uses `historyChecked` and
+`expectedGlobalSequence`. Any intervening event conflicts, including a reservation.
+The budget summary also keeps unresolved reservation and dispatch identities.
+Computer loss, turn closure and reservation expiry do not clear them.
+Only a confirmed settlement or zero-cost release clears a hold or send; an unknown
+outcome keeps switch-on refused. A send without a reservation also needs saved
+settlement or release evidence. These history reads precede the short access check.
+The event schema is unchanged. The saved provider position also identifies the drain
+used for a retry: no drain change can save after switch-on.
+
+A legacy start already waiting to append can finish after switch-on. Existing decision
+and budget checks refuse its claimless pass before any hold or upstream send. A drain
+alone is not proof that every pending admission has finished. Summaries read no keys
+and perform no provider requests. Calls remain refused until the managed gateway arrives.
+
+The new HTTP tests use real NATS, PostgreSQL, OpenFGA and a recording gateway upstream.
+The last requested bullet, testing existing hold settlement and replay through this new
+command, is split into follow-up work to keep this change small. Existing hold regressions
+are rerun after rebasing. Fresh-install qualification, paid calls and a journey are NOT RUN.
+
+The HTTP tests use real NATS, PostgreSQL, OpenFGA and a recording gateway upstream.
+They refuse open holds after computer loss and admitted sends after turn closure,
+including sends without a reservation. Expired holds and unknown settlements stay refused.
+A released hold and a settled paid send each allow the command to complete.
+The paid-send test keeps the original tariff and payer and charges one integer cent.
+Settlement redelivery and restart/replay through this command remain follow-up work.
+Fresh-install qualification, paid provider calls and a journey are NOT RUN.
 
 ## Catalogue watch and dispatch holds (#48 PR 3b, first split)
 

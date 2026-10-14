@@ -27,7 +27,7 @@ export interface AppendCommand {
   historyChecked?: true;
   /** Check the whole category, such as member-*, instead of one entity. */
   expectedSubject?: string;
-  /** Check the whole log position for ownership migration or provider draining. */
+  /** Check the whole log position for ownership migration or provider migration. */
   expectedGlobalSequence?: number;
 }
 export type AppendResult =
@@ -185,7 +185,8 @@ function validMigrationFence(command: AppendCommand, event: EventEnvelope) {
     return true;
   }
   const migration = event.type === 'ownership.seeded' ||
-    event.type === 'provider.managed_calls_drain_set';
+    event.type === 'provider.managed_calls_drain_set' ||
+    event.type === 'provider.managed_calls_enabled';
   return migration && Number.isSafeInteger(sequence) && sequence >= 0;
 }
 

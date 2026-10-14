@@ -247,8 +247,8 @@ configuration and a fresh silo installation remain unqualified.
 `chat-state-<memberId>` maps to `ev.chat-state.<memberId>`, including category reads.
 Preference parsing binds the human principal to that member id. Access checks remain the caller's job.
 
-`expectedGlobalSequence` is allowed only for `ownership.seeded` and
-`provider.managed_calls_drain_set`. A drain command captures the global position
+`expectedGlobalSequence` is allowed only for `ownership.seeded`,
+`provider.managed_calls_drain_set` and `provider.managed_calls_enabled`. A drain command captures the global position
 before loading provider configuration and spending mode. Its one append checks
 both that position and the provider-category position. This refuses switch-on on
 the budget stream between the command's last check and its append. Any other new
@@ -291,3 +291,8 @@ so the count never drops and one saved logical subject corresponds to one NATS
 subject. Member inventory compares this count with its rebuilt index to detect
 new history before the worker processes it. `test/conversation-command.test.ts`
 checks empty-stream creation, category checks and retries.
+
+Switch-on captures that same global position before its incremental history reads.
+It appends to `budget-<silo>` with `historyChecked`, checking both the budget
+position and global position. A concurrent reservation, turn start, binding change,
+drain cancellation or second switch-on therefore causes a conflict.

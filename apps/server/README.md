@@ -12,7 +12,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks startup, member and child access, indexed departures, final tool and memory sends, renewal access before spending stops, memory setup, fact links, tool reviews, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
-  server -->|records changes, authenticated instance observations and stops, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -->|records changes, authenticated instance observations and stops, control intent, memory facts and choices, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
@@ -189,8 +189,9 @@ turns keep their original path. Starting or cancelling the pause saves an event.
 Owner and admin spending reads include saved budget stop reasons and UTC resets.
 A zero limit, or a limit lowered to the money already spent or held, stops affected
 model reservations as soon as the change is saved. Applying stops to every running
-computer and tool call is still planned. Switching on managed provider calls remains
-unavailable.
+computer and tool call is still planned. Owners and admins can record provider
+switch-on after choosing a default and draining legacy turns. Calls then stay refused
+until the managed gateway is available.
 
 ## Processes it handles
 

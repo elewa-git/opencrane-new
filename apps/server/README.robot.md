@@ -2451,6 +2451,14 @@ The memory integration test checks the real shared sender and memory HTTP backen
 a stopped pass reaches neither the backend nor a new budget admission, and a
 renewed pass cannot reopen the stopped turn. Native execution remains disabled.
 
+## Provider switch-on (P4-22 PR 4e; Part of #104)
+
+The provider route table exposes the [switch-on command](../../docs/api/providers.md#switching-on-managed-calls).
+It uses the existing session, organisation, Origin and error handling. Changes GET
+also finds the saved marker on the silo budget stream and checks provider management
+permission and its creation receipt. Missing results remain unknown, never proof of failure.
+Managed gateway startup, fallback-key refusal, switch-off, retirement and UI are outside this part.
+
 ## Dispatch catalogue capture (#48 PR 3b, first split)
 
 `models-main.ts` starts the shared catalogue watch for `MODEL_MCP_ROUTES`.
