@@ -33,7 +33,7 @@ flowchart LR
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
   handlers -.-> events["libs/events<br/>reaction list"]
   handlers -.-> projections["libs/projections<br/>database helpers"]
-  handlers -->|saves jobs and checks other client sessions| pg["PostgreSQL<br/>job queue"]
+  handlers -->|saves jobs and checks database sessions| pg["PostgreSQL<br/>job queue"]
 ```
 
 ## What it is responsible for
@@ -70,8 +70,9 @@ the memory worker catches up.
 3. **A release changes subscriptions.** The dispatcher reports which reactions and
    event types changed and waits for shutdown. With writers and workers stopped,
    `npm run ops -- upgrade-handlers` adds historical jobs for new subscriptions.
-   It refuses other database clients, including idle ones. PostgreSQL's own
-   maintenance workers do not count as clients.
+   It refuses other database clients, including idle ones, and replication workers.
+   It ignores only named PostgreSQL maintenance processes, such as autovacuum,
+   that cannot apply application changes. Unknown process types block the upgrade.
    An interrupted scan continues from its saved progress. Computers stay in
    their current state while the dispatcher waits. Finished reactions keep their
    receipts, so they do not run again. The

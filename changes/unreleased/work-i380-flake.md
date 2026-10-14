@@ -1,0 +1,1 @@
+- Handler subscription upgrades ignore only named safe PostgreSQL maintenance processes. Other sessions, including logical replication workers and unknown backend types, still block the upgrade. Test diagnostics omit client query text and application names so they cannot copy secrets into test logs.
