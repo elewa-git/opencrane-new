@@ -539,3 +539,10 @@ Fresh-install qualification: NOT RUN.
 The conversation contains no cents, ceiling, payer or copied budget reasons.
 `stop-budget-turns` receives ceiling changes and exhaustion, including per-turn stops.
 No root event is added. Stop schemas live outside the near-full `data.ts`.
+
+## Gateway load observations
+
+`gateway.configuration_observed` records generation, recordDigest, configDigest,
+processRef, outcome (`loaded`) and observedAt on `gateway-config-<silo>`.
+It is evidence from an exact live control response, not readiness or a file write.
+It grants no permission. Per-server receipts and the Ready read remain unbuilt.

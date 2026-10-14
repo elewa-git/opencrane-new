@@ -1,0 +1,2 @@
+- Reviewed gateway configurations can be delivered by atomic file replacement and acknowledged only by an exact reply from the live gateway. Production wiring and the Ready read remain separate work.
+- A gateway acknowledgement is refused when publication is withdrawn, a newer configuration is prepared, or its live child or delivery changes while the receipt is being saved or read.

@@ -68,3 +68,4 @@ export { prepareGatewayConfiguration, gatewayConfigurationCurrent } from './gate
 export { renderGatewayConfiguration, type GatewayRenderSettings } from './gateway-renderer.ts';
 export { RootBudgetRefused, rootTotals } from './root-budget.ts';
 export { registerHosted, hostedRegistrationChange } from './hosted-registration.ts';
+export { gatewayDelivery } from './gateway-delivery.ts';

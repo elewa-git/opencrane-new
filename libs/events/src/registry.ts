@@ -1,4 +1,4 @@
-import { gatewayConfigurationEvent } from './gateway-configuration.ts';
+import { gatewayConfigurationEvent, gatewayObservationEvent } from './gateway-configuration.ts';
 import { memoryContextEvent } from './memory-context.ts';
 import { surveyEvents } from './survey.ts';
 import { routineEvents, modernRoutineExamples } from './routine-events.ts';
@@ -379,7 +379,7 @@ export const eventRegistry: readonly EventDefinition[] = [
       evidence: [{ kind: 'provider_receipt', reference: 'receipt_1', digest: '0'.repeat(64), amountCents: 180 }] },
   ),
 
-  ...mcpEvents, gatewayConfigurationEvent,
+  ...mcpEvents, gatewayConfigurationEvent, gatewayObservationEvent,
   ...mcpInstanceEvents,
 
   ...budgetEvents,

@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|builds configuration; checks calls, holds and stops against queued work; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|delivers and probes configuration; checks calls, holds and stops against queued work; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on; saves hosted registration, publication, gateway, root allowance, overrun, spending, connection and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
 ```
@@ -54,8 +54,10 @@ This internal API has no child-chat caller yet.
   Relay registration and lifetime controls are still needed.
 - Save publication requests and prepare ordered gateway records. These records do not enable calls.
 - Turn a saved gateway record into repeatable configuration bytes. Keep the existing
-  model and memory routes, and add rules for the reviewed tools. Loading this
-  configuration and confirming that it is active are separate work.
+  model and memory routes, and add rules for the reviewed tools. An explicit internal
+  caller can replace the file and record its exact reply from the running gateway.
+  It checks again before returning that reply, so a withdrawal or replacement makes it invalid.
+  Background delivery and a Ready read are not built yet.
 - Provide an optional gateway route for testing CONNECT, the HTTP request that
   opens a byte tunnel. It uses only the private relay address returned by the
   decision service. Normal startup keeps this route off. Computers cannot use it
