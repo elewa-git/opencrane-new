@@ -178,7 +178,7 @@ Later confirmed usage can still settle their cost.
 
 The catalogue watch starts with calls paused and reads the tool list again. The models
 process uses its result before issuing a pass and immediately before sending a call.
-Failed checks end old approvals. Changed definitions keep the whole server paused,
+Failed checks and expired evidence end old approvals. Changed definitions keep the server paused,
 even if saving the change fails. Descriptions remain untrusted tool data.
 
 A saved catalogue change holds every tool on that server. New reviews and legacy

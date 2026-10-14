@@ -1686,6 +1686,10 @@ consecutive failures stop automatic retries; attempts wait five seconds between 
 Replacing the process creates a closed watch and recaptures, including the same digest.
 Stopping aborts discovery. Late results cannot append success or release its hold.
 Dispatch also checks expiry by time, without depending on a running timer.
+Renewal checks the previous expiry again after the event store replies. If evidence
+expired during capture or append, the watch saves a failed check and then renews it
+before allowing calls. This advances the saved approval revision even when nobody
+read an approval during the gap. Uninterrupted renewal keeps that revision unchanged.
 
 The watch closes dispatch before appending drift or failure. A failed drift append leaves
 that process held. Successful unchanged checks can recover a freshness pause only after
