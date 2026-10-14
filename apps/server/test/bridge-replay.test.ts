@@ -1307,14 +1307,16 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     return typeof value === 'object' && value !== null && Reflect.get(value, 'type') === 'turn';
   }
   function turnArrived() {
-    return frames.get('computer')?.some(isTurn) === true;
+    const received = frames.get('computer');
+    return received?.some(isTurn) === true;
   }
   function isSettlement(value: unknown) {
     return typeof value === 'object' && value !== null &&
       Reflect.get(value, 'type') === 'approval_settled';
   }
   function settlementArrived() {
-    return frames.get('computer')?.some(isSettlement) === true;
+    const received = frames.get('computer');
+    return received?.some(isSettlement) === true;
   }
   function isStopOrSettlement(value: unknown) {
     return typeof value === 'object' && value !== null &&
@@ -1332,7 +1334,8 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     }
     const signal = { type: 'approval_waiting', approvalId,
       conversationId: 'alice', turnId: 'message-alice' };
-    sockets.get('computer')!.send(JSON.stringify(signal));
+    const computer = sockets.get('computer')!;
+    computer.send(JSON.stringify(signal));
     await until(approvalWasRead);
     const head = fixture.store.head.bind(fixture.store);
     async function pauseNextPoll(subject?: string, deadline?: number) {
@@ -1367,7 +1370,8 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     await append('conversation-alice', 'agent.turn_stop_requested', savedStop);
     release.resolve();
     await until(settlementArrived, 5000);
-    const ordered = frames.get('computer')!.filter(isStopOrSettlement);
+    const received = frames.get('computer')!;
+    const ordered = received.filter(isStopOrSettlement);
     expect(ordered).toEqual([
       { type: 'stop', ...savedStop },
       { type: 'approval_settled', approvalId, state: 'cancelled' },
