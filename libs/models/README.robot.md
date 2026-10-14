@@ -1955,3 +1955,31 @@ History loads precede the short access check. Reader authority streams are uncha
 Tests use real NATS, PostgreSQL, OpenFGA and a recording model gateway. Bridge
 stop-first delivery and reconnect coverage are deferred to PR 4b. Computer grant
 removal, status APIs, screens and fresh-install qualification are NOT RUN here.
+
+## Gateway file delivery (P3-4 PR 3a; Part of #45)
+
+`gatewayDelivery` is created once with the child captured by `startGateway.onChildSpawn`.
+Its `deliver` operation writes a new 0600 sibling file and renames it over the configuration.
+The renderer's digest excludes a control route containing generation, recordDigest,
+configDigest and a random reference for this process. A source-address rule admits only
+127.0.0.1. The listener still opens on all interfaces; other source addresses receive 403.
+`observe` probes with a one-second deadline and compares the exact response. It checks
+that the child is alive, this delivery is still active and saved sources remain current.
+Only then does it conditionally append `gateway.configuration_observed`. A retry probes
+again and finds the original event after a lost reply. Preparation skips observations.
+Replay mode writes, probes and appends nothing. Creating a new delivery object requires
+another delivery and probe; saved receipts alone cannot acknowledge a restarted child.
+
+The decision stub always allows and supplies the normal request id and dispatch permit.
+Recorded outbound names are accept, content-type, host, mcp-method, mcp-name,
+mcp-protocol-version, transfer-encoding, x-opencrane-mcp-permit and x-request-id.
+No caller identity or canary is in the delivered file, recorded traffic or gateway logs.
+Malformed input errors are covered by the existing renderer tests.
+Remaining: per-server receipts, the Ready read, worker wiring, removal of MODEL_MCP_ROUTES
+and generation admission. This internal module enables no production call.
+
+Own checks, 14 October 2026, base `808d69c0` plus this branch: PASS — 41 focused
+renderer, preparation, reload and delivery tests twice; 419 event security tests once;
+136 registry/catalogue types agree. Logs: `/tmp/p3-4-tests-final-{1,2}.log`,
+`/tmp/p3-4-tests-1.log`, `/tmp/p3-4-events.log`. Full root suite and fresh-install
+journey: NOT RUN. Fixtures use the pinned gateway and disposable NATS, with no paid calls.

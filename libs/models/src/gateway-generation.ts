@@ -7,6 +7,10 @@ import { publicationDigest, publicationEntry } from './publication.ts';
 type Configuration = ReturnType<typeof gatewayConfigurationSchema.parse>;
 type ConfigurationStore = Pick<EventStore, 'append' | 'head' | 'readEvent' | 'readStream'>;
 
+function requested(row: StoredEvent) {
+  return row.event.type === 'gateway.configuration_requested';
+}
+
 function configurationFromRow(row: StoredEvent): Configuration {
   if (row.event.type !== 'gateway.configuration_requested') {
     throw new Error('Unexpected gateway configuration event');
@@ -51,8 +55,10 @@ export async function gatewayConfigurationCurrent(store: ConfigurationStore, sil
   if (position === 0 || recordDigest !== publicationDigest(saved)) {
     return false;
   }
-  const latest = await store.readEvent(position);
-  return latest.event.silo === silo && configurationFromRow(latest).recordDigest === recordDigest;
+  const rows = await history(store, configurationSubject, silo);
+  const requests = rows.filter(requested);
+  const latest = requests.at(-1);
+  return latest !== undefined && configurationFromRow(latest).recordDigest === recordDigest;
 }
 
 export async function prepareGatewayConfiguration(store: ConfigurationStore, silo: string,
@@ -63,7 +69,8 @@ export async function prepareGatewayConfiguration(store: ConfigurationStore, sil
   // Retry a competing append from its saved record, preserving both separate changes.
   for (let attempt = 0; attempt < 20; attempt++) {
     const rows = await history(store, subject, silo);
-    const records = rows.map(configurationFromRow);
+    const requests = rows.filter(requested);
+    const records = requests.map(configurationFromRow);
     for (const record of records) {
       if (record.changeRef === changeRef) {
         function matchesIntent(member: Configuration['members'][number]) {

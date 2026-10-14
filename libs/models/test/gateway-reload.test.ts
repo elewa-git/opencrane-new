@@ -70,7 +70,8 @@ async function isolatedControlListener() {
   }
   await expect.poll(loopbackServes, { timeout: 5000 }).toBeUndefined();
   const external = await fetch(`http://${externalAddress}:${controlPort}/generation-2`,
-    { signal: AbortSignal.timeout(1000) });
+    { signal: AbortSignal.timeout(1000), headers: { 'x-forwarded-for': '127.0.0.1',
+      forwarded: 'for=127.0.0.1', host: 'localhost' } });
   expect(external.status).toBe(403);
   expect(await external.text()).not.toBe('generation-2');
 }

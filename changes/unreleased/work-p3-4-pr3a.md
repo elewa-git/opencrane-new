@@ -1,0 +1,1 @@
+- Reviewed gateway configurations can be delivered by atomic file replacement and acknowledged only by an exact reply from the live gateway. Production wiring and the Ready read remain separate work.

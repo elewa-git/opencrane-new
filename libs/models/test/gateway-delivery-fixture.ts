@@ -32,17 +32,26 @@ export async function gatewayFixture() {
     if (request.url !== '/jwks.json') {
       const chunks: Buffer[] = [];
       for await (const chunk of request) {
-        chunks.push(Buffer.from(chunk as Uint8Array));
+        if (!Buffer.isBuffer(chunk)) throw new Error('Invalid fixture bytes');
+        chunks.push(chunk);
       }
       traffic.push({ path: request.url!, headers: request.headers,
         content: Buffer.concat(chunks).toString() });
+      response.setHeader('x-opencrane-mcp-permit', 'fixture-permit');
+      response.setHeader('x-request-id', 'fixture');
       response.end('{}');
       return;
     }
     response.setHeader('content-type', 'application/json');
     response.end(jwks);
   }
-  const decision = createServer(serveKeys);
+  function serve(request: IncomingMessage, response: ServerResponse) {
+    void serveKeys(request, response).catch(failed);
+    function failed() {
+      response.destroy();
+    }
+  }
+  const decision = createServer(serve);
   decision.listen(0, '127.0.0.1');
   await once(decision, 'listening');
   const address = decision.address();
@@ -79,9 +88,12 @@ export async function gatewayFixture() {
   };
   await writeFile(options.keyFile, 'KEY-FILE-CANARY', { mode: 0o600 });
   const gateway = await startGateway(options);
-  const pass = await new SignJWT({}).setProtectedHeader({ alg: 'ES256', kid: 'fixture' })
-    .setIssuer(options.issuer).setAudience('agentgateway').setExpirationTime('5m')
-    .sign(pair.privateKey);
+  const signer = new SignJWT({});
+  signer.setProtectedHeader({ alg: 'ES256', kid: 'fixture' });
+  signer.setIssuer(options.issuer);
+  signer.setAudience('agentgateway');
+  signer.setExpirationTime('5m');
+  const pass = await signer.sign(pair.privateKey);
   return { options, gateway, child: child!, logs, traffic, pass };
 }
 

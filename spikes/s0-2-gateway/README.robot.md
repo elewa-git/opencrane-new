@@ -143,3 +143,18 @@ itself only ran on the darwin-arm64 machine this spike was built on.
 2. **The gateway's own ~60-second JWT expiry leeway** (see "Findings") has no config knob to remove in this agentgateway release. Is relying on the decision service's independent strict re-check as the real enforcement point (rather than trying to eliminate the gateway's leeway) an acceptable permanent design, or does it need escalating to agentgateway upstream as a configurability request?
 3. **Native `mcp`/`ai` backend types** — once Codex (or whatever harness S0.1 lands on) speaks a protocol revision agentgateway natively recognises, does it make sense to revisit using agentgateway's own MCP client/multiplexer (tool-list caching, session management, etc.) instead of a plain HTTP passthrough? That would hand agentgateway more of the protocol-conformance work, at the cost of us no longer controlling the exact wire shape.
 4. **Price table source** — the $0.00002/token figure here is invented. The real decision service needs a live price table (per the "Money" row of the IAM-context table) — is that expected to come from LiteLLM's cost map, per decision 3 in `plan.md`'s LiteLLM section, reusing the same mechanism already decided for BYOK/BYOM?
+
+## File replacement and private control response, 14 October 2026
+
+P3-4 PR 3a, base `808d69c0` plus branch changes, pinned v1.5.0 Linux SHA-256
+`daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14a37e7b`.
+PASS: `gateway-reload.test.ts` replaces a 0600 sibling file by rename, keeps the same
+PID, removes the old route and serves the new one. No restart or in-place write.
+Option 1 FAIL: `binds[0].listeners[0].bindAddress` is rejected as an unknown field;
+loopback never serves the replacement. Logs: `/tmp/p3-4-option1{,-gateway}.log`.
+Option 2 PASS: `authorization.rules: ['source.address == "127.0.0.1"']` admits
+loopback and refuses the host's non-loopback source with 403 before directResponse.
+The final test also spoofs Host, Forwarded and X-Forwarded-For. This restricts the
+response, not the listening socket. Log: `/tmp/p3-4-option2.log`.
+Option 3 NOT RUN: option 2 passed, so no new binary or dependency was needed.
+These disposable local fixtures are not a fresh-install user journey.

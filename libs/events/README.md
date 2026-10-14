@@ -45,7 +45,8 @@ Root allowance records fix one turn's spending bound. Root stop records prevent
 further holds without refunding earlier calls. They include calls that cost more
 than their hold, and always keep the first stop reason. These records start no work.
 
-Define publication requests and ordered gateway records without private review text.
+Define publication requests, ordered gateway records and exact live gateway observations
+without private review text. An observation alone permits no call.
 
 - Check encrypted survey records and the bounded answers for all four steps.
   Check each saved answer’s hash without reading a private key. A hash is a

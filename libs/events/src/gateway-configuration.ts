@@ -18,3 +18,16 @@ export const gatewayConfigurationEvent = event(
   { changeRef: 'publication-1', generation: 1, rendererVersion: '1', members: [],
     recordDigest: 'a'.repeat(64) },
 );
+
+export const gatewayObservationSchema = z.strictObject({
+  generation: z.int().positive(), recordDigest: digest, configDigest: digest,
+  processRef: z.uuid(), outcome: z.literal('loaded'), observedAt: z.iso.datetime(),
+});
+export const gatewayObservationEvent = event(
+  'gateway.configuration_observed', 'gateway',
+  'The running gateway returned the exact saved configuration identity.',
+  gatewayObservationSchema,
+  { generation: 1, recordDigest: 'a'.repeat(64), configDigest: 'b'.repeat(64),
+    processRef: '00000000-0000-4000-8000-000000000001', outcome: 'loaded',
+    observedAt: '2026-10-14T00:00:00.000Z' },
+);
