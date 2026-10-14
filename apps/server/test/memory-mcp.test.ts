@@ -1063,7 +1063,7 @@ async function refusesRevocationWhileReadingAdmission() {
 it('refuses remember when another admission masks a saved write revocation',
   refusesRevocationWhileReadingAdmission);
 
-// Keep command recovery and preparation checks while the exposed write lacks complete evidence.
+// Exercise command recovery and preparation independently of the MCP proof check.
 async function admittedRemember(body: Awaited<ReturnType<typeof recalledRemember>>, overrides = {}) {
   let statusCode = 200;
   let response: unknown;

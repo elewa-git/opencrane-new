@@ -1683,7 +1683,7 @@ Private team sessions still refuse participant capture.
 ## Governed memory recall
 
 `POST /mcp/memory/server` serves stateless 2026-07-28 discovery, listing and scoped recall.
-Only recall is advertised. Remember and other memory operations remain separate work.
+Only recall is advertised. The personal remember handler is described below.
 Recall selects the requester's person scope, the bound assistant's notes, or its
 owner group's scope. Another assistant or membership cannot add a scope. Notes
 and group reads require the live assistant audience, current group membership
