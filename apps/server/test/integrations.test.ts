@@ -1387,6 +1387,48 @@ async function refusesPublication(kind: string) {
 it.each(['member', 'origin', 'position', 'review', 'secret', 'rejected', 'startup', 'failed'])(
   'publication refuses %s independently', refusesPublication);
 
+async function rejectionSurvivesReview() {
+  const review = await exactReviewCommand();
+  const snapshot = (await catalogue.tools('test', 'odoo')).catalogue!;
+  const rejection = envelope('test', 'mcp-odoo', 'mcp.server_rejected',
+    { serverId: 'odoo', reason: 'ssrf_guard_failed' });
+  await nats.seed([rejection]);
+  const rejectedPosition = await nats.store.head('mcp-odoo');
+  const request = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
+    headers: { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin },
+    payload: { ...review, expectedSequence: rejectedPosition, policyRevision: rejectedPosition } };
+  expect((await app.inject(request)).statusCode).toBe(200);
+  await runner.run(mcpCatalogue);
+  const reviewed = await catalogue.tools('test', 'odoo');
+  expect.soft(publicationEntry(reviewed)).toBeNull();
+  const publication = { ...request, url: '/api/org/integrations/odoo/publication',
+    payload: { commandId: 'publish-rejected', expectedSequence: reviewed.sequence,
+      reviewRevision: reviewed.reviewRevision! } };
+  const before = await nats.store.head();
+  expect.soft((await app.inject(publication)).statusCode).toBe(409);
+  expect.soft(await nats.store.head()).toBe(before);
+  await expect(prepareGatewayConfiguration(nats.store, 'test', 'odoo', 'publish-rejected'))
+    .rejects.toThrow('Publication is unavailable');
+  expect(await history(nats.store, 'gateway-config-test', 'test')).toEqual([]);
+
+  const rediscovery = envelope('test', 'mcp-odoo', 'mcp.server_discovered', snapshot);
+  await nats.seed([rediscovery]);
+  const discoveredPosition = await nats.store.head('mcp-odoo');
+  const newReview = { ...request, payload: { ...review, commandId: 'review-rediscovered',
+    expectedSequence: discoveredPosition, policyRevision: discoveredPosition } };
+  expect((await app.inject(newReview)).statusCode).toBe(200);
+  const newReviewPosition = await nats.store.head('mcp-odoo');
+  const newPublication = { ...publication, payload: { commandId: 'publish-rediscovered',
+    expectedSequence: newReviewPosition, reviewRevision: newReviewPosition } };
+  expect((await app.inject(newPublication)).statusCode).toBe(200);
+  const prepared = await prepareGatewayConfiguration(nats.store, 'test', 'odoo',
+    'publish-rediscovered');
+  expect(prepared.generation).toBe(1);
+  expect(prepared.members).toHaveLength(1);
+  expect(prepared.members[0]?.entry.reviewRevision).toBe(newReviewPosition);
+}
+it('publication keeps rejection through review until successful rediscovery', rejectionSurvivesReview);
+
 async function preparesSerialGenerations() {
   const first = await publicationRequest();
   expect((await app.inject(first)).statusCode).toBe(200);
