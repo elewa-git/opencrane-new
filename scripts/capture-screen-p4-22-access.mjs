@@ -38,6 +38,10 @@ async function serve(route, state) {
     return;
   }
   state.requests.push({ path, query: url.search, method: request.method() });
+  if (state.holdReads?.includes(path)) {
+    state.held.set(path, route);
+    return;
+  }
   let response;
   if (path === '/api/org/providers') {
     response = json({ rows: [], loadedAt: time,
@@ -90,6 +94,7 @@ async function open(browser, width, patch = {}) {
   return { page, state, dialog, opener };
 }
 async function capture(page, name, width) {
+  if (process.argv.includes('--check')) return;
   await page.evaluate(fontsReady);
   const problems = await page.evaluate(layoutProblems);
   assert.deepEqual(problems, []);
@@ -231,15 +236,63 @@ async function additionalCases(browser) {
   for (const check of checks) assert.equal(check.path, `${base}/changes/${run.state.posts[0].commandId}`);
   await run.page.close();
 }
+async function parentDenialCases(browser) {
+  for (const deniedPath of ['/api/org/providers', '/api/org/models']) {
+    for (const status of [401, 403]) {
+      const run = await open(browser, 1280);
+      try {
+        await run.dialog.getByText('Sales team', { exact: true }).waitFor();
+        await run.page.keyboard.press('Escape');
+        run.state.held = new Map();
+        run.state.holdReads = ['/api/org/providers', '/api/org/models', `${base}/candidates`];
+        await run.page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await run.opener.click();
+        await run.dialog.getByText('Sales team', { exact: true }).waitFor();
+        await run.dialog.getByRole('button', { name: 'Person', exact: true }).click();
+        await run.dialog.getByRole('button', { name: 'Remove', exact: true }).click();
+        await run.dialog.getByText('One row selected: Remove.', { exact: true }).waitFor();
+        assert.equal(await run.dialog.getByRole('button', { name: 'Save access' }).isEnabled(), true);
+        assert.equal(run.state.held.size, 3);
+        const refusal = run.state.held.get(deniedPath);
+        await refusal.fulfill(json({ status: 'refused' }, status));
+        // Keep the other parent read pending until all protected rows and controls disappear.
+        await run.dialog.getByText('Access lost. Details cleared.', { exact: true })
+          .waitFor({ timeout: 1000 });
+        assert.equal(await run.dialog.locator('article').count(), 0);
+        assert.equal(await run.dialog.getByRole('button', { name: 'Save access' }).count(), 0);
+        assert.equal(await run.page.getByRole('button', { name: 'Access', exact: true }).count(), 0);
+        const candidateRead = run.state.held.get(`${base}/candidates`);
+        const candidates = { rows: [{ id: 'late-person', displayName: 'Late person' }],
+          next: null, loadedAt: time, projection: access.projection };
+        await candidateRead.fulfill(json(candidates));
+        const pendingPath = deniedPath === '/api/org/providers'
+          ? '/api/org/models' : '/api/org/providers';
+        const pendingRead = run.state.held.get(pendingPath);
+        run.state.holdReads = [];
+        await serve(pendingRead, run.state);
+        await delay(100);
+        assert.equal(await run.dialog.locator('article').count(), 0);
+        assert.equal(await run.dialog.getByText('Late person', { exact: true }).count(), 0);
+        assert.equal(await run.page.getByRole('button', { name: 'Access', exact: true }).count(), 0);
+        process.stdout.write(`PASS immediate parent denial ${deniedPath} ${status}\n`);
+      } finally {
+        await run.page.close();
+      }
+    }
+  }
+}
 function isCandidateRead(request) { return request.path.endsWith('/candidates'); }
 function isStatusRead(request) { return request.path.includes('/changes/'); }
 function queryOf(request) { return request.query; }
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
 try {
-  for (const width of [1280, 390]) await cases(browser, width);
-  await additionalCases(browser);
+  await parentDenialCases(browser);
+  if (!process.argv.includes('--parent-denial-only')) {
+    for (const width of [1280, 390]) await cases(browser, width);
+    await additionalCases(browser);
+  }
 } finally {
   await browser.close();
 }
-process.stdout.write('PASS model access controls and 16 responsive captures\n');
+process.stdout.write('PASS model access checks\n');
