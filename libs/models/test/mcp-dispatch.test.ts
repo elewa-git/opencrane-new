@@ -2,8 +2,9 @@ import type { AppendCommand } from '@opencrane/event-store';
 import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
+import { mcpCatalogueWatch } from '../src/mcp-catalogue-watch.ts';
 import { grantStream } from '@opencrane/authz';
-import { decideApproval, history, priceTableId, readApproval, readToolPolicy,
+import { decideApproval, history, ingestUsage, priceTableId, readApproval, readToolPolicy,
   setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
@@ -650,3 +651,331 @@ async function checksAdmissionOrder(stopped: boolean) {
 }
 it.each([false, true])('orders budget before tool admission and checks Stop between them: %s',
   checksAdmissionOrder);
+
+async function watchesCatalogue(failure: 'drift append' | 'drift saved' | 'failed' | 'stalled' | 'replacement') {
+  const setup = await fixture();
+  let watch: ReturnType<typeof mcpCatalogueWatch> | undefined;
+  let expectedCalls = 0;
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const capture = vi.fn().mockResolvedValue(before.catalogue);
+    const options = { serverIds: ['fixture'], capture, requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+    watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+    setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+    expect((await send(setup, value)).status).toBe(403);
+    const startup = watch.check('fixture');
+    expect(watch.check('fixture')).toBe(startup);
+    await startup;
+    expect(capture).toHaveBeenCalledTimes(1);
+    const freshPermit = await permit(setup, headers);
+    if (failure === 'replacement') {
+      const started = Promise.withResolvers<void>();
+      const late = Promise.withResolvers<NonNullable<typeof before.catalogue>>();
+      function pendingCapture() {
+        started.resolve();
+        return late.promise;
+      }
+      capture.mockImplementation(pendingCapture);
+      const checking = watch.check('fixture');
+      const cancelled = expect(checking).rejects.toThrow();
+      await started.promise;
+      watch.close();
+      await cancelled;
+      capture.mockResolvedValue(before.catalogue);
+      watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+      setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+      expect((await send(setup, freshPermit)).status).toBe(403);
+      await watch.check('fixture');
+      expect(capture).toHaveBeenCalledTimes(3);
+      const current = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+      late.resolve(before.catalogue!);
+      await pause(0);
+      const afterLateResult = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+      expect(afterLateResult.sequence).toBe(current.sequence);
+    } else {
+      const append = setup.nats.store.append.bind(setup.nats.store);
+      let driftAppendAttempted = false;
+      const captureStarted = Promise.withResolvers<void>();
+      const stalled = Promise.withResolvers<NonNullable<typeof before.catalogue>>();
+      async function failDriftAppend(command: AppendCommand) {
+        const event = z.object({ type: z.string() }).parse(command.event);
+        if (event.type === 'mcp.tools_changed') {
+          driftAppendAttempted = true;
+          expect((await send(setup, freshPermit)).status).toBe(403);
+          throw new Error('Event store unavailable');
+        }
+        return append(command);
+      }
+      if (failure === 'drift append' || failure === 'drift saved') {
+        const added = toolEvidence({ name: 'another', reviewed: false, costCents: 0 });
+        capture.mockResolvedValue({ ...before.catalogue, ...catalogueEvidence([tool, added]) });
+        if (failure === 'drift append') {
+          vi.spyOn(setup.nats.store, 'append').mockImplementation(failDriftAppend);
+        }
+      } else if (failure === 'failed') {
+        capture.mockRejectedValue(new Error('Upstream unavailable'));
+      } else {
+        function stallCapture() {
+          captureStarted.resolve();
+          return stalled.promise;
+        }
+        capture.mockImplementation(stallCapture);
+      }
+      const checking = watch.check('fixture');
+      let refused: Promise<unknown>;
+      if (failure === 'drift saved') refused = checking;
+      else refused = expect(checking).rejects.toThrow();
+      if (failure === 'stalled') {
+        await captureStarted.promise;
+      }
+      await refused;
+      if (failure === 'drift append') expect(driftAppendAttempted).toBe(true);
+      if (failure === 'stalled') {
+        stalled.resolve(before.catalogue!);
+        await pause(0);
+      }
+      expect((await send(setup, freshPermit)).status).toBe(403);
+      expect(() => watch!.requireCurrent('fixture')).toThrow();
+      if (failure === 'drift saved') {
+        const held = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+        expect(held.driftHeld).toBe(true);
+        expect(held.previousCatalogue).toEqual(before.catalogue);
+      } else if (failure !== 'drift append') {
+        const failed = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+        expect(failed.expiresAt).toBeNull();
+        expect(failed.policyRevision).toBeGreaterThan(before.policyRevision);
+        capture.mockResolvedValue(before.catalogue);
+        await watch.check('fixture');
+        const recovered = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+        expect(recovered.policyRevision).toBeGreaterThan(before.policyRevision);
+        const newPermit = await permit(setup, headers);
+        expect((await send(setup, newPermit)).status).toBe(200);
+        expectedCalls = 1;
+      }
+    }
+    expect(setup.received()).toBe(expectedCalls);
+  } finally {
+    vi.restoreAllMocks();
+    watch?.close();
+    await setup.close();
+  }
+}
+it.each(['drift append', 'drift saved', 'failed', 'stalled', 'replacement'] as const)(
+  'holds recording upstream through %s and recaptures on worker replacement', watchesCatalogue, 60_000);
+
+async function grantToolApproval(setup: Fixture, headers: Record<string, string>) {
+  const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
+    toolRevision: tool.revision, mode: 'ask', setBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+  const publication = { serverId: 'fixture', publishedBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.server_published', publication);
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    request);
+  const answer = z.object({ approvalId: z.string() }).parse(await response.json());
+  const current = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  async function fresh() {}
+  const result = await decideApproval(setup.nats.store, 'test', answer.approvalId,
+    'alice', 'approved', true, fresh, current, setup.actor.now());
+  expect(result.status).toBe('appended');
+  const approved = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  expect(approved.state).toBe('approved');
+  return answer.approvalId;
+}
+
+async function approvalPermit(setup: Fixture, headers: Record<string, string>, approvalId: string) {
+  const approvalHeaders = { ...headers, 'x-opencrane-approval-id': approvalId };
+  const request = { method: 'POST', headers: approvalHeaders, body };
+  return fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
+}
+
+const renewalCases = ['fresh', 'expired observed', 'expired unread', 'expired during append'] as const;
+async function checksApprovalAfterRenewal(renewal: typeof renewalCases[number]) {
+  const setup = await fixture();
+  let watch: ReturnType<typeof mcpCatalogueWatch> | undefined;
+  try {
+    const headers = await prepare(setup);
+    const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const startedAt = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(startedAt);
+    const expiresAt = new Date(startedAt + 10_000).toISOString();
+    const initialCapture = { ...initial.catalogue, expiresAt };
+    const capture = vi.fn();
+    capture.mockResolvedValue(initialCapture);
+    const options = { serverIds: ['fixture'], capture,
+      requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+    watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+    setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+    await watch.check('fixture');
+    const approvalId = await grantToolApproval(setup, headers);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const captureStarted = Promise.withResolvers<void>();
+    const captured = Promise.withResolvers<NonNullable<typeof initial.catalogue>>();
+    function pendingCapture() {
+      captureStarted.resolve();
+      return captured.promise;
+    }
+    capture.mockImplementation(pendingCapture);
+    vi.setSystemTime(startedAt + 1000);
+    const checking = watch.check('fixture');
+    await captureStarted.promise;
+    if (renewal === 'expired observed') {
+      vi.setSystemTime(startedAt + 10_000);
+      expect(() => watch!.requireCurrent('fixture')).toThrow('watch unavailable');
+    }
+    let finishedAt = startedAt + 10_500;
+    if (renewal === 'fresh' || renewal === 'expired during append') finishedAt = startedAt + 9500;
+    vi.setSystemTime(finishedAt);
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    async function crossExpiryDuringAppend(command: AppendCommand) {
+      const result = await append(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'mcp.catalogue_checked') vi.setSystemTime(startedAt + 10_500);
+      return result;
+    }
+    if (renewal === 'expired during append') {
+      const writer = vi.spyOn(setup.nats.store, 'append');
+      writer.mockImplementation(crossExpiryDuringAppend);
+    }
+    const renewed = { ...initial.catalogue!, checkedAt: new Date(finishedAt).toISOString(),
+      expiresAt: new Date(startedAt + 11_000).toISOString() };
+    captured.resolve(renewed);
+    await checking;
+    expect(() => watch!.requireCurrent('fixture')).not.toThrow();
+    const after = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const approval = await readApproval(setup.nats.store, 'test', approvalId);
+    const response = await approvalPermit(setup, headers, approvalId);
+    if (renewal === 'fresh') {
+      expect(after.policyRevision).toBe(before.policyRevision);
+      expect(approval.state).toBe('approved');
+      expect(response.headers.get('x-opencrane-mcp-permit')).toBeTruthy();
+    } else {
+      expect.soft(after.policyRevision).toBeGreaterThan(before.policyRevision);
+      expect.soft(approval.state).toBe('cancelled');
+      expect.soft(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
+    }
+    expect(setup.received()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    watch?.close();
+    await setup.close();
+  }
+}
+it.each(renewalCases)('keeps approvals valid only across uninterrupted renewal: %s',
+  checksApprovalAfterRenewal);
+
+async function verifyApprovalRetry(setup: Fixture, headers: Record<string, string>,
+  approvalId: string) {
+  await setup.refuseMcpConnection();
+  const approvalHeaders = { ...headers, 'x-opencrane-approval-id': approvalId };
+  const request = { method: 'POST', headers: approvalHeaders, body };
+  const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
+    request);
+  expect(response.status).toBe(503);
+  await setup.restart();
+  await ingestUsage(setup.actor, setup.options.usageFile);
+  const current = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(current).toMatchObject({ state: 'outcome_unknown', canRetry: true });
+  async function fresh() {}
+  const retry = await decideApproval(setup.nats.store, 'test', approvalId,
+    'alice', 'retry', true, fresh, current, setup.actor.now());
+  expect(retry.status).toBe('appended');
+  const approved = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(approved.state).toBe('approved');
+}
+
+const recoveryApprovals = [
+  { failure: 'failed', retry: false }, { failure: 'failed', retry: true },
+  { failure: 'stalled', retry: false }, { failure: 'stalled', retry: true },
+] as const;
+async function refusesOldApprovalAfterRecovery(testCase: typeof recoveryApprovals[number]) {
+  const setup = await fixture();
+  let watch: ReturnType<typeof mcpCatalogueWatch> | undefined;
+  try {
+    const headers = await prepare(setup);
+    const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const capture = vi.fn();
+    capture.mockResolvedValue(initial.catalogue);
+    const options = { serverIds: ['fixture'], capture,
+      requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+    watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+    setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+    await watch.check('fixture');
+    const approvalId = await grantToolApproval(setup, headers);
+    if (testCase.retry) await verifyApprovalRetry(setup, headers, approvalId);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const stalled = Promise.withResolvers<NonNullable<typeof initial.catalogue>>();
+    if (testCase.failure === 'failed') {
+      capture.mockRejectedValue(new Error('Upstream unavailable'));
+    } else {
+      capture.mockReturnValue(stalled.promise);
+    }
+    await expect(watch.check('fixture')).rejects.toThrow();
+    expect(() => watch!.requireCurrent('fixture')).toThrow();
+    capture.mockResolvedValue(initial.catalogue);
+    await watch.check('fixture');
+    expect(() => watch!.requireCurrent('fixture')).not.toThrow();
+    const after = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    expect.soft(after.policyRevision).toBeGreaterThan(before.policyRevision);
+    const approval = await readApproval(setup.nats.store, 'test', approvalId);
+    expect.soft(approval).toMatchObject({ state: 'cancelled', canRetry: false });
+    const response = await approvalPermit(setup, headers, approvalId);
+    expect.soft(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
+    expect.soft(setup.received()).toBe(0);
+  } finally {
+    watch?.close();
+    await setup.close();
+  }
+}
+it.each(recoveryApprovals)('refuses old approval after watch recovery: $failure, retry $retry',
+  refusesOldApprovalAfterRecovery, 45_000);
+
+async function refusesFinalSendDuringLocalHold() {
+  const setup = await fixture();
+  let watch: ReturnType<typeof mcpCatalogueWatch> | undefined;
+  try {
+    const headers = await prepare(setup);
+    const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const capture = vi.fn();
+    capture.mockResolvedValue(initial.catalogue);
+    const options = { serverIds: ['fixture'], capture,
+      requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+    watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+    setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+    await watch.check('fixture');
+    const value = await permit(setup, headers);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    let admitted = false;
+    async function holdAfterAdmission(command: AppendCommand) {
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'mcp.catalogue_checked') throw new Error('Event store unavailable');
+      const result = await append(command);
+      if (event.type === 'mcp.dispatch_admitted' && result.status === 'appended') {
+        admitted = true;
+        capture.mockRejectedValue(new Error('Upstream unavailable'));
+        await expect(watch!.check('fixture')).rejects.toThrow('Event store unavailable');
+      }
+      return result;
+    }
+    const writer = vi.spyOn(setup.nats.store, 'append');
+    writer.mockImplementation(holdAfterAdmission);
+    const response = await send(setup, value);
+    expect(admitted).toBe(true);
+    expect.soft(response.status).toBe(403);
+    expect.soft(setup.received()).toBe(0);
+    const after = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    expect(after.policyRevision).toBe(before.policyRevision);
+    expect(() => watch!.requireCurrent('fixture')).toThrow();
+  } finally {
+    vi.restoreAllMocks();
+    watch?.close();
+    await setup.close();
+  }
+}
+it('refuses a final send when a local hold arrives after tool admission',
+  refusesFinalSendDuringLocalHold);

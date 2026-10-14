@@ -2450,3 +2450,20 @@ and at most two new budget rows in its volume test.
 The memory integration test checks the real shared sender and memory HTTP backend:
 a stopped pass reaches neither the backend nor a new budget admission, and a
 renewed pass cannot reopen the stopped turn. Native execution remains disabled.
+
+## Dispatch catalogue capture (#48 PR 3b, first split)
+
+`models-main.ts` starts the shared catalogue watch for `MODEL_MCP_ROUTES`.
+`watch-capture.ts` sends only `server/discover` and `tools/list` to the operator's
+configured dispatch destination, with the configured generation and no caller credentials.
+It refuses redirects, sessions, invalid replies and responses over 4 MiB. It reuses
+`discoverInventory`: ten pages, 100 tools per page, 32 KiB per tool, 512 KiB of tool
+definitions and 900 KiB for the inventory. The watch bounds the whole attempt in time.
+Tool descriptions stay inside the exact saved definition; no Markdown, HTML or icons run.
+
+This capture supports credential-free catalogues at the configured dispatch path only.
+A backend requiring a caller context for discovery, or advertising zero TTL, remains held.
+That includes the present memory backend; this change adds no memory or Odoo exception.
+Per-call capture for zero TTL, discovery credentials and hosted instance lifecycle wiring
+remain unfinished. A models-process restart always recaptures; this does not prove capture
+on every independently restarted MCP process. No live capability completion is claimed.

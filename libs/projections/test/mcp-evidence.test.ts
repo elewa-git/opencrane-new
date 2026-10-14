@@ -151,3 +151,11 @@ function retainsDriftHold(laterEvent: typeof laterEvents[number]) {
   expect(isToolPolicyAvailable(published, Date.parse(checkedAt))).toBe(false);
 }
 it.each(laterEvents)('keeps drift held after %s and a late publication', retainsDriftHold);
+
+function refusesPublishedDriftHold() {
+  const fresh = { ...discovered(), published: true };
+  expect(isToolPolicyAvailable(fresh, Date.parse(checkedAt))).toBe(true);
+  const held = { ...fresh, driftHeld: true };
+  expect(isToolPolicyAvailable(held, Date.parse(checkedAt))).toBe(false);
+}
+it('refuses an otherwise fresh published policy with a drift hold', refusesPublishedDriftHold);

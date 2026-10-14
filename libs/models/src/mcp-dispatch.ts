@@ -18,6 +18,7 @@ type Route = z.infer<typeof mcpDispatchRouteSchema>;
 export interface McpDispatchOptions {
   routes: Route[];
   requireLeader: () => Promise<void>;
+  requireCatalogue?: (serverId: string) => void;
 }
 type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
 interface MemorySend {
@@ -62,6 +63,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     function matches(route: Route) {
       return route.serverId === serverId && route.connectionId === connectionId;
     }
+    options?.requireCatalogue?.(serverId);
     const route = options?.routes.find(matches);
     if (!route?.generation || !route.revisionHeader) {
       throw new Error('MCP atomic revision contract unavailable');

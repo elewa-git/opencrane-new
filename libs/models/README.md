@@ -14,7 +14,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals including private reviews, saved fact references, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
-  models -->|checks spending before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks spending and the catalogue before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials and confirms removal| custody["Kubernetes<br/>private credentials"]
@@ -175,6 +175,11 @@ Older holds keep their money because their senders used older rules.
 Later confirmed usage can still settle their cost.
 
 ## Processes it handles
+
+The catalogue watch starts with calls paused and reads the tool list again. The models
+process uses its result before issuing a pass and immediately before sending a call.
+Failed checks and expired evidence end old approvals. Changed definitions keep the server paused,
+even if saving the change fails. Descriptions remain untrusted tool data.
 
 A saved catalogue change holds every tool on that server. New reviews and legacy
 publication cannot restore calls yet. A failed catalogue check ends old approvals,

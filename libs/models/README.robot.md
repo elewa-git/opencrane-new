@@ -1675,3 +1675,52 @@ between them to prove that the call never reaches upstream.
 `turnBudgetStop` uses the same budget fold for renewal. Its first history read runs
 before the short membership check; later checks read only new budget events.
 The personal-payer summary and both authority test limits remain unchanged.
+
+## Catalogue watch and dispatch holds (#48 PR 3b, first split)
+
+`mcpCatalogueWatch` runs beside the active models dispatcher. Startup holds every
+configured server and records a failed check before recapture, invalidating old approval
+revisions. One check per server runs at a time, for at most 32 distinct servers.
+`tick` schedules checks 30 seconds before expiry, at least one second apart. Each attempt
+has a 30-second deadline, followed by at most two seconds to save failure. Three
+consecutive failures stop automatic retries; attempts wait five seconds between failures.
+Replacing the process creates a closed watch and recaptures, including the same digest.
+Stopping aborts discovery. Late results cannot append success or release its hold.
+Dispatch also checks expiry by time, without depending on a running timer.
+Renewal checks the previous expiry again after the event store replies. If evidence
+expired during capture or append, the watch saves a failed check and then renews it
+before allowing calls. This advances the saved approval revision even when nobody
+read an approval during the gap. Uninterrupted renewal keeps that revision unchanged.
+
+The watch closes dispatch before appending drift or failure. A failed drift append leaves
+that process held. Successful unchanged checks can recover a freshness pause only after
+failure was saved; they retain the newer approval revision. Saved drift and local drift
+holds never clear here. Existing `mcp.tools_changed` records retain both snapshots.
+The models process retains its existing database leader check. No conversation access
+stream, authority implementation or authority test is changed.
+
+This split does not implement in-process configuration reload, pending approval cancellation
+on reload, instance-start observation, configuration acknowledgement or restoration.
+The current routes reload by restarting the models process; its startup invalidates old
+approvals. Recapture of an independently restarted backend still needs instance lifecycle
+wiring. No exact acknowledgement event or completed #45 publication path exists on this
+base, so there is no restoration path or late-ack acceptance path to test.
+Fresh-install qualification is NOT RUN. The rest of row 3 remains PARTIAL.
+
+### Watch checks, 13 October 2026
+
+Runtime source: `a3543e19d5e9fccebcbde49843ee1ffb0e5136f4`, based on `c92db7f9`.
+Environment: Linux worktree, clean npm ci, disposable NATS/OpenFGA fixtures, the
+supplied PostgreSQL test database and recording HTTP upstreams. Not a fresh install.
+The tests-first commit is `d94d0b74`; its expected FAIL was the missing watch module.
+PASS: initial four-file batch, 94 tests; both final changed-test batches, 45 tests each.
+The capture tests also passed twice after replacing the fixture's unchecked JSON cast.
+All used `nice -n 10`, one worker and the supplied `PG_TEST_URL`.
+PASS: full lint (18 warnings, no errors), workspace typecheck, final models/server
+package typechecks, event catalogue (132 types), Knip and changelog validation.
+Both authority test files and the authority implementation match the base.
+NOT RUN: full root suite, hosted CI, paid calls and fresh-install qualification.
+Row 3 remains PARTIAL for the omissions above.
+Logs: `/tmp/p3-6-pr3b-tests-{1,2,3}.log`, `/tmp/p3-6-pr3b-lint-final.log`,
+`/tmp/p3-6-pr3b-typecheck.log`, `/tmp/p3-6-pr3b-{models,server}-typecheck-final.log`,
+`/tmp/p3-6-pr3b-{events,knip,changelog}.log` and `/tmp/p3-6-pr3b-capture-final-{1,2}.log`.
