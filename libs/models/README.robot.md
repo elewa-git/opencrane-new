@@ -1649,8 +1649,9 @@ The operation id hashes silo, subject and changeRef. History retains retry ident
 NATS deduplication. A retry must recover the same private material and exact identity and
 match the saved payload. Confirmed appends are read back and compared before returning.
 Unknown appends retain custody; these commands never delete it. Explicit candidate cleanup
-is described below. Scanning and closing expired operations remain planned. `foldConnection` keeps old or incomplete records unavailable and new profiles
-`saved_unverified`. It reads no secret store and starts no work.
+is described below. Scanning remains planned. `foldConnection` keeps old or incomplete
+records unavailable and new profiles `saved_unverified`. It reads no secret store and starts
+no work.
 
 The existing `profile` event field holds the opaque profileId, never an editable label.
 The stream is `connection-<member>-<server>-<profile>`. Selection, identity verification,
@@ -1706,20 +1707,29 @@ short access check. The authority implementation and volume tests are unchanged.
 
 Under the lock, cleanup recovers the exact identity from the private journal, verifies
 all custody bindings and reads fresh profile history. A current reference is always kept.
-An expired append deadline alone proves nothing. Cleanup also requires a later profile
-position than the stage's expected sequence, with a valid current generation or a saved
-revocation. That saved conflict makes a delayed conditional save impossible, even after
-a worker loses its lock. A current generation with another reference or a revocation can
+An expired append deadline alone proves nothing. At the stage's expected profile position,
+cleanup conditionally appends `connection.operation_closed` and reads it back. If a delayed
+save arrives first, closure conflicts and material stays. A lost closure reply also retains
+material; the next run reads the saved closure and does not append another one.
+Deletion requires a later profile position with a valid current generation, saved revocation
+or accepted closure. That saved conflict makes a delayed conditional save impossible, even
+after a worker loses its lock. A current generation with another reference or a revocation can
 therefore retire an old stage. The custody adapter still sends both UID and resourceVersion
 preconditions. A conflict, missing record or failed read returns `retained`, without
 copying dependency errors or adopting a replacement identity.
 
 This is the first bounded cleanup part under the approximately 600-line review target.
-Candidate scanning, journal reconstruction from custody enumeration, conditional closure
-of expired operations without a conflicting event, automatic revoke/rotation reactions
-and tracking future active credential injections remain planned. Idle uncertain stages
-are deliberately retained. All credentialed routes stay closed. The caller must supply
-a trusted private stage, never browser input. No new dependency or event is introduced.
+Candidate scanning, journal reconstruction from custody enumeration, automatic revoke/rotation
+reactions and tracking future active credential injections remain planned. The caller must
+supply a trusted private stage, never browser input. All credentialed routes stay closed.
+
+P3-8 PR 3c adds the strict `connection.operation_closed` event. Its id hashes silo, subject,
+event type and the closed operation id. Its principal is always `system/models`.
+The fold keeps the saved generation and reference when a replacement closes. It records the
+closed operation id and generation, so a retry refuses before staging and a fresh rotation
+skips that generation. The private journal pins Secret names permanently: closing generation
+2 means the next rotation stages generation 3. Closing a first create leaves its profile id
+unavailable; a fresh connect needs a new id. No adapter or access-check change is needed.
 
 Tests use real NATS and PostgreSQL with a local HTTP Secret fixture. They cover exact
 removal, changed UID/version, unknown and current references, lock contention, fresh

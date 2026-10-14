@@ -476,10 +476,15 @@ it('closes an expired idle stage conditionally and deletes its exact identity on
 async function closesExpiredRotationWithoutLaterEvent() {
   const test = await candidateFixture(stage.appendUntil, await events.store.head() + 1, 2);
   const previousOperationId = `previous-${test.input.operationId}`;
-  const previousReference = 'secret:previous-generation';
+  const previousStore = await fixture();
+  const previousStage = { ...test.input, generation: 1, expectedSequence: 0,
+    operationId: previousOperationId };
+  const previousSaved = await previousStore.custody.stage(previousStage, material);
+  const previousReference = `secret:${previousSaved.identity!.reference}`;
   const previousActivation = {
     connectionId: test.input.connectionId, ownerKind: 'personal', purpose: 'personal',
-    generation: 1, uid: 'previous-uid', resourceVersion: 'previous-version',
+    generation: 1, uid: previousSaved.identity!.uid,
+    resourceVersion: previousSaved.identity!.resourceVersion,
     endpointDigest: test.input.endpointDigest, operationId: previousOperationId,
     changedBy: test.input.userId, expectedSequence: 0,
     appendUntil: test.input.appendUntil, reason: 'bearer_create',
@@ -511,6 +516,24 @@ async function closesExpiredRotationWithoutLaterEvent() {
   expect(foldConnection(closedRows)).toMatchObject({ status: 'saved_unverified',
     data: savedProfile.data, sequence: closedRows[1]!.sequence });
   expect(test.store.deletes).toBe(1);
+  expect(await reconcileConnectionStage(events.store, test.db,
+    previousStore.restart(), previousStage)).toEqual({ status: 'retained' });
+  expect(previousStore.deletes).toBe(0);
+  expect(await previousStore.custody.recover(previousStage)).toMatchObject({ status: 'recovered' });
+  const provider = vi.spyOn(globalThis, 'fetch');
+  const release = vi.spyOn(events.store, 'append');
+  const recovery = vi.spyOn(custody, 'recover');
+  removal.mockClear();
+  try {
+    foldConnection(closedRows);
+    expect(provider).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+    expect(recovery).not.toHaveBeenCalled();
+    expect(removal).not.toHaveBeenCalled();
+  } finally {
+    provider.mockRestore();
+    release.mockRestore();
+  }
 }
 it('closes an expired rotation and preserves the current generation and reference',
   closesExpiredRotationWithoutLaterEvent);
@@ -650,12 +673,15 @@ async function keepsUnexpiredStage(laterEvent: boolean) {
 }
 it.each([false, true])('keeps an unexpired stage (later event: %s)', keepsUnexpiredStage);
 
-async function refusesUnconfirmedClosure(outcome: 'conflict' | 'unavailable' | 'throw' | 'lost') {
+async function refusesUnconfirmedClosure(outcome: 'conflict' | 'unavailable' | 'throw' | 'lost' | 'unconfirmed') {
   const test = await candidateFixture();
   const append = events.store.append.bind(events.store);
   async function failClosure(command: AppendCommand) {
     if (outcome === 'throw') {
       throw new Error(material);
+    }
+    if (outcome === 'unconfirmed') {
+      return { status: 'appended' as const, sequence: 1 };
     }
     if (outcome === 'lost') {
       await append(command);
@@ -684,7 +710,7 @@ async function refusesUnconfirmedClosure(outcome: 'conflict' | 'unavailable' | '
     fault.mockRestore();
   }
 }
-it.each(['conflict', 'unavailable', 'throw', 'lost'] as const)(
+it.each(['conflict', 'unavailable', 'throw', 'lost', 'unconfirmed'] as const)(
   'retains material on closure %s and recovers a lost reply without another append',
   refusesUnconfirmedClosure);
 
@@ -710,11 +736,12 @@ async function keepsEarlierPosition() {
   // Keep a valid saved profile with a different reference below the stage's expected position.
   const rows = await history(events.store, test.subject, 'test');
   const changed = structuredClone(rows);
-  const data = z.object({ secretRef: z.string() }).loose().parse(changed[0]!.event.data);
+  const dataSchema = z.looseObject({ secretRef: z.string() });
+  const data = dataSchema.parse(changed[0]!.event.data);
   data.secretRef = 'secret:another';
   changed[0]!.event.data = data;
   async function* earlierHistory() {
-    yield* changed;
+    yield* await Promise.resolve(changed);
   }
   const read = vi.spyOn(events.store, 'readStream');
   read.mockImplementation(earlierHistory);
@@ -726,3 +753,17 @@ async function keepsEarlierPosition() {
   }
 }
 it('retains a candidate when history has not reached its expected position', keepsEarlierPosition);
+
+async function refusesInvalidClosureCandidate() {
+  const test = await candidateFixture(stage.appendUntil, 0, 2);
+  const append = vi.spyOn(events.store, 'append');
+  try {
+    expect(await test.reconcile()).toEqual({ status: 'retained' });
+    expect(append).not.toHaveBeenCalled();
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    append.mockRestore();
+  }
+}
+it('refuses to close a generation that does not follow the saved profile',
+  refusesInvalidClosureCandidate);

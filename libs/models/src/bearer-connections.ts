@@ -4,7 +4,8 @@ import type { Db } from '@opencrane/projections';
 import { withConnectionStage } from './connection-stage-lock.ts';
 import type { Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { connectionCreatedDataSchema, type EventEnvelope } from '@opencrane/events';
+import { connectionCreatedDataSchema, connectionOperationClosedDataSchema,
+  type EventEnvelope } from '@opencrane/events';
 import type { connectionCustody, ConnectionStage } from './connection-custody.ts';
 import { envelope, history } from './actor.ts';
 import { authorityFence } from './authority.ts';
@@ -28,15 +29,23 @@ interface State {
   status: 'unavailable' | 'saved_unverified';
   sequence: number;
   data?: Saved;
+  lastGeneration: number;
+  closedOperations: string[];
 }
 
 /** Rebuild references only. Saving material does not prove the upstream account's identity. */
 export function foldConnection(rows: StoredEvent[]): State {
-  let state: State = { status: 'unavailable', sequence: 0 };
+  let state: State = { status: 'unavailable', sequence: 0, lastGeneration: 0,
+    closedOperations: [] };
   for (const row of rows) {
     const parsed = savedSchema.safeParse(row.event.data);
     const previous = state;
-    state = { status: 'unavailable', sequence: row.sequence };
+    state = { status: 'unavailable', sequence: row.sequence, lastGeneration: 0,
+      closedOperations: [] };
+    if (row.event.type === 'connection.operation_closed') {
+      state = applyClosure(previous, row, rows[0]?.event.silo) ?? state;
+      continue;
+    }
     if (!parsed.success) {
       continue;
     }
@@ -49,10 +58,46 @@ export function foldConnection(rows: StoredEvent[]): State {
       row.event.type === 'connection.created' && activation.reason === 'bearer_create';
     const replacement = replacesSaved(previous, row, data, rows[0]?.event.silo);
     if (first || replacement) {
-      state = { status: 'saved_unverified', sequence: row.sequence, data };
+      state = { status: 'saved_unverified', sequence: row.sequence, data,
+        lastGeneration: activation.generation, closedOperations: previous.closedOperations };
     }
   }
   return state;
+}
+function applyClosure(previous: State, row: StoredEvent, silo?: string): State | undefined {
+  const parsed = connectionOperationClosedDataSchema.safeParse(row.event.data);
+  if (!parsed.success) {
+    return undefined;
+  }
+  const data = parsed.data;
+  const subject = `connection-${data.userId}-${data.serverId}-${data.profile}`;
+  if (row.event.subject !== subject || row.event.silo !== silo ||
+      row.event.principal?.kind !== 'system' || row.event.principal.id !== 'models' ||
+      data.expectedSequence !== previous.sequence || row.sequence <= previous.sequence ||
+      Date.parse(row.event.time) <= data.appendUntil ||
+      data.generation !== previous.lastGeneration + 1) {
+    return undefined;
+  }
+  if (previous.sequence !== 0 && previous.status !== 'saved_unverified') {
+    return undefined;
+  }
+  if (!closureMatchesProfile(data, previous.data)) {
+    return undefined;
+  }
+  if (previous.closedOperations.includes(data.operationId)) {
+    return undefined;
+  }
+  // Reserve the name permanently: the private journal pins each generation's original UID.
+  return { ...previous, sequence: row.sequence, lastGeneration: data.generation,
+    closedOperations: [...previous.closedOperations, data.operationId] };
+}
+function closureMatchesProfile(data: z.infer<typeof connectionOperationClosedDataSchema>,
+  previous?: Saved) {
+  if (!previous) {
+    return true;
+  }
+  return previous.userId === data.userId && previous.serverId === data.serverId &&
+    previous.profile === data.profile && previous.activation.operationId !== data.operationId;
 }
 function validIdentity(row: StoredEvent, data: Saved, expectedSequence: number) {
   const subject = `connection-${data.userId}-${data.serverId}-${data.profile}`;
@@ -67,7 +112,8 @@ function replacesSaved(previous: State, row: StoredEvent, data: Saved, silo?: st
   }
   return row.event.type === 'connection.refreshed' &&
     data.activation.reason === 'bearer_rotation' &&
-    data.activation.generation === previous.data.activation.generation + 1 &&
+    data.activation.generation === previous.lastGeneration + 1 &&
+    !previous.closedOperations.includes(data.activation.operationId) &&
     sameBindings(previous.data, data) && row.event.silo === silo;
 }
 function sameBindings(first: Saved, second: Saved) {
@@ -174,15 +220,22 @@ async function saveLocked(store: EventStore, binding: Binding, memberId: string,
     return row.event.id === operationId;
   }
   const original = rows.find(originalOperation);
+  if (state.closedOperations.includes(operationId)) {
+    throw new Error('Connection conflict');
+  }
   if (!original) {
     requireCurrent(state, input);
   }
   const server = await eligibleServer(store, binding.silo, input);
   await readActiveMember(store, binding, memberId);
   await requireConnectionEnabled(store, memberId, input.serverId, performance.now() + 10_000);
+  let generation = state.lastGeneration + 1;
+  if (original) {
+    generation = savedSchema.parse(original.event.data).activation.generation;
+  }
   const stage: ConnectionStage = { siloId: binding.silo, userId: memberId,
     serverId: input.serverId, connectionId: input.connectionId, profileId: input.profileId,
-    purpose: 'personal', generation: input.expectedGeneration + 1, operationId,
+    purpose: 'personal', generation, operationId,
     expectedSequence: input.expectedSequence, appendUntil: input.appendUntil,
     endpointDigest: server.endpointDigest };
   const identity = await stageMaterial(custody, stage, material);

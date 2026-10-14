@@ -113,6 +113,13 @@ export const mcpEvents = [
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', revokedBy: 'mem_1' },
   ),
   event(
+    'connection.operation_closed', 'connection',
+    'An expired unsaved bearer operation was closed before exact secret cleanup.',
+    data.connectionOperationClosedDataSchema,
+    { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', operationId: 'operation_1',
+      generation: 1, expectedSequence: 0, appendUntil: 1, reason: 'append_deadline_passed' },
+  ),
+  event(
     'connection.disabled',
     'connection',
     'An admin blocked personal connections for one member and server.',

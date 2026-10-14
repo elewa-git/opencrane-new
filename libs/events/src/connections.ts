@@ -36,3 +36,10 @@ export const connectionDisabledDataSchema = z.strictObject({
   disabledBy: connectionId, expectedSequence: z.int().nonnegative(),
   reason: z.literal('admin_disabled'),
 });
+
+export const connectionOperationClosedDataSchema = z.strictObject({
+  userId: connectionId, serverId: connectionId, profile: connectionId,
+  operationId: connectionId, generation: z.int().positive(),
+  expectedSequence: z.int().nonnegative(), appendUntil: z.int().positive(),
+  reason: z.literal('append_deadline_passed'),
+});

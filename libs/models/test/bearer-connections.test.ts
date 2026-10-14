@@ -41,9 +41,11 @@ async function initialise() {
   const registered = envelope('test', 'mcp-server', 'mcp.server_registered', {
     serverId: 'server', kind: 'remote', locator: 'https://example.test/mcp', registeredBy: 'admin',
   });
+  const checkedAt = Date.now();
   const catalogue = { serverId: 'server', connectionId: 'installed', accountMode: 'personal',
     tools: [], toolCount: 0, schemaDigest: catalogueDigest([]),
-    checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 300_000).toISOString() };
+    checkedAt: new Date(checkedAt).toISOString(),
+    expiresAt: new Date(checkedAt + 300_000).toISOString() };
   const discovered = envelope('test', 'mcp-server', 'mcp.server_discovered', catalogue);
   const published = envelope('test', 'mcp-server', 'mcp.server_published', {
     serverId: 'server', publishedBy: 'admin',
@@ -585,6 +587,11 @@ async function lateAppendCannotFollowDeletion(next: 'rotate' | 'revoke' | 'race'
     return;
   }
   expect(deletes).toBe(1);
+  await continueAfterClosure(test, memberId, next, rotation, rows);
+}
+async function continueAfterClosure(test: ReturnType<typeof fixture>, memberId: string,
+  next: string, rotation: object, rows: StoredEvent[]) {
+  const state = foldConnection(rows);
   expect(rows.at(-1)!.event.type).toBe('connection.operation_closed');
   const staging = vi.spyOn(test.custody, 'stage');
   const retry = { ...rotation, expectedSequence: state.sequence };
@@ -618,14 +625,19 @@ it.each(['rotate', 'revoke', 'race', 'create'] as const)(
   'orders a lost save against closure and supports the next %s', lateAppendCannotFollowDeletion);
 
 function assertInvalidClosuresUnavailable(rows: StoredEvent[]) {
+  const recordSchema = z.record(z.string(), z.unknown());
+  const profileSchema = z.looseObject({
+    userId: z.string(), serverId: z.string(), profile: z.string() });
+  const activationSchema = z.looseObject({ activation: recordSchema });
   const patches = [
     { userId: 'foreign' }, { serverId: 'foreign' }, { profile: 'foreign' },
     { expectedSequence: 0 }, { generation: 1 }, { appendUntil: Date.now() + 60_000 },
+    { reason: 'foreign' }, { generation: 0 },
   ];
   for (const patch of patches) {
     const changed = structuredClone(rows);
     const closure = changed.at(-1)!;
-    const data = z.record(z.string(), z.unknown()).parse(closure.event.data);
+    const data = recordSchema.parse(closure.event.data);
     closure.event.data = { ...data, ...patch };
     expect(foldConnection(changed).status).toBe('unavailable');
   }
@@ -633,7 +645,7 @@ function assertInvalidClosuresUnavailable(rows: StoredEvent[]) {
     const changed = structuredClone(rows);
     const closure = changed.at(-1)!;
     if (field === 'principal') {
-      closure.event.principal = { kind: 'human', id: 'alice' };
+      closure.event.principal = { kind: 'human', id: 'models' };
     } else if (field === 'system') {
       closure.event.principal = { kind: 'system', id: 'foreign' };
     } else if (field === 'sequence') {
@@ -643,6 +655,37 @@ function assertInvalidClosuresUnavailable(rows: StoredEvent[]) {
     }
     expect(foldConnection(changed).status).toBe('unavailable');
   }
+  for (const field of ['userId', 'serverId', 'profile'] as const) {
+    const changed = structuredClone(rows);
+    const closure = changed.at(-1)!;
+    const data = profileSchema.parse(closure.event.data);
+    data[field] = 'foreign';
+    closure.event.data = data;
+    closure.event.subject = `connection-${data.userId}-${data.serverId}-${data.profile}`;
+    expect(foldConnection(changed).status).toBe('unavailable');
+  }
+  const closed = rows.at(-1)!;
+  const closureData = recordSchema.parse(closed.event.data);
+  const repeated = structuredClone(closed);
+  repeated.sequence += 1;
+  repeated.event.data = { ...closureData, expectedSequence: closed.sequence, generation: 3 };
+  expect(foldConnection([...rows, repeated]).status).toBe('unavailable');
+  const original = structuredClone(rows);
+  original.at(-1)!.event.data = { ...closureData, operationId: rows[0]!.event.id };
+  expect(foldConnection(original).status).toBe('unavailable');
+  const revoked = structuredClone(rows);
+  revoked[0]!.event.type = 'connection.revoked';
+  revoked.at(-1)!.event.data = { ...closureData, generation: 1 };
+  expect(foldConnection(revoked)).toMatchObject({ status: 'unavailable', closedOperations: [] });
+  const activation = structuredClone(rows[0]!);
+  const saved = activationSchema.parse(activation.event.data);
+  activation.sequence = closed.sequence + 1;
+  activation.event.type = 'connection.refreshed';
+  activation.event.id = String(closureData['operationId']);
+  saved.activation = { ...saved.activation, operationId: activation.event.id,
+    generation: 3, reason: 'bearer_rotation', expectedSequence: closed.sequence };
+  activation.event.data = saved;
+  expect(foldConnection([...rows, activation]).status).toBe('unavailable');
 }
 
 async function saveUsesCleanupLock() {
