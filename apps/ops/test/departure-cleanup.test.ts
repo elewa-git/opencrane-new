@@ -45,7 +45,7 @@ async function setup() {
   storage = await database('pg');
   fga = await openfga();
   const binding = await createStore(fga.apiUrl, 'test');
-  auth = memberAuthorisation(binding);
+  auth = memberAuthorisation(binding, nats.store);
   runner = new ProjectionRunner(storage.db, nats.reader, createLogger('departure-test'));
   await runner.initialise(members);
   for (const memberId of ['alice', 'bob']) {
@@ -93,7 +93,7 @@ async function deliver() {
   function clock() {
     return Date.parse('2026-10-13T12:00:00Z');
   }
-  const handler = module.departureCleanupHandler(nats.store, clock);
+  const handler = module.departureCleanupHandler(nats.store, auth, clock);
   await handler.handle(removal, storage.db);
 }
 
@@ -250,9 +250,9 @@ it('rebuilds without effects and previews the added subscription without running
   replayAndUpgrade);
 
 async function computerEvent(assistantId: string, type: string) {
-  return append(`computer-${assistantId}`, type, {
-    assistantId, computerId: `desk-${assistantId}`,
-  });
+  const data: Record<string, unknown> = { assistantId, computerId: `desk-${assistantId}` };
+  if (type === 'computer.resumed') data['tokenId'] = 'token:fixture';
+  return append(`computer-${assistantId}`, type, data);
 }
 
 async function finish() {
@@ -284,8 +284,7 @@ async function busyComputer() {
   expect(suspended.type).toBe('computer.suspended');
   const saved = await completion();
   expect(saved.data).toMatchObject({ memberId: 'alice', removalId: removal.id,
-    sections: { groups: expect.any(Array), grants: expect.any(Array),
-      assistant: expect.any(Array), computer: [suspended.id] } });
+    sections: { computer: [suspended.id] } });
   await finish();
   expect(await completion()).toEqual(saved);
 }
@@ -357,6 +356,11 @@ async function reorderedCompletion() {
     assistantId: 'returned', kind: 'personal', ownerId: 'returned',
   });
   await grant('member', 'returned');
+  await append('computer-returned', 'computer.claimed', {
+    assistantId: 'returned', computerId: 'desk-returned', generation: 1, tokenId: 'token:fixture',
+  });
+  await computerEvent('returned', 'computer.ready');
+  const returnedComputer = await history(nats.store, 'computer-returned');
   const returned = await history(nats.store, 'assistant-returned');
   await applyPermissions();
   await runner.run(members);
@@ -373,9 +377,62 @@ async function reorderedCompletion() {
   }
   expect(saved.data).toEqual({ memberId: 'alice', removalId: removal.id, sections });
   expect(await history(nats.store, 'assistant-returned')).toEqual(returned);
+  expect(await history(nats.store, 'computer-returned')).toEqual(returnedComputer);
   expect(await auth.use('person', 'returned', 'model', 'test-model')).toMatchObject({ allowed: true });
   expect(await history(nats.store, 'computer-shared')).toHaveLength(1);
   expect(await history(nats.store, 'computer-other')).toHaveLength(1);
 }
 it('requires IAM receipts and saves one complete record across reordered deliveries and rejoin',
   reorderedCompletion);
+
+async function existingRevocation(type: string) {
+  if (type === 'group') {
+    await append('team-early', 'team.member_removed', {
+      teamId: 'early', memberId: 'alice', removedBy: 'owner',
+    });
+  } else {
+    await append(grantStream('model', 'test-model'), 'grant.revoked', {
+      resourceType: 'model', resourceId: 'test-model', granteeKind: 'member',
+      granteeId: 'alice', revokedBy: 'owner',
+    });
+  }
+  await runner.run(members);
+  await expect(deliver()).rejects.toThrow('Departure permissions pending');
+  const end = await nats.store.head();
+  for await (const { event } of readEvents(nats.store, 1, end)) {
+    if (event.source !== 'opencrane-worker') continue;
+    if (auth.handler.eventTypes.includes(event.type)) await auth.handler.handle(event, storage.db);
+  }
+  await runner.run(members);
+  await expect(deliver()).rejects.toThrow('Departure permissions pending');
+  expect(await history(nats.store, 'memberaudit-alice')).toEqual([]);
+  await finish();
+  await completion();
+}
+it.each(['group', 'grant'])(
+  'requires the IAM receipt when another command already removed the %s', existingRevocation);
+
+async function completionFailure(mode: string) {
+  await expect(deliver()).rejects.toThrow('Departure permissions pending');
+  await runner.run(members);
+  await applyPermissions();
+  if (mode === 'membership') {
+    const original = nats.store.head.bind(nats.store);
+    async function moved(subject?: string, deadline?: number) {
+      const position = await original(subject, deadline);
+      if (subject === 'member-alice') return position + 1;
+      return position;
+    }
+    vi.spyOn(nats.store, 'head').mockImplementation(moved);
+  } else {
+    const failure = { status: 'unavailable' as const, cause: new Error('Append unavailable') };
+    vi.spyOn(nats.store, 'append').mockResolvedValue(failure);
+  }
+  await expect(deliver()).rejects.toThrow();
+  expect(await history(nats.store, 'memberaudit-alice')).toEqual([]);
+  vi.restoreAllMocks();
+  await finish();
+  await completion();
+}
+it.each(['membership', 'append'])(
+  'does not record completion after a changed member position or failed append: %s', completionFailure);

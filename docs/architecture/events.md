@@ -145,7 +145,8 @@ the personal default.
 | `silo.owner_bootstrapped` | authenticated installation-token claim | members, identities | OpenFGA owner/member; seed ownership; emit `assistant.created` (personal); seed model `grant.given`; prepare private personal key |
 | `member.joined` | invitation accepted | members | OpenFGA `member`; emit personal `assistant.created` unless `personalAssistant: none`; seed model `grant.given`; prepare private personal key |
 | `member.role_changed` | non-owner role command | members | OpenFGA role tuples |
-| `member.removed` | reviewed non-owner removal command; optional `reviewRevision` for old events | members | OpenFGA delete; deny access immediately from events; `cleanup-departure` removes groups and personal grants and deactivates personal assistants; computer cleanup and completion are pending |
+| `member.removed` | reviewed non-owner removal command; optional `reviewRevision` for old events | members | OpenFGA delete; deny access immediately from events; `cleanup-departure` removes groups and personal grants and deactivates personal assistants; suspends idle personal computers, then records completion after OpenFGA receipts |
+| `member.departure_cleanup_completed` | departure reaction after saved cleanup and OpenFGA receipts | member audit history; memberId, removalId and sections with up to 100 event ids each for groups, grants, assistant and computer | — |
 | `ownership.seeded` | fenced installation migration or bootstrap reaction | current owner set | OpenFGA seed receipt after existing owner tuples converge |
 | `ownership.transferred` | Owner command | request only when `awaitingConfirmation: true`; older events add the owner | confirm active successor on their member stream; OpenFGA request receipt |
 | `member.ownership_confirmed` | appointment reaction | successor role and owner set | OpenFGA owner tuple and receipt |

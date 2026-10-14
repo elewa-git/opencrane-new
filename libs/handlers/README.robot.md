@@ -153,13 +153,13 @@ NATS, PostgreSQL and OpenFGA where those services hold the result.
 
 | Handler | Event type | Current-state check | Test |
 | --- | --- | --- | --- |
-| cleanup-departure | member.removed | Require the saved reviewed removal; read current indexed resources; keep one removal outcome per resource. Computer cleanup and completion remain pending. | departure-cleanup |
+| cleanup-departure | member.removed | Require the saved reviewed removal; read current indexed resources; keep one removal outcome per resource. Suspend only idle personal computers; require group/grant OpenFGA receipts before one completion record. Busy computers use existing retries. | departure-cleanup |
 | prepare-personal-key | member.joined | Check current membership; retain the existing private key, including for none. | personal-keys |
 | prepare-personal-key | silo.owner_bootstrapped | Skip a removed owner; retain the existing private key. | personal-keys |
 | create-assistant | member.joined | Skip a removed member or an existing assistant. | assistant-choice |
 | create-assistant | silo.owner_bootstrapped | Check membership before creating the owner assistant. | assistant-choice |
 | claim-computer | assistant.created | Check the personal owner is active; keep later computer lifecycle events. | assistant-choice |
-| claim-computer | computer.lost | Claim only if this loss is still the latest lifecycle event. | backfill-lifecycle |
+| claim-computer | computer.lost | Claim only if this loss is still the latest lifecycle event and its personal owner has not been removed. | backfill-lifecycle |
 | confirm-ownership | ownership.transferred | Confirm an active successor once on its member stream. | ownership-coordination |
 | seed-ownership | silo.owner_bootstrapped | Read current members and existing ownership before seeding. | ownership-migration |
 | seed-model-grants | member.joined | Skip removed members; keep later grants and revocations. | grants-backfill |

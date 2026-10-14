@@ -25,7 +25,23 @@ export const memberCommandRefusedSchema = z.object({
     'ownership_stream_required', 'sign_in_again', 'unsupported_email']),
 }).strict();
 
+export const departureCleanupCompletedSchema = z.object({
+  memberId: safeReference,
+  removalId: safeReference,
+  sections: z.object({
+    groups: z.array(safeReference).max(100),
+    grants: z.array(safeReference).max(100),
+    assistant: z.array(safeReference).max(100),
+    computer: z.array(safeReference).max(100),
+  }).strict(),
+}).strict();
+
 export const identityEvents = [
+  event('member.departure_cleanup_completed', 'memberaudit',
+    'A reviewed departure finished its supported cleanup.', departureCleanupCompletedSchema,
+    { memberId: 'mem_2', removalId: 'removal_1',
+      sections: { groups: ['removed_1'], grants: ['revoked_1'],
+        assistant: ['inactive_1'], computer: ['suspended_1'] } }),
   event('member.command_refused', 'memberaudit', 'A trusted invitation request was refused.',
     memberCommandRefusedSchema, { memberId: 'mem_2', originalCommandDigest: 'b'.repeat(64),
       operation: 'invite', inputDigest: 'a'.repeat(64), reason: 'access_refused' }),

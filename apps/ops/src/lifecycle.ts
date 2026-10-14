@@ -87,19 +87,34 @@ export function lifecycleHandlers(store: Store) {
   const createAssistant = registerHandler('create-assistant', createPersonalAssistant);
   async function claimAssistantComputer(event: EventEnvelope) {
     const assistantId = field(event.data, 'assistantId');
-    if (event.type === 'assistant.created' && field(event.data, 'kind') === 'personal') {
-      const ownerId = field(event.data, 'ownerId');
-      const memberEvents = await history(store, `member-${ownerId}`);
-      const memberFacts = memberEvents.filter(changesMembership);
-      if (memberFacts.at(-1)?.event.type === 'member.removed') {
-        return;
-      }
-    }
     const subject = `computer-${assistantId}`;
     const events = await history(store, subject);
     const latestLifecycle = events.findLast(containsLifecycleEvent);
     if (events.length && latestLifecycle?.event.id !== event.id) {
       return;
+    }
+    let assistant = event;
+    if (event.type === 'computer.lost') {
+      // Read the saved assistant because a loss event carries no owner.
+      const assistantEvents = await history(store, `assistant-${assistantId}`);
+      function created(row: StoredEvent) {
+        return row.event.type === 'assistant.created';
+      }
+      const saved = assistantEvents.find(created);
+      if (!saved) {
+        throw new Error('Computer assistant unavailable');
+      }
+      assistant = saved.event;
+    }
+    if (field(assistant.data, 'kind') === 'personal') {
+      const ownerId = field(assistant.data, 'ownerId');
+      const memberEvents = await history(store, `member-${ownerId}`);
+      function removed(row: StoredEvent) {
+        return row.event.type === 'member.removed';
+      }
+      if (memberEvents.some(removed)) {
+        return;
+      }
     }
     const claims = events.filter(containsClaim);
     const generation = claims.length + 1;

@@ -1,0 +1,1 @@
+Personal computers now suspend after departure once their turns close. Lost computers stay unclaimed for removed members. Cleanup records completion after saved changes and confirmed permission updates; API cleanup status follows separately.

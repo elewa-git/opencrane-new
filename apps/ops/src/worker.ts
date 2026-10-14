@@ -118,7 +118,7 @@ try {
     const available = [authorisation.handler, ownershipSeedHandler(commands.store),
       ownershipConfirmationHandler(commands.store), budgetStopHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
-      ...lifecycleHandlers(commands.store), departureCleanupHandler(commands.store)];
+      ...lifecycleHandlers(commands.store), departureCleanupHandler(commands.store, authorisation)];
     const personalDirectory = process.env['PERSONAL_KEY_DIRECTORY']?.trim();
     if (personalDirectory) {
       const keys = conversationKeys(personalDirectory);

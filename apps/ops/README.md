@@ -12,11 +12,11 @@ This is the background workers layer. `apps/server` records events, and these wo
 flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events, departures and owner appointments| ops["apps/ops<br/>workers and memory replay"]
-  ops -->|records departure changes and spending turn stops| nats
+  ops -->|records departure changes, completion and spending turn stops| nats
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables and jobs; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
-  ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
+  ops -->|updates and checks permissions| fga["OpenFGA<br/>permission service"]
   ops -->|updates computers and delivers passes and public keys| kube["Kubernetes<br/>computer manager"]
 ```
 
@@ -95,8 +95,11 @@ survey progress into read tables. Rebuilding those tables changes no keys.
 
 A member leaves. The dispatcher checks their saved removal and current resources.
 It records group removal, personal grant revocation and assistant deactivation.
-Retries keep one outcome per resource. Computer cleanup and a complete departure
-status are not available yet. Rebuilding read tables never runs this cleanup.
+Retries keep one outcome per resource. The worker suspends idle personal computers
+and waits for busy turns to close. It records completion only after checking the
+saved changes and permission receipts, which confirm that OpenFGA applied each change.
+Lost computers stay unclaimed after their owner leaves. Departure status in the API
+is not available yet. Rebuilding read tables never runs this cleanup.
 
 When cleanup fails repeatedly, the original job stays available for an operator to retry.
 The fact and its dependent copies stay hidden. The dispatcher restores pending cleanup jobs

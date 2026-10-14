@@ -492,8 +492,12 @@ reaction, and no enable or cleanup command is supplied in this first part of P3-
 
 `cleanup-departure` receives `member.removed`. The dispatcher only acts on saved
 removals with `reviewRevision`. It reuses `team.member_removed`, `grant.revoked`
-and `assistant.settings_changed`; this first part adds no event fields or completion
-record. Computer cleanup and receipt-confirmed completion remain pending.
+and `assistant.settings_changed`, then uses `computer.suspended` for idle personal computers.
+`member.departure_cleanup_completed` belongs to `memberaudit-<memberId>` and holds
+`memberId`, `removalId` and strict `sections`: groups, grants, assistant and computer.
+Each list holds at most 100 safe event-id references. It confirms stored results and
+OpenFGA receipts; it does not restore access or trigger another reaction.
+API applying/unknown/complete status remains pending.
 
 ## Publication preparation (P3-4 PR 2a; Part of #45)
 
