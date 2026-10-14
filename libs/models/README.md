@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|delivers and probes configuration; checks calls, holds and stops against queued work; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|delivers and probes configuration; checks calls, holds and stops against queued work; tests private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on; saves hosted registration, publication, gateway, root allowance, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
 ```
@@ -51,7 +51,8 @@ This internal API has no child-chat caller yet.
 
 - Share public address checks with the server’s remote tool discovery. Test a socket
   check that accepts one visible TLS hostname and public DNS answers before connecting.
-  Relay registration and lifetime controls are still needed.
+  Give each permit one private relay. Close its sockets on expiry or explicit closure,
+  and report counts and times once. Production callers are still needed.
 - Save publication requests and prepare ordered gateway records. These records do not enable calls.
 - Turn a saved gateway record into repeatable configuration bytes. Keep the existing
   model and memory routes, and add rules for the reviewed tools. An explicit internal

@@ -35,8 +35,12 @@ async function fixture(stage = 'open', throwing = false) {
   }
   function connector() {
     connections++;
+    if (stage === 'failed') throw new Error('Connect failed');
     let socket = new Socket();
-    if (stage !== 'connect') socket = connect(upstreamPort, '127.0.0.1');
+    if (stage !== 'connect' && stage !== 'late-connect') {
+      socket = connect(upstreamPort, '127.0.0.1');
+    }
+    if (stage === 'late-connect') registry.closePermit('permit');
     sockets.push(socket);
     return socket;
   }
@@ -66,8 +70,22 @@ async function fixture(stage = 'open', throwing = false) {
     await finished;
   }
   onTestFinished(cleanup);
-  function counts() { return { lookups, connections, received }; }
-  return { registry, register, dial, records, sockets, counts, dns, answers };
+  function counts() {
+    return { lookups, connections, received };
+  }
+  function recordCount() {
+    return records.length;
+  }
+  function lookupCount() {
+    return lookups;
+  }
+  function connectionCount() {
+    return connections;
+  }
+  function socketsClosed() {
+    return sockets.every(isClosed);
+  }
+  return { registry, register, dial, records, sockets, counts, dns, answers, recordCount, lookupCount, connectionCount, socketsClosed };
 }
 function ignoreError() {
   // Accept connection resets when a relay refuses a socket.
@@ -96,7 +114,7 @@ async function singleUse(concurrent: boolean) {
   await once(client, 'data');
   if (!concurrent) {
     client.destroy();
-    await expect.poll(() => setup.records.length).toBe(1);
+    await expect.poll(setup.recordCount).toBe(1);
   }
   const extra = await setup.dial(target);
   await once(extra, 'close');
@@ -124,7 +142,7 @@ async function closesTunnel(action: string) {
   if (action === 'all') setup.registry.closeAll();
   if (action === 'finished') client.end();
   await ended;
-  await expect.poll(() => setup.sockets.every(isClosed)).toBe(true);
+  await expect.poll(setup.socketsClosed).toBe(true);
   expect(Date.now() - started).toBeLessThan(2000);
   setup.registry.closeAll();
   await delay(450);
@@ -132,15 +150,18 @@ async function closesTunnel(action: string) {
   let reason = 'revoked';
   if (action === 'expiry') reason = 'expired';
   if (action === 'finished') reason = 'finished';
-  expect(setup.records[0]).toEqual({ permitId: 'permit', ...destination,
+  const record = setup.records[0]!;
+  expect(record).toEqual({ permitId: 'permit', ...destination,
     address: '1.1.1.1', reason, bytesSent: clientHello().length + 4,
-    bytesReceived: clientHello().length + 4, registeredAt: expect.any(Number),
-    connectedAt: expect.any(Number), closedAt: expect.any(Number) });
+    bytesReceived: clientHello().length + 4, registeredAt: record.registeredAt,
+    connectedAt: record.connectedAt, closedAt: record.closedAt });
   expect(setup.records[0]!.registeredAt).toBeGreaterThanOrEqual(registeredAt);
   expect(setup.records[0]!.connectedAt).toBeGreaterThanOrEqual(setup.records[0]!.registeredAt);
   expect(setup.records[0]!.closedAt).toBeGreaterThanOrEqual(setup.records[0]!.connectedAt!);
 }
-function isClosed(socket: Socket) { return socket.destroyed; }
+function isClosed(socket: Socket) {
+  return socket.destroyed;
+}
 it.each(['permit', 'destination', 'all', 'expiry', 'finished'])(
   'closes both sides once with exact counts on %s, despite a throwing callback', closesTunnel);
 
@@ -149,12 +170,14 @@ async function stopsPending(stage: string, expire: boolean) {
   const target = await setup.register();
   if (stage !== 'before') {
     await setup.dial(target, stage !== 'hello');
-    if (stage === 'dns') await expect.poll(() => setup.counts().lookups).toBe(1);
-    if (stage === 'connect') await expect.poll(() => setup.counts().connections).toBe(1);
+    if (stage === 'dns') await expect.poll(setup.lookupCount).toBe(1);
+    if (stage === 'connect' || stage === 'late-connect') {
+      await expect.poll(setup.connectionCount).toBe(1);
+    }
   }
   const started = Date.now();
   if (!expire) setup.registry.closePermit('permit');
-  await expect.poll(() => setup.records.length).toBe(1);
+  await expect.poll(setup.recordCount).toBe(1);
   expect(Date.now() - started).toBeLessThan(2000);
   setup.dns.resolve(setup.answers);
   if (stage === 'connect') setup.sockets.at(-1)!.emit('connect');
@@ -164,14 +187,15 @@ async function stopsPending(stage: string, expire: boolean) {
   }
   await delay(20);
   expect(setup.counts().received).toBe(0);
-  expect(setup.counts().connections).toBe(stage === 'connect' ? 1 : 0);
+  const connected = stage === 'connect' || stage === 'late-connect';
+  expect(setup.counts().connections).toBe(connected ? 1 : 0);
   expect(setup.sockets.every(isClosed)).toBe(true);
   expect(setup.records).toHaveLength(1);
   expect(setup.records[0]).toMatchObject({ connectedAt: null, bytesSent: 0,
     bytesReceived: 0, reason: expire ? 'expired' : 'revoked' });
 }
 it.each([['before', false], ['hello', false], ['dns', false], ['connect', false],
-  ['before', true], ['hello', true], ['dns', true], ['connect', true]])(
+  ['before', true], ['hello', true], ['dns', true], ['connect', true], ['late-connect', false]])(
   'stops %s work with no bytes (expiry: %s)', stopsPending);
 
 async function recordsRefusal() {
@@ -184,3 +208,29 @@ async function recordsRefusal() {
     connectedAt: null, bytesSent: 0, bytesReceived: 0 });
 }
 it('records a guard refusal without storing tunnel data', recordsRefusal);
+
+async function failedConnection() {
+  const setup = await fixture('failed');
+  const client = await setup.dial(await setup.register());
+  await once(client, 'close');
+  expect(setup.records).toHaveLength(1);
+  expect(setup.records[0]).toMatchObject({ reason: 'failed', address: '1.1.1.1',
+    connectedAt: null, bytesSent: 0, bytesReceived: 0 });
+}
+it('records a failed connection with its checked address', failedConnection);
+
+async function matchesExactDestination() {
+  const setup = await fixture();
+  const first = await setup.register();
+  const other = { ...destination, port: 8443, permitId: 'other', expiresAt: Date.now() + 400 };
+  const second = await setup.registry.register(other);
+  setup.registry.closeDestination({ host: 'REGISTRY.NPMJS.ORG', port: 443 });
+  expect(setup.records).toHaveLength(1);
+  expect(setup.records[0]).toMatchObject({ permitId: 'permit', address: null });
+  const refused = await setup.dial(first);
+  await once(refused, 'close');
+  const allowed = await setup.dial(second);
+  await once(allowed, 'data');
+  expect(setup.counts().connections).toBe(1);
+}
+it('normalises the host and closes only the exact destination port', matchesExactDestination);

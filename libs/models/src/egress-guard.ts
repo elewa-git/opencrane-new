@@ -6,7 +6,7 @@ import { egressDestinationSchema } from '@opencrane/events';
 import { isPublicAddress } from './address-policy.ts';
 import { readEgressHello } from './egress-client-hello.ts';
 
-type Transport = {
+export type EgressTransport = {
   resolve: (host: string) => Promise<LookupAddress[]>;
   connect: (address: string, port: number) => Socket;
 };
@@ -16,7 +16,7 @@ function resolveAll(host: string) {
 function connectAddress(address: string, port: number) {
   return connect({ host: address, port });
 }
-const systemTransport: Transport = { resolve: resolveAll, connect: connectAddress };
+export const systemTransport: EgressTransport = { resolve: resolveAll, connect: connectAddress };
 
 async function bounded<T>(work: Promise<T>, signal: AbortSignal) {
   let abort: (() => void) | undefined;
@@ -41,7 +41,7 @@ async function bounded<T>(work: Promise<T>, signal: AbortSignal) {
 
 // Return a checked connection; the relay owner must forward bytes and enforce permit lifetime.
 export async function connectEgressDestination(incoming: Socket,
-  destination: { host: string; port: number }, transport: Transport = systemTransport) {
+  destination: { host: string; port: number }, transport: EgressTransport = systemTransport) {
   const closed = new AbortController();
   function cancelled() {
     closed.abort();
