@@ -9,6 +9,7 @@ import { pgDb, type Query } from "@opencrane/projections";
 import type { EventEnvelope } from "@opencrane/events";
 import { event, natsFixture } from "@opencrane/event-store/testing";
 import { HandlerRuntime, dispatch, type Handler } from "../src/index.ts";
+import { sessionDiagnostics } from "./session-diagnostics.ts";
 
 export const logger = createLogger("handler-tests", { level: "silent" });
 export async function effect(
@@ -101,15 +102,7 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
     waitForConnectionsClosed,
     closeIdleConnections,
     async otherSessions() {
-      const sessions = await admin.query<{
-        application_name: string;
-        state: string | null;
-        query: string | null;
-      }>(
-        'SELECT application_name, state, query FROM pg_stat_activity WHERE datname = $1',
-        [name],
-      );
-      return sessions.rows;
+      return sessionDiagnostics(admin, name);
     },
     async runtime(
       handlers: Handler[],
@@ -223,12 +216,8 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
       await until(childConnectionsClosed);
 
       async function reportChildExit() {
-        const sessions = await admin.query(
-          "SELECT application_name, backend_start, state, query " +
-            "FROM pg_stat_activity WHERE datname = $1 ORDER BY backend_start",
-          [name],
-        );
-        const details = JSON.stringify(sessions.rows);
+        const sessions = await sessionDiagnostics(admin, name);
+        const details = JSON.stringify(sessions);
         return new Error(`Child exited: ${stderr}\nOther database sessions: ${details}`);
       }
     },

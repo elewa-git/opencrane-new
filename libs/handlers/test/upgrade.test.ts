@@ -8,6 +8,7 @@ import { event } from "@opencrane/event-store/testing";
 import { dispatch, HandlerRuntime, registerHandler, upgradeHandlers } from "../src/index.ts";
 import { scanUpgrade } from "../src/upgrade-scan.ts";
 import { effect, fixture, until } from "./helpers.ts";
+import { sessionDiagnostics } from "./session-diagnostics.ts";
 
 const execute = promisify(execFile);
 const oldManifest = JSON.stringify([
@@ -91,14 +92,17 @@ function upgradeTests() {
     const session = new Client(sessionOptions);
     await session.connect();
     try {
-      await session.query("SELECT 'session-secret-canary'");
+      const identity = await session.query<{ pid: number }>(
+        "SELECT 'session-secret-canary', pg_backend_pid() AS pid",
+      );
       if (childExit) {
         const outcome = current.crash('upgrade-inside-publication');
         await expect(outcome).rejects.toThrow('Other database sessions:');
         await expect(outcome).rejects.not.toThrow(canary);
       } else {
         const sessions = await current.otherSessions();
-        expect(sessions.length).toBeGreaterThan(0);
+        const expectedSession = { pid: identity.rows[0]!.pid, backend_type: 'client backend' };
+        expect(sessions).toContainEqual(expect.objectContaining(expectedSession));
         const output = JSON.stringify(sessions);
         expect(output).not.toContain(canary);
         for (const row of sessions) {
@@ -543,9 +547,7 @@ function upgradeTests() {
             'SELECT target, sequence, jobs FROM handler_upgrade');
           upgradeRows = saved.rows;
         }
-        const sessions = await current.db.query(
-          'SELECT application_name, state, query FROM pg_stat_activity ' +
-            'WHERE datname = current_database() AND pid <> pg_backend_pid()');
+        const sessions = await sessionDiagnostics(current.db);
         const diagnostic = {
           expectedOutcome: 'The source opens a PostgreSQL session during the history scan',
           worker: 'No worker started; the runtime stopped before the upgrade',
@@ -556,7 +558,7 @@ function upgradeTests() {
           poolWaiting: current.pool.waitingCount,
           upgradeStatus,
           upgradeRows,
-          otherDatabaseSessions: sessions.rows,
+          otherDatabaseSessions: sessions,
         };
         console.error(JSON.stringify(diagnostic));
         throw error;
@@ -595,16 +597,14 @@ function upgradeTests() {
     const jobs = await current.db.query("SELECT state FROM pgboss.job WHERE start_after = 'infinity'");
     expect(jobs.rows).toHaveLength(7);
     const sessions = await current.db.query(
-      "SELECT application_name, backend_start, state, query " +
+      "SELECT pid " +
         "FROM pg_stat_activity WHERE datname = current_database() " +
-        "AND pid <> pg_backend_pid()",
+        "AND pid <> pg_backend_pid() AND application_name = $1",
+      ['handlers-test-fixture'],
     );
-    function belongsToTestWorker(session: typeof sessions.rows[number]) {
-      return session['application_name'] === 'handlers-test-fixture';
-    }
-    const workerSessions = sessions.rows.filter(belongsToTestWorker);
-    expect(workerSessions.length).toBeGreaterThan(0);
-    console.info(JSON.stringify({ otherDatabaseSessions: sessions.rows }));
+    expect(sessions.rows.length).toBeGreaterThan(0);
+    const diagnostics = await sessionDiagnostics(current.db);
+    console.info(JSON.stringify({ otherDatabaseSessions: diagnostics }));
     await expect(upgradeHandlers(runtime, current.nats.store))
       .rejects.toThrow('other database sessions');
     const stillParked = await current.db.query(
