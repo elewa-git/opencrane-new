@@ -1543,6 +1543,10 @@ restored. [Check record](../../docs/process/approval-watcher-review-fixes.md).
 ## Model grant changes
 
 Provider GET replies advertise `grantsAvailable: true` with `reason: "model_access_routes"`.
+Provider list/detail, model grant and candidate GETs check current Owner/Admin access
+once with `readActiveMember`. They do not start the two-second write check or watch
+provider activity. Slow database reads and saved verification results cannot refuse
+an already authorised read. Writes retain their existing access checks.
 
 `POST /api/org/models/:modelId/access` accepts only `{commandId, expectedSequence,
 action: "grant" | "revoke", granteeKind, granteeId}` in at most 2 KiB. It requires

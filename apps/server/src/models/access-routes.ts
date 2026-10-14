@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import type { EventStore } from '@opencrane/event-store';
 import { grantStream } from '@opencrane/authz';
-import { models, providerAuthority, ProviderRefused, ProviderConflict,
+import { models, readActiveMember, ProviderRefused, ProviderConflict,
   MemberAccessRefused } from '@opencrane/models';
 import { providerModelIdSchema } from '@opencrane/events';
 import { modelAccessCandidatesQuerySchema,
@@ -88,7 +88,7 @@ function trustedRequest(request: FastifyRequest, config: AuthConfig, options: Mo
 
 async function readAccess(request: FastifyRequest, reply: FastifyReply,
   options: ModelAccessOptions, memberId: string) {
-  await providerAuthority(options.store, options.binding, memberId);
+  await readActiveMember(options.store, options.binding, memberId, 'admin');
   const { modelId } = parseInput(parameters, request.params);
   const subject = grantStream('model', modelId);
   const expectedSequence = await options.store.head(subject);
@@ -128,7 +128,7 @@ async function readAccess(request: FastifyRequest, reply: FastifyReply,
 
 async function readCandidates(request: FastifyRequest, reply: FastifyReply,
   options: ModelAccessOptions, memberId: string) {
-  await providerAuthority(options.store, options.binding, memberId);
+  await readActiveMember(options.store, options.binding, memberId, 'admin');
   parseInput(parameters, request.params);
   const query = parseInput(modelAccessCandidatesQuerySchema, request.query);
   const position = await options.store.head();
