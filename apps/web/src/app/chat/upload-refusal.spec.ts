@@ -27,7 +27,8 @@ function fetchWorkspace(input: RequestInfo | URL) {
   } else if (path === '/api/chat') {
     body = { memberId: 'me', assistantId: 'assistant' };
   } else if (path === '/api/conversations') {
-    body = { rows: [] };
+    body = { rows: [{ conversationId: 'chat', createdBy: 'me', assistantId: 'assistant',
+      createdAt: '2026-10-04T10:00:00Z', mode: 'agent_session' }] };
   } else {
     body = { rows: workspaceRows, position: 1, generation: 1, computerState: 'ready' };
   }
