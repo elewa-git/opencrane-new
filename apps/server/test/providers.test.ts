@@ -363,7 +363,7 @@ async function selectsRegistryModelsWithoutGrants() {
   await runner.run(providers);
   expect((await request('GET', '/api/org/providers/primary')).json()).toMatchObject({
     rows: [{ enabledModels: ['gpt-6-luna', 'gpt-6.1-sol'] }],
-    access: { grantsAvailable: false, reason: 'p4_22_required' } });
+    access: { grantsAvailable: true, reason: 'model_access_routes' } });
   expect((await request('POST', '/api/org/providers', { ...body,
     commandId: 'unknown-model', expectedRevision: 4, models: ['made-up'] })).statusCode).toBe(403);
 }
