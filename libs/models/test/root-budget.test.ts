@@ -1,13 +1,14 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { afterEach, beforeEach, expect, it } from 'vitest';
+import { parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { BudgetActor, budgetSummary, envelope, history, priceTableId,
   budgets, readBudget, totals } from '../src/index.ts';
-import { replayBudgets, type BudgetState } from '../src/state.ts';
+import { applyBudget, emptyBudget, replayBudgets, type BudgetState } from '../src/state.ts';
 import { checkRootReservation, rootTotals } from '../src/root-budget.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -316,3 +317,95 @@ async function stopsOverrun() {
 }
 it('stops an overrun permanently while keeping full cost and late dispatched settlement',
   stopsOverrun);
+
+async function keepsFirstStop(firstReason: 'allowance_exhausted' | 'ceiling_stop') {
+  const root = await actor.setRootAllowance(binding, 1);
+  const allowanceStop = { rootId: root.rootId, reason: 'allowance_exhausted',
+    attemptedBoundCents: 1001, availableCents: 1000 };
+  const ceilingStop = { rootId: root.rootId, reason: 'ceiling_stop', stopId: 'ceiling-event' };
+  let stops = [allowanceStop, ceilingStop];
+  if (firstReason === 'ceiling_stop') stops = [ceilingStop, allowanceStop];
+  const live = emptyBudget();
+  const historyBefore = await history(nats.store, 'budget-test', 'test');
+  for (const row of historyBefore) applyBudget(live, row.event, row.sequence);
+  let sequence = historyBefore.at(-1)!.sequence;
+  for (const stop of stops) {
+    const event = envelope('test', 'budget-test', 'budget.root_stopped', stop);
+    const result = await nats.store.append({ event, expectedSequence: sequence });
+    expect(result.status).toBe('appended');
+    if (result.status !== 'appended') throw new Error('Stop fixture append failed');
+    sequence = result.sequence;
+    applyBudget(live, event, sequence);
+    expect(live.roots[0]?.stop).toEqual(stops[0]);
+    await expect(checkRootReservation(live, call, root.rootId, 1, noWritesDuringReplay))
+      .rejects.toMatchObject({ reason: firstReason });
+  }
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
+  expect(actor.state.roots[0]?.stop).toEqual(stops[0]);
+  const before = await nats.store.head();
+  await expect(reserve(root.rootId, 1)).rejects.toMatchObject({ reason: firstReason });
+  expect(await nats.store.head()).toBe(before);
+  await replayStoppedRoot(root.rootId, firstReason);
+}
+it.each(['allowance_exhausted', 'ceiling_stop'] as const)(
+  'keeps %s as the first of two different stops live and through replay', keepsFirstStop);
+
+async function keepsStopAfterWriteFailure(failedType: string) {
+  const root = await actor.setRootAllowance(binding, 110);
+  const reservation = await reserve(root.rootId, 110);
+  const append = nats.store.append.bind(nats.store);
+  async function failWrite(command: Parameters<typeof append>[0]) {
+    const parsed = parseEventByType(command.event);
+    if (parsed.success && parsed.event.type === failedType) {
+      nats.store.append = append;
+      return { status: 'unavailable' as const, cause: new Error('Write unavailable') };
+    }
+    return append(command);
+  }
+  nats.store.append = failWrite;
+  await expect(settle(reservation, 240)).rejects.toThrow();
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
+  await expect(reserve(root.rootId, 1)).rejects.toMatchObject({
+    reason: 'budget_reservation_exceeded' });
+  if (failedType === 'budget.settled') {
+    expect(rootTotals(actor.state, root.rootId)).toEqual({
+      settledCents: 0, heldCents: 110, availableCents: 890 });
+  }
+  await settle(reservation, 240);
+  const beforeRetry = await nats.store.head();
+  await settle(reservation, 240);
+  expect(await nats.store.head()).toBe(beforeRetry);
+  expect(rootTotals(actor.state, root.rootId)).toEqual({
+    settledCents: 240, heldCents: 0, availableCents: 760 });
+  const rows = await history(nats.store, 'budget-test', 'test');
+  function isRootStop(row: (typeof rows)[number]) {
+    return row.event.type === 'budget.root_stopped';
+  }
+  expect(rows.filter(isRootStop)).toHaveLength(1);
+  const alerts = await history(nats.store, `security-${reservation}`, 'test');
+  expect(alerts).toHaveLength(1);
+}
+it.each(['budget.settled', 'security.alert_raised'])(
+  'keeps the overrun stop after a failed %s write and retries the full cost once',
+  keepsStopAfterWriteFailure);
+
+async function keepsStopBeforeLateOverrun() {
+  const root = await actor.setRootAllowance(binding, 110);
+  const reservation = await reserve(root.rootId, 110);
+  await expect(reserve(root.rootId, 1001)).rejects.toMatchObject({
+    reason: 'allowance_exhausted' });
+  const originalStop = root.stop;
+  const before = await nats.store.head();
+  await settle(reservation, 240);
+  expect(root.stop).toEqual(originalStop);
+  expect(await nats.store.head()).toBe(before + 2);
+  expect(rootTotals(actor.state, root.rootId)).toEqual({
+    settledCents: 240, heldCents: 0, availableCents: 760 });
+  await expect(reserve(root.rootId, 1)).rejects.toMatchObject({
+    reason: 'allowance_exhausted' });
+  await replayStoppedRoot(root.rootId, 'allowance_exhausted');
+}
+it('keeps an earlier allowance stop when a late settlement exceeds its hold',
+  keepsStopBeforeLateOverrun);
