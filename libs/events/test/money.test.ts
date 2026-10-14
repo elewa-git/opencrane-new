@@ -91,13 +91,18 @@ function moneyFieldsNotInCents(jsonSchema: unknown): string[] {
 
 // A `...Cents` field must be an integer that cannot go below zero. A plain
 // number (a float), an integer with no lower bound or a string is wrong.
+function hasWrongCentsShape([, schema]: [string, unknown]) {
+  const shape = asRecord(schema);
+  const minimum = shape['minimum'];
+  const exclusiveMinimum = shape['exclusiveMinimum'];
+  const nonnegative = typeof minimum === 'number' && minimum >= 0;
+  const positive = typeof exclusiveMinimum === 'number' && exclusiveMinimum >= 0;
+  return !(shape['type'] === 'integer' && (nonnegative || positive));
+}
 function centsFieldsWithWrongShape(jsonSchema: unknown): string[] {
   return declaredProperties(jsonSchema)
     .filter(([name]) => name.endsWith('Cents'))
-    .filter(([, schema]) => {
-      const shape = asRecord(schema);
-      return !(shape['type'] === 'integer' && shape['minimum'] === 0);
-    })
+    .filter(hasWrongCentsShape)
     .map(([name]) => name);
 }
 
