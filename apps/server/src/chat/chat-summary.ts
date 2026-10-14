@@ -36,15 +36,7 @@ function emptyChat(): ChatSummary {
 function addChat(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
   if (event.type === 'agent.memory_context_recorded') {
-    const data = memoryContextRecordedEventSchema.parse(event).data;
-    const turnId = data.turnId;
-    const lateInitialLoad = summary.conversationClosed && data.delivery === 'initial';
-    if (lateInitialLoad || summary.closedTurnIds.has(turnId)) {
-      throw new Error('Memory evidence arrived after the turn closed');
-    }
-    const previous = summary.memoryContexts.get(turnId);
-    const context = foldMemoryContext(previous, event);
-    summary.memoryContexts.set(turnId, context);
+    addMemoryContext(summary, row);
   }
   let data: Record<string, unknown> | undefined;
   if (event.type === 'conversation.created' || event.type === 'message.posted') {
@@ -65,6 +57,18 @@ function addChat(summary: ChatSummary, row: StoredEvent) {
   if (closedTurnId !== undefined) summary.closedTurnIds.add(closedTurnId);
   closeMemoryContexts(summary, closedTurnId);
   if (event.report) addReport(summary, event.report, row.sequence);
+}
+function addMemoryContext(summary: ChatSummary, row: StoredEvent) {
+  const event = row.event;
+  const data = memoryContextRecordedEventSchema.parse(event).data;
+  const turnId = data.turnId;
+  const lateInitialLoad = summary.conversationClosed && data.delivery === 'initial';
+  if (lateInitialLoad || summary.closedTurnIds.has(turnId)) {
+    throw new Error('Memory evidence arrived after the turn closed');
+  }
+  const previous = summary.memoryContexts.get(turnId);
+  const context = foldMemoryContext(previous, event);
+  summary.memoryContexts.set(turnId, context);
 }
 function closeMemoryContexts(summary: ChatSummary, turnId: string | undefined) {
   if (turnId !== undefined) {
