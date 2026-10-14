@@ -43,7 +43,8 @@ export async function uploadComputer(deliverCredential = true, nodeOptions = '')
       const issuer = await tokenIssuer(options);
       const identity = { silo: 'test', computerId: 'computer',
         assistantId: 'assistant', generation: 1, tokenId };
-      return issuer.computer(identity);
+      const credential = await issuer.computer(identity);
+      return { ...credential, verifier: issuer.jwks.keys[0] };
     }
     const credential = await issue('token:test');
     disk = await docker('volume', 'create', `upload-disk-${randomUUID()}`);
@@ -67,7 +68,7 @@ export async function uploadComputer(deliverCredential = true, nodeOptions = '')
     };
     await start();
     const ready = () => until(async () => { try { return (await fetch(`${url}/health`)).ok; } catch { return false; } }, 30_000);
-    async function install(token: { value: string; id: string; expiresAt: number }, uid = 0) {
+    async function install(token: { value: string; id: string; expiresAt: number; verifier?: unknown }, uid = 0) {
       const args = ['exec', '-i', '--user', String(uid), container!,
         '/usr/bin/env', '-u', 'NODE_OPTIONS', '/usr/local/bin/node', '--disable-sigusr1',
         '--experimental-strip-types', '/app/src/install-credential.ts'];

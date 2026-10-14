@@ -1,5 +1,6 @@
 import { until } from '@opencrane/authz/testing';
 import { once } from 'node:events';
+import { generateKeyPairSync } from 'node:crypto';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 
@@ -76,6 +77,26 @@ async function protectsStoredCredential() {
     await computer.install(computer.credential);
     const original = await computer.read(path);
     expect(original).not.toContain(computer.credential.value);
+    expect(JSON.parse(original) as unknown).toMatchObject({
+      verifier: computer.credential.verifier, issuer: 'fixture', silo: 'test',
+      computer: 'computer', assistant: 'assistant', generation: 1, podUid: 'fixture',
+    });
+    expect(await computer.exec('stat', '-c', '%u:%g:%a', path)).toBe('0:1000:440');
+    const readAsCodex = `process.setgroups([]); process.setgid(1000); process.setuid(1000);
+      process.stdout.write(require('fs').readFileSync('${path}', 'utf8'));`;
+    expect(await computer.exec('node', '-e', readAsCodex)).toBe(original);
+    const other = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const wrongCurve = generateKeyPairSync('ec', { namedCurve: 'P-384' });
+    const invalidKeys = [
+      { ...computer.credential.verifier, d: 'private-key-canary' },
+      other.publicKey.export({ format: 'jwk' }),
+      wrongCurve.publicKey.export({ format: 'jwk' }),
+    ];
+    for (const verifier of invalidKeys) {
+      const altered = { ...computer.credential, verifier };
+      await expect(computer.install(altered)).rejects.toThrow('Test credential refused');
+      expect(await computer.read(path)).toBe(original);
+    }
     for (const uid of [1000, 1001, 1002, 1003]) {
       await expect(computer.install(computer.credential, uid)).rejects.toThrow();
       const code = `const fs = require('fs');
@@ -233,3 +254,18 @@ print(json.dumps(opened))
 }
 
 it.each(inspectorCases)('keeps $name unavailable to debugger attacks', refusesInspector, 60_000);
+
+async function acceptsLegacyCredential() {
+  const computer = await uploadComputer(false);
+  try {
+    const legacy = { ...computer.credential, verifier: undefined };
+    await computer.install(legacy);
+    const saved = await computer.read('/run/executor/credentials/computer.json');
+    expect(JSON.parse(saved) as unknown).not.toHaveProperty('verifier');
+    const socket = await connect(computer.url, legacy.value);
+    socket.terminate();
+  } finally {
+    await computer.close();
+  }
+}
+it('keeps credential delivery working without a saved public key', acceptsLegacyCredential, 60_000);

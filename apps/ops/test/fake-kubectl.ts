@@ -9,7 +9,7 @@ export async function fakeKubectl(script = '') {
 printf '%s\\n' "$*" >> '${calls}'
 case "$*" in
   *' get '*|*' delete '*|*'--dry-run=server'*) ;;
-  *' replace '*) cat > '${calls}.input' ;;
+  *' replace '*|*' exec '*) cat > '${calls}.input' ;;
   *) cat >/dev/null ;;
 esac
 ${script}

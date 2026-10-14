@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { SandboxClient } from '../src/kubernetes.ts';
@@ -175,10 +176,13 @@ it.each([true, false])('keeps the claim name and waits between reads (different:
 async function deliversThroughAuthenticatedExec() {
   const fixture = await fakeKubectl();
   const token = { id: 'fixture-id', value: 'fixture-value', expiresAt: Date.now() + 60_000 };
+  const keys = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const verifier = keys.publicKey.export({ format: 'jwk' });
   try {
     const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
-    await kube.credentials('computer', token);
-    await kube.credentials('computer', token, true);
+    await kube.credentials('computer', token, verifier);
+    await kube.credentials('computer', token, verifier, true);
+    expect(await fixture.input()).toEqual({ ...token, verifier });
     const commands = await fixture.commands();
     expect(commands).toHaveLength(2);
     for (const command of commands) {
