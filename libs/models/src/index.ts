@@ -60,3 +60,6 @@ export { saveBearerConnection, foldConnection } from './bearer-connections.ts';
 export { mcpCatalogueWatch } from './mcp-catalogue-watch.ts';
 export { providerSwitchOn, providerSwitchOnChange } from './provider-switch-on.ts';
 export { isPublicAddress, remoteEndpoint } from './address-policy.ts';
+export { publishToolPolicy } from './tool-policy.ts';
+export { publicationEntry } from './publication.ts';
+export { prepareGatewayConfiguration, gatewayConfigurationCurrent } from './gateway-generation.ts';

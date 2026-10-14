@@ -1,3 +1,6 @@
+import type { AppendCommand } from '@opencrane/event-store';
+import { Writable } from 'node:stream';
+import { prepareGatewayConfiguration, gatewayConfigurationCurrent, publicationEntry, envelope } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { installWorker } from '../src/integrations/install-worker.ts';
@@ -16,7 +19,7 @@ import { encodeSession, tokenIssuer } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { getEventDefinition, parseEventByType, mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { auditTrail, computers, connectComputers, connectMcpCatalogue, connectMemberFeed, mcpCatalogue, members, pgDb, ProjectionRunner } from '@opencrane/projections';
 import {
@@ -1302,3 +1305,250 @@ async function refusesUnavailableReview(kind: 'cost' | 'expired' | 'ask-details'
 }
 it.each(['cost', 'expired', 'ask-details'] as const)(
   'refuses review without current %s evidence', refusesUnavailableReview);
+
+async function publicationRequest() {
+  const review = await exactReviewCommand();
+  const request = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
+    headers: { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin },
+    payload: review };
+  expect((await app.inject(request)).statusCode).toBe(200);
+  const rows = await history(nats.store, 'mcp-odoo', 'test');
+  const reviewRevision = rows.at(-1)!.sequence;
+  return { ...request, url: '/api/org/integrations/odoo/publication',
+    payload: { commandId: 'publish-odoo', expectedSequence: reviewRevision, reviewRevision } };
+}
+
+async function savesPublicationIntent() {
+  const request = await publicationRequest();
+  const before = await nats.store.head();
+  const first = await app.inject(request);
+  expect(first.statusCode, first.body).toBe(200);
+  expect((await app.inject(request)).body).toEqual(first.body);
+  expect(await nats.store.head()).toBe(before + 1);
+  const rows = await history(nats.store, 'mcp-odoo', 'test');
+  expect(rows.at(-1)?.event).toMatchObject({ type: 'mcp.server_published',
+    data: { ...request.payload, serverId: 'odoo', publishedBy: 'amina' } });
+  const intent = mcpPublicationIntentDataSchema.parse(rows.at(-1)!.event.data);
+  expect(intent.fragmentDigest).toMatch(/^[a-f0-9]{64}$/u);
+  await runner.run(mcpCatalogue);
+  const saved = await catalogue.tools('test', 'odoo');
+  expect(saved.published).toBe(false);
+  expect(saved.policyRevision).toBe(request.payload.reviewRevision);
+  const entry = publicationEntry(saved);
+  expect(intent.fragmentDigest).toBe(losslessJson(JSON.stringify(entry)).digest);
+  await runner.rebuild(mcpCatalogue);
+  expect(await catalogue.tools('test', 'odoo')).toEqual(saved);
+  expect(await nats.store.head()).toBe(before + 1);
+  const payload = { ...request.payload, reviewRevision: 1 };
+  expect((await app.inject({ ...request, payload })).statusCode).toBe(409);
+  await nats.seed([fixture('mcp.server_unpublished', 'mcp-odoo', { serverId: 'odoo' })]);
+  expect((await app.inject(request)).body).toBe(first.body);
+}
+it('publication saves one intent without grants, approvals or replay preparation', savesPublicationIntent);
+
+async function refusesPublication(kind: string) {
+  const request = await publicationRequest();
+  let expected = 409;
+  if (kind === 'member') {
+    request.headers = { ...request.headers, ...headers('oidc-bob') };
+    expected = 403;
+  } else if (kind === 'origin') {
+    request.headers.origin = 'https://foreign.test';
+    expected = 403;
+  } else if (kind === 'position') {
+    request.payload.expectedSequence = 0;
+  } else if (kind === 'review') {
+    const rows = await history(nats.store, 'mcp-odoo', 'test');
+    const previous = mcpServerReviewedDataSchema.parse(rows.at(-1)!.event.data);
+    const data = { ...previous, policyRevision: request.payload.reviewRevision };
+    const saved = envelope('test', 'mcp-odoo', 'mcp.server_reviewed', data);
+    const event = { ...saved, principal: { kind: 'human' as const, id: 'amina' } };
+    await nats.seed([event]);
+    request.payload.expectedSequence = await nats.store.head('mcp-odoo');
+  } else if (kind === 'secret') {
+    Object.assign(request.payload, { token: 'publication-secret-canary' });
+    expected = 400;
+  } else {
+    const reasons: Record<string, string> = { rejected: 'ssrf_guard_failed', startup: 'startup_contract_unverified' };
+    const reason = reasons[kind];
+    const type = reason ? 'mcp.server_rejected' : 'mcp.catalogue_checked';
+    const data = reason ? { reason } : { outcome: 'failed', reason: 'unavailable',
+      checkedAt: new Date().toISOString() };
+    const event = envelope('test', 'mcp-odoo', type, { serverId: 'odoo', ...data });
+    await nats.seed([event]);
+    request.payload.expectedSequence = await nats.store.head('mcp-odoo');
+  }
+  const before = await nats.store.head();
+  const response = await app.inject(request);
+  expect(response.statusCode, response.body).toBe(expected);
+  expect(response.body).not.toContain('publication-secret-canary');
+  expect(await nats.store.head()).toBe(before);
+}
+it.each(['member', 'origin', 'position', 'review', 'secret', 'rejected', 'startup', 'failed'])(
+  'publication refuses %s independently', refusesPublication);
+
+async function rejectionSurvivesReview() {
+  const review = await exactReviewCommand();
+  const snapshot = (await catalogue.tools('test', 'odoo')).catalogue!;
+  const rejection = envelope('test', 'mcp-odoo', 'mcp.server_rejected',
+    { serverId: 'odoo', reason: 'ssrf_guard_failed' });
+  await nats.seed([rejection]);
+  const rejectedPosition = await nats.store.head('mcp-odoo');
+  const request = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
+    headers: { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin },
+    payload: { ...review, expectedSequence: rejectedPosition, policyRevision: rejectedPosition } };
+  expect((await app.inject(request)).statusCode).toBe(200);
+  await runner.run(mcpCatalogue);
+  const reviewed = await catalogue.tools('test', 'odoo');
+  expect.soft(publicationEntry(reviewed)).toBeNull();
+  const publication = { ...request, url: '/api/org/integrations/odoo/publication',
+    payload: { commandId: 'publish-rejected', expectedSequence: reviewed.sequence,
+      reviewRevision: reviewed.reviewRevision! } };
+  const before = await nats.store.head();
+  expect.soft((await app.inject(publication)).statusCode).toBe(409);
+  expect.soft(await nats.store.head()).toBe(before);
+  await expect(prepareGatewayConfiguration(nats.store, 'test', 'odoo', 'publish-rejected'))
+    .rejects.toThrow('Publication is unavailable');
+  expect(await history(nats.store, 'gateway-config-test', 'test')).toEqual([]);
+
+  const rediscovery = envelope('test', 'mcp-odoo', 'mcp.server_discovered', snapshot);
+  await nats.seed([rediscovery]);
+  const discoveredPosition = await nats.store.head('mcp-odoo');
+  const newReview = { ...request, payload: { ...review, commandId: 'review-rediscovered',
+    expectedSequence: discoveredPosition, policyRevision: discoveredPosition } };
+  expect((await app.inject(newReview)).statusCode).toBe(200);
+  const newReviewPosition = await nats.store.head('mcp-odoo');
+  const newPublication = { ...publication, payload: { commandId: 'publish-rediscovered',
+    expectedSequence: newReviewPosition, reviewRevision: newReviewPosition } };
+  expect((await app.inject(newPublication)).statusCode).toBe(200);
+  const prepared = await prepareGatewayConfiguration(nats.store, 'test', 'odoo',
+    'publish-rediscovered');
+  expect(prepared.generation).toBe(1);
+  expect(prepared.members).toHaveLength(1);
+  expect(prepared.members[0]?.entry.reviewRevision).toBe(newReviewPosition);
+}
+it('publication keeps rejection through review until successful rediscovery', rejectionSurvivesReview);
+
+async function preparesSerialGenerations() {
+  const first = await publicationRequest();
+  expect((await app.inject(first)).statusCode).toBe(200);
+  const state = await catalogue.tools('test', 'odoo');
+  await nats.seed([fixture('mcp.server_discovered', 'mcp-second',
+    { ...state.catalogue, serverId: 'second' })]);
+  const position = await nats.store.head('mcp-second');
+  const originalRows = await history(nats.store, 'mcp-odoo', 'test');
+  const original = mcpServerReviewedDataSchema.parse(originalRows.at(-2)!.event.data);
+  const { serverId: _server, reviewedBy: _reviewer, ...choices } = original;
+  const review = { ...choices, commandId: 'review-second',
+    expectedSequence: position, policyRevision: position };
+  const secondReview = { ...first, url: '/api/org/integrations/second/review', payload: review };
+  expect((await app.inject(secondReview)).statusCode).toBe(200);
+  const secondPosition = await nats.store.head('mcp-second');
+  const second = { ...first, url: '/api/org/integrations/second/publication',
+    payload: { commandId: 'publish-second', expectedSequence: secondPosition,
+      reviewRevision: secondPosition } };
+  expect((await app.inject(second)).statusCode).toBe(200);
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const appendEvent = nats.store.append.bind(nats.store);
+  let arrived = 0;
+  let release = function releaseWaiting() {};
+  function waitForBoth(resolve: () => void) { release = resolve; }
+  const bothStarted = new Promise<void>(waitForBoth);
+  async function compete(command: AppendCommand) {
+    if (command.expectedSequence === 0) {
+      arrived++;
+      if (arrived === 2) release();
+      await bothStarted;
+    }
+    return appendEvent(command);
+  }
+  const appends = vi.spyOn(nats.store, 'append').mockImplementation(compete);
+  const records = await Promise.all([
+    prepareGatewayConfiguration(nats.store, 'test', 'odoo', 'publish-odoo'),
+    prepareGatewayConfiguration(nats.store, 'test', 'second', 'publish-second'),
+  ]);
+  function byGeneration(left: typeof records[number], right: typeof records[number]) {
+    return left.generation - right.generation;
+  }
+  records.sort(byGeneration);
+  expect(appends).toHaveBeenCalledTimes(3);
+  expect(records[0].generation).toBe(1);
+  expect(records[1].generation).toBe(2);
+  expect(records[1].members).toHaveLength(2);
+  expect(JSON.stringify(records)).not.toContain('canary');
+  const { recordDigest, ...saved } = records[1];
+  expect(recordDigest).toBe(losslessJson(JSON.stringify(saved)).digest);
+  expect(await gatewayConfigurationCurrent(nats.store, 'test', records[0])).toBe(false);
+  for (const [subject] of reads.mock.calls) expect(subject).not.toMatch(/[* >]/u);
+  const repeated = await prepareGatewayConfiguration(nats.store, 'test', 'odoo', 'publish-odoo');
+  expect(records).toContainEqual(repeated);
+  expect(await gatewayConfigurationCurrent(nats.store, 'test', records[1])).toBe(true);
+  await nats.seed([fixture('mcp.server_unpublished', 'mcp-odoo', { serverId: 'odoo' })]);
+  expect(await gatewayConfigurationCurrent(nats.store, 'test', records[1])).toBe(false);
+  expect(await history(nats.store, 'gateway-config-test', 'test')).toHaveLength(2);
+}
+it('publication preparation serialises concurrent changes and records exact sources', preparesSerialGenerations);
+
+async function refusesUnsafeEntry(field: string) {
+  await publicationRequest();
+  await runner.run(mcpCatalogue);
+  const state = await catalogue.tools('test', 'odoo');
+  expect(publicationEntry(state)).not.toBeNull();
+  if (field === 'reviewed') state.tools[0]!.reviewed = false;
+  if (field === 'cost') delete state.tools[0]!.costCents;
+  if (field === 'drift') state.driftHeld = true;
+  if (field === 'startup') state.startupReviewRequired = true;
+  if (field === 'expiry') state.expiresAt = '2020-01-01T00:00:00Z';
+  if (field === 'personal') state.accountMode = 'personal';
+  if (field === 'company') state.accountMode = 'company';
+  expect(publicationEntry(state)).toBeNull();
+}
+it.each(['reviewed', 'cost', 'drift', 'startup', 'expiry', 'personal', 'company'])(
+  'publication entry refuses %s as its sole invalid field', refusesUnsafeEntry);
+
+async function refusesLegacyGeneration() {
+  await publicationRequest();
+  await nats.seed([fixture('mcp.server_published', 'mcp-odoo',
+    { serverId: 'odoo', publishedBy: 'amina' })]);
+  const rows = await history(nats.store, 'mcp-odoo', 'test');
+  function isLegacy(row: typeof rows[number]) {
+    return row.event.type === 'mcp.server_published';
+  }
+  const legacy = rows.findLast(isLegacy)!;
+  await expect(prepareGatewayConfiguration(nats.store, 'test', 'odoo', legacy.event.commandId!))
+    .rejects.toThrow();
+  expect(await history(nats.store, 'gateway-config-test', 'test')).toEqual([]);
+  const reads = vi.spyOn(nats.store, 'readStream');
+  await expect(prepareGatewayConfiguration(nats.store, 'test', '*', 'invalid'))
+    .rejects.toThrow('Invalid entity subject');
+  expect(reads).not.toHaveBeenCalled();
+}
+it('publication preparation excludes legacy publication', refusesLegacyGeneration);
+
+async function hidesPublicationSecrets() {
+  const request = await publicationRequest();
+  let logs = '';
+  const sink = new Writable({
+    write(chunk: Buffer, _encoding, callback) { logs += chunk.toString(); callback(); },
+  });
+  vi.stubEnv('LOG_LEVEL', 'info');
+  const integrations = { silo: 'test', store: nats.store, feed, catalogue,
+    binding: authorisation.binding };
+  const logged = buildServer(config, { logDestination: sink, integrations });
+  const payload = { ...request.payload, token: 'publication-secret-canary' };
+  try {
+    const refused = await logged.inject({ ...request, payload });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.body).not.toContain('canary');
+    const accepted = await logged.inject(request);
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.body).not.toContain('canary');
+    const rows = await history(nats.store, 'mcp-odoo', 'test');
+    expect(JSON.stringify(rows.at(-1))).not.toContain('canary');
+    expect(logs).not.toContain('canary');
+  } finally {
+    await logged.close();
+    vi.unstubAllEnvs();
+  }
+}
+it('publication keeps secret input out of replies, logs and new events', hidesPublicationSecrets);

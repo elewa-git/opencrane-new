@@ -497,9 +497,15 @@ export const mcpToolModeSetDataSchema = z
   .object({ serverId: id, toolName: id, connectionId: id.optional(), toolRevision: digestSchema.optional(), mode: z.enum(['allow', 'ask', 'block']), setBy: id })
   .strict();
 
-export const mcpServerPublishedDataSchema = z
-  .object({ serverId: id, publishedBy: id })
-  .strict();
+export const mcpPublicationIntentDataSchema = z.strictObject({
+  serverId: id, publishedBy: id, commandId: id,
+  expectedSequence: z.int().nonnegative(), reviewRevision: z.int().positive(),
+  fragmentDigest: digestSchema,
+});
+export const mcpServerPublishedDataSchema = z.union([
+  mcpPublicationIntentDataSchema,
+  z.strictObject({ serverId: id, publishedBy: id }),
+]);
 
 export const mcpServerUnpublishedDataSchema = z
   .object({ serverId: id, unpublishedBy: id })

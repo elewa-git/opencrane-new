@@ -29,8 +29,8 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks startup, saved turn references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance records and revisions| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records and subscriptions| events["libs/events<br/>checks records<br/>previews dates"]
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks tool admission, personal connection references and blocks, control, turns and spending| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, subscriptions and nightly memory records| events["libs/events<br/>checks records<br/>previews dates"]
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, turns and spending| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod and @noble/hashes<br/>data and encrypted byte checks"]
   events -.-> zones["Intl<br/>built-in time zone rules"]
@@ -41,6 +41,8 @@ The back end checks tool hashes against their saved definitions. A hash is a fix
 value calculated from those definitions. Older records remain readable for replay.
 
 ## What it is responsible for
+
+Define publication requests and ordered gateway records without private review text.
 
 - Check encrypted survey records and the bounded answers for all four steps.
   Check each saved answer’s hash without reading a private key. A hash is a

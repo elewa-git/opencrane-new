@@ -2500,3 +2500,11 @@ That includes the present memory backend; this change adds no memory or Odoo exc
 Per-call capture for zero TTL, discovery credentials and hosted instance lifecycle wiring
 remain unfinished. A models-process restart always recaptures; this does not prove capture
 on every independently restarted MCP process. No live capability completion is claimed.
+
+## Publication preparation (P3-4 PR 2a; Part of #45)
+
+`POST /api/org/integrations/:serverId/publication` uses the review route’s session,
+organisation, admin and Origin checks. Input is commandId, expectedSequence and reviewRevision.
+Success returns status and the original saved sequence. Changed retry input conflicts.
+The server computes fragmentDigest, saves one MCP event and writes no grants or approvals.
+Only credential-free, current reviewed catalogues qualify. No preparation worker is connected.

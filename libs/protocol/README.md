@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
-  server["apps/server<br/>back end"] -.->|access replies and saved chat choices| protocol
+  server["apps/server<br/>back end"] -.->|access replies, publication facts and saved chat choices| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list shapes"]
@@ -21,6 +21,8 @@ Tool rule messages include saved tool lists and their check and expiry dates.
 They also identify the server and silo, and carry the rule revision used by waiting approvals.
 
 ## What it is responsible for
+
+Describe saved publication requests separately from tool availability.
 
 - Carries whether a hosted tool server needs startup review before calls can run.
 - Check safe control references and affected-turn counts in history records.

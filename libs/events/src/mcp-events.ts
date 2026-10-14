@@ -59,7 +59,7 @@ export const mcpEvents = [
   event(
     'mcp.server_published',
     'mcp',
-    'An admin published an MCP server, generating its gateway route.',
+    'An admin saved publication intent; older records retain their legacy meaning.',
     data.mcpServerPublishedDataSchema,
     { serverId: 'mcp_1', publishedBy: 'mem_1' },
   ),

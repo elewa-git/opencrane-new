@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks calls, holds and spending stops; tests private CONNECT routing and public address checks| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks open spending before provider switch-on, saves spending, checks connection changes together, saves instance reports and matching child admission records| store["libs/event-store<br/>event log"]
+  models -->|checks spending before provider switch-on; saves publication, gateway, spending, connection, instance and child admission records| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -46,6 +46,7 @@ Other hosted images still need image admission.
 - Share public address checks with the server’s remote tool discovery. Test a socket
   check that accepts one visible TLS hostname and public DNS answers before connecting.
   Relay registration and lifetime controls are still needed.
+- Save publication requests and prepare ordered gateway records. These records do not enable calls.
 - Provide an optional gateway route for testing CONNECT, the HTTP request that
   opens a byte tunnel. It uses only the private relay address returned by the
   decision service. Normal startup keeps this route off. Computers cannot use it

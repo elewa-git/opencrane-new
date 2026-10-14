@@ -1,6 +1,6 @@
 import { validateMcpCatalogue, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { getEventDefinition, hostedCredentialContractSchema, mcpServerDiscoveredDataSchema,
-  mcpServerReviewedDataSchema,
+  mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
@@ -32,21 +32,28 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   if (event.type === 'mcp.server_registered') {
     const startupReviewRequired = requiresStartupReview(data);
     next = { ...emptyToolPolicy(), ...identity, sequence, policyRevision: sequence,
-      startupReviewRequired, driftHeld: state.driftHeld === true };
+      startupReviewRequired, driftHeld: state.driftHeld === true, rejected: state.rejected === true };
   }
   if (event.type === 'mcp.server_discovered') {
     const catalogue = mcpServerDiscoveredDataSchema.parse(parsed);
     next = applyCapture(next, state.catalogue, catalogue);
+    if (catalogue.checkedAt !== undefined) {
+      next.rejected = false;
+    }
   }
   if (event.type === 'mcp.server_reviewed') {
     next = applyReview(next, state, event);
   }
   if (event.type === 'mcp.server_published') {
+    const intent = mcpPublicationIntentDataSchema.safeParse(data);
+    if (intent.success) {
+      return { ...state, sequence, published: false, publication: intent.data };
+    }
     // Keep drift held until the publication path can confirm the exact applied revision.
     next.published = state.startupReviewRequired !== true && state.driftHeld !== true;
   }
-  if (event.type === 'mcp.server_rejected' && isStartupRefusal(data)) {
-    next.startupReviewRequired = true;
+  if (event.type === 'mcp.server_rejected') {
+    next = applyRejection(next, data);
   }
   if (['mcp.server_unpublished', 'mcp.server_rejected', 'mcp.tools_changed'].includes(event.type)) {
     next.published = false;
@@ -62,6 +69,14 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   return toolPolicySchema.parse(next);
 }
 
+function applyRejection(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy {
+  // Keep rejection through review until a checked discovery validates this server again.
+  if (isStartupRefusal(data)) {
+    return { ...state, rejected: true, startupReviewRequired: true };
+  }
+  return { ...state, rejected: true };
+}
+
 function applyReview(next: ToolPolicy, state: ToolPolicy, event: EventEnvelope): ToolPolicy {
   const review = mcpServerReviewedDataSchema.parse(event.data);
   const tools = reviewedToolChoices(state, review, Date.parse(event.time));
@@ -70,7 +85,8 @@ function applyReview(next: ToolPolicy, state: ToolPolicy, event: EventEnvelope):
   if (!tools || !principalMatchesReviewer) {
     throw new Error('Tool review does not match the saved catalogue');
   }
-  return { ...next, tools, published: keepsPublication(state, tools) };
+  return { ...next, tools, reviewRevision: next.sequence,
+    published: keepsPublication(state, tools) };
 }
 
 function requiresStartupReview(data: Record<string, unknown>) {
@@ -197,7 +213,8 @@ function applyChange(next: ToolPolicy, state: ToolPolicy, data: Record<string, u
 }
 
 export function isToolPolicyAvailable(policy: ToolPolicy, now = Date.now()) {
-  if (policy.startupReviewRequired === true || policy.driftHeld === true) {
+  if (policy.rejected === true || policy.startupReviewRequired === true ||
+      policy.driftHeld === true) {
     return false;
   }
   return policy.published && policy.catalogue !== null && policy.checkedAt !== null &&
