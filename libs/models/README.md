@@ -59,7 +59,8 @@ Other hosted images still need image admission.
   claim success for different details under the same request id.
 - Let owners and admins stop another member's private tool instance. Check their role
   before reading that instance, then again before saving. Show each admin only their
-  own original stop changes.
+  own original stop changes. Let an admin's stop continue when another person's
+  ownership changes. Refuse it if the acting admin loses their role.
 - Check a worker against one saved private tool run and record its observations.
   Stop retrying a report when the worker pass expires or is replaced.
   Refuse old runs, different Pods and changed retries. Missing workloads stay unknown.

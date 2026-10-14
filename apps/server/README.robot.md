@@ -159,7 +159,11 @@ actor and current run. `GET` on the same path with `/changes/:changeRef?profileI
 returns only that admin's original stops. It never changes an instance.
 Owners and admins can use these routes for another member's instance. A plain member
 is refused before that instance's history is read. Writes check the admin role again
-after history and before the conditional append. Responses contain only status,
+after history and before the conditional append. Membership and ownership histories
+load with a ten-second limit before the two-second write check starts. That check
+watches the actor's member stream; a caller using the Owner role also watches the
+silo's ownership stream. Another person's ownership change cannot refuse an Admin's
+stop, while an acting admin's demotion still refuses it. Responses contain only status,
 change reference, sequence, run generation and reason. Both routes use the same
 4,096-byte POST limit, strict ids, `no-store` and safe error replies as member routes.
 

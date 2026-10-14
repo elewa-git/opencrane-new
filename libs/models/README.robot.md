@@ -1511,7 +1511,14 @@ unchanged retry uses its saved original run. Explicit runs remain checked for in
 `McpInstanceRefused` distinguishes foreign or missing references, conflicting input
 and unavailable profile/admission prerequisites. Unexpected dependency errors stay unavailable.
 `mcpAdminInstanceStop` checks the owner or admin role before reading another member's
-instance. It loads the instance history before a two-second check on `member-<adminId>`.
+instance. It loads the instance, membership and ownership histories before the two-second
+write check. Instance history has a ten-second limit; membership and ownership histories
+share a separate ten-second limit. The write check watches
+`member-<adminId>` and compares it with the prepared membership position. An Admin's
+stop does not watch `ownership-<silo>`, so another person's ownership change cannot
+refuse it. A caller using the Owner role also watches `ownership-<silo>` and compares
+its prepared position. Both roles still need current permission and applied access events.
+The final check refuses an acting admin's demotion or a change to an Owner's authority.
 The event records `admin_stop` and the admin's human principal. One conditional append
 saves it. An unchanged retry returns the saved run and sequence after later runs.
 `mcpAdminInstanceChange` checks the role once, then returns only stops made by that
@@ -1526,7 +1533,7 @@ cancels pending backoff and prevents later publish attempts.
 It checks the saved result before returning a receipt, including duplicate recovery.
 Reports store their checked `expectedSequence`; older observations may omit it.
 No membership or conversation streams decide this internal worker permission.
-Admin commands remain the next split of design row 2. Credential actions stay closed.
+Admin stop commands complete the command part of design row 2. Credential actions stay closed.
 No worker runs a saved stop yet.
 Every MCP continues to use the shared hosted installation path.
 

@@ -8,6 +8,7 @@ import { applyMcpInstance, type McpInstanceState } from '@opencrane/projections'
 import { history } from './actor.ts';
 import { authorityFence } from './authority.ts';
 import { activeMember, readActiveMember } from './member-authority.ts';
+import { currentMembership, ownershipSubject } from './ownership.ts';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const referenceSchema = z.strictObject({ instanceId: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -213,8 +214,14 @@ export async function mcpAdminInstanceStop(store: EventStore, binding: Binding,
   // Check the role before loading another member's instance history.
   await readActiveMember(store, binding, adminId, 'admin');
   const current = await readMcpInstance(store, binding.silo, reference);
+  const membership = await currentMembership(store, binding.silo, adminId,
+    undefined, performance.now() + 10_000);
+  // Keep ownership current for Owners. An Admin's role changes on their own member stream.
+  if (membership.role !== 'owner') {
+    membership.positions.delete(ownershipSubject(binding.silo));
+  }
   const fresh = await authorityFence(store, performance.now(), [`member-${adminId}`]);
-  await activeMember(store, binding, adminId, { requiredRole: 'admin', fresh });
+  await activeMember(store, binding, adminId, { requiredRole: 'admin', fresh, membership });
   const original = findChange(current.rows, input.changeRef);
   if (original) {
     if (original.event.type !== 'mcp.instance_stop_requested') {
