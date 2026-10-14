@@ -1,12 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import type { EventStore } from '@opencrane/event-store';
 import { budgetCeilingSetDataSchema, budgetCallDispatchAdmittedDataSchema,
   effectResolvedDataSchema, effectUncertainDataSchema,
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budgetStopMessage,
   exceededReasons, observedPayload, requireDispatchReservation, type BudgetState, type ModelCall } from './state.ts';
+
+import { history } from './event-history.ts';
+import { checkRootReservation, setRootAllowance, stopRootAtCeiling,
+  stopRootOnOverrun } from './root-budget.ts';
+export { history } from './event-history.ts';
 
 type ModelUsage = {
   inputTokens: number;
@@ -18,26 +23,6 @@ type ModelUsage = {
 // Keep a hold for three minutes so usage reports have time to arrive.
 const SETTLE_TIMEOUT_MS = 180_000;
 
-export async function history(store: Pick<EventStore, 'readStream'>,
-  subject: string, silo: string, deadline = Infinity) {
-  const rows = [];
-  for await (const row of store.readStream(subject, 1, deadline)) {
-    if (row.event.silo !== silo) throw new Error('Wrong silo');
-    rows.push(row);
-  }
-  if (subject.startsWith('conversation-')) {
-    const conversationId = subject.slice('conversation-'.length);
-    for await (const row of store.readStream(`participation-${conversationId}`, 1, deadline)) {
-      if (row.event.silo !== silo) throw new Error('Wrong silo');
-      if (row.event.type === 'conversation.closed') rows.push(row);
-    }
-    rows.sort(compareEventPosition);
-  }
-  return rows;
-}
-function compareEventPosition(first: StoredEvent, second: StoredEvent) {
-  return first.sequence - second.sequence;
-}
 export function envelope(silo: string, subject: string, type: string, payload: unknown, id: string = randomUUID(), now = new Date()): EventEnvelope {
   const parsed = parseEventByType({ id, commandId: id, type, subject, silo, data: payload,
     source: 'models', time: now.toISOString(), principal: { kind: 'system', id: 'models' } });
@@ -153,14 +138,24 @@ export class BudgetActor {
       return { status: 'appended' };
     });
   }
-  reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>, admittedAt?: number) {
+  setRootAllowance(raw: unknown, firstCallBoundCents: number) {
+    const save = () => setRootAllowance(this.state, this.silo, this.now(), raw,
+      firstCallBoundCents, this.append.bind(this));
+    return this.serial(save);
+  }
+  reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>, admittedAt?: number,
+    rootId?: string) {
     return this.serial(async () => {
       z.int().positive().parse(amountCents);
       if (!models.some(row => row.id === call.model && row.priceTableId === call.priceTableId && !row.retired)) throw new Error('Unknown model tariff');
       if (!call.payingGroupId) throw new Error('Paying group unavailable');
+      const root = await checkRootReservation(this.state, call, rootId, amountCents,
+        this.append.bind(this));
+      if (root) admittedAt = root.position;
       const stopId = budgetStopId(this.state, call, this.now(), admittedAt);
       if (stopId !== undefined) {
         await this.recordRefusedWork(call, stopId, fresh);
+        await stopRootAtCeiling(this.state, root, stopId, this.append.bind(this));
         this.requireBudget(call, admittedAt);
       }
       const reasons = exceededReasons(this.state, call, this.now(), amountCents);
@@ -169,13 +164,15 @@ export class BudgetActor {
         const exhaustion = { reasons, work };
         await fresh?.();
         await this.append('budget.exhausted', exhaustion);
+        const stopId = budgetStopId(this.state, call, this.now(), admittedAt)!;
+        await stopRootAtCeiling(this.state, root, stopId, this.append.bind(this));
         this.requireBudget(call);
       }
       await fresh?.();
       const id = randomUUID();
       await this.append('budget.reserved', { reservationId: id, permitId: id, amountCents,
         payingGroupId: call.payingGroupId, assistantId: call.assistantId, modelCall: call,
-        dispatchGate: 1 });
+        dispatchGate: 1, ...(rootId === undefined ? {} : { rootId }) });
       return id;
     });
   }
@@ -286,6 +283,8 @@ export class BudgetActor {
     const conflict = Boolean(r.outcomeUnknown) || amounts.some(amount => amount !== cents) ||
       (r.settledCents !== undefined && r.settledCents !== cents);
     const amount = Math.max(r.settledCents ?? 0, cents, ...amounts);
+    // Save the stop first so a failed settlement write cannot reopen the root after restart.
+    await stopRootOnOverrun(this.state, r, amount, this.append.bind(this));
     if (r.settledCents !== amount || Boolean(r.outcomeUnknown) !== conflict) {
       await this.append('budget.settled', { reservationId: r.id, permitId: r.id, settledCents: amount,
         ...(conflict ? { outcome: 'unknown' } : released ? { outcome: 'not_dispatched' } : {}) });

@@ -1,7 +1,16 @@
 import { event } from './definition.ts';
 import * as data from './data.ts';
+import { budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema } from './budget-root.ts';
 
 export const budgetEvents = [
+  event('budget.root_allowance_set', 'budget', 'The actor fixed a turn spending allowance.',
+    budgetRootAllowanceSetDataSchema, { rootId: 'root_1', requesterId: 'member_1',
+      conversationId: 'conversation_1', turnId: 'turn_1', threadId: 'thread_1',
+      assistantId: 'assistant_1', computerId: 'computer_1', generation: 1,
+      payingGroupId: 'group_1', allowanceCents: 1000 }),
+  event('budget.root_stopped', 'budget', 'The actor permanently stopped root reservations.',
+    budgetRootStoppedDataSchema, { rootId: 'root_1', reason: 'allowance_exhausted',
+      attemptedBoundCents: 651, availableCents: 650 }),
   event(
     'budget.ceiling_set',
     'budget',

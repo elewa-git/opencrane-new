@@ -97,3 +97,4 @@ export { memoryContextRecordedDataSchema, memoryContextRecordedEventSchema,
 
 export { mcpPublicationIntentDataSchema } from './data.ts';
 export { gatewayEntrySchema, gatewayConfigurationSchema } from './gateway-configuration.ts';
+export { budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema } from './budget-root.ts';

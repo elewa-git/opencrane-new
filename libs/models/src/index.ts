@@ -65,3 +65,4 @@ export { publishToolPolicy } from './tool-policy.ts';
 export { publicationEntry } from './publication.ts';
 export { prepareGatewayConfiguration, gatewayConfigurationCurrent } from './gateway-generation.ts';
 export { renderGatewayConfiguration, type GatewayRenderSettings } from './gateway-renderer.ts';
+export { RootBudgetRefused, rootTotals } from './root-budget.ts';

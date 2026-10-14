@@ -559,7 +559,7 @@ const reservedModelCallDataSchema = optionalProviderTurnBindingSchema.safeExtend
   turnId: id, threadId: id, payingGroupId: id.optional(), contextDigest: digestSchema,
 });
 export const budgetReservedDataSchema = z.object({
-  reservationId: id, permitId: id, amountCents: centsSchema,
+  reservationId: id, permitId: id, amountCents: centsSchema, rootId: id.optional(),
   payingGroupId: id, assistantId: id, modelCall: reservedModelCallDataSchema.optional(),
   dispatchGate: z.literal(1).optional(),
 }).strict();

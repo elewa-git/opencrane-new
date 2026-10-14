@@ -357,9 +357,9 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `approval.expired` | timer | approvals | tell the computer |
 | `approval.cancelled` | decision service / approval reader | approvals | close the card when its logical turn or binding changes |
 | `approval.used` | decision service (single use) | approvals | — |
-| `effect.observed` | gateway log ingest | audit, usage | settle the actual cost; with no matching permit or a reservation overrun → `security.alert_raised` |
+| `effect.observed` | gateway log ingest | audit, usage | settle the actual cost; with no matching permit or a reservation overrun → `security.alert_raised`; a rooted overrun also saves `budget.root_stopped` |
 | `effect.uncertain` | settle timeout or `computer.lost` | audit, effects | notify for manual resolution |
-| `effect.resolved` | Owner/Admin | audit, effects | evidence, reservation id and integer settledCents; settle or release through settle-budget |
+| `effect.resolved` | Owner/Admin | audit, effects | evidence, reservation id and integer settledCents; settle or release through settle-budget; a rooted overrun saves `budget.root_stopped` and `security.alert_raised` |
 
 ### MCP catalogue, grants and connections
 
@@ -394,12 +394,26 @@ counts process starts for that fixed identity.
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `budget.ceiling_set` | admin | budgets | — |
+| `budget.root_allowance_set` | budget actor | budgets | — |
+| `budget.root_stopped` | budget actor | budgets | — |
 | `budget.reserved` | budget actor (inside `ext_authz`) | budgets | — |
 | `budget.reservation_expired` | budget actor at expiry | budgets | — |
 | `budget.call_dispatch_admitted` | budget actor at the final gateway check | budgets | — |
 | `budget.settled` | budget actor (on `effect.observed` or admission rejected before dispatch) | budgets, usage | — |
 | `budget.period_started` | timer (00:00 UTC on the 1st) | budgets | — |
 | `budget.exhausted` | budget actor | budgets | notify admins; stop affected work (hard stop cascades) |
+
+A root is one turn's fixed allowance. `budget.root_allowance_set` binds rootId,
+requesterId, conversationId, turnId, threadId, assistantId, computerId, generation,
+payingGroupId and allowanceCents (1–1,000). Allocation holds no money.
+`budget.reserved.rootId` optionally links the call's sole hold to that root.
+Root totals count those calls over their whole lifetime, across budget periods.
+`budget.root_stopped` records allowance_exhausted with attemptedBoundCents and
+availableCents, ceiling_stop with the existing budget stopId, or
+budget_reservation_exceeded with the reservationId whose actual cost exceeded its hold.
+The actor saves an overrun stop before the full settlement and the existing alert.
+The first stop wins and refunds nothing. External stop reasons and dispatch checks follow separately.
+These internal records have no caller, route or reaction yet.
 
 The Phase 2 model actor records the global monthly `ceilingCents` and
 `dailyCeilingCents` together. Reservations include `modelCall`: model, pinned

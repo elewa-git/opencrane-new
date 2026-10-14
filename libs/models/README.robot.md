@@ -1883,3 +1883,22 @@ are NOT RUN here; they remain PR 2c to keep this change near 600 lines. Runtime 
 enforcement is not established by comparing configuration text. No delivery, reload,
 witness, acknowledgement, worker or admission change is included. Fresh-install
 qualification is NOT RUN.
+
+## Root spending allowance (P4-8 PR 4, first part; #90 and #93)
+
+`BudgetActor.setRootAllowance(binding, firstCallBoundCents)` saves the reviewed bound
+only when every remaining cap and the first call fit. It derives rootId as SHA-256
+of JSON `[silo, conversationId, turnId]`. Identical retries return the saved record.
+`reserve` takes optional rootId as its fifth argument; rooted turns must supply it
+and match every saved identity field. The saved root position replaces admittedAt.
+`rootTotals` uses the existing reservations, BigInt sums and lifetime settlement.
+Roots stay out of `budgetSummary`. Refusals contain fixed reasons and availableCents.
+Allowance, ceiling and call-overrun stops are permanent; settlement and replay still work.
+An overrun uses the existing `budget_reservation_exceeded` reason and names its
+reservationId. The actor saves the first stop before settlement, then records the
+full cost and the existing alert. Repeated settlement adds no stop or charge.
+A failed settlement or alert can be retried without reopening the root.
+Tests in `libs/models/test/root-budget.test.ts` use real NATS and PostgreSQL.
+Requester, turn-ended and access-revoked stop commands follow in the next part.
+Trusted call ids, grant/dispatch checks and the child dispatcher remain in row 5.
+There is no route, caller, running-turn fan-out or model call in this part.

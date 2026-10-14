@@ -1,0 +1,2 @@
+- Add internal turn spending allowances with shared per-call holds and permanent allowance, ceiling or call-overrun stops. Child chat dispatch is not enabled yet.
+- Stop further calls when a root call costs more than its hold, while recording the full cost and an alert. Keep the first stop reason through restart and replay.
