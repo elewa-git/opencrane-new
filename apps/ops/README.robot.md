@@ -541,8 +541,13 @@ personal assistants become inactive. Computers are read only on exact
 computer position. Each computer read is bounded at 10,000 events, as is their total.
 `suspendComputer` checks open turns and conditionally suspends ready computers.
 Claimed/resumed or busy computers fail with a safe error and use existing job retries.
-Suspended, lost and retired computers need no suspension. The loss reaction also checks
-the personal owner's removal before claiming. Cleanup makes no Kubernetes call.
+Suspended, lost and retired computers need no suspension. For a lost computer, cleanup
+conditionally saves another `computer.lost` with a deterministic removal-based id.
+This advances the exact computer stream so a claim paused after reading membership
+cannot append after completion. If the claim appends first, cleanup's append conflicts
+and completion waits for a retry. The completion's computer section includes the saved
+loss confirmation. Retries reuse it. The loss reaction also checks the personal owner's
+removal before claiming. Cleanup makes no Kubernetes call.
 Group grants, shared assistants and computers, connections and other members are untouched.
 Existing OpenFGA handlers apply the saved changes. The worker checks their `applied`
 receipts, including changes saved in earlier attempts, before recording completion.
@@ -557,6 +562,8 @@ Read-table rebuild runs no reactions.
 `test/departure-cleanup.test.ts` uses real disposable NATS, PostgreSQL and OpenFGA.
 It covers current resources, retries, incomplete inventory, legacy removal, rebuild,
 idle/busy computer states, missing permission receipts, completion and the upgrade dry-run.
+It pauses a real NATS claim before append, completes removal cleanup, then releases the
+claim and checks that no new claim was saved. It also checks loss confirmation retries.
 Rejoin coverage keeps the new assistant, computer and grants unchanged. It does not
 qualify live private-history isolation after return. Run with `PG_TEST_URL` and `nice -n 10 npx vitest run
 apps/ops/test/departure-cleanup.test.ts --maxWorkers=2` from the root.

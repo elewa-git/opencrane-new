@@ -200,7 +200,7 @@ export function departureCleanupHandler(store: EventStore,
       await appendChanges(store, trigger, departure.position, subject, rows, changes, deadline, now);
     }
     const computer = await suspendPersonalComputers(store, trigger, departure.position,
-      assistants, deadline);
+      assistants, deadline, now);
     const sections = await confirmedResults(histories, trigger, authorisation);
     sections.computer = computer;
     const completion = { memberId: departure.memberId, removalId: trigger.id, sections };
@@ -219,7 +219,7 @@ function cleanupId(trigger: EventEnvelope, type: string, subject: string, resour
 }
 
 async function suspendPersonalComputers(store: EventStore, trigger: EventEnvelope,
-  position: number, assistants: Set<string>, deadline: number) {
+  position: number, assistants: Set<string>, deadline: number, now: () => number) {
   const results: string[] = [];
   let count = 0;
   function lifecycle(row: StoredEvent) {
@@ -237,6 +237,15 @@ async function suspendPersonalComputers(store: EventStore, trigger: EventEnvelop
     if (!latest) {
       continue;
     }
+    if (latest.type === 'computer.lost') {
+      // Advance the stream before completion so a claim based on the old loss cannot land later.
+      const subject = `computer-${assistantId}`;
+      const data = { assistantId, computerId: field(latest.data, 'computerId') };
+      const change = { type: 'computer.lost', resource: assistantId, data };
+      await appendChanges(store, trigger, position, subject, rows, [change], deadline, now);
+      results.push(cleanupId(trigger, change.type, subject, assistantId));
+      continue;
+    }
     if (latest.type === 'computer.ready') {
       if (await store.head(trigger.subject, deadline) !== position) {
         throw new Error('Departure membership changed');
@@ -246,7 +255,7 @@ async function suspendPersonalComputers(store: EventStore, trigger: EventEnvelop
     }
     if (latest.type === 'computer.suspended') {
       results.push(latest.id);
-    } else if (!['computer.lost', 'computer.retired'].includes(latest.type)) {
+    } else if (latest.type !== 'computer.retired') {
       throw new Error('Departure computer busy');
     }
   }

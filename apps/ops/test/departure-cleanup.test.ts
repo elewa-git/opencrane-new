@@ -9,7 +9,7 @@ import { createLogger } from '@opencrane/observability';
 import { members, ProjectionRunner, readEvents } from '@opencrane/projections';
 import type { EventEnvelope } from '@opencrane/events';
 import { database } from '../../../libs/projections/test/database.ts';
-import { history, lifecycleHandlers } from '../src/lifecycle.ts';
+import { field, history, lifecycleHandlers } from '../src/lifecycle.ts';
 import { dispatcherHandlerNames } from '../src/dispatcher-handlers.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -468,7 +468,9 @@ async function pausedClaimAfterCleanup() {
   const paused = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   async function pauseClaim(command: Parameters<typeof appendCommand>[0]) {
-    if (command.event.type === 'computer.claimed' && command.event.subject === lost.subject) {
+    const type = field(command.event, 'type');
+    const subject = field(command.event, 'subject');
+    if (type === 'computer.claimed' && subject === lost.subject) {
       paused.resolve();
       await release.promise;
     }
