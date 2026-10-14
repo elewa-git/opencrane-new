@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
-  server["apps/server<br/>back end"] -.->|access replies, child invitations, publication facts and saved chat choices| protocol
+  server["apps/server<br/>back end"] -.->|member flags, access replies, child invitations, publication facts and saved chat choices| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list shapes"]
@@ -43,6 +43,8 @@ Describe saved publication requests separately from tool availability.
   Report when a complete departure review permits removal.
   Keep unknown history separate from a checked absence.
   Keep member headers separate from the admin directory.
+- Check the directory and detail management flags as booleans, while ordinary
+  member headers keep false flags.
 - Check own-group picker pages, reviewed member snapshots and human group chat rows.
 - Check group and child chat participant edits and the current people list.
 - Check archive and read requests, and each person's saved choice in chat lists.

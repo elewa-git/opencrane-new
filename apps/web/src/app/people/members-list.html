@@ -1,0 +1,70 @@
+<div class="register members-register">
+  <label class="sr-only" for="member-search">Search members</label>
+  <input #searchField id="member-search" type="search" maxlength="100"
+    placeholder="Search members by name or email" [value]="search()"
+    (input)="searchChanged($event)" />
+  <div class="member-toolbar">
+    @if (count() !== undefined) { <p class="member-count">{{ count() }} members</p> }
+    @if (loadedAt() && state() !== 'access') {
+      <button type="button" class="button secondary"
+        (click)="refresh()">{{ state() === 'loading' ? 'Refreshing…' : 'Refresh' }}</button>
+    }
+  </div>
+  @if (state() === 'access') {
+    <oc-shared-state kind="access_changed" message="Your access changed"
+      detail="Member details were cleared. Managing people needs the Owner or Admin role."
+      [showAction]="false" [announce]="true" />
+  } @else {
+    @if (state() === 'loading' && !loadedAt()) {
+      <oc-shared-state kind="checking" message="Loading members…" [announce]="true" />
+      @for (width of ['48%', '65%', '54%']; track width) {
+        <div class="skeleton-row" aria-hidden="true">
+          <oc-grain-loader width="100%" height="42px" />
+        </div>
+      }
+    }
+    @if (state() === 'failed') {
+      @if (loadedAt()) {
+        <div class="refresh-notice"><strong>Showing what we loaded at {{ loadedTime() }}</strong>
+        </div>
+      } @else {
+        <oc-shared-state kind="failed" message="Members are unavailable right now"
+          [safeToRetry]="true" actionLabel="Try again" (action)="refresh()"
+          [announce]="true" />
+      }
+    }
+    @if (loadedAt() && rows().length === 0 && next() === null && state() !== 'loading') {
+      <section class="empty">
+        @if (search()) {
+          <h2>No members match your search</h2>
+          <button type="button" class="button secondary" (click)="clearSearch(searchField)">
+            Clear search</button>
+        } @else {
+          <h2>No members</h2>
+        }
+      </section>
+    }
+    @if (rows().length > 0) {
+      <div [class.stale]="state() === 'failed' || state() === 'loading'">
+        <div class="member-header" aria-hidden="true"><span>Member</span><span>Role</span>
+          <span>Groups</span><span>Status</span><span>Last active</span></div>
+        <ul class="member-list" aria-label="Members">
+          @for (member of rows(); track member.memberId) {
+            <li data-member-row class="member-row">
+              <span><strong>{{ memberName(member) }}</strong><small>{{ member.email }}</small></span>
+              <span><b class="column-label">Role: </b>{{ member.role }}</span>
+              <span><b class="column-label">Groups: </b>{{ groupNames(member) }}</span>
+              <span><b class="column-label">Status: </b>Active</span>
+              <span><b class="column-label">Last active: </b>Not available yet</span>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+    @if (next() && state() !== 'failed') {
+      <button data-load-more type="button" class="button secondary load-more"
+        [disabled]="loadingMore() || state() === 'loading'" (click)="loadMore()">
+        {{ loadingMore() ? 'Loading…' : 'Load more' }}</button>
+    }
+  }
+</div>

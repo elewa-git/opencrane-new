@@ -452,13 +452,17 @@ it('pages the member projection, searches contact email and never calls page len
   readsBoundedDirectory);
 
 it('sets management flags from current roles without writing an event', async () => {
-  await append('owner', 'silo.owner_bootstrapped');
+  await append('bootstrap-owner', 'silo.owner_bootstrapped', {
+    memberId: 'bootstrap-owner', role: 'owner',
+    email: 'owner@example.test', displayName: 'Owner',
+    identity: { issuer: config.issuerUrl, sub: 'oidc-bootstrap-owner' } });
   await append('bob', 'member.joined', { email: 'bob@example.test' });
   const before = await nats.store.head();
   const ordinary = memberDetailSchema.parse(await (await memberRead('/api/members/bob')).json());
   expect(ordinary.permissions).toEqual({ changeRole: true, remove: true,
     manageOwnership: false });
-  const owner = memberDetailSchema.parse(await (await memberRead('/api/members/owner')).json());
+  const owner = memberDetailSchema.parse(
+    await (await memberRead('/api/members/bootstrap-owner')).json());
   expect(owner.permissions).toEqual({ changeRole: false, remove: false,
     manageOwnership: false });
   expect(await nats.store.head()).toBe(before);

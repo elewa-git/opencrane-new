@@ -1,5 +1,5 @@
 @if (state() !== 'missing') {
-  <nav aria-label="Breadcrumb"><a href="/org/people">People &amp; groups</a> › Groups
+  <nav aria-label="Breadcrumb"><a href="/org/people?tab=groups">People &amp; groups</a> › Groups
     @if (group()) { › <span aria-current="page">{{ group()!.name }}</span> }
   </nav>
 }
@@ -17,7 +17,7 @@
     <oc-shared-state kind="checking" message="Loading group…" />
   } @else if (state() === 'missing') {
     <oc-shared-state kind="removed" [message]="statusMessage()" [showAction]="false" />
-    <a class="button secondary" href="/org/people">Back to groups</a>
+    <a class="button secondary" href="/org/people?tab=groups">Back to groups</a>
   } @else if (state() === 'access') {
     <oc-shared-state kind="access_changed" [message]="statusMessage()" [detail]="detail()"
       [showAction]="false" />

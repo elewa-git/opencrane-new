@@ -1,5 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createGroupCommandSchema } from '@opencrane/protocol';
 import { PeopleScreen } from './people-screen';
 
@@ -98,7 +98,11 @@ async function settle(fixture: ComponentFixture<PeopleScreen>): Promise<void> {
     await fixture.whenStable();
   }
 }
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => history.replaceState(null, '', '/org/people?tab=groups'));
+afterEach(() => {
+  vi.unstubAllGlobals();
+  history.replaceState(null, '', '/org/people');
+});
 
 it('shows typed rows with one link per group and one status region', async () => {
   const root = await mount({ rows: [sampleGroup] });

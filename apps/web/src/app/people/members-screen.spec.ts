@@ -1,5 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PeopleScreen } from './people-screen';
 
 const alice = { memberId: 'alice', displayName: 'Alice', email: 'alice@example.test',
@@ -17,7 +17,9 @@ function response(body: unknown, status = 200): Response {
     headers: { 'content-type': 'application/json' } });
 }
 function root(fixture: ComponentFixture<PeopleScreen>): HTMLElement {
-  return fixture.nativeElement as HTMLElement;
+  const element: unknown = fixture.nativeElement;
+  if (element instanceof HTMLElement) return element;
+  throw new Error('Expected a screen element');
 }
 async function settle(fixture: ComponentFixture<PeopleScreen>): Promise<void> {
   for (let index = 0; index < 4; index += 1) {
@@ -34,7 +36,11 @@ async function mount(handler: (url: string) => Promise<Response> | Response) {
   await settle(fixture);
   return fixture;
 }
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => history.replaceState(null, '', '/org/people'));
+afterEach(() => {
+  vi.unstubAllGlobals();
+  history.replaceState(null, '', '/org/people');
+});
 
 it('starts with a bounded member page and appends distinct rows once', async () => {
   const urls: string[] = [];
@@ -45,15 +51,48 @@ it('starts with a bounded member page and appends distinct rows once', async () 
     return response(page([alice], 'alice'));
   });
   expect(urls[0]).toBe('/api/members?q=&after=&limit=20');
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Alice');
+  });
   const loadMore = root(fixture).querySelector<HTMLButtonElement>('button[data-load-more]');
   expect(loadMore).not.toBeNull();
+  expect(root(fixture).textContent).toContain('2 members');
   loadMore?.click();
   loadMore?.click();
   expect(urls).toHaveLength(2);
   release?.(response(page([alice, bob], null)));
-  await settle(fixture);
-  expect(root(fixture).querySelectorAll('[data-member-row]')).toHaveLength(2);
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('[data-member-row]')).toHaveLength(2);
+  });
   expect(root(fixture).textContent).toContain('Not available yet');
+});
+
+it('keeps loaded rows and focus after a failed Refresh', async () => {
+  let reads = 0;
+  const fixture = await mount(() => {
+    reads += 1;
+    if (reads === 1) return response(page([alice], null, 'applying'));
+    return response({ status: 'unavailable' }, 503);
+  });
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.member-toolbar button')).not.toBeNull();
+  });
+  const refresh = root(fixture).querySelector<HTMLButtonElement>('.member-toolbar button');
+  expect(refresh).not.toBeNull();
+  refresh?.focus();
+  refresh?.click();
+  expect(reads).toBe(2);
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Showing what we loaded at');
+  });
+  expect(root(fixture).textContent).toContain('Alice');
+  expect(root(fixture).querySelector('.member-count')).toBeNull();
+  expect(document.activeElement).toBe(refresh);
+  expect(reads).toBe(2);
 });
 
 it('drops an old search reply and clears all protected values after a denied read', async () => {

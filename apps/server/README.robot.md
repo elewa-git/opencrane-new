@@ -2,6 +2,11 @@
 
 For people, read [README.md](README.md) first.
 
+Member directory GETs return `permissions.invite: true` after current Owner/Admin
+checks. Detail GETs return `changeRole` and `remove: true` for active non-owner
+targets, including the caller. Owner targets keep both false. Member headers keep
+literal false flags. These reads append nothing.
+
 `test/approvals.test.ts` covers saved drift and a failed catalogue check followed by
 renewal while an approval is unread. The existing approval reader saves cancellation;
 a late Approve cannot send a call. An unchanged check alone preserves approval.

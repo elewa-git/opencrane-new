@@ -118,7 +118,7 @@ async function readDirectory(options: GroupOptions,
   if (result.rows.length > input.limit) next = page.at(-1)?.member_id ?? null;
   const checkedAt = new Date().toISOString();
   const totals = await memberCounts(options, checkedAt);
-  return { rows, next, ...totals, checkedAt, permissions: { invite: false } };
+  return { rows, next, ...totals, checkedAt, permissions: { invite: true } };
 }
 
 async function readHeader(options: GroupOptions, memberId: string,
@@ -136,7 +136,9 @@ async function readHeader(options: GroupOptions, memberId: string,
   const record = await directoryRow(options, memberId, target);
   const memberSequence = await options.store.head(`member-${memberId}`);
   const ownershipSequence = target.ownership.at(-1)?.sequence ?? 0;
-  const detail = { ...record, permissions: { ...permissions, manageOwnership: callerRole === 'owner' },
+  const canManageTarget = target.role !== 'owner';
+  const detail = { ...record, permissions: { changeRole: canManageTarget,
+    remove: canManageTarget, manageOwnership: callerRole === 'owner' },
     memberSequence, ownershipSequence, personalAssistant: { status: 'unavailable' },
     rejoinedAt: { status: 'unavailable' } };
   return { code: 200, body: memberDetailSchema.parse(detail) };

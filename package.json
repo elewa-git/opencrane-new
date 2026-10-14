@@ -42,6 +42,7 @@
     "visual:p3-15-spending": "node scripts/check-p3-15-spending.mjs",
     "visual:integrations": "npm run build -w apps/web && node scripts/check-integrations-screens.mjs",
     "visual:p4-1-people": "node scripts/check-p4-1-people.mjs",
+    "visual:screen-p4-3-members": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-3-members.mjs",
     "visual:p4-2-screens": "node docs/process/p4-2-screens/check-screens.mjs",
     "visual:p4-7-screens": "node scripts/check-p4-7-screens.mjs",
     "visual:p4-12-memory": "npm run build -w apps/web && node scripts/check-p4-12-memory.mjs",

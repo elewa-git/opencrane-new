@@ -6,16 +6,19 @@ export const memberPageQuerySchema = z.object({
   q: z.string().trim().max(100).default(''),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 }).strict();
-const permissions = z.object({
+const headerPermissions = z.object({
   changeRole: z.literal(false),
   remove: z.literal(false),
   manageOwnership: z.boolean(),
+}).strict();
+const managementPermissions = headerPermissions.extend({
+  changeRole: z.boolean(), remove: z.boolean(),
 }).strict();
 export const memberHeaderSchema = z.object({
   memberId,
   displayName: z.string().nullable(),
   role: z.enum(['owner', 'admin', 'member']),
-  permissions,
+  permissions: headerPermissions,
 }).strict();
 const group = z.object({
   groupId: memberId,
@@ -29,7 +32,7 @@ export const memberDirectoryRowSchema = memberHeaderSchema.omit({ permissions: t
   groups: z.array(group).max(100),
 }).strict();
 export const memberDetailSchema = memberDirectoryRowSchema.extend({
-  permissions,
+  permissions: managementPermissions,
   memberSequence: z.int().nonnegative(),
   ownershipSequence: z.int().nonnegative(),
   personalAssistant: z.object({ status: z.literal('unavailable') }).strict(),
@@ -47,7 +50,7 @@ export const memberDirectorySchema = z.object({
   }).strict(),
   checkedAt: z.iso.datetime(),
   projection: z.object({ content: z.enum(['current', 'applying']) }).strict(),
-  permissions: z.object({ invite: z.literal(false) }).strict(),
+  permissions: z.object({ invite: z.boolean() }).strict(),
 }).strict();
 
 export const invitationEmailInputSchema = z.object({ email: z.email().max(254) }).strict();

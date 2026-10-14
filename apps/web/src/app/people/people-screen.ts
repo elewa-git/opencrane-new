@@ -8,6 +8,7 @@ import { GrainLoader } from '../ui/grain-loader';
 import { fetchGroups, followChange, sendCreateGroup } from './groups-api';
 import { isDuplicateName, newGroupId, checkTimeLabel } from './group-wording';
 import { GroupsList } from './groups-list';
+import { MembersList } from './members-list';
 
 type LoadState = 'loading' | 'ready' | 'failed' | 'retrying' | 'access';
 type Tab = 'members' | 'groups' | 'invitations';
@@ -15,7 +16,7 @@ type PendingCreate = { commandId: string; groupId: string; name: string; receipt
 
 @Component({
   selector: 'oc-people-screen',
-  imports: [SharedState, HingeDrawer, GroupsList, GrainLoader],
+  imports: [SharedState, HingeDrawer, GroupsList, MembersList, GrainLoader],
   templateUrl: './people-screen.html', styleUrls: ['./people.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -23,7 +24,8 @@ export class PeopleScreen implements OnInit, OnDestroy {
   readonly organisationName = input.required<string>();
   protected readonly rows = signal<GroupRow[]>([]);
   protected readonly state = signal<LoadState>('loading');
-  protected readonly selectedTab = signal<Tab>('groups');
+  protected readonly selectedTab = signal<Tab>(
+    globalThis.location.search === '?tab=groups' ? 'groups' : 'members');
   protected readonly query = signal('');
   protected readonly loadedAt = signal<string | undefined>(undefined);
   protected readonly drawerOpen = signal(false);
@@ -48,10 +50,15 @@ export class PeopleScreen implements OnInit, OnDestroy {
   private pendingCreate: PendingCreate | undefined;
   protected readonly retryAfterNotFound = signal(false);
 
-  ngOnInit(): void { void this.load(); }
+  ngOnInit(): void {
+    if (this.selectedTab() === 'groups') void this.load();
+  }
   ngOnDestroy(): void { this.request.abort(); }
 
-  protected select(tab: Tab): void { this.selectedTab.set(tab); }
+  protected select(tab: Tab): void {
+    this.selectedTab.set(tab);
+    if (tab === 'groups' && !this.loadedAt() && this.state() !== 'access') void this.load();
+  }
   protected openDrawer(button: HTMLButtonElement): void {
     if (!this.hasUnresolvedCreate()) this.pendingCreate = undefined;
     this.opener = button;
