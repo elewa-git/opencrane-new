@@ -160,3 +160,64 @@ async function recordsEverySavedStop(cause: typeof causes[number]) {
   expect(setup.received()).toBe(0);
 }
 it.each(causes)('records a turn stop from %s', recordsEverySavedStop);
+
+async function refusesUnsavedSource() {
+  const event = await stop();
+  const unsaved = { ...event, id: 'unsaved-stop', commandId: 'unsaved-stop' };
+  await expect(deliver(unsaved)).rejects.toThrow('Budget stop is not saved');
+  expect(await records()).toEqual([]);
+}
+it('refuses a source event that does not exist in saved budget history', refusesUnsavedSource);
+
+async function selectsOnlyEarlierHumanMessages() {
+  const human = await setup.append('conversation-conversation', 'message.posted', {
+    conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+  await setup.append('conversation-conversation', 'message.posted', {
+    conversationId: 'conversation', authorKind: 'assistant', authorId: 'assistant',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+  const event = await stop();
+  await setup.append('conversation-conversation', 'message.posted', {
+    conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+  await setup.append('conversation-later', 'conversation.created', {
+    conversationId: 'later', assistantId: 'not-created', createdBy: 'alice',
+    mode: 'agent_session' });
+  await setup.append('conversation-later', 'message.posted', {
+    conversationId: 'later', authorKind: 'human', authorId: 'alice',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+  await deliver(event);
+  expect(await records('later')).toEqual([]);
+  const saved = await records();
+  function turnId(row: typeof saved[number]) {
+    return z.object({ turnId: z.string() }).parse(row.event.data).turnId;
+  }
+  expect(saved.map(turnId).sort()).toEqual([human.id, 'turn'].sort());
+}
+it('selects only human messages saved before the stop', selectsOnlyEarlierHumanMessages);
+
+async function keepsQueuedPayerBeforeDefaultChange() {
+  const queued = await setup.append('conversation-conversation', 'message.posted', {
+    conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+  await setup.actor.configure({ scope: 'global', ceilingCents: 20000,
+    dailyCeilingCents: 2000, defaultPayingGroupId: 'other', setBy: 'alice' });
+  const event = await stop();
+  await deliver(event);
+  const saved = await records();
+  expect(saved).toHaveLength(2);
+  expect(saved[1]!.event.data).toMatchObject({ turnId: queued.id, stopId: event.id });
+}
+it('keeps the message payer when the default changes before the stop',
+  keepsQueuedPayerBeforeDefaultChange);
+
+async function stopsFoldAtSourceEvent() {
+  await setup.actor.configure({ scope: 'paying_group', scopeId: 'personal-default',
+    ceilingCents: 20000, setBy: 'alice' });
+  const rows = await history(setup.nats.store, 'budget-test', 'test');
+  const beforeStop = rows.at(-1)!.event;
+  await stop();
+  await deliver(beforeStop);
+  expect(await records()).toEqual([]);
+}
+it('does not apply a stop saved after the delivered source event', stopsFoldAtSourceEvent);
