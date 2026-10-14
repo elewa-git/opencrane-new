@@ -13,6 +13,9 @@ import { decisionActivity } from './decision-activity.ts';
 import { decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants } from './decision-grants.ts';
 import { groupMembership } from './paying-group.ts';
+import { sharedAdmissionAccess } from './shared-admission-access.ts';
+import { history } from './actor.ts';
+import { data } from './state.ts';
 
 type Start = z.infer<typeof computerTurnStartedDataSchema>;
 type Descendant = Extract<Start, { task: 'native_descendant' }>;
@@ -117,7 +120,12 @@ export async function admitDescendant(store: EventStore, access: Binding,
     }
     const activity = await decisionActivity(store, access.silo, binding.assistantId,
       binding.conversationId, binding.rootTurnId, deadline);
-    requirePrivateActivity(activity, binding, facts.summary.computer.lifecycle);
+    requireRootActivity(activity, binding, facts.summary.computer.lifecycle);
+    let confirmSharedAccess: Awaited<ReturnType<typeof sharedAdmissionAccess>> | undefined;
+    if (binding.dataClass === 'shared') {
+      confirmSharedAccess = await sharedAdmissionAccess(store, access.silo,
+        activity.conversation, binding.requesterId, deadline);
+    }
     const grants = await readDecisionGrants(store, access.silo, binding.model!, deadline);
     const subjects = [`member-${binding.requesterId}`, `assistant-${binding.assistantId}`];
     const authority = await decisionAuthorityFence(store, performance.now(), subjects,
@@ -125,8 +133,9 @@ export async function admitDescendant(store: EventStore, access: Binding,
     async function confirmAdmission() {
       while (true) {
         const activityChanged = await activity.confirm(authority.deadline, false);
+        const sharedAccessChanged = await confirmSharedAccess?.(authority.deadline);
         const authorityChanged = await authority();
-        if (!activityChanged && !authorityChanged) {
+        if (!activityChanged && !sharedAccessChanged && !authorityChanged) {
           return;
         }
       }
@@ -135,6 +144,7 @@ export async function admitDescendant(store: EventStore, access: Binding,
     const fresh = Object.assign(confirmAdmission, limits);
     await currentAuthority(store, access, binding.requesterId, binding.assistantId,
       binding.conversationId, 'model', binding.model!, fresh, activity.conversation, grants);
+    await requireSharedPayer(store, access.silo, binding, fresh.deadline);
     if (binding.payingGroupId !== 'personal-default') {
       fresh.include(`team-${binding.payingGroupId}`);
       await groupMembership(store, access.silo, binding.requesterId, binding.payingGroupId,
@@ -249,13 +259,13 @@ function requireSavedAdmission(stored: StoredEvent | undefined,
   }
 }
 
-function requirePrivateActivity(activity: Awaited<ReturnType<typeof decisionActivity>>,
+function requireRootActivity(activity: Awaited<ReturnType<typeof decisionActivity>>,
   binding: Descendant, ready: StoredEvent | undefined) {
   if (activity.computer.firstClose || activity.computer.control ||
       activity.computer.lifecycle?.sequence !== ready?.sequence) {
     throw new Error('Root is not active');
   }
-  let privateSession = false;
+  let matchingSession = false;
   for (const row of activity.conversation) {
     if (row.event.type === 'conversation.closed' ||
         closesDecisionTurn(row.event, binding.rootTurnId)) {
@@ -265,12 +275,21 @@ function requirePrivateActivity(activity: Awaited<ReturnType<typeof decisionActi
       continue;
     }
     const created = conversationCreatedDataSchema.parse(row.event.data);
-    privateSession = created.mode === 'agent_session' && !('contextKind' in created) &&
-      created.createdBy === binding.requesterId;
+    matchingSession = matchesRootConversation(created, binding);
   }
-  if (!privateSession) {
-    throw new Error('Private root required');
+  if (!matchingSession) {
+    throw new Error('Root conversation refused');
   }
+}
+function matchesRootConversation(created: z.infer<typeof conversationCreatedDataSchema>,
+  binding: Descendant) {
+  if (binding.dataClass === 'shared') {
+    return 'contextKind' in created && created.contextKind === 'shared_child' &&
+      created.assistantId === binding.assistantId &&
+      created.payingGroupId === binding.payingGroupId;
+  }
+  return created.mode === 'agent_session' && !('contextKind' in created) &&
+    created.createdBy === binding.requesterId;
 }
 function requireComputerGeneration(computer: ComputerSummary, binding: Descendant) {
   const claim = computer.claim;
@@ -288,7 +307,8 @@ function requireComputerGeneration(computer: ComputerSummary, binding: Descendan
   return claim.sequence;
 }
 const rootFields = ['assistantId', 'computerId', 'conversationId', 'requesterId',
-  'payingGroupId', 'model', 'providerId', 'bindingSequence', 'executionMode'] as const;
+  'payingGroupId', 'model', 'providerId', 'bindingSequence', 'executionMode',
+  'sharingClass'] as const;
 function requireRoot(summary: AdmissionSummary, binding: Descendant) {
   const claimPosition = requireComputerGeneration(summary.computer, binding);
   const root = summary.computer.turns.get(binding.rootTurnId);
@@ -298,10 +318,10 @@ function requireRoot(summary: AdmissionSummary, binding: Descendant) {
     throw new Error('Root is not active');
   }
   const start = computerTurnStartedDataSchema.parse(recorded.event.data);
-  if (start.task !== 'chat_turn' || start.threadId !== binding.rootThreadId || !start.model ||
-      start.executionMode !== 'memory_free' || binding.dataClass !== 'private') {
+  if (start.task !== 'chat_turn' || start.threadId !== binding.rootThreadId || !start.model) {
     throw new Error('Root binding refused');
   }
+  requireRootClass(start, binding);
   for (const field of rootFields) {
     if (start[field] !== binding[field]) {
       throw new Error('Root binding refused');
@@ -311,6 +331,15 @@ function requireRoot(summary: AdmissionSummary, binding: Descendant) {
   const maximum = { models: [start.model], tools: [], resources: [], operations: [],
     destinations: [], connectionIds: [], profileIds: [] };
   requireNarrowScopes(binding.scopes, maximum);
+}
+function requireRootClass(start: Start, binding: Descendant) {
+  const sharedRoot = start.sharingClass === 'shared_only' &&
+    start.executionMode === 'restricted' && binding.dataClass === 'shared';
+  const privateRoot = start.sharingClass === undefined &&
+    start.executionMode === 'memory_free' && binding.dataClass === 'private';
+  if (!sharedRoot && !privateRoot) {
+    throw new Error('Root binding refused');
+  }
 }
 const scopeFields = ['models', 'tools', 'resources', 'operations', 'destinations',
   'connectionIds', 'profileIds'] as const;
@@ -382,5 +411,21 @@ function requireParentAndLimits(summary: AdmissionSummary, binding: Descendant) 
   }
   if (total >= 8 || active >= 4 || siblings >= 4) {
     throw new Error('Descendant limit reached');
+  }
+}
+
+async function requireSharedPayer(store: EventStore, silo: string,
+  binding: Descendant, deadline: number) {
+  if (binding.dataClass !== 'shared') {
+    return;
+  }
+  const rows = await history(store, `assistant-${binding.assistantId}`, silo, deadline);
+  function isCreation(row: StoredEvent) {
+    return row.event.type === 'assistant.created';
+  }
+  const created = rows.find(isCreation);
+  if (!created || data(created.event)['kind'] !== 'team' ||
+      data(created.event)['payingGroupId'] !== binding.payingGroupId) {
+    throw new Error('Shared payer binding mismatch');
   }
 }

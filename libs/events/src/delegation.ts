@@ -15,7 +15,7 @@ export const nativeDelegationBindingSchema = z.object({
   conversationId: id, requesterId: id, payingGroupId: id,
   parentDelegationId: id.optional(), parentTurnId: id, parentThreadId: id,
   turnId: id, threadId: id, spawnItemId: id,
-  dataClass: z.enum(['shared', 'private']), scopes,
+  dataClass: z.enum(['shared', 'private']), sharingClass: z.literal('shared_only').optional(), scopes,
 }).strict().refine(hasDistinctDelegationChild, 'A child cannot be its own parent or root');
 
 export function hasDistinctDelegationChild(data: {

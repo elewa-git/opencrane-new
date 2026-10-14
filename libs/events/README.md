@@ -30,7 +30,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, subscriptions, nightly memory records and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, turns, root allowances, overruns, spending and safe spending stop references| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, private and shared turns, root allowances, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
@@ -72,7 +72,8 @@ Define publication requests and ordered gateway records without private review t
 - Calculate daily and weekly routine dates in a named time zone. Show the first
   repeated time and flag missing times when clocks move forward.
 - Defines delegated task relationships and outcomes, including cancellation. Older records
-  remain readable. These records grant no permission to run a task.
+  remain readable. Shared tasks record the root’s shared-only class. These records
+  grant no permission to run a task.
 
 - Defines tool dispatch records, unsupported consent refusals, requester retries and safe invitation refusal records.
 - Records the departure review used for a member removal. Older removals still replay.

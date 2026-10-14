@@ -245,7 +245,7 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 | `assistant.settings_changed` | owner, admin or departure deactivation reaction | assistants (model, persona, tools, active) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
-| `computer.turn_started` / `computer.turn_closed` | server turn command | chat admission and idle-suspend checks; native computer-root read indexes and internal admission limits | chat starts bind the message, thread and `executionMode`, with optional provider/model identity; native starts bind root and ancestry without granting authority; closed is permanent |
+| `computer.turn_started` / `computer.turn_closed` | server turn command | chat admission and idle-suspend checks; native computer-root read indexes and internal admission limits | chat starts bind the message, thread and `executionMode`, with optional provider/model identity; native starts bind root and ancestry, copying `sharingClass` for shared-only roots without granting authority; closed is permanent |
 | `computer.suspended` / `computer.resumed` | server (intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
@@ -600,7 +600,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` / `routine.run_finished` | server system | saved run facts | none; records grant no authority |
 | `routine.run_stop_requested` | server for checked owner/admin | saved Stop intent | none; execution integration is not built |
-| `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; native execution remains disabled |
+| `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; shared native starts retain the admission’s `sharingClass`; native execution remains disabled |
 
 Routine version 1 stores a full encrypted request, one member owner, a team assistant,
 its fixed payer, explicit company connection/profile/account and daily/weekly schedule.
