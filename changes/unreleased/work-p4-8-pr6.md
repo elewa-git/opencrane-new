@@ -1,0 +1,1 @@
+Internal child-chat commands can review a person's own group message, save their chosen audience and assistant, and create one child from that record. Requests stay out of parent history. Public starting and the first-input command are not available yet.

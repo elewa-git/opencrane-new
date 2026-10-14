@@ -1,3 +1,4 @@
+import { childRequestedEventSchema } from './child-request.ts';
 import { memoryContextRecordedEventSchema } from './memory-context.ts';
 import { validSurveyEvent } from './survey.ts';
 import { validEgressRuleEvent } from './egress.ts';
@@ -53,6 +54,7 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   envelopeSchema = envelopeSchema.superRefine(checkDelegationEvent);
   envelopeSchema = envelopeSchema.refine(validEgressRuleEvent);
   envelopeSchema = envelopeSchema.refine(validSurveyEvent);
+  envelopeSchema = envelopeSchema.refine(validChildRequest);
   envelopeSchema = envelopeSchema.superRefine(checkRoutineEvent);
   if (definition.type === 'memory.maintenance_recorded') {
     envelopeSchema = envelopeSchema.refine(matchingMaintenanceScope);
@@ -121,4 +123,9 @@ function matchingMaintenanceScope(event: EventEnvelope) {
   const fields = z.object({ scopeId: z.string() });
   const data = fields.parse(event.data);
   return event.subject === `scope-${data.scopeId}`;
+}
+
+function validChildRequest(event: EventEnvelope) {
+  return event.type !== 'conversation.child_requested' ||
+    childRequestedEventSchema.safeParse(event).success;
 }

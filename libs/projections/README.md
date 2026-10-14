@@ -24,7 +24,7 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup, provider, spending, child, tool review and publication, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
-  projections -->|saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
+  projections -->|omits child requests; saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, nightly records, tool holds and private instance stops and reports| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
@@ -130,6 +130,9 @@ Closing a chat keeps that message position. Later reports and repeated closes ca
 these details. The reports remain in the feed so their saved evidence is available.
 
 ## Processes it handles
+
+Internal child-chat requests stay in the event log. They do not appear in parent
+history or change its visible activity, including when the tables are rebuilt.
 
 Nightly memory records become a small history table for the server to read.
 Rebuilding it copies the saved records and starts no scheduled work.

@@ -100,3 +100,5 @@ export { gatewayEntrySchema, gatewayConfigurationSchema, gatewayObservationSchem
 export { budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema } from './budget-root.ts';
 export { hostedImageInstallationSchema } from './hosted-image.ts';
 export { departureCleanupCompletedSchema } from './identity-events.ts';
+export { childRequestedDataSchema, childRequestedEventSchema, type ChildRequest }
+  from './child-request.ts';

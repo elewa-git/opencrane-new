@@ -642,3 +642,9 @@ with readers and workers stopped to create this new table.
 The tool-policy fold saves reviewRevision and publication intent. New publication events
 leave published false and policyRevision unchanged. Old boolean events cannot supply a
 generation entry. Rebuilding the catalogue repeats the same fold and starts no preparation.
+
+## Hidden child requests
+
+`conversation.child_requested` is skipped before the conversation feed is written,
+like `agent.memory_context_recorded`. Rebuild repeats that omission. The separate
+child creation still rebuilds its recorded participants and OpenFGA receipts.

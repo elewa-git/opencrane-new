@@ -1929,7 +1929,8 @@ and the remaining live qualification. No full root suite ran.
 The participation reader recognises shared-child initial joins and returns a separate
 `historyPosition` from child creation. `joinPosition` and `joinEventId` remain authority facts.
 Effective inherited access and participant commands are described below.
-No child creation emitter exists.
+Inherited access checks the saved parent joins. Internal child creation is available;
+public child commands remain later work.
 `test/shared-child.test.ts` checks real NATS/PostgreSQL/OpenFGA replay and delayed creation.
 
 ## Private turn memory preview
@@ -2559,6 +2560,20 @@ organisation, admin and Origin checks. Input is commandId, expectedSequence and 
 Success returns status and the original saved sequence. Changed retry input conflicts.
 The server computes fragmentDigest, saves one MCP event and writes no grants or approvals.
 Only credential-free, current reviewed catalogues qualify. No preparation worker is connected.
+
+## Internal child requests (P4-8 PR 6, first part)
+
+`chat/child-requests.ts` exports review, intent and creation commands only. The parent
+history loads with a ten-second deadline before the two-second access check. Each write
+checks membership, current parent joins, assistant permission and owner/payer membership.
+The source must be the requester's own human message in an open group. The default
+upper bound is 1,000 cents. Request retries compare the frozen choices; another request
+id for the same source returns the original intent. Stage ids hash silo, parent and source.
+Creation copies the saved joins, including people later removed; inherited access still
+checks the original joins. It never replaces them with new people. Parent closure blocks
+creation at admission; closing immediately afterwards is not an atomic cross-stream check.
+First-input copying and its OpenFGA receipt wait follow in the next part. No route, job,
+activation, token or spending action calls these functions. Live qualification: NOT RUN.
 
 ## Hosted registration — first part of P3-6 PR 4
 

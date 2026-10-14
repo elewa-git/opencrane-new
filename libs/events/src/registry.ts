@@ -1,3 +1,4 @@
+import { childRequestEvent } from './child-request.ts';
 import { gatewayConfigurationEvent, gatewayObservationEvent } from './gateway-configuration.ts';
 import { memoryContextEvent } from './memory-context.ts';
 import { surveyEvents } from './survey.ts';
@@ -65,6 +66,7 @@ const maintenanceRecordedExample: MaintenanceRecord = {
 
 export const eventRegistry: readonly EventDefinition[] = [
   memoryContextEvent,
+  childRequestEvent,
   event('memory.maintenance_recorded', 'scope',
     'One scope night was claimed or skipped without dispatch.', memoryMaintenanceRecordedDataSchema,
     maintenanceRecordedExample),
