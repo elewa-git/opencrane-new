@@ -69,10 +69,7 @@ export async function providerTurnAdmission(store: EventStore, silo: string,
     if (queued) {
       const work = { ...queued, assistantId,
         payingGroupId: queued.payingGroupId ?? defaultPayingGroupId };
-      // Keep queued work terminal when a stop followed its message.
-      // Leave current capacity checks at the shared call dispatch gate.
-      const historicalStops = { ...summary.budget, limits: [] };
-      stopId = budgetStopId(historicalStops, work, new Date(), queued.position);
+      stopId = budgetStopId(summary.budget, work, new Date(), queued.position);
     }
     return { enabled: summary.enabled, defaultPayingGroupId, stopId };
   }

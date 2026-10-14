@@ -1916,8 +1916,8 @@ Waiting approvals use the existing turn-stop invalidation. No computer is requir
 Replay updates tables only. Jobs can retry cleanup but cannot reopen stopped work.
 
 The provider admission summary now folds spending stops while reading its existing
-budget history. First admission checks for stops after the queued message position; renewed turns
-retain the first computer admission position. Current capacity still guards every send.
+budget history. First admission checks active stops and stops after the queued message position;
+renewed turns retain the first computer admission position. Capacity still guards every send.
 Both history loads precede the short
 access check. Reader authority streams are unchanged.
 
