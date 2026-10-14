@@ -505,7 +505,7 @@ class TurnRunner {
       if ((input.attachments !== undefined
         && (!Array.isArray(input.attachments) || input.attachments.length > 0))
         || input.omittedAttachments > 0) throw new Error('Private attachments refused');
-      return privateTurnInput(input.text, context);
+      return privateTurnInput(input.text, context, input.sharingClass);
     }
     if (context !== undefined) throw new Error('Private context on memory-free turn');
     return turnInput(input.text, input.conversationId, input.attachments,

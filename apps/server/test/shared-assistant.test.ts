@@ -768,7 +768,7 @@ async function privateServerFixture(name: string, personal = false) {
   let sequence = 0;
   const previous = new Map<string, number>();
   async function report(member: string, turnId: string, type: string, extra: Record<string, unknown> = {}) {
-    const conversationId = String(extra['conversationId'] ?? `${name}-${member}`);
+    const conversationId = z.string().parse(extra['conversationId'] ?? `${name}-${member}`);
     const value = { sequence: ++sequence, previousSequence: previous.get(conversationId) ?? 0,
       conversationId, turnId, assistantId, requesterId: member, type, ...extra };
     previous.set(conversationId, sequence);
@@ -1287,7 +1287,9 @@ async function sharesOnlyChildHistory() {
     const saved = appends.mock.invocationCallOrder[appends.mock.calls.findIndex(isStart)]!;
     let historyAfterAdmission = false;
     for (const [index, call] of reads.mock.calls.entries()) {
-      expect(call[0]).not.toBe(`conversation-${test.parentId}`);
+      if (call[0].startsWith('conversation-')) {
+        expect(call[0]).toBe(`conversation-${test.conversationId}`);
+      }
       if (call[0] === `conversation-${test.conversationId}`
         && reads.mock.invocationCallOrder[index]! > saved) {
         historyAfterAdmission = true;
@@ -1307,12 +1309,21 @@ async function sharesOnlyChildHistory() {
     expect(retry?.['context']).toEqual(next?.['context']);
     expect(privateReader).not.toHaveBeenCalled();
     const rows = await history(nats.store, `conversation-${test.conversationId}`, 'test');
-    const firstMessage = rows.find(function firstInput(row) { return row.event.id === firstId; })!;
+    function isFirstInput(row: typeof rows[number]) {
+      return row.event.id === firstId;
+    }
+    const firstMessage = rows.find(isFirstInput)!;
     const conversation: AgentSession = { ...test.created,
       createdAt: firstMessage.event.time, assistantKind: 'team' };
     const frame = turnMessage(chat!, conversation, rows, [], firstMessage, 'restricted');
     expect(frame).toMatchObject({ text: 'Reviewed source', sharingClass: 'shared_only' });
-    const exposed = JSON.stringify([test.frames, frame, rows]);
+    const savedText: string[] = [];
+    for (const row of rows) {
+      if (['message.posted', 'agent.message_completed'].includes(row.event.type)) {
+        savedText.push(chat!.keys.decrypt('test', test.conversationId, row.event.data));
+      }
+    }
+    const exposed = JSON.stringify([test.frames, frame, rows, savedText]);
     expect(exposed).not.toMatch(/private-canary|parent-author-canary|parent-other-canary/u);
     expect(JSON.stringify(next?.['context'])).not.toMatch(/alice|bob|example.test/u);
   } finally {

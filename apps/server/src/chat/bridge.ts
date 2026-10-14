@@ -17,8 +17,10 @@ import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand, requireTurnMember, TurnAdmissionRejected } from './turns.ts';
 import { privateContext } from './private-context.ts';
+import { sharedContext } from './shared-context.ts';
+import { creationEvent } from './private-session.ts';
 import { chatHistory } from './commands.ts';
-import { recordReport, reportPosition, ReportRejected } from './reports.ts';
+import { recordReport, reportPosition, ReportRejected, agentSessionData } from './reports.ts';
 import { bridgeApprovals } from './bridge-approvals.ts';
 import type { ChatOptions } from './routes.ts';
 
@@ -86,7 +88,7 @@ async function releaseTurnCredentials(options: BridgeOptions,
   acknowledgement: { token?: string; expiresAt?: number; model?: string;
     refused?: string; context?: unknown }) {
   try {
-    const privateHistory = await privateContextFor(options, report, binding);
+    const history = await turnContextFor(options, report, binding);
     if (!tokens) throw new Error('Turn issuer unavailable');
     const fresh = await requireTurnMember(options.store, options.silo, binding.requesterId);
     const credentials = computerCredentials(options.store, tokens, options.silo);
@@ -97,24 +99,23 @@ async function releaseTurnCredentials(options: BridgeOptions,
     acknowledgement.model = turn.model;
     acknowledgement.token = grant.value;
     acknowledgement.expiresAt = grant.expiresAt;
-    if (privateHistory !== undefined) acknowledgement.context = privateHistory;
+    if (history !== undefined) acknowledgement.context = history;
   } catch (error) {
     if (error instanceof TurnAdmissionRejected) {
       acknowledgement.refused = error.message;
       return;
     }
-    if (!(error instanceof PrivateContextUnavailable)) throw error;
+    if (!(error instanceof TurnContextUnavailable)) throw error;
     await turnCommand(options.store, context, { ...report, status: 'failed' });
-    acknowledgement.refused = 'Private context unavailable';
+    acknowledgement.refused = error.message;
   }
 }
 
-class PrivateContextUnavailable extends Error {}
+class TurnContextUnavailable extends Error {}
 
-async function privateContextFor(options: BridgeOptions,
+async function turnContextFor(options: BridgeOptions,
   report: z.infer<typeof reportDetails>,
   binding: NonNullable<Awaited<ReturnType<typeof turnCommand>>>) {
-  if (binding.executionMode !== 'restricted') return undefined;
   function isMessage(row: ChatRows[number]) {
     return row.event.type === 'message.posted' && row.event.id === report.turnId;
   }
@@ -122,13 +123,27 @@ async function privateContextFor(options: BridgeOptions,
     return options.keys.decrypt(options.silo, report.conversationId, data);
   }
   try {
+    // Check the saved creation before choosing either reader, including on retries.
+    const event = await creationEvent(options.store, options.silo,
+      `conversation-${report.conversationId}`, 'conversation.created');
+    const created = agentSessionData(event.data);
+    const shared = 'contextKind' in created && created.contextKind === 'shared_child';
+    if (shared !== (binding.sharingClass === 'shared_only')
+      || (shared && binding.executionMode !== 'restricted')) {
+      throw new TurnContextUnavailable('Turn context mismatch');
+    }
+    if (binding.executionMode !== 'restricted') return undefined;
     // Read history after admission, outside the two-second access check.
     const rows = await chatHistory(options.store, options.silo, report.conversationId);
     const message = rows.find(isMessage);
     if (!message) throw new Error('Requested message unavailable');
+    if (shared) return sharedContext(rows, message, decrypt);
     return privateContext(rows, message, binding.requesterId, decrypt);
   } catch (error) {
-    throw new PrivateContextUnavailable('Private context unavailable', { cause: error });
+    if (error instanceof TurnContextUnavailable) throw error;
+    const reason = binding.sharingClass === 'shared_only'
+      ? 'Shared context unavailable' : 'Private context unavailable';
+    throw new TurnContextUnavailable(reason, { cause: error });
   }
 }
 

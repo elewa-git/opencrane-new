@@ -1205,6 +1205,28 @@ and [check record](../../docs/process/p4-14-private-turns-evidence.md) give the 
 
 ## Shared child turns
 
+After admission, the bridge checks that the saved creation and admitted
+`sharingClass` agree. A mismatch closes the turn as failed with `Turn context
+mismatch` and releases no token or context. Shared turns use `sharedContext`,
+never the requester-private reader. History loads through `chatHistory` under its
+ten-second deadline, outside the two-second access check, and reads no parent or
+private session. A failed shared read closes the turn with `Shared context unavailable`.
+
+The child creation class makes its human messages and admitted assistant replies
+shared content. Only text or Markdown from completed exchanges is selected, across
+senders. Stopped, failed, unfinished or lost exchanges retain time only. No sender
+names, emails or profiles are added. Newest whole exchanges fit within 24 KiB of
+JSON, with `omittedExchanges` counting older records. The first saved start report
+sets the cutoff, so rebuilding and retrying cannot add later reports. Context is
+sent only in the grant acknowledgement and is never saved as another event.
+The first input remains the copied message named by `origin.firstInputId`.
+
+`shared-assistant.test.ts`, `shared-child-reports.test.ts` and
+`private-turn-channel.test.ts` cover delivery, class mismatch, selection, limits,
+retry, parent/private canaries and computer wording. No model calls are needed.
+Fresh-install qualification remains NOT RUN; creation and follow-up commands are
+separate work.
+
 The server derives `sharingClass: shared_only` from the saved child creation and
 records it on the child start report and `computer.turn_started`, separately from
 `executionMode: restricted`.

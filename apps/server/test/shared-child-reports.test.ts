@@ -89,38 +89,43 @@ it('saves admitted shared output and only accepts its exact replay after closure
 
 async function selectsCompletedSharedExchanges() {
   const keys = await setup(admitted);
-  let sequence = 0;
-  async function save(type: string, turnId: string, text?: string, authorId = 'bob') {
+  const rows = await chatHistory(nats.store, 'test', 'child');
+  let sequence = rows.at(-1)!.sequence;
+  function save(type: string, turnId: string, text?: string, authorId = 'bob') {
     const data = { conversationId: 'child', turnId, authorId, authorKind: 'human',
       contentType: 'text', ...keys.encrypt('test', 'child', text ?? 'excluded-canary') };
-    const id = type === 'message.posted' ? turnId : `history-${++sequence}`;
+    sequence++;
+    const id = type === 'message.posted' ? turnId : `history-${sequence}`;
     const saved = { ...event(id, 'conversation-child', type), data };
-    await nats.seed([saved]);
+    const row = { sequence, event: saved };
+    rows.push(row);
   }
-  await save('agent.message_completed', 'input', 'Shared answer');
-  await save('agent.turn_completed', 'input');
+  save('agent.message_completed', 'input', 'Shared answer');
+  save('agent.turn_completed', 'input');
   for (const type of ['agent.message_delta', 'agent.reasoning_summarised', 'agent.command_ran',
     'agent.tool_call_finished', 'approval.decided', 'file.uploaded']) {
-    await save(type, 'input');
+    save(type, 'input');
   }
   for (const type of ['unfinished', 'agent.turn_failed', 'agent.turn_stop_requested',
     'agent.output_lost']) {
-    await save('message.posted', type);
-    await save('agent.message_completed', type);
+    save('message.posted', type);
+    save('agent.message_completed', type);
     if (type !== 'unfinished') {
-      await save(type, type);
-      await save('agent.turn_completed', type);
+      save(type, type);
+      save('agent.turn_completed', type);
     }
   }
-  await save('message.posted', 'next', 'New input');
-  await save('agent.turn_started', 'next');
+  save('message.posted', 'next', 'New input');
+  save('agent.turn_started', 'next');
   function decrypt(data: unknown) {
     const text = keys.decrypt('test', 'child', data);
     expect(text).not.toContain('excluded-canary');
     return text;
   }
-  const rows = await chatHistory(nats.store, 'test', 'child');
-  const message = rows.find(function current(row) { return row.event.id === 'next'; })!;
+  function isCurrent(row: typeof rows[number]) {
+    return row.event.id === 'next';
+  }
+  const message = rows.find(isCurrent)!;
   const expected = sharedContext(rows, message, decrypt);
   expect(expected?.exchanges[0]).toMatchObject({ member: 'Shared question',
     assistant: ['Shared answer'] });
@@ -129,8 +134,8 @@ async function selectsCompletedSharedExchanges() {
     expect(Object.keys(exchange)).toEqual(['at', 'outcome']);
     expect(exchange).toMatchObject({ outcome: 'not_completed' });
   }
-  await save('agent.message_completed', 'input', 'excluded-canary-late');
-  const rebuilt = await chatHistory(nats.store, 'test', 'child');
+  save('agent.message_completed', 'input', 'excluded-canary-late');
+  const rebuilt = structuredClone(rows);
   expect(sharedContext(rebuilt, message, decrypt)).toEqual(expected);
   expect(sharedContext(rows, rows[1]!, decrypt)).toBeUndefined();
 }
@@ -145,7 +150,8 @@ async function boundsSharedExchanges() {
     const id = `large-${index}`;
     const content = keys.encrypt('test', 'child', `${index}${'界'.repeat(3000)}`);
     const message = { ...first, sequence: index * 3 + 10,
-      event: { ...first.event, id, data: { ...first.event.data as object, ...content } } };
+      event: { ...first.event, id, data: { conversationId: 'child', authorId: 'bob',
+        authorKind: 'human', contentType: 'text', ...content } } };
     rows.push(message, { sequence: index * 3 + 11,
       event: { ...event(`done-${index}`, 'conversation-child', 'agent.turn_completed'),
         data: { turnId: id } } });

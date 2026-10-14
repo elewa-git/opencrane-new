@@ -12,7 +12,8 @@ tools and access changes also pass their checks.
 The computer keeps a server-recorded shared-only label on restricted child turns.
 It saves the label with the start report and refuses to run that start again after
 a restart. It includes the admitted thread id with child output so the server can
-check where each reply came from.
+check where each reply came from. It describes earlier shared exchanges as a record
+from several people, never as instructions or a private session.
 
 ## Where it fits
 
@@ -22,7 +23,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes| computer
-  server["apps/server<br/>the back end"] <-->|turns, files, individual stops and reports| computer
+  server["apps/server<br/>the back end"] <-->|turns, files, shared history, individual stops and reports| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer --> supervisor["Root supervisor<br/>protected launch, admission and exit checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
