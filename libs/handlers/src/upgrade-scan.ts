@@ -9,12 +9,32 @@ export interface SubscriptionChange {
   eventCount: number;
 }
 
+const safeMaintenanceBackends = new Set([
+  // Start vacuum workers without applying application changes.
+  'autovacuum launcher',
+  // Reclaim dead rows and update statistics without changing live application rows.
+  'autovacuum worker',
+  // Flush already changed buffers to disk without running application statements.
+  'background writer',
+  // Flush existing changes at checkpoints without creating application changes.
+  'checkpointer',
+  // Flush existing write-ahead log records without applying them to tables.
+  'walwriter',
+  // Copy completed write-ahead log files without applying them to tables.
+  'archiver',
+  // Start replication workers without applying their changes itself.
+  'logical replication launcher',
+]);
+
 export async function requireOnlySession(db: Query): Promise<void> {
-  const sessions = await db.query(
-    'SELECT pid FROM pg_stat_activity WHERE datname = current_database() ' +
+  const sessions = await db.query<{ backend_type: string | null }>(
+    'SELECT backend_type FROM pg_stat_activity WHERE datname = current_database() ' +
     'AND pid <> pg_backend_pid()',
   );
-  if (sessions.rows.length) {
+  function isBlockingSession(session: { backend_type: string | null }) {
+    return session.backend_type === null || !safeMaintenanceBackends.has(session.backend_type);
+  }
+  if (sessions.rows.some(isBlockingSession)) {
     throw new Error('There are other database sessions connected to the handlers database; ' +
       'stop every worker, dispatcher and database client before upgrading');
   }

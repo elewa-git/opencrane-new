@@ -4,6 +4,7 @@ import { connectEventStore, connectNats } from "@opencrane/event-store";
 import { members, ProjectionRunner, pgDb, type Db, type Query } from "@opencrane/projections";
 import { HandlerRuntime, registerHandler, dispatch, upgradeHandlers } from "../src/index.ts";
 import { effect, logger } from "./helpers.ts";
+import { sessionDiagnostics } from "./session-diagnostics.ts";
 
 const mode = process.env["CRASH_MODE"] ?? "";
 const poolOptions = {
@@ -63,6 +64,15 @@ function upgradeCrashDb(database: Db): Db {
     async function run(tx: Query) {
       async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
         const result = await tx.query<Row>(sql, values);
+        function isClientSession(row: Row) {
+          return row['backend_type'] === 'client backend';
+        }
+        if (sql.startsWith('SELECT backend_type FROM pg_stat_activity') &&
+          result.rows.some(isClientSession)) {
+          const sessions = await sessionDiagnostics(tx);
+          const diagnostic = { mode, otherDatabaseSessions: sessions };
+          console.error(JSON.stringify(diagnostic));
+        }
         if (sql.startsWith('UPDATE pgboss.job AS job') && mode === 'upgrade-inside-chunk') {
           await barrier();
         }

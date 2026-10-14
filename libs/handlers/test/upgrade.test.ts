@@ -1,13 +1,14 @@
 import { execFile } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
-import type { PoolClient } from "pg";
+import { Client } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type HandlerName } from "@opencrane/events";
 import { event } from "@opencrane/event-store/testing";
 import { dispatch, HandlerRuntime, registerHandler, upgradeHandlers } from "../src/index.ts";
 import { scanUpgrade } from "../src/upgrade-scan.ts";
 import { effect, fixture, until } from "./helpers.ts";
+import { sessionDiagnostics } from "./session-diagnostics.ts";
 
 const execute = promisify(execFile);
 const oldManifest = JSON.stringify([
@@ -19,9 +20,32 @@ const oldManifest = JSON.stringify([
 function upgradeTests() {
   let preparedRuntime: Awaited<ReturnType<Awaited<ReturnType<typeof fixture>>["runtime"]>>;
   let current: Awaited<ReturnType<typeof fixture>>;
+  async function reportSlowClose() {
+    try {
+      const sessions = await current.otherSessions();
+      const diagnostic = {
+        expectedOutcome: 'The handler test database closes after the test',
+        poolTotal: current.pool.totalCount,
+        poolIdle: current.pool.idleCount,
+        poolWaiting: current.pool.waitingCount,
+        otherDatabaseSessions: sessions,
+      };
+      console.error(JSON.stringify(diagnostic));
+    } catch {
+      console.error('Could not inspect handler test sessions while closing');
+    }
+  }
+  function reportSlowCloseAtDeadline() {
+    void reportSlowClose();
+  }
   async function close() {
     if (current) {
-      await current.close();
+      const diagnosticTimer = setTimeout(reportSlowCloseAtDeadline, 8_000);
+      try {
+        await current.close();
+      } finally {
+        clearTimeout(diagnosticTimer);
+      }
     }
   }
   afterEach(close);
@@ -61,14 +85,52 @@ function upgradeTests() {
     return runtime;
   }
 
-  async function command(...args: string[]) {
-    if (!args.includes("--dry-run")) {
-      await preparedRuntime.stop();
-      await current.closeIdleConnections();
+  async function sessionDiagnosticsHideClientText(childExit: boolean) {
+    current = await fixture();
+    const canary = 'session-secret-canary';
+    const sessionOptions = { connectionString: current.connectionString, application_name: canary };
+    const session = new Client(sessionOptions);
+    await session.connect();
+    try {
+      const identity = await session.query<{ pid: number }>(
+        "SELECT 'session-secret-canary', pg_backend_pid() AS pid",
+      );
+      if (childExit) {
+        const outcome = current.crash('upgrade-inside-publication');
+        await expect(outcome).rejects.toThrow('Other database sessions:');
+        await expect(outcome).rejects.not.toThrow(canary);
+      } else {
+        const sessions = await current.otherSessions();
+        const expectedSession = { pid: identity.rows[0]!.pid, backend_type: 'client backend' };
+        expect(sessions).toContainEqual(expect.objectContaining(expectedSession));
+        const output = JSON.stringify(sessions);
+        expect(output).not.toContain(canary);
+        for (const row of sessions) {
+          expect(Object.keys(row).sort()).toEqual([
+            'backend_start', 'backend_type', 'pid', 'query_start', 'state',
+            'state_change', 'wait_event_type', 'xact_start',
+          ]);
+        }
+      }
+    } finally {
+      await session.end();
     }
+  }
+  it.each([false, true])('hides client text in session diagnostics (child exit: %s)',
+    sessionDiagnosticsHideClientText);
+
+  async function runCommand(...args: string[]) {
     const env = { ...process.env, ...current.nats.env("projection"),
       DATABASE_URL: current.connectionString, SILO_ID: "test", MODEL_DECISION_URL: "http://unused" };
     return execute("npm", ["run", "ops", "--", "upgrade-handlers", ...args], { env });
+  }
+
+  async function command(...args: string[]) {
+    if (!args.includes("--dry-run")) {
+      await preparedRuntime.stop();
+      await current.waitForConnectionsClosed();
+    }
+    return runCommand(...args);
   }
 
   async function snapshot() {
@@ -139,7 +201,8 @@ function upgradeTests() {
       return locks.rows.length > 0;
     }
     await until(dispatcherLocked);
-    await expect(command("--confirm-writers-stopped")).rejects.toThrow("dispatcher is running");
+    await expect(runCommand("--confirm-writers-stopped"))
+      .rejects.toThrow("dispatcher is running");
   }
   it("refuses an upgrade while the dispatcher holds its lock, even for an equal manifest", locked);
 
@@ -201,9 +264,12 @@ function upgradeTests() {
 
   async function connectedSession() {
     await prepare();
+    await preparedRuntime.stop();
+    await current.waitForConnectionsClosed();
     const session = await current.pool.connect();
     try {
-      await expect(command('--confirm-writers-stopped')).rejects.toThrow('other database session');
+      await expect(runCommand('--confirm-writers-stopped'))
+        .rejects.toThrow('other database session');
       await command('--dry-run');
     } finally {
       session.release();
@@ -372,26 +438,39 @@ function upgradeTests() {
     const runtime = await prepare();
     await runtime.stop();
     await current.waitForConnectionsClosed();
-    let scanning = runtime;
-    if (missing) {
-      const options = { ...runtime.options, handlers: [] };
-      scanning = new HandlerRuntime(options);
-    } else {
-      const insert = runtime.boss.insert.bind(runtime.boss);
-      async function fewerIds(...args: Parameters<typeof insert>) {
-        const ids = await insert(...args);
-        return ids?.slice(1) ?? null;
-      }
-      vi.spyOn(runtime.boss, 'insert').mockImplementation(fewerIds);
-    }
     const changes = [{ handler: 'update-openfga', addedTypes: ['member.role_changed'],
       removedTypes: [], eventCount: 0 }];
     let message = 'Handler batch enqueue refused';
     if (missing) {
       message = 'Backfill handler missing';
     }
-    await expect(scanUpgrade(scanning, current.nats.store, changes, 4,
-      'target-manifest', oldManifest, undefined, false)).rejects.toThrow(message);
+    const originalDb = runtime.options.db;
+    // Use one client for the scan and its session check, as the upgrade command does.
+    async function scanWithLock(locked: typeof current.db) {
+      runtime.options.db = locked;
+      try {
+        let scanning = runtime;
+        if (missing) {
+          const options = { ...runtime.options, handlers: [] };
+          scanning = new HandlerRuntime(options);
+        } else {
+          const insert = runtime.boss.insert.bind(runtime.boss);
+          async function fewerIds(...args: Parameters<typeof insert>) {
+            const ids = await insert(...args);
+            return ids?.slice(1) ?? null;
+          }
+          vi.spyOn(runtime.boss, 'insert').mockImplementation(fewerIds);
+        }
+        await expect(scanUpgrade(scanning, current.nats.store, changes, 4,
+          'target-manifest', oldManifest, undefined, false)).rejects.toThrow(message);
+      } finally {
+        runtime.options.db = originalDb;
+      }
+    }
+    if (!current.db.lock) {
+      throw new Error('The database fixture must support a lasting lock');
+    }
+    await current.db.lock('handler-upgrade', scanWithLock);
     expect((await snapshot()).jobs).toEqual([]);
     const progress = await current.db.query('SELECT sequence, jobs FROM handler_upgrade');
     expect(progress.rows).toEqual([{ sequence: '0', jobs: '0' }]);
@@ -413,24 +492,38 @@ function upgradeTests() {
     await runtime.stop();
     await current.waitForConnectionsClosed();
     const subscribe = current.nats.store.subscribe.bind(current.nats.store);
-    let session: PoolClient | undefined;
+    let session: Client | undefined;
     let sessionPid: number | undefined;
+    let reconnectStage = 'not called';
     async function* reconnects(from: number, signal?: AbortSignal) {
-      session ??= await current.pool.connect();
+      reconnectStage = 'opening database session';
+      if (!session) {
+        // Keep this session outside the pool that the upgrade holds while it scans.
+        session = new Client({
+          connectionString: current.connectionString,
+          application_name: 'handlers-upgrade-injected-session',
+        });
+        await session.connect();
+      }
+      reconnectStage = 'reading database session id';
       const identity = await session.query<{ pid: number }>(
         'SELECT pg_backend_pid() AS pid');
       sessionPid = identity.rows[0]?.pid;
+      reconnectStage = 'reading history';
       yield* subscribe(from, signal);
     }
     const head = current.nats.store.head.bind(current.nats.store);
     const source = { head, subscribe: reconnects };
     try {
       const upgrade = upgradeHandlers(runtime, source);
+      let upgradeStatus = 'running';
       async function captureUpgradeError() {
         try {
           await upgrade;
+          upgradeStatus = 'completed';
           return undefined;
         } catch (error) {
+          upgradeStatus = error instanceof Error ? error.message : String(error);
           return error;
         }
       }
@@ -443,7 +536,33 @@ function upgradeTests() {
           'SELECT pid FROM pg_stat_activity WHERE pid = $1', [sessionPid]);
         return result.rows.length === 1;
       }
-      await until(reconnectSessionIsVisible);
+      try {
+        await until(reconnectSessionIsVisible);
+      } catch (error) {
+        const progress = await current.db.query(
+          "SELECT to_regclass('handler_upgrade')::text AS table_name");
+        let upgradeRows: unknown[] = [];
+        if (progress.rows[0]?.['table_name']) {
+          const saved = await current.db.query(
+            'SELECT target, sequence, jobs FROM handler_upgrade');
+          upgradeRows = saved.rows;
+        }
+        const sessions = await sessionDiagnostics(current.db);
+        const diagnostic = {
+          expectedOutcome: 'The source opens a PostgreSQL session during the history scan',
+          worker: 'No worker started; the runtime stopped before the upgrade',
+          sessionPid,
+          reconnectStage,
+          poolTotal: current.pool.totalCount,
+          poolIdle: current.pool.idleCount,
+          poolWaiting: current.pool.waitingCount,
+          upgradeStatus,
+          upgradeRows,
+          otherDatabaseSessions: sessions,
+        };
+        console.error(JSON.stringify(diagnostic));
+        throw error;
+      }
       const error = await upgradeOutcome;
       expect(error).toBeInstanceOf(Error);
       if (!(error instanceof Error)) {
@@ -458,7 +577,7 @@ function upgradeTests() {
         "SELECT id FROM pgboss.job WHERE start_after <> 'infinity'");
       expect(released.rows).toEqual([]);
     } finally {
-      session?.release();
+      await session?.end();
     }
   }
   it.each([false, true])('rechecks sessions before publication and between chunks (%s)',
@@ -478,16 +597,14 @@ function upgradeTests() {
     const jobs = await current.db.query("SELECT state FROM pgboss.job WHERE start_after = 'infinity'");
     expect(jobs.rows).toHaveLength(7);
     const sessions = await current.db.query(
-      "SELECT application_name, backend_start, state, query " +
+      "SELECT pid " +
         "FROM pg_stat_activity WHERE datname = current_database() " +
-        "AND pid <> pg_backend_pid()",
+        "AND pid <> pg_backend_pid() AND application_name = $1",
+      ['handlers-test-fixture'],
     );
-    function belongsToTestWorker(session: typeof sessions.rows[number]) {
-      return session['application_name'] === 'handlers-test-fixture';
-    }
-    const workerSessions = sessions.rows.filter(belongsToTestWorker);
-    expect(workerSessions.length).toBeGreaterThan(0);
-    console.info(JSON.stringify({ otherDatabaseSessions: sessions.rows }));
+    expect(sessions.rows.length).toBeGreaterThan(0);
+    const diagnostics = await sessionDiagnostics(current.db);
+    console.info(JSON.stringify({ otherDatabaseSessions: diagnostics }));
     await expect(upgradeHandlers(runtime, current.nats.store))
       .rejects.toThrow('other database sessions');
     const stillParked = await current.db.query(

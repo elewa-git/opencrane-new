@@ -89,7 +89,14 @@ the dispatcher waits. An operator stops them as part of the upgrade procedure.
 The [operator upgrade procedure](../../apps/ops/README.robot.md#handler-subscription-upgrade)
 stops clients, drains old jobs with decision services available, then stops
 all database clients and event writers. The command checks the dispatcher lock
-and refuses any other session in the handlers database, including idle sessions.
+and refuses other sessions in the handlers database, including idle clients,
+logical replication workers and unknown or null backend types. Only these named
+PostgreSQL processes are ignored: autovacuum launcher, autovacuum worker,
+background writer, checkpointer, walwriter, archiver and logical replication
+launcher. Each has its reason beside the allow-list in `src/upgrade-scan.ts`.
+The startup process remains blocking because it replays changes from the log.
+Test diagnostics select only PID, backend type, state, wait event type and timing
+columns. Client query text and application names never enter those reports.
 Original jobs in created, retry or active state block a changed manifest.
 Failed originals are listed in the report and do not block an upgrade.
 Diagnostic dead-letter copies do not block it. A successful rerun with an equal

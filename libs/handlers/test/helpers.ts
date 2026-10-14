@@ -9,6 +9,7 @@ import { pgDb, type Query } from "@opencrane/projections";
 import type { EventEnvelope } from "@opencrane/events";
 import { event, natsFixture } from "@opencrane/event-store/testing";
 import { HandlerRuntime, dispatch, type Handler } from "../src/index.ts";
+import { sessionDiagnostics } from "./session-diagnostics.ts";
 
 export const logger = createLogger("handler-tests", { level: "silent" });
 export async function effect(
@@ -78,8 +79,13 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
     await until(idleConnectionsClosed);
   }
   async function waitForConnectionsClosed() {
-    await closeIdleConnections();
     async function closed() {
+      // Close clients that become idle after the previous check.
+      await closeIdleConnections();
+      // Wait for clients that are still connecting, even before PostgreSQL lists them.
+      if (pool.totalCount > 0 || pool.waitingCount > 0) {
+        return false;
+      }
       const connections = await admin.query(
         "SELECT pid FROM pg_stat_activity WHERE datname = $1",
         [name],
@@ -95,6 +101,9 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
     connectionString,
     waitForConnectionsClosed,
     closeIdleConnections,
+    async otherSessions() {
+      return sessionDiagnostics(admin, name);
+    },
     async runtime(
       handlers: Handler[],
       options: { retryLimit?: number; expireInSeconds?: number } = {},
@@ -207,12 +216,8 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
       await until(childConnectionsClosed);
 
       async function reportChildExit() {
-        const sessions = await admin.query(
-          "SELECT application_name, backend_start, state, query " +
-            "FROM pg_stat_activity WHERE datname = $1 ORDER BY backend_start",
-          [name],
-        );
-        const details = JSON.stringify(sessions.rows);
+        const sessions = await sessionDiagnostics(admin, name);
+        const details = JSON.stringify(sessions);
         return new Error(`Child exited: ${stderr}\nOther database sessions: ${details}`);
       }
     },
