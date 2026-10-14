@@ -152,11 +152,19 @@ describe('the money checks catch a bad field added to a real event type', () => 
     ['a float with a lower bound', z.number().nonnegative()],
     ['an integer with no lower bound', z.int()],
     ['a negative-only integer', z.int().max(-1)],
+    ['an integer allowing minus one', z.int().gt(-2)],
     ['a string', z.string()],
     ['a number or a string', z.union([z.int().nonnegative(), z.string()])],
   ])('budget.reserved refuses a "taxCents" field that is %s', (_shape, schema) => {
     expect(centsFieldsWithWrongShape(acceptedShape(withField('budget.reserved', 'taxCents', schema)))).toEqual(['taxCents']);
   });
+
+  const positiveAmounts = [z.int().min(1).max(1000), z.int().positive()];
+  function acceptsPositiveAmount(schema: z.ZodType) {
+    const definition = withField('budget.reserved', 'taxCents', schema);
+    expect(centsFieldsWithWrongShape(acceptedShape(definition))).toEqual([]);
+  }
+  it.each(positiveAmounts)('accepts a stricter positive cents bound', acceptsPositiveAmount);
 
   it('accepts the real schemas and a new whole, non-negative amount, so the cases above fail only because of the added field', () => {
     for (const type of typesCarryingCents) {
