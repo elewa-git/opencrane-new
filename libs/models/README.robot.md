@@ -1675,6 +1675,7 @@ between them to prove that the call never reaches upstream.
 `turnBudgetStop` uses the same budget fold for renewal. Its first history read runs
 before the short membership check; later checks read only new budget events.
 The personal-payer summary and both authority test limits remain unchanged.
+
 ## Catalogue watch and dispatch holds (#48 PR 3b, first split)
 
 `mcpCatalogueWatch` runs beside the active models dispatcher. Startup holds every

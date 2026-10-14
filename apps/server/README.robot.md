@@ -2450,6 +2450,7 @@ and at most two new budget rows in its volume test.
 The memory integration test checks the real shared sender and memory HTTP backend:
 a stopped pass reaches neither the backend nor a new budget admission, and a
 renewed pass cannot reopen the stopped turn. Native execution remains disabled.
+
 ## Dispatch catalogue capture (#48 PR 3b, first split)
 
 `models-main.ts` starts the shared catalogue watch for `MODEL_MCP_ROUTES`.
