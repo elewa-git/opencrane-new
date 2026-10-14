@@ -69,7 +69,12 @@ async function appendRecord(options: MemoryOptions, context: MemoryContext,
 export async function recordRecall(options: MemoryOptions, context: MemoryContext,
   rights: Rights, snapshot: Snapshot, page: Page, byteCount: number,
   evidence: Awaited<ReturnType<typeof readRecallContext>>) {
-  const { chat, inputGeneration } = evidence;
+  const { inputGeneration } = evidence;
+  // Include ordinary activity that arrived during access checks without changing the proof.
+  const chat = await readChatFacts(options.store, options.silo, context.conversation, context.turn);
+  if (chat.closed) {
+    throw new Error('Memory turn ended');
+  }
   const rows = await history(options.store, `scope-${rights.scope.scopeId}`, options.silo,
     performance.now() + 10_000);
   const data = record(context, snapshot, inputGeneration);
