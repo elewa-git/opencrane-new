@@ -27,6 +27,12 @@ async function settle(fixture: ComponentFixture<PeopleScreen>): Promise<void> {
     await fixture.whenStable();
   }
 }
+async function waitForText(fixture: ComponentFixture<PeopleScreen>, value: string): Promise<void> {
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain(value);
+  });
+}
 async function mount(handler: (url: string) => Promise<Response> | Response) {
   vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(handler(url))));
   TestBed.configureTestingModule({ imports: [PeopleScreen] });
@@ -116,4 +122,111 @@ it('drops an old search reply and clears all protected values after a denied rea
   expect(root(fixture).textContent).not.toContain('Alice');
   expect(root(fixture).textContent).not.toContain('Bob');
   expect(root(fixture).textContent).not.toContain('example.test');
+});
+
+it('clears a newer search result when an older live search returns 403', async () => {
+  let releaseOldSearch: ((value: Response) => void) | undefined;
+  const fixture = await mount((url) => {
+    if (url.includes('q=old')) {
+      return new Promise((resolve) => { releaseOldSearch = resolve; });
+    }
+    if (url.includes('q=new')) return response(page([bob], null));
+    return response(page([alice], null));
+  });
+  const search = root(fixture).querySelector<HTMLInputElement>('#member-search');
+  if (!search) throw new Error('Expected the member search field');
+  await waitForText(fixture, 'alice@example.test');
+  search.value = 'old';
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  search.value = 'new';
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  await waitForText(fixture, 'Bob');
+  expect(root(fixture).textContent).toContain('bob@example.test');
+
+  releaseOldSearch?.(response({ status: 'refused' }, 403));
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('Your access changed');
+  expect(root(fixture).textContent).not.toContain('Bob');
+  expect(root(fixture).textContent).not.toContain('bob@example.test');
+});
+
+it('clears a loaded directory after a 401', async () => {
+  const fixture = await mount((url) => {
+    if (url.includes('q=again')) return response({ status: 'signed_out' }, 401);
+    return response(page([alice], null));
+  });
+  const search = root(fixture).querySelector<HTMLInputElement>('#member-search');
+  if (!search) throw new Error('Expected the member search field');
+  await waitForText(fixture, 'alice@example.test');
+  search.value = 'again';
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('Your access changed');
+  expect(root(fixture).textContent).not.toContain('alice@example.test');
+});
+
+it('checks a denied status before reading its body', async () => {
+  let bodyReads = 0;
+  const denied = response({ status: 'refused' }, 403);
+  denied.json = async () => {
+    bodyReads += 1;
+    throw new Error('Denied body must not be read');
+  };
+  const fixture = await mount(() => denied);
+  expect(root(fixture).textContent).toContain('Your access changed');
+  expect(bodyReads).toBe(0);
+});
+
+it('starts a new first page and drops the old cursor after a search', async () => {
+  const urls: string[] = [];
+  const fixture = await mount((url) => {
+    urls.push(url);
+    if (url.includes('q=Bob')) return response(page([bob], null));
+    return response(page([alice], 'alice'));
+  });
+  const search = root(fixture).querySelector<HTMLInputElement>('#member-search');
+  if (!search) throw new Error('Expected the member search field');
+  await waitForText(fixture, 'Alice');
+  expect(root(fixture).querySelector('[data-load-more]')).not.toBeNull();
+  search.value = 'Bob';
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  await waitForText(fixture, 'bob@example.test');
+  expect(urls.at(-1)).toBe('/api/members?q=Bob&after=&limit=20');
+  expect(root(fixture).textContent).toContain('Bob');
+  expect(root(fixture).textContent).not.toContain('Alice');
+  expect(root(fixture).querySelector('[data-load-more]')).toBeNull();
+});
+
+it('purges Groups and Members after a Members 403', async () => {
+  const fixture = await mount((url) => {
+    if (url === '/api/groups') {
+      return response({ rows: [{ groupId: 'sales', name: 'Sales team',
+        membershipSource: 'local', position: 0, payingGroupId: 'sales',
+        members: [{ memberId: 'alice', displayName: 'Alice', membershipSource: 'local' }],
+        access: { source: 'group_membership', conversationAccess: false,
+          personalMemoryAccess: false, grants: [] } }] });
+    }
+    if (url.includes('q=deny')) return response({ status: 'refused' }, 403);
+    return response(page([bob], null));
+  });
+  const screen = root(fixture);
+  screen.querySelector<HTMLButtonElement>('#people-tab-groups')?.click();
+  await waitForText(fixture, 'Sales team');
+  screen.querySelector<HTMLButtonElement>('#people-tab-members')?.click();
+  await waitForText(fixture, 'bob@example.test');
+  const search = screen.querySelector<HTMLInputElement>('#member-search');
+  if (!search) throw new Error('Expected the member search field');
+  search.value = 'deny';
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  expect(screen.textContent).toContain('Your access changed');
+  screen.querySelector<HTMLButtonElement>('#people-tab-groups')?.click();
+  await settle(fixture);
+  expect(screen.textContent).not.toContain('Sales team');
+  expect(screen.textContent).not.toContain('Alice');
+  expect(screen.textContent).not.toContain('Bob');
+  expect(screen.textContent).not.toContain('bob@example.test');
+  expect(screen.querySelector('[role="tablist"]')).toBeNull();
 });
