@@ -1915,6 +1915,9 @@ lost replies retry without a second stop. Existing Stop and terminal reports win
 Waiting approvals use the existing turn-stop invalidation. No computer is required.
 Replay updates tables only. Jobs can retry cleanup but cannot reopen stopped work.
 
+Provider status reads only the saved switch-on flag. It does not need call details
+from older spending holds.
+
 The provider admission summary now folds spending stops while reading its existing
 budget history. First admission checks active stops and stops after the queued message position;
 renewed turns retain the first computer admission position. Capacity still guards every send.

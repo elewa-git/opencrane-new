@@ -167,6 +167,8 @@ NATS, PostgreSQL and OpenFGA where those services hold the result.
 | seed-model-grants | assistant.created | Check the personal owner's membership; keep later revocations. | grants-backfill |
 | seed-provider-default | provider.verification_recorded | Keep a saved binding or pause; use only the first verified default. | provider-bindings |
 | seed-provider-default | provider.models_selected | Keep a saved binding or pause; use only the first verified default. | provider-bindings |
+| stop-budget-turns | budget.ceiling_set | Require the conversation index through the stop; keep saved Stop and final reports. | budget-stop-handler |
+| stop-budget-turns | budget.exhausted | Use the admitted payer and position; keep one stop per unfinished turn. | budget-stop-handler |
 | settle-budget | computer.lost | Require the latest lifecycle event and reservations saved before it. | actor, loss-backfill |
 | settle-budget | effect.observed | Read current spending and all saved effect amounts; charge once. | reconcile |
 | settle-budget | effect.resolved | Read current spending and saved resolutions; charge once. | reconcile |

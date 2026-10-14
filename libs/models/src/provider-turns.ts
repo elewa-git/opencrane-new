@@ -41,24 +41,34 @@ function emptyMode(): Mode {
   return { enabled: false, budget: emptyBudget() };
 }
 
-function addMode(summary: Mode, row: StoredEvent) {
+function emptyEnabled() {
+  return { enabled: false };
+}
+function addEnabled(summary: { enabled: boolean }, row: StoredEvent) {
   if (row.event.type === 'provider.managed_calls_enabled') {
     summary.enabled = true;
   }
+}
+function addMode(summary: Mode, row: StoredEvent) {
+  addEnabled(summary, row);
   applyBudget(summary.budget, row.event, row.sequence);
 }
+// Keep status readable when older holds lack call details.
+const providerEnabled: SummaryKind<{ enabled: boolean }> = {
+  name: 'provider-enabled', keep: 4, empty: emptyEnabled, add: addEnabled,
+};
 
 const providerMode: SummaryKind<Mode> = {
   name: 'provider-call-mode', keep: 4, empty: emptyMode, add: addMode,
 };
 
-function takeEnabled(summary: Mode) {
+function takeEnabled(summary: { enabled: boolean }) {
   return summary.enabled;
 }
 
 export function managedProviderCallsEnabled(store: EventStore, silo: string, deadline: number) {
   // Read the silo's spending stream so legacy calls never scan provider connections.
-  return readStreamSummary(store, silo, `budget-${silo}`, providerMode, deadline, takeEnabled);
+  return readStreamSummary(store, silo, `budget-${silo}`, providerEnabled, deadline, takeEnabled);
 }
 
 export async function providerTurnAdmission(store: EventStore, silo: string,
