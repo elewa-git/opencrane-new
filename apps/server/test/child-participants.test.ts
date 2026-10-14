@@ -74,6 +74,14 @@ async function inviteAndRecover() {
     }
     const added = after.tuples.filter(newTuple);
     expect(added).toHaveLength(2);
+    function isParticipant(tuple: (typeof added)[number]) {
+      return tuple.key.relation === 'participant';
+    }
+    const participantTuple = added.find(isParticipant);
+    expect(participantTuple?.key.user).toBe(
+      `person:${Buffer.from(JSON.stringify(['test', 'jane'])).toString('base64url')}`);
+    expect(participantTuple?.key.object).toBe(
+      `conversation:${Buffer.from(JSON.stringify(['test', 'child'])).toString('base64url')}`);
     expect(await context.auth.applied(input.id)).toBe(true);
     expect((await context.auth.conversation('jane', 'child', 'read')).allowed).toBe(true);
     expect((await context.auth.conversation('jane', 'parent', 'read')).allowed).toBe(false);
@@ -121,10 +129,14 @@ async function refusesInvitations() {
     expect((await request(context, missingAcknowledgement)).statusCode).toBe(400);
     const falseAcknowledgement = { ...input, historyReleaseAcknowledged: false };
     expect((await request(context, falseAcknowledgement)).statusCode).toBe(400);
+    expect((await request(context, input, 'alice', 'parent')).statusCode).toBe(400);
     const promotion = { memberId: 'bob', previousRole: 'member', newRole: 'admin',
       changedBy: 'alice' };
     await context.append('member-bob', 'member.role_changed', promotion);
     expect((await request(context, input, 'bob')).statusCode).toBe(403);
+    const removeOther = { id: 'bob-removes', action: 'remove', participantId: 'alice',
+      expectedAccessPosition: reviewed };
+    expect((await request(context, removeOther, 'bob')).statusCode).toBe(403);
     const leave = { id: 'creator-leave', action: 'leave', expectedAccessPosition: reviewed };
     expect((await request(context, leave)).statusCode).toBe(403);
     expect((await request(context, input, 'jane')).statusCode).toBe(403);
@@ -197,9 +209,11 @@ async function removesAndLeaves(action: string) {
     const saved = await context.nats.store.readEvent(removed.json<{ sequence: number }>().sequence);
     expect(saved.event.data).toEqual({ conversationId: 'child', participantId: 'jane',
       removedBy: actor, contextKind: 'shared_child', reviewPosition: sequence });
-    await context.append('participation-parent', 'participant.added', {
-      conversationId: 'parent', participantId: 'jane', addedBy: 'alice',
-    });
+    const parentJoin = { conversationId: 'parent', participantId: 'jane', addedBy: 'alice' };
+    await context.append('participation-parent', 'participant.added', parentJoin);
+    const parentRemoval = { conversationId: 'parent', participantId: 'jane', removedBy: 'alice' };
+    await context.append('participation-parent', 'participant.removed', parentRemoval);
+    await context.append('participation-parent', 'participant.added', parentJoin);
     expect((await request(context, undefined, 'jane')).statusCode).toBe(403);
     const rejoined = await request(context, invitation(await position(context), 'jane', 'reinvite'));
     expect(rejoined.statusCode).toBe(200);

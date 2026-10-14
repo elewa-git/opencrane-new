@@ -97,8 +97,9 @@ Source and qualification evidence: [P4-4 backend receipt](../process/p4-4-backen
 
 ## Group participants
 
-These routes work for saved human group chats. They do not change direct chats or
-assistant sessions. Group creation and sends are supplied separately.
+These routes work for saved human group chats and
+[shared child chats](group-chats.md#child-only-invitations). They do not change direct
+chats or private assistant sessions. Group creation and sends are supplied separately.
 
 `GET /api/conversations/:conversationId/participants` returns
 `{ rows: [{ memberId, displayName }], joinPosition, accessPosition, canManage, canLeave }`.

@@ -198,3 +198,10 @@ admin-only tool explanation shape.
 
 ToolPolicy optionally carries reviewRevision and the strict publication intent.
 These are saved facts, with no gateway readiness claim. Older policy replies still parse.
+
+## Child invitation acknowledgement
+
+`chatParticipantCommandSchema` accepts `historyReleaseAcknowledged: true` on an
+addition. The server requires it for shared children and rejects it for ordinary
+groups. Remove and leave shapes are unchanged. See the
+[child invitation contract](../../docs/api/group-chats.md#child-only-invitations).

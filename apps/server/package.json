@@ -32,6 +32,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@openfga/sdk": "0.9.7",
     "@types/pg": "8.15.5",
     "@types/ws": "8.18.2",
     "@types/yauzl": "2.10.3",

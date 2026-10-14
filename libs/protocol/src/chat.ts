@@ -144,6 +144,9 @@ export function sessionSlug(text: string): string {
 
 
 export const chatParticipantCommandSchema = z.union([
+  z.strictObject({ id: chatIdSchema, action: z.literal('add'),
+    participantId: chatIdSchema, expectedAccessPosition: z.int().nonnegative(),
+    historyReleaseAcknowledged: z.literal(true) }),
   z.strictObject({ id: chatIdSchema, action: z.enum(['add', 'remove']),
     participantId: chatIdSchema, expectedAccessPosition: z.int().nonnegative() }),
   z.strictObject({ id: chatIdSchema, action: z.literal('leave'),
