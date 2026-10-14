@@ -22,6 +22,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
 
   function requireCurrent(serverId: string) {
     const state = servers.get(serverId);
+    if (state && state.expiresAt <= Date.now()) state.held = true;
     if (stopped || !state || state.held || state.driftHeld || state.expiresAt <= Date.now()) {
       throw new Error('MCP catalogue watch unavailable');
     }
@@ -70,7 +71,8 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     const deadline = performance.now() + 30_000;
     await options.requireLeader();
     let policy = await readToolPolicy(store, silo, serverId, deadline);
-    if (state.held) {
+    const invalidated = state.held;
+    if (invalidated) {
       signal.throwIfAborted();
       await saveFailure(serverId, signal);
       policy = await readToolPolicy(store, silo, serverId, deadline);
@@ -102,11 +104,24 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     }
     await options.requireLeader();
     signal.throwIfAborted();
-    const event = envelope(silo, `mcp-${serverId}`, type, data);
-    const command = { event, expectedSequence: policy.sequence, deadline, signal };
-    const result = await store.append(command);
-    if (result.status !== 'appended') throw new Error('Catalogue append unconfirmed');
-    signal.throwIfAborted();
+    async function saveCapture(sequence: number) {
+      signal.throwIfAborted();
+      const event = envelope(silo, `mcp-${serverId}`, type, data);
+      const command = { event, expectedSequence: sequence, deadline, signal };
+      const result = await store.append(command);
+      if (result.status !== 'appended') throw new Error('Catalogue append unconfirmed');
+      signal.throwIfAborted();
+    }
+    await saveCapture(policy.sequence);
+    // Check after the append too: evidence can expire while the event store replies.
+    // Keep dispatch closed until the saved revision has invalidated old approvals.
+    if (!invalidated && !changed && state.expiresAt <= Date.now()) {
+      state.held = true;
+      await saveFailure(serverId, signal);
+      policy = await readToolPolicy(store, silo, serverId, deadline);
+      await options.requireLeader();
+      await saveCapture(policy.sequence);
+    }
     state.expiresAt = Date.parse(catalogue.expiresAt);
     state.held = changed || policy.driftHeld === true || state.driftHeld;
   }
