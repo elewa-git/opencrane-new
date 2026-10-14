@@ -172,8 +172,9 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
     principal: { kind: 'human', id: requester }, correlation: {}, data };
   const event = memoryForgottenEventSchema.parse(proposed);
   const identity = { silo: options.silo, ...scope, memoryId, revision: input.expectedRevision };
+  const position = await options.store.head(`scope-${scope.scopeId}`, fresh.deadline);
   await fresh();
-  if (await options.store.head(`scope-${scope.scopeId}`, fresh.deadline) !== expectedSequence) {
+  if (position !== expectedSequence) {
     return reconcile();
   }
   // Keep uncertain attempts across restart. This record never authorises key recovery or a resend.
