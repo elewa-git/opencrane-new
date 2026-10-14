@@ -7,8 +7,8 @@ import { pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { BudgetActor, budgetSummary, envelope, history, priceTableId,
   budgets, readBudget, totals } from '../src/index.ts';
-import { replayBudgets } from '../src/state.ts';
-import { rootTotals } from '../src/root-budget.ts';
+import { replayBudgets, type BudgetState } from '../src/state.ts';
+import { checkRootReservation, rootTotals } from '../src/root-budget.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let actor: BudgetActor;
@@ -240,3 +240,79 @@ async function refusesLateAllocation() {
   await expect(actor.setRootAllowance(binding, 1)).rejects.toThrow('Root binding conflict');
 }
 it('refuses an allowance after that turn already held money without a root', refusesLateAllocation);
+
+async function noWritesDuringReplay() {
+  throw new Error('Replay must not append');
+}
+async function replayStoppedRoot(rootId: string, reason: string) {
+  const storage = await databases();
+  try {
+    const db = pgDb(storage.queue);
+    const logger = createLogger('test', { level: 'silent' });
+    const runner = new ProjectionRunner(db, nats.store, logger);
+    const before = await nats.store.head();
+    await runner.initialise(budgets);
+    await runner.run(budgets);
+    await runner.initialise(replayBudgets);
+    await runner.run(replayBudgets);
+    expect(await readBudget(db, 'test')).toEqual(actor.state);
+    const rows = await db.query<{ state: BudgetState }>('SELECT state FROM model_budgets_replay');
+    const replayed = rows.rows[0]!.state;
+    expect(replayed).toEqual(actor.state);
+    await expect(checkRootReservation(replayed, call, rootId, 1, noWritesDuringReplay))
+      .rejects.toMatchObject({ reason });
+    expect(await nats.store.head()).toBe(before);
+  } finally {
+    await storage.close();
+  }
+}
+async function permitsDispatch() {}
+async function stopsOverrun() {
+  const root = await actor.setRootAllowance(binding, 110);
+  const reservation = await reserve(root.rootId, 110);
+  const lateReservation = await reserve(root.rootId, 110);
+  const dispatch = { callId: 'late-call', decisionId: 'late-decision',
+    bodyDigest: '1'.repeat(64), reservationId: lateReservation, modelCall: call };
+  await actor.admitDispatch(dispatch, permitsDispatch);
+  await settle(reservation, 240);
+  expect(rootTotals(actor.state, root.rootId)).toEqual({
+    settledCents: 240, heldCents: 110, availableCents: 650 });
+  await expect(reserve(root.rootId, 1)).rejects.toMatchObject({
+    reason: 'budget_reservation_exceeded', availableCents: 650 });
+  const stop = { rootId: root.rootId, reason: 'budget_reservation_exceeded',
+    reservationId: reservation };
+  expect(root.stop).toEqual(stop);
+  const beforeRetry = await nats.store.head();
+  await settle(reservation, 240);
+  await expect(reserve(root.rootId, 1)).rejects.toMatchObject({ reason: stop.reason });
+  expect(await nats.store.head()).toBe(beforeRetry);
+  const alerts = await history(nats.store, `security-${reservation}`, 'test');
+  expect(alerts).toHaveLength(1);
+  expect(alerts[0]?.event).toMatchObject({ type: 'security.alert_raised',
+    data: { reason: stop.reason,
+      overrun: { reservedCents: 110, settledCents: 240 } } });
+  const otherBinding = { ...binding, turnId: 'other', threadId: 'other' };
+  const otherCall = { ...call, turnId: 'other', threadId: 'other' };
+  const other = await actor.setRootAllowance(otherBinding, 1);
+  await actor.reserve(otherCall, 1, undefined, undefined, other.rootId);
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
+  await expect(reserve(root.rootId, 1)).rejects.toMatchObject({ reason: stop.reason });
+  await expect(actor.releaseUndispatched(lateReservation)).rejects.toThrow('may have been dispatched');
+  await settle(lateReservation, 70);
+  const afterLate = await nats.store.head();
+  await settle(lateReservation, 70);
+  expect(await nats.store.head()).toBe(afterLate);
+  expect(rootTotals(actor.state, root.rootId)).toEqual({
+    settledCents: 310, heldCents: 0, availableCents: 690 });
+  expect(totals(actor.state, clock)).toMatchObject({ monthCents: 310, reservedCents: 1 });
+  await expect(reserve(root.rootId, 1)).rejects.toMatchObject({ reason: stop.reason });
+  const rows = await history(nats.store, 'budget-test', 'test');
+  function isRootStop(row: (typeof rows)[number]) {
+    return row.event.type === 'budget.root_stopped';
+  }
+  expect(rows.filter(isRootStop)).toHaveLength(1);
+  await replayStoppedRoot(root.rootId, stop.reason);
+}
+it('stops an overrun permanently while keeping full cost and late dispatched settlement',
+  stopsOverrun);
