@@ -1747,6 +1747,58 @@ async function contextRecord() {
   const first = events.next().value!;
   return memoryContextRecordedEventSchema.parse(JSON.parse(first)).data;
 }
+async function grantChangedDuringLineage(restore: boolean) {
+  const body = await loadedWrite(`lineage-grant-change-${String(restore)}`);
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  const scopeSubject = `scope-${scopeId}`;
+  const before = await setup.nats.store.head(scopeSubject);
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  const originalCipher = crypto.createCipheriv;
+  let prepared = false;
+  let changed = false;
+  let finished = false;
+  function createCipher(...argumentsValue: Parameters<typeof originalCipher>) {
+    const cipher = originalCipher(...argumentsValue);
+    prepared = true;
+    return cipher;
+  }
+  async function* readStream(subject: string, from?: number, deadline?: number,
+    includeConversationCloses?: boolean) {
+    const lineageRead = prepared && !changed && subject === 'conversation-conversation';
+    if (lineageRead) {
+      expect(from).toBe(chat.sequence + 1);
+      expect(includeConversationCloses).toBe(true);
+      changed = true;
+      const fields = { resourceType: 'memory_write', resourceId: scopeId,
+        granteeKind: 'assistant', granteeId: 'assistant', revokedBy: 'alice' };
+      const revoked = await setup.append(grantStream('memory_write', scopeId),
+        'grant.revoked', fields);
+      await setup.auth.handler.handle(revoked, setup.db);
+      if (restore) await grantWrite('assistant');
+    }
+    yield* originalRead(subject, from, deadline, includeConversationCloses);
+    if (lineageRead) {
+      expect(performance.now()).toBeLessThan(deadline!);
+      finished = true;
+    }
+  }
+  const cipher = vi.spyOn(crypto, 'createCipheriv').mockImplementationOnce(createCipher);
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
+  try {
+    const response = await backendRemember(body);
+    expect(changed).toBe(true);
+    expect(finished).toBe(true);
+    expect.soft(response.statusCode, response.body).toBe(403);
+    expect.soft(await setup.nats.store.head(scopeSubject)).toBe(before);
+  } finally {
+    reads.mockRestore();
+    cipher.mockRestore();
+  }
+}
+it.each([false, true])(
+  'refuses a write grant changed during the final lineage read (restored=%s)',
+  grantChangedDuringLineage);
+
 async function refusesWithoutFact(body: Awaited<ReturnType<typeof recalledRemember>>) {
   const before = await setup.nats.store.head(`scope-${scopeId}`);
   const response = await backendRemember(body);
