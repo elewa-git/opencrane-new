@@ -2557,6 +2557,7 @@ Success is 202 with status appended, serverId and `chg_<commandId>` as changeRef
 Changed input or another admin reusing the command returns 409.
 `GET /api/org/integrations/changes/:commandId` returns applied with the original
 sequence and registeredAt, or unknown. Both routes require current admin access.
+The GET checks access once without starting a two-second write deadline.
 New credential-free installation requests remain checking; the worker saves no
 rejection and performs no discovery or network request. Older hosted records and
 built-in memory retain their existing rules.

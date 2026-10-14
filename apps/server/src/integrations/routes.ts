@@ -1,5 +1,5 @@
 import { AuthorityApplying, registerHosted, hostedRegistrationChange } from '@opencrane/models';
-import { activeMember, GroupRefused } from '../members/groups.ts';
+import { activeMember, readActiveMember, GroupRefused } from '../members/groups.ts';
 import { installWorker } from './install-worker.ts';
 import type { RemoteNetwork } from './remote.ts';
 import { registerRemote, discoveryStatus, remoteReference } from './registration.ts';
@@ -60,8 +60,12 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
           return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
         }
         if (options.store) {
-          const authority = { requiredRole: 'admin' as const };
-          await activeMember(options.store, options.binding, memberId, authority);
+          if (path.endsWith('/:commandId')) {
+            await readActiveMember(options.store, options.binding, memberId, 'admin');
+          } else {
+            const authority = { requiredRole: 'admin' as const };
+            await activeMember(options.store, options.binding, memberId, authority);
+          }
         }
         return await authorisedRequest(path, request, reply, config, options, memberId, now());
       } catch (error) {
