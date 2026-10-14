@@ -52,7 +52,8 @@
     "visual:p4-5-pr7": "npm run build -w apps/web && node scripts/capture-p4-5-pr7.mjs",
     "visual:screen-p4-22-access": "node scripts/capture-screen-p4-22-access.mjs",
     "visual:p4-21-screens": "npm run build -w apps/web && node scripts/check-p4-21-screens.mjs",
-    "visual:screen-p4-6-list": "npm run build -w apps/web && node scripts/capture-screen-p4-6-list.mjs"
+    "visual:screen-p4-6-list": "npm run build -w apps/web && node scripts/capture-screen-p4-6-list.mjs",
+    "visual:screen-p4-19-survey": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-19-survey.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

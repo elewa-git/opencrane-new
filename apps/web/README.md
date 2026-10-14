@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>chat, paged conversation lists and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>chat, welcome survey and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys, grants and reads facts| providers["Provider pages<br/>keys, checks, model choices and access"]
@@ -26,6 +26,8 @@ The editor checks that each save has taken effect. An uncertain reply offers a s
 check with the original request id.
 
 - Shows sign-in and the first-owner claim page.
+- Lets a person enter their name and optional pronouns for the welcome survey.
+  It shows saved progress and checks an uncertain save before continuing.
 - Lets people start conversations, send messages and stop a reply.
 - Lets organisation admins create shared assistants for groups and members start private
   sessions with them.

@@ -3,6 +3,16 @@
 For people, read [README.md](README.md) first.
 
 This Angular app provides the organisation settings shell, MCP register and Memory panel.
+`/welcome/survey` is a separate page without a chat composer. It reads
+`/api/onboarding` and opens the first unsaved step. The name and optional pronouns
+form sends one checked `save_step` command. A confirmed save reads progress again.
+An unknown save uses only `GET /api/personal/changes/:commandId`. A 409 rereads
+progress while keeping typed answers in memory; 403 clears them. A failed initial
+read permits an in-memory draft but requires another progress read before saving.
+The remaining survey steps show an unavailable message. `/account` reads only
+the onboarding `state` and links to the survey for `not_started` or `survey`.
+No survey answer is stored in the address, console or browser storage.
+`npm run visual:screen-p4-19-survey` uses intercepted replies to capture both widths.
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.

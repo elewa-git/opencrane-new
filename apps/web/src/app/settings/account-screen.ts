@@ -24,6 +24,7 @@ export class AccountScreen implements OnDestroy {
   @ViewChild('accountHeading') private accountHeading?: ElementRef<HTMLHeadingElement>;
   protected readonly identityState = signal<IdentityState>('loading');
   protected readonly identityName = signal('');
+  protected readonly surveyLink = signal(false);
   protected readonly announcement = signal('');
   private request = new AbortController();
 
@@ -57,6 +58,7 @@ export class AccountScreen implements OnDestroy {
       }
       this.identityName.set(identity.user?.name?.trim() ?? '');
       this.identityState.set('ready');
+      void this.loadSurveyState(request);
       if (this.identityName()) {
         this.announcement.set('Identity loaded from your current session.');
       } else {
@@ -68,6 +70,22 @@ export class AccountScreen implements OnDestroy {
       if (request.signal.aborted) return;
       this.identityState.set('failed');
       this.announcement.set("Couldn't load your identity.");
+    }
+  }
+
+  private async loadSurveyState(request: AbortController): Promise<void> {
+    this.surveyLink.set(false);
+    try {
+      const response = await fetch('/api/onboarding', {
+        cache: 'no-store', signal: request.signal,
+      });
+      if (!response.ok) return;
+      const body: unknown = await response.json();
+      const parsed = z.object({ state: z.string() }).parse(body);
+      if (request.signal.aborted) return;
+      this.surveyLink.set(parsed.state === 'not_started' || parsed.state === 'survey');
+    } catch {
+      this.surveyLink.set(false);
     }
   }
 

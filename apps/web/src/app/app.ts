@@ -25,6 +25,7 @@ import { SharedAssistantAdmin } from './people/shared-assistant-admin';
 import { OwnershipScreen } from './people/ownership-screen';
 import { SharedAssistantPicker } from './chat/shared-assistant-picker';
 import { personalSettingsPage, personalSettingsPageLabel } from './settings/pages';
+import { SurveyScreen } from './welcome/survey';
 
 @Component({
   selector: 'app-root',
@@ -34,7 +35,7 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, IntegrationDetail,
     OrganisationShell,
     AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen,
-    SharedAssistantAdmin, SharedAssistantPicker, OwnershipScreen,
+    SharedAssistantAdmin, SharedAssistantPicker, OwnershipScreen, SurveyScreen,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -55,6 +56,7 @@ export class App {
   protected readonly settingsPage = personalSettingsPage(this.pathname);
   protected readonly accountPath = this.pathname === '/account'
     || this.pathname.startsWith('/account/');
+  protected readonly surveyPage = this.pathname === '/welcome/survey';
   protected readonly activePage = organisationPage(this.pathname);
   protected readonly peopleGroupId = peopleGroupId(this.pathname);
   protected readonly ownershipPage = this.pathname === '/org/people/owners';

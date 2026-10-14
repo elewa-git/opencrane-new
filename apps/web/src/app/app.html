@@ -8,6 +8,8 @@
   <oc-workspace />
 } @else if (sharedAssistantPickerPage) {
   <oc-shared-assistant-picker />
+} @else if (surveyPage) {
+  <oc-survey-screen />
 } @else if (accountPath) {
   <oc-personal-settings-shell [activePage]="settingsPage">
     @if (!settingsPage) {

@@ -102,7 +102,8 @@ restart, slow history, unrelated activity, missing keys and removal during reads
 Run it with the supplied `PG_TEST_URL`, `nice -n 10` and one Vitest worker.
 Persona approval events are not on main yet: active-approval preservation remains
 NOT RUN until row 6. The survey append retains all earlier personal events.
-Screens, independent review and fresh-install qualification are NOT RUN.
+Survey step 1 screens use intercepted replies in `apps/web`; the step 2 form,
+independent review and fresh-install qualification are NOT RUN.
 
 ## Shared member guard
 
