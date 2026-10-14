@@ -314,3 +314,159 @@ async function requiresPermissionAndSpace() {
 }
 it('requires OpenFGA management permission and refuses a 98th recorded participant',
   requiresPermissionAndSpace, 120_000);
+
+async function recoversOwnLeave(changed: boolean) {
+  const context = await childFixture();
+  try {
+    await childSession(context);
+    const input = { id: 'bob-leaves', action: 'leave',
+      expectedAccessPosition: await position(context) };
+    const response = await request(context, input, 'bob');
+    expect(response.statusCode, response.body).toBe(200);
+    const sequence = response.json<{ sequence: number }>().sequence;
+    const retryInput = { ...input };
+    if (changed) retryInput.expectedAccessPosition = sequence;
+    const retry = await request(context, retryInput, 'bob');
+    if (changed) {
+      expect(retry.statusCode, retry.body).toBe(409);
+    } else {
+      expect(retry.statusCode, retry.body).toBe(200);
+      expect(retry.json()).toEqual(response.json());
+    }
+    await join(context, 'jane');
+    expect((await request(context, input, 'jane')).statusCode).toBe(403);
+    expect((await request(context, input, 'alice')).statusCode).toBe(403);
+    for (const path of ['messages', 'participants', 'files', 'approvals']) {
+      const denied = await request(context, undefined, 'bob', 'child', path);
+      expect(denied.statusCode, path).toBe(403);
+    }
+    const anotherCommand = { ...input, id: 'another-leave' };
+    expect((await request(context, anotherCommand, 'bob')).statusCode).toBe(403);
+    expect(await context.nats.store.head('participation-child')).toBe(sequence);
+    await refusesNewSubscription(context, 'bob');
+  } finally {
+    await context.close();
+  }
+}
+it.each([false, true])('recovers only the caller’s saved leave (changed position: %s)',
+  recoversOwnLeave, 120_000);
+
+async function refusesOtherConversationModes(mode: string) {
+  const context = await childFixture();
+  try {
+    let data;
+    if (mode === 'direct') {
+      data = { conversationId: 'other', createdBy: 'alice', mode,
+        participantIds: ['alice', 'bob'] };
+    } else {
+      data = { conversationId: 'other', createdBy: 'alice', mode,
+        assistantId: 'assistant' };
+    }
+    await context.append('conversation-other', 'conversation.created', data);
+    await context.runner.run(conversations);
+    expect((await context.auth.conversation('alice', 'other', 'read')).allowed).toBe(true);
+    const response = await request(context, undefined, 'alice', 'other');
+    expect(response.statusCode, response.body).toBe(403);
+  } finally {
+    await context.close();
+  }
+}
+it.each(['direct', 'agent_session'])('refuses participant routes for %s conversations',
+  refusesOtherConversationModes, 120_000);
+
+async function refusesNonCreatorWithPermission() {
+  const context = await childFixture();
+  try {
+    await childSession(context);
+    await join(context, 'jane');
+    const personId = Buffer.from(JSON.stringify(['test', 'bob'])).toString('base64url');
+    const childId = Buffer.from(JSON.stringify(['test', 'child'])).toString('base64url');
+    const tuple = { user: `person:${personId}`, relation: 'creator',
+      object: `conversation:${childId}` };
+    const client = new OpenFgaClient(context.options.binding);
+    await client.write({ writes: [tuple] });
+    const permission = await context.auth.conversation('bob', 'child', 'manage_participants');
+    expect(permission.allowed).toBe(true);
+    const reviewed = await position(context);
+    const response = await request(context, invitation(reviewed), 'bob');
+    expect(response.statusCode, response.body).toBe(403);
+    expect(await context.nats.store.head('participation-child')).toBe(0);
+  } finally {
+    await context.close();
+  }
+}
+it('refuses a non-creator even with OpenFGA management permission',
+  refusesNonCreatorWithPermission, 120_000);
+
+async function refusesAbsentRemoval() {
+  const context = await childFixture();
+  try {
+    await childSession(context);
+    const reviewed = await position(context);
+    const input = { id: 'remove-absent', action: 'remove', participantId: 'jane',
+      expectedAccessPosition: reviewed };
+    const response = await request(context, input);
+    expect(response.statusCode, response.body).toBe(409);
+    expect(await context.nats.store.head('participation-child')).toBe(0);
+  } finally {
+    await context.close();
+  }
+}
+it('refuses removal of an absent participant at the current position',
+  refusesAbsentRemoval, 120_000);
+
+async function refusesChangedSavedCommand(field: string) {
+  const context = await childFixture();
+  const readEvent = context.nats.store.readEvent.bind(context.nats.store);
+  try {
+    await childSession(context);
+    await join(context, 'jane');
+    const input = invitation(await position(context));
+    const response = await request(context, input);
+    expect(response.statusCode, response.body).toBe(200);
+    const sequence = response.json<{ sequence: number }>().sequence;
+    async function changedEvent(position: number, deadline?: number) {
+      const saved = await readEvent(position, deadline);
+      if (position !== sequence) return saved;
+      const event = { ...saved.event };
+      if (field === 'subject') event.subject = 'participation-other';
+      if (field === 'principal') event.principal = { kind: 'human', id: 'bob' };
+      return { ...saved, event };
+    }
+    // Change only the saved envelope returned by the store, leaving the request unchanged.
+    context.nats.store.readEvent = changedEvent;
+    const retry = await request(context, input);
+    expect(retry.statusCode, retry.body).toBe(409);
+    expect(await context.nats.store.head('participation-child')).toBe(sequence);
+  } finally {
+    context.nats.store.readEvent = readEvent;
+    await context.close();
+  }
+}
+it.each(['subject', 'principal'])('refuses a saved retry with a changed %s',
+  refusesChangedSavedCommand, 120_000);
+
+async function refusesNewSubscription(context: Fixture, memberId: string) {
+  const address = await context.app.listen({ host: '127.0.0.1', port: 0 });
+  const realtime = { feed: context.feed, binding: context.options.binding, chat: context.options };
+  const wss = attachWebSocketServer(context.app.server, context.app.log, context.config, realtime);
+  const socketOptions = { headers: context.headers(memberId) };
+  const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, socketOptions);
+  const received: unknown[] = [];
+  function receive(raw: Buffer) {
+    received.push(chatMessageSchema.parse(JSON.parse(raw.toString()) as unknown));
+  }
+  socket.on('message', receive);
+  try {
+    await once(socket, 'open');
+    const closed = once(socket, 'close');
+    const subscription = { type: 'subscribe', topic: 'conversation', conversationId: 'child', since: 0 };
+    socket.send(JSON.stringify(subscription));
+    await closed;
+    expect(received).toEqual([]);
+  } finally {
+    socket.terminate();
+    function stop(resolve: () => void) { wss.close(resolve); }
+    await new Promise<void>(stop);
+  }
+}
