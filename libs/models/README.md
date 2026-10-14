@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|builds configuration; checks calls, holds and spending stops; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks open spending before provider switch-on; saves publication, gateway, root allowance, spending, connection and instance stops; records matching child admissions| store["libs/event-store<br/>event log"]
+  models -->|checks open spending before provider switch-on; saves publication, gateway, root allowance, overrun, spending, connection and instance stops; records matching child admissions| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -45,7 +45,9 @@ Other hosted images still need image admission.
 
 The budget actor can save a fixed allowance for one turn, called a root. Calls share
 that allowance through their existing holds. A spending refusal stops further holds
-for that root permanently. This internal API has no child-chat caller yet.
+for that root permanently. A call that costs more than its hold also stops the root,
+while its full cost and an alert are saved. Other roots can still use the payer.
+This internal API has no child-chat caller yet.
 
 - Share public address checks with the server’s remote tool discovery. Test a socket
   check that accepts one visible TLS hostname and public DNS answers before connecting.

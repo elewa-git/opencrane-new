@@ -408,9 +408,11 @@ requesterId, conversationId, turnId, threadId, assistantId, computerId, generati
 payingGroupId and allowanceCents (1–1,000). Allocation holds no money.
 `budget.reserved.rootId` optionally links the call's sole hold to that root.
 Root totals count those calls over their whole lifetime, across budget periods.
-`budget.root_stopped` records either allowance_exhausted with attemptedBoundCents
-and availableCents, or ceiling_stop with the existing budget stopId. The first stop
-wins and refunds nothing. External stop reasons and dispatch checks follow separately.
+`budget.root_stopped` records allowance_exhausted with attemptedBoundCents and
+availableCents, ceiling_stop with the existing budget stopId, or
+budget_reservation_exceeded with the reservationId whose actual cost exceeded its hold.
+The actor saves an overrun stop before the full settlement and the existing alert.
+The first stop wins and refunds nothing. External stop reasons and dispatch checks follow separately.
 These internal records have no caller, route or reaction yet.
 
 The Phase 2 model actor records the global monthly `ceilingCents` and

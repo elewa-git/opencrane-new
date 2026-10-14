@@ -9,7 +9,8 @@ import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budget
   exceededReasons, observedPayload, requireDispatchReservation, type BudgetState, type ModelCall } from './state.ts';
 
 import { history } from './event-history.ts';
-import { checkRootReservation, setRootAllowance, stopRootAtCeiling } from './root-budget.ts';
+import { checkRootReservation, setRootAllowance, stopRootAtCeiling,
+  stopRootOnOverrun } from './root-budget.ts';
 export { history } from './event-history.ts';
 
 type ModelUsage = {
@@ -282,6 +283,8 @@ export class BudgetActor {
     const conflict = Boolean(r.outcomeUnknown) || amounts.some(amount => amount !== cents) ||
       (r.settledCents !== undefined && r.settledCents !== cents);
     const amount = Math.max(r.settledCents ?? 0, cents, ...amounts);
+    // Save the stop first so a failed settlement write cannot reopen the root after restart.
+    await stopRootOnOverrun(this.state, r, amount, this.append.bind(this));
     if (r.settledCents !== amount || Boolean(r.outcomeUnknown) !== conflict) {
       await this.append('budget.settled', { reservationId: r.id, permitId: r.id, settledCents: amount,
         ...(conflict ? { outcome: 'unknown' } : released ? { outcome: 'not_dispatched' } : {}) });

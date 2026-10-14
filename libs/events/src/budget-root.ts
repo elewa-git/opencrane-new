@@ -10,4 +10,6 @@ export const budgetRootStoppedDataSchema = z.discriminatedUnion('reason', [
   z.object({ rootId: id, reason: z.literal('allowance_exhausted'),
     attemptedBoundCents: z.int().positive(), availableCents: z.int().nonnegative() }).strict(),
   z.object({ rootId: id, reason: z.literal('ceiling_stop'), stopId: id }).strict(),
+  z.object({ rootId: id, reason: z.literal('budget_reservation_exceeded'),
+    reservationId: id }).strict(),
 ]);

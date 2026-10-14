@@ -508,7 +508,11 @@ of JSON `[silo, conversationId, turnId]`. Identical retries return the saved rec
 and match every saved identity field. The saved root position replaces admittedAt.
 `rootTotals` uses the existing reservations, BigInt sums and lifetime settlement.
 Roots stay out of `budgetSummary`. Refusals contain fixed reasons and availableCents.
-Allowance and ceiling stops are permanent; settlement and replay still work.
+Allowance, ceiling and call-overrun stops are permanent; settlement and replay still work.
+An overrun uses the existing `budget_reservation_exceeded` reason and names its
+reservationId. The actor saves the first stop before settlement, then records the
+full cost and the existing alert. Repeated settlement adds no stop or charge.
+A failed settlement or alert can be retried without reopening the root.
 Tests in `libs/models/test/root-budget.test.ts` use real NATS and PostgreSQL.
 Requester, turn-ended and access-revoked stop commands follow in the next part.
 Trusted call ids, grant/dispatch checks and the child dispatcher remain in row 5.

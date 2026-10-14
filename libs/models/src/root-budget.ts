@@ -7,7 +7,8 @@ import { budgetStopId, exceededReasons, type BudgetState, type ModelCall } from 
 type Append = (type: string, payload: unknown) => Promise<void>;
 type Root = BudgetState['roots'][number];
 const allowanceInput = budgetRootAllowanceSetDataSchema.omit({ rootId: true });
-type RefusalReason = 'allowance_exhausted' | 'ceiling_stop' | 'allowance_unavailable';
+type RefusalReason = z.infer<typeof budgetRootStoppedDataSchema>['reason'] |
+  'allowance_unavailable';
 export class RootBudgetRefused extends Error {
   readonly reason: RefusalReason;
   readonly availableCents: number;
@@ -105,6 +106,15 @@ export async function stopRootAtCeiling(state: BudgetState, root: Root | undefin
   if (!root) return;
   const stop = { rootId: root.rootId, reason: 'ceiling_stop' as const, stopId };
   await stopRoot(state, stop, append);
+}
+export async function stopRootOnOverrun(state: BudgetState,
+  reservation: BudgetState['reservations'][number], settledCents: number, append: Append) {
+  if (reservation.rootId === undefined || settledCents <= reservation.amountCents) return;
+  const root = findRoot(state, reservation.rootId);
+  if (root.stop) return;
+  const stop = { rootId: root.rootId, reason: 'budget_reservation_exceeded' as const,
+    reservationId: reservation.id };
+  await append('budget.root_stopped', stop);
 }
 export async function checkRootReservation(state: BudgetState, call: ModelCall,
   rootId: string | undefined, amountCents: number, append: Append) {
