@@ -1,12 +1,13 @@
 import { ChildProcess, execFile } from 'node:child_process';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
+import { z } from 'zod';
 import { promisify } from 'node:util';
 import { databases } from '@opencrane/authz/testing';
 import { createLogger } from '@opencrane/observability';
 import { pgDb, ProjectionRunner, mcpCatalogue } from '@opencrane/projections';
-import { expect, it, onTestFinished } from 'vitest';
-import { gatewayObservationSchema, getEventDefinition } from '@opencrane/events';
+import { expect, it, onTestFinished, vi } from 'vitest';
+import { gatewayObservationSchema, getEventDefinition, eventEnvelopeSchema } from '@opencrane/events';
 import { lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
@@ -20,6 +21,8 @@ import { startGateway } from '../src/gateway.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
 import { freePort, gatewayFixture } from './gateway-delivery-fixture.ts';
 
+const appendEventSchema = eventEnvelopeSchema(z.unknown());
+
 async function fixture() {
   const nats = await natsFixture();
   async function closeNats() {
@@ -29,7 +32,8 @@ async function fixture() {
   const setup = await gatewayFixture();
   const faulty = await lostReplyStore(nats.connection);
   function declaration(name: string) {
-    const definition = JSON.stringify({ name, inputSchema: { type: 'object' } });
+    const definition = JSON.stringify({ name, description: 'CATALOGUE-CANARY',
+      inputSchema: { type: 'object' } });
     return { name, definition, revision: losslessJson(definition).digest,
       reviewed: false, costCents: 0 as const };
   }
@@ -481,7 +485,8 @@ async function memberReceipts(setup: Awaited<ReturnType<typeof fixture>>) {
 async function savesOneReceiptPerOperation() {
   const setup = await fixture();
   await waitForDeliveredWitness(setup);
-  const before = toolPolicyFromRows(await history(setup.nats.store, 'mcp-alpha', 'test'));
+  const original = await history(setup.nats.store, 'mcp-alpha', 'test');
+  const before = toolPolicyFromRows(original);
   await Promise.all([setup.delivery.observe(), setup.delivery.observe()]);
   await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
   const receipts = await memberReceipts(setup);
@@ -496,14 +501,29 @@ async function savesOneReceiptPerOperation() {
     reviewRevision: before.reviewRevision, published: false,
     configurationObservation: receipts[0]!.event.data });
   expect(await gatewayConfigurationCurrent(setup.nats.store, 'test', setup.record)).toBe(true);
-  const { recordDigest: _digest, ...previous } = setup.record;
-  const saved = { ...previous, generation: 2, changeRef: 'another-operation' };
-  const next = { ...saved, recordDigest: publicationDigest(saved) };
-  await setup.nats.seed([envelope('test', 'gateway-config-test',
-    'gateway.configuration_requested', next)]);
+  const bravoEntry = { ...member.entry, serverId: 'bravo' };
+  for (const row of original) {
+    const fields = z.record(z.string(), z.unknown()).parse(row.event.data);
+    let data: Record<string, unknown> = { ...fields, serverId: 'bravo' };
+    if (row.event.type === 'mcp.server_reviewed') {
+      data = { ...data, policyRevision: await setup.nats.store.head('mcp-bravo') };
+    }
+    if (row.event.type === 'mcp.server_published') {
+      const position = await setup.nats.store.head('mcp-bravo');
+      bravoEntry.reviewRevision = position;
+      data = { ...data, commandId: 'publish-bravo', expectedSequence: position,
+        reviewRevision: position, fragmentDigest: publicationDigest(bravoEntry) };
+    }
+    const event = envelope('test', 'mcp-bravo', row.event.type, data);
+    event.principal = row.event.principal;
+    await setup.nats.seed([event]);
+  }
+  const next = await prepareGatewayConfiguration(setup.nats.store, 'test', 'bravo', 'publish-bravo');
   await setup.delivery.deliver(next);
   await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
   expect(await memberReceipts(setup)).toEqual(receipts);
+  const bravo = toolPolicyFromRows(await history(setup.nats.store, 'mcp-bravo', 'test'));
+  expect(bravo.configurationObservation).toMatchObject({ changeRef: 'publish-bravo', generation: 2 });
 }
 it('saves one receipt per operation under concurrent observation and unchanged generations',
   savesOneReceiptPerOperation);
@@ -512,11 +532,13 @@ async function recoversLostMemberReply() {
   const setup = await fixture();
   let lost = false;
   async function append(command: Parameters<typeof setup.options.store.append>[0]) {
-    if (!lost && command.event.type === 'mcp.configuration_observed') {
+    const result = await setup.options.store.append(command);
+    const eventType = appendEventSchema.parse(command.event).type;
+    if (!lost && eventType === 'mcp.configuration_observed') {
       lost = true;
-      setup.faulty.loseNextReply();
+      throw new Error('Lost receipt reply');
     }
-    return setup.options.store.append(command);
+    return result;
   }
   const store = { append, head: setup.options.store.head.bind(setup.options.store),
     readStream: setup.options.store.readStream.bind(setup.options.store),
@@ -554,30 +576,76 @@ it('checks every member receipt field and rejects extra fields', validatesMember
 async function rebuildsReceiptsWithoutEffects() {
   const setup = await fixture();
   const storage = await databases();
-  onTestFinished(storage.close);
+  async function closeStorage() {
+    await storage.close();
+  }
+  onTestFinished(closeStorage);
   await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
   const logger = createLogger('receipt-replay', { level: 'silent' });
   const runner = new ProjectionRunner(pgDb(storage.queue), setup.nats.reader, logger);
   await runner.initialise(mcpCatalogue);
   await runner.run(mcpCatalogue);
-  const before = await storage.queue.query('SELECT policy FROM mcp_catalogue');
+  const before = await storage.queue.query<{ policy: unknown }>('SELECT policy FROM mcp_catalogue');
   const receipts = await memberReceipts(setup);
   expect(before.rows[0]?.['policy']).toMatchObject({
     configurationObservation: receipts[0]!.event.data, published: false });
   const position = await setup.nats.store.head();
   const bytes = await readFile(setup.options.configFile);
+  const inode = (await stat(setup.options.configFile)).ino;
+  const probe = vi.spyOn(globalThis, 'fetch');
+  function restoreProbes() {
+    vi.restoreAllMocks();
+  }
+  onTestFinished(restoreProbes);
   const replay = gatewayDelivery({ ...setup.options, mode: 'replay' });
   await replay.deliver(setup.record);
   expect(await replay.observe()).toBeNull();
+  expect(probe).not.toHaveBeenCalled();
+  probe.mockRestore();
   const execute = promisify(execFile);
   const env = { ...process.env, ...setup.nats.env('projection'),
     DATABASE_URL: storage.queue.options.connectionString };
   const result = await execute('npm', ['run', 'replay', '--', 'mcp-catalogue', '--verify'],
     { env, timeout: 10_000 });
   expect(result.stdout).toContain('rebuilt state matched the live projection');
-  expect((await storage.queue.query('SELECT policy FROM mcp_catalogue')).rows).toEqual(before.rows);
+  expect((await storage.queue.query<{ policy: unknown }>('SELECT policy FROM mcp_catalogue')).rows).toEqual(before.rows);
   expect(await setup.nats.store.head()).toBe(position);
   expect(await readFile(setup.options.configFile)).toEqual(bytes);
+  expect((await stat(setup.options.configFile)).ino).toBe(inode);
 }
 it('rebuilds member receipts with the replay CLI without delivery or new events',
   rebuildsReceiptsWithoutEffects);
+
+async function changedStateRefusesMemberAppend(change: 'withdrawal' | 'preparation') {
+  const setup = await fixture();
+  let changed = false;
+  async function append(command: Parameters<typeof setup.options.store.append>[0]) {
+    const eventType = appendEventSchema.parse(command.event).type;
+    if (eventType === 'mcp.configuration_observed') {
+      if (change === 'withdrawal') {
+        const event = envelope('test', 'mcp-alpha', 'mcp.server_unpublished',
+          { serverId: 'alpha', unpublishedBy: 'admin' });
+        await setup.nats.seed([event]);
+      } else {
+        const { recordDigest: _digest, ...previous } = setup.record;
+        const saved = { ...previous, generation: 2, changeRef: 'second' };
+        const next = { ...saved, recordDigest: publicationDigest(saved) };
+        const event = envelope('test', 'gateway-config-test', 'gateway.configuration_requested', next);
+        await setup.nats.seed([event]);
+      }
+      changed = true;
+    }
+    return setup.options.store.append(command);
+  }
+  const store = { append, head: setup.options.store.head.bind(setup.options.store),
+    readStream: setup.options.store.readStream.bind(setup.options.store),
+    readEvent: setup.options.store.readEvent.bind(setup.options.store) };
+  const delivery = gatewayDelivery({ ...setup.options, store });
+  await delivery.deliver(setup.record);
+  await waitForDeliveredWitness(setup);
+  expect(await delivery.observe()).toBeNull();
+  expect(changed).toBe(true);
+  expect(await memberReceipts(setup)).toHaveLength(0);
+}
+it.each(['withdrawal', 'preparation'] as const)(
+  'lets a %s refuse the conditional server receipt append', changedStateRefusesMemberAppend);

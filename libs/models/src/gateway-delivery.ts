@@ -1,11 +1,13 @@
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { rename, rm, writeFile } from 'node:fs/promises';
-import { gatewayConfigurationSchema } from '@opencrane/events';
+import { gatewayConfigurationSchema, gatewayObservationSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { z } from 'zod';
 import { envelope, history } from './actor.ts';
-import { gatewayConfigurationCurrent } from './gateway-generation.ts';
+import { publicationDigest } from './publication.ts';
+import { toolPolicyFromRows } from './tool-policy.ts';
+import { gatewayConfigurationCurrent, gatewayMemberCurrent } from './gateway-generation.ts';
 import { renderGatewayConfiguration, type GatewayRenderSettings } from './gateway-renderer.ts';
 
 type Configuration = ReturnType<typeof gatewayConfigurationSchema.parse>;
@@ -79,7 +81,42 @@ export function gatewayDelivery(options: {
     if (!current || !usable(delivered)) {
       return null;
     }
+    for (const member of delivered.record.members) {
+      if (!await saveMemberReceipt(delivered, member, row)) return null;
+    }
+    const stillCurrent = await gatewayConfigurationCurrent(options.store, options.silo,
+      delivered.record);
+    if (!stillCurrent || !usable(delivered)) return null;
     return row;
+  }
+
+  async function saveMemberReceipt(delivered: NonNullable<typeof active>,
+    member: Configuration['members'][number], observation: StoredEvent) {
+    const subject = `mcp-${member.entry.serverId}`;
+    const deadline = performance.now() + 10_000;
+    const expectedGlobalSequence = await options.store.head(undefined, deadline);
+    const rows = await history(options.store, subject, options.silo, deadline);
+    if (!gatewayMemberCurrent(rows, member)) return false;
+    const operation = { serverId: member.entry.serverId, changeRef: member.changeRef,
+      fragmentDigest: member.fragmentDigest };
+    const id = `mcp-observed:${publicationDigest(operation)}`;
+    const state = toolPolicyFromRows(rows);
+    for (const row of rows) {
+      if (row.event.id === id) {
+        return state.configurationObservation?.changeRef === member.changeRef &&
+          state.configurationObservation.fragmentDigest === member.fragmentDigest;
+      }
+    }
+    const current = await gatewayConfigurationCurrent(options.store, options.silo, delivered.record);
+    if (!current || !usable(delivered)) return false;
+    const { outcome: _outcome, ...observed } = gatewayObservationSchema.parse(observation.event.data);
+    const data = { ...operation, ...observed, reviewRevision: member.entry.reviewRevision,
+      sourceSequence: member.sourceSequence };
+    const event = envelope(options.silo, subject, 'mcp.configuration_observed', data, id);
+    // Refuse withdrawal on this server and newer preparations on the gateway stream.
+    const command = { event, expectedSequence: state.sequence, expectedGlobalSequence, deadline };
+    const result = await options.store.append(command);
+    return result.status === 'appended';
   }
 
   async function observe() {

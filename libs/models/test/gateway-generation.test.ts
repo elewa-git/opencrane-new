@@ -195,12 +195,12 @@ async function refusesUnrelatedReceipts() {
     await save(store, envelope('test', 'mcp-alpha', 'mcp.configuration_observed',
       { ...valid, ...fields }));
     const policy = toolPolicyFromRows(await history(store, 'mcp-alpha', 'test'));
-    expect(policy).not.toHaveProperty('configurationObservation');
+    expect(policy.configurationObservation).toBeUndefined();
   }
   await save(store, envelope('test', 'mcp-bravo', 'mcp.configuration_observed',
     { ...valid, serverId: 'bravo' }));
   const other = toolPolicyFromRows(await history(store, 'mcp-bravo', 'test'));
-  expect(other).not.toHaveProperty('configurationObservation');
+  expect(other.configurationObservation).toBeUndefined();
   await save(store, envelope('test', 'mcp-alpha', 'mcp.server_unpublished',
     { serverId: 'alpha', unpublishedBy: 'admin' }));
   await save(store, envelope('test', 'mcp-alpha', 'mcp.configuration_observed', valid));

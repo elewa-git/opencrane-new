@@ -1,0 +1,1 @@
+Tool servers now keep one receipt for each publication request confirmed by the live gateway. Receipts, calls and unchanged catalogue checks keep the prepared configuration current; changed rules or publication invalidate it. The internal Ready read and background delivery remain unfinished.

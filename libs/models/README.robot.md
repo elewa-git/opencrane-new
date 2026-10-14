@@ -2015,7 +2015,7 @@ Recorded outbound names are accept, content-length, content-type, host, mcp-meth
 mcp-name, mcp-protocol-version, x-opencrane-mcp-permit and x-request-id.
 No caller identity or canary is in the delivered file, recorded traffic or gateway logs.
 Malformed input errors are covered by the existing renderer tests.
-Remaining: per-server receipts, the Ready read, worker wiring, removal of MODEL_MCP_ROUTES
+Remaining: the Ready read, worker wiring, removal of MODEL_MCP_ROUTES
 and generation admission. This internal module enables no production call.
 
 Own checks, 14 October 2026, base `808d69c0` plus this branch: PASS — 41 focused
@@ -2023,3 +2023,24 @@ renderer, preparation, reload and delivery tests twice; 419 event security tests
 136 registry/catalogue types agree. Logs: `/tmp/p3-4-tests-final-{1,2}.log`,
 `/tmp/p3-4-tests-1.log`, `/tmp/p3-4-events.log`. Full root suite and fresh-install
 journey: NOT RUN. Fixtures use the pinned gateway and disposable NATS, with no paid calls.
+
+
+## Per-server gateway receipts (P3-4 PR 3b; Part of #45)
+
+After an exact live observation, `observe` saves `mcp.configuration_observed` on each
+member's MCP stream. Its fixed id hashes serverId, changeRef and fragmentDigest. Each
+append requires that stream's read position and the global position from before the checks.
+This also refuses a newer preparation saved during the receipt append. A lost reply is recovered on the next
+probe. Unchanged operations carried into another generation receive no extra receipt.
+A restarted child requires delivery and a new probe, even when these receipts exist.
+
+`gatewayMemberCurrent` compares the current intent and entry digest, and requires the
+same policyRevision as at sourceSequence. Receipts, call admissions and unchanged checks
+keep it current. Withdrawal, changed policy, failed checks and replacement intents do not.
+The delivery checks the latest preparation again before each receipt and before returning.
+The fold retains only a receipt matching its intent and review; no receipt enables calls.
+The Ready read remains outside this split to keep the change near 600 lines. Worker
+wiring, startup route removal, generation admission and fresh-install qualification remain.
+
+Tests use the pinned gateway, disposable NATS and PostgreSQL. The replay CLI compares
+rebuilt policy with the live projection; it writes no events or gateway configuration.

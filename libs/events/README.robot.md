@@ -571,4 +571,13 @@ references and closed operations; it performs no custody, provider or release wo
 `gateway.configuration_observed` records generation, recordDigest, configDigest,
 processRef, outcome (`loaded`) and observedAt on `gateway-config-<silo>`.
 It is evidence from an exact live control response, not readiness or a file write.
-It grants no permission. Per-server receipts and the Ready read remain unbuilt.
+It grants no permission. Per-server receipts are described below; the Ready read remains unbuilt.
+
+
+## Per-server gateway receipts
+
+`mcp.configuration_observed` uses a strict schema in `gateway-configuration.ts`.
+It records serverId, changeRef, reviewRevision, fragmentDigest, sourceSequence,
+generation, recordDigest, configDigest, processRef and observedAt. These are saved
+configuration references, with no request bodies or credentials. The event parser
+requires the matching MCP subject. This receipt grants no call permission.

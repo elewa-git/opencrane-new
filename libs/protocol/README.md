@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
-  server["apps/server<br/>back end"] -.->|member flags, access replies, child invitations, publication facts and saved chat choices| protocol
+  server["apps/server<br/>back end"] -.->|member flags, access replies, child invitations, publication facts, gateway receipts and saved chat choices| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list shapes"]
@@ -22,7 +22,8 @@ They also identify the server and silo, and carry the rule revision used by wait
 
 ## What it is responsible for
 
-Describe saved publication requests separately from tool availability.
+Describe saved publication requests and their gateway receipts separately from tool availability.
+A saved receipt alone cannot prove that a gateway is still running.
 
 - Carries whether a hosted tool server needs startup review before calls can run.
 - Check safe control references and affected-turn counts in history records.

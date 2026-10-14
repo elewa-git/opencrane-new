@@ -209,3 +209,10 @@ These are saved facts, with no gateway readiness claim. Older policy replies sti
 addition. The server requires it for shared children and rejects it for ordinary
 groups. Remove and leave shapes are unchanged. See the
 [child invitation contract](../../docs/api/group-chats.md#child-only-invitations).
+
+
+## Saved gateway receipt
+
+ToolPolicy optionally carries `configurationObservation`, using the strict event schema.
+Older policy replies still parse. The field contains safe configuration references and
+the observation date. It is a saved fact, not a live Ready status or call permission.
