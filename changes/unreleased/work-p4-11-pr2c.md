@@ -1,0 +1,1 @@
+- Shared child-chat roots can record internal child admissions with the same shared-only class, model, provider and payer. Admission checks current parent participation and group membership, refuses stopped or closed roots, and keeps the same limits across competing servers. Native execution and calls remain disabled.

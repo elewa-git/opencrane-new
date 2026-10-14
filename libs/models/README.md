@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|builds configuration; checks calls, holds and stops against queued work; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks open spending before provider switch-on; saves publication, gateway, root allowance, overrun, spending, connection and instance stops; records matching child admissions| store["libs/event-store<br/>event log"]
+  models -->|checks open spending before provider switch-on; saves publication, gateway, root allowance, overrun, spending, connection and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -156,7 +156,7 @@ This internal API has no child-chat caller yet.
 - Refuse provider-bound model passes on the deployment-key gateway before holding money.
   Read switch-on from the silo’s spending stream before checking access.
   Calls through saved provider choices are not available yet.
-- Save internal child admissions for private turns with a fixed model and provider.
+- Save internal child admissions for private and shared child turns with a fixed model and provider.
   Check the signed decision, parent, narrowed model access and server limits first.
   Save a separate delegation start from the computer record and require both to agree.
   These records cannot start native tasks, issue their passes or hold money.
@@ -218,6 +218,8 @@ changed details is refused, including when two servers submit it together.
 Each admission has a separate delegation start that copies the saved computer record.
 Retries add only a missing start. A read checks that both records agree and that the
 computer admission is still open. Missing, older or conflicting records refuse the check.
+Shared admissions keep the root’s shared-only class and check current parent participation
+and the chat’s and assistant’s paying group. Private admissions stay private.
 Native execution remains disabled.
 
 An isolated gateway test opens a CONNECT tunnel after the decision is saved and

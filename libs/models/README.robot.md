@@ -109,8 +109,8 @@ pass. A private turn cannot claim the class, and a shared child cannot omit it.
 `admitDescendant` saves `computer.turn_started` and then a version 1
 `delegation.started` for a signed internal decision. Each stage makes its own conditional
 append to one stream. It returns `{ admission, start }`, both original stored events.
-No route or production signer calls it. Shared roots and native call decisions remain
-for #374 and #375; root allowance checks remain for #90 PR 4.
+No route or production signer calls it. Native call decisions remain for the next part
+of #93 row 2; root allowance checks remain for #90 PR 4.
 The native bridge, thread grants and Stop work remain in later design rows.
 
 The decision uses ES256, the configured issuer, audience `delegation-admission`,
@@ -119,8 +119,17 @@ within 120 seconds. Its `jti` and delegation id are the SHA-256 of the JSON arra
 `[silo, rootId, computerId, generation, spawnItemId, threadId]`.
 No signature, another audience or a changed signed payload refuses admission.
 
-Admission accepts only private agent sessions with an explicit `memory_free`
-root and a saved model/provider choice. Older roots and shared sessions refuse.
+Admission accepts private agent sessions with an explicit `memory_free` root, or
+`shared_child` sessions with a `shared_only`, `restricted` root. Both require a saved
+model/provider choice. Shared children copy `sharingClass` into both admission records
+and keep `dataClass: shared`; private children keep `dataClass: private` at every level.
+Shared admission checks the chat and assistant payer and current group membership.
+It reads child and parent participation before the two-second authority check, then
+reads only later changes. Inherited joins must still match the original parent joins
+for the requester and chat creator. Rejoining the parent does not restore inherited
+access; an explicit child join can grant a new period. No authority watch is added.
+`test/shared-descendant-admission.test.ts` covers both levels, copied fields, narrowed
+scopes, stale OpenFGA allows, closure, Stop, payer mismatch and two competing replicas.
 Descendants keep the requester, payer, generation, conversation, model and provider.
 Their model scopes narrow the recorded parent maximum; every other scope stays empty.
 Current permissions and applied grant receipts are checked again, including inherited

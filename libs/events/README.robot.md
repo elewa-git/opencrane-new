@@ -42,6 +42,9 @@ A gateway call with a different current transport binding cannot use that old ap
 Delegation version 1 records one computer generation, root, requester, payer,
 parent/child turns and threads, spawn item and narrowed scopes. `dataClass` records
 whether the task uses shared or private data; it grants no audience access.
+Native computer records and version 1 delegation starts accept optional
+`sharingClass: shared_only`. Shared admission copies it from the root and requires
+`dataClass: shared`; old private records remain unchanged.
 `computerAdmission` names the computer start event and its global position.
 Completed records distinguish `completed`, `failed` and `cancelled`, with a terminal
 evidence reference and optional saved result reference. Exact unversioned records

@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { computerTurnStartedDataSchema } from '@opencrane/events';
 import { tokenVerifier } from '@opencrane/auth';
 import { createEventStore } from '@opencrane/event-store';
 import { admitDescendant, descendantId, history, readDescendantAgreement } from '../src/index.ts';
@@ -9,7 +10,7 @@ const scopes = { models: ['gpt-6.1-sol'], tools: [], resources: [], operations: 
   destinations: [], connectionIds: [], profileIds: [] };
 const root = { assistantId: 'assistant', computerId: 'computer', conversationId: 'child',
   turnId: 'root-turn', threadId: 'root-thread', requesterId: 'alice', task: 'chat_turn',
-  payingGroupId: 'sales', executionMode: 'restricted', sharingClass: 'shared_only',
+  payingGroupId: 'sales', executionMode: 'restricted', sharingClass: 'shared_only' as string | undefined,
   model: 'gpt-6.1-sol', providerId: 'provider', bindingSequence: 1 };
 
 async function setup(rootPatch: Record<string, unknown> = {},
@@ -198,8 +199,9 @@ async function racesSharedAdmissions() {
     expect(results.filter(accepted)).toHaveLength(4);
     const rows = await history(other, 'computer-assistant', 'test');
     function native(row: (typeof rows)[number]) {
-      return row.event.type === 'computer.turn_started' &&
-        Reflect.get(row.event.data as object, 'task') === 'native_descendant';
+      const parsed = computerTurnStartedDataSchema.safeParse(row.event.data);
+      return row.event.type === 'computer.turn_started' && parsed.success &&
+        parsed.data.task === 'native_descendant';
     }
     expect(rows.filter(native)).toHaveLength(4);
     await noEffects(context, budgetPosition);
@@ -208,3 +210,85 @@ async function racesSharedAdmissions() {
   }
 }
 it('limits a shared root to four active children across two replicas', racesSharedAdmissions);
+
+async function refusesAssistantPayerMismatch() {
+  const payer = { payingGroupId: 'other' };
+  const context = await setup(payer, payer);
+  try {
+    const group = { teamId: 'other', name: 'Other', createdBy: 'alice' };
+    await context.append('team-other', 'team.created', group);
+    const membership = { teamId: 'other', memberId: 'alice', addedBy: 'alice' };
+    await context.append('team-other', 'team.member_added', membership);
+    const binding = { ...child('payer'), ...payer };
+    await expect(admit(context, binding)).rejects.toThrow('Shared payer binding mismatch');
+  } finally {
+    await context.close();
+  }
+}
+it('refuses a chat and root payer that differs from the assistant payer',
+  refusesAssistantPayerMismatch);
+
+async function checksChangesDuringAuthority(removeRequester: boolean) {
+  const context = await setup();
+  try {
+    await context.stopDispatch();
+    const original = context.nats.store.head.bind(context.nats.store);
+    let changed = false;
+    async function head(...args: Parameters<typeof original>) {
+      const position = await original(...args);
+      if (args[0] === 'member-alice' && !changed) {
+        changed = true;
+        const participantId = removeRequester ? 'alice' : 'bob';
+        const removal = { conversationId: 'parent', participantId, removedBy: 'alice' };
+        await context.append('participation-parent', 'participant.removed', removal);
+      }
+      return position;
+    }
+    context.nats.store.head = head;
+    const attempt = admit(context, child('during-authority'));
+    if (removeRequester) await expect(attempt).rejects.toThrow('Shared participation refused');
+    else await attempt;
+    expect(changed).toBe(true);
+  } finally {
+    await context.close();
+  }
+}
+it.each([true, false])('checks relevant parent changes during admission: %s',
+  checksChangesDuringAuthority);
+
+async function keepsInheritedAccessRevoked() {
+  const context = await setup();
+  try {
+    await context.stopDispatch();
+    const removal = { conversationId: 'parent', participantId: 'alice', removedBy: 'alice' };
+    await context.append('participation-parent', 'participant.removed', removal);
+    const rejoin = { conversationId: 'parent', participantId: 'alice', addedBy: 'alice' };
+    await context.append('participation-parent', 'participant.added', rejoin);
+    await expect(admit(context, child('old-join'))).rejects.toThrow('Shared participation refused');
+    const explicit = { conversationId: 'child', participantId: 'alice', addedBy: 'alice',
+      contextKind: 'shared_child', joinKind: 'explicit_child', reviewPosition: 1 };
+    const childRemoval = { conversationId: 'child', participantId: 'alice', removedBy: 'alice',
+      contextKind: 'shared_child', reviewPosition: 1 };
+    await context.append('participation-child', 'participant.removed', childRemoval);
+    const joined = await context.append('participation-child', 'participant.added', explicit);
+    await context.auth.handler.handle(joined, context.db);
+    await admit(context, child('new-explicit-join'));
+  } finally {
+    await context.close();
+  }
+}
+it('keeps inherited access revoked after a parent rejoin but accepts a new explicit child join',
+  keepsInheritedAccessRevoked);
+
+async function admitsAfterParentCloses() {
+  const context = await setup();
+  try {
+    const closed = { conversationId: 'parent', closedBy: 'alice' };
+    await context.append('participation-parent', 'conversation.closed', closed);
+    await admit(context, child('parent-closed'));
+  } finally {
+    await context.close();
+  }
+}
+it('keeps an open shared child available after its human parent chat closes',
+  admitsAfterParentCloses);
