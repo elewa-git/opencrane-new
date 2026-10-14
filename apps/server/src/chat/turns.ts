@@ -70,6 +70,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
     requested.requesterId, requested.sharingClass);
   if (!data) return;
   let fresh: WriteAuthority | undefined;
+  let confirmBudget: WriteAuthority | undefined;
   let status = input.status;
   let refusal: TurnAdmissionRejected | undefined;
   requireThreadOwner(facts, data);
@@ -82,6 +83,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
         requested.executionMode, executionMode);
       if (admission.payer) data.payingGroupId = admission.payer;
       fresh = admission.fresh;
+      confirmBudget = admission.confirmBudget;
     } catch (error) {
       if (!isFinalAdmissionRefusal(error)) throw error;
       refusal = new TurnAdmissionRejected(error.message, { cause: error });
@@ -106,7 +108,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   await saveTurn(store, facts, event, data);
   if (refusal) throw refusal;
   // Check stops saved while the separate computer append was waiting before returning a pass.
-  await fresh?.();
+  await confirmBudget?.();
   if (input.status === 'started') return admittedTurn(data, executionMode);
   return undefined;
 }
@@ -140,7 +142,7 @@ async function startAuthority(store: EventStore, context: TurnContext, conversat
       await authority();
       requireNoBudgetStop(currentStop);
     }
-    return { fresh, payer: undefined };
+    return { fresh, payer: undefined, confirmBudget: fresh };
   }
   return admitTurn(store, context, conversation, facts, data, requested, mode);
 }
@@ -380,7 +382,14 @@ async function admitTurn(store: EventStore, context: TurnContext, conversation: 
     }
     await payer.fresh?.();
   }
-  return { payer: payer.payer, fresh: confirmAdmission };
+  async function confirmSavedBudget() {
+    const current = await providerTurnAdmission(
+      store, context.silo, context.assistantId, deadline, queued);
+    await payer.fresh?.();
+    requireNoBudgetStop(current.stopId);
+  }
+  // Keep provider switch-on refusal at its existing send gate after a start was saved.
+  return { payer: payer.payer, fresh: confirmAdmission, confirmBudget: confirmSavedBudget };
 }
 
 

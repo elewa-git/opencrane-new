@@ -2553,7 +2553,9 @@ before that message was saved. Admission checks once before starting the compute
 append and again after it returns, reading only new budget events within the short
 write check. Renewal keeps the message position, including a start saved after
 a stop and a limit increase. Tests pause that append and verify the recording gateway
-issues no send permission before the asynchronous handler runs.
+issues no send permission before the asynchronous handler runs. The check after
+append confirms spending and membership. Provider switch-on retains its existing
+gateway refusal for a legacy start that was already being saved.
 A saved budget turn stop also closes that turn in the chat summary. Legacy member
 stops retain their previous fold. Read and viewer authority checks are unchanged.
 Bridge stop-first delivery is deferred to P3-14 PR 4b.
