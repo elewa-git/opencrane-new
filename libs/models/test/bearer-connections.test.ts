@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import type { AppendCommand } from '@opencrane/event-store';
+import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { pgDb } from '@opencrane/projections';
@@ -508,12 +508,20 @@ it.each(membershipChanges)(
   'rechecks membership after profile history for $action (retry: $retry)',
   losesMembershipDuringHistory);
 
-async function lateAppendCannotFollowDeletion() {
-  await joinMember('late-append');
-  const test = fixture('late-append');
-  const created = await test.save();
-  const rotation = { ...test.input, action: 'rotate', changeRef: 'late',
-    expectedSequence: created.sequence, expectedGeneration: 1 };
+async function lateAppendCannotFollowDeletion(next: 'rotate' | 'revoke' | 'race' | 'create') {
+  const memberId = `late-append-${next}`;
+  await joinMember(memberId);
+  const test = fixture(memberId);
+  let sequence = 0;
+  let generation = 0;
+  if (next !== 'create') {
+    const created = await test.save();
+    sequence = created.sequence;
+    generation = created.generation;
+  }
+  const action = next === 'create' ? 'create' : 'rotate';
+  const rotation = { ...test.input, action, changeRef: 'late',
+    expectedSequence: sequence, expectedGeneration: generation };
   const stage = test.custody.stage;
   let candidate: ConnectionStage | undefined;
   let staged: Awaited<ReturnType<typeof stage>> | undefined;
@@ -540,7 +548,7 @@ async function lateAppendCannotFollowDeletion() {
     return Promise.resolve(result);
   }
   async function remove() {
-    // Deliver the lost publish just before deletion; the saved revoke must already refuse it.
+    // Deliver the lost publish just before deletion; the closure must already refuse it.
     const result = await append(delayed!);
     expect(result.status).toBe('conflict');
     deletes += 1;
@@ -550,22 +558,92 @@ async function lateAppendCannotFollowDeletion() {
   const db = pgDb(storage.queue);
   expect(await reconcileConnectionStage(nats.store, db, custody, candidate!))
     .toEqual({ status: 'retained' });
-  const revoke = { ...controlInput(test, created.sequence), userId: 'late-append' };
-  await changePersonalConnection(nats.store, binding, 'late-append', revoke);
+  async function saveBeforeClosure(command: AppendCommand) {
+    expect((await append(delayed!)).status).toBe('appended');
+    return append(command);
+  }
+  const closureAppend = vi.spyOn(nats.store, 'append');
+  if (next === 'race') {
+    closureAppend.mockImplementationOnce(saveBeforeClosure);
+  }
   const now = vi.spyOn(Date, 'now');
   now.mockReturnValue(candidate!.appendUntil + 1);
   try {
+    const expected = next === 'race' ? 'retained' : 'deleted';
     expect(await reconcileConnectionStage(nats.store, db, custody, candidate!))
-      .toEqual({ status: 'deleted' });
+      .toEqual({ status: expected });
   } finally {
     now.mockRestore();
+    closureAppend.mockRestore();
+  }
+  const rows = await history(nats.store, test.subject, 'test');
+  const state = foldConnection(rows);
+  if (next === 'race') {
+    expect(deletes).toBe(0);
+    expect(rows.at(-1)!.event.type).toBe('connection.refreshed');
+    expect(state.data?.activation.generation).toBe(2);
+    return;
   }
   expect(deletes).toBe(1);
-  expect(foldConnection(await history(nats.store, test.subject, 'test')).status)
-    .toBe('unavailable');
+  expect(rows.at(-1)!.event.type).toBe('connection.operation_closed');
+  const staging = vi.spyOn(test.custody, 'stage');
+  const retry = { ...rotation, expectedSequence: state.sequence };
+  await expect(test.save(retry)).rejects.toThrow('Connection conflict');
+  expect(staging).not.toHaveBeenCalled();
+  if (next === 'create') {
+    const freshReference = { ...test.input, changeRef: 'new', expectedSequence: state.sequence };
+    await expect(test.save(freshReference)).rejects.toThrow('Connection conflict');
+    expect((await fixture(memberId).save()).generation).toBe(1);
+    return;
+  }
+  expect(state).toMatchObject({ status: 'saved_unverified',
+    data: { secretRef: `secret:mcp-${test.input.profileId}-g1`, activation: { generation: 1 } } });
+  assertInvalidClosuresUnavailable(rows);
+  if (next === 'revoke') {
+    const revoke = { ...controlInput(test, state.sequence), userId: memberId };
+    expect((await changePersonalConnection(nats.store, binding, memberId, revoke)).status)
+      .toBe('revoked');
+    return;
+  }
+  const freshRotation = { ...retry, changeRef: 'fresh' };
+  const saved = await test.save(freshRotation);
+  expect(saved.generation).toBe(3);
+  expect(staging).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ generation: 3 }), material);
+  expect(await test.save(freshRotation)).toEqual(saved);
+  const replayed = foldConnection(await history(nats.store, test.subject, 'test'));
+  expect(replayed.data?.activation.generation).toBe(3);
 }
-it('blocks a delayed conditional append before deleting its staged material',
-  lateAppendCannotFollowDeletion);
+it.each(['rotate', 'revoke', 'race', 'create'] as const)(
+  'orders a lost save against closure and supports the next %s', lateAppendCannotFollowDeletion);
+
+function assertInvalidClosuresUnavailable(rows: StoredEvent[]) {
+  const patches = [
+    { userId: 'foreign' }, { serverId: 'foreign' }, { profile: 'foreign' },
+    { expectedSequence: 0 }, { generation: 1 }, { appendUntil: Date.now() + 60_000 },
+  ];
+  for (const patch of patches) {
+    const changed = structuredClone(rows);
+    const closure = changed.at(-1)!;
+    const data = z.record(z.string(), z.unknown()).parse(closure.event.data);
+    closure.event.data = { ...data, ...patch };
+    expect(foldConnection(changed).status).toBe('unavailable');
+  }
+  for (const field of ['principal', 'system', 'silo', 'subject', 'sequence'] as const) {
+    const changed = structuredClone(rows);
+    const closure = changed.at(-1)!;
+    if (field === 'principal') {
+      closure.event.principal = { kind: 'human', id: 'alice' };
+    } else if (field === 'system') {
+      closure.event.principal = { kind: 'system', id: 'foreign' };
+    } else if (field === 'sequence') {
+      closure.sequence = rows[0]!.sequence;
+    } else {
+      closure.event[field] = 'foreign';
+    }
+    expect(foldConnection(changed).status).toBe('unavailable');
+  }
+}
 
 async function saveUsesCleanupLock() {
   await joinMember('save-lock');
