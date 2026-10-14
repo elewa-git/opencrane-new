@@ -119,8 +119,19 @@ async function budgetBridge(realChannel = false) {
     return Promise.resolve(Readable.from([bytes]));
   }
   vi.spyOn(objects, 'getObject').mockImplementation(readObject);
-  function connection() {
-    return Promise.resolve(link);
+  let connectionGate: Promise<void> | undefined;
+  let connectionEntered: (() => void) | undefined;
+  async function connection() {
+    connectionEntered?.();
+    await connectionGate;
+    return link;
+  }
+  function pauseConnection() {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    connectionGate = release.promise;
+    connectionEntered = entered.resolve;
+    return { entered: entered.promise, release: release.resolve };
   }
   function connectionId() {
     return link.connectionId;
@@ -189,7 +200,7 @@ async function budgetBridge(realChannel = false) {
     await rm(directory, { recursive: true, force: true });
   }
   return { ...options, actor, assistantId, frames, interrupts, grants, channel,
-    message, start, stop, process, reconnect, upload, close };
+    message, start, stop, process, reconnect, pauseConnection, upload, close };
 }
 
 function isStop(frame: Frame) {
@@ -354,3 +365,28 @@ async function isolatesRealTurns() {
   expect(rows.filter(isSavedStop)).toEqual([]);
 }
 it('interrupts only the stopped payer on the real team computer channel', isolatesRealTurns);
+
+async function stopDuringReconnect() {
+  fixture = await budgetBridge();
+  const turn = await fixture.message('first');
+  await fixture.start(turn);
+  await fixture.process();
+  expect(fixture.frames.filter(isTurn)).toHaveLength(1);
+  // Force another conversation pass while the replacement connection is still opening.
+  await fixture.upload(turn);
+  const gate = fixture.pauseConnection();
+  const processing = fixture.process();
+  try {
+    await gate.entered;
+    await fixture.stop(turn);
+    await fixture.reconnect();
+  } finally {
+    gate.release();
+    await processing;
+  }
+  const work = fixture.frames.filter(isWork);
+  expect.soft(work[0]).toEqual({ type: 'stop', ...turn, reason: 'budget', stopId: 'first-stop' });
+  expect(fixture.frames.filter(isTurn)).toEqual([]);
+}
+it('sends a Stop saved while reconnect opens before releasing work on the new socket',
+  stopDuringReconnect);
