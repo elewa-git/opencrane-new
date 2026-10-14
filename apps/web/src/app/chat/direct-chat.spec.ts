@@ -1116,6 +1116,8 @@ it('opens a saved chat after one list change during lookup', async () => {
   api.override(changedThenFound);
 
   const fixture = await mountWithoutReady(api, 'older-chat');
+  await vi.waitFor(() => expect(lookupCount).toBe(2));
+  fixture.detectChanges();
   expect(fixture.componentInstance['selectedConversationId']()).toBe('older-chat');
   expect(root(fixture).querySelector('textarea')).not.toBeNull();
   expect(lookupCount).toBe(2);
@@ -1133,6 +1135,8 @@ it('offers Retry after two list changes during saved-chat lookup', async () => {
   api.override(changedLookup);
 
   const fixture = await mountWithoutReady(api, 'older-chat');
+  await vi.waitFor(() => expect(lookupCount).toBe(2));
+  fixture.detectChanges();
   expect(lookupCount).toBe(2);
   expect(root(fixture).textContent).toContain('Conversation list changed again');
   expect(root(fixture).textContent).not.toContain('Direct conversations are unavailable right now');

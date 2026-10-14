@@ -24,7 +24,7 @@ async function createCaptureWorkspace(
   approvalCards: Record<string, unknown>[] | ((path: string) => Record<string, unknown>[]) = [],
   assistantKind?: 'team',
   computerState = 'ready',
-  listPlacement?: 'recent-page-two' | 'archived' | 'missing',
+  listPlacement?: 'recent-page-two' | 'archived' | 'missing' | 'changed-twice',
 ): Promise<CaptureWorkspace> {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const rows = [...initialRows];
@@ -60,6 +60,9 @@ async function createCaptureWorkspace(
     }
     if (pathname === '/api/conversations' && init?.method !== 'POST') {
       if (listPlacement) {
+        if (listPlacement === 'changed-twice' && path.includes('?')) {
+          return Promise.resolve(new Response('{"status":"list_changed"}', { status: 409 }));
+        }
         const query = new URL(path, location.origin).searchParams;
         const section = query.get('section');
         const cursor = query.get('cursor');
@@ -131,7 +134,8 @@ async function createCaptureWorkspace(
   ] });
   const fixture = TestBed.createComponent(Workspace);
   await fixture.whenStable();
-  const expectedSelection = listPlacement === 'missing' ? '' : 'chat';
+  const expectedSelection = listPlacement === 'missing' || listPlacement === 'changed-twice'
+    ? '' : 'chat';
   await vi.waitFor(() => expect(fixture.componentInstance['chat'].selected())
     .toBe(expectedSelection));
   await vi.waitFor(() => expect(fixture.componentInstance['chat'].loading()).toBe(false));
@@ -1449,6 +1453,18 @@ it('shows the generic unavailable state for an inaccessible saved session', asyn
     expect(capture.root.textContent).not.toContain('Access unavailable');
     expect(capture.root.querySelector('.composer-dock')).toBeNull();
     expect(capture.calls.some(call => call.includes('section=archived'))).toBe(true);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('offers Retry when a saved session list changes twice', async () => {
+  const capture = await createCaptureWorkspace([], [], undefined, 'ready', 'changed-twice');
+  try {
+    expect(capture.root.textContent).toContain('Conversation list changed again');
+    expect(capture.root.textContent).not.toContain('Could not load the conversation');
+    expect(capture.root.querySelector('.error button')?.textContent).toContain('Retry');
+    expect(capture.calls.filter(call => call.includes('section=recent'))).toHaveLength(2);
   } finally {
     capture.fixture.destroy();
   }
