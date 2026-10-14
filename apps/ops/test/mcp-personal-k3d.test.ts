@@ -3,11 +3,12 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { openfga } from '@opencrane/authz/testing';
+import type { AppendCommand } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { type EventEnvelope } from '@opencrane/events';
+import { mcpInstanceObservedSchema, mcpInstanceStopSchema, type EventEnvelope } from '@opencrane/events';
 import { envelope, history, mcpInstanceCommand, mcpInstanceStatus,
   mcpAdminInstanceStop } from '@opencrane/models';
 import { mcpInstanceId, mcpInstances, ProjectionRunner } from '@opencrane/projections';
@@ -61,7 +62,7 @@ async function cleanup() {
   await nats?.close();
   await storage?.close();
   await fga?.close();
-  if (namespace) await run(['delete', 'namespace', namespace, '--wait=true', '--timeout=60s']);
+  if (namespace) await run(['delete', 'namespace', namespace, '--wait=false']);
 }
 afterAll(cleanup, 90_000);
 
@@ -74,7 +75,9 @@ async function fixture(reason = 'owner_stop', recordPod = true) {
   const annotations = { 'opencrane.ai/mcp-instance': instanceId,
     'opencrane.ai/mcp-spec': 'c'.repeat(64) };
   const container = { name: 'fixture', image: 'docker.io/rancher/local-path-provisioner:v0.0.37',
-    imagePullPolicy: 'Never', command: ['/bin/sh', '-c', 'sleep 600'] };
+    imagePullPolicy: 'Never', command: ['/bin/sh', '-c', 'sleep 600'],
+    resources: { requests: { cpu: '10m', memory: '16Mi' },
+      limits: { cpu: '20m', memory: '32Mi' } } };
   const workload = { apiVersion: 'apps/v1', kind: 'StatefulSet',
     metadata: { name, labels, annotations }, spec: { replicas: 1, serviceName: name,
       selector: { matchLabels: labels }, template: { metadata: { labels },
@@ -87,11 +90,13 @@ async function fixture(reason = 'owner_stop', recordPod = true) {
     if (!podUid) await delay(100);
   }
   expect(podUid).not.toBe('');
+  await run(['wait', `pod/${name}-0`, '--for=condition=Ready', '--timeout=8s']);
   const subject = `mcp-instance-${instanceId}`;
+  const requestedAt = new Date().toISOString();
   const start = { ...identity, instanceId, connectionId: 'connection', imageDigest: 'a'.repeat(64),
     installGeneration: 1, upstreamBindingDigest: 'b'.repeat(64), workloadSpecDigest: 'c'.repeat(64),
-    runGeneration: 1, changeRef: randomUUID(), requestedAt: new Date().toISOString(),
-    deadline: new Date(Date.now() + 20_000).toISOString() };
+    runGeneration: 1, changeRef: randomUUID(), requestedAt,
+    deadline: new Date(Date.parse(requestedAt) + 20_000).toISOString() };
   async function save(type: string, data: unknown) {
     const event = envelope('test', subject, type, data);
     const result = await nats.store.append({ event, expectedSequence: await nats.store.head(subject) });
@@ -113,8 +118,12 @@ async function fixture(reason = 'owner_stop', recordPod = true) {
   const stop = rows.at(-1)!.event;
   const calls: string[][] = [];
   let lose = '';
+  let paused: (() => Promise<void>) | undefined;
   async function runner(args: string[], input?: string) {
     calls.push(args);
+    const pause = paused;
+    paused = undefined;
+    await pause?.();
     const output = await run(args, input);
     if (lose && args.includes(lose)) {
       lose = '';
@@ -130,9 +139,12 @@ async function fixture(reason = 'owner_stop', recordPod = true) {
   async function absentCount() {
     const events = await history(nats.store, subject, 'test');
     function absent(row: (typeof events)[number]) {
-      return row.event.type === 'mcp.instance_observed' && row.event.data['state'] === 'absent';
+      return row.event.type === 'mcp.instance_observed' && mcpInstanceObservedSchema.parse(row.event.data).state === 'absent';
     }
     return events.filter(absent).length;
+  }
+  function pauseNext(pause: () => Promise<void>) {
+    paused = pause;
   }
   function loseReply(operation: string) {
     lose = operation;
@@ -142,14 +154,14 @@ async function fixture(reason = 'owner_stop', recordPod = true) {
       'jsonpath={.metadata.uid}:{.metadata.resourceVersion}']);
   }
   return { name, subject, start, observation, reference, stop, calls, workload,
-    deliver, absentCount, loseReply, save, version };
+    deliver, absentCount, loseReply, pauseNext, save, version };
 }
 
 async function stopsAndRecovers(operation: string) {
   const fixtureCase = await fixture(operation === 'admin_stop' ? operation : 'owner_stop');
   if (operation === 'patch' || operation === 'delete') {
     fixtureCase.loseReply(operation);
-    await expect(fixtureCase.deliver()).rejects.toThrow('MCP Kubernetes operation failed');
+    await expect(fixtureCase.deliver()).rejects.toThrow(/^MCP Kubernetes operation failed$/u);
   }
   await fixtureCase.deliver();
   expect(await fixtureCase.absentCount()).toBe(1);
@@ -167,7 +179,19 @@ it.skipIf(!live).each(['owner_stop', 'admin_stop', 'patch', 'delete'])(
 
 async function refusesForeign(change: string) {
   const current = await fixture();
-  if (change === 'recreated') {
+  if (change === 'recreated-after-patch') {
+    current.loseReply('patch');
+    await expect(current.deliver()).rejects.toThrow(/^MCP Kubernetes operation failed$/u);
+    const oldUid = await run(['get', `statefulset/${current.name}`,
+      '-o', 'jsonpath={.metadata.uid}']);
+    Reflect.set(current.workload.metadata.annotations, 'opencrane.ai/mcp-stop',
+      JSON.stringify([current.stop.id, oldUid]));
+  }
+  if (change === 'extra') {
+    const extra = structuredClone(current.workload);
+    extra.metadata.name = 'foreign-' + current.name;
+    await run(['create', '-f', '-'], JSON.stringify(extra));
+  } else if (change.startsWith('recreated')) {
     await run(['delete', `statefulset/${current.name}`, '--wait=true']);
     await run(['create', '-f', '-'], JSON.stringify(current.workload));
   } else {
@@ -183,14 +207,16 @@ async function refusesForeign(change: string) {
   expect(await current.version()).toBe(before);
   expect(await current.absentCount()).toBe(0);
 }
-it.skipIf(!live).each(['foreign', 'relabelled', 'recreated'])(
+it.skipIf(!live).each(['foreign', 'relabelled', 'recreated', 'recreated-after-patch', 'extra'])(
   'leaves a %s StatefulSet untouched', refusesForeign, 90_000);
 
 async function alreadyGone() {
   const current = await fixture();
   await run(['delete', `statefulset/${current.name}`, '--wait=true']);
   await current.deliver();
-  function deletion(args: string[]) { return args.includes('delete'); }
+  function deletion(args: string[]) {
+    return args.includes('delete');
+  }
   expect(current.calls.filter(deletion)).toHaveLength(0);
   expect(await current.absentCount()).toBe(1);
 }
@@ -198,6 +224,15 @@ it.skipIf(!live)('records already absent objects without deleting', alreadyGone,
 
 async function concurrentStops() {
   const current = await fixture();
+  const entered = Promise.withResolvers<void>();
+  const released = Promise.withResolvers<void>();
+  async function pause() {
+    entered.resolve();
+    await released.promise;
+  }
+  current.pauseNext(pause);
+  const lateDelivery = current.deliver();
+  await entered.promise;
   await Promise.allSettled([current.deliver(), current.deliver()]);
   await current.deliver();
   expect(await current.absentCount()).toBe(1);
@@ -205,12 +240,20 @@ async function concurrentStops() {
   await current.save('mcp.instance_start_requested', nextStart);
   const nextWorkload = structuredClone(current.workload);
   nextWorkload.metadata.name = `mcp-${current.start.instanceId.slice(0, 32)}-2`;
+  nextWorkload.metadata.labels['opencrane.ai/mcp-run'] = '2';
   await run(['create', '-f', '-'], JSON.stringify(nextWorkload));
+  await delay(1500);
+  const versionArgs = ['get', `statefulset/${nextWorkload.metadata.name}`, '-o',
+    'jsonpath={.metadata.uid}:{.metadata.resourceVersion}'];
+  const nextVersion = await run(versionArgs);
   const before = await nats.store.head(current.subject);
+  released.resolve();
+  await lateDelivery;
   current.calls.length = 0;
   await Promise.all([current.deliver(), current.deliver()]);
   expect(current.calls).toHaveLength(0);
   expect(await nats.store.head(current.subject)).toBe(before);
+  expect(await run(versionArgs)).toBe(nextVersion);
 }
 it.skipIf(!live)('saves one absent under concurrent delivery and ignores the old run',
   concurrentStops, 90_000);
@@ -220,7 +263,8 @@ async function ignoresInvalidTriggers() {
   await current.deliver();
   const other = await fixture();
   await other.deliver({ ...other.stop, id: randomUUID() });
-  const changed = { ...other.stop, data: { ...other.stop.data, changeRef: 'changed' } };
+  await other.deliver({ ...other.stop, silo: 'foreign' });
+  const changed = { ...other.stop, data: { ...mcpInstanceStopSchema.parse(other.stop.data), changeRef: 'changed' } };
   await other.deliver(changed);
   expect(current.calls).toHaveLength(0);
   expect(other.calls).toHaveLength(0);
@@ -240,10 +284,39 @@ async function ignoresInvalidTriggers() {
   expect(await nats.store.head(other.subject)).toBe(before);
   const wake = { action: 'wake', changeRef: randomUUID(), expectedSequence: before };
   await expect(mcpInstanceCommand(nats.store, binding, 'alice', other.reference, wake))
-    .rejects.toThrow();
+    .rejects.toThrow('profile_or_admission_unavailable');
 }
 it.skipIf(!live)('ignores missing Pods and unsaved triggers; replay and wake do no work',
   ignoresInvalidTriggers, 90_000);
+
+async function retriesAppendConflict() {
+  const current = await fixture();
+  const append = nats.store.append.bind(nats.store);
+  async function advanceBeforeAppend(command: AppendCommand) {
+    const observation = envelope('test', current.subject,
+      'mcp.instance_observed', current.observation);
+    const competing = { event: observation, expectedSequence: command.expectedSequence };
+    expect((await append(competing)).status).toBe('appended');
+    const result = await append(command);
+    expect(result.status).toBe('conflict');
+    return result;
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementationOnce(advanceBeforeAppend);
+  try {
+    await current.deliver();
+    expect(await current.absentCount()).toBe(1);
+    const rows = await history(nats.store, current.subject, 'test');
+    const saved = rows.at(-1)!.event;
+    expect(saved.principal?.kind).toBe('system');
+    expect(saved.data).toMatchObject({ ...current.observation, state: 'absent',
+      expectedSequence: rows.at(-2)!.sequence });
+  } finally {
+    spy.mockRestore();
+  }
+}
+it.skipIf(!live)('rereads a real append conflict before recording exact absence',
+  retriesAppendConflict, 90_000);
 
 function gatesHandler() {
   expect(dispatcherHandlerNames({})).not.toContain('stop-mcp-instance');

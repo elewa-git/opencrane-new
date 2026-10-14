@@ -18,6 +18,8 @@ import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
 import { personalKeyHandler } from './personal-keys.ts';
 import { departureCleanupHandler } from './departure-cleanup.ts';
 import { memoryCleanupHandler, recoverMemoryCleanup } from './memory-cleanup.ts';
+import { McpKubernetes } from './mcp-kubernetes.ts';
+import { stopMcpInstanceHandler } from './mcp-stop.ts';
 import { dispatcherHandlerNames } from './dispatcher-handlers.ts';
 import type { Handler } from '@opencrane/handlers';
 import type { HandlerName } from '@opencrane/events';
@@ -119,6 +121,11 @@ try {
       ownershipConfirmationHandler(commands.store), budgetStopHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
       ...lifecycleHandlers(commands.store), departureCleanupHandler(commands.store, authorisation)];
+    const mcpNamespace = process.env['MCP_KUBE_NAMESPACE']?.trim();
+    if (mcpNamespace) {
+      const mcpKube = new McpKubernetes(mcpNamespace);
+      available.push(stopMcpInstanceHandler(commands.store, silo, mcpKube));
+    }
     const personalDirectory = process.env['PERSONAL_KEY_DIRECTORY']?.trim();
     if (personalDirectory) {
       const keys = conversationKeys(personalDirectory);

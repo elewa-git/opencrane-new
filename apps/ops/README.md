@@ -17,7 +17,7 @@ flowchart LR
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables and jobs; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates and checks permissions| fga["OpenFGA<br/>permission service"]
-  ops -->|updates computers and delivers passes and public keys| kube["Kubernetes<br/>computer manager"]
+  ops -->|updates computers, delivers passes and keys, stops private tools| kube["Kubernetes<br/>computer manager"]
 ```
 
 ## What it is responsible for
@@ -50,6 +50,10 @@ flowchart LR
 A spending stop creates durable jobs on the existing dispatcher. Each job checks
 saved admissions and records Stop for affected turns, even with no computer connected.
 A delayed conversation index makes the job retry. Rebuilding tables sends no stops.
+
+When configured, a saved owner or admin stop shuts down the exact private tool process
+in Kubernetes. The worker records absence before status becomes Sleeping. It cannot
+wake a tool or release credentials. Rebuilding read tables does no Kubernetes work.
 
 The dispatcher also uses PostgreSQL's job queue to check enabled memory scopes each night.
 It records why a dirty scope is blocked or missed. Failed triggers keep their original night

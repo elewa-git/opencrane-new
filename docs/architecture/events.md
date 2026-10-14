@@ -379,7 +379,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.tools_changed` | drift check | catalogue (before/after snapshots, dated new catalogue, changed policyRevision and durable drift hold) | shared policy denies calls and cancels old approvals on their next read; the models watch closes dispatch before saving drift; legacy publication cannot clear the hold; acknowledged restoration remains unbuilt |
 | `mcp.instance_start_requested` | reserved lifecycle command; wake is refused for now | exact personal instance identity, installed image, run and original change; 20-second deadline | none; no workload or release handler |
 | `mcp.instance_observed` | authenticated, run-bound lifecycle worker | matching run, Pod UID, checked workload and expected sequence; system principal and change id for new reports; starting, failed, stopping, absent or unknown; no callable state | none |
-| `mcp.instance_stop_requested` | current owner or admin command | close the exact run with its original start and stop references; `owner_stop` requires the instance owner, while `admin_stop` records the acting admin | none; no workload handler |
+| `mcp.instance_stop_requested` | current owner or admin command | close the exact run with its original start and stop references; `owner_stop` requires the instance owner, while `admin_stop` records the acting admin | `stop-mcp-instance` checks the saved current run, stops its exact Kubernetes workload and records absence when configured |
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade; departure revocation reaction | grants | OpenFGA tuples |
 | `connection.created` | personal bearer create command after private staging | connection fold (exact reference and generation; identity unverified) | explicit live candidate cleanup keeps current references; no automatic reaction |
 | `connection.refreshed` | personal bearer rotate command after private staging; planned OAuth refresh | connection fold replaces the exact reference at the expected generation and revision | explicit live candidate cleanup can delete a superseded exact UID/version after its append deadline and a proven conflicting event; never release on replay |
@@ -677,6 +677,7 @@ events. Desktop admission additionally requires an explicit member
 
 | Handler | Subscribed events |
 | --- | --- |
+| `stop-mcp-instance` | `mcp.instance_stop_requested` |
 | `cleanup-departure` | `member.removed` |
 | `cleanup-memory` | `memory.forgotten` |
 | `stop-budget-turns` | `budget.ceiling_set`, `budget.exhausted` |

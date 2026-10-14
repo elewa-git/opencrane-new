@@ -1,0 +1,1 @@
+- Stop an exact private tool process in Kubernetes after a saved owner or admin request, then record its absence so status becomes Sleeping. Recover lost stop replies without touching replaced workloads. Enabled only with MCP_KUBE_NAMESPACE; wake and credential release remain unavailable.
