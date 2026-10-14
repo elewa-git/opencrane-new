@@ -312,7 +312,6 @@ It appends to `budget-<silo>` with `historyChecked`, checking both the budget
 position and global position. A concurrent reservation, turn start, binding change,
 drain cancellation or second switch-on therefore causes a conflict.
 
-
 Tool publication receipts capture the global position before reading the server and
 checking the current gateway preparation. Their append checks both the server and
 global positions. A newer preparation on the gateway stream therefore refuses the

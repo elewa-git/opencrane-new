@@ -2024,7 +2024,6 @@ renderer, preparation, reload and delivery tests twice; 419 event security tests
 `/tmp/p3-4-tests-1.log`, `/tmp/p3-4-events.log`. Full root suite and fresh-install
 journey: NOT RUN. Fixtures use the pinned gateway and disposable NATS, with no paid calls.
 
-
 ## Per-server gateway receipts (P3-4 PR 3b; Part of #45)
 
 After an exact live observation, `observe` saves `mcp.configuration_observed` on each

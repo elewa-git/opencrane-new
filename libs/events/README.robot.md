@@ -573,7 +573,6 @@ processRef, outcome (`loaded`) and observedAt on `gateway-config-<silo>`.
 It is evidence from an exact live control response, not readiness or a file write.
 It grants no permission. Per-server receipts are described below; the Ready read remains unbuilt.
 
-
 ## Per-server gateway receipts
 
 `mcp.configuration_observed` uses a strict schema in `gateway-configuration.ts`.
