@@ -49,7 +49,7 @@ export { approvalActivity } from './decision-activity.ts';
 export { mcpInstanceCommand, mcpInstanceStatus, mcpInstanceChange, McpInstanceRefused }
   from './mcp-instance.ts';
 
-export { admitDescendant, descendantId } from './descendant-admission.ts';
+export { admitDescendant, descendantId, readDescendantAgreement } from './descendant-admission.ts';
 
 export { mcpDispatchRouteSchema } from './mcp-dispatch.ts';
 export { mcpInstanceWorkerRegistration, mcpInstanceObservation }

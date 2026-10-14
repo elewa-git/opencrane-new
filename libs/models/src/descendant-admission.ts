@@ -79,10 +79,8 @@ const admissions: SummaryKind<AdmissionSummary> = { name: 'descendant-admission'
   empty: emptyAdmissions, add: addAdmission,
   budget: { limit: 48 * 1024 * 1024, size: admissionSize } };
 
-/** Save the computer admission without granting call or spending authority. */
-export async function admitDescendant(store: EventStore, access: Binding,
+async function verifyAdmissionDecision(access: Binding,
   verifier: ReturnType<typeof tokenVerifier>, signedDecision: string) {
-  const deadline = performance.now() + 10_000;
   const claims = await verifier.verify(signedDecision, 'delegation-admission');
   const decision = decisionSchema.parse(claims);
   const binding = decision.binding;
@@ -91,6 +89,14 @@ export async function admitDescendant(store: EventStore, access: Binding,
       claims.jti !== descendantId(access.silo, binding) || claims.jti !== binding.delegationId) {
     throw new Error('Descendant decision refused');
   }
+  return binding;
+}
+
+/** Save both admission records without granting call or spending authority. */
+export async function admitDescendant(store: EventStore, access: Binding,
+  verifier: ReturnType<typeof tokenVerifier>, signedDecision: string) {
+  const deadline = performance.now() + 10_000;
+  const binding = await verifyAdmissionDecision(access, verifier, signedDecision);
   const subject = `computer-${binding.assistantId}`;
   for (let attempt = 0; attempt < 10 && performance.now() < deadline; attempt++) {
     function take(summary: AdmissionSummary, sequence: number) {
@@ -98,6 +104,10 @@ export async function admitDescendant(store: EventStore, access: Binding,
     }
     const facts = await readStreamSummary(store, access.silo, subject, admissions, deadline, take);
     const existing = facts.summary.descendants.get(binding.delegationId);
+    if (existing?.closed) {
+      throw new Error('Descendant is closed');
+    }
+    const start = await readDelegationStart(store, binding.delegationId, deadline);
     if (existing && !isDeepStrictEqual(existing.binding, binding)) {
       throw new Error('Admission conflict');
     }
@@ -132,7 +142,7 @@ export async function admitDescendant(store: EventStore, access: Binding,
     }
     await fresh();
     if (existing) {
-      return existing.start;
+      return saveDelegationStart(store, existing.start, start, fresh.deadline);
     }
     const event = { id: binding.delegationId, commandId: binding.delegationId,
       silo: access.silo, subject, type: 'computer.turn_started', source: 'opencrane-server',
@@ -146,13 +156,82 @@ export async function admitDescendant(store: EventStore, access: Binding,
       // Read the saved event because duplicate recovery may return another replica's admission.
       const stored = await readEventAt(store, subject, saved.sequence, deadline);
       requireSavedAdmission(stored, event);
-      return stored;
+      await fresh();
+      return saveDelegationStart(store, stored, start, fresh.deadline);
     }
     if (saved.status !== 'conflict') {
       throw new Error('Descendant admission unavailable');
     }
   }
   throw new Error('Descendant admission contention or deadline');
+}
+
+async function readDelegationStart(store: EventStore, delegationId: string, deadline: number) {
+  try {
+    for await (const row of store.readStream(`delegation-${delegationId}`, 1, deadline)) {
+      return row;
+    }
+    return undefined;
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Invalid stored event') {
+      // eslint-disable-next-line preserve-caught-error -- Keep stored event details out of refusals.
+      throw new Error('Admission conflict');
+    }
+    refuseAgreementRead();
+  }
+}
+function refuseAgreementRead(): never {
+  throw new Error('Delegation agreement unavailable');
+}
+
+function delegationStartEvent(admission: StoredEvent) {
+  const parsed = computerTurnStartedDataSchema.safeParse(admission.event.data);
+  if (!parsed.success || parsed.data.task !== 'native_descendant') {
+    throw new Error('Invalid descendant record');
+  }
+  // Copy only the delegation fields from the saved computer admission.
+  const { task, model, providerId, bindingSequence, executionMode, ...binding } = parsed.data;
+  const computerAdmission = { eventId: admission.event.id, position: admission.sequence };
+  const data = { ...binding, version: 1, computerAdmission };
+  const id = `delegation-start:${binding.delegationId}`;
+  return { ...admission.event, id, commandId: id, subject: `delegation-${binding.delegationId}`,
+    type: 'delegation.started', time: new Date().toISOString(), data };
+}
+
+async function saveDelegationStart(store: EventStore, admission: StoredEvent,
+  existing: StoredEvent | undefined, deadline: number) {
+  const event = delegationStartEvent(admission);
+  let start = existing;
+  if (!start) {
+    // Require an empty stream even after NATS has forgotten a duplicate command.
+    const command = { event, expectedSequence: 0, historyChecked: true as const, deadline };
+    const saved = await store.append(command);
+    if (saved.status !== 'appended' && saved.status !== 'conflict') {
+      throw new Error('Delegation start unavailable');
+    }
+    start = await readDelegationStart(store, event.data.delegationId, deadline);
+  }
+  requireSavedAdmission(start, event);
+  return { admission, start };
+}
+
+/** Read matching records only. Callers must still check root, access and spending rules. */
+export async function readDescendantAgreement(store: EventStore, silo: string,
+  assistantId: string, delegationId: string) {
+  const deadline = performance.now() + 10_000;
+  function take(summary: AdmissionSummary) {
+    return structuredClone(summary.descendants.get(delegationId));
+  }
+  const recorded = await readStreamSummary(store, silo, `computer-${assistantId}`,
+    admissions, deadline, take).catch(refuseAgreementRead);
+  if (!recorded || recorded.closed) {
+    throw new Error('Descendant admission missing or closed');
+  }
+  const admission = recorded.start;
+  const event = delegationStartEvent(admission);
+  const start = await readDelegationStart(store, delegationId, deadline);
+  requireSavedAdmission(start, event);
+  return { admission, start };
 }
 
 function requireSavedAdmission(stored: StoredEvent | undefined,

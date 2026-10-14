@@ -75,9 +75,11 @@ pass. A private turn cannot claim the class, and a shared child cannot omit it.
 
 ## Internal descendant admission
 
-`admitDescendant` saves one `computer.turn_started` for a signed internal decision.
-No route or production signer calls it. The separate `delegation.started` stage,
-root allowance checks and native call decisions remain for the next part of #93 PR 2.
+`admitDescendant` saves `computer.turn_started` and then a version 1
+`delegation.started` for a signed internal decision. Each stage makes its own conditional
+append to one stream. It returns `{ admission, start }`, both original stored events.
+No route or production signer calls it. Shared roots and native call decisions remain
+for #374 and #375; root allowance checks remain for #90 PR 4.
 The native bridge, thread grants and Stop work remain in later design rows.
 
 The decision uses ES256, the configured issuer, audience `delegation-admission`,
@@ -86,7 +88,7 @@ within 120 seconds. Its `jti` and delegation id are the SHA-256 of the JSON arra
 `[silo, rootId, computerId, generation, spawnItemId, threadId]`.
 No signature, another audience or a changed signed payload refuses admission.
 
-This first part accepts only private agent sessions with an explicit `memory_free`
+Admission accepts only private agent sessions with an explicit `memory_free`
 root and a saved model/provider choice. Older roots and shared sessions refuse.
 Descendants keep the requester, payer, generation, conversation, model and provider.
 Their model scopes narrow the recorded parent maximum; every other scope stays empty.
@@ -102,11 +104,29 @@ After every successful append result, admission reads that exact stored position
 checks the event identity and full binding. Duplicate recovery cannot return a caller's
 proposed event when another replica saved different scopes under the same id.
 
+The start is copied from the saved computer admission, with that event's exact id and
+position in `computerAdmission`. Its event and command id are
+`delegation-start:<delegationId>`, on `delegation-<delegationId>` with expected position 0.
+Retries read saved records before appending and work beyond the NATS duplicate window.
+A competing append must match the original record. Missing or unavailable status never
+allows an unchecked append or grants permission. Legacy starts and changed fields conflict.
+
+`readDescendantAgreement(store, silo, assistantId, delegationId)` reads the computer
+history and the original delegation start within ten seconds. It returns the same pair
+only if their full delegation binding and admission reference agree and the computer
+admission is open. It performs no append or effect. Read errors contain no binding values.
+The future minting caller must also check current root, access and spending rules.
+
 History and grant summaries load before the two-second access check. That check watches
 only the existing small authority streams. Later root activity is read incrementally.
 `test/descendant-admission.test.ts` uses real NATS, PostgreSQL, OpenFGA and gateway
-fixtures. `test/delegation.test.ts` retains the refusal of native credentials and calls.
-These computer admissions grant no call authority and create no budget event or hold.
+fixtures. The duplicate-window test uses the already installed Apache-2.0 NATS client
+(`@nats-io/jetstream` 3.4.0), declared as a test dependency.
+`test/delegation.test.ts` retains the refusal of native credentials and calls.
+The tests cover lost replies at either append, retries after NATS duplicate expiry,
+competing starts, changed bindings and references, missing/legacy/closed records,
+unavailable reads and projection replay. These records grant no call authority and
+create no budget event, hold, token or upstream call. Live native qualification: NOT RUN.
 
 ## Budget writes
 
