@@ -74,8 +74,9 @@ async function fixture(reason = 'owner_stop', recordPod = true) {
     'opencrane.ai/mcp-run': '1' };
   const annotations = { 'opencrane.ai/mcp-instance': instanceId,
     'opencrane.ai/mcp-spec': 'c'.repeat(64) };
-  const container = { name: 'fixture', image: 'docker.io/rancher/local-path-provisioner:v0.0.37',
-    imagePullPolicy: 'Never', command: ['/bin/sh', '-c', 'sleep 600'],
+  // Use the node's pause image because this fixture only needs a running Pod.
+  const container = { name: 'fixture', image: 'docker.io/rancher/mirrored-pause:3.10.2',
+    imagePullPolicy: 'Never', command: ['/pause'],
     resources: { requests: { cpu: '10m', memory: '16Mi' },
       limits: { cpu: '20m', memory: '32Mi' } } };
   const workload = { apiVersion: 'apps/v1', kind: 'StatefulSet',
