@@ -192,7 +192,11 @@ async function selectsOnlyEarlierHumanMessages() {
   function turnId(row: typeof saved[number]) {
     return z.object({ turnId: z.string() }).parse(row.event.data).turnId;
   }
-  expect(saved.map(turnId).sort()).toEqual([human.id, 'turn'].sort());
+  const stoppedTurns = saved.map(turnId);
+  stoppedTurns.sort();
+  const expectedTurns = [human.id, 'turn'];
+  expectedTurns.sort();
+  expect(stoppedTurns).toEqual(expectedTurns);
 }
 it('selects only human messages saved before the stop', selectsOnlyEarlierHumanMessages);
 

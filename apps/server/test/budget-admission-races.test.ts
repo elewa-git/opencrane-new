@@ -89,7 +89,8 @@ async function refusesPausedAppend() {
     dispatchStatus = reply.status;
     return result;
   }
-  vi.spyOn(setup.nats.store, 'append').mockImplementation(pauseAppend);
+  const appendSpy = vi.spyOn(setup.nats.store, 'append');
+  appendSpy.mockImplementation(pauseAppend);
   await expect(turnCommand(setup.nats.store, context, input)).rejects.toThrow('spending');
   expect(paused).toBe(true);
   expect(dispatchStatus).not.toBe(200);
@@ -99,18 +100,22 @@ async function refusesPausedAppend() {
 it('refuses admission and send permission after stop and recovery during the computer append',
   refusesPausedAppend);
 
-async function refusesLateStartRenewal() {
+const lateStartChecks = ['renewal', 'dispatch'] as const;
+async function refusesLateStartRenewal(check: typeof lateStartChecks[number]) {
   await stopped();
   await recover();
   await setup.append('computer-assistant', 'computer.turn_started', {
     conversationId: input.conversationId, turnId: input.turnId, threadId: input.threadId,
     assistantId: 'assistant', computerId: 'computer', requesterId: 'alice',
     task: 'chat_turn', payingGroupId: 'personal-default' });
+  expect(setup.actor.state.stoppedWork).toEqual([]);
+  if (check === 'renewal') {
+    await expect(turnCommand(setup.nats.store, context, input)).rejects.toThrow('spending');
+    expect(await closedRecords()).toHaveLength(1);
+  }
   await expectNoSend();
-  await expect(turnCommand(setup.nats.store, context, input)).rejects.toThrow('spending');
-  expect(await closedRecords()).toHaveLength(1);
 }
-it('uses the queued position for renewal and dispatch of a start saved after recovery',
+it.each(lateStartChecks)('uses the queued position for %s of a start saved after recovery',
   refusesLateStartRenewal);
 
 async function initialCheckClosesRefusedTurn() {
@@ -136,7 +141,8 @@ async function finalCheckSeesNewStop() {
     }
     return head(...args);
   }
-  vi.spyOn(setup.nats.store, 'head').mockImplementation(insertStop);
+  const headSpy = vi.spyOn(setup.nats.store, 'head');
+  headSpy.mockImplementation(insertStop);
   await expect(turnCommand(setup.nats.store, context, input)).rejects.toThrow('spending');
   expect(inserted).toBe(true);
   expect(await closedRecords()).toEqual([]);
