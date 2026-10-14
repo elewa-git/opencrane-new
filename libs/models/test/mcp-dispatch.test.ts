@@ -3,6 +3,8 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
 import { mcpCatalogueWatch } from '../src/mcp-catalogue-watch.ts';
+import { conversations } from '@opencrane/projections';
+import { budgetStopHandler } from '../src/index.ts';
 import { grantStream } from '@opencrane/authz';
 import { decideApproval, history, ingestUsage, priceTableId, readApproval, readToolPolicy,
   setToolPolicy } from '../src/index.ts';
@@ -979,3 +981,28 @@ async function refusesFinalSendDuringLocalHold() {
 }
 it('refuses a final send when a local hold arrives after tool admission',
   refusesFinalSendDuringLocalHold);
+
+async function budgetHandlerEndsApproval() {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const approvalId = await grantToolApproval(setup, headers);
+    await setup.actor.configure({ scope: 'paying_group', scopeId: 'personal-default',
+      ceilingCents: 0, setBy: 'alice' });
+    const rows = await history(setup.nats.store, 'budget-test', 'test');
+    const stop = rows.at(-1)!.event;
+    await setup.runner.initialise(conversations);
+    await setup.runner.run(conversations);
+    await budgetStopHandler(setup.nats.store).handle(stop, setup.db);
+    await setup.actor.configure({ scope: 'paying_group', scopeId: 'personal-default',
+      ceilingCents: 20000, setBy: 'alice' });
+    const approval = await readApproval(setup.nats.store, 'test', approvalId);
+    expect(approval.state).toBe('cancelled');
+    const response = await approvalPermit(setup, headers, approvalId);
+    expect(response.status).not.toBe(200);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('ends a waiting approval through the saved budget turn stop', budgetHandlerEndsApproval);
