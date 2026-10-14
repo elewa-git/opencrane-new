@@ -22,7 +22,9 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
 
   function requireCurrent(serverId: string) {
     const state = servers.get(serverId);
-    if (state && state.expiresAt <= Date.now()) state.held = true;
+    if (state && state.expiresAt <= Date.now()) {
+      state.held = true;
+    }
     if (stopped || !state || state.held || state.driftHeld || state.expiresAt <= Date.now()) {
       throw new Error('MCP catalogue watch unavailable');
     }

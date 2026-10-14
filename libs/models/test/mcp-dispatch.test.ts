@@ -802,7 +802,9 @@ async function checksApprovalAfterRenewal(renewal: typeof renewalCases[number]) 
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(startedAt);
     const expiresAt = new Date(startedAt + 10_000).toISOString();
-    const capture = vi.fn().mockResolvedValue({ ...initial.catalogue, expiresAt });
+    const initialCapture = { ...initial.catalogue, expiresAt };
+    const capture = vi.fn();
+    capture.mockResolvedValue(initialCapture);
     const options = { serverIds: ['fixture'], capture,
       requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
     watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
@@ -835,7 +837,8 @@ async function checksApprovalAfterRenewal(renewal: typeof renewalCases[number]) 
       return result;
     }
     if (renewal === 'expired during append') {
-      vi.spyOn(setup.nats.store, 'append').mockImplementation(crossExpiryDuringAppend);
+      const writer = vi.spyOn(setup.nats.store, 'append');
+      writer.mockImplementation(crossExpiryDuringAppend);
     }
     const renewed = { ...initial.catalogue!, checkedAt: new Date(finishedAt).toISOString(),
       expiresAt: new Date(startedAt + 11_000).toISOString() };
@@ -895,7 +898,8 @@ async function refusesOldApprovalAfterRecovery(testCase: typeof recoveryApproval
   try {
     const headers = await prepare(setup);
     const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
-    const capture = vi.fn().mockResolvedValue(initial.catalogue);
+    const capture = vi.fn();
+    capture.mockResolvedValue(initial.catalogue);
     const options = { serverIds: ['fixture'], capture,
       requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
     watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
@@ -936,7 +940,8 @@ async function refusesFinalSendDuringLocalHold() {
   try {
     const headers = await prepare(setup);
     const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
-    const capture = vi.fn().mockResolvedValue(initial.catalogue);
+    const capture = vi.fn();
+    capture.mockResolvedValue(initial.catalogue);
     const options = { serverIds: ['fixture'], capture,
       requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
     watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
@@ -957,7 +962,8 @@ async function refusesFinalSendDuringLocalHold() {
       }
       return result;
     }
-    vi.spyOn(setup.nats.store, 'append').mockImplementation(holdAfterAdmission);
+    const writer = vi.spyOn(setup.nats.store, 'append');
+    writer.mockImplementation(holdAfterAdmission);
     const response = await send(setup, value);
     expect(admitted).toBe(true);
     expect.soft(response.status).toBe(403);
