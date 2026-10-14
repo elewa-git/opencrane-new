@@ -3,19 +3,9 @@ import { expect, it, vi } from 'vitest';
 import { until } from '@opencrane/authz/testing';
 import { fixture } from './bridge-gate-fixture.ts';
 
-// Exercise stop and cleanup with a test-only authority fixture. Keep real authority
-// refusal in bridge-gate-authority.test.ts, which does not replace this check.
-function gateAuthorityFixture() {
-  return { requireBridgeGateAuthority: vi.fn() };
-}
-vi.mock('../src/bridge-gate-authority.ts', gateAuthorityFixture);
-
-const gate = { type: 'bridge_gate', takeoverId: 'takeover', generation: 1,
-  affectedTurnIds: ['first', 'second'] };
-
-
 async function stopsEveryConversation() {
   const test = await fixture();
+  const gate = await test.signedGate();
   try {
     test.start('first');
     test.start('second', 'restricted');
@@ -34,7 +24,8 @@ async function stopsEveryConversation() {
     test.finish('thread-2');
     function quiet() { return Boolean(test.receipt()); }
     await until(quiet);
-    expect(test.receipt()).toEqual({ ...gate, type: 'bridge_quiet', epoch: test.receipt()?.['epoch'],
+    expect(test.receipt()).toEqual({ type: 'bridge_quiet', takeoverId: 'takeover',
+      generation: 1, affectedTurnIds: ['first', 'second'], epoch: test.receipt()?.['epoch'],
       interruptedTurnIds: ['first', 'second'], preparingTurnIds: [], runningTurnIds: [],
       loadedThreadIds: [], heldApprovalIds: [], executorProof: 'unavailable',
       browserProof: 'unavailable' });
@@ -44,7 +35,7 @@ async function stopsEveryConversation() {
     test.send({ type: 'file_begin' });
     await test.flush();
     expect(test.calls).toEqual(before);
-    test.send({ ...gate, generation: 2 });
+    test.send(await test.signedGate({ generation: 2 }));
     const closed: unknown[] = await once(test.socket, 'close');
     expect(closed[0]).toBe(1008);
   } finally { await test.close(); }
@@ -54,6 +45,7 @@ it('closes all work before waiting for every terminal completion and unloaded th
 
 async function cancelsLoading() {
   const test = await fixture();
+  const gate = await test.signedGate();
   const loading = Promise.withResolvers<unknown>();
   const original = test.driver.rpc.bind(test.driver);
   function rpc(method: string, params: Record<string, unknown>) {
@@ -80,6 +72,7 @@ it('unloads a late preparation without granting or starting it', cancelsLoading)
 
 async function repeatsAfterReconnect() {
   const test = await fixture();
+  const gate = await test.signedGate();
   try {
     test.send(gate);
     function quiet() { return Boolean(test.receipt()); }
@@ -93,7 +86,7 @@ async function repeatsAfterReconnect() {
     expect(test.receipt()?.['epoch']).toBe(epoch);
     expect(test.loaded.size).toBe(0);
     expect(test.calls).toContain('thread/unsubscribe:unexpected-thread');
-    socket.send(JSON.stringify({ ...gate, takeoverId: 'another' }));
+    socket.send(JSON.stringify(await test.signedGate({ takeoverId: 'another' })));
     const closed: unknown[] = await once(socket, 'close');
     expect(closed[0]).toBe(1008);
   } finally { await test.close(); }
@@ -103,6 +96,7 @@ it('gates an idle computer and repeats inventory checks with the same epoch on r
 
 async function refusesLateGrant(renewal: boolean, installing: boolean) {
   const test = await fixture();
+  const gate = await test.signedGate();
   const pending = Promise.withResolvers<void>();
   let delayed = !renewal && installing;
   let entered = false;
@@ -154,6 +148,7 @@ it.each([[false, false], [true, false], [false, true], [true, true]])(
 
 async function doesNotInferQuiet(cause: string) {
   const test = await fixture();
+  const gate = await test.signedGate();
   try {
     test.start('first', 'restricted');
     function running() { return test.calls.includes('turn/start:thread-1'); }

@@ -25,7 +25,9 @@ keep their digest check and can be acknowledged after the computer turn closes.
 
 The bridge connection caller and lifecycle worker share `SandboxClient.credentials`.
 Delivery now uses root-only Pod exec and standard input, without token arguments.
-The computer stores only the token hash and expiry. The server then presents the
+Both callers include the issuer's public P-256 JWK as `verifier`. The computer
+checks the signature and saves the key, signed identity and local Pod UID beside
+the token hash and expiry. The server then presents the
 actual token to `/bridge`. Public HTTP replacement is removed. Deploy the new
 computer image first; old images refuse delivery because the installer is absent.
 See the [computer contract](../computer/README.robot.md#bridge-credential-delivery).

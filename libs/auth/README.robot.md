@@ -230,3 +230,14 @@ an internal reader; callers must check access before exposing any private fields
 Generation replacement preserves control until a later checked recovery contract.
 Old `takeover.started` and `takeover.ended` shapes become unverified control and
 refuse work passes. Neither shape restores work or grants a writer.
+
+## Signed takeover gates
+
+`tokenIssuer.takeoverGate` signs ES256 with `kid: lifecycle`, payload
+`typ: takeover-gate`, audience `takeover-gate` and a thirty-second lifetime.
+Its input names `silo`, `computer`, `assistant`, `generation`, `podUid`,
+`takeoverId` and `affectedTurnIds`. The gateway and decision-service audiences
+refuse it. Only trusted server code may call this signer after saving intent;
+there is no server caller or delivery path yet. Token values must never enter
+logs, errors, events, receipts or API responses. `test/tokens.test.ts` checks
+the signature, claims, expiry and audience separation with a real issuer key.

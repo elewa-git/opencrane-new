@@ -1,14 +1,33 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
+import { generateKeyPairSync } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
+import { tokenIssuer } from '@opencrane/auth';
 import { bridgeChannel } from '../src/channel.ts';
 import { record } from '../src/http.ts';
 import type { TurnDriver } from '../src/turn-runner.ts';
 
-export async function fixture() {
+export async function fixture(savedKey = true) {
   const directory = mkdtempSync(`${tmpdir()}/bridge-gate-`);
+  const keys = generateKeyPairSync('ec', { namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  const keyPath = `${directory}/issuer.pem`;
+  writeFileSync(keyPath, keys.privateKey);
+  const issuer = await tokenIssuer({ privateKeyPath: keyPath, issuer: 'fixture' });
+  const gateIdentity = savedKey ? { verifier: issuer.jwks.keys[0],
+    issuer: 'fixture', silo: 'test', computer: 'computer', assistant: 'assistant',
+    generation: 1, podUid: 'pod' } : undefined;
+  const binding = { silo: 'test', computer: 'computer', assistant: 'assistant',
+    generation: 1, podUid: 'pod', takeoverId: 'takeover',
+    affectedTurnIds: ['first', 'second'] };
+  async function signedGate(changes: Partial<typeof binding> = {}) {
+    const issued = await issuer.takeoverGate({ ...binding, ...changes });
+    return { type: 'bridge_gate', gate: issued.value };
+  }
   const server = createServer();
   const calls: string[] = [];
   const loaded = new Set<string>();
@@ -43,7 +62,8 @@ export async function fixture() {
     catalogues.delete(key);
     return Promise.resolve();
   }
-  function credential() { return { value: 'test', expiresAt: Date.now() + 120_000 }; }
+  function credential() { return { value: 'test', expiresAt: Date.now() + 120_000,
+    gateIdentity }; }
   function privateSession() {
     const lifetime = Promise.withResolvers<void>();
     privateExit = lifetime.resolve;
@@ -99,7 +119,7 @@ export async function fixture() {
   }
   function pauseAcks() { acknowledge = false; }
   function exitPrivate() { privateExit(); }
-  return { driver, channel, exitPrivate, pauseAcks, calls, loaded, catalogues, grants, frames, socket, connect,
+  return { driver, channel, issuer, keyPath, gateIdentity, signedGate, exitPrivate,
+    pauseAcks, calls, loaded, catalogues, grants, frames, socket, connect,
     send, start, finish, receipt, flush, close };
 }
-

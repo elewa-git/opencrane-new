@@ -401,7 +401,7 @@ async function openBridge(options: WatchOptions, tokens: Tokens, kube: SandboxCl
   proxyUrl: string, computer: Pick<BridgeInput, 'computerId' | 'assistantId'>,
   refused: Set<string>, logger: Logger) {
   const token = await resumeComputer(options.store, tokens, options.silo, computer.assistantId);
-  await kube.credentials(computer.computerId, token, true);
+  await kube.credentials(computer.computerId, token, tokens.jwks.keys[0], true);
   const proxy = proxyUrl.replace('http:', 'ws:');
   const pod = `${proxy}/api/v1/namespaces/${kube.namespace}/pods/${computer.computerId}:8081`;
   const input = { ...computer, bearer: token.value, url: `${pod}/proxy/bridge` };

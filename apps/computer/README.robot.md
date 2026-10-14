@@ -590,13 +590,20 @@ Kubernetes authentication and root access authorise every delivery, including th
 first one and recovery after expiry. No bootstrap bearer or new permission is needed.
 The installer caps input at 16 KiB and lifetime at the issuer's ten minutes. It checks
 that the supplied expiry matches the signed token's `exp`, and checks `iat`, `jti`
-and computer type. It trusts the issuer reached through Pod exec; it does not verify
-the signature again. The gateway still verifies signed credentials on model requests.
+and computer type. When delivery includes `verifier`, the installer requires a public
+P-256 JWK and checks the ES256 signature, `kid: lifecycle` and `agentgateway` audience
+using only `node:crypto`. It refuses private keys, other curves and mismatched keys.
+The root Pod exec caller supplies the trusted public key. No socket request can
+replace it. Deliveries without a key keep working and save no trusted identity.
+The gateway still verifies signed credentials on model requests.
 
 `/run/executor/credentials` is root-owned, mode 0750, group 1000. Its atomically
-replaced `computer.json` contains only a SHA-256 digest and expiry, mode 0440,
-owner root, group 1000. Codex can read the digest but cannot use it as a pass or
-change it. Desktop, tool and private Codex users cannot traverse the directory.
+replaced `computer.json` contains a SHA-256 digest and expiry, mode 0440,
+owner root, group 1000. Verified delivery also saves `verifier`, `issuer`, `silo`,
+`computer`, `assistant`, positive integer `generation` and the local `POD_UID`
+as `podUid`. The signed claims supply the identity; root's environment supplies
+the Pod UID. Codex can read the digest and public key but cannot use either to
+sign requests or change the file. Desktop, tool and private Codex users cannot traverse the directory.
 The bridge compares incoming token hashes in constant time before replacing any
 live connection. It retains the authenticated server's token only in memory for
 per-thread gateway grants. Tokens never enter events, replies, logs or the PVC.
@@ -611,7 +618,8 @@ processes. No launch copies `process.execArgv` or accepts extra Node flags.
 
 `apps/server/test/bridge-credentials.test.ts` uses the existing disposable computer
 fixture, exact template capabilities, UIDs 1000–1003, signed fixture credentials and
-the stub provider. It covers unauthorised replacement, file changes, issuer expiry,
+the stub provider. It covers public-key and identity storage, private/wrong-curve/
+mismatched key refusal, legacy delivery, unauthorised replacement, file changes, issuer expiry,
 forged connections and rotation followed by a real Codex turn. The debugger regression
 sends SIGUSR1 from UID 1000 to the bridge and memory-free Codex wrapper, UID 1002 to
 the desktop helper, and UID 1003 to the private Codex wrapper. It checks that port 9229
@@ -813,28 +821,23 @@ model delivery and a fresh-install chat journey remain NOT RUN.
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
 
-## Bridge work gate (P3-17 PR 2b, first split)
+## Signed bridge work gate
 
-The bridge work gate stays off until the server sender lands with trusted checks.
-The computer currently stores only a bridge pass digest and expiry. It has no trusted
-gate signing key, current computer/generation binding or saved current takeover.
-`BridgeGate.close` therefore refuses every request before setting its binding or
-stopping anything, with `Bridge gate authority unavailable`. The socket returns the
-fixed close code 1008 and reason `Invalid bridge message`, before or after resume.
-It returns neither `bridge_quiet` nor `bridge_unavailable`. Current turns, grants,
-catalogues and thread loads remain intact, and later authorised work can continue.
+The bridge reads the public signing key and identity saved by root credential
+delivery. It accepts only an ES256 gate with `kid: lifecycle`, audience and
+`typ: takeover-gate`, and a lifetime of at most 30 seconds. The issue time may
+be at most five seconds ahead. The signed silo, computer, assistant, generation
+and Pod UID must match the saved identity. A missing key or any mismatch closes
+the socket with code 1008 and the fixed reason `Invalid bridge message`, before
+any stop or cleanup. The signed gate never enters errors, logs or receipts.
 
-Enabling the gate requires verifying a signature with a key the computer already
-trusts, the target computer, its current generation and a current saved takeover.
-Neither a bridge pass nor fields supplied by the caller can replace those checks.
-
-The disabled stop implementation expects `bridge_gate`. It carries
-`takeoverId`, a positive integer `generation` and at most 64 unique `affectedTurnIds`.
-Only identifier characters are accepted. Unknown fields and a different request
+`bridge_gate` carries only `type` and `gate`. Verified claims supply `takeoverId`,
+the saved positive `generation` and at most 64 unique `affectedTurnIds`.
+Only identifier characters are accepted. Unknown fields and a different signed binding
 close the socket. An identical request retains the process-local `epoch` and checks
 again. There is no reopen operation. The gate is not saved across process restarts.
 
-Once authority can be checked, the prepared gate code stops preparing and running
+A valid gate stops preparing and running
 memory-free and restricted turns, removes catalogues and grants, and cancels held
 approvals. An action already being sent keeps
 its own answer path. A matching terminal Codex reply is required for each executing
@@ -848,13 +851,13 @@ and checks unloaded threads. A failed cleanup leaves proof unavailable.
 appear in either receipt. `bridge_unavailable` returns the request and epoch if proof
 fails or takes 30 seconds. Neither receipt grants desktop control.
 
-Not in this PR: server delivery from saved intent (including idle computers and
-reconnect ordering), server receipt validation, supervisor calls, takeover events,
-event-backed hold cancellation, budget reservation release, automation closure,
-crash recovery, writer access and fresh-install qualification. The local tests use
+Not in this PR: server delivery within two seconds of saved intent (including idle
+computers and first-message reconnect ordering), server receipt checks for binding,
+epoch, empty inventory and unavailable executor/browser proof, pausing/paused events,
+supervisor calls, hold cancellation, budget release, automation proof and crash recovery.
+Delivery must land with receipt checks because the server closes on unknown messages.
+Writer access and fresh-install qualification are also absent. The local tests use
 real authenticated sockets and stub Codex replies; they do not qualify a live computer.
-The stop/cleanup tests replace the unavailable authority check with a test-only
-fixture and retain their existing assertions. Separate refusal tests use the real
-authority check. Stale generations, old takeovers, foreign takeovers, unsigned requests
-and caller-supplied proof are sent first on fresh authenticated connections while two
-turns run. Each must be refused without stopping work or returning any gate receipt.
+The stop and refusal tests use real issuer keys and bridge sockets. Invalid gates
+are sent first before and after resume while memory-free and restricted turns run.
+They must leave work unchanged and return no gate receipt.

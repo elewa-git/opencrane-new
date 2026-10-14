@@ -2,7 +2,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { decodeJwt } from 'jose';
+import { decodeJwt, decodeProtectedHeader, jwtVerify, createLocalJWKSet } from 'jose';
 import { afterEach, expect, it } from 'vitest';
 import { computerTokenAudience, tokenIssuer, turnTokenAudience } from '../src/index.ts';
 
@@ -114,3 +114,34 @@ async function refusesUnknownContextClass() {
   await expect(issuer.turn(input)).rejects.toThrow();
 }
 it('refuses an unknown context class before signing a turn pass', refusesUnknownContextClass);
+
+async function signsSeparateGate() {
+  directory = await mkdtemp(join(tmpdir(), 'takeover-gate-'));
+  const keyOptions = { namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8' as const, format: 'pem' as const },
+    publicKeyEncoding: { type: 'spki' as const, format: 'pem' as const } };
+  const key = generateKeyPairSync('ec', keyOptions);
+  const path = join(directory, 'signing.pem');
+  await writeFile(path, key.privateKey, { mode: 0o600 });
+  let now = 1_800_000_000;
+  function clock() { return now; }
+  const options = { privateKeyPath: path, issuer: 'https://gate.invalid/', now: clock };
+  const issuer = await tokenIssuer(options);
+  const binding = { silo: 'test', computer: 'computer', assistant: 'assistant',
+    generation: 7, podUid: 'pod', takeoverId: 'takeover', affectedTurnIds: ['turn'] };
+  const gate = await issuer.takeoverGate(binding);
+  expect(decodeProtectedHeader(gate.value)).toEqual({ alg: 'ES256', kid: 'lifecycle' });
+  const keys = createLocalJWKSet(issuer.jwks);
+  const verification = { issuer: options.issuer, audience: 'takeover-gate',
+    algorithms: ['ES256'], currentDate: new Date(now * 1000) };
+  const verified = await jwtVerify(gate.value, keys, verification);
+  expect(verified.payload).toEqual({ ...binding, typ: 'takeover-gate',
+    iss: options.issuer, aud: 'takeover-gate', iat: now, exp: now + 30, jti: gate.id });
+  expect(gate.expiresAt).toBe((now + 30) * 1000);
+  for (const audience of [computerTokenAudience, turnTokenAudience]) {
+    await expect(issuer.verify(gate.value, audience)).rejects.toThrow();
+  }
+  now += 30;
+  await expect(issuer.verify(gate.value, 'takeover-gate')).rejects.toThrow();
+}
+it('signs a thirty-second gate that cannot be used for model or turn access', signsSeparateGate);

@@ -17,7 +17,7 @@ flowchart LR
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables and jobs; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
-  ops -->|updates computers and delivers passes| kube["Kubernetes<br/>computer manager"]
+  ops -->|updates computers and delivers passes and public keys| kube["Kubernetes<br/>computer manager"]
 ```
 
 ## What it is responsible for
@@ -33,7 +33,8 @@ flowchart LR
 - Removes a departed member’s groups and personal grants and deactivates their assistant.
 - Updates permissions and sets up a new member's assistant and computer when requested.
 - Starts computers, gives them short-lived access keys through authenticated
-  Kubernetes access as root, and pauses idle ones.
+  Kubernetes access as root, and pauses idle ones. Deliver the signing public key
+  with each pass so the computer can check it and save its identity.
 - Settles model spending after a model request.
 - Rebuilds tables and permissions for operator recovery.
 - Checks all saved memory keys before rebuilding current memory and search text.

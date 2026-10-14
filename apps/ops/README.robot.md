@@ -205,8 +205,10 @@ label selector; install service workloads elsewhere.
 
 The required credential sink uses authenticated Pod exec as root to run
 `/app/src/install-credential.ts`. It sends the token only on standard input.
-Both the worker and server use this adapter. The installer stores only a hash and
-expiry under the root-owned `/run/executor/credentials`; Ready follows successful
+Both the worker and server pass the issuer's public JWK as `verifier` through this
+adapter. The installer checks the signature, then saves the key and computer
+identity beside the hash and expiry under root-owned `/run/executor/credentials`.
+It never saves the credential value. Ready follows successful
 delivery. The reconciler refreshes before expiry and can recover after it expires.
 The new computer image must precede the worker and server deployment. No token
 value enters an event, process argument, reply or PVC.

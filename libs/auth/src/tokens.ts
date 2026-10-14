@@ -76,6 +76,11 @@ export async function tokenIssuer(options: TokenOptions) {
       token.setExpirationTime(expires);
       return token.sign(key);
     },
+    takeoverGate(input: { silo: string; computer: string; assistant: string;
+      generation: number; podUid: string; takeoverId: string; affectedTurnIds: string[] }) {
+      const payload = { ...input, typ: 'takeover-gate' };
+      return issue(payload, 'takeover-gate', 30);
+    },
     budget(input: { silo: string; memberId: string; commandDigest: string }) {
       return issue({ typ: 'budget-admin', silo: input.silo, memberId: input.memberId, commandDigest: input.commandDigest }, 'budget-admin', 30);
     },

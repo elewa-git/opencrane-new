@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, chownSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { record } from './http.ts';
+import { credentialIdentity } from './credential-identity.ts';
 
 const DIRECTORY = '/run/executor/credentials';
 
@@ -25,14 +26,18 @@ async function install() {
     || expiresAt <= Date.now() || expiresAt > Date.now() + 600_000) {
     throw new Error('Invalid credential');
   }
-  checkIssuerExpiry(value, input['id'], expiresAt);
+  const claims = checkIssuerExpiry(value, input['id'], expiresAt);
+  let identity: ReturnType<typeof credentialIdentity> | undefined;
+  if (input['verifier'] !== undefined) {
+    identity = credentialIdentity(value, input['verifier'], claims);
+  }
   // Keep only a verifier on disk. UID 1000 must not obtain a usable bridge pass here.
   const hash = createHash('sha256');
   hash.update(value);
   const digest = hash.digest('hex');
   const temporary = `${DIRECTORY}/${randomUUID()}.tmp`;
   try {
-    const saved = JSON.stringify({ digest, expiresAt });
+    const saved = JSON.stringify({ digest, expiresAt, ...identity });
     const options = { mode: 0o600, flag: 'wx' };
     writeFileSync(temporary, saved, options);
     chownSync(temporary, 0, 1000);
@@ -58,6 +63,7 @@ function checkIssuerExpiry(value: string, id: string, expiresAt: number) {
     || expires * 1000 !== expiresAt || claims['jti'] !== id || claims['typ'] !== 'computer') {
     throw new Error('Invalid credential');
   }
+  return claims;
 }
 
 function refused() {
