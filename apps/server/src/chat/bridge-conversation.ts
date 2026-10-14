@@ -163,10 +163,9 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   refused: Set<string>, connection: Connection,
   computerHistoryUnavailable = false, checkControl?: ControlCheck): Promise<ConversationProgress> {
   const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
-  let link: BridgeLink | undefined;
   async function refreshStops() {
     await readNewConversationRows(options, conversation.conversationId, rows);
-    if (link) sendBudgetStops(link, pendingBudgetStops(rows, assistant.closed));
+    sendBudgetStops(link, pendingBudgetStops(rows, assistant.closed));
   }
   async function controlPending() {
     let control: boolean;
@@ -209,7 +208,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   if (current.type !== 'computer.ready' || refused.has(computer.computerId)) {
     return { pending: true, retry: true };
   }
-  link = await connection(computer.computerId, conversation.assistantId);
+  const link = await connection(computer.computerId, conversation.assistantId);
   await refreshStops();
   const control = await controlPending();
   if (control) {
