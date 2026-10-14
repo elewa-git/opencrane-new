@@ -420,3 +420,115 @@ async function foldRejectsForeignOwnerStop() {
   expect(() => applyMcpInstance(current, event, fixture.sequence + 1)).toThrow();
 }
 it('refuses an owner stop requested by someone else', foldRejectsForeignOwnerStop);
+
+async function adminAccessFixture(role: 'admin' | 'owner') {
+  const fixture = await start();
+  const actorId = `stop-actor-${counter}`;
+  const auth = memberAuthorisation(binding);
+  const joined = envelope('test', `member-${actorId}`, 'member.joined', {
+    memberId: actorId, role, email: `${actorId}@example.test`, displayName: actorId });
+  await nats.seed([joined]);
+  await auth.handler.handle(joined, pgDb(storage.queue));
+  if (await nats.store.head('ownership-test') === 0) {
+    const seeded = envelope('test', 'ownership-test', 'ownership.seeded', {
+      ownerIds: ['dave'] });
+    await nats.seed([seeded]);
+    await auth.handler.handle(seeded, pgDb(storage.queue));
+  }
+  if (role === 'owner') {
+    const appointed = envelope('test', 'ownership-test', 'ownership.transferred', {
+      memberId: actorId, transferredBy: 'dave' });
+    await nats.seed([appointed]);
+    await auth.handler.handle(appointed, pgDb(storage.queue));
+  }
+  const command = { changeRef: fixture.stop.changeRef, expectedSequence: fixture.sequence };
+  return { ...fixture, actorId, command };
+}
+
+const adminAccessChanges = [
+  { name: 'allows an admin stop when another person gains ownership',
+    role: 'admin' as const, change: 'other-owner', allowed: true },
+  { name: 'refuses an admin demoted after membership history was read',
+    role: 'admin' as const, change: 'demotion', allowed: false },
+  { name: 'refuses an Owner stop when their ownership changes after history was read',
+    role: 'owner' as const, change: 'step-down', allowed: false },
+];
+
+async function changesDuringAdminWrite(testCase: (typeof adminAccessChanges)[number]) {
+  const fixture = await adminAccessFixture(testCase.role);
+  let event;
+  if (testCase.change === 'demotion') {
+    event = envelope('test', `member-${fixture.actorId}`, 'member.role_changed', {
+      memberId: fixture.actorId, previousRole: 'admin', newRole: 'member', changedBy: 'dave' });
+  } else if (testCase.change === 'step-down') {
+    event = envelope('test', 'ownership-test', 'ownership.stepped_down', {
+      memberId: fixture.actorId });
+  } else {
+    event = envelope('test', 'ownership-test', 'ownership.transferred', {
+      memberId: 'bob', transferredBy: 'dave', awaitingConfirmation: true });
+  }
+  const originalHead = nats.store.head.bind(nats.store);
+  let changed = false;
+  async function changeAfterMemberPosition(subject?: string, deadline?: number) {
+    const position = await originalHead(subject, deadline);
+    if (subject === `member-${fixture.actorId}` && !changed) {
+      changed = true;
+      // Save the change after history and the first position check, before the final check.
+      await nats.seed([event]);
+    }
+    return position;
+  }
+  const head = vi.spyOn(nats.store, 'head');
+  head.mockImplementation(changeAfterMemberPosition);
+  try {
+    const result = mcpAdminInstanceStop(nats.store, binding, fixture.actorId,
+      fixture.reference, fixture.command);
+    if (testCase.allowed) {
+      await expect(result).resolves.toMatchObject({ status: 'applied', reason: 'admin_stop' });
+    } else {
+      await expect(result).rejects.toThrow('Authority changed');
+    }
+    expect(changed).toBe(true);
+  } finally {
+    head.mockRestore();
+  }
+  const rows = await history(nats.store, fixture.event.subject, 'test');
+  if (testCase.allowed) {
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.event.data).toMatchObject({ requestedBy: fixture.actorId,
+      reason: 'admin_stop', changeRef: fixture.command.changeRef });
+  } else {
+    expect(rows).toHaveLength(1);
+  }
+}
+it.each(adminAccessChanges)('$name', changesDuringAdminWrite);
+
+async function slowOwnershipHistoryBeforeAdminWrite() {
+  const fixture = await adminAccessFixture('admin');
+  const originalRead = nats.store.readStream.bind(nats.store);
+  const originalNow = performance.now.bind(performance);
+  let elapsed = 0;
+  function currentTime() {
+    return originalNow() + elapsed;
+  }
+  async function* slowOwnershipRead(subject: string, from?: number, deadline?: number) {
+    yield* originalRead(subject, from, deadline);
+    if (subject === 'ownership-test') elapsed += 2_100;
+  }
+  const clock = vi.spyOn(performance, 'now');
+  const read = vi.spyOn(nats.store, 'readStream');
+  clock.mockImplementation(currentTime);
+  read.mockImplementation(slowOwnershipRead);
+  try {
+    const result = await mcpAdminInstanceStop(nats.store, binding, fixture.actorId,
+      fixture.reference, fixture.command);
+    expect(result).toMatchObject({ status: 'applied', reason: 'admin_stop' });
+    expect(elapsed).toBeGreaterThan(2_000);
+  } finally {
+    read.mockRestore();
+    clock.mockRestore();
+  }
+  expect(await history(nats.store, fixture.event.subject, 'test')).toHaveLength(2);
+}
+it('loads slow ownership history before the admin write deadline',
+  slowOwnershipHistoryBeforeAdminWrite);

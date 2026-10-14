@@ -408,3 +408,25 @@ async function adminMemberRefusals() {
 }
 it('refuses members before reading history and hides owner routes from admins',
   adminMemberRefusals);
+
+async function memberCannotReadAdminStop() {
+  const fixture = await start();
+  const url = adminUrl(fixture.reference,
+    `/changes/${fixture.stop.changeRef}?profileId=${fixture.reference.profileId}`);
+  const read = vi.spyOn(nats.store, 'readStream');
+  try {
+    const request = { method: 'GET' as const, url, headers: headers('alice') };
+    const response = await app.inject(request);
+    expect(response.statusCode).toBe(403);
+    expect(response.headers['cache-control']).toBe('no-store');
+    function readsInstance(call: unknown[]) {
+      return call[0] === fixture.event.subject;
+    }
+    expect(read.mock.calls.some(readsInstance)).toBe(false);
+  } finally {
+    read.mockRestore();
+  }
+  expect(await nats.store.head(fixture.event.subject)).toBe(fixture.sequence);
+}
+it('refuses a plain member’s admin stop GET before reading instance history',
+  memberCannotReadAdminStop);
