@@ -207,6 +207,22 @@ async function settledSendAfterClosure() {
 it('allows switch-on after an admitted send settles at its original tariff and payer',
   settledSendAfterClosure);
 
+async function unresolvedHold(kind: 'expired' | 'unknown') {
+  const reservationId = 'unresolved-hold';
+  const reservation = { reservationId, permitId: reservationId, amountCents: 12,
+    payingGroupId: 'sales', assistantId: 'assistant' };
+  await setup.append('budget-test', 'budget.reserved', reservation);
+  if (kind === 'expired') {
+    await setup.append('budget-test', 'budget.reservation_expired', { reservationId });
+  } else {
+    const settlement = { reservationId, permitId: reservationId,
+      settledCents: 0, outcome: 'unknown' };
+    await setup.append('budget-test', 'budget.settled', settlement);
+  }
+  await refused(403);
+}
+it.each(['expired', 'unknown'] as const)('refuses a hold whose outcome is %s', unresolvedHold);
+
 async function denied(reason: string) {
   const command = await input();
   let sub = 'alice';
