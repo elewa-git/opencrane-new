@@ -108,6 +108,38 @@ async function clean() {
 }
 it('leaves a clean scope alone',
   clean, 30_000);
+async function forgottenOnly() {
+  await setup();
+  const forgotten = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
+    memoryId: 'memory_1', revision: 2, expectedRevision: 1 };
+  await append('memory.forgotten', forgotten);
+  await scan('2026-10-12T02:00:00Z');
+  const first = await records();
+  expect(first).toMatchObject([{ action: 'no_changes', reason: null, inputRefs: [] }]);
+  await scan('2026-10-13T02:00:00Z');
+  expect(await records()).toEqual(first);
+}
+it('reviews a forgotten-only change once without dispatch', forgottenOnly, 30_000);
+
+async function boundedPrefix() {
+  await setup(false);
+  for (let index = 0; index < 33; index++) {
+    const fact = written(`fact_${String(index).padStart(2, '0')}`);
+    await append('memory.written', fact);
+  }
+  await scan('2026-10-12T02:00:00Z');
+  const [first] = await records();
+  expect(first).toMatchObject({ action: 'refused', reason: 'qualification_blocked' });
+  expect(first.inputRefs).toHaveLength(32);
+  const reviewed = { ...first, action: 'no_changes', reason: null };
+  await append('memory.maintenance_recorded', reviewed);
+  await scan('2026-10-13T02:00:00Z');
+  const saved = await records();
+  expect(saved).toHaveLength(3);
+  expect(saved[2]).toMatchObject({ inputRefs: [expect.objectContaining({ memoryId: 'fact_32' })] });
+}
+it('reviews only the saved prefix and carries omitted facts into the next night',
+  boundedPrefix, 30_000);
 async function missed() {
   await setup();
   await scan('2026-10-12T02:15:00Z');
