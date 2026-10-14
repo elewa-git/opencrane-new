@@ -1971,8 +1971,8 @@ Replay mode writes, probes and appends nothing. Creating a new delivery object r
 another delivery and probe; saved receipts alone cannot acknowledge a restarted child.
 
 The decision stub always allows and supplies the normal request id and dispatch permit.
-Recorded outbound names are accept, content-type, host, mcp-method, mcp-name,
-mcp-protocol-version, transfer-encoding, x-opencrane-mcp-permit and x-request-id.
+Recorded outbound names are accept, content-length, content-type, host, mcp-method,
+mcp-name, mcp-protocol-version, x-opencrane-mcp-permit and x-request-id.
 No caller identity or canary is in the delivered file, recorded traffic or gateway logs.
 Malformed input errors are covered by the existing renderer tests.
 Remaining: per-server receipts, the Ready read, worker wiring, removal of MODEL_MCP_ROUTES

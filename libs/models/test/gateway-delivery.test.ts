@@ -103,7 +103,9 @@ it('records one exact live observation; replay and another process cannot acknow
 
 async function sends(setup: Awaited<ReturnType<typeof fixture>>, method: string,
   extra: string[]) {
-  const headers = ['host', 'localhost', 'authorization', `Bearer ${setup.pass}`,
+  const content = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read"}}';
+  const headers = ['content-length', String(Buffer.byteLength(content)),
+    'host', 'localhost', 'authorization', `Bearer ${setup.pass}`,
     'content-type', 'application/json',
     'mcp-protocol-version', '2026-07-28', 'x-request-id', 'fixture', ...extra];
   return new Promise<number>(send);
@@ -119,7 +121,7 @@ async function sends(setup: Awaited<ReturnType<typeof fixture>>, method: string,
     }
     const outgoing = request(options, received);
     outgoing.on('error', reject);
-    outgoing.end('{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read"}}');
+    outgoing.end(content);
   }
 }
 
@@ -160,8 +162,8 @@ async function enforcesRenderedRules() {
   }
   const outbound = setup.traffic.filter(dispatched);
   for (const item of outbound) {
-    expect(Object.keys(item.headers).sort()).toEqual(['accept', 'content-type',
-      'host', 'mcp-method', 'mcp-name', 'mcp-protocol-version', 'transfer-encoding', 'x-opencrane-mcp-permit', 'x-request-id']);
+    expect(Object.keys(item.headers).sort()).toEqual(['accept', 'content-length', 'content-type',
+      'host', 'mcp-method', 'mcp-name', 'mcp-protocol-version', 'x-opencrane-mcp-permit', 'x-request-id']);
   }
   const evidence = JSON.stringify([await readFile(setup.options.configFile, 'utf8'),
     setup.traffic, setup.logs]);
