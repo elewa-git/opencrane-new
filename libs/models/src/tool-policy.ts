@@ -119,7 +119,7 @@ export async function setToolPolicy(store: EventStore, binding: Binding, memberI
     payload, command, rows, valid);
 }
 
-async function saveToolCommand(store: EventStore, binding: Binding, memberId: string,
+export async function saveToolCommand(store: EventStore, binding: Binding, memberId: string,
   serverId: string, type: string, payload: Record<string, unknown>,
   command: { commandId: string; expectedSequence: number }, rows: StoredEvent[], valid: boolean,
   expiresAt = Infinity) {

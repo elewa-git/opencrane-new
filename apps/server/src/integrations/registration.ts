@@ -34,8 +34,13 @@ export async function discoveryStatus(store: EventStore, silo: string, serverId:
   let last = rows.findLast(isDiscoveryOutcome);
   if (last && last.sequence < registration.sequence) last = undefined;
   const registered = z.object({ kind: z.string(), locator: z.string(),
-    credentialContract: z.unknown().optional() }).parse(registration.event.data);
+    credentialContract: z.unknown().optional(), installation: z.unknown().optional() })
+    .parse(registration.event.data);
   if (registered.kind === 'hosted') {
+    if (registered.installation !== undefined && registered.credentialContract === undefined) {
+      return { serverId, changeRef: `chg_${registration.event.commandId}`, state: 'checking',
+        reason: undefined, inventory: undefined };
+    }
     // Keep a saved startup refusal closed even if a later discovery claims success.
     const startupRefusal = rows.findLast(isStartupRefusal);
     if (startupRefusal && startupRefusal.sequence > registration.sequence) {

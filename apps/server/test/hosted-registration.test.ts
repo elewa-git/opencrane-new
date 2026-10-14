@@ -1,4 +1,5 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
@@ -23,10 +24,14 @@ let fga: Awaited<ReturnType<typeof openfga>>;
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let dbs: Awaited<ReturnType<typeof databases>>;
 let auth: ReturnType<typeof memberAuthorisation>;
-let app: ReturnType<typeof Fastify>;
+let app: FastifyInstance;
 
-async function startFga() { fga = await openfga(); }
-async function closeFga() { await fga.close(); }
+async function startFga() {
+  fga = await openfga();
+}
+async function closeFga() {
+  await fga.close();
+}
 beforeAll(startFga, 120_000);
 afterAll(closeFga);
 
@@ -45,9 +50,15 @@ async function setup() {
   await member('alice', 'admin');
   await member('amina', 'admin');
   await member('bob', 'member');
-  async function memberId(_silo: string, _issuer: string, sub: string) { return sub; }
-  async function rows() { return []; }
-  async function tools() { return emptyToolPolicy(); }
+  function memberId(_silo: string, _issuer: string, sub: string) {
+    return Promise.resolve(sub);
+  }
+  function rows() {
+    return Promise.resolve([]);
+  }
+  function tools() {
+    return Promise.resolve(emptyToolPolicy());
+  }
   app = Fastify();
   const options = { silo: 'test', store: nats.store, binding: auth.binding,
     feed: { memberId }, catalogue: { rows, tools } };
@@ -67,7 +78,7 @@ function headers(sub = 'alice', origin = new URL(config.redirectUri).origin) {
   const session = { sub, orgId: 'org-acme', roles: ['owner'], authTime: now, exp: now + 60 };
   return { origin, cookie: `${config.cookieName}=${encodeSession(config, session)}` };
 }
-async function register(payload: unknown = command, sub = 'alice', origin?: string) {
+async function register(payload: Record<string, unknown> = command, sub = 'alice', origin?: string) {
   return app.inject({ method: 'POST', url: '/api/org/integrations',
     headers: headers(sub, origin), payload });
 }
@@ -100,14 +111,45 @@ async function savesAndRecovers() {
   const changed = await register({ ...command, platform: 'linux/arm64' });
   expect(changed.statusCode).toBe(409);
   expect((await register(command, 'amina')).statusCode).toBe(409);
+  const rejection = envelope('test', `mcp-${receipt.serverId}`, 'mcp.server_rejected',
+    { serverId: receipt.serverId, reason: 'scanner_unavailable' }, 'later-result');
+  const append = { event: rejection, expectedSequence: saved[0]!.sequence };
+  expect((await nats.store.append(append)).status).toBe('appended');
   const recovered = await status(command.commandId);
   expect(recovered.statusCode).toBe(200);
   expect(recovered.json()).toMatchObject({ ...receipt, status: 'applied',
     operation: 'register', sequence: saved[0]?.sequence });
   expect((await status('never-seen')).json()).toMatchObject({ status: 'unknown' });
-  expect(await registrations()).toHaveLength(1);
+  expect(await registrations()).toHaveLength(2);
 }
 it('saves attempt one and recovers the original operation after a lost reply', savesAndRecovers);
+
+async function recoversLostAppendReply() {
+  const append = nats.store.append.bind(nats.store);
+  async function loseReply(input: Parameters<typeof append>[0]): ReturnType<typeof append> {
+    await append(input);
+    throw new Error('Reply lost after append');
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(loseReply);
+  expect((await register()).statusCode).toBe(503);
+  const recovered = (await status(command.commandId)).json<{ serverId: string }>();
+  const retried = await register();
+  expect(retried.statusCode).toBe(202);
+  expect(retried.json()).toMatchObject({ serverId: recovered.serverId });
+  expect(await registrations()).toHaveLength(1);
+}
+it('recovers a saved append when its acknowledgement is lost', recoversLostAppendReply);
+
+async function refusesUnappliedRole() {
+  const fields = { memberId: 'alice', previousRole: 'admin', newRole: 'admin',
+    changedBy: 'amina' };
+  const event = envelope('test', 'member-alice', 'member.role_changed', fields, 'unapplied');
+  const expectedSequence = await nats.store.head('member-alice');
+  expect((await nats.store.append({ event, expectedSequence })).status).toBe('appended');
+  expect((await register()).statusCode).toBe(503);
+  expect(await registrations()).toHaveLength(0);
+}
+it('waits for the current admin facts to be applied to IAM', refusesUnappliedRole);
 
 const invalid = [
   { locator: 'ghcr.io/elewa/test:latest' },
@@ -155,7 +197,8 @@ async function waitsWithoutDiscovery() {
     const saved = (await registrations())[0]!.event;
     expect(parseEventByType({ ...saved, subject: 'mcp-other' }).success).toBe(false);
     const schema = getEventDefinition('mcp.server_registered')!.dataSchema;
-    expect(schema.safeParse({ ...saved.data as object,
+    const data = z.record(z.string(), z.unknown()).parse(saved.data);
+    expect(schema.safeParse({ ...data,
       credentialContract: { credentialMode: 'startup_lasting' } }).success).toBe(false);
   } finally {
     await workerApp.close();

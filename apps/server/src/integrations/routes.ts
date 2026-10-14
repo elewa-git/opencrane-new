@@ -1,4 +1,4 @@
-import { AuthorityApplying } from '@opencrane/models';
+import { AuthorityApplying, registerHosted, hostedRegistrationChange } from '@opencrane/models';
 import { activeMember, GroupRefused } from '../members/groups.ts';
 import { installWorker } from './install-worker.ts';
 import type { RemoteNetwork } from './remote.ts';
@@ -32,36 +32,52 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
   if (options?.store && options.discovery) installWorker(app, options.store, options.silo, options.discovery).start();
   const authorisation = options && memberAuthorisation(options.binding);
   const now = options?.now ?? (() => new Date());
-  for (const path of ['/api/org/integrations', '/api/org/models', '/api/org/integrations/:serverId/tools', '/api/org/integrations/:serverId/review', '/api/org/integrations/:serverId/publication', '/api/org/integrations/:serverId/discovery', '/api/org/integrations/discovery']) app.route({ method: !path.endsWith('/discovery') ? ['GET', 'POST'] : ['GET'], url: path, handler: async (request, reply) => {
-    const session = sessionFor(request, config, now());
-    if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });
-    if (!options || !authorisation || !config.expectedOrgId) return reply.code(503).send({ status: 'unavailable' });
-    if (!isOrganisationSession(config, session)
-      || options.silo !== options.binding.silo) {
-      return reply.code(403).send({ status: 'refused', reason: 'wrong_silo' });
+  const paths = [
+    '/api/org/integrations', '/api/org/models',
+    '/api/org/integrations/:serverId/tools', '/api/org/integrations/:serverId/review',
+    '/api/org/integrations/:serverId/publication', '/api/org/integrations/:serverId/discovery',
+    '/api/org/integrations/discovery', '/api/org/integrations/changes/:commandId',
+  ];
+  for (const path of paths) {
+    const readOnly = path.endsWith('/discovery') || path.endsWith('/:commandId');
+    const method: ('GET' | 'POST')[] = readOnly ? ['GET'] : ['GET', 'POST'];
+    async function handleIntegration(request: FastifyRequest, reply: FastifyReply) {
+      const session = sessionFor(request, config, now());
+      if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });
+      if (!options || !authorisation || !config.expectedOrgId) return reply.code(503).send({ status: 'unavailable' });
+      if (!isOrganisationSession(config, session)
+        || options.silo !== options.binding.silo) {
+        return reply.code(403).send({ status: 'refused', reason: 'wrong_silo' });
+      }
+      try {
+        const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
+        if (!memberId) {
+          return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
+        }
+        const permission = await authorisation.check(memberId, 'admin');
+        if (permission.status === 'unavailable') return reply.code(503).send({ status: 'unavailable' });
+        if (!permission.allowed) {
+          return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
+        }
+        if (options.store) {
+          const authority = { requiredRole: 'admin' as const };
+          await activeMember(options.store, options.binding, memberId, authority);
+        }
+        return await authorisedRequest(path, request, reply, config, options, memberId, now());
+      } catch (error) {
+        return routeError(request, reply, error);
+      }
     }
-    try {
-      const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
-      if (!memberId) {
-        return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
-      }
-      const permission = await authorisation.check(memberId, 'admin');
-      if (permission.status === 'unavailable') return reply.code(503).send({ status: 'unavailable' });
-      if (!permission.allowed) {
-        return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
-      }
-      if (options.store) {
-        const authority = { requiredRole: 'admin' as const };
-        await activeMember(options.store, options.binding, memberId, authority);
-      }
-      return await authorisedRequest(path, request, reply, config, options, memberId, now());
-    } catch (error) {
-      return routeError(request, reply, error);
-    }
-  } });
+    app.route({ method, url: path, handler: handleIntegration });
+  }
 }
 
 async function authorisedRequest(path: string, request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string, now: Date) {
+      if (path.endsWith('/:commandId')) {
+        if (!options.store) return reply.code(503).send({ status: 'unavailable' });
+        const params = z.object({ commandId: z.string() }).parse(request.params);
+        return reply.send(await hostedRegistrationChange(options.store, options.silo, params.commandId));
+      }
       if (path.endsWith('/discovery')) {
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
         const { serverId } = path === '/api/org/integrations/discovery'
@@ -71,9 +87,7 @@ async function authorisedRequest(path: string, request: FastifyRequest, reply: F
         return reply.code(status ? 200 : 404).send(status ?? { status: 'not_found' });
       }
       if (path === '/api/org/integrations' && request.method === 'POST') {
-        if (request.headers.origin !== new URL(config.redirectUri).origin) return reply.code(403).send({ status: 'refused' });
-        if (!options.store) return reply.code(503).send({ status: 'unavailable' });
-        return reply.code(202).send(await registerRemote(options.store, options.silo, memberId, request.body));
+        return registerIntegration(request, reply, config, options, memberId);
       }
       if (/\/(review|publication)$/u.test(path)) {
         return review(request, reply, config, options, memberId);
@@ -90,6 +104,28 @@ async function authorisedRequest(path: string, request: FastifyRequest, reply: F
       const response: IntegrationsResponse = { rows: await options.catalogue.rows(options.silo), loadedAt: now.toISOString() };
       return reply.send(response);
  }
+
+async function registerIntegration(request: FastifyRequest, reply: FastifyReply,
+  config: AuthConfig, options: IntegrationOptions, memberId: string) {
+  if (request.headers.origin !== new URL(config.redirectUri).origin) {
+    return reply.code(403).send({ status: 'refused' });
+  }
+  if (!options.store) return reply.code(503).send({ status: 'unavailable' });
+  const body = z.object({ kind: z.string().optional() }).parse(request.body);
+  if (body.kind === 'hosted') {
+    const result = await registerHosted(options.store, options.binding, memberId, request.body);
+    let statusCode = 409;
+    if (result.status === 'appended') {
+      statusCode = 202;
+    }
+    if (result.status === 'unavailable') {
+      statusCode = 503;
+    }
+    return reply.code(statusCode).send(result);
+  }
+  const result = await registerRemote(options.store, options.silo, memberId, request.body);
+  return reply.code(202).send(result);
+}
 
 async function tools(request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string) {
         const { serverId } = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) }).parse(request.params);

@@ -1,0 +1,1 @@
+Admins can register digest-pinned hosted images and recover the original result after a lost reply. New registrations stay Checking without fetching images or discovering tools. Image receipts, admission status and recheck commands remain unfinished.

@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, fact links, tool reviews, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, fact links, tool reviews, hosted registration, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes, authenticated instance observations and stops, owner and admin stops, control intent, memory facts, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|saved child leave results| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
@@ -208,6 +208,10 @@ A shared child chat's creator can invite someone after acknowledging that all sh
 history will be visible. The invite gives access only to that child. The creator can
 remove others, and others can leave. Saved removals stop reads and live connections
 before the permissions service catches up.
+
+An owner or admin can register a hosted image and read the result using the original
+command id. The image stays Checking while image admission is unfinished.
+Registration does not fetch an image, discover tools or start a process.
 
 A person continues a shared child chat. The server gives the assistant completed
 exchanges from that child, including replies to other people. It leaves out parent

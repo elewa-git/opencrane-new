@@ -1912,6 +1912,20 @@ Requester, turn-ended and access-revoked stop commands follow in the next part.
 Trusted call ids, grant/dispatch checks and the child dispatcher remain in row 5.
 There is no route, caller, running-turn fan-out or model call in this part.
 
+## Hosted registration — first part of P3-6 PR 4
+
+`registerHosted` derives serverId from silo and commandId. It reuses saveToolCommand
+for current admin permission, membership, applied IAM receipts and the two-second
+access check. It reads MCP history before that check and conditionally appends
+once at expectedSequence 0. Retries compare saved input and the human principal;
+the saved event is checked again after store deduplication.
+`hostedRegistrationChange` reads only that operation. An absent event is unknown.
+Its HTTP caller must check current admin access before calling it.
+
+Remaining: dated receipts, admission GET and recheck commands. Evidence storage is
+P3-6 PR 4b. Image fetch, scans, deployment and evidence bytes are outside this part.
+Fresh-install qualification: NOT RUN.
+
 ## Durable budget turn stops (P3-14 PR 4a; Part of #55)
 
 `stop-budget-turns` subscribes to `budget.ceiling_set` and `budget.exhausted`.
