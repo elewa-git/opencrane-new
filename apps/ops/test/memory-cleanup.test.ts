@@ -348,6 +348,78 @@ it('does not rebuild completed, legacy or non-person cleanup jobs',
     await runtime.stop();
   }, 30_000);
 
+it('recovers a lost exhaustion report from the failed original after restart',
+  async function lostExhaustionReport() {
+    const remove = keys.delete;
+    function failChild(identity: MemoryIdentity) {
+      if (identity.memoryId === 'child') throw new Error('PRIVATE ERROR /keys/private');
+      remove(identity);
+    }
+    const failingKeys = { ...keys, delete: failChild };
+    const reaction = memoryCleanupHandler(nats.store, failingKeys);
+    const logger = createLogger('lost-cleanup-report-test');
+    const alerts = vi.spyOn(logger, 'error');
+    const runtime = new HandlerRuntime({ db: storage.db, logger, silo: 'test',
+      handlers: [reaction], retryLimit: 0 });
+    const append = vi.spyOn(nats.store, 'append');
+    const failure = { status: 'unavailable' as const, cause: new Error('Store down') };
+    append.mockResolvedValue(failure);
+    await runtime.start();
+    async function enqueue(transaction: Parameters<typeof reaction.handle>[1]) {
+      await runtime.enqueue(reaction, forgotten, transaction);
+    }
+    await storage.db.transaction(enqueue);
+    await runtime.work(1);
+    async function reportsExhausted() {
+      const result = await storage.db.query<{ state: string; retry_count: number }>(
+        "SELECT state, retry_count FROM pgboss.job WHERE name='cleanup-memory-dead'",
+      );
+      return result.rows[0]?.state === 'failed';
+    }
+    await until(reportsExhausted);
+    const failed = (await runtime.deadLetters('cleanup-memory'))[0]!;
+    expect(failed).toBeDefined();
+    expect(await completions()).toEqual([]);
+    expect(append).toHaveBeenCalledTimes(3);
+    await runtime.stop();
+    append.mockRestore();
+
+    const restarted = new HandlerRuntime({ db: storage.db, logger, silo: 'test',
+      handlers: [handler()], retryLimit: 0 });
+    await restarted.start();
+    const checkpoint = await nats.store.head();
+    expect(await recoverMemoryCleanup(restarted, nats.reader, checkpoint)).toBe(0);
+    expect(await recoverMemoryCleanup(restarted, nats.reader, checkpoint)).toBe(0);
+    expect((await completions()).map(resultOutcome)).toEqual(['unavailable']);
+    function jobId(job: { id: string }) {
+      return job.id;
+    }
+    expect((await restarted.deadLetters('cleanup-memory')).map(jobId))
+      .toContain(failed.id);
+    expect(JSON.stringify(alerts.mock.calls)).toContain(failed.id);
+    await restarted.stop();
+  }, 30_000);
+
+it('never reports a failed original unavailable after cleanup completed',
+  async function completedOriginal() {
+    const reaction = handler();
+    const logger = createLogger('completed-cleanup-recovery-test');
+    const runtime = new HandlerRuntime({ db: storage.db, logger, silo: 'test',
+      handlers: [reaction] });
+    await runtime.start();
+    async function enqueue(transaction: Parameters<typeof reaction.handle>[1]) {
+      await runtime.enqueue(reaction, forgotten, transaction);
+    }
+    await storage.db.transaction(enqueue);
+    await storage.db.query("UPDATE pgboss.job SET state='failed' WHERE name='cleanup-memory'");
+    await runner.run(projection);
+    await reaction.handle(forgotten, storage.db);
+    expect((await completions()).map(resultOutcome)).toEqual(['completed']);
+    expect(await recoverMemoryCleanup(runtime, nats.reader, await nats.store.head())).toBe(0);
+    expect((await completions()).map(resultOutcome)).toEqual(['completed']);
+    await runtime.stop();
+  }, 30_000);
+
 it('converges when two workers report the same exhausted cleanup',
   async function concurrentExhaustion() {
     const reaction = handler();
