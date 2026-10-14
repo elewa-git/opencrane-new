@@ -177,15 +177,30 @@ const maintenanceRecord = z.strictObject({
   date: z.iso.date(), bindingRevision: revision, memberId: identifier,
   acceptedCapCents: acceptedNightlyCap, intendedAt: z.iso.datetime(), selectedAt: z.iso.datetime(),
   inputRefs: z.array(maintenanceReference).max(32),
-  action: z.enum(['due', 'refused', 'missed']),
+  reviewedPosition: z.int().nonnegative().optional(),
+  action: z.enum(['due', 'refused', 'missed', 'no_changes']),
   reason: z.enum(['qualification_blocked', 'window_missed', 'overlap']).nullable(),
 });
 function validRun(data: z.infer<typeof maintenanceRecord>) {
   if (data.intendedAt !== `${data.date}T02:00:00.000Z`) {
     return false;
   }
+  if (data.action !== 'no_changes' && data.reviewedPosition !== undefined) {
+    return false;
+  }
   if (data.action === 'due') {
     return data.reason === null;
+  }
+  if (data.action === 'no_changes') {
+    if (data.reason !== null || data.reviewedPosition === undefined) {
+      return false;
+    }
+    for (const reference of data.inputRefs) {
+      if (reference.position > data.reviewedPosition) {
+        return false;
+      }
+    }
+    return true;
   }
   if (data.action === 'refused') {
     return data.reason === 'qualification_blocked';

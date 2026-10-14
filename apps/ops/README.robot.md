@@ -510,9 +510,15 @@ Scans require the memory checkpoint to reach a fixed event position, then page
 100 binding rows at a time. Each scope history has its own ten-second deadline.
 Bindings begin on the next UTC night. Clean and disabled scopes append nothing.
 Each dirty night gets one conditional scope append, using SHA-256 keys from
-silo, scope, date and selected revision metadata. Same-night input changes cannot
-claim another attempt. At most 32 oldest references are recorded, without text.
-No revision is marked reviewed. Every unprocessed fact remains dirty.
+silo, scope, date, last fact-change position, selected revisions and reviewed position.
+Same-night input changes cannot claim another attempt. The scanner and status read
+share one TypeScript selection rule. Forgotten and dependent hidden facts are excluded.
+Up to 32 oldest eligible references fit as whole escaped blocks within 16 KiB.
+The first fact that does not fit stops the prefix; there is no backfill.
+Due unpinned expiry contributes metadata only. Due pins are excluded.
+A `no_changes` record reviews its exact input revisions and the last fact-change
+position. Omitted and newer revisions stay dirty. A forgotten-only change records
+`no_changes` once; cleanup records do not make it dirty.
 After downtime, startup checks the latest elapsed boundary. Failed queued triggers
 are retained without an expiry and recovered before the new scan. Each keeps its
 original UTC night, even after retries are exhausted or the dispatcher restarts.

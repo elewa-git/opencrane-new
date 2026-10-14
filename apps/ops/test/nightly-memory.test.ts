@@ -67,8 +67,22 @@ async function records() {
   return rows;
 }
 async function scan(time: string) {
-  const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
-  await runner.run(projection);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
+    await runner.run(projection);
+    try {
+      await scanPrepared(time);
+      return;
+    } catch (error) {
+      if (!(error instanceof Error) ||
+          error.message !== 'Nightly memory metadata is behind the event log') {
+        throw error;
+      }
+    }
+  }
+  throw new Error('Nightly test projection remained behind');
+}
+async function scanPrepared(time: string) {
   const occurrence = new Date(time);
   function selectedTime() {
     return occurrence;
@@ -110,6 +124,9 @@ it('leaves a clean scope alone',
   clean, 30_000);
 async function forgottenOnly() {
   await setup();
+  const dependent = { ...written('dependent'),
+    dependsOn: [{ scopeId, memoryId: 'memory_1', revision: 1 }] };
+  await append('memory.written', dependent);
   const forgotten = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
     memoryId: 'memory_1', revision: 2, expectedRevision: 1 };
   await append('memory.forgotten', forgotten);
@@ -119,7 +136,7 @@ async function forgottenOnly() {
   await scan('2026-10-13T02:00:00Z');
   expect(await records()).toEqual(first);
 }
-it('reviews a forgotten-only change once without dispatch', forgottenOnly, 30_000);
+it('reviews forgotten and dependent hidden facts once without dispatch', forgottenOnly, 30_000);
 
 async function boundedPrefix() {
   await setup(false);
@@ -128,10 +145,11 @@ async function boundedPrefix() {
     await append('memory.written', fact);
   }
   await scan('2026-10-12T02:00:00Z');
-  const [first] = await records();
+  const first = memoryMaintenanceRecordedDataSchema.parse((await records())[0]);
   expect(first).toMatchObject({ action: 'refused', reason: 'qualification_blocked' });
   expect(first.inputRefs).toHaveLength(32);
-  const reviewed = { ...first, action: 'no_changes', reason: null };
+  const reviewed = { ...first, action: 'no_changes', reason: null,
+    reviewedPosition: first.inputRefs.at(-1)!.position };
   await append('memory.maintenance_recorded', reviewed);
   await scan('2026-10-13T02:00:00Z');
   const saved = await records();
@@ -140,6 +158,33 @@ async function boundedPrefix() {
 }
 it('reviews only the saved prefix and carries omitted facts into the next night',
   boundedPrefix, 30_000);
+
+async function replayNoChanges() {
+  await setup();
+  await scan('2026-10-12T02:00:00Z');
+  const first = memoryMaintenanceRecordedDataSchema.parse((await records())[0]);
+  const reviewed = { ...first, action: 'no_changes', reason: null,
+    reviewedPosition: first.inputRefs[0]!.position };
+  await append('memory.maintenance_recorded', reviewed);
+  const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
+  await runner.run(projection);
+  const sql = `SELECT data FROM memory_maintenance_runs WHERE scope_id=$1 ORDER BY position`;
+  const before = await services.db.query<{ data: unknown }>(sql, [scopeId]);
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  try {
+    await runner.rebuild(projection);
+    await runner.rebuild(projection);
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    fetch.mockRestore();
+  }
+  const after = await services.db.query<{ data: unknown }>(sql, [scopeId]);
+  expect(after.rows).toEqual(before.rows);
+  const saved = memoryMaintenanceRecordedDataSchema.parse(after.rows[1]?.data);
+  expect(saved).toMatchObject({ action: 'no_changes', reviewedPosition: reviewed.reviewedPosition });
+}
+it('rebuilds reviewed records twice with unavailable decryption and no fetch',
+  replayNoChanges, 30_000);
 async function missed() {
   await setup();
   await scan('2026-10-12T02:15:00Z');

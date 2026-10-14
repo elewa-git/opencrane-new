@@ -2306,7 +2306,7 @@ it('allows disable after payer or assistant loss and refuses renewed enablement'
 
 it('refuses binding events that claim another member or another scope', invalidBindingEvent);
 
-it('shows blocked and missed history only to the binding owner', nightlyHistory);
+it('shows blocked and missed history only to the binding owner', nightlyHistory, 90_000);
 
 
 function forget(memoryId: string, commandId: string, expectedRevision = 1,
@@ -2790,8 +2790,28 @@ async function originalBinding() {
   const status = await get(`${path('dreamer')}/maintenance`, 'dreamer');
   expect(status.statusCode).toBe(200);
   expect(status.headers['cache-control']).toBe('no-store');
-  expect(status.json()).toMatchObject({ status: 'qualification_blocked', dispatch: 'disabled',
-    nextAt: null, binding: { memberId: 'dreamer', revision: 1 } });
+  expect(status.json()).toMatchObject({ status: 'clean', dispatch: 'disabled',
+    nextAt: null, waitingCount: 0, binding: { memberId: 'dreamer', revision: 1 } });
+  const written = await write('dreamer', 'person', 'dream-fact');
+  await runner.run(projection);
+  const dirty = await get(`${path('dreamer')}/maintenance`, 'dreamer');
+  const dirtyStatus = dirty.json<{ status: string; waitingCount: number; nextAt: string }>();
+  expect(dirtyStatus).toMatchObject({ status: 'qualification_blocked', waitingCount: 1 });
+  expect(dirtyStatus.nextAt).toMatch(/T02:00:00\.000Z$/u);
+  const factPosition = await nats.store.head(written.subject);
+  const selectedAt = new Date().toISOString();
+  const date = selectedAt.slice(0, 10);
+  const reviewed = { scopeId: memoryScopeId('acme', 'person', 'dreamer'),
+    nightId: 'd'.repeat(64), batchKey: 'e'.repeat(64), inputRevision: 'f'.repeat(64),
+    date, bindingRevision: 1, memberId: 'dreamer', acceptedCapCents: 100,
+    intendedAt: `${date}T02:00:00.000Z`, selectedAt, action: 'no_changes', reason: null,
+    reviewedPosition: factPosition,
+    inputRefs: [{ memoryId: 'dream-fact', revision: 1, expiresAt: null,
+      position: factPosition }] };
+  await append(written.subject, 'memory.maintenance_recorded', reviewed);
+  await runner.run(projection);
+  const cleanAgain = await get(`${path('dreamer')}/maintenance`, 'dreamer');
+  expect(cleanAgain.json()).toMatchObject({ status: 'clean', waitingCount: 0, nextAt: null });
   expect((await get(`${path('dreamer')}/maintenance`, 'admin')).statusCode).toBe(404);
   expect((await get(`${path('dream-sales', 'group')}/maintenance`, 'admin')).statusCode).toBe(404);
 }
@@ -2819,6 +2839,7 @@ async function nightlyHistory() {
   const expectedHistory = { history: [
     { action: 'missed', reason: 'window_missed' },
     { action: 'refused', reason: 'qualification_blocked' },
+    { action: 'no_changes', reason: null },
   ] };
   const original = response.json<unknown>();
   expect(original).toMatchObject(expectedHistory);
@@ -2831,6 +2852,7 @@ async function nightlyHistory() {
   const sharedMaintenance = await get(`${shared}/maintenance`, 'admin');
   expect(sharedMaintenance.statusCode).toBe(404);
   const position = await nats.store.head();
+  await runner.rebuild(projection);
   await runner.rebuild(projection);
   const rebuilt = await get(maintenancePath, 'dreamer');
   const rebuiltHistory = rebuilt.json<unknown>();

@@ -16,7 +16,7 @@ flowchart LR
   nats -->|saved child leave results| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
+  server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory status| postgres
   server -->|delivers turns, shared history, files, passes and public keys; sends individual stops; checks reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies| computer
@@ -257,6 +257,8 @@ paused until the publication work can confirm a new configuration; that part is 
 
 The person who set up nightly memory upkeep can read its blocked and missed history.
 These reads contain dates and fact references, with no saved memory text or new work.
+The same status shows whether the scope is clean or has facts waiting for a future
+night. It shows the next 02:00 UTC boundary for waiting facts.
 
 1. **A person signs in.** The server sends the browser to Zitadel and checks the returned identity. It keeps the session in an encrypted cookie. If the sign-in details are too large
    for a browser cookie, it shows a clear error.

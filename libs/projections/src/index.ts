@@ -48,6 +48,7 @@ export { lifecycleComputerState } from './computer-chat-state.ts';
 export { memoryKeys, memoryScopeId, memoryIdentity } from './memory-keys.ts';
 export { memoryProjection, readMemoryFactIds } from './memory.ts';
 export { memoryErasureHistory } from './memory-erasure.ts';
+export { selectMaintenanceInputs, type MaintenanceFact } from './memory-maintenance.ts';
 export { delegations } from './delegations.ts';
 
 export { egressPolicy, readEgressRule, egressRulesAllow, egressGrantStream } from './egress-policy.ts';

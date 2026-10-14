@@ -422,12 +422,12 @@ the event log, so a missing or behind table cannot decide whether a change saved
 ## Nightly binding read table
 
 The existing `memory` projection also fills `memory_maintenance_bindings` with the
-latest checked binding data and event position per silo/scope. The table update,
+latest checked binding data, save time and event position per silo/scope. The table update,
 processed event id and checkpoint commit together through ProjectionRunner.
 Binding preparation never decrypts a fact or calls any execution service. Offline
 memory rebuild restores these rows with readers and workers stopped. Existing
-installations create the added table on worker startup. Dirty batches and run
-history are not stored yet.
+installations add the save-time column on worker startup. Run history is stored in
+`memory_maintenance_runs`.
 
 ## Control audit fields
 
@@ -636,6 +636,9 @@ in the scope event history; rebuilding tables never runs cleanup or calls a mode
 transaction with its checkpoint. Offline memory replay rebuilds these rows without
 a scheduler, model, tool, computer or spending port. Rebuild memory on upgrade
 with readers and workers stopped to create this new table.
+The shared TypeScript selector compares these reviewed references with current fact
+metadata. It reads encrypted byte lengths without decrypting. SQL stores rows and
+does not decide which facts are dirty.
 
 ## Publication preparation (P3-4 PR 2a; Part of #45)
 

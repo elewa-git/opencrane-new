@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { history } from '@opencrane/models';
+import { memoryErasureHistory, selectMaintenanceInputs } from '@opencrane/projections';
+import type { MaintenanceFact } from '@opencrane/projections';
 import {
   memoryMaintenanceBoundDataSchema,
   memoryMaintenanceRecordedDataSchema,
@@ -21,43 +23,43 @@ function digest(value: unknown): string {
   return hash.digest('hex');
 }
 
-function oldest(first: { position: number; memoryId: string },
-  second: { position: number; memoryId: string }) {
-  const firstId = Buffer.from(first.memoryId);
-  const secondId = Buffer.from(second.memoryId);
-  return first.position - second.position || Buffer.compare(firstId, secondId);
-}
-
-function contentInputs(rows: StoredEvent[]) {
-  const facts = new Map<string, { memoryId: string; revision: number;
-    expiresAt: string | null; position: number }>();
-  let position = 0;
+async function scopeFacts(rows: StoredEvent[], silo: string, scopeId: string) {
+  const erasure = await memoryErasureHistory(rows);
+  const hidden = erasure.hidden(silo, scopeId);
+  const facts = new Map<string, MaintenanceFact>();
+  let lastChangePosition = 0;
+  let lastForgetPosition = 0;
   for (const row of rows) {
     const type = row.event.type;
     if (type !== 'memory.written' && type !== 'memory.forgotten') {
       continue;
     }
-    position = row.sequence;
-    const schema = type === 'memory.written' ? memoryWrittenDataSchema : memoryForgottenDataSchema;
-    const parsed = schema.safeParse(row.event.data);
+    lastChangePosition = row.sequence;
+    if (type === 'memory.forgotten') {
+      memoryForgottenDataSchema.parse(row.event.data);
+      lastForgetPosition = row.sequence;
+      continue;
+    }
+    const parsed = memoryWrittenDataSchema.safeParse(row.event.data);
     if (!parsed.success) {
       continue;
     }
     const data = parsed.data;
-    const expiresAt = 'expiresAt' in data ? data.expiresAt : null;
-    const reference = { memoryId: data.memoryId, revision: data.revision, expiresAt, position };
-    facts.set(data.memoryId, reference);
+    const encryptedBytes = Buffer.from(data.ciphertext, 'base64').byteLength;
+    const status = hidden.has(data.memoryId) ? 'erased' : 'available';
+    const fact = { memoryId: data.memoryId, revision: data.revision,
+      expiresAt: data.expiresAt, pinned: data.pinned, position: row.sequence,
+      encryptedBytes, status };
+    facts.set(data.memoryId, fact);
   }
-  const ordered = [...facts.values()];
-  ordered.sort(oldest);
-  const inputRefs = ordered.slice(0, 32);
-  return { position, inputRefs };
+  return { facts: [...facts.values()], lastChangePosition, lastForgetPosition };
 }
 
 function nightState(rows: StoredEvent[], date: string) {
   let binding;
   let boundAt = '';
   let overlap = false;
+  const runs = [];
   for (const row of rows) {
     if (row.event.type === 'memory.maintenance_bound') {
       binding = memoryMaintenanceBoundDataSchema.parse(row.event.data);
@@ -65,15 +67,16 @@ function nightState(rows: StoredEvent[], date: string) {
     }
     if (row.event.type === 'memory.maintenance_recorded') {
       const run = memoryMaintenanceRecordedDataSchema.parse(row.event.data);
+      runs.push(run);
       if (run.date === date) {
-        return { binding, boundAt, overlap, claimed: true };
+        return { binding, boundAt, overlap, claimed: true, runs };
       }
       if (run.action === 'due') {
         overlap = true;
       }
     }
   }
-  return { binding, boundAt, overlap, claimed: false };
+  return { binding, boundAt, overlap, claimed: false, runs };
 }
 
 async function recordScope(store: EventStore, silo: string, scopeId: string,
@@ -82,7 +85,7 @@ async function recordScope(store: EventStore, silo: string, scopeId: string,
   const deadline = performance.now() + 10_000;
   const rows = await history(store, subject, silo, deadline);
   const date = intendedAt.slice(0, 10);
-  const { binding, boundAt, overlap, claimed } = nightState(rows, date);
+  const { binding, boundAt, overlap, claimed, runs } = nightState(rows, date);
   if (claimed) {
     return;
   }
@@ -90,11 +93,14 @@ async function recordScope(store: EventStore, silo: string, scopeId: string,
   if (!binding?.enabled || Date.parse(boundAt) >= boundaryTime) {
     return;
   }
-  const inputs = contentInputs(rows);
-  if (!inputs.inputRefs.length) {
+  const scope = await scopeFacts(rows, silo, scopeId);
+  const inputs = selectMaintenanceInputs(scope.facts, runs,
+    scope.lastChangePosition, scope.lastForgetPosition, intendedAt);
+  if (!inputs.dirty) {
     return;
   }
-  const revisionFields = [silo, scopeId, inputs];
+  const revisionFields = [silo, binding.scopeKind, binding.ownerId, scopeId,
+    inputs.lastChangePosition, inputs.inputRefs, inputs.reviewedPosition];
   const inputRevision = digest(revisionFields);
   const nightFields = [silo, scopeId, date];
   const nightId = digest(nightFields);
@@ -102,19 +108,25 @@ async function recordScope(store: EventStore, silo: string, scopeId: string,
   const batchKey = digest(batchFields);
   // Read the clock after preparing this scope, so slow reads cannot extend its window.
   const selectedAt = clock();
-  let action: 'refused' | 'missed' = 'refused';
-  let reason: 'qualification_blocked' | 'window_missed' | 'overlap' = 'qualification_blocked';
+  let action: 'refused' | 'missed' | 'no_changes' = 'refused';
+  let reason: 'qualification_blocked' | 'window_missed' | 'overlap' | null =
+    'qualification_blocked';
   if (selectedAt.getTime() >= boundaryTime + 15 * 60_000) {
     action = 'missed';
     reason = 'window_missed';
   } else if (overlap) {
     action = 'missed';
     reason = 'overlap';
+  } else if (inputs.inputRefs.length === 0) {
+    action = 'no_changes';
+    reason = null;
   }
   const selectionTime = selectedAt.toISOString();
   const data = { scopeId, nightId, batchKey, inputRevision, date,
     bindingRevision: binding.revision, memberId: binding.memberId, acceptedCapCents: 100,
-    intendedAt, selectedAt: selectionTime, inputRefs: inputs.inputRefs, action, reason };
+    intendedAt, selectedAt: selectionTime, inputRefs: inputs.inputRefs,
+    reviewedPosition: action === 'no_changes' ? scope.lastChangePosition : undefined,
+    action, reason };
   const event: EventEnvelope = { id: nightId, type: 'memory.maintenance_recorded', subject, silo,
     source: 'opencrane-nightly', time: selectionTime, commandId: nightId,
     principal: { kind: 'system', id: 'nightly-memory' }, correlation: {}, data };
