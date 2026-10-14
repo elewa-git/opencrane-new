@@ -67,9 +67,10 @@ export async function participantList(options: ChatOptions, memberId: string,
     canManage: creator, canLeave: !creator };
 }
 
-function participantData(input: Input, memberId: string, conversationId: string, access: Access) {
+function participantData(input: Input, memberId: string, conversationId: string,
+  sharedChild: boolean) {
   let childFields;
-  if ('contextKind' in access.created) {
+  if (sharedChild) {
     childFields = { contextKind: 'shared_child', reviewPosition: input.expectedAccessPosition };
   }
   if (input.action === 'add') {
@@ -99,7 +100,7 @@ function verifyRetry(row: StoredEvent, event: EventEnvelope) {
 async function requireParticipantAction(options: ChatOptions, memberId: string,
   conversationId: string, input: Input, access: Access) {
   requireParticipantConversation(access);
-  const targetId = participantData(input, memberId, conversationId, access).participantId;
+  const targetId = input.action === 'leave' ? memberId : input.participantId;
   const selfRemoval = input.action !== 'add' && targetId === memberId;
   if (targetId === access.created.createdBy && input.action !== 'add') {
     throw new ChatRefused('The creator must remain in the conversation');
@@ -138,30 +139,55 @@ async function confirmParticipantAccess(fresh: Awaited<ReturnType<typeof convers
   }
 }
 
-export async function participantCommand(options: ChatOptions, memberId: string,
-  conversationId: string, value: unknown) {
-  const input = chatParticipantCommandSchema.parse(value);
+function participantEvent(options: ChatOptions, memberId: string, conversationId: string,
+  input: Input, sharedChild: boolean) {
   const subject = `participation-${conversationId}`;
-  const deadline = performance.now() + 10_000;
-  const access = await conversationParticipation(options, memberId, conversationId, deadline);
-  requireParticipantConversation(access);
-  requireHistoryReview(input, access);
-  function commandPosition(commands: Commands, sequence: number) {
-    return { previous: commands.get(input.id), sequence };
-  }
-  const facts = await readStreamSummary(options.store, options.silo, subject,
-    commandsKind, deadline, commandPosition);
-  const data = participantData(input, memberId, conversationId, access);
+  const data = participantData(input, memberId, conversationId, sharedChild);
   const type = input.action === 'add' ? 'participant.added' : 'participant.removed';
   const event = envelope(options.silo, subject, type, data, input.id);
   event.commandId = input.id;
   event.source = 'opencrane-server';
   event.principal = { kind: 'human', id: memberId };
+  return event;
+}
+
+async function recoverChildSelfRemoval(options: ChatOptions, memberId: string,
+  conversationId: string, input: Input, previous: StoredEvent) {
+  if (previous.event.type !== 'participant.removed') return;
+  const fields = z.record(z.string(), z.unknown()).parse(previous.event.data);
+  if (fields['contextKind'] !== 'shared_child') return;
+  if (fields['participantId'] !== fields['removedBy']) return;
+  if (fields['removedBy'] !== memberId) throw new ChatRefused('Conversation refused');
+  await activeChatMember(options, memberId);
+  const event = participantEvent(options, memberId, conversationId, input, true);
+  verifyRetry(previous, event);
+  // Return only the caller's saved result. Do not grant access or append another event.
+  return { status: 'appended' as const, sequence: previous.sequence };
+}
+
+export async function participantCommand(options: ChatOptions, memberId: string,
+  conversationId: string, value: unknown) {
+  const input = chatParticipantCommandSchema.parse(value);
+  const subject = `participation-${conversationId}`;
+  const deadline = performance.now() + 10_000;
+  function commandPosition(commands: Commands, sequence: number) {
+    return { previous: commands.get(input.id), sequence };
+  }
+  const facts = await readStreamSummary(options.store, options.silo, subject,
+    commandsKind, deadline, commandPosition);
   let previous: StoredEvent | undefined;
   if (facts.previous !== undefined) {
     previous = await options.store.readEvent(facts.previous, deadline);
-    verifyRetry(previous, event);
+    const recovered = await recoverChildSelfRemoval(options, memberId, conversationId,
+      input, previous);
+    if (recovered) return recovered;
   }
+  const access = await conversationParticipation(options, memberId, conversationId, deadline);
+  requireParticipantConversation(access);
+  requireHistoryReview(input, access);
+  const event = participantEvent(options, memberId, conversationId, input,
+    'contextKind' in access.created);
+  if (previous) verifyRetry(previous, event);
   await requireParticipantAction(options, memberId, conversationId, input, access);
   // Load cold close and target histories before starting the short write check.
   await conversationClosed(options.store, options.db, options.silo, conversationId, deadline);

@@ -1,1 +1,3 @@
 Shared child chat creators can invite active members after acknowledging release of all shared child history. Invitations grant child-only access, support saved retries and stay within 97 participants. Creator removals and self-leave end reads and live connections before permissions catch up. Origin and summary routes remain planned.
+
+People who leave a child chat can recover their own saved leave result after a lost reply. Changed retries conflict, and recovery never reopens the chat.

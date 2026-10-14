@@ -58,8 +58,11 @@ History loads within ten seconds before a separate two-second write check watche
 only member and participation streams. No conversation content stream is watched.
 
 Retrying the same id and payload returns the original sequence without another
-append. Changed saved payloads return 409. The existing `changes/:id` route confirms
-the join and whether content and IAM have caught up. New joins wait for their IAM
+append. Changed saved payloads return 409. An authenticated active silo member can
+recover their own saved self-removal through the same POST after leaving. This returns
+only the saved result; messages, participants, files, approvals and sockets remain
+unavailable. Another caller cannot recover that self-removal. The existing `changes/:id`
+route confirms the join and whether content and IAM have caught up. New joins wait for their IAM
 receipt; removals end HTTP and socket access within two seconds, before IAM catches up.
 Joining the parent later cannot restore a removed child join. A new explicit
 invitation is required. An explicit child join survives parent or creator departure.

@@ -2572,3 +2572,11 @@ PostgreSQL and OpenFGA to check invitations, refusals, replay, saved retries and
 socket removal. The fixture follows `childSession` in the access regression tests.
 The tests declare the existing OpenFGA SDK 0.9.7, licensed Apache-2.0, as a development dependency.
 Origin, summaries, child creation and fresh-install qualification remain NOT RUN.
+
+Saved child self-removal retries are checked before conversation participation. Only the
+active silo member who saved the removal can recover it. Matching input returns the
+original sequence; changed child review positions return 409. Recovery appends nothing
+and grants no conversation access. HTTP tests also check refusal of another caller,
+messages, participants, files, approvals and a new socket subscription after recovery.
+The guard tests cover direct/private routes, a non-creator with OpenFGA management
+permission, absent removal targets, and changed saved subjects and principals.

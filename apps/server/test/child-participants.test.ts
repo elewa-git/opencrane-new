@@ -462,8 +462,11 @@ async function refusesNewSubscription(context: Fixture, memberId: string) {
     const closed = once(socket, 'close');
     const subscription = { type: 'subscribe', topic: 'conversation', conversationId: 'child', since: 0 };
     socket.send(JSON.stringify(subscription));
-    await closed;
-    expect(received).toEqual([]);
+    const [code] = await closed;
+    expect(code).toBe(1008);
+    const refusal = { version: 1, topic: 'conversation', conversationId: 'child',
+      type: 'refused', position: 0, generation: 0 };
+    expect(received).toEqual([refusal]);
   } finally {
     socket.terminate();
     function stop(resolve: () => void) { wss.close(resolve); }
