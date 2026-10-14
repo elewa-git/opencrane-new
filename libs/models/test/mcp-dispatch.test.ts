@@ -764,3 +764,103 @@ async function watchesCatalogue(failure: 'drift append' | 'drift saved' | 'faile
 }
 it.each(['drift append', 'drift saved', 'failed', 'stalled', 'replacement'] as const)(
   'holds recording upstream through %s and recaptures on worker replacement', watchesCatalogue, 60_000);
+
+async function grantToolApproval(setup: Fixture, headers: Record<string, string>) {
+  const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
+    toolRevision: tool.revision, mode: 'ask', setBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+  const publication = { serverId: 'fixture', publishedBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.server_published', publication);
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    request);
+  const answer = z.object({ approvalId: z.string() }).parse(await response.json());
+  const current = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  async function fresh() {}
+  const result = await decideApproval(setup.nats.store, 'test', answer.approvalId,
+    'alice', 'approved', true, fresh, current, setup.actor.now());
+  expect(result.status).toBe('appended');
+  const approved = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  expect(approved.state).toBe('approved');
+  return answer.approvalId;
+}
+
+async function approvalPermit(setup: Fixture, headers: Record<string, string>, approvalId: string) {
+  const approvalHeaders = { ...headers, 'x-opencrane-approval-id': approvalId };
+  const request = { method: 'POST', headers: approvalHeaders, body };
+  return fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
+}
+
+const renewalCases = ['fresh', 'expired observed', 'expired unread', 'expired during append'] as const;
+async function checksApprovalAfterRenewal(renewal: typeof renewalCases[number]) {
+  const setup = await fixture();
+  let watch: ReturnType<typeof mcpCatalogueWatch> | undefined;
+  try {
+    const headers = await prepare(setup);
+    const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const startedAt = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(startedAt);
+    const expiresAt = new Date(startedAt + 10_000).toISOString();
+    const capture = vi.fn().mockResolvedValue({ ...initial.catalogue, expiresAt });
+    const options = { serverIds: ['fixture'], capture,
+      requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+    watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+    setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+    await watch.check('fixture');
+    const approvalId = await grantToolApproval(setup, headers);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const captureStarted = Promise.withResolvers<void>();
+    const captured = Promise.withResolvers<NonNullable<typeof initial.catalogue>>();
+    function pendingCapture() {
+      captureStarted.resolve();
+      return captured.promise;
+    }
+    capture.mockImplementation(pendingCapture);
+    vi.setSystemTime(startedAt + 1000);
+    const checking = watch.check('fixture');
+    await captureStarted.promise;
+    if (renewal === 'expired observed') {
+      vi.setSystemTime(startedAt + 10_000);
+      expect(() => watch!.requireCurrent('fixture')).toThrow('watch unavailable');
+    }
+    let finishedAt = startedAt + 10_500;
+    if (renewal === 'fresh' || renewal === 'expired during append') finishedAt = startedAt + 9500;
+    vi.setSystemTime(finishedAt);
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    async function crossExpiryDuringAppend(command: AppendCommand) {
+      const result = await append(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'mcp.catalogue_checked') vi.setSystemTime(startedAt + 10_500);
+      return result;
+    }
+    if (renewal === 'expired during append') {
+      vi.spyOn(setup.nats.store, 'append').mockImplementation(crossExpiryDuringAppend);
+    }
+    const renewed = { ...initial.catalogue!, checkedAt: new Date(finishedAt).toISOString(),
+      expiresAt: new Date(startedAt + 11_000).toISOString() };
+    captured.resolve(renewed);
+    await checking;
+    expect(() => watch!.requireCurrent('fixture')).not.toThrow();
+    const after = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const approval = await readApproval(setup.nats.store, 'test', approvalId);
+    const response = await approvalPermit(setup, headers, approvalId);
+    if (renewal === 'fresh') {
+      expect(after.policyRevision).toBe(before.policyRevision);
+      expect(approval.state).toBe('approved');
+      expect(response.headers.get('x-opencrane-mcp-permit')).toBeTruthy();
+    } else {
+      expect.soft(after.policyRevision).toBeGreaterThan(before.policyRevision);
+      expect.soft(approval.state).toBe('cancelled');
+      expect.soft(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
+    }
+    expect(setup.received()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    watch?.close();
+    await setup.close();
+  }
+}
+it.each(renewalCases)('keeps approvals valid only across uninterrupted renewal: %s',
+  checksApprovalAfterRenewal);
