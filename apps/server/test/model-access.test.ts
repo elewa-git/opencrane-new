@@ -1058,7 +1058,7 @@ async function readsAfterSlowMembershipRead(url: string) {
   try {
     const response = await request(url);
     expect(response.statusCode, `${url}: ${response.body}`).toBe(200);
-    if (url.endsWith('/candidates')) {
+    if (url.includes('/candidates?')) {
       expect(modelAccessCandidatesResponseSchema.safeParse(response.json()).success).toBe(true);
     } else {
       expect(response.json()).toMatchObject({ modelId: 'gpt-6-luna', canManage: true });
@@ -1069,7 +1069,7 @@ async function readsAfterSlowMembershipRead(url: string) {
   }
 }
 const slowMembershipUrls = ['/api/org/models/gpt-6-luna/access',
-  '/api/org/models/gpt-6-luna/access/candidates'];
+  '/api/org/models/gpt-6-luna/access/candidates?kind=member'];
 it.each(slowMembershipUrls)('allows %s when membership takes over two seconds to read',
   readsAfterSlowMembershipRead);
 
