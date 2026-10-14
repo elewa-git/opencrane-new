@@ -29,8 +29,10 @@ Connected state and access grants remain unavailable until the server provides t
 People & groups reads flat group rows from `/api/groups`, validates them through
 the shared protocol package and creates groups through the same-origin API.
 The default Members tab reads `/api/members?q=&after=&limit=20`. Search starts a new
-page, and `next` loads more rows. A request generation drops older search replies
-and all replies after a 401 or 403. Member rows are read-only in this part.
+page, and `next` loads more rows. A request generation drops older successful and
+ordinary failed search replies. Any live 401 or 403 clears member and group rows,
+closes the tabs and stops later replies from showing names. Member rows are read-only
+in this part.
 `?tab=groups` opens the existing Groups tab, including from group detail pages.
 Group details link to a shared assistant draft at
 `/org/people/groups/<id>/assistants/new`. The draft reads the owner group, listed groups,

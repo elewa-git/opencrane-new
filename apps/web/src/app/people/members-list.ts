@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, signal, type OnDestroy, type OnInit } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, output, signal, type OnDestroy, type OnInit,
+} from '@angular/core';
 import { memberDirectorySchema } from '@opencrane/protocol';
 import { SharedState } from '../shared-state/shared-state';
 import { GrainLoader } from '../ui/grain-loader';
@@ -17,6 +19,7 @@ type State = 'loading' | 'ready' | 'failed' | 'access';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MembersList implements OnInit, OnDestroy {
+  readonly accessLost = output<number>();
   protected readonly rows = signal<Member[]>([]);
   protected readonly state = signal<State>('loading');
   protected readonly search = signal('');
@@ -89,13 +92,15 @@ export class MembersList implements OnInit, OnDestroy {
     else this.state.set('loading');
     const parameters = new URLSearchParams({ q: this.search(), after, limit: '20' });
     const result = await this.read(`/api/members?${parameters.toString()}`);
-    if (generation !== this.generation || this.request.signal.aborted) return;
-    this.readInFlight = false;
-    this.loadingMore.set(false);
+    if (this.request.signal.aborted) return;
     if (result.kind === 'access') {
-      this.clearForAccessChange();
+      this.clearForAccessChange(result.status);
       return;
     }
+    // An older denial still withdraws access, but older data cannot replace a new search.
+    if (generation !== this.generation) return;
+    this.readInFlight = false;
+    this.loadingMore.set(false);
     if (result.kind === 'failed') {
       this.state.set('failed');
       return;
@@ -119,13 +124,13 @@ export class MembersList implements OnInit, OnDestroy {
   }
 
   private async read(url: string): Promise<{ kind: 'ok'; value: Directory }
-    | { kind: 'failed' } | { kind: 'access' }> {
+    | { kind: 'failed' } | { kind: 'access'; status: number }> {
     try {
       const response = await fetch(url, { headers: { accept: 'application/json' },
         signal: this.request.signal });
       if (!response.ok) {
         const kind = classifyStatus(response.status, 'GET');
-        if (kind === 'access_changed') return { kind: 'access' };
+        if (kind === 'access_changed') return { kind: 'access', status: response.status };
         return { kind: 'failed' };
       }
       const raw: unknown = await response.json();
@@ -137,15 +142,19 @@ export class MembersList implements OnInit, OnDestroy {
     }
   }
 
-  private clearForAccessChange(): void {
+  private clearForAccessChange(status: number): void {
     // Stop older replies from showing names after the server withdraws access.
     this.generation += 1;
+    this.request.abort();
+    this.readInFlight = false;
+    this.loadingMore.set(false);
     this.rows.set([]);
     this.search.set('');
     this.next.set(null);
     this.count.set(undefined);
     this.loadedAt.set(undefined);
     this.state.set('access');
+    this.accessLost.emit(status);
   }
 }
 

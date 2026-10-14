@@ -13,7 +13,11 @@
       [disabled]="state() === 'access'" (click)="openDrawer(createButton)">New group</button>
   </div>
 </div>
-@if (selectedTab() === 'groups') {
+@if (state() === 'access') {
+  <oc-shared-state kind="access_changed" message="Your access changed"
+    [detail]="accessDetail()" [showAction]="false" [announce]="true" />
+}
+@if (selectedTab() === 'groups' && state() !== 'access') {
 <div>
   @if (state() === 'loading') {
     <oc-shared-state kind="checking" message="Loading groups…" [announce]="true" />
@@ -42,10 +46,6 @@
   } @else if (operationKind() === 'refused') {
     <oc-shared-state kind="refused" [message]="operation()" [showAction]="false"
       [announce]="true" />
-  } @else if (state() === 'access') {
-    <oc-shared-state kind="access_changed" message="Your access changed"
-      [detail]="accessDetail()"
-      [showAction]="false" [announce]="true" />
   } @else if (state() === 'failed' && !loadedAt()) {
     <oc-shared-state kind="failed" message="Groups are unavailable right now"
       detail="Nothing changed. Reading again is safe." [safeToRetry]="true"
@@ -109,7 +109,7 @@
       }
       </div>
     } @else if (selectedTab() === 'members') {
-      <oc-members-list />
+      <oc-members-list (accessLost)="clearForAccessChange($event)" />
     } @else {
       <oc-shared-state kind="not_configured" message="Not available yet"
         detail="Invitations aren't available yet." [showAction]="false" />

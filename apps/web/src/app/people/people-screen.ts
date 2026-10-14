@@ -285,11 +285,13 @@ export class PeopleScreen implements OnInit, OnDestroy {
     this.operationKind.set('refused');
     this.changeReference.set(undefined);
   }
-  private clearForAccessChange(status?: number): void {
+  protected clearForAccessChange(status?: number): void {
     // Clear protected names and references before a late response can redraw them.
     this.request.abort();
     this.rows.set([]);
+    this.query.set('');
     this.loadedAt.set(undefined);
+    this.highlightedGroupId.set(undefined);
     this.draftName.set('');
     this.drawerOpen.set(false);
     this.pendingCreate = undefined;
@@ -299,8 +301,8 @@ export class PeopleScreen implements OnInit, OnDestroy {
     this.operationKind.set('access_changed');
     this.operation.set('Your access changed');
     this.accessDetail.set(status === 401
-      ? 'Group details were cleared. Your session ended. Sign in again to continue.'
-      : 'Group details were cleared. Managing groups needs the Owner or Admin role.');
+      ? 'People and group details were cleared. Your session ended. Sign in again to continue.'
+      : 'People and group details were cleared. Managing them needs the Owner or Admin role.');
   }
 }
 
