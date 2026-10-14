@@ -84,6 +84,37 @@ function upgradeTests() {
     return runtime;
   }
 
+  async function sessionDiagnosticsHideClientText(childExit: boolean) {
+    current = await fixture();
+    const canary = 'session-secret-canary';
+    const sessionOptions = { connectionString: current.connectionString, application_name: canary };
+    const session = new Client(sessionOptions);
+    await session.connect();
+    try {
+      await session.query("SELECT 'session-secret-canary'");
+      if (childExit) {
+        const outcome = current.crash('upgrade-inside-publication');
+        await expect(outcome).rejects.toThrow('Other database sessions:');
+        await expect(outcome).rejects.not.toThrow(canary);
+      } else {
+        const sessions = await current.otherSessions();
+        expect(sessions.length).toBeGreaterThan(0);
+        const output = JSON.stringify(sessions);
+        expect(output).not.toContain(canary);
+        for (const row of sessions) {
+          expect(Object.keys(row).sort()).toEqual([
+            'backend_start', 'backend_type', 'pid', 'query_start', 'state',
+            'state_change', 'wait_event_type', 'xact_start',
+          ]);
+        }
+      }
+    } finally {
+      await session.end();
+    }
+  }
+  it.each([false, true])('hides client text in session diagnostics (child exit: %s)',
+    sessionDiagnosticsHideClientText);
+
   async function runCommand(...args: string[]) {
     const env = { ...process.env, ...current.nats.env("projection"),
       DATABASE_URL: current.connectionString, SILO_ID: "test", MODEL_DECISION_URL: "http://unused" };
