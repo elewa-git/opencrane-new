@@ -3,7 +3,7 @@ import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import type { AppendCommand } from '@opencrane/event-store';
-import { getEventDefinition } from '@opencrane/events';
+import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { applyMcpInstance, mcpInstanceId, mcpInstances, pgDb, ProjectionRunner }
   from '@opencrane/projections';
@@ -456,7 +456,7 @@ const adminAccessChanges = [
 
 async function changesDuringAdminWrite(testCase: (typeof adminAccessChanges)[number]) {
   const fixture = await adminAccessFixture(testCase.role);
-  let event;
+  let event: EventEnvelope;
   if (testCase.change === 'demotion') {
     event = envelope('test', `member-${fixture.actorId}`, 'member.role_changed', {
       memberId: fixture.actorId, previousRole: 'admin', newRole: 'member', changedBy: 'dave' });
@@ -465,7 +465,7 @@ async function changesDuringAdminWrite(testCase: (typeof adminAccessChanges)[num
       memberId: fixture.actorId });
   } else {
     event = envelope('test', 'ownership-test', 'ownership.transferred', {
-      memberId: 'bob', transferredBy: 'dave', awaitingConfirmation: true });
+      memberId: 'bob', transferredBy: 'dave' });
   }
   const originalHead = nats.store.head.bind(nats.store);
   let changed = false;
