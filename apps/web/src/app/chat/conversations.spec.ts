@@ -64,6 +64,41 @@ describe('server-backed conversations list', () => {
     expect(list.rows()).toHaveLength(1);
   });
 
+  it('stops after a second list change and offers Retry', async () => {
+    const changed = new Response('{"status":"list_changed"}', { status: 409 });
+    const fetcher = vi.fn().mockResolvedValueOnce(reply([row('old')], 'next'))
+      .mockResolvedValueOnce(changed).mockResolvedValueOnce(changed);
+    const list = new ConversationList(fetcher);
+
+    await list.change('recent', '');
+    await list.loadMore();
+
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher.mock.calls[2]?.[0]).not.toContain('cursor=');
+    expect(list.rows()).toEqual([]);
+    expect(list.error()).toContain('Try again');
+    expect(list.denied()).toBe(false);
+  });
+
+  it.each([401, 403])('clears protected rows before reading a stalled %i body', async status => {
+    const stalled = new Response('{}', { status });
+    const readBody = vi.spyOn(stalled, 'json').mockImplementation(
+      () => new Promise<unknown>(() => {}),
+    );
+    const fetcher = vi.fn().mockResolvedValueOnce(reply([row('private')], 'next'))
+      .mockResolvedValueOnce(stalled);
+    const list = new ConversationList(fetcher);
+    await list.change('recent', '');
+
+    const loading = list.loadMore();
+    await vi.waitFor(() => expect(list.denied()).toBe(true));
+    await loading;
+
+    expect(list.rows()).toEqual([]);
+    expect(list.cursor()).toBeUndefined();
+    expect(readBody).not.toHaveBeenCalled();
+  });
+
   it('clears denied rows and ignores late section and query replies', async () => {
     let finish!: (response: Response) => void;
     const pending = new Promise<Response>(resolve => { finish = resolve; });
@@ -114,5 +149,27 @@ describe('resume lookup', () => {
     expect(fetcher).toHaveBeenCalledTimes(10);
     fetcher.mockReset().mockResolvedValue(new Response('{}', { status: 503 }));
     await expect(findConversation('missing', fetcher)).rejects.toThrow();
+  });
+
+  it('restarts at Recent page one after one list change and finds the saved chat', async () => {
+    const changed = new Response('{"status":"list_changed"}', { status: 409 });
+    const fetcher = vi.fn().mockResolvedValueOnce(reply([row('other')], 'old-cursor'))
+      .mockResolvedValueOnce(changed)
+      .mockResolvedValueOnce(reply([row('saved')]));
+
+    const found = await findConversation('saved', fetcher);
+
+    expect(found?.conversationId).toBe('saved');
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher.mock.calls[2]?.[0]).toContain('section=recent');
+    expect(fetcher.mock.calls[2]?.[0]).not.toContain('cursor=');
+  });
+
+  it('stops after a second lookup list change and keeps the failure retryable', async () => {
+    const changed = new Response('{"status":"list_changed"}', { status: 409 });
+    const fetcher = vi.fn().mockResolvedValue(changed);
+
+    await expect(findConversation('saved', fetcher)).rejects.toThrow('list_changed');
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });

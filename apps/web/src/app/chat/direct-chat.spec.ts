@@ -1104,6 +1104,31 @@ it('keeps listed chats and offers retry when resume lookup is unavailable', asyn
   fixture.destroy();
 });
 
+it('ignores a saved-chat lookup reply after the screen is destroyed', async () => {
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  const held = deferredReply();
+  function holdLookup(request: RequestRecord): Promise<Response> | undefined {
+    if (request.url.startsWith('/api/conversations?')) return held.promise;
+    return undefined;
+  }
+  api.override(holdLookup);
+  history.replaceState({}, '', '/workspace/direct?conversation=older-chat');
+  buttonNamed(fixture, 'Refresh').click();
+  await vi.waitFor(() => {
+    expect(api.requests.some(request => request.url.startsWith('/api/conversations?'))).toBe(true);
+  });
+
+  const socketCount = api.sockets.length;
+  fixture.destroy();
+  held.release(reply({ rows: [conversation('older-chat', 'bob')], nextCursor: null }));
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(api.requests.some(request => request.url.includes('/older-chat/messages'))).toBe(false);
+  expect(api.sockets).toHaveLength(socketCount);
+});
+
 async function clearsAfterRealRefusal(): Promise<void> {
   const api = createFetchFixture();
   const fixture = await mount(api);

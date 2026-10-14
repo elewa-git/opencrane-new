@@ -24,7 +24,7 @@ async function createCaptureWorkspace(
   approvalCards: Record<string, unknown>[] | ((path: string) => Record<string, unknown>[]) = [],
   assistantKind?: 'team',
   computerState = 'ready',
-  listPlacement?: 'recent-page-two' | 'archived',
+  listPlacement?: 'recent-page-two' | 'archived' | 'missing',
 ): Promise<CaptureWorkspace> {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const rows = [...initialRows];
@@ -131,7 +131,9 @@ async function createCaptureWorkspace(
   ] });
   const fixture = TestBed.createComponent(Workspace);
   await fixture.whenStable();
-  await vi.waitFor(() => expect(fixture.componentInstance['chat'].selected()).toBe('chat'));
+  const expectedSelection = listPlacement === 'missing' ? '' : 'chat';
+  await vi.waitFor(() => expect(fixture.componentInstance['chat'].selected())
+    .toBe(expectedSelection));
   await vi.waitFor(() => expect(fixture.componentInstance['chat'].loading()).toBe(false));
   fixture.detectChanges();
   const root: unknown = fixture.nativeElement;
@@ -1439,6 +1441,18 @@ it.each(['recent-page-two', 'archived'] as const)(
     }
   },
 );
+
+it('shows the generic unavailable state for an inaccessible saved session', async () => {
+  const capture = await createCaptureWorkspace([], [], undefined, 'ready', 'missing');
+  try {
+    expect(capture.root.textContent).toContain('Conversation not found or unavailable');
+    expect(capture.root.textContent).not.toContain('Access unavailable');
+    expect(capture.root.querySelector('.composer-dock')).toBeNull();
+    expect(capture.calls.some(call => call.includes('section=archived'))).toBe(true);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
 
 function isDisabledModeButton(button: HTMLButtonElement): boolean {
   return button.disabled;
