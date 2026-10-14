@@ -17,7 +17,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
-  server -->|delivers turns, shared history, files, passes and public keys; sends saved spending stops before files and turns in each chat; checks reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|delivers turns, shared history, files, passes and public keys; sends saved spending stops before files, turns and approval replies; checks reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
 ```
 
@@ -42,10 +42,11 @@ active people. An ordinary Member receives only a small header for one person.
 The provider list reports that model access routes are available. Those routes let
 admins read and change grants for people, groups and assistants.
 
-The bridge sends a saved spending Stop before files or new work in that chat. It
-repeats an unfinished Stop after a lost message or reconnection. Work stopped by a
-spending limit stays stopped when that limit rises. Other turns on the same
-computer can continue.
+The bridge sends a saved spending Stop before files, new work or approval replies
+for that turn. It checks for new Stops after waiting for a connection or preparing
+work. It repeats an unfinished Stop after a lost message or reconnection. Work
+stopped by a spending limit stays stopped when that limit rises. Other turns on
+the same computer can continue.
 
 Let owners and admins request publication of an exact reviewed tool list. Calls remain disabled.
 

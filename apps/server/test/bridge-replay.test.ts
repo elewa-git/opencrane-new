@@ -1345,12 +1345,16 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     vi.spyOn(fixture.store, 'head').mockImplementation(pauseNextPoll);
     await entered.promise;
     let delayedComputerReads = 0;
+    let delayedApprovalRead = false;
     async function* delayedRead(subject: string, from?: number, deadline?: number) {
       if (subject === 'computer-assistant') {
         delayedComputerReads++;
         await delay(computerDelay);
       }
-      if (subject === `approval-${approvalId}`) await delay(approvalDelay);
+      if (subject === `approval-${approvalId}` && !delayedApprovalRead) {
+        delayedApprovalRead = true;
+        await delay(approvalDelay);
+      }
       yield* read(subject, from, deadline);
     }
     reads.mockImplementation(delayedRead);
@@ -1369,6 +1373,7 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
       { type: 'approval_settled', approvalId, state: 'cancelled' },
     ]);
     expect(delayedComputerReads).toBeGreaterThan(0);
+    expect(delayedApprovalRead).toBe(true);
   } finally {
     release.resolve();
     stop.abort();

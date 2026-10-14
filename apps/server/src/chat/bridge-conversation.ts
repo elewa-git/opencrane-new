@@ -1,3 +1,4 @@
+import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import { chatMembership } from './participation.ts';
 import { isComputerLifecycle, readComputerControl } from '@opencrane/auth';
 import type { Client } from 'minio/dist/esm/minio.mjs';
@@ -404,36 +405,6 @@ function conversationUploads(rows: ChatRows, assistantKind: string) {
     return fileUploadedDataSchema.parse(row.event.data);
   }
   return uploads.map(uploadedFile);
-}
-
-type BudgetStop = Extract<z.infer<typeof agentTurnStopRequestedDataSchema>, { reason: 'budget' }>;
-
-function pendingBudgetStops(rows: ChatRows, closed: Set<string>) {
-  const finished = new Set(closed);
-  const stops = new Map<string, BudgetStop>();
-  for (const row of rows) {
-    if (['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) {
-      finished.add(turnIdData.parse(row.event.data).turnId);
-    }
-    if (row.event.type !== 'agent.turn_stop_requested') continue;
-    const stop = agentTurnStopRequestedDataSchema.parse(row.event.data);
-    if ('reason' in stop && !stops.has(stop.turnId)) stops.set(stop.turnId, stop);
-  }
-  for (const turnId of finished) stops.delete(turnId);
-  return [...stops.values()];
-}
-
-function sendBudgetStops(link: BridgeLink, stops: BudgetStop[]) {
-  for (const stop of stops) {
-    const previous = link.sentStops.get(stop.turnId);
-    const now = performance.now();
-    if (previous !== undefined && now - previous < 1000) continue;
-    // Retry without a new event: a sent frame does not prove the computer stopped.
-    const frame = { type: 'stop', turnId: stop.turnId, conversationId: stop.conversationId,
-      reason: stop.reason, stopId: stop.stopId };
-    link.socket.send(JSON.stringify(frame));
-    link.sentStops.set(stop.turnId, now);
-  }
 }
 
 function sendStop(socket: WebSocket, rows: ChatRows,

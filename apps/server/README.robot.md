@@ -2628,6 +2628,18 @@ socket sends Stop on its first conversation pass after the resume handshake.
 A saved terminal report or computer turn close ends retries. The bridge never
 appends a Stop. Pending Stops use the existing polling retry path and the same
 chat history read as an unaccepted turn; they add no budget read or access check.
+After connection opening and each delivery preparation wait, the bridge checks the
+conversation position and reads only new rows. It sends newly saved Stops before
+releasing files or turns, and drops a selected turn if a new Stop ended it.
+These reads have their own ten-second deadline and do not use an authority fence.
+
+Approval polling remains independent of conversation processing. After checking the
+saved approval belongs to this assistant and turn, it reads the conversation again
+before sending a settlement. It sends that turn's saved budget Stop first. Both
+paths share the socket's Stop timestamps, so a concurrent poll does not duplicate
+the frame or shorten its retry interval. A failed Stop read keeps the approval
+waiting for the existing retry. The real watcher tests cover computer-history and
+approval-history delays of zero and 300 ms in all four combinations.
 
 P3-14 PR 4b tests use real NATS, PostgreSQL and OpenFGA, plus the real computer
 channel for different saved payers on one team computer. PR 4c still needs to

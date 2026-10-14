@@ -199,7 +199,7 @@ async function budgetBridge(realChannel = false) {
     await view.close();
     await rm(directory, { recursive: true, force: true });
   }
-  return { ...options, actor, assistantId, frames, interrupts, grants, channel,
+  return { ...options, actor, assistantId, frames, interrupts, grants, channel, objects, bytes,
     message, start, stop, process, reconnect, pauseConnection, upload, close };
 }
 
@@ -390,3 +390,44 @@ async function stopDuringReconnect() {
 }
 it('sends a Stop saved while reconnect opens before releasing work on the new socket',
   stopDuringReconnect);
+
+async function stopDuringPreparation(wait: string) {
+  fixture = await budgetBridge();
+  const turn = await fixture.message('first');
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  if (wait === 'object read') {
+    await fixture.upload(turn);
+    const bytes = fixture.bytes;
+    async function pausedObjectRead() {
+      entered.resolve();
+      await release.promise;
+      return Readable.from([bytes]);
+    }
+    vi.spyOn(fixture.objects, 'getObject').mockImplementation(pausedObjectRead);
+  } else {
+    const read = fixture.store.readStream.bind(fixture.store);
+    async function* pausedMembershipRead(subject: string, from?: number, deadline?: number) {
+      if (subject === 'member-alice') {
+        entered.resolve();
+        await release.promise;
+      }
+      yield* read(subject, from, deadline);
+    }
+    vi.spyOn(fixture.store, 'readStream').mockImplementation(pausedMembershipRead);
+  }
+  const processing = fixture.process();
+  try {
+    await entered.promise;
+    await fixture.stop(turn);
+  } finally {
+    release.resolve();
+    await processing;
+  }
+  expect(fixture.frames.filter(isWork)[0]).toEqual({
+    type: 'stop', ...turn, reason: 'budget', stopId: 'first-stop',
+  });
+  expect(fixture.frames.filter(isTurn)).toEqual([]);
+}
+it.each(['object read', 'membership read'])(
+  'sends a Stop saved during %s before releasing the prepared work', stopDuringPreparation);
