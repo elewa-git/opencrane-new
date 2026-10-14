@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
 import { mcpCatalogueWatch } from '../src/mcp-catalogue-watch.ts';
 import { grantStream } from '@opencrane/authz';
-import { decideApproval, history, priceTableId, readApproval, readToolPolicy,
+import { decideApproval, history, ingestUsage, priceTableId, readApproval, readToolPolicy,
   setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
@@ -864,3 +864,112 @@ async function checksApprovalAfterRenewal(renewal: typeof renewalCases[number]) 
 }
 it.each(renewalCases)('keeps approvals valid only across uninterrupted renewal: %s',
   checksApprovalAfterRenewal);
+
+async function verifyApprovalRetry(setup: Fixture, headers: Record<string, string>,
+  approvalId: string) {
+  await setup.refuseMcpConnection();
+  const approvalHeaders = { ...headers, 'x-opencrane-approval-id': approvalId };
+  const request = { method: 'POST', headers: approvalHeaders, body };
+  const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
+    request);
+  expect(response.status).toBe(503);
+  await setup.restart();
+  await ingestUsage(setup.actor, setup.options.usageFile);
+  const current = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(current).toMatchObject({ state: 'outcome_unknown', canRetry: true });
+  async function fresh() {}
+  const retry = await decideApproval(setup.nats.store, 'test', approvalId,
+    'alice', 'retry', true, fresh, current, setup.actor.now());
+  expect(retry.status).toBe('appended');
+  const approved = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(approved.state).toBe('approved');
+}
+
+const recoveryApprovals = [
+  { failure: 'failed', retry: false }, { failure: 'failed', retry: true },
+  { failure: 'stalled', retry: false }, { failure: 'stalled', retry: true },
+] as const;
+async function refusesOldApprovalAfterRecovery(testCase: typeof recoveryApprovals[number]) {
+  const setup = await fixture();
+  let watch: ReturnType<typeof mcpCatalogueWatch> | undefined;
+  try {
+    const headers = await prepare(setup);
+    const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const capture = vi.fn().mockResolvedValue(initial.catalogue);
+    const options = { serverIds: ['fixture'], capture,
+      requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+    watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+    setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+    await watch.check('fixture');
+    const approvalId = await grantToolApproval(setup, headers);
+    if (testCase.retry) await verifyApprovalRetry(setup, headers, approvalId);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const stalled = Promise.withResolvers<NonNullable<typeof initial.catalogue>>();
+    if (testCase.failure === 'failed') {
+      capture.mockRejectedValue(new Error('Upstream unavailable'));
+    } else {
+      capture.mockReturnValue(stalled.promise);
+    }
+    await expect(watch.check('fixture')).rejects.toThrow();
+    expect(() => watch!.requireCurrent('fixture')).toThrow();
+    capture.mockResolvedValue(initial.catalogue);
+    await watch.check('fixture');
+    expect(() => watch!.requireCurrent('fixture')).not.toThrow();
+    const after = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    expect.soft(after.policyRevision).toBeGreaterThan(before.policyRevision);
+    const approval = await readApproval(setup.nats.store, 'test', approvalId);
+    expect.soft(approval).toMatchObject({ state: 'cancelled', canRetry: false });
+    const response = await approvalPermit(setup, headers, approvalId);
+    expect.soft(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
+    expect.soft(setup.received()).toBe(0);
+  } finally {
+    watch?.close();
+    await setup.close();
+  }
+}
+it.each(recoveryApprovals)('refuses old approval after watch recovery: $failure, retry $retry',
+  refusesOldApprovalAfterRecovery, 45_000);
+
+async function refusesFinalSendDuringLocalHold() {
+  const setup = await fixture();
+  let watch: ReturnType<typeof mcpCatalogueWatch> | undefined;
+  try {
+    const headers = await prepare(setup);
+    const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const capture = vi.fn().mockResolvedValue(initial.catalogue);
+    const options = { serverIds: ['fixture'], capture,
+      requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+    watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+    setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+    await watch.check('fixture');
+    const value = await permit(setup, headers);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    let admitted = false;
+    async function holdAfterAdmission(command: AppendCommand) {
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'mcp.catalogue_checked') throw new Error('Event store unavailable');
+      const result = await append(command);
+      if (event.type === 'mcp.dispatch_admitted' && result.status === 'appended') {
+        admitted = true;
+        capture.mockRejectedValue(new Error('Upstream unavailable'));
+        await expect(watch!.check('fixture')).rejects.toThrow('Event store unavailable');
+      }
+      return result;
+    }
+    vi.spyOn(setup.nats.store, 'append').mockImplementation(holdAfterAdmission);
+    const response = await send(setup, value);
+    expect(admitted).toBe(true);
+    expect.soft(response.status).toBe(403);
+    expect.soft(setup.received()).toBe(0);
+    const after = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    expect(after.policyRevision).toBe(before.policyRevision);
+    expect(() => watch!.requireCurrent('fixture')).toThrow();
+  } finally {
+    vi.restoreAllMocks();
+    watch?.close();
+    await setup.close();
+  }
+}
+it('refuses a final send when a local hold arrives after tool admission',
+  refusesFinalSendDuringLocalHold);
