@@ -1,6 +1,6 @@
 import { Directive, signal, type OnDestroy, type OnInit } from '@angular/core';
 import { readProvider, readProviderChange, readProviders, readRegistry,
-  type ModelQuote, type ProviderRow, type TaskRouting } from './provider-api';
+  type ApiResult, type ModelQuote, type ProviderRow, type TaskRouting } from './provider-api';
 import { formatTime, isSettledOutcome } from './provider-display';
 
 type SetupStep = 'provider' | 'key' | 'verify' | 'models' | 'access' | 'done';
@@ -65,7 +65,7 @@ export class ProviderPageState implements OnInit, OnDestroy {
   }
 
   protected async load(): Promise<void> {
-    if (this.listReadInFlight || this.loadState() === 'access') {
+    if (this.listReadInFlight || this.request.signal.aborted) {
       return;
     }
     this.listReadInFlight = true;
@@ -73,18 +73,11 @@ export class ProviderPageState implements OnInit, OnDestroy {
     const hadRows = this.loadedAt() !== undefined;
     this.loadState.set(hadRows ? 'retrying' : 'loading');
     const [providerResult, modelResult] = await Promise.all([
-      readProviders(this.request.signal), readRegistry(this.request.signal),
+      this.checkReadAccess(readProviders(this.request.signal)),
+      this.checkReadAccess(readRegistry(this.request.signal)),
     ]);
     this.listReadInFlight = false;
     if (this.request.signal.aborted) {
-      return;
-    }
-    if (providerResult.kind === 'access' || modelResult.kind === 'access') {
-      this.clearProtectedData();
-      return;
-    }
-    if (providerResult.kind === 'forbidden' || modelResult.kind === 'forbidden') {
-      this.clearForbiddenData();
       return;
     }
     if (providerResult.kind !== 'ok' || modelResult.kind !== 'ok') {
@@ -105,11 +98,25 @@ export class ProviderPageState implements OnInit, OnDestroy {
     this.liveStatus.set('Providers and models loaded.');
   }
 
+  private async checkReadAccess<T>(read: Promise<ApiResult<T>>): Promise<ApiResult<T>> {
+    const result = await read;
+    if (this.request.signal.aborted) {
+      return result;
+    }
+    // Clear access as soon as either read refuses it, even if the other read never finishes.
+    if (result.kind === 'access') {
+      this.clearProtectedData();
+    } else if (result.kind === 'forbidden') {
+      this.clearForbiddenData();
+    }
+    return result;
+  }
+
   protected retryLabel(): string {
     return this.loadState() === 'retrying' ? 'Refreshing…' : 'Refresh';
   }
   protected canRefresh(): boolean {
-    return this.loadState() !== 'retrying' && this.loadState() !== 'access';
+    return this.loadState() !== 'retrying' && !this.request.signal.aborted;
   }
   protected showProviderList(): boolean {
     return this.loadedAt() !== undefined && this.providers().length > 0;
@@ -332,6 +339,15 @@ export class ProviderPageState implements OnInit, OnDestroy {
 
   protected clearProtectedData(): void {
     this.request.abort();
+    this.pendingCreates.set({});
+    this.pendingKeys.set({});
+    this.pendingModels.set({});
+    this.pendingChecks.set({});
+    this.draft.set({ provider: 'openai', name: '' });
+    this.keyError.set('');
+    this.replaceKeyError.set('');
+    this.busy.set(false);
+    this.refreshError.set(false);
     this.selectedProvider.set(undefined);
     this.selectedModels.set([]);
     this.providerIdDraft.set('');
@@ -352,22 +368,8 @@ export class ProviderPageState implements OnInit, OnDestroy {
   }
 
   protected clearForbiddenData(): void {
-    this.selectedProvider.set(undefined);
-    this.selectedModels.set([]);
-    this.providerIdDraft.set('');
-    this.replaceProviderId.set(undefined);
-    this.resetQuote();
-    this.resultText.set('');
-    this.commandReference.set('');
-    this.providers.set([]);
-    this.registry.set([]);
-    this.routing.set({});
-    this.loadedAt.set(undefined);
+    this.clearProtectedData();
     this.loadState.set('forbidden');
-    this.setupOpen.set(false);
-    this.replaceOpen.set(false);
-    this.clearKeyDraft();
-    this.replaceKeyDraft.set('');
     this.liveStatus.set('Provider settings need the Owner or Admin role.');
   }
 
