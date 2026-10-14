@@ -1,37 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
-import { requireBridgeGateAuthority } from './bridge-gate-authority.ts';
-
-function identifier(value: unknown): string {
-  if (typeof value !== 'string' || !/^[\w-]{1,200}$/u.test(value)) {
-    throw new Error('Invalid gate reference');
-  }
-  return value;
-}
-
-function request(value: Record<string, unknown>) {
-  const allowed = new Set(['type', 'takeoverId', 'generation', 'affectedTurnIds']);
-  for (const field of Object.keys(value)) {
-    if (!allowed.has(field)) throw new Error('Invalid gate field');
-  }
-  const takeoverId = identifier(value['takeoverId']);
-  const generation = value['generation'];
-  if (typeof generation !== 'number' || !Number.isSafeInteger(generation) || generation < 1) {
-    throw new Error('Invalid gate generation');
-  }
-  const turns = value['affectedTurnIds'];
-  if (!Array.isArray(turns) || turns.length > 64) throw new Error('Invalid gate turns');
-  const affectedTurnIds = turns.map(identifier);
-  affectedTurnIds.sort();
-  if (new Set(affectedTurnIds).size !== affectedTurnIds.length) {
-    throw new Error('Repeated gate turn');
-  }
-  return { takeoverId, generation, affectedTurnIds };
-}
+import { requireBridgeGateAuthority, type GateBinding, type GateIdentity } from './bridge-gate-authority.ts';
 
 export class BridgeGate {
-  private binding: ReturnType<typeof request> | undefined;
+  private binding: GateBinding | undefined;
   private readonly epoch = randomUUID();
   readonly interrupted = new Set<string>();
   readonly awaitingTerminal = new Set<string>();
@@ -40,9 +13,12 @@ export class BridgeGate {
 
   get closed() { return this.binding !== undefined; }
 
-  close(value: Record<string, unknown>) {
-    requireBridgeGateAuthority();
-    const next = request(value);
+  close(value: Record<string, unknown>, identity: GateIdentity | undefined) {
+    if (Object.keys(value).length !== 2 || value['type'] !== 'bridge_gate') {
+      throw new Error('Invalid bridge gate');
+    }
+    // Check the saved computer identity before any stop or cleanup can begin.
+    const next = requireBridgeGateAuthority(value['gate'], identity);
     if (this.binding && JSON.stringify(this.binding) !== JSON.stringify(next)) {
       throw new Error('Different bridge gate');
     }

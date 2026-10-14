@@ -11,6 +11,7 @@ import { bridgeChannel } from './channel.ts';
 import { proxy } from './proxy.ts';
 import { proxyControl } from './proxy-control.ts';
 import { json, record } from './http.ts';
+import type { GateIdentity } from './bridge-gate-authority.ts';
 function stopped(error: unknown) {
   const name = error instanceof Error ? error.name : 'Error';
   const safeName = /^[A-Za-z][A-Za-z0-9]{0,60}$/u.test(name) ? name : 'Error';
@@ -154,7 +155,23 @@ const channel = bridgeChannel(server, {
     if (typeof saved['digest'] !== 'string' || typeof saved['expiresAt'] !== 'number') {
       throw new Error('Missing credential');
     }
-    return { digest: saved['digest'], expiresAt: saved['expiresAt'] };
+    let gateIdentity: GateIdentity | undefined;
+    const verifier = saved['verifier'];
+    const issuer = saved['issuer'];
+    const silo = saved['silo'];
+    const computer = saved['computer'];
+    const assistant = saved['assistant'];
+    const generation = saved['generation'];
+    const podUid = saved['podUid'];
+    if (verifier && typeof verifier === 'object' && !Array.isArray(verifier)
+      && typeof issuer === 'string' && typeof silo === 'string'
+      && typeof computer === 'string' && typeof assistant === 'string'
+      && typeof generation === 'number' && Number.isSafeInteger(generation)
+      && typeof podUid === 'string' && podUid === process.env['POD_UID']) {
+      gateIdentity = { verifier, issuer, silo, computer,
+        assistant, generation, podUid };
+    }
+    return { digest: saved['digest'], expiresAt: saved['expiresAt'], gateIdentity };
   },
   authenticated(value) {
     // Retain the authenticated server's pass only in memory for gateway requests.

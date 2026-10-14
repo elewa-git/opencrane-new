@@ -821,28 +821,23 @@ model delivery and a fresh-install chat journey remain NOT RUN.
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
 
-## Bridge work gate (P3-17 PR 2b, first split)
+## Signed bridge work gate
 
-The bridge work gate stays off until its signature and identity checks are connected.
-Root credential delivery saves the public key and identity for that later check.
-The bridge does not yet read them or check signed gates against them.
-`BridgeGate.close` therefore refuses every request before setting its binding or
-stopping anything, with `Bridge gate authority unavailable`. The socket returns the
-fixed close code 1008 and reason `Invalid bridge message`, before or after resume.
-It returns neither `bridge_quiet` nor `bridge_unavailable`. Current turns, grants,
-catalogues and thread loads remain intact, and later authorised work can continue.
+The bridge reads the public signing key and identity saved by root credential
+delivery. It accepts only an ES256 gate with `kid: lifecycle`, audience and
+`typ: takeover-gate`, and a lifetime of at most 30 seconds. The issue time may
+be at most five seconds ahead. The signed silo, computer, assistant, generation
+and Pod UID must match the saved identity. A missing key or any mismatch closes
+the socket with code 1008 and the fixed reason `Invalid bridge message`, before
+any stop or cleanup. The signed gate never enters errors, logs or receipts.
 
-Enabling the gate requires verifying a signature with a key the computer already
-trusts, the target computer, its current generation and a current saved takeover.
-Neither a bridge pass nor fields supplied by the caller can replace those checks.
-
-The disabled stop implementation expects `bridge_gate`. It carries
-`takeoverId`, a positive integer `generation` and at most 64 unique `affectedTurnIds`.
-Only identifier characters are accepted. Unknown fields and a different request
+`bridge_gate` carries only `type` and `gate`. Verified claims supply `takeoverId`,
+the saved positive `generation` and at most 64 unique `affectedTurnIds`.
+Only identifier characters are accepted. Unknown fields and a different signed binding
 close the socket. An identical request retains the process-local `epoch` and checks
 again. There is no reopen operation. The gate is not saved across process restarts.
 
-Once authority can be checked, the prepared gate code stops preparing and running
+A valid gate stops preparing and running
 memory-free and restricted turns, removes catalogues and grants, and cancels held
 approvals. An action already being sent keeps
 its own answer path. A matching terminal Codex reply is required for each executing
@@ -856,21 +851,13 @@ and checks unloaded threads. A failed cleanup leaves proof unavailable.
 appear in either receipt. `bridge_unavailable` returns the request and epoch if proof
 fails or takes 30 seconds. Neither receipt grants desktop control.
 
-Not in this PR: server delivery from saved intent (including idle computers and
-reconnect ordering), server receipt validation, supervisor calls, takeover events,
-event-backed hold cancellation, budget reservation release, automation closure,
-crash recovery, writer access and fresh-install qualification. The local tests use
+Not in this PR: server delivery within two seconds of saved intent (including idle
+computers and first-message reconnect ordering), server receipt checks for binding,
+epoch, empty inventory and unavailable executor/browser proof, pausing/paused events,
+supervisor calls, hold cancellation, budget release, automation proof and crash recovery.
+Delivery must land with receipt checks because the server closes on unknown messages.
+Writer access and fresh-install qualification are also absent. The local tests use
 real authenticated sockets and stub Codex replies; they do not qualify a live computer.
-The stop/cleanup tests replace the unavailable authority check with a test-only
-fixture and retain their existing assertions. Separate refusal tests use the real
-authority check. Stale generations, old takeovers, foreign takeovers, unsigned requests
-and caller-supplied proof are sent first on fresh authenticated connections while two
-turns run. Each must be refused without stopping work or returning any gate receipt.
-
-### Trusted key delivery split (P3-17 PR 2c, first part)
-
-This part adds gate issuance and root-only delivery of the public key and checked
-computer identity. The bridge reader and unconditional gate refusal are unchanged.
-The next part must replace the test-only authority mock with real signed gates
-and prove first-request refusal before and after resume for every invalid binding.
-No takeover or live control capability is claimed here.
+The stop and refusal tests use real issuer keys and bridge sockets. Invalid gates
+are sent first before and after resume while memory-free and restricted turns run.
+They must leave work unchanged and return no gate receipt.

@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- Keep approval renewal and release beside the turn state they share. */
 import { BridgeGate } from './bridge-gate.ts';
+import type { GateIdentity } from './bridge-gate-authority.ts';
 import type { approvalHolds } from './approval-holds.ts';
 import { modelForTask } from '@opencrane/models/routing';
 import type { WorkspaceFile } from './files.ts';
@@ -25,7 +26,8 @@ export interface TurnDriver extends ThreadLoadDriver {
   privateSession?(): Promise<PrivateSession>;
   file?(file: WorkspaceFile, bytes: Buffer): Promise<void | 'kept_existing'>;
   grant(thread: string, conversation: string, token: string, expiresAt: number): Promise<void>;
-  credential(): { expiresAt: number } & ({ value: string } | { digest: string });
+  credential(): { expiresAt: number; gateIdentity?: GateIdentity | undefined } &
+    ({ value: string } | { digest: string });
   authenticated?(value: string): void;
   journal: string;
 }
@@ -307,7 +309,9 @@ class TurnRunner {
   }
 
   stopBridge(value: Record<string, unknown>) {
-    this.gate.close(value);
+    const credential = this.driver.credential();
+    const identity = credential.expiresAt > Date.now() ? credential.gateIdentity : undefined;
+    this.gate.close(value, identity);
     this.approvals?.stop?.();
     void this.gate.track(this.loads.stop());
     for (const input of this.state.preparing.values()) this.state.cancelled.add(input.id);

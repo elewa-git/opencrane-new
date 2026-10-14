@@ -39,10 +39,10 @@ flowchart LR
 - Accepts new server passes only through authenticated Kubernetes access as root.
   Check each pass with the supplied public key before saving the key and computer
   identity. Codex can read the key, but cannot use it to sign requests or change it.
-  Older deliveries without a key still work; computer-wide stop requests stay refused.
+  Older deliveries without a key still work; computer-wide stop requests need a key.
 - Runs the bridge that receives chat turns and sends progress reports to the server.
-- Refuses computer-wide bridge stop requests until it can check the signed request
-  against this computer and its current saved takeover.
+- Checks signed computer-wide stop requests against its saved identity and generation
+  before stopping any work.
 - Disables Node debugging in trusted processes so local programs cannot use a debugger
   to read their passes or change their access checks.
 - Runs each turn with the model the server confirms. Keeps that model when renewing
@@ -82,10 +82,10 @@ server whether it can wait for approval. Older computers receive Allow tools onl
    workers whose main thread has exited, and detached children. If work keeps running,
    it refuses an exit receipt. Its receipt cannot grant desktop control.
 
-The computer-wide bridge work gate stays off until its signature and identity
-checks are built. Every gate request is refused without stopping turns or returning
-a receipt. A valid bridge connection alone cannot authorise a takeover. The prepared
-stop code cannot prove that executors or browser automation have stopped.
+The bridge accepts a short-lived signed stop request only for this computer, Pod and
+generation. A missing key or an old or foreign request leaves work running. A valid
+request stops bridge work and reports what it has checked. The bridge cannot prove
+that executors or browser automation have stopped, so this report cannot grant control.
 
 The local HTTP listener allows up to 17 minutes to receive a request. This setting
 does not limit how long its reply can wait. Approval waits have their own 15-minute limit.
