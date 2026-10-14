@@ -767,3 +767,15 @@ async function refusesInvalidClosureCandidate() {
 }
 it('refuses to close a generation that does not follow the saved profile',
   refusesInvalidClosureCandidate);
+
+async function keepsInvalidClosureProof() {
+  const test = await candidateFixture();
+  const data = { userId: test.input.userId, serverId: test.input.serverId,
+    profile: test.input.profileId, operationId: test.input.operationId, generation: 2,
+    expectedSequence: 0, appendUntil: test.input.appendUntil, reason: 'append_deadline_passed' };
+  const event = envelope('test', test.subject, 'connection.operation_closed', data);
+  await events.seed([event]);
+  expect(await test.reconcile()).toEqual({ status: 'retained' });
+  expect(test.store.deletes).toBe(0);
+}
+it('retains material after an invalid saved closure', keepsInvalidClosureProof);

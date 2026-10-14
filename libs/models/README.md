@@ -248,7 +248,7 @@ A live maintenance function checks one staged secret while holding the same lock
 staging and saving. It keeps current references. After the save deadline, it records
 that the unsaved operation is closed, so a delayed save cannot succeed. Only a confirmed
 closure or another saved conflict permits deletion of that exact stored version.
-Closing a replacement keeps the previous token and reserves the unused generation number.
+Closing a replacement keeps the previous token and records the closed generation number.
 A later replacement uses the next number. Automatic scanning is still planned.
 The event store checks profile changes and admin blocks together when it saves a profile.
 If the block is saved first, the profile save is refused, even if its access check has finished.

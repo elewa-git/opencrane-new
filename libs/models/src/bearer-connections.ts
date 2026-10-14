@@ -223,19 +223,19 @@ async function saveLocked(store: EventStore, binding: Binding, memberId: string,
   if (state.closedOperations.includes(operationId)) {
     throw new Error('Connection conflict');
   }
-  if (!original) {
-    requireCurrent(state, input);
+  let expectedState = state;
+  if (original) {
+    const originalIndex = rows.indexOf(original);
+    const precedingRows = rows.slice(0, originalIndex);
+    expectedState = foldConnection(precedingRows);
   }
+  requireCurrent(expectedState, input);
   const server = await eligibleServer(store, binding.silo, input);
   await readActiveMember(store, binding, memberId);
   await requireConnectionEnabled(store, memberId, input.serverId, performance.now() + 10_000);
-  let generation = state.lastGeneration + 1;
-  if (original) {
-    generation = savedSchema.parse(original.event.data).activation.generation;
-  }
   const stage: ConnectionStage = { siloId: binding.silo, userId: memberId,
     serverId: input.serverId, connectionId: input.connectionId, profileId: input.profileId,
-    purpose: 'personal', generation, operationId,
+    purpose: 'personal', generation: expectedState.lastGeneration + 1, operationId,
     expectedSequence: input.expectedSequence, appendUntil: input.appendUntil,
     endpointDigest: server.endpointDigest };
   const identity = await stageMaterial(custody, stage, material);
