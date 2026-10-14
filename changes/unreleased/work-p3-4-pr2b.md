@@ -1,0 +1,1 @@
+Prepared gateway records can now be turned into repeatable configuration bytes, with reviewed tool rules and fixed authorisation headers. Invalid records are refused. Loading the configuration and confirming active routes remain separate work.

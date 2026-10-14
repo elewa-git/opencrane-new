@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|checks calls, holds and spending stops; tests private CONNECT routing and public address checks| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|builds configuration; checks calls, holds and spending stops; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on; saves publication, gateway, spending, connection and instance stops; records matching child admissions| store["libs/event-store<br/>event log"]
 ```
@@ -47,6 +47,9 @@ Other hosted images still need image admission.
   check that accepts one visible TLS hostname and public DNS answers before connecting.
   Relay registration and lifetime controls are still needed.
 - Save publication requests and prepare ordered gateway records. These records do not enable calls.
+- Turn a saved gateway record into repeatable configuration bytes. Keep the existing
+  model and memory routes, and add rules for the reviewed tools. Loading this
+  configuration and confirming that it is active are separate work.
 - Provide an optional gateway route for testing CONNECT, the HTTP request that
   opens a byte tunnel. It uses only the private relay address returned by the
   decision service. Normal startup keeps this route off. Computers cannot use it

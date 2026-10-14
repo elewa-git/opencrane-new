@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { gatewayConfigurationSchema } from '@opencrane/events';
 import { renderGatewayConfiguration, type GatewayRenderSettings } from '../src/index.ts';
 import { publicationDigest } from '../src/publication.ts';
+import { gatewayConfig } from '../src/gateway.ts';
 
 type Configuration = ReturnType<typeof gatewayConfigurationSchema.parse>;
 type Entry = Configuration['members'][number]['entry'];
@@ -122,9 +123,15 @@ it('renders fixed routes and each reviewed member with its own rule and constant
 function changesOnlyMember(field: 'mode' | 'review' | 'connection') {
   const original = record();
   const changed = entry('alpha');
-  if (field === 'mode') changed.tools[0]!.mode = 'block';
-  if (field === 'review') changed.reviewRevision++;
-  if (field === 'connection') changed.connectionId = 'replacement';
+  if (field === 'mode') {
+    changed.tools[0]!.mode = 'block';
+  }
+  if (field === 'review') {
+    changed.reviewRevision++;
+  }
+  if (field === 'connection') {
+    changed.connectionId = 'replacement';
+  }
   const next = record([changed, entry('bravo')]);
   const first = renderGatewayConfiguration(original, settings);
   const second = renderGatewayConfiguration(next, settings);
@@ -142,15 +149,22 @@ it.each(['mode', 'review', 'connection'] as const)('isolates a member %s change'
 function invalidMembers(kind: string) {
   const first = entry('alpha');
   const second = entry('bravo');
-  if (kind === 'server') second.serverId = 'alpha';
-  if (kind === 'path') second.serverId = 'alpha';
-  if (kind === 'server') second.connectionId = 'different';
+  if (kind === 'server' || kind === 'path') {
+    second.serverId = 'alpha';
+  }
+  if (kind === 'server') {
+    second.connectionId = 'different';
+  }
   if (kind === 'memory') {
     first.serverId = 'memory';
     first.connectionId = 'internal';
   }
-  if (kind === 'personal' || kind === 'company') first.accountMode = kind;
-  if (kind === 'duplicate tool') first.tools.push(first.tools[0]!);
+  if (kind === 'personal' || kind === 'company') {
+    first.accountMode = kind;
+  }
+  if (kind === 'duplicate tool') {
+    first.tools.push(first.tools[0]!);
+  }
   refuses(record([first, second]));
 }
 it.each(['server', 'path', 'memory', 'personal', 'company', 'duplicate tool'])(
@@ -167,7 +181,9 @@ it.each(['a" || true || "', 'read\n', 'read,write', 'read && write', 'a'.repeat(
 
 function blocksAllNames() {
   const blocked = entry('alpha');
-  for (const tool of blocked.tools) tool.mode = 'block';
+  for (const tool of blocked.tools) {
+    tool.mode = 'block';
+  }
   expect(route(record([blocked]), 'mcp-alpha-installed')).toHaveProperty(
     'policies.authorization.rules', ['false']);
 }
@@ -208,3 +224,67 @@ function rejectsRemoteDecision(decisionUrl: string) {
 it.each(['http://example.com:3102', 'http://secret:canary@127.0.0.1:3102',
   'http://127.0.0.1:3102/path', 'https://127.0.0.1:3102'])(
   'requires a plain loopback decision listener: %s', rejectsRemoteDecision);
+
+function refusesFragmentMismatch() {
+  const saved = record();
+  saved.members[0]!.fragmentDigest = 'b'.repeat(64);
+  const { recordDigest: _digest, ...payload } = saved;
+  saved.recordDigest = publicationDigest(payload);
+  refuses(saved);
+}
+it('refuses a changed fragment even when the whole record digest matches', refusesFragmentMismatch);
+
+function rejectsUnsafeIdentity(field: 'serverId' | 'connectionId') {
+  const changed = entry('alpha');
+  changed[field] = `../${canary}`;
+  refuses(record([changed]));
+}
+it.each(['serverId', 'connectionId'] as const)(
+  'refuses an unsafe route %s without quoting it', rejectsUnsafeIdentity);
+
+function refusesAmbiguousRouteNames() {
+  const first = entry('alpha-beta');
+  first.connectionId = 'gamma';
+  const second = entry('alpha');
+  second.connectionId = 'beta-gamma';
+  refuses(record([first, second]));
+}
+it('refuses distinct paths that would share a gateway route name', refusesAmbiguousRouteNames);
+
+function fixedRoutesStayUnchanged() {
+  const fixed: GatewayRenderSettings = { port: settings.port, readinessPort: settings.readinessPort,
+    decisionUrl: settings.decisionUrl, issuer: settings.issuer, keyFile: settings.keyFile,
+    memoryRoute: settings.memoryRoute };
+  for (const options of [fixed, settings]) {
+    const memoryRoutes = [options.memoryRoute];
+    const expected = gatewayConfig(options.port, options.readinessPort, options.decisionUrl,
+      options.keyFile, options.issuer, options.upstream, memoryRoutes, options.egressDecisionUrl);
+    const rendered = renderGatewayConfiguration(record([]), options);
+    expect(rendered.configBytes.toString('utf8')).toBe(JSON.stringify(expected));
+  }
+}
+it('keeps startup route bytes with and without optional upstream and egress', fixedRoutesStayUnchanged);
+
+function independentOfAmbientState() {
+  const saved = record();
+  const before = renderGatewayConfiguration(saved, settings);
+  vi.useFakeTimers();
+  vi.stubEnv('MODEL_MCP_ROUTES', canary);
+  vi.stubEnv('OPENAI_API_KEY', canary);
+  try {
+    vi.setSystemTime(new Date('2040-01-01T00:00:00Z'));
+    expect(renderGatewayConfiguration(saved, settings)).toEqual(before);
+    vi.setSystemTime(new Date('2050-01-01T00:00:00Z'));
+    expect(renderGatewayConfiguration(saved, settings)).toEqual(before);
+  } finally {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  }
+}
+it('does not use the clock or environment to render a saved record', independentOfAmbientState);
+
+function refusesInvalidPort(port: number) {
+  refuses(record(), { ...settings, port });
+  refuses(record(), { ...settings, readinessPort: port });
+}
+it.each([0, 65536, 1.5, NaN])('refuses invalid listener port %s', refusesInvalidPort);
