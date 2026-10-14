@@ -60,14 +60,16 @@ async function serve(route, state) {
     }
   } else if (path.endsWith('/candidates')) {
     const kind = url.searchParams.get('kind');
+    if (kind === 'member' && state.slowCandidates) await delay(700);
     response = json({ rows: [{ id: `${kind}-two`, displayName: `${kind} candidate`,
       memberCount: kind === 'team' ? 12 : undefined }], next: null, loadedAt: time,
       projection: access.projection });
   } else {
     if (state.slow) await delay(800);
-    response = json(state.list);
+    response = state.failList ? json({ status: 'unavailable' }, 503) : json(state.list);
   }
-  if (state.deny && path.startsWith(base)) response = json({ status: 'refused' }, state.deny);
+  if (state.deny && path.startsWith(base)
+    && (!state.denyPath || path.includes(state.denyPath))) response = json({ status: 'refused' }, state.deny);
   await route.fulfill(response);
 }
 function receipt(state) {
@@ -79,7 +81,8 @@ async function open(browser, width, patch = {}) {
     current: false, statusReads: 0, ...patch };
   const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
   page.setDefaultTimeout(5000);
-  await page.route(`${origin}/**`, route => serve(route, state));
+  async function serveRequest(route) { await serve(route, state); }
+  await page.route(`${origin}/**`, serveRequest);
   await page.goto(`${origin}/org/models`);
   const opener = page.getByRole('button', { name: 'Access', exact: true }).first();
   await opener.click();
@@ -87,19 +90,23 @@ async function open(browser, width, patch = {}) {
   return { page, state, dialog, opener };
 }
 async function capture(page, name, width) {
-  await page.evaluate(async function fontsReady() { await document.fonts.ready; });
-  const problems = await page.evaluate(function layoutProblems() {
-    const result = [];
-    if (document.documentElement.scrollWidth > window.innerWidth) result.push('overflow');
-    for (const target of document.querySelectorAll('dialog[open] button, dialog[open] select')) {
-      const bounds = target.getBoundingClientRect();
-      if (bounds.width && (bounds.width < 44 || bounds.height < 44)) result.push('small target');
-    }
-    return result;
-  });
+  await page.evaluate(fontsReady);
+  const problems = await page.evaluate(layoutProblems);
   assert.deepEqual(problems, []);
   await page.screenshot({ path: resolve(output, `${name}-${width}.png`), fullPage: true });
 }
+async function fontsReady() { await document.fonts.ready; }
+function layoutProblems() {
+  const result = [];
+  if (document.documentElement.scrollWidth > window.innerWidth) result.push('overflow');
+  for (const target of document.querySelectorAll('dialog[open] button, dialog[open] select')) {
+    const bounds = target.getBoundingClientRect();
+    if (bounds.width && (bounds.width < 44 || bounds.height < 44)) result.push('small target');
+  }
+  return result;
+}
+function hasFocus(element) { return element === document.activeElement; }
+
 async function remove(dialog) {
   await dialog.getByRole('button', { name: 'Remove', exact: true }).click();
   await dialog.getByRole('button', { name: 'Save access', exact: true }).dblclick();
@@ -117,16 +124,17 @@ async function cases(browser, width) {
   assert.deepEqual(run.state.posts[0], { commandId: run.state.posts[0].commandId,
     expectedSequence: 4, action: 'revoke', granteeKind: 'team', granteeId: 'sales' });
   await run.page.keyboard.press('Escape');
-  assert.equal(await run.opener.evaluate(element => element === document.activeElement), true);
+  assert.equal(await run.opener.evaluate(hasFocus), true);
   await run.opener.click();
   run.state.current = true;
   run.state.list = { ...access, expectedSequence: 5, grants: [], grantTotal: 0 };
   await run.dialog.getByRole('button', { name: 'Check status', exact: true }).click();
+  assert.equal(await run.dialog.getByText('Saved', { exact: true }).count(), 0);
   await run.dialog.getByText('Saved', { exact: true }).waitFor();
   assert.equal(run.state.posts.length, 1);
   await capture(run.page, 'MOD-31-saved', width);
   await run.dialog.getByRole('button', { name: 'Back', exact: true }).click();
-  assert.equal(await run.opener.evaluate(element => element === document.activeElement), true);
+  assert.equal(await run.opener.evaluate(hasFocus), true);
   await run.page.close();
 
   for (const [mode, code, message, action] of [
@@ -162,10 +170,75 @@ async function cases(browser, width) {
   await capture(run.page, 'MOD-31-access-lost', width);
   await run.page.close();
 }
+async function additionalCases(browser) {
+  for (const reason of ['model_unavailable', 'target_unavailable', 'target_changed']) {
+    const run = await open(browser, 1280, { mode: 'refused', code: 409, reason });
+    await remove(run.dialog);
+    const sentences = { model_unavailable: 'This model is no longer available for this change.',
+      target_unavailable: 'This person, group or assistant is no longer available.',
+      target_changed: 'This person or assistant changed during the access check.' };
+    await run.dialog.getByText(sentences[reason], { exact: true }).waitFor();
+    run.state.failList = true;
+    await run.dialog.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await delay(150);
+    assert.equal(await run.dialog.getByRole('button', { name: 'Remove' }).isDisabled(), true);
+    await run.page.close();
+  }
+  let run = await open(browser, 1280, { slowCandidates: true });
+  await run.dialog.getByRole('button', { name: 'Person', exact: true }).click();
+  await run.dialog.getByRole('button', { name: 'Group', exact: true }).click();
+  await run.dialog.getByText('12 joined members', { exact: true }).waitFor();
+  await delay(800);
+  assert.equal(await run.dialog.getByText('member candidate', { exact: true }).count(), 0);
+  await run.dialog.getByRole('button', { name: 'Grant', exact: true }).click();
+  await run.dialog.getByText('One row selected: Grant.', { exact: true }).waitFor();
+  assert.equal(await run.dialog.getByRole('button', { name: 'Remove' }).isDisabled(), true);
+  await run.dialog.getByRole('button', { name: 'Save access', exact: true }).click();
+  await delay(200);
+  assert.equal(run.state.posts[0].action, 'grant');
+  assert.equal(run.state.posts[0].granteeKind, 'team');
+  const candidateReads = run.state.requests.filter(isCandidateRead);
+  assert.deepEqual(candidateReads.map(queryOf), ['?kind=member&limit=50', '?kind=team&limit=50']);
+  await run.page.close();
+  run = await open(browser, 1280, { list: { ...access, grants: [], grantTotal: 101 } });
+  await run.dialog.getByText('Showing 0 of 101', { exact: true }).waitFor();
+  assert.equal(await run.dialog.getByText('No audience yet', { exact: true }).count(), 0);
+  await run.page.close();
+  for (const deny of [401, 403]) {
+    for (const denyPath of ['', '/candidates', '/changes']) {
+      run = await open(browser, 1280, { slowCandidates: true });
+      await run.dialog.getByText('Sales team', { exact: true }).waitFor();
+      await run.dialog.getByRole('button', { name: 'Person', exact: true }).click();
+      run.state.deny = deny;
+      run.state.denyPath = denyPath;
+      if (denyPath !== '/candidates') await remove(run.dialog);
+      await run.dialog.getByText('Access lost. Details cleared.', { exact: true }).waitFor();
+      await delay(800);
+      assert.equal(await run.dialog.locator('article').count(), 0);
+      assert.equal(await run.dialog.getByRole('button', { name: 'Save access' }).count(), 0);
+      await run.page.close();
+    }
+  }
+  run = await open(browser, 1280, { mode: 'unknown', code: 503 });
+  await remove(run.dialog);
+  await run.dialog.getByText('Outcome unknown', { exact: true }).waitFor();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await run.dialog.getByRole('button', { name: 'Check status', exact: true }).click();
+    await delay(100);
+  }
+  assert.equal(run.state.posts.length, 1);
+  const checks = run.state.requests.filter(isStatusRead);
+  for (const check of checks) assert.equal(check.path, `${base}/changes/${run.state.posts[0].commandId}`);
+  await run.page.close();
+}
+function isCandidateRead(request) { return request.path.endsWith('/candidates'); }
+function isStatusRead(request) { return request.path.includes('/changes/'); }
+function queryOf(request) { return request.query; }
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
 try {
   for (const width of [1280, 390]) await cases(browser, width);
+  await additionalCases(browser);
 } finally {
   await browser.close();
 }

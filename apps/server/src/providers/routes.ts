@@ -148,7 +148,7 @@ async function read(request: FastifyRequest, reply: FastifyReply,
   const publicRows = rows.map(providerRow);
   await fresh();
   return reply.send({ rows: publicRows, loadedAt: new Date().toISOString(),
-    access: { grantsAvailable: false, reason: 'p4_22_required' } });
+    access: { grantsAvailable: true, reason: 'model_access_routes' } });
 }
 async function writeKey(request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) {

@@ -10,7 +10,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
+  web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, fact links, tool reviews, hosted registration, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes, authenticated instance observations and stops, owner and admin stops, control intent, memory facts, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|saved child leave results| server
@@ -38,6 +38,9 @@ Native memory and agent-derived writes stay disabled.
 
 Give Owners and Admins a member directory and current management flags for
 active people. An ordinary Member receives only a small header for one person.
+
+The provider list reports that model access routes are available. Those routes let
+admins read and change grants for people, groups and assistants.
 
 Let owners and admins request publication of an exact reviewed tool list. Calls remain disabled.
 

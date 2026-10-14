@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { IntegrationFacts } from '../integrations/integration-facts';
 import type { IntegrationFact } from '../integrations/integration-facts-map';
+import { ModelAccessEditor } from './model-access-editor';
 import { ModalSheet } from '../ui/modal-sheet';
 import { SharedState } from '../shared-state/shared-state';
 import { readQuote, sendProviderCommand, type ModelQuote, type ProviderRow } from './provider-api';
@@ -15,7 +16,7 @@ function commandId(): string {
 
 @Component({
   selector: 'oc-models',
-  imports: [SharedState, ModalSheet, IntegrationFacts],
+  imports: [SharedState, ModalSheet, IntegrationFacts, ModelAccessEditor],
   templateUrl: './model-registry.html',
   styleUrls: ['./model-registry.css', './provider-setup.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

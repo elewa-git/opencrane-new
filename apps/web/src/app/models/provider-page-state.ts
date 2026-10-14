@@ -50,8 +50,7 @@ export class ProviderPageState implements OnInit, OnDestroy {
   protected readonly replaceOpen = signal(false);
   protected readonly replaceKeyDraft = signal('');
   protected readonly replaceKeyError = signal('');
-  protected readonly accessExplanation = signal('Not available yet. The provider API says model '
-    + 'grants are unavailable. This screen cannot list people, assistants or their grants.');
+
 
   protected readonly request = new AbortController();
   private listReadInFlight = false;
@@ -100,7 +99,6 @@ export class ProviderPageState implements OnInit, OnDestroy {
     this.restoreUnfinishedChecks(providerResult.value.rows);
     this.registry.set(modelResult.value.models);
     this.routing.set(modelResult.value.taskRouting);
-    this.accessExplanation.set(grantExplanation(providerResult.value.access));
     this.loadedAt.set(providerResult.value.loadedAt);
     this.refreshError.set(false);
     this.loadState.set('ready');
@@ -333,6 +331,7 @@ export class ProviderPageState implements OnInit, OnDestroy {
   }
 
   protected clearProtectedData(): void {
+    this.request.abort();
     this.selectedProvider.set(undefined);
     this.selectedModels.set([]);
     this.providerIdDraft.set('');
@@ -417,17 +416,6 @@ function matchesProvider(providerIdValue: string): (provider: ProviderRow) => bo
     return provider.providerId === providerIdValue;
   }
   return hasMatchingId;
-}
-
-function grantExplanation(access: { grantsAvailable: boolean; reason: string }): string {
-  if (access.grantsAvailable) {
-    return 'The provider API says grants are available. This screen does not edit them.';
-  }
-  if (access.reason === 'p4_22_required') {
-    return 'Not available yet. The provider API says model grants are unavailable. This screen '
-      + 'cannot list people, assistants or their grants.';
-  }
-  return 'Not available yet. The provider API did not provide a model grant contract.';
 }
 
 function replaceProvider(rows: ProviderRow[], updated: ProviderRow): ProviderRow[] {

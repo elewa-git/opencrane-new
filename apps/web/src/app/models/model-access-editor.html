@@ -1,0 +1,59 @@
+<oc-hinge-drawer [open]="opened()" [title]="'Access · ' + model()"
+  [description]="taskRoute()" [returnFocusTo]="opener" (closed)="close()">
+  <div role="status" aria-live="polite" aria-atomic="true">
+    <strong>{{ messages[phase()] }}</strong>
+    @if (detail()) { <p>{{ detail() }}</p> }
+  </div>
+  @if (list(); as access) {
+    @if (noAudience()) { <p>No audience yet</p> }
+    @else { <p>Showing {{ access.grants.length }} of {{ access.grantTotal }}</p> }
+    @for (row of access.grants; track row.granteeKind + ':' + row.granteeId) {
+      <article>
+        <strong>{{ row.displayName }}</strong><span>{{ labels[row.granteeKind] }}</span>
+        <span>{{ rowState(row) }}</span>
+        <button type="button" [disabled]="locked()"
+          (click)="choose(row.state === 'granted' ? 'revoke' : 'grant', row.granteeKind, row.granteeId)">
+          {{ row.state === 'granted' ? 'Remove' : 'Grant' }}
+        </button>
+      </article>
+    }
+    <h3>Add access</h3>
+    <div class="sources">
+      @for (source of kinds; track source) {
+        <button type="button" [disabled]="locked()" (click)="add(source)"
+          [attr.aria-pressed]="kind() === source">{{ labels[source] }}</button>
+      }
+    </div>
+    @if (picking()) { <p>Loading candidates…</p> }
+    @if (candidates(); as choices) {
+      @for (row of choices.rows; track row.id) {
+        <article>
+          <strong>{{ row.displayName }}</strong><span>{{ labels[kind()] }}</span>
+          @if (row.memberCount !== undefined) { <small>{{ row.memberCount }} joined members</small> }
+          <button type="button" [disabled]="locked()" (click)="choose('grant', kind(), row.id)">
+            Grant
+          </button>
+        </article>
+      }
+      @if (choices.next) { <p>Showing the first 50 candidates. More are not available here yet.</p> }
+    }
+    <p class="routing">Both the requester and the assistant need access.
+      There is no automatic failover.</p>
+  }
+  @if (phase() === 'saved') {
+    <p>Removing a group stops new calls within two seconds; calls already sent still settle.</p>
+  }
+  <div overlayFooter>
+    @if (edit()) { <p>One row selected: {{ edit()?.action === 'grant' ? 'Grant' : 'Remove' }}.</p> }
+    @if (phase() === 'conflict' || phase() === 'failed') {
+      <button type="button" [disabled]="busy()" (click)="refresh()">Refresh</button>
+    } @else if (phase() === 'unavailable') {
+      <button type="button" [disabled]="busy()" (click)="send()">Try again</button>
+    } @else if (phase() === 'unknown' || phase() === 'applying') {
+      <button type="button" [disabled]="busy()" (click)="check()">Check status</button>
+    } @else if (phase() !== 'access') {
+      <button class="primary" type="button" [disabled]="!edit() || busy()"
+        (click)="save()">Save access</button>
+    }
+  </div>
+</oc-hinge-drawer>
