@@ -148,6 +148,24 @@ async function legacy(end: string) {
   expect((await request(await input())).statusCode).toBe(200);
 }
 it.each(['closed', 'lost', 'retired', 'claimed'])('waits for legacy work to be %s', legacy);
+async function openHoldAfterLoss() {
+  await setup.append('computer-assistant', 'computer.turn_started', turn);
+  const call = { model: 'gpt-6-luna', priceTableId, payingGroupId: 'sales',
+    assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+    turnId: 'legacy', threadId: 'legacy-thread', requesterId: 'alice',
+    contextDigest: 'a'.repeat(64), requestId: 'held-call' };
+  const reservationId = await setup.actor.reserve(call, 12);
+  await setup.append('computer-assistant', 'computer.lost',
+    { assistantId: 'assistant', computerId: 'computer' });
+  await refused(403);
+  await setup.actor.releaseUndispatched(reservationId);
+  expect((await request(await input())).statusCode).toBe(200);
+  expect(setup.actor.state.reservations).toMatchObject([
+    { id: reservationId, amountCents: 12, settledCents: 0 },
+  ]);
+}
+it('refuses an open hold after computer loss until its zero-cost release', openHoldAfterLoss);
+
 async function denied(reason: string) {
   const command = await input();
   let sub = 'alice';
