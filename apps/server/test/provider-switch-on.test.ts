@@ -166,6 +166,47 @@ async function openHoldAfterLoss() {
 }
 it('refuses an open hold after computer loss until its zero-cost release', openHoldAfterLoss);
 
+async function openSendAfterClosure() {
+  await setup.append('computer-assistant', 'computer.turn_started', turn);
+  const modelCall = { model: 'mcp-zero-cost', priceTableId: 'zero', payingGroupId: 'sales',
+    assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+    turnId: 'legacy', threadId: 'legacy-thread', requesterId: 'alice',
+    contextDigest: 'a'.repeat(64), requestId: 'free-send' };
+  const dispatch = { callId: 'free-send', decisionId: 'free-decision',
+    bodyDigest: 'b'.repeat(64), modelCall };
+  async function fresh() {}
+  await setup.actor.admitDispatch(dispatch, fresh);
+  await setup.append('computer-assistant', 'computer.turn_closed', { ...turn, status: 'completed' });
+  await refused(403);
+}
+it('refuses an admitted send without settlement after its turn closes', openSendAfterClosure);
+
+async function settledSendAfterClosure() {
+  await setup.append('computer-assistant', 'computer.turn_started', turn);
+  const modelCall = { model: 'gpt-6-luna', priceTableId, payingGroupId: 'sales',
+    assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+    turnId: 'legacy', threadId: 'legacy-thread', requesterId: 'alice',
+    contextDigest: 'a'.repeat(64), requestId: 'paid-send' };
+  const reservationId = await setup.actor.reserve(modelCall, 12);
+  const admission = { requestId: 'paid-send', permitId: reservationId, route: 'model',
+    outcome: 'allow', reason: 'model_allowed', contextDigest: modelCall.contextDigest };
+  await setup.append('decision-paid-send', 'decision.recorded', admission);
+  const dispatch = { callId: 'paid-send', decisionId: 'paid-decision',
+    bodyDigest: 'b'.repeat(64), reservationId, modelCall };
+  async function fresh() {}
+  await setup.actor.admitDispatch(dispatch, fresh);
+  await setup.append('computer-assistant', 'computer.turn_closed', { ...turn, status: 'completed' });
+  await refused(403);
+  await setup.actor.effect(reservationId, { inputTokens: 1000, outputTokens: 120 });
+  await setup.settled();
+  expect((await request(await input())).statusCode).toBe(200);
+  expect(setup.actor.state.reservations).toMatchObject([
+    { id: reservationId, amountCents: 12, settledCents: 1, call: modelCall },
+  ]);
+}
+it('allows switch-on after an admitted send settles at its original tariff and payer',
+  settledSendAfterClosure);
+
 async function denied(reason: string) {
   const command = await input();
   let sub = 'alice';
