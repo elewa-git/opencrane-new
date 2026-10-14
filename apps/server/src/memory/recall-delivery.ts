@@ -15,21 +15,27 @@ function digest(value: string) {
   hash.update(value);
   return hash.digest('hex');
 }
-function inputGeneration(previous: MemoryContextState | undefined) {
-  const events = previous?.events.values();
-  const saved = events?.next().value;
-  if (saved === undefined) {
-    return randomUUID();
+export async function readRecallContext(options: MemoryOptions, context: MemoryContext) {
+  // Read history before starting the final short access checks.
+  const chat = await readChatFacts(options.store, options.silo, context.conversation, context.turn);
+  if (chat.closed) {
+    throw new Error('Memory turn ended');
   }
-  const decoded: unknown = JSON.parse(saved);
-  const event = memoryContextRecordedEventSchema.parse(decoded);
-  return event.data.inputGeneration;
+  const events = chat.memoryContext?.events.values();
+  const encoded = events?.next().value;
+  let saved: MemoryContextRecord | undefined;
+  if (encoded !== undefined) {
+    const decoded: unknown = JSON.parse(encoded);
+    saved = memoryContextRecordedEventSchema.parse(decoded).data;
+  }
+  const inputGeneration = saved?.inputGeneration ?? randomUUID();
+  return { chat, saved, inputGeneration };
 }
-function record(context: MemoryContext, state: Snapshot, previous: MemoryContextState | undefined) {
+function record(context: MemoryContext, state: Snapshot, inputGeneration: string) {
   const data: MemoryContextRecord = {
     conversationId: context.conversation, turnId: context.turn, requesterId: context.requester,
     assistantId: context.assistant, computerId: context.computer, generation: context.generation,
-    threadId: context.thread, inputGeneration: inputGeneration(previous),
+    threadId: context.thread, inputGeneration,
     projectionGeneration: state.generation, action: 'prepared', delivery: null,
     callDigest: null, dispatchDigest: null, additions: [], scopePositions: [],
     byteCount: 0, hasOmissions: false, reason: 'none',
@@ -61,15 +67,12 @@ async function appendRecord(options: MemoryOptions, context: MemoryContext,
 }
 
 export async function recordRecall(options: MemoryOptions, context: MemoryContext,
-  rights: Rights, snapshot: Snapshot, page: Page, byteCount: number) {
-  // Read history before starting the final short access checks.
-  const chat = await readChatFacts(options.store, options.silo, context.conversation, context.turn);
-  if (chat.closed) {
-    throw new Error('Memory turn ended');
-  }
+  rights: Rights, snapshot: Snapshot, page: Page, byteCount: number,
+  evidence: Awaited<ReturnType<typeof readRecallContext>>) {
+  const { chat, inputGeneration } = evidence;
   const rows = await history(options.store, `scope-${rights.scope.scopeId}`, options.silo,
     performance.now() + 10_000);
-  const data = record(context, snapshot, chat.memoryContext);
+  const data = record(context, snapshot, inputGeneration);
   const position = { scopeId: rights.scope.scopeId, position: snapshot.position };
   data.scopePositions = [position];
   const additions: MemoryContextRecord['additions'] = [];

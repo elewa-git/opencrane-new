@@ -256,10 +256,10 @@ async function appendPrepared(options: MemoryOptions, input: Input,
     keys.provision(identity);
     const encrypted = keys.encrypt(identity, input.text);
     event.data = { ...data, ...encrypted };
-    checkDependencies(rows, scope, input, keys, options.silo);
     await fresh();
     // Recheck the original deadline, live turn and watched grants just before saving.
     if (agent) await agent.confirm();
+    checkDependencies(rows, scope, input, keys, options.silo);
     journal.save({ ...entry, stage: 'unknown' });
     const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0,
       historyChecked: true as const, deadline: fresh.deadline };

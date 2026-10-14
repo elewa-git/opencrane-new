@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { expect, it } from 'vitest';
 import type { MemoryContext } from '@opencrane/models';
-import { checkRecallProof, recallProof } from '../src/memory/recall-proof.ts';
+import { checkRecallProof, recallProof, recallProofBytes } from '../src/memory/recall-proof.ts';
 
 const secret = 'test-only-recall-proof-secret';
 const context: MemoryContext = { silo: 'test', requester: 'alice', assistant: 'assistant',
@@ -130,3 +130,14 @@ function refusesInputGeneration() {
   expect(check(stale)).toThrow('Recall proof thread mismatch');
 }
 it('refuses a valid signature for another input generation', refusesInputGeneration);
+
+function exactProofBytes() {
+  const generation = 'x'.repeat(200);
+  const largest = { memoryId: 'x'.repeat(200), revision: Number.MAX_SAFE_INTEGER };
+  const facts = Array<typeof largest>(20).fill(largest);
+  const signed = recallProof(secret, context, facts, generation);
+  const withoutProof = Buffer.byteLength(JSON.stringify({ facts }));
+  const withProof = Buffer.byteLength(JSON.stringify({ facts, recallProof: signed }));
+  expect(recallProofBytes(secret, context, 20, generation)).toBe(withProof - withoutProof);
+}
+it('reserves the exact proof field bytes including the saved input generation', exactProofBytes);

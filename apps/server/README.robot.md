@@ -1894,18 +1894,19 @@ saved append loses its reply. The event links the conversation, turn and decisio
 
 A recall page includes `recallProof`, a signed list of returned fact ids and revisions.
 It binds the silo, requester, assistant, computer generation, conversation, turn, thread,
-content class and selected scope. It contains no fact text and needs no saved permit table.
+content class, selected scope and saved `inputGeneration`. It contains no fact text
+and needs no saved permit table.
 Proof bytes count towards the 16 KiB reply limit. Page-limit placeholders are excluded.
 Remember requires this proof, non-empty same-scope `dependsOn`, and empty `sources`.
+The proof's references must belong to `dependsOn`. The dependencies must equal the whole
+saved loaded set, in any order, with no duplicates. Earlier recall pages remain required.
 The command checks current key status, expiry and all historical dependencies before using text.
-The exposed remember tool is refused and omitted from discovery because a selective proof
-cannot establish every reference loaded into a turn. Internal command recovery remains tested.
-`test/memory-recall-proof.test.ts` checks each refusal reason separately, including a
-valid selective proof's complete-evidence refusal. The MCP tests also check proof
-validation independently of the generic HTTP 403 response. A separate endpoint test
-checks that a valid selective proof makes no append. Removing the HMAC comparison must
-fail the signature test even while the complete-evidence refusal remains. Proof errors
-stay internal; the endpoint response does not include them. The MCP fixture renews
+The backend accepts complete person-scope lineage. Any loaded group or assistant-notes
+reference refuses the write, for personal and team assistants. Remember stays omitted
+from discovery, and native admission stays disabled.
+`test/memory-recall-proof.test.ts` checks signatures, identity and input generation.
+The MCP tests check complete lineage, stale facts, terminal evidence, races and replay.
+Proof errors stay internal; the endpoint response does not include them. The MCP fixture renews
 its two-minute turn token before each test so slow runs do not use expired credentials.
 An agent cannot claim a human statement. This proof checks references, not whether the
 model's wording follows logically from them.
@@ -2505,12 +2506,19 @@ The production route tests close the conversation before preparation, between pr
 and loading, and after loading. Each returns only a refusal, then reads the ended
 accounting through both the cached summary and cold replay. A later recall is also refused.
 
-This is a size-limited split of row 2. Remaining work: bind proofs to input generation,
-validate the complete accumulated reference set before every model/tool dispatch and
-grant renewal, and admit only complete same-scope derived writes. Current proofs already
-bind computer generation, turn and scope, but selective-proof writes remain refused.
-This part checks the page being delivered, not every earlier loaded scope. Native memory
-remains disabled. Public feed responses remain unchanged.
+Recall chooses `inputGeneration` before sizing or signing its reply and uses that same
+value in the prepared record. The proof remains part of the exact saved reply byte count.
+Agent remember reads the existing `readChatFacts` evidence before final access checks.
+It refuses absent, prepared-only, empty, invalidated or ended evidence. Immediately before
+append it reads only conversation rows after the saved sequence, including participation
+closes, and refuses new evidence or closure for that turn. The command validates all
+loaded references, including expiry, corrections, tombstones and supporting keys.
+It keeps the existing conditional scope append and command receipt recovery.
+
+Row 2 still needs complete loaded-set checks before model/tool dispatch and turn grant
+renewal, after #396 and p4-11-pr2c. Correction target proofs remain deferred; agents cannot
+correct or forget. Storage with no loaded memory remains row 6. Native memory stays off.
+Public feed responses remain unchanged.
 Fresh-install qualification and real model/tool calls: NOT RUN.
 
 ## Renewal after budget stops (P3-14 PR 3; Part of #55)

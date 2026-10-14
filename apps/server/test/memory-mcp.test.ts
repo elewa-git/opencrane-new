@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import * as crypto from 'node:crypto';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { request, type IncomingMessage } from 'node:http';
 import { setTimeout as pause } from 'node:timers/promises';
@@ -88,8 +88,8 @@ function mode(target: Awaited<ReturnType<typeof fixture>>, value: 'allow' | 'ask
     connectionId: 'server', toolName: 'recall', toolRevision: recallTool.revision,
     mode: value, setBy: 'alice' });
 }
-async function prepare() {
-  setup = await fixture(2000, 20000, false, 'gpt-6-luna', false, 'manual', 'sales',
+async function prepare(team = false) {
+  setup = await fixture(2000, 20000, false, 'gpt-6-luna', team, 'manual', 'sales',
     'restricted');
   await setup.stopDispatch();
   await setup.runtime.stop();
@@ -167,7 +167,10 @@ async function renewGatewayCredentials() {
   // Keep catalogue expiry from hiding the memory check each test intends to exercise.
   await setup.append('mcp-memory', 'mcp.catalogue_checked', check);
 }
-beforeEach(prepare, 120_000);
+async function preparePersonal() {
+  await prepare();
+}
+beforeEach(preparePersonal, 120_000);
 beforeEach(renewGatewayCredentials);
 afterEach(close);
 
@@ -553,7 +556,10 @@ it('replaces caller context and returns bounded facts as data through the real g
     expect(result.result.structuredContent.returnedCount).toBe(20);
     expect(result.result.structuredContent.facts[0]?.memoryId).toBe('fact_22');
     expect(result.result.structuredContent.facts[1]?.memoryId).toBe('fact_21');
-    expect(Buffer.byteLength(response.text)).toBeLessThanOrEqual(16384);
+    const replyBytes = Buffer.byteLength(response.text);
+    expect(replyBytes).toBeLessThanOrEqual(16384);
+    const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+    expect(chat.memoryContext?.recallBytes).toBe(replyBytes);
     const claims = decodeJwt(capability);
     expect(claims).toMatchObject({ silo: 'test', requester: 'alice', assistant: 'assistant',
       computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
@@ -933,10 +939,12 @@ async function grantWrite(granteeKind: string) {
 function independentFact(fact: { memoryId: string }) {
   return fact.memoryId.startsWith('fact_');
 }
-async function recalledRemember(commandId: string) {
+async function recalledRemember(commandId: string, query = 'deliver') {
   await grantWrite('member');
   await grantWrite('assistant');
-  const response = await setup.call(headers, call, route);
+  const recallArguments = { ...call.params.arguments, query };
+  const selectedCall = { ...call, params: { ...call.params, arguments: recallArguments } };
+  const response = await setup.call(headers, selectedCall, route);
   expect(response.status, response.text).toBe(200);
   const page = recallProofSchema.parse(JSON.parse(response.text)).result.structuredContent;
   // Choose an original test fact. Earlier tests deliberately erase sources of derived facts.
@@ -1168,9 +1176,10 @@ async function refusesLineage(change: string, reason: string) {
   const parsed = parseMemoryRequest(JSON.stringify(changed), rememberHeaders);
   const context = await verifyMemoryContext(token, setup.identity, parsed);
   const config = testAuthConfig();
+  const recorded = await contextRecord();
   function validateReferences() {
     checkRecallProof(config.cookieSecret, context, argumentsValue.recallProof,
-      argumentsValue.dependsOn);
+      argumentsValue.dependsOn, recorded.inputGeneration);
   }
   // Check the reason separately because the endpoint returns the same refusal for every proof.
   expect(validateReferences).toThrow(reason);
@@ -1239,7 +1248,7 @@ it('keeps personal recall proof out of shared writes and forged shared-only cont
   });
 
 async function refusesChangedWrite(change: string) {
-  const body = await recalledRemember(`during-write-${change}`);
+  const body = await loadedWrite(`during-write-${change}`);
   const originalLock = setup.db.lock!.bind(setup.db);
   let revoked: Awaited<ReturnType<typeof setup.append>> | undefined;
   async function changedLock<Result>(name: string,
@@ -1257,7 +1266,7 @@ async function refusesChangedWrite(change: string) {
   const lock = vi.spyOn(setup.db, 'lock').mockImplementation(changedLock);
   const append = vi.spyOn(setup.nats.store, 'append');
   try {
-    expect((await admittedRemember(body)).statusCode).toBe(403);
+    expect((await backendRemember(body)).statusCode).toBe(403);
     expect(append).not.toHaveBeenCalled();
   } finally {
     append.mockRestore();
@@ -1555,7 +1564,8 @@ async function preparationTurn(body: Awaited<ReturnType<typeof recalledRemember>
   const parsed = parseMemoryRequest(JSON.stringify(changedBody), rememberHeaders);
   const proofContext = await verifyMemoryContext(token, setup.identity, parsed);
   const dependencies = body.params.arguments.dependsOn;
-  const proof = recallProof(testAuthConfig().cookieSecret, proofContext, dependencies);
+  const proof = recallProof(testAuthConfig().cookieSecret, proofContext, dependencies,
+    'preparation-input');
   const argumentsValue = { ...body.params.arguments, recallProof: proof };
   const finalBody = { ...changedBody, params: { ...changedBody.params,
     arguments: argumentsValue } };
@@ -1724,7 +1734,7 @@ it('rechecks stale grants at the backend and refuses an ended turn upstream', as
 });
 
 async function loadedWrite(commandId = 'complete-lineage') {
-  const body = await recalledRemember(commandId);
+  const body = await recalledRemember(commandId, 'exactly');
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   const dependsOn = [...chat.memoryContext!.references];
   dependsOn.reverse();
@@ -1733,7 +1743,8 @@ async function loadedWrite(commandId = 'complete-lineage') {
 }
 async function contextRecord() {
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
-  const first = chat.memoryContext!.events.values().next().value!;
+  const events = chat.memoryContext!.events.values();
+  const first = events.next().value!;
   return memoryContextRecordedEventSchema.parse(JSON.parse(first)).data;
 }
 async function refusesWithoutFact(body: Awaited<ReturnType<typeof recalledRemember>>) {
@@ -1746,12 +1757,13 @@ async function refusesWithoutFact(body: Awaited<ReturnType<typeof recalledRememb
 async function completeLoadedWrite() {
   const body = await loadedWrite();
   const secondMetadata = { ...metadata, callId: 'second-recall' };
-  const argumentsValue = { scopeId, query: 'exactly' };
+  const argumentsValue = { scopeId, query: 'deliver' };
   const secondCall = { ...call, params: { ...call.params,
     arguments: argumentsValue, _meta: secondMetadata } };
   expect((await setup.call(headers, secondCall, route)).status).toBe(200);
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
-  body.params.arguments.dependsOn = [...chat.memoryContext!.references].reverse();
+  body.params.arguments.dependsOn = [...chat.memoryContext!.references];
+  body.params.arguments.dependsOn.reverse();
   const first = await backendRemember(body);
   expect(first.statusCode, first.body).toBe(200);
   const saved = rememberedSchema.parse(first.json()).result.structuredContent;
@@ -1763,12 +1775,20 @@ async function completeLoadedWrite() {
   }
   expect(rows).toHaveLength(1);
   expect(rows[0]?.event.data).toMatchObject({ dependsOn: body.params.arguments.dependsOn });
-  const custody = vi.spyOn(keys, 'provision');
+  const directory = dirname(setup.options.configFile);
+  const filesBefore = readdirSync(directory);
   const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
   expect((await readChatFacts(cold, 'test', 'conversation', 'turn')).memoryContext)
     .toEqual(chat.memoryContext);
-  expect(custody).not.toHaveBeenCalled();
-  custody.mockRestore();
+  await setup.runner.rebuild(projection);
+  const rebuilt = await setup.db.query(`SELECT scope_id AS "scopeId",
+    dependency_id AS "memoryId", dependency_revision::integer AS revision
+    FROM memory_dependencies WHERE memory_id=$1`, [saved.memoryId]);
+  expect(rebuilt.rows).toHaveLength(body.params.arguments.dependsOn.length);
+  expect(rebuilt.rows).toEqual(expect.arrayContaining(body.params.arguments.dependsOn));
+  expect(readdirSync(directory)).toEqual(filesBefore);
+  body.params.arguments.dependsOn.reverse();
+  await refusesWithoutFact(body);
   body.params.arguments.dependsOn.pop();
   await refusesWithoutFact(body);
 }
@@ -1790,13 +1810,18 @@ async function firstProofGeneration() {
 }
 it('binds the first proof to its prepared input generation', firstProofGeneration);
 
-async function changedLoadedContext(change: string) {
+async function changedLoadedContext(change: string, team = false) {
+  if (team) {
+    await close();
+    await prepare(true);
+    await renewGatewayCredentials();
+  }
   const body = await loadedWrite();
   const prepared = await contextRecord();
   if (change === 'superset') {
-    body.params.arguments.dependsOn.push({ scopeId, memoryId: 'fact_22', revision: 1 });
+    body.params.arguments.dependsOn.push({ scopeId, memoryId: 'fact_20', revision: 1 });
   } else {
-    let data = { ...prepared, action: 'invalidated', reason: 'changed' };
+    let data = { ...prepared, action: 'invalidated', reason: 'content_changed' };
     if (change === 'ended') data = { ...data, action: 'ended', reason: 'ended' };
     if (change === 'group' || change === 'assistant_notes') {
       const otherScope = memoryScopeId('test', change, 'sales');
@@ -1805,12 +1830,20 @@ async function changedLoadedContext(change: string) {
         callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64), additions,
         scopePositions: [{ scopeId: otherScope, position: 0 }], byteCount: 1 });
     }
-    await setup.append('conversation-conversation', 'agent.memory_context_recorded', data);
+    await seedEvidence(data);
   }
   await refusesWithoutFact(body);
 }
+async function changedPersonalContext(change: string) {
+  await changedLoadedContext(change);
+}
 it.each(['superset', 'invalidated', 'ended', 'group', 'assistant_notes'])(
-  'refuses complete person lineage when the loaded context has %s', changedLoadedContext);
+  'refuses complete person lineage when the loaded context has %s', changedPersonalContext);
+async function mixedTeamContext(change: string) {
+  await changedLoadedContext(change, true);
+}
+it.each(['group', 'assistant_notes'])(
+  'refuses a team assistant write after loaded %s references', mixedTeamContext);
 
 async function racesLoadedContext(change: string) {
   const body = await loadedWrite();
@@ -1827,13 +1860,13 @@ async function racesLoadedContext(change: string) {
         await setup.append('participation-conversation', 'conversation.closed',
           { conversationId: 'conversation', closedBy: 'alice' });
       } else {
-        const data = { ...prepared, action: 'invalidated', reason: 'changed' };
+        const data = { ...prepared, action: 'invalidated', reason: 'content_changed' };
         if (change === 'loaded') {
           Object.assign(data, { action: 'loaded', reason: 'none', delivery: 'recall',
             callDigest: 'e'.repeat(64), dispatchDigest: 'f'.repeat(64), byteCount: 1,
             additions: [{ scopeId, memoryId: 'fact_22', revision: 1 }] });
         }
-        await setup.append('conversation-conversation', 'agent.memory_context_recorded', data);
+        await seedEvidence(data);
       }
     }
     if (changed && subject === 'conversation-conversation') {
@@ -1853,3 +1886,71 @@ async function racesLoadedContext(change: string) {
 }
 it.each(['loaded', 'invalidated', 'closed'])(
   'refuses %s after reading evidence using only new conversation rows', racesLoadedContext);
+
+async function seedEvidence(data: unknown) {
+  const id = randomUUID();
+  const event = memoryContextRecordedEventSchema.parse({ id, commandId: id,
+    type: 'agent.memory_context_recorded', subject: 'conversation-conversation', silo: 'test',
+    source: 'opencrane-server', time: new Date().toISOString(),
+    principal: { kind: 'system', id: 'server' }, correlation: {}, data });
+  await setup.nats.seed([event]);
+}
+async function obsoleteLoadedFact(change: string) {
+  const expires = Date.now() + 60_000;
+  const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
+    ownerId: 'alice', memoryId: 'expiring-loaded', revision: 1 };
+  keys.provision(identity);
+  await setup.append(`scope-${scopeId}`, 'memory.written', {
+    schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
+    memoryId: identity.memoryId, revision: 1, kind: 'fact', pinned: false,
+    expiresAt: new Date(expires).toISOString(), sources: [], dependsOn: [],
+    ...keys.encrypt(identity, 'Deliver exactly') });
+  await setup.runner.run(projection);
+  const body = await loadedWrite();
+  expect(body.params.arguments.dependsOn).toContainEqual({ scopeId,
+    memoryId: identity.memoryId, revision: 1 });
+  if (change === 'corrected') {
+    await setup.append(`scope-${scopeId}`, 'memory.corrected', { scopeId,
+      memoryId: identity.memoryId, ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:2' });
+  }
+  if (change === 'forgotten') {
+    await setup.append(`scope-${scopeId}`, 'memory.forgotten', { scopeId,
+      memoryId: identity.memoryId });
+  }
+  const now = Date.now.bind(Date);
+  const clock = vi.spyOn(Date, 'now');
+  if (change === 'expired') {
+    clock.mockReturnValue(expires);
+  } else {
+    clock.mockImplementation(now);
+  }
+  try {
+    await refusesWithoutFact(body);
+  } finally {
+    clock.mockRestore();
+  }
+}
+it.each(['expired', 'corrected', 'forgotten'])(
+  'refuses a loaded fact that is %s before any fact append', obsoleteLoadedFact);
+
+async function missingLoadedEvidence(stage: string) {
+  const body = await recalledRemember('missing-evidence');
+  const selected = await preparationTurn(body);
+  if (stage !== 'absent') {
+    const original = await contextRecord();
+    const data = { ...original, turnId: 'preparation-turn', threadId: 'preparation-thread',
+      inputGeneration: 'preparation-input' };
+    await seedEvidence(data);
+    if (stage === 'empty') {
+      const loaded = { ...data, action: 'loaded', delivery: 'recall',
+        callDigest: '1'.repeat(64), dispatchDigest: '2'.repeat(64), byteCount: 1 };
+      await seedEvidence(loaded);
+    }
+  }
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  const response = await backendRemember(selected.body, selected.overrides);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+}
+it.each(['absent', 'prepared', 'empty'])(
+  'refuses valid personal proofs with %s loaded evidence', missingLoadedEvidence);
