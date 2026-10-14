@@ -2545,7 +2545,7 @@ async function forgetRecheck(change: 'other' | 'original' | 'removed' | 'removed
   async function* read(subject: string, from?: number, deadline?: number) {
     yield* original(subject, from, deadline);
     if (subject !== `scope-${scopeId}` || changed) return;
-    if (change === 'removed-late' && from === 1) return;
+    if (change === 'removed-late') return;
     changed = true;
     if (change === 'other') {
       await write('bob', 'person', 'forget-concurrent-write');
@@ -2556,6 +2556,16 @@ async function forgetRecheck(change: 'other' | 'original' | 'removed' | 'removed
       await append('member-bob', 'member.removed', { memberId: 'bob', removedBy: 'owner' });
     }
   }
+  const originalHead = nats.store.head.bind(nats.store);
+  async function head(subject?: string, deadline?: number) {
+    const position = await originalHead(subject, deadline);
+    if (change === 'removed-late' && subject === `scope-${scopeId}` && !changed) {
+      changed = true;
+      await append('member-bob', 'member.removed', { memberId: 'bob', removedBy: 'owner' });
+    }
+    return position;
+  }
+  const headSpy = vi.spyOn(nats.store, 'head').mockImplementation(head);
   const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(read);
   const appendSpy = vi.spyOn(nats.store, 'append');
   try {
@@ -2565,6 +2575,7 @@ async function forgetRecheck(change: 'other' | 'original' | 'removed' | 'removed
     expect(appendSpy).toHaveBeenCalledTimes(1);
   } finally {
     spy.mockRestore();
+    headSpy.mockRestore();
     appendSpy.mockRestore();
     if (change === 'removed' || change === 'removed-late') {
       await append('member-bob', 'member.joined', { memberId: 'bob', role: 'member',
