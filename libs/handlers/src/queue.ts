@@ -1,4 +1,5 @@
 import { handlerJobKey } from './job-key.ts';
+import { isDeepStrictEqual } from 'node:util';
 import { PgBoss, type Queue, type JobWithMetadata } from "pg-boss";
 import { parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { runHandler, type Logger } from "@opencrane/observability";
@@ -137,17 +138,63 @@ export class HandlerRuntime {
         localConcurrency: concurrency,
         pollingIntervalSeconds: 0.5,
       } as const;
+      const processJobs = async (jobs: JobWithMetadata<unknown>[]) => {
+        const job = jobs[0];
+        if (job) await this.apply(handler, job);
+      };
+      const processDeadJobs = async (jobs: JobWithMetadata<unknown>[]) => {
+        const job = jobs[0];
+        if (job) await this.recordExhaustion(handler, job);
+      };
       await this.boss.work<unknown, void, typeof workOptions>(
-        handler.name,
-        workOptions,
-        async (jobs) => {
-          const job = jobs[0];
-          if (job) {
-            await this.apply(handler, job);
-          }
-        },
+        handler.name, workOptions, processJobs,
       );
+      if (handler.exhausted) {
+        await this.boss.work<unknown, void, typeof workOptions>(
+          `${handler.name}-dead`, workOptions, processDeadJobs,
+        );
+      }
     }
+  }
+
+  private async recordExhaustion(handler: Handler, job: JobWithMetadata<unknown>): Promise<void> {
+    const parsed = parseEventByType(job.data);
+    const originalId = job.sourceId;
+    if (!parsed.success || !originalId || !handler.eventTypes.includes(parsed.event.type) ||
+        parsed.event.silo !== this.options.silo ||
+        handlerJobKey(handler.name, parsed.event) !== job.singletonKey) {
+      throw new Error('Invalid cleanup dead-letter job');
+    }
+    await this.reportFailedOriginal(handler, parsed.event, originalId, job.data);
+  }
+
+  /** Report a retained failed job, including when its diagnostic copy also failed. */
+  async reportFailedOriginal(
+    handler: Handler,
+    event: EventEnvelope,
+    originalId: string,
+    expectedData: unknown = event,
+  ): Promise<boolean> {
+    if (handler.name !== 'cleanup-memory' || event.type !== 'memory.forgotten' ||
+        event.silo !== this.options.silo) {
+      throw new Error('Invalid cleanup original');
+    }
+    const original = await this.options.db.query<{ state: string; data: unknown }>(
+      'SELECT state, data FROM pgboss.job WHERE name=$1 AND id=$2',
+      [handler.name, originalId],
+    );
+    const saved = original.rows[0];
+    if (saved?.state !== 'failed' || !isDeepStrictEqual(saved.data, expectedData)) {
+      return false;
+    }
+    if (!handler.exhausted) throw new Error('Cleanup exhaustion handler missing');
+    const appended = await handler.exhausted(event);
+    if (appended) {
+      const fields = { changeId: event.id,
+        scopeId: event.subject.slice('scope-'.length), jobId: originalId };
+      this.options.logger.error(fields, 'Memory cleanup retries exhausted');
+    }
+    return appended;
   }
 
   private async apply(
@@ -164,49 +211,44 @@ export class HandlerRuntime {
       throw new Error("Invalid handler job");
     }
     const event = parsed.event;
-    await runHandler(
-      this.options.logger,
-      {
-        handler: handler.name,
-        eventId: event.id,
-        eventType: event.type,
-        stream: event.subject,
-        attempt: job.retryCount + 1,
-      },
-      () =>
-        this.options.db.transaction((transaction) =>
-          withinAttempt(
-            transaction,
-            job.signal,
-            job.expireInSeconds,
-            async (tx) => {
-              // Hold this attempt until commit, so expiry or replay cannot start
-              // another SQL writer while the transaction is running.
-              const claim = await tx.query<{
-                state: string;
-                retry_count: number;
-              }>(
-                "SELECT state, retry_count FROM pgboss.job WHERE name = $1 AND id = $2 FOR UPDATE",
-                [handler.name, job.id],
-              );
-              if (
-                claim.rows[0]?.state !== "active" ||
-                claim.rows[0].retry_count !== job.retryCount
-              ) {
-                throw new Error("Handler attempt lost its claim");
-              }
-              const receipt = await tx.query(
-                "INSERT INTO handler_receipts VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING event_id",
-                [handler.name, event.id],
-              );
-              if (receipt.rows.length) {
-                await handler.handle(event, tx);
-              }
-              job.signal.throwIfAborted();
-            },
-          ),
-        ),
-    );
+    const database = this.options.db;
+    async function attempt(tx: Query) {
+      // Hold this attempt until commit, so expiry or replay cannot start
+      // another SQL writer while the transaction is running.
+      const claim = await tx.query<{ state: string; retry_count: number }>(
+        'SELECT state, retry_count FROM pgboss.job WHERE name = $1 AND id = $2 FOR UPDATE',
+        [handler.name, job.id],
+      );
+      if (claim.rows[0]?.state !== 'active' || claim.rows[0].retry_count !== job.retryCount) {
+        throw new Error('Handler attempt lost its claim');
+      }
+      const receipt = await tx.query(
+        'INSERT INTO handler_receipts VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING event_id',
+        [handler.name, event.id],
+      );
+      if (receipt.rows.length) {
+        await handler.handle(event, tx);
+      }
+      job.signal.throwIfAborted();
+    }
+    async function transactionWork(transaction: Query) {
+      await withinAttempt(transaction, job.signal, job.expireInSeconds, attempt);
+    }
+    async function perform() {
+      await database.transaction(transactionWork);
+    }
+    if (handler.name === 'cleanup-memory') {
+      // Keep custody errors out of logs and the job queue's saved error output.
+      try {
+        await perform();
+      } catch {
+        throw new Error('Memory cleanup attempt failed');
+      }
+      return;
+    }
+    const run = { handler: handler.name, eventId: event.id, eventType: event.type,
+      stream: event.subject, attempt: job.retryCount + 1 };
+    await runHandler(this.options.logger, run, perform);
   }
 
   /** Keep failed originals as the lasting failure list after diagnostic copies expire. */

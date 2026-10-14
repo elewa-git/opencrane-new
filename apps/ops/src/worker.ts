@@ -17,7 +17,7 @@ import { SandboxClient } from './kubernetes.ts';
 import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
 import { personalKeyHandler } from './personal-keys.ts';
 import { departureCleanupHandler } from './departure-cleanup.ts';
-import { memoryCleanupHandler } from './memory-cleanup.ts';
+import { memoryCleanupHandler, recoverMemoryCleanup } from './memory-cleanup.ts';
 import { dispatcherHandlerNames } from './dispatcher-handlers.ts';
 import type { Handler } from '@opencrane/handlers';
 import type { HandlerName } from '@opencrane/events';
@@ -151,6 +151,16 @@ try {
     const dispatcherRuntime = runtime;
     const commandStore = commands.store;
     async function startWorkers() {
+      if (memoryDirectory) {
+        const saved = await db.db.query<{ sequence: string }>(
+          'SELECT sequence FROM handler_dispatcher WHERE id=1',
+        );
+        const checkpoint = Number(saved.rows[0]?.sequence);
+        if (!Number.isSafeInteger(checkpoint) || checkpoint < 0) {
+          throw new Error('Dispatcher checkpoint is invalid for cleanup recovery');
+        }
+        await recoverMemoryCleanup(dispatcherRuntime, store, checkpoint);
+      }
       await dispatcherRuntime.work();
       async function scanNightly(occurrence: Date) {
         await scanNightlyMemory(db.db, commandStore, silo, occurrence);

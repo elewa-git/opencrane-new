@@ -408,7 +408,7 @@ export const eventRegistry: readonly EventDefinition[] = [
       ownerId: 'alice', memoryId: 'memory_1', expectedRevision: 1, revision: 2 },
   ),
   event('memory.cleanup_recorded', 'scope',
-    'The worker verified destruction of memory keys and removal of searchable text.',
+    'The worker verified memory cleanup or recorded that retries ran out.',
     memoryCleanupRecordedDataSchema,
     { schemaVersion: 1, scopeId: memoryWrittenExample.scopeId, scopeKind: 'person',
       ownerId: 'alice', changeId: 'forget-root', outcome: 'completed' }),

@@ -33,7 +33,7 @@ flowchart LR
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
   handlers -.-> events["libs/events<br/>reaction list"]
   handlers -.-> projections["libs/projections<br/>database helpers"]
-  handlers -->|saves jobs and checks database sessions| pg["PostgreSQL<br/>job queue"]
+  handlers -->|saves jobs and failed copies; checks database sessions| pg["PostgreSQL<br/>job queue"]
 ```
 
 ## What it is responsible for
@@ -43,6 +43,7 @@ flowchart LR
 - Run jobs about the same thing, such as one member, one after another, while
   jobs about different things run side by side.
 - Retry failed jobs and keep failed jobs from being skipped silently.
+- Let memory cleanup record a safe unavailable result when its retries run out.
 - Save a note that the job is done in the same database step as the reaction's
   changes, so its database changes are never applied twice.
 - Let an operator retry a failed job after fixing its cause.
@@ -66,6 +67,9 @@ the memory worker catches up.
 2. **A reaction fails.** Later jobs about the same thing wait, while jobs about
    other things carry on. An operator can repair the cause and retry the failed
    job, or deliberately cancel a failed original with the ops command.
+   For forgotten memory, the failed copy records that cleanup is unavailable.
+   The original remains ready for an operator retry. If reporting also fails,
+   startup recovery checks the original and records the missing result.
 
 3. **A release changes subscriptions.** The dispatcher reports which reactions and
    event types changed and waits for shutdown. With writers and workers stopped,

@@ -29,7 +29,10 @@ writes must share the supplied database. The role needs schema/table creation
 and DML rights. Run `npm run provision` with command credentials first (R3 by
 default; `NATS_REPLICAS=1` for local tests). Start
 telemetry in the host for real trace ids; every valid handler attempt uses
-observability's `runHandler` (name, event id, stream, attempt). Queue errors
+observability's `runHandler` (name, event id, stream, attempt), except memory cleanup.
+Its attempt errors may contain private custody details, so the runtime replaces them with
+a fixed error before pg-boss stores the failed attempt. It does not log the raw error.
+Queue errors
 are logged; dispatcher errors reject its promise and require host restart.
 
 The durable `handler-dispatcher` consumer reads `ev.>` from the beginning,
@@ -57,6 +60,13 @@ runtime against the same projection tables concurrently.
 Failed heads remain in place and block their stream. Monitor
 `runtime.deadLetters(name)` and pg-boss queue errors in the host. Each failure
 also has a diagnostic copy in `<handler>-dead` (14-day queued retention).
+`cleanup-memory` handles its copy after confirming that the original is failed.
+Its callback records one durable unavailable result. The runtime then logs only the
+change id, scope id and original job id. Duplicate copies cannot add another result.
+The ops recovery pass checks the same retained failed original after restart. If the
+callback exhausted its retries while the event store was down, recovery records the
+missing result and logs the same safe alert. A saved completion or unavailable result
+prevents another report. The failed original stays available for operator replay.
 Repair with `runtime.replay(name, originalJobId)`: it retries the original
 head once, preserving order. Never redrive the diagnostic copy. An operator can deliberately cancel a failed
 original with `npm run ops -- jobs --cancel <id>`. This records a cancelled job,

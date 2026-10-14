@@ -430,13 +430,16 @@ It contains no pass, credentials or arguments. Its conditional append orders tha
 call against policy and quarantine writes. No reaction sends a call on replay.
 Only the catalogue write position advances; tool policy and approval revision stay stable.
 
-## Memory cleanup completion
+## Memory cleanup results
 
 `memory.cleanup_recorded` version 1 names scope id/kind/owner and the initiating `changeId`.
-Its only current outcome is `completed`. It requires the matching scope subject,
+Its outcome is `completed` or `unavailable`. Unavailable requires the fixed
+`retry_exhausted` failure code; completion has no failure code. It requires the
+matching scope subject,
 `opencrane-worker` source/system principal and `commandId` equal to the event id.
 It contains no text, encrypted value or key reference. `cleanup-memory` subscribes to
-`memory.forgotten` only. Correction cleanup and unavailable evidence remain unimplemented.
+`memory.forgotten` only. A later completion may follow unavailable evidence for the same
+change after operator replay. Correction cleanup remains unimplemented.
 
 ## Nightly intent records
 

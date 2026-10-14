@@ -549,7 +549,7 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
 | `memory.corrected` | OpenCrane memory MCP (planned); nightly dreaming job (planned) | Postgres memory projection (planned) | correction cleanup is planned |
 | `memory.forgotten` | Person HTTP command (planned); other scopes disabled | Postgres memory projection hides the fact and all dependent facts | `cleanup-memory` destroys person revision and candidate keys and verifies search removal |
-| `memory.cleanup_recorded` | Configured cleanup worker | Memory projection checks the record; scope history retains completion status | — |
+| `memory.cleanup_recorded` | Configured cleanup worker after verified deletion or exhausted retries | Memory projection checks the fixed `completed` or `unavailable` outcome without changing fact rows; scope history retains both | — |
 | `memory.consolidated` | Reserved for later use; not emitted by MVP dreaming | Postgres memory projection for that scope | — |
 | `scope.promotion_requested` / `scope.promoted` | person / approver | scopes | OpenFGA viewer tuples; copy to the target dataset |
 
@@ -565,10 +565,13 @@ transaction, and never restores a hidden identity from a later write. Legacy tom
 still parse, but stop projection replay because their ownership is unknown.
 The configured dispatcher destroys person revision keys, next-revision candidates and
 pending copies. It records completion only after checking deletion markers and caught-up
-search removal. A failed append or verification leaves cleanup pending. The reaction
-checks saved targets and completed events before acting again, without model calls.
-HTTP forget/status, retry-exhaustion evidence and pending-job recovery after job-table loss
-are not built yet. Forget remains disabled for every scope until these work together.
+search removal. A failed append or verification leaves cleanup pending. Exhausted retries
+save one `unavailable` record with the fixed `retry_exhausted` code. The original failed
+job stays available for operator replay, which may later record `completed`. The dispatcher
+scans saved events in chunks through its checkpoint before starting workers and restores
+missing personal cleanup jobs after job-table loss. Completion, not a read table, decides
+whether work is finished. The reaction uses no model calls. HTTP forget and status remain
+disabled for every scope.
 
 Nightly dreaming currently records one blocked or missed intent per dirty scope and UTC night. The native pg-boss clock triggers at 02:00 UTC, with a 15-minute start window. Restart records only the latest missed night; facts stay dirty. Computer dispatch and spending remain disabled. Later work will run per scope through the gateway with a budget. It merges duplicates, flags contradictions and expires stale facts through `memory.corrected`; it never crosses scopes. `memory.consolidated` and the existing scope-promotion rows are retained for contract compatibility, with no MVP emitters or promotion reactions enabled. The stream table's older scope description includes these deferred operations. Sharing data across groups is a later design topic.
 

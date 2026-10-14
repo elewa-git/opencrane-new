@@ -148,10 +148,16 @@ function validForgotten(event: z.infer<typeof forgottenEnvelope>): boolean {
 export const memoryForgottenEventSchema = forgottenEnvelope
   .extend({ type: z.literal('memory.forgotten') }).refine(validForgotten, 'Invalid memory tombstone');
 
-export const memoryCleanupRecordedDataSchema = z.strictObject({
+const cleanupData = z.strictObject({
   schemaVersion: z.literal(1), scopeId: digest, scopeKind, ownerId: identifier,
-  changeId: identifier, outcome: z.literal('completed'),
+  changeId: identifier, outcome: z.enum(['completed', 'unavailable']),
+  failureCode: z.enum(['retry_exhausted']).optional(),
 });
+function validCleanupData(data: z.infer<typeof cleanupData>): boolean {
+  if (data.outcome === 'unavailable') return data.failureCode === 'retry_exhausted';
+  return data.failureCode === undefined;
+}
+export const memoryCleanupRecordedDataSchema = cleanupData.refine(validCleanupData);
 const cleanupEnvelope = eventEnvelopeSchema(memoryCleanupRecordedDataSchema);
 function validCleanup(event: z.infer<typeof cleanupEnvelope>): boolean {
   return event.subject === `scope-${event.data.scopeId}` &&

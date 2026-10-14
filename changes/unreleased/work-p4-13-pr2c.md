@@ -1,0 +1,1 @@
+Forgotten personal memory now records when key cleanup runs out of retries. If reporting fails while the event store is down, startup recovery records the missing result and alert after repair. An operator can retry the original job, and the dispatcher rebuilds pending cleanup jobs from saved events after job-table loss. Forget routes remain disabled.
