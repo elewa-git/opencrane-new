@@ -56,6 +56,7 @@ This internal API has no child-chat caller yet.
 - Turn a saved gateway record into repeatable configuration bytes. Keep the existing
   model and memory routes, and add rules for the reviewed tools. An explicit internal
   caller can replace the file and record its exact reply from the running gateway.
+  It checks again before returning that reply, so a withdrawal or replacement makes it invalid.
   Background delivery and a Ready read are not built yet.
 - Provide an optional gateway route for testing CONNECT, the HTTP request that
   opens a byte tunnel. It uses only the private relay address returned by the

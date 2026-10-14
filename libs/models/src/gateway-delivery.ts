@@ -2,7 +2,7 @@ import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { rename, rm, writeFile } from 'node:fs/promises';
 import { gatewayConfigurationSchema } from '@opencrane/events';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { z } from 'zod';
 import { envelope, history } from './actor.ts';
 import { gatewayConfigurationCurrent } from './gateway-generation.ts';
@@ -73,6 +73,15 @@ export function gatewayDelivery(options: {
       !writing && alive();
   }
 
+  async function currentObservation(delivered: NonNullable<typeof active>, row: StoredEvent) {
+    // Recheck after saving or recovering a receipt: its sources or child may have changed.
+    const current = await gatewayConfigurationCurrent(options.store, options.silo, delivered.record);
+    if (!current || !usable(delivered)) {
+      return null;
+    }
+    return row;
+  }
+
   async function observe() {
     const delivered = active;
     if (!delivered || !usable(delivered)) return null;
@@ -86,7 +95,9 @@ export function gatewayDelivery(options: {
       const id = `gateway-observed:${delivered.record.recordDigest}:` +
         `${delivered.configDigest}:${processRef}`;
       for (const row of rows) {
-        if (row.event.id === id) return row;
+        if (row.event.id === id) {
+          return await currentObservation(delivered, row);
+        }
       }
       const data = { generation: delivered.record.generation,
         recordDigest: delivered.record.recordDigest, configDigest: delivered.configDigest,
@@ -95,7 +106,8 @@ export function gatewayDelivery(options: {
       const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0 };
       const result = await options.store.append(command);
       if (result.status !== 'appended' || !usable(delivered)) return null;
-      return await options.store.readEvent(result.sequence);
+      const row = await options.store.readEvent(result.sequence);
+      return await currentObservation(delivered, row);
     } catch {
       // Leave an uncertain append for the next exact probe to recover from saved history.
       return null;

@@ -1965,8 +1965,11 @@ configDigest and a random reference for this process. A source-address rule admi
 127.0.0.1. The listener still opens on all interfaces; other source addresses receive 403.
 `observe` probes with a one-second deadline and compares the exact response. It checks
 that the child is alive, this delivery is still active and saved sources remain current.
-Only then does it conditionally append `gateway.configuration_observed`. A retry probes
-again and finds the original event after a lost reply. Preparation skips observations.
+Only then does it conditionally append `gateway.configuration_observed`. After reading
+the saved event, it checks the source positions, latest preparation and live child again
+before returning a loaded receipt. A retry probes again and finds the original event
+after a lost reply, with the same final checks. An invalidated observation returns null;
+its saved event alone does not establish current readiness. Preparation skips observations.
 Replay mode writes, probes and appends nothing. Creating a new delivery object requires
 another delivery and probe; saved receipts alone cannot acknowledge a restarted child.
 
