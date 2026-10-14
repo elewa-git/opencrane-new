@@ -357,9 +357,9 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `approval.expired` | timer | approvals | tell the computer |
 | `approval.cancelled` | decision service / approval reader | approvals | close the card when its logical turn or binding changes |
 | `approval.used` | decision service (single use) | approvals | — |
-| `effect.observed` | gateway log ingest | audit, usage | settle the actual cost; with no matching permit or a reservation overrun → `security.alert_raised` |
+| `effect.observed` | gateway log ingest | audit, usage | settle the actual cost; with no matching permit or a reservation overrun → `security.alert_raised`; a rooted overrun also saves `budget.root_stopped` |
 | `effect.uncertain` | settle timeout or `computer.lost` | audit, effects | notify for manual resolution |
-| `effect.resolved` | Owner/Admin | audit, effects | evidence, reservation id and integer settledCents; settle or release through settle-budget |
+| `effect.resolved` | Owner/Admin | audit, effects | evidence, reservation id and integer settledCents; settle or release through settle-budget; a rooted overrun saves `budget.root_stopped` and `security.alert_raised` |
 
 ### MCP catalogue, grants and connections
 
