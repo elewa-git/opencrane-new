@@ -10,6 +10,10 @@ function reply(rows: ReturnType<typeof row>[], nextCursor: string | null = null)
   return new Response(JSON.stringify({ rows, nextCursor }));
 }
 
+function changedReply(): Response {
+  return new Response('{"status":"list_changed"}', { status: 409 });
+}
+
 describe('server-backed conversations list', () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -65,9 +69,8 @@ describe('server-backed conversations list', () => {
   });
 
   it('stops after a second list change and offers Retry', async () => {
-    const changed = new Response('{"status":"list_changed"}', { status: 409 });
     const fetcher = vi.fn().mockResolvedValueOnce(reply([row('old')], 'next'))
-      .mockResolvedValueOnce(changed).mockResolvedValueOnce(changed);
+      .mockResolvedValueOnce(changedReply()).mockResolvedValueOnce(changedReply());
     const list = new ConversationList(fetcher);
 
     await list.change('recent', '');
@@ -166,8 +169,8 @@ describe('resume lookup', () => {
   });
 
   it('stops after a second lookup list change and keeps the failure retryable', async () => {
-    const changed = new Response('{"status":"list_changed"}', { status: 409 });
-    const fetcher = vi.fn().mockResolvedValue(changed);
+    const fetcher = vi.fn().mockResolvedValueOnce(changedReply())
+      .mockResolvedValueOnce(changedReply());
 
     await expect(findConversation('saved', fetcher)).rejects.toThrow('list_changed');
     expect(fetcher).toHaveBeenCalledTimes(2);
