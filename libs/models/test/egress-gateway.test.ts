@@ -1,3 +1,6 @@
+import { once } from 'node:events';
+import { request } from 'node:http';
+import { clientHello } from './egress-hello-fixture.ts';
 import { expect, it } from 'vitest';
 import { egressFixture, type EgressScenario } from './egress-fixture.ts';
 import { egressGatewayRoute } from '../src/egress-gateway.ts';
@@ -108,3 +111,30 @@ const publicListeners = ['http://0.0.0.0:4000', 'https://127.0.0.1:4000',
   'http://user@127.0.0.1:4000', 'http://127.0.0.1:4000/control',
   'http://127.0.0.1:4000/?token=canary'];
 it.each(publicListeners)('refuses a non-private control address: %s', refusesPublicControlListener);
+
+async function guardedTunnel(bytes: Buffer, connections: number) {
+  const setup = await egressFixture(true, true);
+  const bearer = await setup.token();
+  expect(await setup.tunnel(bearer, 'registry.npmjs.org:443', bytes)).toBe(200);
+  expect(setup.connected()).toBe(connections);
+  if (connections === 1) expect(setup.received()).toEqual(bytes);
+  else expect(setup.received()).toHaveLength(0);
+  expect(setup.received().includes(bearer)).toBe(false);
+  expect(setup.received().includes('secret-canary')).toBe(false);
+}
+it.each([[clientHello(), 1], [Buffer.from('GET https://registry.npmjs.org/ HTTP/1.1\r\n\r\n'), 0]])(
+  'checks tunnel bytes behind the real gateway before connecting', guardedTunnel);
+
+async function refusesAbsoluteHttp() {
+  const setup = await egressFixture(true, true);
+  const headers = { 'proxy-authorization': `Bearer ${await setup.token()}` };
+  const options = { host: '127.0.0.1', port: setup.port, method: 'GET',
+    path: 'https://registry.npmjs.org/', headers };
+  const outgoing = request(options);
+  const response = once(outgoing, 'response');
+  outgoing.end();
+  await response;
+  expect(setup.connected()).toBe(0);
+  expect(setup.received()).toHaveLength(0);
+}
+it('sends absolute-form plain HTTP to no upstream', refusesAbsoluteHttp);

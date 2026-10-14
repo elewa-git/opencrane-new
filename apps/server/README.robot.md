@@ -963,6 +963,10 @@ selects its endpoint from events, strips caller headers and never invokes tools.
 Restart reconciles unfinished registrations; terminal evidence is never rediscovered
 by this worker. PostgreSQL replay only rebuilds the register.
 
+`isPublicAddress` and `remoteEndpoint` now live in `libs/models/src/address-policy.ts`.
+Remote discovery and registration import them from `@opencrane/models`; the code
+and remote discovery behaviour are unchanged.
+
 The OC1 guarded transport source is commit `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`.
 Every HTTPS connection checks all DNS answers, pins its checked address and verifies
 the original TLS hostname. IP URLs, credentials, queries/fragments, redirects,

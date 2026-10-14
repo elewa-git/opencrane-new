@@ -11,9 +11,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks startup, member and child access, indexed departures, final tool and memory sends, renewal access before spending stops, memory setup, fact links, tool reviews, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -.->|checks public tool addresses, startup, member and child access, indexed departures, final tool and memory sends, renewal access before spending stops, memory setup, fact links, tool reviews, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes, authenticated instance observations and stops, control intent, memory facts, recall references and choices, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
-  server -->|records changes, authenticated instance observations and stops, control intent, memory facts, recall references and choices, grants, roles, participants, chats, computers, provider choices, drains, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
@@ -258,7 +257,8 @@ These reads contain dates and fact references, with no saved memory text or new 
    Lists reuse permission facts within the request and check for changes after each
    answer from the permissions service.
 7. **An admin adds a tool server.** The server checks the remote address, lists its
-   tools and leaves them blocked until an admin reviews them.
+   tools and leaves them blocked until an admin reviews them. Remote discovery uses
+   the public address checks shared by `libs/models`.
    A member can read their own private instance and request its stop through HTTP.
    Reading status never starts it or releases credentials. A missing result stays unknown.
 8. **An assistant asks an AI model for help.** The request goes through agentgateway, the

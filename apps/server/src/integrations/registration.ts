@@ -1,5 +1,5 @@
 import { startupContractRejection } from './startup-credentials.ts';
-import { remoteEndpoint } from './address-policy.ts';
+import { remoteEndpoint } from '@opencrane/models';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';

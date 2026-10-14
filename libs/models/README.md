@@ -13,14 +13,12 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals including private reviews, saved fact references and recall progress, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks public tool addresses, reads, calls, control, private reviews, saved fact references and recall progress, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
   models -->|checks revision, spending and the catalogue before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
-  server["apps/server<br/>back end and models process"] -.->|checks reads, calls, control, approvals including private reviews, saved fact references and recall progress, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
-  models -->|checks spending before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
-  models -->|stages credentials and checks safe cleanup| custody["Kubernetes<br/>private credentials"]
-  models <-->|checks calls, holds and spending stops; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
+  models <-->|checks calls, holds and spending stops; tests private CONNECT routing and public address checks| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on, saves spending, checks connection changes together, saves instance reports and matching child admission records| store["libs/event-store<br/>event log"]
 ```
@@ -45,6 +43,9 @@ Other hosted images still need image admission.
 
 ## What it is responsible for
 
+- Share public address checks with the server’s remote tool discovery. Test a socket
+  check that accepts one visible TLS hostname and public DNS answers before connecting.
+  Relay registration and lifetime controls are still needed.
 - Provide an optional gateway route for testing CONNECT, the HTTP request that
   opens a byte tunnel. It uses only the private relay address returned by the
   decision service. Normal startup keeps this route off. Computers cannot use it
@@ -201,7 +202,8 @@ Native execution remains disabled.
 
 An isolated gateway test opens a CONNECT tunnel after the decision is saved and
 the spending process grants one send. A saved stop or access change prevents that
-send. This proves routing order; it does not prove safe HTTPS access yet.
+send. A separate test adds TLS hostname and public address checks before connecting.
+The full relay still needs one-use registration and lifetime controls.
 
 A private credential stage saves one generation and returns its reference, UID and version.
 Recovery needs its saved identity or an exact identity supplied by the caller.
