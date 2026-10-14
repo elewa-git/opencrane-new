@@ -44,7 +44,7 @@ function logNumber(line: string, field: string): number | undefined {
   return Number.isSafeInteger(number) ? number : undefined;
 }
 interface McpRoute { serverId: string; connectionId: string; upstream: string }
-function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
+export function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
   const segment = z.string().regex(/^[\w-]{1,200}$/u);
   segment.parse(route.serverId); segment.parse(route.connectionId);
   const path = `/mcp/${route.serverId}/${route.connectionId}`;
@@ -74,7 +74,7 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
       urlRewrite: { path: { full: `/dispatch${path}` } },
     }, backends: [{ host: new URL(decisionUrl).host }] };
 }
-function gatewayConfig(
+export function gatewayConfig(
   port: number, readinessPort: number, decisionUrl: string, keyFile: string,
   issuer: string, upstream?: string, mcpRoutes: McpRoute[] = [],
   egressDecisionUrl?: string,

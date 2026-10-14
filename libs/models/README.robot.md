@@ -1845,9 +1845,41 @@ added. Complete loaded-reference checks on every dispatch remain separate work.
 Publication commands save one exact review reference and return the original saved position on retry.
 `prepareGatewayConfiguration` is an explicit internal operation, with no worker registration.
 It saves reviewed MCP entries, source positions and a digest on `gateway-config-<silo>`.
-It rereads after competing conditional appends. The renderer, fixed model/memory routes,
-delivery and acknowledgement are deferred to the next parts. Replay calls no preparation.
+It rereads after competing conditional appends. The renderer below adds fixed model/memory routes.
+Delivery and acknowledgement are deferred to the next parts. Replay calls no preparation.
 `gatewayConfigurationCurrent` rejects changed sources or a replaced gateway record.
 Each new generation keeps the other servers' entries from the last saved generation.
 Only the server being prepared needs its latest intent. This lets two replacement
 intents prepare in order even when both were saved before either preparation.
+
+## Saved gateway configuration renderer (P3-4 PR 2b; Part of #45)
+
+`renderGatewayConfiguration(record, settings)` returns `configBytes` (a UTF-8 Buffer)
+and `configDigest` (the SHA-256 of those exact bytes). It checks the saved record with
+`gatewayConfigurationSchema`, its record digest and every member's fragment digest.
+Settings supply listener ports, a plain HTTP loopback decision URL with an explicit port,
+issuer, key file path, optional model upstream and egress URL, and the internal memory route.
+The function reads no files, environment, clock or random values. The key stays in its file.
+
+The existing `gatewayConfig` and `mcpRoute` builders keep startup output unchanged.
+Each saved member supplies one exact POST route. Its CEL rule permits only one
+`tools/call` method header and one non-Block name from that entry. Joined header values
+prevent repeated headers from matching. Tool names must match `[a-zA-Z0-9_.-]{1,128}`.
+Unknown names and entries with no enabled tools have no allowed rule.
+The renderer refuses duplicate server ids, paths, route names and tool names, including
+collisions with memory. Personal and company account modes are refused.
+
+HTTP ext_authz uses fixed `x-opencrane-gateway-generation`, `x-opencrane-record-digest`,
+`x-opencrane-server-id`, `x-opencrane-connection-id` and `x-opencrane-review-revision`
+expressions. These replace caller values in the authorisation request. Outbound headers
+use the existing fixed list; saved entries cannot provide header names or expressions.
+Changing one entry changes the complete record digest in every MCP route. Other routes
+remain byte-identical apart from the required global generation and record digest.
+
+`test/gateway-renderer.test.ts` checks deterministic replay, fixed routes, generated rules,
+digest and input refusals, and private-data canaries. Pinned-gateway file loading, zero
+dispatch counts for refused names/methods, duplicate-header handling and spoof replacement
+are NOT RUN here; they remain PR 2c to keep this change near 600 lines. Runtime rule
+enforcement is not established by comparing configuration text. No delivery, reload,
+witness, acknowledgement, worker or admission change is included. Fresh-install
+qualification is NOT RUN.
