@@ -57,12 +57,17 @@ export async function memoryRights(store: EventStore, binding: Binding,
     'conversation' | 'turn' | 'thread'>, parsed: ReturnType<typeof parseMemoryRequest>,
   deadline: number, includeDispatch?: (...subjects: string[]) => void) {
   const activity = await liveMemoryTurn(store, binding, claims, parsed, deadline);
+  let writeAuthority: Awaited<ReturnType<typeof decisionAuthorityFence>> | undefined;
   const rights = await check(deadline);
   return { ...rights, confirm: check };
 
   async function check(checkDeadline = deadline) {
-    const authority = await decisionAuthorityFence(store, performance.now(), [],
+    const authority = writeAuthority ?? await decisionAuthorityFence(store, performance.now(), [],
       claims.requester, claims.assistant, undefined, checkDeadline);
+    // Keep the original write check so removing and restoring a grant still refuses the write.
+    if (parsed.input?.operation === 'remember') {
+      writeAuthority = authority;
+    }
     async function confirmAuthority() {
       await confirmDecisionAccess(activity, authority, false);
     }

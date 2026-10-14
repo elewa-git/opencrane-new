@@ -2513,6 +2513,10 @@ It refuses absent, prepared-only, empty, invalidated or ended evidence. Immediat
 append it reads only conversation rows after the saved sequence, including participation
 closes, and refuses new evidence or closure for that turn. The command validates all
 loaded references, including expiry, corrections, tombstones and supporting keys.
+After that tail read it checks rights again under the original deadline. The write keeps
+its original access snapshot, so revoking and restoring a grant cannot revive that check.
+The production MCP route tests change the assistant's write grant during this read,
+with and without restoring it. Both require HTTP 403 and an unchanged memory stream.
 It keeps the existing conditional scope append and command receipt recovery.
 
 Row 2 still needs complete loaded-set checks before model/tool dispatch and turn grant

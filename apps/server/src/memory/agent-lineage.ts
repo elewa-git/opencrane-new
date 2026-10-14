@@ -58,6 +58,8 @@ export function confirmAgentLineage(options: MemoryOptions, context: MemoryConte
         }
       }
     }
+    // Recheck access because grants can change while the conversation tail is read.
+    await confirmRights();
     if (Date.now() >= context.exp * 1000 || performance.now() >= deadline) {
       throw new MemoryRefused();
     }

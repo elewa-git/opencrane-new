@@ -1202,6 +1202,9 @@ installations keep working without a remember policy.
 `memoryRights` returns a final check that reads saved grants, current permissions and tool
 policy again. It reuses the conversation history already read. The server calls it before
 the conditional append, with the capability's original deadline.
+For remember, repeated checks retain the original `decisionAuthorityFence`. They refuse
+relevant access changes even when a removed grant has already been restored. Reads still
+take a fresh access snapshot. Neither path adds conversation history to the access check.
 It uses the dispatcher's `confirmDecisionAccess` loop. Access and later activity
 checks repeat until both see no new events. A harmless admission cannot hide a
 revocation saved while it is read. The original deadline still ends the check.
