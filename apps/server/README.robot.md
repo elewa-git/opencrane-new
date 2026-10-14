@@ -2499,8 +2499,8 @@ Fresh-install qualification and real model/tool calls: NOT RUN.
 ## Renewal after budget stops (P3-14 PR 3; Part of #55)
 
 `turnCommand` checks the saved turn and immutable payer before returning a renewal.
-`turnBudgetStop` shares the models budget fold and compares the original computer
-admission position with applicable stops, including recovered limits. It reads the
+`turnBudgetStop` shares the models budget fold and compares the original queued message
+position with applicable stops, including recovered limits. It reads the
 budget history before the two-second membership check and only new rows afterwards.
 Membership is checked before reporting a spending refusal, including after the final
 budget read. Closed turns and conflicting thread requesters keep their access refusals.
@@ -2548,8 +2548,12 @@ Only credential-free, current reviewed catalogues qualify. No preparation worker
 ## Queued admission after a spending stop
 
 New turn admission passes the saved human message position and the payer selection
-into the existing provider/budget summary. It checks before returning a token and
-again within the existing short write check, reading only new budget events there.
+into the existing provider/budget summary. Personal work uses the default selected
+before that message was saved. Admission checks once before starting the computer
+append and again after it returns, reading only new budget events within the short
+write check. Renewal keeps the message position, including a start saved after
+a stop and a limit increase. Tests pause that append and verify the recording gateway
+issues no send permission before the asynchronous handler runs.
 A saved budget turn stop also closes that turn in the chat summary. Legacy member
 stops retain their previous fold. Read and viewer authority checks are unchanged.
 Bridge stop-first delivery is deferred to P3-14 PR 4b.

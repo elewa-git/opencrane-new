@@ -105,10 +105,16 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   await fresh?.();
   await saveTurn(store, facts, event, data);
   if (refusal) throw refusal;
-  if (input.status === 'started') return { ...data, threadId: z.string().parse(data.threadId),
+  // Check stops saved while the separate computer append was waiting before returning a pass.
+  await fresh?.();
+  if (input.status === 'started') return admittedTurn(data, executionMode);
+  return undefined;
+}
+
+function admittedTurn(data: TurnBinding, executionMode: ExecutionMode | undefined) {
+  return { ...data, threadId: z.string().parse(data.threadId),
     executionMode: executionMode ?? 'memory_free',
     ...(data.sharingClass ? { sharingClass: data.sharingClass } : {}) };
-  return undefined;
 }
 
 function startExecutionMode(facts: ComputerFacts, input: TurnInput) {
@@ -121,7 +127,7 @@ async function startAuthority(store: EventStore, context: TurnContext, conversat
   const started = facts.turn?.firstStart;
   if (started) {
     const work = { ...data, assistantId: context.assistantId };
-    const admittedAt = started.sequence;
+    const admittedAt = conversation.message!.position;
     const stop = await turnBudgetStop(store, context.silo, work, admittedAt,
       performance.now() + 10_000);
     const authority = await requireTurnMember(store, context.silo, data.requesterId);

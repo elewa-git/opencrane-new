@@ -6,6 +6,7 @@ import { registerHandler } from '@opencrane/handlers';
 import { listOpenConversations, type Query } from '@opencrane/projections';
 import { history, envelope } from './actor.ts';
 import { closesDecisionTurn } from './approvals.ts';
+import { queuedPersonalPayer } from './provider-turns.ts';
 import { applyBudget, budgetStopId, data, emptyBudget, type BudgetState } from './state.ts';
 
 type Session = Extract<Awaited<ReturnType<typeof listOpenConversations>>[number],
@@ -32,11 +33,13 @@ async function requireIndex(db: Query, position: number) {
 }
 
 async function queuedPayer(store: EventStore, silo: string, session: Session,
-  state: BudgetState, deadline: number) {
+  position: number, deadline: number) {
   const rows = await history(store, `assistant-${session.assistantId}`, silo, deadline);
   for (const row of rows) {
     if (row.event.type !== 'assistant.created') continue;
-    if (data(row.event)['kind'] === 'personal') return state.defaultPayingGroupId;
+    if (data(row.event)['kind'] === 'personal') {
+      return queuedPersonalPayer(store, silo, position, deadline);
+    }
     return session.payingGroupId;
   }
   throw new Error('Assistant unavailable for queued budget stop');
@@ -46,11 +49,10 @@ async function affectedWork(store: EventStore, event: EventEnvelope, session: Se
   state: BudgetState, deadline: number) {
   const rows = await history(store, `conversation-${session.conversationId}`, event.silo, deadline);
   const works = new Map<string, Work>();
-  let payer: string | undefined;
   for (const row of rows) {
     if (row.sequence > state.sequence || row.event.type !== 'message.posted' ||
         data(row.event)['authorKind'] !== 'human') continue;
-    payer ??= await queuedPayer(store, event.silo, session, state, deadline);
+    const payer = await queuedPayer(store, event.silo, session, row.sequence, deadline);
     works.set(row.event.id, { conversationId: session.conversationId,
       turnId: row.event.id, assistantId: session.assistantId, payingGroupId: payer,
       position: row.sequence });
@@ -66,7 +68,8 @@ async function affectedWork(store: EventStore, event: EventEnvelope, session: Se
       const saved = computerTurnStartedDataSchema.parse(start.event.data);
       if (saved.conversationId !== session.conversationId) continue;
       // Keep the admitted payer even if the installation default later changes.
-      works.set(turnId, { ...saved, position: start.sequence });
+      const position = works.get(turnId)?.position ?? start.sequence;
+      works.set(turnId, { ...saved, position });
     }
   }
   await readStreamSummary(store, event.silo, `computer-${session.assistantId}`,

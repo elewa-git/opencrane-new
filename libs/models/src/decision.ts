@@ -145,6 +145,16 @@ function activeTurn(turnToken: z.infer<typeof legacyTurnSchema>,
   return requireRecordedActiveTurn(turnToken, facts.firstStart, facts.firstClose);
 }
 
+function queuedPosition(conversation: StoredEvent[], turn: StoredEvent) {
+  const turnId = data(turn.event)['turnId'];
+  function requestedTurn(row: StoredEvent) {
+    return row.event.type === 'message.posted' && row.event.id === turnId;
+  }
+  const queued = conversation.find(requestedTurn);
+  // Use history already loaded before access checks. Legacy turns may have no message.
+  return queued?.sequence ?? turn.sequence;
+}
+
 function requireActiveConversationTurn(conversation: StoredEvent[], turnId: string) {
   function closesCurrentTurn(row: StoredEvent) {
     return closesDecisionTurn(row.event, turnId);
@@ -234,6 +244,7 @@ export async function startDecision(
       const conversation = activity.conversation;
       requireActiveConversationTurn(conversation, turnToken.turn);
       const turn = activeTurn(turnToken, activity.computer, checked.sequence);
+      const admittedAt = queuedPosition(conversation, turn);
       const grants = await modelGrantHistory(actor, turnToken.model, route, decisionDeadline);
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
       const authority = await decisionAuthorityFence(actor.store, started,
@@ -268,9 +279,9 @@ export async function startDecision(
           assistantId: computer.assistant, requesterId: turnToken.requester,
           conversationId: turnToken.conversation, turnId: turnToken.turn, threadId: turnToken.thread,
           payingGroupId: z.string().min(1).parse(data(turn.event)['payingGroupId']), contextDigest };
-        await actor.checkBudget(modelCall, fresh, turn.sequence);
+        await actor.checkBudget(modelCall, fresh, admittedAt);
         const decisionId = await audit('allow', 'memory_read_allowed');
-        const budget = { modelCall, decisionId, admittedAt: turn.sequence };
+        const budget = { modelCall, decisionId, admittedAt };
         await fresh();
         const memorySend = prepareMemorySend(memory.payload, identity.memory.memoryContext);
         mcpSender.setPermit(res, 'allow', policy, raw, requestId, fresh,
@@ -303,7 +314,7 @@ export async function startDecision(
         contextDigest = digestContext([call.contextDigest, policy]);
         // Check stops before opening or consuming an approval. Zero-cost calls hold no money.
         const modelCall = { ...call, requestId, model: 'mcp-zero-cost' };
-        await actor.checkBudget(modelCall, fresh, turn.sequence);
+        await actor.checkBudget(modelCall, fresh, admittedAt);
         await fresh();
         const approvalBinding = {
           requesterId: turnToken.requester, assistantId: computer.assistant,
@@ -315,7 +326,7 @@ export async function startDecision(
         linkApprovalAttempt(toolFacts, approvalId);
         const decisionId = await audit(outcome, reason,
           approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
-        const budget = { modelCall, decisionId, admittedAt: turn.sequence };
+        const budget = { modelCall, decisionId, admittedAt };
         await fresh();
         mcpSender.setPermit(res, outcome, policy, raw, requestId, fresh, fresh.deadline, budget);
         res.setHeader('x-request-id', requestId);
@@ -334,13 +345,13 @@ export async function startDecision(
       requireConnectedClient(req, res);
       const modelCall = { ...call, requestId };
       // Keep the original turn stopped after a limit increase, before holding any money.
-      const reservation = await actor.reserve(modelCall, amountCents, fresh, turn.sequence);
+      const reservation = await actor.reserve(modelCall, amountCents, fresh, admittedAt);
       const decisionId = await allowModel(reservation);
       const bodyHash = createHash('sha256');
       bodyHash.update(raw);
       const dispatch = { callId: requestId, decisionId, bodyDigest: bodyHash.digest('hex'),
         reservationId: reservation, modelCall };
-      await actor.admitDispatch(dispatch, fresh, turn.sequence);
+      await actor.admitDispatch(dispatch, fresh, admittedAt);
       res.setHeader('x-request-id', requestId);
       res.setHeader('x-reservation-id', reservation); res.end('{}');
     })().catch(async (error: unknown) => {

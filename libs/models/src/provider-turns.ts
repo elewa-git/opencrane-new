@@ -5,7 +5,8 @@ import { readStreamSummary, type EventStore, type StoredEvent,
 
 type Choice = { providerId: string; bindingSequence: number; model: string; state: 'active' | 'paused' };
 type Routing = { draining: boolean; choices: Map<string, Choice> };
-type Mode = { enabled: boolean; budget: BudgetState };
+type PersonalPayer = { position: number; payingGroupId: string };
+type Mode = { enabled: boolean; budget: BudgetState; personalPayers: PersonalPayer[] };
 type QueuedWork = { conversationId: string; turnId: string; position: number;
   payingGroupId?: string | undefined };
 
@@ -38,7 +39,7 @@ const providerRouting: SummaryKind<Routing> = {
 };
 
 function emptyMode(): Mode {
-  return { enabled: false, budget: emptyBudget() };
+  return { enabled: false, budget: emptyBudget(), personalPayers: [] };
 }
 
 function emptyEnabled() {
@@ -51,7 +52,12 @@ function addEnabled(summary: { enabled: boolean }, row: StoredEvent) {
 }
 function addMode(summary: Mode, row: StoredEvent) {
   addEnabled(summary, row);
+  const previousPayer = summary.budget.defaultPayingGroupId;
   applyBudget(summary.budget, row.event, row.sequence);
+  const payingGroupId = summary.budget.defaultPayingGroupId;
+  if (payingGroupId !== undefined && payingGroupId !== previousPayer) {
+    summary.personalPayers.push({ position: row.sequence, payingGroupId });
+  }
 }
 // Keep status readable when older holds lack call details.
 const providerEnabled: SummaryKind<{ enabled: boolean }> = {
@@ -71,10 +77,30 @@ export function managedProviderCallsEnabled(store: EventStore, silo: string, dea
   return readStreamSummary(store, silo, `budget-${silo}`, providerEnabled, deadline, takeEnabled);
 }
 
+function personalPayerBefore(summary: Mode, position: number) {
+  function precedesWork(payer: PersonalPayer) {
+    return payer.position < position;
+  }
+  const payer = summary.personalPayers.findLast(precedesWork);
+  // Bind work queued before installation setup to the first configured payer.
+  // Later changes must not move that work to another payer.
+  return payer?.payingGroupId ?? summary.personalPayers[0]?.payingGroupId;
+}
+
+export function queuedPersonalPayer(store: EventStore, silo: string,
+  position: number, deadline: number) {
+  function takePayer(summary: Mode) {
+    return personalPayerBefore(summary, position);
+  }
+  // Keep the message's payer through later default changes, including delayed stop delivery.
+  return readStreamSummary(store, silo, `budget-${silo}`, providerMode, deadline, takePayer);
+}
+
 export async function providerTurnAdmission(store: EventStore, silo: string,
   assistantId: string, deadline: number, queued?: QueuedWork) {
   function takeBudgetAdmission(summary: Mode) {
-    const defaultPayingGroupId = summary.budget.defaultPayingGroupId;
+    const defaultPayingGroupId = queued
+      ? personalPayerBefore(summary, queued.position) : summary.budget.defaultPayingGroupId;
     let stopId: string | undefined;
     if (queued) {
       const work = { ...queued, assistantId,

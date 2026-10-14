@@ -1908,7 +1908,10 @@ There is no route, caller, running-turn fan-out or model call in this part.
 `stop-budget-turns` subscribes to `budget.ceiling_set` and `budget.exhausted`.
 It folds through the source event and requires the conversations checkpoint to
 reach that position. It reads saved computer admissions with their original payer
-and position. Queued human messages use the personal default or session payer.
+and position. Queued human messages use the personal default from before their saved
+message position, or the session payer. The provider summary retains default changes
+and their positions, so delayed handling and admission choose the same payer. Work
+queued before setup uses the first configured default; no configured default still refuses.
 `budgetStopId` selects affected work. Each conditional conversation append uses
 a deterministic id from silo, stop id, conversation and turn. Conflicts reread;
 lost replies retry without a second stop. Existing Stop and terminal reports win.
@@ -1919,10 +1922,12 @@ Provider status reads only the saved switch-on flag. It does not need call detai
 from older spending holds.
 
 The provider admission summary now folds spending stops while reading its existing
-budget history. First admission checks active stops and stops after the queued message position;
-renewed turns retain the first computer admission position. Capacity still guards every send.
-Both history loads precede the short
-access check. Reader authority streams are unchanged.
+budget history. First admission checks active stops and stops after the queued message position.
+Renewal and model, MCP and memory dispatch use that message position from their existing
+conversation summary. Legacy dispatch records with no message retain the computer
+admission position. Admission checks again after the computer append, before returning
+a pass. A saved stop does not wait for the handler to prevent a send.
+History loads precede the short access check. Reader authority streams are unchanged.
 
 Tests use real NATS, PostgreSQL, OpenFGA and a recording model gateway. Bridge
 stop-first delivery and reconnect coverage are deferred to PR 4b. Computer grant
