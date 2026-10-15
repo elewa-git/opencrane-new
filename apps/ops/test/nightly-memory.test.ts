@@ -157,6 +157,34 @@ async function expiredDependency() {
 }
 it('selects expired dependency metadata without the dependent fact', expiredDependency, 30_000);
 
+async function repeatedExpiredPin() {
+  await setup(false);
+  const original = { ...written('pinned'), pinned: true,
+    expiresAt: '2026-10-12T01:59:00.000Z' };
+  await append('memory.written', original);
+  const repeated = { ...original, expiresAt: null };
+  await append('memory.written', repeated);
+  await scan('2026-10-12T02:00:00Z');
+  expect(await records()).toEqual([]);
+}
+it('keeps a repeated expired pin out of nightly selection', repeatedExpiredPin, 30_000);
+
+async function repeatedReviewedFact() {
+  await setup(false);
+  const original = written('reviewed');
+  await append('memory.written', original);
+  await scan('2026-10-12T02:00:00Z');
+  const first = memoryMaintenanceRecordedDataSchema.parse((await records())[0]);
+  const reviewed = { ...first, action: 'no_changes', reason: null,
+    reviewedPosition: first.inputRefs[0]!.position };
+  await append('memory.maintenance_recorded', reviewed);
+  const before = await records();
+  await append('memory.written', original);
+  await scan('2026-10-13T02:00:00Z');
+  expect(await records()).toEqual(before);
+}
+it('keeps an identical repeat clean after an exact nightly review', repeatedReviewedFact, 30_000);
+
 async function boundedPrefix() {
   await setup(false);
   for (let index = 0; index < 33; index++) {

@@ -2812,6 +2812,16 @@ async function originalBinding() {
   await runner.run(projection);
   const cleanAgain = await get(`${path('dreamer')}/maintenance`, 'dreamer');
   expect(cleanAgain.json()).toMatchObject({ status: 'clean', waitingCount: 0, nextAt: null });
+  await append(written.subject, 'memory.written', written.data);
+  const expiredPin = await write('dreamer', 'person', 'expired-nightly-pin',
+    'A pinned fact', true, 'acme', [], '2026-10-12T01:59:00.000Z');
+  const pinnedData = memoryWrittenDataSchema.parse(expiredPin.data);
+  const repeatedPin = { ...pinnedData, expiresAt: null };
+  await append(expiredPin.subject, 'memory.written', repeatedPin);
+  await runner.run(projection);
+  const repeatedStatus = await get(`${path('dreamer')}/maintenance`, 'dreamer');
+  expect(repeatedStatus.statusCode).toBe(200);
+  expect(repeatedStatus.json()).toMatchObject({ status: 'clean', waitingCount: 0, nextAt: null });
   expect((await get(`${path('dreamer')}/maintenance`, 'admin')).statusCode).toBe(404);
   expect((await get(`${path('dream-sales', 'group')}/maintenance`, 'admin')).statusCode).toBe(404);
 }
