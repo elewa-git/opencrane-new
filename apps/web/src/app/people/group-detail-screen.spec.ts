@@ -82,6 +82,59 @@ function rootElement(fixture: ComponentFixture<GroupDetailScreen>): HTMLElement 
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it('opens member search from the local group header and keeps supplied groups locked', async () => {
+  const local = await mount(response({ rows: [group] }));
+  expect(local.querySelector('header.detail-heading .button.primary')?.textContent)
+    .toContain('Add members');
+  findButton(local, 'Add members').click();
+  expect(local.textContent).toContain('Add people to Sales team');
+  expect(local.textContent).toContain('Only active members of your organisation appear.');
+  expect(globalThis.document.activeElement?.tagName).toBe('INPUT');
+  const supplied = await mount(response({ rows: [suppliedGroup] }), suppliedGroup.groupId);
+  expect(supplied.textContent).toContain('Membership comes from your identity provider');
+  expect([...supplied.querySelectorAll('button')].some((button) =>
+    button.textContent?.trim() === 'Add members')).toBe(false);
+});
+
+it('adds one person and waits for both records before showing Added', async () => {
+  const directory = { rows: [{ memberId: 'bob', displayName: 'Bob', email: 'bob@example.test',
+    role: 'member', status: 'joined', joinedAt: '2026-10-01T00:00:00.000Z', groups: [] }],
+    next: null, counts: { members: { status: 'current', value: 1 },
+      groups: { status: 'current', value: 1 },
+      pendingInvitations: { status: 'current', value: 0 },
+      acceptedInvitations: { status: 'current', value: 0 } },
+    checkedAt: '2026-10-01T00:00:00.000Z', projection: { content: 'current' },
+    permissions: { invite: true } };
+  const replies = [response({ rows: [group] }), response(directory),
+    response({ status: 'appended', groupId: group.groupId, sequence: 1, changeId: 'change' }),
+    response({ status: 'appended', groupId: group.groupId, sequence: 1, changeId: 'change',
+      projection: { content: 'current', iam: 'current' } }),
+    response({ rows: [{ ...group, members: [...group.members,
+      { memberId: 'bob', displayName: 'Bob', membershipSource: 'local' }] }] })];
+  const calls: SeenRequest[] = [];
+  const fixture = await mountWithFetch(makeFetch(replies, calls));
+  const root = rootElement(fixture);
+  findButton(root, 'Add members').click();
+  fixture.detectChanges();
+  const field = root.querySelector<HTMLInputElement>('input[placeholder="Search name or email"]');
+  if (!field) throw new Error('Expected the member search field');
+  field.value = 'Bob';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('No groups');
+  });
+  findButton(root, 'Add').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('Added Bob to Sales team');
+  });
+  expect(calls.filter(isPostRequest)).toHaveLength(1);
+  expect(calls.find(isPostRequest)?.body).toMatch(
+    /^\{"action":"add","commandId":"[^"]+","memberId":"bob"\}$/u);
+  expect(root.textContent).toContain('Already a member');
+});
+
 it('lets admins create a shared assistant for an identity-provider group', async () => {
   const root = await mount(response({ rows: [suppliedGroup] }), suppliedGroup.groupId);
   const link = root.querySelector<HTMLAnchorElement>('a.button.primary');

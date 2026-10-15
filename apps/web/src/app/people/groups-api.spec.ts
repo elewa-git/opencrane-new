@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { classifyStatus, fetchChange, followChange } from './groups-api';
+import { classifyStatus, fetchChange, followChange, sendAddMember } from './groups-api';
 
 it('classifies read and write statuses separately', () => {
   expect(classifyStatus(401, 'POST')).toBe('access_changed');
@@ -8,6 +8,20 @@ it('classifies read and write statuses separately', () => {
   expect(classifyStatus(400, 'POST')).toBe('invalid');
   expect(classifyStatus(409, 'POST')).toBe('conflict');
   expect(classifyStatus(503, 'GET')).toBe('unavailable');
+});
+
+it('sends an add command to the group with exactly the supplied body', async () => {
+  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    status: 'appended', groupId: 'sales', sequence: 2, changeId: 'change',
+  })));
+  vi.stubGlobal('fetch', fetcher);
+  const body = { action: 'add', commandId: 'new-command', memberId: 'alex' };
+  const result = await sendAddMember('sales', body, new AbortController().signal);
+  expect(result.kind).toBe('ok');
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher.mock.calls[0]?.[0]).toBe('/api/groups/sales');
+  expect(JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string)).toEqual(body);
+  vi.unstubAllGlobals();
 });
 
 it('marks a schema mismatch as unavailable', async () => {

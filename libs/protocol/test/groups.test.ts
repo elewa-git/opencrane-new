@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { createGroupCommandSchema, groupRowSchema, removeMemberCommandSchema } from '../src/groups.ts';
+import { addMemberCommandSchema, createGroupCommandSchema, groupRowSchema,
+  removeMemberCommandSchema } from '../src/groups.ts';
 
 const sample = {
   groupId: 'sales-team', name: 'Sales team', membershipSource: 'local', position: 0,
@@ -27,4 +28,11 @@ it('rejects unknown create command fields', () => {
 it('rejects a group id on the strict remove command', () => {
   expect(removeMemberCommandSchema.safeParse({ action: 'remove', commandId: 'cmd',
     memberId: 'alex', groupId: 'sales' }).success).toBe(false);
+});
+
+it('accepts only the add action and its three command fields', () => {
+  const body = { action: 'add', commandId: 'new-command', memberId: 'alex' };
+  expect(addMemberCommandSchema.safeParse(body).success).toBe(true);
+  expect(addMemberCommandSchema.safeParse({ ...body, groupId: 'sales' }).success).toBe(false);
+  expect(addMemberCommandSchema.safeParse({ ...body, action: 'remove' }).success).toBe(false);
 });
