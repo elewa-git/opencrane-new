@@ -465,7 +465,8 @@ async function refusesOnlyOneTurn(refusal: string, sharedChild = false) {
   const assistantId = `team-${prefix}`;
   const computerId = `${prefix}-computer`;
   await append(`assistant-${assistantId}`, 'assistant.created', {
-    assistantId, ownerId: 'sales', kind: 'team', payingGroupId: `${prefix}-payer`,
+    assistantId, ownerId: sharedChild ? `${prefix}-payer` : 'sales',
+    kind: 'team', payingGroupId: `${prefix}-payer`,
   });
   await append(`computer-${assistantId}`, 'computer.claimed', {
     assistantId, computerId, generation: 1, tokenId: 'token:test',
