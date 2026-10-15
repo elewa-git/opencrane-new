@@ -14,7 +14,7 @@ export interface GatewayRenderSettings {
   keyFile: string;
   upstream?: string;
   egressDecisionUrl?: string;
-  memoryRoute: Parameters<typeof mcpRoute>[0];
+  memoryRoute?: Parameters<typeof mcpRoute>[0];
 }
 
 const DECISION_HEADERS = {
@@ -125,7 +125,9 @@ export function renderGatewayConfiguration(input: unknown, settings: GatewayRend
   const servers = new Set<string>();
   const paths = new Set<string>();
   const names = new Set<string>();
-  reserveRoute(settings.memoryRoute, servers, paths, names);
+  if (settings.memoryRoute) {
+    reserveRoute(settings.memoryRoute, servers, paths, names);
+  }
   const routes = [];
   for (const member of record.members) {
     const entry = member.entry;
@@ -135,7 +137,10 @@ export function renderGatewayConfiguration(input: unknown, settings: GatewayRend
     reserveRoute(entry, servers, paths, names);
     routes.push(reviewedRoute(entry, record, settings));
   }
-  const memoryRoutes = [settings.memoryRoute];
+  const memoryRoutes = [];
+  if (settings.memoryRoute) {
+    memoryRoutes.push(settings.memoryRoute);
+  }
   const config = gatewayConfig(settings.port, settings.readinessPort, settings.decisionUrl,
     settings.keyFile, settings.issuer, settings.upstream, memoryRoutes, settings.egressDecisionUrl);
   config.routes.push(...routes);

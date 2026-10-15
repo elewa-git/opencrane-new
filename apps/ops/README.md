@@ -12,7 +12,7 @@ This is the background workers layer. `apps/server` records events, and these wo
 flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events, departures, owner appointments and memory facts| ops["apps/ops<br/>workers and memory replay"]
-  ops -->|records departure changes, confirmed computer losses and spending stops| nats
+  ops -->|records gateway preparations, departure changes and spending stops| nats
   ops -.->|checks memory history and revisions| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables and jobs; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
@@ -46,6 +46,10 @@ flowchart LR
 - Runs one-off upgrades for model access, the default budget group and handler subscriptions.
 
 ## Processes it handles
+
+The dispatcher prepares one complete gateway configuration for each current reviewed
+publication request. Jobs for the same silo run in saved order. Old or withdrawn
+requests do nothing. Rebuilding tables never prepares or delivers configuration.
 
 A spending stop creates durable jobs on the existing dispatcher. Each job checks
 saved admissions and records Stop for affected turns, even with no computer connected.

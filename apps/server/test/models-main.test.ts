@@ -4,9 +4,11 @@ import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { randomUUID, generateKeyPairSync } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { expect, it } from 'vitest';
 import { z } from 'zod';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -77,7 +79,8 @@ it('exits when NATS stays unavailable beyond the reconnect window', async () => 
   }
 }, 60_000);
 
-async function runningModelsFixture(nats: Awaited<ReturnType<typeof natsFixture>>, databaseUrl: string) {
+async function runningModelsFixture(nats: Awaited<ReturnType<typeof natsFixture>>, databaseUrl: string,
+  extraEnv: NodeJS.ProcessEnv = {}) {
   const directory = await mkdtemp(`${tmpdir()}/oc-models-retry-`);
   const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
   await writeFile(`${directory}/key.pem`, key.privateKey, { mode: 0o600 });
@@ -89,6 +92,7 @@ async function runningModelsFixture(nats: Awaited<ReturnType<typeof natsFixture>
   const decisionPort = await freePort();
   const gatewayPort = await freePort();
   const readinessPort = await freePort();
+  const controlPort = await freePort();
   const child = spawn(process.execPath, ['--experimental-strip-types', modelsMain], {
     cwd: resolve('.'),
     env: {
@@ -102,17 +106,19 @@ async function runningModelsFixture(nats: Awaited<ReturnType<typeof natsFixture>
       MODEL_DECISION_PORT: String(decisionPort),
       MODEL_GATEWAY_PORT: String(gatewayPort),
       MODEL_READINESS_PORT: String(readinessPort),
+      MODEL_GATEWAY_CONTROL_PORT: String(controlPort),
       AGENTGATEWAY_BINARY: agentgateway,
       MODEL_KEY_FILE: `${directory}/key.pem`,
       MODEL_UPSTREAM: '127.0.0.1:9',
       OPENFGA_API_URL: 'http://127.0.0.1:9',
       OPENFGA_STORE_ID: 'test',
       OPENFGA_MODEL_ID: 'test',
+      ...extraEnv,
     },
     stdio: 'ignore',
   });
   await waitForReadiness(child, readinessPort);
-  return { child, directory, usageFile, readinessPort, initialUsageId };
+  return { child, directory, usageFile, readinessPort, gatewayPort, controlPort, initialUsageId };
 }
 
 async function freePort() {
@@ -184,7 +190,7 @@ it.each([undefined, { d: 'not-a-private-key' }, { alg: 'ES384' }, { crv: 'P-384'
       timeout: 20_000,
       env: { ...process.env, ...nats.env(), DATABASE_URL: await dbs.postgres(), SILO_ID: 'test',
         TOKEN_ISSUER: 'https://lifecycle.test/', MODEL_STATE_DIR: directory, MODEL_JWKS_FILE: `${directory}/jwks.json`, MODEL_DECISION_PORT: '0',
-        MODEL_GATEWAY_PORT: '0', MODEL_READINESS_PORT: '0', AGENTGATEWAY_BINARY: `${directory}/gateway`,
+        MODEL_GATEWAY_CONTROL_PORT: '43004', MODEL_GATEWAY_PORT: '0', MODEL_READINESS_PORT: '0', AGENTGATEWAY_BINARY: `${directory}/gateway`,
         OPENFGA_API_URL: 'http://127.0.0.1:1', OPENFGA_STORE_ID: 'test', OPENFGA_MODEL_ID: 'test' },
     }).then(() => '', (error: unknown) => z.object({ stderr: z.string() }).parse(error).stderr);
     expect(result).toContain(patch ? 'ZodError' : 'Gateway digest mismatch');
@@ -209,7 +215,7 @@ it.each(['startup', 'migration'] as const)('upgrades an existing budget through 
     await writeFile(`${directory}/gateway`, 'deliberately untrusted test binary');
     const env = { ...process.env, ...nats.env(), DATABASE_URL: await dbs.postgres(), SILO_ID: 'test',
       TOKEN_ISSUER: 'https://lifecycle.test/', MODEL_STATE_DIR: directory, MODEL_JWKS_FILE: `${directory}/jwks.json`, MODEL_DECISION_PORT: '0',
-      MODEL_GATEWAY_PORT: '0', MODEL_READINESS_PORT: '0', AGENTGATEWAY_BINARY: `${directory}/gateway`,
+      MODEL_GATEWAY_CONTROL_PORT: '43004', MODEL_GATEWAY_PORT: '0', MODEL_READINESS_PORT: '0', AGENTGATEWAY_BINARY: `${directory}/gateway`,
       DEFAULT_PAYING_GROUP_ID: 'installation-default',
       OPENFGA_API_URL: 'http://127.0.0.1:1', OPENFGA_STORE_ID: 'test', OPENFGA_MODEL_ID: 'test' };
     for (let restart = 0; restart < 2; restart++) {
@@ -240,3 +246,67 @@ it.each(['startup', 'migration'] as const)('upgrades an existing budget through 
       { conversationId: 'chat', turnId: 'message', threadId: 'thread', status: 'started' })).toMatchObject({ payingGroupId: 'installation-default' });
   } finally { await nats.close(); await dbs.close(); await rm(directory, { recursive: true, force: true }); }
 }, 40_000);
+
+async function restartsLatestWithoutStartupTools() {
+  const nats = await natsFixture();
+  const dbs = await databases();
+  let requests = 0;
+  function record(_request: import('node:http').IncomingMessage,
+    response: import('node:http').ServerResponse) {
+    requests += 1;
+    response.end('{}');
+  }
+  const upstream = createHttpServer(record);
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const address = upstream.address();
+  if (!address || typeof address === 'string') throw new Error('No upstream port');
+  const canary = { serverId: 'canary', connectionId: 'installed',
+    upstream: `127.0.0.1:${address.port}`, generation: 'canary',
+    revisionHeader: 'x-opencrane-mcp-revision' };
+  const env = { MODEL_MCP_ROUTES: JSON.stringify([canary]) };
+  const databaseUrl = await dbs.postgres();
+  const identities = new Set<string>();
+  try {
+    for (const generation of [1, 2]) {
+      const saved = { changeRef: `change-${generation}`, generation,
+        rendererVersion: '1', members: [] };
+      const data = { ...saved, recordDigest: publicationDigest(saved) };
+      await nats.seed([envelope('test', 'gateway-config-test',
+        'gateway.configuration_requested', data)]);
+    }
+    for (let restart = 0; restart < 2; restart++) {
+      const fixture = await runningModelsFixture(nats, databaseUrl, env);
+      try {
+        const response = await fetch(`http://127.0.0.1:${fixture.gatewayPort}/mcp/canary/installed`,
+          { method: 'POST', signal: AbortSignal.timeout(2000) });
+        expect(response.status).toBe(404);
+        async function observed() {
+          const rows = await history(nats.store, 'gateway-config-test', 'test');
+          expect(rows).toHaveLength(3 + restart);
+          const last = rows.at(-1)!;
+          expect(last.event.data).toMatchObject({ generation: 2, outcome: 'loaded' });
+          const data = z.object({ processRef: z.string() }).parse(last.event.data);
+          identities.add(data.processRef);
+        }
+        await expect.poll(observed, { timeout: 10_000 }).toBeUndefined();
+      } finally {
+        await stopModelsFixture(fixture);
+      }
+    }
+    expect(identities.size).toBe(2);
+    expect(requests).toBe(0);
+  } finally {
+    upstream.close();
+    upstream.closeAllConnections();
+    await nats.close();
+    await dbs.close();
+  }
+}
+it('re-delivers only the latest saved generation after restart and ignores startup MCP routes',
+  restartsLatestWithoutStartupTools, 40_000);
+
+function publicationDigest(value: unknown) {
+  const encoded = JSON.stringify(value);
+  return losslessJson(encoded).digest;
+}

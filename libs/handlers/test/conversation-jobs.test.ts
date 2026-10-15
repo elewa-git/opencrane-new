@@ -98,3 +98,33 @@ async function queuesHistoricalConversationJobs() {
 }
 it('backfills creation, removal and re-addition on one conversation key in saved order',
   queuesHistoricalConversationJobs);
+
+async function ordersGatewayPublications() {
+  const storage = await fixture();
+  const applied: string[] = [];
+  function handle(saved: EventEnvelope) {
+    applied.push(saved.id);
+    return Promise.resolve();
+  }
+  const handler = registerHandler('prepare-gateway-configuration', handle);
+  const runtime = await storage.runtime([handler]);
+  try {
+    const alpha = { ...event('alpha', 'mcp-alpha', 'mcp.server_published'),
+      data: { serverId: 'alpha', publishedBy: 'admin' } };
+    const bravo = { ...event('bravo', 'mcp-bravo', 'mcp.server_published'),
+      data: { serverId: 'bravo', publishedBy: 'admin' } };
+    expect(handlerJobKey(handler.name, alpha)).toBe('gateway-config-test');
+    expect(handlerJobKey(handler.name, bravo)).toBe('gateway-config-test');
+    await runtime.enqueue(handler, alpha, storage.db);
+    await runtime.enqueue(handler, bravo, storage.db);
+    await runtime.work();
+    function bothApplied() {
+      return Promise.resolve(applied.length === 2);
+    }
+    await until(bothApplied);
+    expect(applied).toEqual(['alpha', 'bravo']);
+  } finally {
+    await storage.close();
+  }
+}
+it('runs publications from different servers in one silo order', ordersGatewayPublications);

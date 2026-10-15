@@ -2134,3 +2134,17 @@ wiring, startup route removal, generation admission and fresh-install qualificat
 
 Tests use the pinned gateway, disposable NATS and PostgreSQL. The replay CLI compares
 rebuilt policy with the live projection; it writes no events or gateway configuration.
+
+## Ordered gateway delivery (P3-4 PR 3c; Part of #45)
+
+Preparation drops carried members whose source policy or publication is no longer
+current. Delivery refuses any record except the latest saved current one before
+replacing the file. The worker keeps one delivery object and allows no overlapping
+ticks. Lost observation or receipt replies recover fixed ids on a later probe.
+Leadership is checked before file replacement, probes and receipt appends.
+Render settings come from the startup gateway options. Memory is optional; when
+present its route bytes are unchanged. Replay performs no delivery or observation.
+
+Left for part d: Ready/applying/disabled/unknown reads and their failure/deadline
+coverage. Generation admission and final-send checks remain row 4. Fresh-install
+qualification is NOT RUN. The approval journey prints SKIP until rows 4, 5 and 14.

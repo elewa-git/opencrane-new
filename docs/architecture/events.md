@@ -376,8 +376,8 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
 | `mcp.dispatch_admitted` | models process | catalogue write position only; preserve tool rules, policy revision and check dates | Order one-use send admission with policy and hold changes on `mcp-<server>`. Replay never sends a call. |
-| `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue and exact publication intent | no preparation during replay; no delivery worker yet |
-| `gateway.configuration_requested` | explicit preparation | serial generation, complete reviewed tool entries and source positions | explicit file delivery; no call admission |
+| `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue and exact publication intent | `prepare-gateway-configuration` orders publication jobs per silo; withdrawal alone prepares nothing; no preparation during replay |
+| `gateway.configuration_requested` | ordered publication handler | serial generation, complete reviewed tool entries and source positions | models leader delivers and probes only the latest current record; no replay delivery or call admission |
 | `gateway.configuration_observed` | exact response from the live gateway child | generation, recordDigest, configDigest, processRef, outcome, observedAt | evidence only; no call admission or Ready read |
 | `mcp.configuration_observed` | live gateway delivery after an exact observation | original publication, review, source position, fragment and gateway digests, generation and process reference | save one receipt per operation on the server stream; preserve policy and approvals; no call admission or Ready read |
 | `mcp.tools_changed` | drift check | catalogue (before/after snapshots, dated new catalogue, changed policyRevision and durable drift hold) | shared policy denies calls and cancels old approvals on their next read; the models watch closes dispatch before saving drift; legacy publication cannot clear the hold; acknowledged restoration remains unbuilt |
@@ -689,6 +689,7 @@ events. Desktop admission additionally requires an explicit member
 
 | Handler | Subscribed events |
 | --- | --- |
+| `prepare-gateway-configuration` | `mcp.server_published` |
 | `stop-mcp-instance` | `mcp.instance_stop_requested` |
 | `cleanup-departure` | `member.removed` |
 | `cleanup-memory` | `memory.forgotten` |

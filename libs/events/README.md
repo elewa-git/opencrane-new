@@ -29,7 +29,7 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks published child answers, child requests, hosted image results, registration, startup, saved turn and spending stop references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, subscriptions, nightly memory reviews and records, and cleanup results| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication subscriptions, nightly memory reviews and records, and cleanup results| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication receipts and gateway records, tool admission, personal connection references and blocks, expired saves, control, private and shared turns, root allowances, source-linked root stops, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
@@ -140,6 +140,9 @@ Define records that close expired connection saves without carrying credentials.
 These records let live cleanup prove a delayed save can no longer succeed.
 
 ## Processes it handles
+
+The publication subscription names the worker that prepares complete gateway
+configurations. Withdrawal has no preparation subscription.
 
 Budget turn stops carry only their reason kind and a reference to the saved spending
 stop. Participants can read them without seeing amounts or payer ids. Member stops

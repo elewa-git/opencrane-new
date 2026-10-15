@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|delivers configuration; checks calls and spending; tests per-call model keys, CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|delivers and probes only the latest current configuration; checks calls, spending, holds and stops against queued work; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on; saves hosted image results and registration, publication receipts, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions; checks private child calls and root activity before refusing them| store["libs/event-store<br/>event log"]
 ```
@@ -64,12 +64,12 @@ This internal API has no child-chat caller yet.
   and report counts and times once. Production callers are still needed.
 - Save publication requests and prepare ordered gateway records. These records do not enable calls.
 - Turn a saved gateway record into repeatable configuration bytes. Keep the existing
-  model and memory routes, and add rules for the reviewed tools. An explicit internal
-  caller can replace the file and record its exact reply from the running gateway.
+  model and memory routes, and add rules for the reviewed tools. The models worker
+  writes only the latest current configuration and records its exact reply from the running gateway.
   It checks again before returning that reply, so a withdrawal or replacement makes it invalid.
   Each server gets one saved receipt for its publication request. Receipts and calls
   keep that request current unless the reviewed rules or intent change.
-  Background delivery and a Ready read are not built yet.
+  A Ready read is not built yet.
 - Provide an optional gateway route for testing CONNECT, the HTTP request that
   opens a byte tunnel. It uses only the private relay address returned by the
   decision service. Normal startup keeps this route off. Computers cannot use it

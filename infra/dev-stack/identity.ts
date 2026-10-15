@@ -6,7 +6,8 @@ export const project = `opencrane-dev${secondary ? `-${stackId}` : ''}`;
 export const namespace = `opencrane-dev${secondary ? `-${stackId}` : ''}`;
 export const ownerPorts = { PG_PORT: '55433', NATS_PORT: '44222', FGA_PORT: '48080',
   MINIO_PORT: '49000', MINIO_CONSOLE_PORT: '49001', SERVER_PORT: '48000', WEB_PORT: '44200',
-  MODEL_GATEWAY_PORT: '43000', MODEL_DECISION_PORT: '43001', MODEL_READINESS_PORT: '43002', MODEL_STUB_PORT: '43003', CLAMD_PORT: '43310' };
+  MODEL_GATEWAY_PORT: '43000', MODEL_DECISION_PORT: '43001', MODEL_READINESS_PORT: '43002', MODEL_STUB_PORT: '43003', CLAMD_PORT: '43310',
+  MODEL_GATEWAY_CONTROL_PORT: '43004' };
 export const ports = Object.fromEntries(Object.entries(ownerPorts).map(([name, fallback], index) => {
   const port = secondary ? String(25000 + Number(stackId) * 100 + index) : (index < 7 || name === 'CLAMD_PORT' ? process.env[name] : undefined) ?? fallback;
   if (!/^\d+$/u.test(port) || Number(port) < 1024 || Number(port) > 65535) throw new Error(`Invalid ${name}`);

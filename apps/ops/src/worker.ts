@@ -19,6 +19,7 @@ import { personalKeyHandler } from './personal-keys.ts';
 import { departureCleanupHandler } from './departure-cleanup.ts';
 import { memoryCleanupHandler, recoverMemoryCleanup } from './memory-cleanup.ts';
 import { McpKubernetes } from './mcp-kubernetes.ts';
+import { prepareGatewayConfigurationHandler } from './gateway-configuration.ts';
 import { stopMcpInstanceHandler } from './mcp-stop.ts';
 import { dispatcherHandlerNames } from './dispatcher-handlers.ts';
 import type { Handler } from '@opencrane/handlers';
@@ -117,7 +118,8 @@ try {
       process.env['COMPUTER_POOL'] ?? 'computer', process.env['COMPUTER_STORAGE'] ?? '10Gi');
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),
       issuer: required('TOKEN_ISSUER') });
-    const available = [authorisation.handler, ownershipSeedHandler(commands.store),
+    const available = [prepareGatewayConfigurationHandler(commands.store, silo),
+      authorisation.handler, ownershipSeedHandler(commands.store),
       ownershipConfirmationHandler(commands.store), budgetStopHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
       ...lifecycleHandlers(commands.store), departureCleanupHandler(commands.store, authorisation)];

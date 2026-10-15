@@ -18,6 +18,7 @@ import { publicationDigest } from '../src/publication.ts';
 import { gatewayConfigurationCurrent, prepareGatewayConfiguration }
   from '../src/gateway-generation.ts';
 import { startGateway } from '../src/gateway.ts';
+import { gatewayConfigurationWorker } from '../src/gateway-configuration-worker.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
 import { freePort, gatewayFixture } from './gateway-delivery-fixture.ts';
 
@@ -669,3 +670,47 @@ async function refusesOldDelivery() {
 }
 it('refuses an older saved record passed directly to delivery without changing the file',
   refusesOldDelivery);
+
+async function reconcilesLatestOnly() {
+  const setup = await fixture();
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  const previousRows = await history(setup.nats.store, 'gateway-config-test', 'test');
+  const previousObservation = gatewayObservationSchema.parse(previousRows.at(-1)!.event.data);
+  const { recordDigest: _digest, ...previous } = setup.record;
+  const saved = { ...previous, generation: 2, changeRef: 'latest' };
+  const next = { ...saved, recordDigest: publicationDigest(saved) };
+  await setup.nats.seed([envelope('test', 'gateway-config-test',
+    'gateway.configuration_requested', next)]);
+  let leader = true;
+  function requireLeader() {
+    if (!leader) return Promise.reject(new Error('Leadership lost'));
+    return Promise.resolve();
+  }
+  const options = { ...setup.options, requireLeader };
+  const worker = gatewayConfigurationWorker(options);
+  onTestFinished(worker.close);
+  async function observed() {
+    await worker.check();
+    const rows = await history(setup.nats.store, 'gateway-config-test', 'test');
+    expect(rows.at(-1)!.event.data).toMatchObject({ generation: 2, outcome: 'loaded' });
+  }
+  setup.faulty.loseNextReply();
+  await expect.poll(observed, { timeout: 5000 }).toBeUndefined();
+  const oldPath = `/configuration/1/${previousObservation.processRef}`;
+  const oldWitness = await fetch(`http://127.0.0.1:${options.controlPort}${oldPath}`,
+    { signal: AbortSignal.timeout(1000) });
+  expect(oldWitness.status).toBe(404);
+  const file = await stat(setup.options.configFile);
+  await worker.check();
+  expect((await stat(setup.options.configFile)).ino).toBe(file.ino);
+  expect(await memberReceipts(setup)).toHaveLength(1);
+  leader = false;
+  await expect(worker.check()).rejects.toThrow();
+  expect((await stat(setup.options.configFile)).ino).toBe(file.ino);
+  const replay = gatewayConfigurationWorker({ ...options, mode: 'replay' });
+  const position = await setup.nats.store.head();
+  await replay.check();
+  expect(await setup.nats.store.head()).toBe(position);
+}
+it('reconciles only the latest generation, recovers a lost reply and stops on lost leadership',
+  reconcilesLatestOnly);

@@ -617,3 +617,11 @@ they verify that a refusal leaves provider state unchanged.
 
 OpenFGA uses its default limit of 100 tuples per atomic write. A new group chat has
 at most 97 people, leaving space for its creator, silo and event receipt.
+
+## Gateway control and approval journey
+
+`MODEL_GATEWAY_CONTROL_PORT` is last in the port list: owner 43004, secondary slots
+25112 and 25212. It is never published or forwarded. The gateway admits loopback
+sources only on this listener. `MODEL_MCP_ROUTES` is no longer supplied.
+The approval journey prints `SKIP approval journey: waits for #45 rows 4, 5 and 14`.
+It cannot report PASS through the former seeded startup route.

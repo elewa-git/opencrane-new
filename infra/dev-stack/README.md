@@ -19,7 +19,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
-  stack -->|runs checks and saves owner tool reviews| journeys["Journeys and timer<br/>browser checks, saved-data repeats and daily run"]
+  stack -->|runs checks; skips the approval journey| journeys["Journeys and timer<br/>browser checks, saved-data repeats and daily run"]
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|uses local cluster| devbox
 ```
@@ -33,12 +33,7 @@ flowchart LR
   include email claims in their signed tokens.
 - Prepare the local Kubernetes cluster so that the server can start a sandboxed computer for each member.
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
-- Run browser checks against real local services. The approval check sends Codex's
-  tool request shape. The thread id ties the call to its live chat turn. The call id
-  links the tool's attempts and progress reports. The signed-in owner saves an exact
-  review of the test tools before the approval check uses them.
-  The local tool stand-in checks that a call names its current tool definition and
-  running instance before recording it.
+- Run browser checks against real local services. The approval journey is currently skipped.
 - Check group chats from the To line, participant access, direct chats, shared assistants and
   provider key saving in a fresh stack.
 - Keep one extra computer place so a saved-data repeat can start a new shared assistant.
@@ -48,17 +43,20 @@ flowchart LR
 
 ## Processes it handles
 
+The models process gets a separate control port for checking loaded configuration.
+The stack never forwards it. The approval journey is skipped while publication
+and call checks are being connected.
+
 1. **A developer starts OpenCrane.** The scripts start the databases and services, then
    start the server, workers and website. The usual start also runs the core browser check.
    Computers update in place after their next pause and keep their home files.
    Admission checks allow only the checked image and settings.
 2. **A developer checks a change.** A browser signs in, sends a chat message and checks
-   that the reply remains after a reload. Other checks cover uploads, approvals, budgets
+   that the reply remains after a reload. Other checks cover uploads, budgets
    and the computer screen. The organisation checks also cover groups, direct chats, shared
    assistants and saving a provider key. Group chat checks cover the mode before the first
    message, who can read each message, quiet ordinary sends, and access clearing after a
    person leaves. Budget checks restore the test limits even if a browser step fails.
-   Failed approval checks save the card's text and a screenshot before closing the test turn.
 3. **A developer runs a separate stack.** `claim.sh` reserves one of two spare test stacks, numbered 1 and 2.
    Its services use separate data and ports, and `down.sh --id` removes that stack and
    releases its id.
