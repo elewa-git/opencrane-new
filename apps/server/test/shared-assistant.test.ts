@@ -572,8 +572,11 @@ async function refusesOnlyOneTurn(refusal: string) {
     server.close();
   }
 }
-it.each(['payer', 'conversation', 'participation'])(
-  'refuses one member after %s changes and admits another on the same bridge', refusesOnlyOneTurn);
+async function refusesUnpaidTurn() {
+  await refusesOnlyOneTurn('payer');
+}
+it('refuses an unpaid turn, accepts Stop and admits another member on the same bridge',
+  refusesUnpaidTurn);
 
 // Reuse the list probe to bound the work for many sessions on one assistant.
 async function listsSixtyTeamSessions() {
@@ -624,6 +627,9 @@ async function listsSixtyTeamSessions() {
 }
 it('lists 60 private team sessions without repeating each assistant access check',
   listsSixtyTeamSessions, 120_000);
+
+it.each(['conversation', 'participation'])(
+  'refuses one member after %s changes and admits another on the same bridge', refusesOnlyOneTurn);
 
 async function refusesRevokedOwnerGroupBeforeIamCatchesUp() {
   await append('team-support', 'team.member_added', {

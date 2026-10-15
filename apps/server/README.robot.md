@@ -2,6 +2,30 @@
 
 For people, read [README.md](README.md) first.
 
+## Close-safe turn acknowledgements (P4-6 PR 4, first part; Part of #88)
+
+A stored `conversation.closed` on either `conversation-<id>` or legacy
+`participation-<id>` refuses delayed starts with an ordinary `ack.refused`.
+No token, expiry, model or context is returned. A never-admitted turn records one
+failed `computer.turn_closed`. Already admitted work remains for PR 5 cleanup;
+refusing a pass is not evidence that execution stopped. Exact replays and new
+report sequences receive the same refusal. The shared connection stays open.
+
+`ChatFacts.turnEnded` tracks turn completion and budget stops separately from
+`conversationClosed`. The turn-ended refusal remains `Turn is closed`.
+Credential delivery reads incremental chat facts before context, after context
+and after signing, with membership checked before release. These reads add no
+conversation stream or close position to `authorityFence`.
+
+The chat summary keeps its content append position separate from a later legacy
+close. Late reports retain their digest, duplicate and sequence checks. The approval
+watcher checks both conversation and participation positions before leaving a pending
+approval unchanged. Closure cancels that approval through the existing reader.
+
+Left out to keep this change small: frozen history/socket output, paging past hidden
+rows, permanent list status, public close and execution cleanup. This is server
+admission support only. Fresh-install qualification: NOT RUN.
+
 Member directory GETs return `permissions.invite: true` after current Owner/Admin
 checks. Detail GETs return `changeRole` and `remove: true` for active non-owner
 targets, including the caller. Owner targets keep both false. Member headers keep

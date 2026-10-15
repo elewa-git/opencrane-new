@@ -72,7 +72,7 @@ export async function recordRecall(options: MemoryOptions, context: MemoryContex
   const { inputGeneration } = evidence;
   // Include ordinary activity that arrived during access checks without changing the proof.
   const chat = await readChatFacts(options.store, options.silo, context.conversation, context.turn);
-  if (chat.closed) {
+  if (chat.turnEnded || chat.conversationClosed) {
     throw new Error('Memory turn ended');
   }
   const rows = await history(options.store, `scope-${rights.scope.scopeId}`, options.silo,

@@ -4,8 +4,9 @@ import { dirname } from 'node:path';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
+import { until } from '@opencrane/authz/testing';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from '@opencrane/models/testing';
-import { parseMemoryRequest, readToolPolicy } from '@opencrane/models';
+import { history, ingestUsage, parseMemoryRequest, readToolPolicy } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
@@ -622,8 +623,20 @@ async function refusesCallsAfterClose(subject: string) {
   expect(setup.received()).toBe(1);
   expect(setup.actor.state.reservations).toHaveLength(reservations);
   expect(setup.actor.state.dispatches).toHaveLength(dispatches);
-  await setup.settled();
-  await setup.settled();
+  const reservationId = setup.actor.state.reservations[0]!.id;
+  async function settleUsage() {
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    const effects = await history(setup.nats.store, `effect-${reservationId}`, 'test');
+    for (const row of effects) {
+      if (row.event.type === 'effect.observed') {
+        await setup.actor.settleRecorded(reservationId, row.event.id);
+      }
+    }
+    return setup.actor.state.reservations[0]?.settledCents !== undefined;
+  }
+  // Run the normal settlement command while this fixture's background worker is paused.
+  await until(settleUsage);
+  await settleUsage();
   expect(setup.actor.state.reservations[0]?.settledCents).toBeGreaterThan(0);
   const settlements = [];
   for await (const row of setup.nats.store.readStream('budget-test')) {
