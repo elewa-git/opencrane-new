@@ -1,7 +1,7 @@
 // Keep the chat read and send flow together. Participant commands live in their own file.
 /* eslint max-lines: ["error", { max: 650, skipBlankLines: true, skipComments: true }] */
 import {
-  ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, effect, inject,
+  ChangeDetectionStrategy, Component, ElementRef, HostListener, afterEveryRender, effect, inject,
   signal, viewChild, type OnDestroy, type OnInit,
 } from '@angular/core';
 import {
@@ -13,6 +13,8 @@ import { NavigationMenu } from '../ui/navigation-menu';
 import { DirectChatSending } from './direct-chat-sending';
 import { DirectChatParticipants } from './direct-chat-participants';
 import { DirectChatArchive } from './direct-chat-archive';
+import { DirectChatColleagues } from './direct-chat-colleagues';
+import { ReadMarker } from './read-marker';
 import { RecipientPicker, type Colleague, type ReviewedSnapshot } from './recipient-picker';
 import { WebSocketService } from '../core/websocket.service';
 import { ChatComposer } from './composer';
@@ -24,17 +26,16 @@ import {
   directConversations, directInitials,
   directConversationHeaderTitle, directConversationMode, directDraftKey, directMessageText,
   directPendingNavigationTitle,
+  directSubscription,
   formatDirectTime,
   exceedsDirectRecipientLimit, focusDirectComposer, hasDirectMessage,
   directConversationsAfterParticipantEvent, isDirectTranscriptNearNewest,
-  mergeDirectColleagues,
   otherParticipant, readDirectUpdate, scrollDirectTranscript,
   directAuthorName, directIsOwnMessage, directRecipientName, groupAuthorName,
   trapDirectDialogFocus,
 } from './direct-chat-display';
 import {
   fetchChatContext, fetchDirectConversations, fetchDirectHistory, fetchDirectPageAndRequested,
-  searchColleagues,
   type DirectFailure,
 } from './direct-chat-api';
 
@@ -63,14 +64,16 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly exceedsDirectRecipientLimit = exceedsDirectRecipientLimit;
   protected readonly pageState = signal<PageState>('loading');
   protected readonly refreshing = signal(false);
-  protected readonly colleagueState = signal<ReadState>('loading');
+  private readonly people = new DirectChatColleagues(
+    this.canReadPage.bind(this), this.clearAfterAccessChange.bind(this));
+  protected readonly colleagueState = this.people.state;
   protected readonly historyState = signal<ReadState>('idle');
   protected readonly listState = signal<ReadState>('loading');
   protected readonly listHasMore = signal(false);
-  protected readonly knownColleagues = signal<Colleague[]>([]);
+  protected readonly knownColleagues = this.people.known;
   protected readonly navigationOpen = signal(false);
   protected readonly colleagueQuery = signal('');
-  protected readonly colleagues = signal<Colleague[]>([]);
+  protected readonly colleagues = this.people.rows;
   protected readonly colleague = signal<Colleague | undefined>(undefined);
   protected readonly selectedPeople = signal<Colleague[]>([]);
   protected readonly audienceReviewed = signal(false);
@@ -90,6 +93,9 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly archive = new DirectChatArchive(
     this.selectedConversationId.bind(this), this.canReadPage.bind(this),
     this.reloadArchiveRow.bind(this), this.clearAfterAccessChange.bind(this));
+  private readonly readMarker = new ReadMarker(
+    this.selectedConversationId.bind(this), this.canReadPage.bind(this),
+    this.reloadArchiveRow.bind(this), this.clearAfterAccessChange.bind(this));
   protected readonly sendState = this.sending.state;
   protected readonly statusChecking = this.sending.checking;
   protected readonly composerBusy = this.sending.busy;
@@ -102,7 +108,6 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly recordedMessage = this.sending.recordedMessage;
   private readonly socket = inject(WebSocketService);
   private readonly subscription = this.socket.received.subscribe(this.receive.bind(this));
-  private searchRequest: AbortController | undefined;
   private historyRequest: AbortController | undefined;
   private listRequest: AbortController | undefined;
   protected currentMemberId = '';
@@ -123,7 +128,6 @@ export class DirectChat implements OnInit, OnDestroy {
   private scrollToNewest = false;
   private followNewest = true;
   private readonly transcript = viewChild<ElementRef<HTMLElement>>('transcript');
-  private focusParticipants = false;
   private returnParticipantFocus = false;
 
   constructor() {
@@ -137,11 +141,12 @@ export class DirectChat implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.lifetime.abort();
-    this.searchRequest?.abort();
+    this.people.clear();
     this.historyRequest?.abort();
     this.listRequest?.abort();
     this.participantManager.reset();
     this.archive.clear();
+    this.readMarker.purge();
     this.subscription.unsubscribe();
     this.socket.disconnect();
   }
@@ -161,7 +166,7 @@ export class DirectChat implements OnInit, OnDestroy {
       return;
     }
     this.currentMemberId = context.value.memberId;
-    await this.loadColleagues(this.colleagueQuery());
+    await this.people.load(this.colleagueQuery());
     if (!this.canReadPage()) return;
     const requestedId = requestedDirectConversationId();
     const conversations = await fetchDirectPageAndRequested(requestedId, this.lifetime.signal);
@@ -193,6 +198,7 @@ export class DirectChat implements OnInit, OnDestroy {
     } else {
       this.announceRead('Direct conversations loaded.');
     }
+    if (!this.canReadPage()) return;
     this.focusAfterRefresh();
   }
 
@@ -232,7 +238,7 @@ export class DirectChat implements OnInit, OnDestroy {
 
   protected colleagueQueryChanged(query: string): void {
     this.colleagueQuery.set(query);
-    void this.loadColleagues(query);
+    void this.people.load(query);
   }
 
   protected async refresh(): Promise<void> {
@@ -244,9 +250,7 @@ export class DirectChat implements OnInit, OnDestroy {
     if (!this.selectedConversationId() || this.selectedConversation()?.mode !== 'group') return;
     this.returnParticipantFocus = false;
     this.focusComposerAfterRead = false;
-    this.focusParticipants = true;
     await this.participantManager.open();
-    this.focusParticipants = false;
     requestAnimationFrame(this.focusParticipantTitle.bind(this));
   }
 
@@ -317,11 +321,13 @@ export class DirectChat implements OnInit, OnDestroy {
     }
     this.selectedConversationId.set(conversationId);
     this.archive.setRow(conversation);
+    this.readMarker.setRow(conversation);
     this.pageState.set('ready');
     if (changed) this.restoreDraft();
     updateDirectConversationAddress(conversationId);
     this.pageError.set('');
     await this.loadHistory(conversationId);
+    if (!this.canReadPage()) return;
     if (changed) this.focusComposerAfterRead = true;
   }
 
@@ -359,10 +365,7 @@ export class DirectChat implements OnInit, OnDestroy {
     const transcript = this.transcript()?.nativeElement;
     if (!transcript) return;
     this.followNewest = isDirectTranscriptNearNewest(transcript);
-  }
-
-  protected focusComposer(): void {
-    focusDirectComposer(this.composerElement()?.nativeElement);
+    if (this.followNewest) void this.markReadAfterRender();
   }
 
   protected protectPendingNavigation(event: MouseEvent): void {
@@ -374,29 +377,8 @@ export class DirectChat implements OnInit, OnDestroy {
       || Boolean(this.archive.commandId());
   }
 
-  private async loadColleagues(query: string): Promise<void> {
-    this.searchRequest?.abort();
-    const request = new AbortController();
-    this.searchRequest = request;
-    this.colleagueState.set('loading');
-    this.colleagues.set([]);
-    const result = await searchColleagues(query, request.signal);
-    if (request.signal.aborted || this.searchRequest !== request || !this.canReadPage()) return;
-    if (result.kind === 'ok') {
-      this.colleagues.set(result.value.rows);
-      const knownColleagues = mergeDirectColleagues(
-        this.knownColleagues(), result.value.rows,
-      );
-      this.knownColleagues.set(knownColleagues);
-      this.colleagueState.set('ready');
-      return;
-    }
-    this.colleagueState.set('failed');
-    if (result.kind === 'access_changed') this.clearAfterAccessChange();
-  }
-
   private async refreshParticipantColleagues(): Promise<void> {
-    await this.loadColleagues(this.colleagueQuery());
+    await this.people.load(this.colleagueQuery());
   }
 
   private async loadHistory(conversationId: string): Promise<void> {
@@ -459,6 +441,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.historyRequest?.abort();
     this.participantManager.reset();
     this.archive.clear();
+    this.readMarker.clear();
     this.historyState.set('idle');
     this.position = 0;
     this.generation = 0;
@@ -505,11 +488,15 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   private clearAfterAccessChange(): void {
-    this.searchRequest?.abort();
+    this.people.clear();
     this.historyRequest?.abort();
     this.listRequest?.abort();
     this.participantManager.reset();
     this.archive.clear();
+    this.readMarker.purge();
+    this.focusComposerAfterRead = false;
+    this.scrollToNewest = false;
+    this.returnParticipantFocus = false;
     this.navigationOpen.set(false);
     this.socketConversationId = '';
     this.socket.disconnect();
@@ -521,9 +508,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.position = 0;
     this.generation = 0;
     this.currentMemberId = '';
-    this.knownColleagues.set([]);
     this.drafts.clear();
-    this.colleagues.set([]);
     this.colleagueQuery.set('');
     this.conversations.set([]);
     this.colleague.set(undefined);
@@ -587,6 +572,7 @@ export class DirectChat implements OnInit, OnDestroy {
     if (selected && !directConversationById(listed, selected.conversationId)) listed.push(selected);
     this.conversations.set(listed);
     this.listHasMore.set(Boolean(result.value.nextCursor));
+    this.readMarker.setRow(directConversationById(listed, this.selectedConversationId()));
   }
 
   private async reloadArchiveRow(): Promise<ChatConversation | undefined> {
@@ -605,6 +591,7 @@ export class DirectChat implements OnInit, OnDestroy {
     if (requested && !directConversationById(listed, conversationId)) listed.push(requested);
     this.conversations.set(listed);
     this.listHasMore.set(Boolean(result.value.nextCursor));
+    this.readMarker.setRow(requested);
     return requested;
   }
 
@@ -620,10 +607,7 @@ export class DirectChat implements OnInit, OnDestroy {
   private sendSubscription(): void {
     const conversationId = this.selectedConversationId();
     if (!conversationId) return;
-    const subscription = {
-      type: 'subscribe' as const, topic: 'conversation' as const, conversationId,
-      since: this.position, generation: this.generation,
-    };
+    const subscription = directSubscription(conversationId, this.position, this.generation);
     this.socket.send(subscription);
   }
 
@@ -665,32 +649,49 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   private afterRender(): void {
+    if (this.pageState() === 'access_changed') {
+      const transcript = this.transcript()?.nativeElement;
+      if (transcript) transcript.scrollTop = 0;
+    }
     if (this.scrollToNewest) {
       this.scrollToNewest = false;
       const transcript = this.transcript()?.nativeElement;
       const conversationId = this.selectedConversationId();
       const shouldScroll = this.shouldFollowTranscript.bind(this, conversationId);
-      if (transcript) void scrollDirectTranscript(transcript, shouldScroll);
+      if (transcript) {
+        const scrolling = scrollDirectTranscript(transcript, shouldScroll);
+        void scrolling.then(this.markReadAfterRender.bind(this));
+      }
+    } else {
+      void this.markReadAfterRender();
     }
     if (this.focusComposerAfterRead) {
       this.focusComposerAfterRead = false;
-      requestAnimationFrame(this.focusComposer.bind(this));
+      requestAnimationFrame(focusDirectComposer.bind(null, this.composerElement()?.nativeElement));
       return;
     }
     if (this.focusAccessHeading) {
       this.focusAccessHeading = false;
-      requestAnimationFrame(this.focusAccessTitle.bind(this));
-      return;
-    }
-    if (this.focusParticipants) {
-      this.focusParticipants = false;
-      requestAnimationFrame(this.focusParticipantTitle.bind(this));
+      this.accessHeading()?.nativeElement.focus();
       return;
     }
     if (this.returnParticipantFocus) {
       this.returnParticipantFocus = false;
       requestAnimationFrame(this.restoreParticipantOpener.bind(this));
     }
+  }
+
+  private async markReadAfterRender(): Promise<void> {
+    const transcript = this.transcript()?.nativeElement;
+    if (!transcript || !this.followNewest) return;
+    const nearNewest = isDirectTranscriptNearNewest(transcript);
+    await this.readMarker.rendered(this.messages(), this.historyState() === 'ready',
+      document.visibilityState === 'visible', nearNewest);
+  }
+
+  @HostListener('document:visibilitychange')
+  protected visibilityChanged(): void {
+    if (document.visibilityState === 'visible') void this.markReadAfterRender();
   }
 
   private focusParticipantTitle(): void {
@@ -701,7 +702,4 @@ export class DirectChat implements OnInit, OnDestroy {
     this.participantOpener()?.nativeElement.focus();
   }
 
-  private focusAccessTitle(): void {
-    this.accessHeading()?.nativeElement.focus();
-  }
 }

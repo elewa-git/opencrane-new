@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>sign-in, chat, saved archive choices, welcome survey and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>sign-in, chat, saved read and archive choices, welcome survey and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices and access"]
@@ -51,6 +51,8 @@ assistant check open rather than guessing an answer.
 - Shows group conversations with each message's saved author and resumes live updates
   from the last message shown. Each draft stays with its conversation. A saved message
   means the server recorded it; it does not say that anyone received it.
+- Saves how far someone has read in a direct or group chat after the newest message appears.
+  Losing access clears its messages, draft, names and files, even when an older reply arrives later.
 - Lets a group creator add or remove participants and lets other people leave. It locks
   the creator in place, marks a colleague who left the company as removed, and checks an
   uncertain change by reading its original status. Losing access clears the conversation.
@@ -125,7 +127,9 @@ assistant check open rather than guessing an answer.
    Colleague search includes later result pages. A lost reply keeps its original change id,
    and workspace links stay on the page until that change's status can be checked. When the
    live connection needs to catch up, the website reloads the current participants from the
-   server. Access loss clears protected chat details and late replies.
+   server. Once the newest message appears in a visible tab, the website saves the read place
+   for that direct or group chat.
+   Access loss clears protected chat details and late replies.
 5. **An admin adds a tool server.** MCP (Model Context Protocol) lets an assistant use tools from another server. The website accepts a remote HTTPS address and shows the discovery result. When tools are ready, the admin can continue to set each tool to Allow automatically, Ask or Block. If a save reply is lost, the website checks the saved modes before offering another action. It never sends the save again.
 6. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. A tool access explanation shows the two grants and account check from a dated server reply. It does not say that a call can run.
 7. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.

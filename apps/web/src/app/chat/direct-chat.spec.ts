@@ -89,6 +89,7 @@ it('moves a confirmed chat from the server row and clears it when archive access
 it('keeps an uncertain archive command through Recent, Archived, another chat and Back', async () => {
   const api = createFetchFixture();
   let checkedCommandId = '';
+  let archiveCommandId = '';
   function lostArchiveReply(request: RequestRecord): Response | undefined {
     const url = new URL(request.url, location.origin);
     if (url.pathname === '/api/conversations' && request.method === 'GET') {
@@ -101,10 +102,14 @@ it('keeps an uncertain archive command through Recent, Archived, another chat an
       return reply({ rows, nextCursor: null });
     }
     if (url.pathname.endsWith('/state') && request.method === 'POST') {
+      if (request.body?.['action'] === 'archive') {
+        archiveCommandId = String(request.body['id']);
+      }
       return reply({}, 503);
     }
     if (url.pathname.includes('/changes/')) {
-      checkedCommandId = url.pathname.split('/').at(-1) ?? '';
+      const checkedId = url.pathname.split('/').at(-1) ?? '';
+      if (checkedId === archiveCommandId) checkedCommandId = checkedId;
       return reply({}, 404);
     }
     return undefined;
@@ -115,7 +120,7 @@ it('keeps an uncertain archive command through Recent, Archived, another chat an
   root(fixture).querySelector<HTMLButtonElement>('.archive-button')?.click();
   await settle(fixture);
   const firstPost = api.requests.find(request => request.method === 'POST'
-    && request.url.endsWith('/state'));
+    && request.url.endsWith('/state') && request.body?.['action'] === 'archive');
   const originalBody = firstPost?.body;
   const commandId = String(originalBody?.['id']);
   expect(commandId).not.toBe('undefined');
@@ -145,7 +150,7 @@ it('keeps an uncertain archive command through Recent, Archived, another chat an
   root(fixture).querySelector<HTMLButtonElement>('.archive-notice button:last-child')?.click();
   await settle(fixture);
   const posts = api.requests.filter(request => request.method === 'POST'
-    && request.url.endsWith('/state'));
+    && request.url.endsWith('/state') && request.body?.['action'] === 'archive');
   expect(posts).toHaveLength(2);
   expect(posts[1]?.body).toEqual(originalBody);
   fixture.destroy();

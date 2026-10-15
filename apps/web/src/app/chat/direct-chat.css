@@ -63,6 +63,12 @@
 .participant-leave { margin-top: 18px; border-color: #c1392b; color: #9c2c22; }
 .transcript { min-height: 0; overflow: auto; padding: 24px 28px 8px; }
 .transcript-inner { width: 100%; max-width: 780px; margin: 0 auto; }
+.access-lock {
+  padding: 20px 28px;
+  border: 1px solid #d9dfe0;
+  border-radius: 9px;
+  background: #eef1f2;
+}
 .refresh-error { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 14px; padding: 10px; border: 1px solid #e6d4b2; border-radius: 7px;

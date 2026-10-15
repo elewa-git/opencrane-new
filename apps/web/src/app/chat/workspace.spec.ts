@@ -509,7 +509,8 @@ it.each([500, 503, 403])('does not show empty states after a %s conversation rea
 
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('No workspace root');
-  const expectedMessage = status === 403 ? 'Access unavailable' : 'Could not load the conversation';
+  const expectedMessage = status === 403 ? 'You no longer have access'
+    : 'Could not load the conversation';
   await vi.waitFor(() => expect(root.textContent).toContain(expectedMessage));
   expect(root.textContent).not.toContain('No messages yet');
   root.querySelector<HTMLButtonElement>('#panel-toggle')?.click();

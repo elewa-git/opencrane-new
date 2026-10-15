@@ -63,3 +63,66 @@ export function capturedByLine(
   if (!includeImageSize) return `Captured by you · ${capturedAt}`;
   return `Captured by you · ${capturedAt} · ${imageSize(facts.width, facts.height)}`;
 }
+import type { ChatAttachment } from './chat-state';
+
+export function screenshotIdFromFile(file: ChatAttachment): string {
+  return file.fileId;
+}
+
+export function screenshotWithId(fileId: string, file: ChatAttachment): boolean {
+  return file.fileId === fileId;
+}
+
+export function isScreenshotAttachment(file: ChatAttachment): boolean {
+  return Boolean(file.screenshot);
+}
+
+export function screenshotFacts(file: ChatAttachment): ScreenshotFacts | undefined {
+  if (!file.screenshot) return undefined;
+  return { ...file.screenshot, size: file.size };
+}
+
+export function screenshotFactsForPath(
+  path: string, attachments: ChatAttachment[],
+): ScreenshotFacts | undefined {
+  for (const file of attachments) {
+    if (file.path === path) return screenshotFacts(file);
+  }
+  return undefined;
+}
+
+export function fileScreenshotCreator(
+  path: string, attachments: ChatAttachment[], memberId: string,
+): 'you' | 'participant' {
+  for (const file of attachments) {
+    if (file.path === path && file.uploadedBy === memberId) return 'you';
+  }
+  return 'participant';
+}
+
+export function hasScreenshotFile(files: string[], screenshots: ChatAttachment[]): boolean {
+  for (const path of files) {
+    for (const screenshot of screenshots) {
+      if (screenshot.path === path) return true;
+    }
+  }
+  return false;
+}
+
+export function displayTextParts(text: string): {
+  text: string; kind: 'text' | 'bold' | 'citation' | 'a2ui';
+}[] {
+  const spaced = text.replace(/\s+(?=\[\d+\])/g, '\u00a0');
+  const parts = spaced.split(/(\*\*[^*]+\*\*|\[\d+\]|```a2ui[\s\S]*?(?:```|$))/g);
+  const visible = parts.filter(Boolean);
+  return visible.map(describeDisplayPart);
+}
+
+function describeDisplayPart(part: string): {
+  text: string; kind: 'text' | 'bold' | 'citation' | 'a2ui';
+} {
+  if (part.startsWith('```a2ui')) return { text: part, kind: 'a2ui' };
+  if (part.startsWith('**')) return { text: part.slice(2, -2), kind: 'bold' };
+  if (/^\[\d+\]$/.test(part)) return { text: part, kind: 'citation' };
+  return { text: part, kind: 'text' };
+}

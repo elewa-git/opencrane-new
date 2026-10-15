@@ -1,0 +1,1 @@
+The website now saves the last message someone has read in a direct or group chat after it appears on screen. Losing access to an open chat clears its messages, draft, names and files, including when older replies arrive later.

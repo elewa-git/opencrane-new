@@ -134,6 +134,13 @@ export async function changeArchive(conversationId: string,
   return write(`/api/conversations/${id}/state`, body, signal, appendReceiptSchema, fetcher);
 }
 
+export async function changeRead(conversationId: string,
+  body: Extract<z.infer<typeof chatStateCommandSchema>, { action: 'read' }>,
+  signal: AbortSignal, fetcher: typeof fetch = fetch) {
+  const id = encodeURIComponent(conversationId);
+  return write(`/api/conversations/${id}/state`, body, signal, appendReceiptSchema, fetcher);
+}
+
 export async function fetchParticipants(conversationId: string, signal: AbortSignal) {
   const id = encodeURIComponent(conversationId);
   return read(`/api/conversations/${id}/participants`, signal, chatParticipantsSchema);

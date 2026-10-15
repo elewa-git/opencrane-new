@@ -22,7 +22,8 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import { ChatIcon } from './icon';
 import { BrandMark } from '../ui/brand-mark';
-import { sessionSlug, type ChatConversation } from '@opencrane/protocol';
+import type { ChatConversation } from '@opencrane/protocol';
+import { workspaceTitle } from './conversations-data';
 import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
@@ -36,7 +37,11 @@ import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
 import {
-  capturedByLine, fileName, fileType, fileUrl, shortTime, utcDateTime, type ScreenshotFacts,
+  capturedByLine, displayTextParts, fileName, fileScreenshotCreator, fileType, fileUrl,
+  hasScreenshotFile,
+  isScreenshotAttachment, screenshotFacts, screenshotFactsForPath, screenshotIdFromFile,
+  screenshotWithId, shortTime, utcDateTime,
+  type ScreenshotFacts,
 } from './file-presentation';
 
 @Component({
@@ -95,7 +100,7 @@ export class Workspace implements OnInit {
   protected readonly captureViewModel = computed(this.capturePresentation.bind(this));
   protected readonly statusChecking = signal(false);
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
-  protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
+  protected readonly title = computed(this.currentTitle.bind(this));
   protected readonly teamConversations = computed(this.listTeamConversations.bind(this));
   protected readonly personalConversations = computed(this.listPersonalConversations.bind(this));
   protected readonly reason = computed(this.composerReason.bind(this));
@@ -109,6 +114,8 @@ export class Workspace implements OnInit {
   private focusComposerAfterNavigation = false;
   private previousCaptureConversation = this.chat.selected();
   private previousCaptureDenied = this.chat.denied();
+  private readonly accessHeading = viewChild<ElementRef<HTMLElement>>('accessHeading');
+  private focusAccess = false;
   constructor() {
     effect(this.rememberRecoveryFocus.bind(this));
     effect(this.resetCaptureWhenSessionChanges.bind(this));
@@ -302,12 +309,7 @@ export class Workspace implements OnInit {
     const state = this.capture.state();
     return state.phase === 'saved' && this.hasTranscriptScreenshot(state.fileId);
   }
-  protected hasScreenshot(files: string[]): boolean {
-    for (const path of files) {
-      if (this.isScreenshot(path)) return true;
-    }
-    return false;
-  }
+  protected readonly hasScreenshotFile = hasScreenshotFile;
   protected captureAction(): void {
     const model = this.captureViewModel();
     if (model?.kind === 'unknown') {
@@ -316,13 +318,9 @@ export class Workspace implements OnInit {
     }
     if (model?.kind === 'failed' && model.safeToRetry) void this.repeatCapture();
   }
-  protected screenshotFacts(file: ChatAttachment): ScreenshotFacts | undefined {
-    if (!file.screenshot) return undefined;
-    return { ...file.screenshot, size: file.size };
-  }
+  protected readonly screenshotFacts = screenshotFacts;
   protected screenshotFactsForPath(path: string): ScreenshotFacts | undefined {
-    const file = this.chat.attachments().find(attachment => attachment.path === path);
-    return file ? this.screenshotFacts(file) : undefined;
+    return screenshotFactsForPath(path, this.chat.attachments());
   }
   protected capturedLine(file: ChatAttachment): string {
     const facts = this.screenshotFacts(file);
@@ -338,9 +336,7 @@ export class Workspace implements OnInit {
     image.hidden = true;
   }
   protected screenshotCreator(path: string): 'you' | 'participant' {
-    const file = this.chat.attachments().find(attachment => attachment.path === path);
-    if (!file || file.uploadedBy !== this.chat.memberId()) return 'participant';
-    return 'you';
+    return fileScreenshotCreator(path, this.chat.attachments(), this.chat.memberId());
   }
   protected resized(): void {
     this.desktop.set(globalThis.innerWidth >= 1100);
@@ -355,6 +351,16 @@ export class Workspace implements OnInit {
     if (conversationChanged || accessWasRevoked) {
       this.capture.reset();
       this.preview.set('');
+    }
+    if (accessWasRevoked) {
+      this.focusAccess = true;
+      this.draft.set('');
+      this.search.set('');
+      this.toolDetails.set(undefined);
+      this.highlightedToolId.set('');
+      this.approvalWaiting.set(false);
+      this.panelOverlay.set(false);
+      this.rail.set(false);
     }
     this.previousCaptureConversation = conversationId;
     this.previousCaptureDenied = denied;
@@ -373,6 +379,10 @@ export class Workspace implements OnInit {
     if (active === document.body || active?.id === 'message') this.focusComposer();
   }
   private afterRender(): void {
+    if (this.focusAccess) {
+      this.focusAccess = false;
+      this.accessHeading()?.nativeElement.focus();
+    }
     const turns = this.chat.turns();
     const recovery = this.chat.computer() + String(this.chat.recoveredLostTurn());
     const renderedTurns = turns.map(turnContent);
@@ -391,6 +401,10 @@ export class Workspace implements OnInit {
   private isPanelExpanded(): boolean {
     if (this.desktop()) return this.panel();
     return this.panelOverlay();
+  }
+  private currentTitle(): string {
+    return workspaceTitle(this.chat.denied(), this.chat.selected(),
+      this.chat.turns(), this.chat.conversations());
   }
   protected duration(start: string, end: string): number { return Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000)); }
   protected shortcut(event: KeyboardEvent): void {
@@ -489,22 +503,5 @@ export class Workspace implements OnInit {
   }
   protected name(path: string): string { return fileName(path); }
   protected type(path: string): string { return fileType(path); }
-  protected textParts(text: string): { text: string; kind: 'text' | 'bold' | 'citation' | 'a2ui' }[] {
-    return text.replace(/\s+(?=\[\d+\])/g, '\u00a0').split(/(\*\*[^*]+\*\*|\[\d+\]|```a2ui[\s\S]*?(?:```|$))/g).filter(Boolean).map(part => ({
-      text: part.startsWith('**') ? part.slice(2, -2) : part,
-      kind: part.startsWith('```a2ui') ? 'a2ui' : part.startsWith('**') ? 'bold' : /^\[\d+\]$/.test(part) ? 'citation' : 'text',
-    }));
-  }
-}
-
-function screenshotIdFromFile(file: ChatAttachment): string {
-  return file.fileId;
-}
-
-function screenshotWithId(fileId: string, file: ChatAttachment): boolean {
-  return file.fileId === fileId;
-}
-
-function isScreenshotAttachment(file: ChatAttachment): boolean {
-  return !!file.screenshot;
+  protected readonly textParts = displayTextParts;
 }
