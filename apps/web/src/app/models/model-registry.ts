@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { IntegrationFacts } from '../integrations/integration-facts';
 import type { IntegrationFact } from '../integrations/integration-facts-map';
 import { ModelAccessEditor } from './model-access-editor';
+import { ModelTable } from './model-table';
 import { ModalSheet } from '../ui/modal-sheet';
 import { SharedState } from '../shared-state/shared-state';
 import { readQuote, sendProviderCommand, type ModelQuote, type ProviderRow } from './provider-api';
@@ -16,7 +17,7 @@ function commandId(): string {
 
 @Component({
   selector: 'oc-models',
-  imports: [SharedState, ModalSheet, IntegrationFacts, ModelAccessEditor],
+  imports: [SharedState, ModalSheet, IntegrationFacts, ModelAccessEditor, ModelTable],
   templateUrl: './model-registry.html',
   styleUrls: ['./model-registry.css', './provider-setup.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -269,16 +270,13 @@ export class ModelsScreen extends ProviderKeyChanges {
   }
 
   protected modelCount(provider: ProviderRow): string {
+    if (provider.provider === 'anthropic') return 'No supported models';
     return `${provider.enabledModels.length} enabled of ${this.registry().length}`;
   }
 
-  protected routeRows(): { task: string; model: string; providerName: string }[] {
-    const rows: { task: string; model: string; providerName: string }[] = [];
-    for (const [task, route] of Object.entries(this.routing())) {
-      const provider = this.providers().find(hasEnabledModel(route.model));
-      rows.push({ task, model: route.model, providerName: provider?.name ?? 'Not enabled' });
-    }
-    return rows;
+  protected tableDenied(kind: 'access' | 'forbidden'): void {
+    if (kind === 'access') this.clearProtectedData();
+    else this.clearForbiddenData();
   }
 
   protected setupTitle(): string {
@@ -392,7 +390,7 @@ export class ModelsScreen extends ProviderKeyChanges {
     return 'Replace key';
   }
   protected async providerAction(provider: ProviderRow, opener: HTMLElement): Promise<void> {
-    if (this.busy()) {
+    if (this.busy() || this.hasRefreshError()) {
       return;
     }
     if (this.hasPendingFor(provider.providerId)) {
@@ -446,13 +444,6 @@ function notEqualTo(value: string): (candidate: string) => boolean {
     return candidate !== value;
   }
   return isDifferent;
-}
-
-function hasEnabledModel(model: string): (provider: ProviderRow) => boolean {
-  function includesModel(provider: ProviderRow): boolean {
-    return provider.enabledModels.includes(model);
-  }
-  return includesModel;
 }
 
 function sameModels(stored: string[], selected: string[]): boolean {

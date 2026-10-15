@@ -62,7 +62,7 @@
       @for (provider of providers(); track provider.providerId) {
         <article class="provider-row" [attr.data-provider-id]="provider.providerId">
           <button #providerButton class="provider-row-main" type="button"
-            [disabled]="isActionLocked(provider) || busy()"
+            [disabled]="isActionLocked(provider) || busy() || hasRefreshError()"
             (click)="providerAction(provider, providerButton)">
             <span class="provider-name">
               <span class="provider-mark" aria-hidden="true">
@@ -83,15 +83,16 @@
           @if (isActionLocked(provider)) {
             <div class="row-pending">
               <p>Another change for this provider is still being checked.</p>
-              <button #statusButton class="button secondary" type="button" [disabled]="busy()"
-                (click)="providerAction(provider, statusButton)">
+              <button #statusButton class="button secondary" type="button"
+                [disabled]="busy() || hasRefreshError()"
+              (click)="providerAction(provider, statusButton)">
                 {{ keyChangeLabel(provider) }}
               </button>
               <code>{{ pendingReference(provider) }}</code>
             </div>
           } @else if (provider.saved) {
             <button #replaceButton class="button secondary row-action" type="button"
-              [disabled]="busy()"
+              [disabled]="busy() || hasRefreshError()"
               (click)="startReplacement(provider, replaceButton)">Replace key</button>
           }
         </article>
@@ -99,38 +100,10 @@
     </section>
 
   }
-  @if (registry().length > 0) {
-    <section class="grants-gap" aria-labelledby="grant-title">
-      <h2 id="grant-title">Model access</h2>
-      @for (model of registry(); track model) {
-        <div><strong>{{ model }}</strong>
-          <button #accessButton class="button secondary" type="button"
-            (click)="accessEditor.open(model, accessButton)">Access</button>
-        </div>
-      }
-    </section>
-
-    <section class="model-register" aria-labelledby="model-register-title">
-      <h2 id="model-register-title">Models and task routes</h2>
-      <p class="register-note">Task routes come from the current model registry.</p>
-      @if (routeRows().length > 0) {
-        <div class="route-header" aria-hidden="true">
-          <span>Task</span><span>Model</span><span>Provider</span><span>Access</span>
-        </div>
-        @for (route of routeRows(); track route.task) {
-          <article class="route-row">
-            <strong>{{ route.task }}</strong>
-            <span>{{ route.model }}</span>
-            <span>{{ route.providerName }}</span>
-            <button #routeAccess class="button secondary" type="button"
-              (click)="accessEditor.open(route.model, routeAccess)">Access</button>
-          </article>
-        }
-      } @else {
-        <oc-shared-state kind="not_configured" message="No task routes returned"
-          detail="The model registry did not include task routing." [showAction]="false" />
-      }
-    </section>
+  @if (loadState() === 'ready' || loadState() === 'retrying') {
+    <oc-model-table [providers]="providers()" [registry]="registry()" [routing]="routing()"
+      [editorOpened]="accessEditor.opened()" (access)="accessEditor.open($event.model, $event.opener)"
+      (lostAccess)="tableDenied($event)" />
   }
 
   <oc-modal-sheet [open]="setupOpen()" [title]="setupTitle()"

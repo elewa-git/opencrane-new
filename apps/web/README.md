@@ -13,7 +13,7 @@ flowchart LR
   web["apps/web<br/>chat, saved archive choices, welcome survey and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
-  web -->|saves keys, grants and reads facts| providers["Provider pages<br/>keys, checks, model choices and access"]
+  web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices and access"]
   web -->|opens| integrations["Integrations pages<br/>register, add, changes, tools and access explanations"]
   web -->|opens and clears on lost access| people["People pages<br/>members, groups, owners and invitations"]
   web -->|reads and stores| memory["Memory panel<br/>scopes, facts, sources and safe receipts"]
@@ -25,6 +25,10 @@ Admins can grant or remove model access for one person, group or assistant at a 
 The editor checks that each save has taken effect. An uncertain reply offers a status
 check with the original request id, including after a page reload. The candidate list
 loads more people, groups or assistants when requested.
+
+The Models table shows models enabled on a connection, their task routes and granted
+audiences. It names a shared assistant whose selected model lacks its own grant.
+If a read fails, it leaves the assistant check open rather than guessing an answer.
 
 - Shows sign-in and the first-owner claim page.
 - Lets a person enter their name, optional pronouns and work description for the

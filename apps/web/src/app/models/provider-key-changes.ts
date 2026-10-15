@@ -309,7 +309,7 @@ export class ProviderKeyChanges extends ProviderPageState {
   }
 
   protected startReplacement(provider: ProviderRow, opener: HTMLElement): void {
-    if (this.busy() || this.hasPendingFor(provider.providerId)) {
+    if (this.busy() || this.hasRefreshError() || this.hasPendingFor(provider.providerId)) {
       return;
     }
     this.clearActionMessage();
@@ -327,6 +327,7 @@ export class ProviderKeyChanges extends ProviderPageState {
   }
 
   protected async replaceKey(): Promise<void> {
+    if (this.hasRefreshError()) return;
     const providerIdValue = this.replaceProviderId();
     const provider = this.providerFor(providerIdValue);
     const key = this.replaceKeyDraft();

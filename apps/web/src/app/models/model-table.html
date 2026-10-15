@@ -1,0 +1,48 @@
+@if (enabledModels().length === 0) {
+  <section class="empty-card">
+    <h2>No usable models</h2>
+    <p>The registry lists {{ registry().length }} models.</p>
+    <p>Others are disabled until you enable them on a connection.</p>
+  </section>
+} @else {
+  <section class="model-table" aria-labelledby="models-title">
+    <h2 id="models-title">Models</h2>
+    <div class="model-table-heading" aria-hidden="true">
+      <span>Model</span><span>Task route</span><span>Who can use it</span><span>Status</span>
+    </div>
+    @for (model of enabledModels(); track model) {
+      <article class="model-table-row">
+        <div class="model-identity">
+          <strong>{{ model }}</strong>
+          <span>{{ connectionNames(model) }}</span>
+        </div>
+        <div class="model-route"><span class="field-label">Task route</span>{{ taskWords(model) }}</div>
+        <div class="model-audience">
+          <span class="field-label">Who can use it</span>
+          @for (grant of grantedRows(model); track grant.granteeKind + ':' + grant.granteeId) {
+            <span>{{ grant.displayName }} ({{ grant.source }})
+              @if (grant.projection === 'applying') { <small>applying</small> }
+            </span>
+          }
+          @if (audienceSummary(model)) { <span>{{ audienceSummary(model) }}</span> }
+        </div>
+        <div class="model-status">
+          <span class="field-label">Status</span>
+          @if (warning(model) === undefined) {
+            <strong>✓ Enabled</strong>
+            <small>Assistant access not checked</small>
+          } @else if (warning(model)) {
+            <strong class="warning">⚠ Enabled · not usable by {{ warning(model) }}</strong>
+            <small>Both the requester and the assistant need access.</small>
+          } @else {
+            <strong>✓ Enabled</strong>
+          }
+        </div>
+        <button #accessButton class="button secondary model-access" type="button"
+          (click)="openAccess(model, accessButton)">Access</button>
+      </article>
+    }
+    <p class="model-footer">Showing {{ enabledModels().length }} of {{ registry().length }}
+      registry models. Others are disabled until you enable them.</p>
+  </section>
+}

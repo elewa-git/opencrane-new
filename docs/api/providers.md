@@ -135,9 +135,11 @@ conflict; 503 unavailable infrastructure. Status reads use 404 for an absent com
 work can still have a refused, failed or unknown recorded outcome.
 
 `access.grantsAvailable` is true with `reason: "model_access_routes"`. The browser
-opens the model access editor from each model's Access button. Access reads still
-mark provider bindings, enabled-model state, keys, verification and configured
-assistant uses as not available yet. The editor does not infer missing users.
+opens the model access editor from each enabled model's Access button. The Models
+table reads configured assistant uses from provider bindings and shared assistant
+names. It warns about a missing assistant grant only when the grant list is complete.
+The access GET still marks its own configured uses and connection availability fields
+as not available yet. The editor does not infer missing users.
 
 ## Changing model grants
 
