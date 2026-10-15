@@ -982,6 +982,17 @@ and an explicit shared-desktop grant are required. The server uses `KUBECONFIG`
 and `KUBE_NAMESPACE` for its private Pod stream. See the
 [live-view contract and evidence](../../docs/process/live-view-evidence.md).
 
+`ViewSessions` owns unused tickets, opening capacity, active session release callbacks
+and pending stop audits. `open` returns its opening place in `finally`, including
+failed upgrades. `ownSession` returns the release callback used by `stopSession`;
+repeated release cannot free another session's place. Shutdown stops active sessions,
+discards tickets and waits for their stop audits. `LiveViewSession` owns one session's access watch, expiry timer and single stop.
+The existing named upgrade, start, desktop, bridge and stop functions remain in
+`view.ts`; they pass the session explicitly.
+Tickets can be redeemed for 15 seconds. A view lasts at most two minutes and never
+outlives its sign-in. `ViewLease.watchAuthority` owns each in-flight check from its
+increment through its `finally` decrement. `ViewDelivery` still gates every send.
+
 Live-view access checks run every 250 ms with a 1,200 ms deadline. An explicit
 `member.removed` result or conversation-read denial ends the check immediately,
 without waiting for sibling reads. These denials close the viewer with 4003 and

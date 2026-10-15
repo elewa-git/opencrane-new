@@ -64,6 +64,7 @@ async function confirmSnapshotStillCurrent(fresh: () => Promise<void>) {
   }
 }
 
+// Leave time within the 1,500 ms viewer lease to act on a completed check.
 export const viewCheckMs = 1200;
 
 const identity = z.object({ assistantId: z.string() });

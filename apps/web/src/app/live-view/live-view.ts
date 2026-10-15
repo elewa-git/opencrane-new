@@ -168,27 +168,31 @@ export class LiveView implements OnDestroy, OnChanges {
       }
       this.viewerConstructor = await this.loadViewer();
       if (attempt !== this.attempt) return;
-      const path = `/ws/conversations/${encodeURIComponent(this.conversationId())}/view`;
-      const address = new URL(path, location.href);
-      address.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const socket = new WebSocket(address, ['binary', result.ticket]);
-      this.socket = socket;
-      const onSocketClose = this.socketClosed.bind(this, attempt);
-      socket.addEventListener('close', onSocketClose);
-      function notice(this: LiveView, lease: LeaseNotice) {
-        if (attempt === this.attempt) this.onLeaseNotice(attempt, lease);
-      }
-      function invalid(this: LiveView) {
-        if (attempt === this.attempt) this.close('Disconnected');
-      }
-      const onNotice = notice.bind(this);
-      const onInvalid = invalid.bind(this);
-      const events = { notice: onNotice, invalid: onInvalid };
-      this.channel = new LeaseChannel(socket, events);
-      this.startViewer(attempt);
+      this.connectViewer(result.ticket, attempt);
     } catch {
       if (attempt === this.attempt) this.close('Disconnected');
     }
+  }
+
+  private connectViewer(ticket: string, attempt: number) {
+    const path = `/ws/conversations/${encodeURIComponent(this.conversationId())}/view`;
+    const address = new URL(path, location.href);
+    address.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socket = new WebSocket(address, ['binary', ticket]);
+    this.socket = socket;
+    const onSocketClose = this.socketClosed.bind(this, attempt);
+    socket.addEventListener('close', onSocketClose);
+    function notice(this: LiveView, lease: LeaseNotice) {
+      if (attempt === this.attempt) this.onLeaseNotice(attempt, lease);
+    }
+    function invalid(this: LiveView) {
+      if (attempt === this.attempt) this.close('Disconnected');
+    }
+    const onNotice = notice.bind(this);
+    const onInvalid = invalid.bind(this);
+    const events = { notice: onNotice, invalid: onInvalid };
+    this.channel = new LeaseChannel(socket, events);
+    this.startViewer(attempt);
   }
 
   private startViewer(attempt: number) {

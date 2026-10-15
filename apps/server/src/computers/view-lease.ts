@@ -1,7 +1,11 @@
 import { ViewCheckUnavailable, viewCheckMs } from './view-access.ts';
 
+// Count permission from the check's start, keeping delivery below the two-second revocation bound.
+// Check every 250 ms so overlapping replies can renew it before the 1,500 ms lease ends.
+// Give each check at most viewCheckMs (1,200 ms); a late answer earns no lease time.
 const LEASE_MS = 1500;
 const CHECK_EVERY_MS = 250;
+// Bound unfinished work when checks take longer than the interval.
 const MAX_CHECKS_IN_FLIGHT = 5;
 const RESUME_MARGIN_MS = 500;
 const NO_LEASE_LIMIT_MS = 10_000;
@@ -92,7 +96,7 @@ export class ViewLease<Computer> {
     if (this.state === 'stopped' || this.interval !== undefined) return;
     this.origin = this.clock.now();
     this.outsideSince = this.origin;
-    this.startCheck();
+    void this.watchAuthority();
     if (this.isStopped()) return;
     const tick = this.tick.bind(this);
     this.interval = setInterval(tick, CHECK_EVERY_MS);
@@ -133,16 +137,12 @@ export class ViewLease<Computer> {
       this.events.unconfirmed();
       return;
     }
-    if (this.inFlight < MAX_CHECKS_IN_FLIGHT) this.startCheck();
+    if (this.inFlight < MAX_CHECKS_IN_FLIGHT) void this.watchAuthority();
   }
 
-  private startCheck() {
+  private async watchAuthority() {
     const startedAt = this.clock.now();
     this.inFlight++;
-    void this.finishCheck(startedAt);
-  }
-
-  private async finishCheck(startedAt: number) {
     try {
       const computer = await deadline(this.check());
       this.acceptSuccess(startedAt, computer);

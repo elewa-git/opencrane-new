@@ -360,7 +360,8 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
 8. **An assistant asks an AI model for help.** The request goes through agentgateway, the
    AI gateway. The gateway asks the models process whether the budget allows it, and only
    then sends it on to the model provider.
-9. **A person watches the assistant's desktop.** The server checks their conversation
+9. **A person watches the assistant's desktop.** The server holds one place while the
+   connection opens and until the session stops. It checks their conversation
    access and desktop grant. A confirmed member removal or conversation permission denial
    ends the view straight away, even if another access read is slow. A later invitation
    on a removed member’s event stream does not restore desktop or file access.
