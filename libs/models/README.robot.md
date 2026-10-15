@@ -2003,8 +2003,8 @@ the saved event is checked again after store deduplication.
 `hostedRegistrationChange` reads only that operation. An absent event is unknown.
 Its HTTP caller must check current admin access before calling it.
 
-Remaining: dated receipts, admission GET and recheck commands. Evidence storage is
-P3-6 PR 4b. Image fetch, scans, deployment and evidence bytes are outside this part.
+Dated receipts and the admission GET are implemented below. Recheck commands and
+evidence storage remain for part c. Image fetch, scans, deployment and evidence bytes are outside this part.
 Fresh-install qualification: NOT RUN.
 
 ## Durable budget turn stops (P3-14 PR 4a; Part of #55)
@@ -2067,6 +2067,18 @@ renderer, preparation, reload and delivery tests twice; 419 event security tests
 136 registry/catalogue types agree. Logs: `/tmp/p3-4-tests-final-{1,2}.log`,
 `/tmp/p3-4-tests-1.log`, `/tmp/p3-4-events.log`. Full root suite and fresh-install
 journey: NOT RUN. Fixtures use the pinned gateway and disposable NATS, with no paid calls.
+
+## Hosted image admission receipts
+
+`writeHostedAdmission` records one `mcp.image_checked` per installation attempt.
+It binds silo, server, attempt, digest and platform. The event id hashes JSON
+[silo, subject, event type, attemptId]. Identical retries recover the original result;
+changed retries conflict. Only the models source and system principal count.
+`foldHostedAdmission` ignores invalid and later results. Checks last at most 24 hours;
+scan databases must also be no older than 24 hours when the result is recorded.
+All-pass admission expires at the earliest check expiry or database age limit.
+Rechecks, evidence storage and readers, scans and deployment remain separate work.
+Fresh-install qualification: NOT RUN.
 
 ## Per-server gateway receipts (P3-4 PR 3b; Part of #45)
 

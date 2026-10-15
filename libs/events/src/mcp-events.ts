@@ -1,8 +1,18 @@
+import { hostedImageCheckedSchema } from './hosted-image.ts';
 import { event } from './definition.ts';
 import * as data from './data.ts';
 const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
 
+const receipt = { verdict: 'pass' as const, checkedAt: '2026-10-15T00:00:00.000Z',
+  expiresAt: '2026-10-16T00:00:00.000Z', engineVersion: '1', reportDigest: DIGEST_EXAMPLE };
+const scanReceipt = { ...receipt, databaseDigest: DIGEST_EXAMPLE,
+  databaseUpdatedAt: receipt.checkedAt };
+
 export const mcpEvents = [
+  event('mcp.image_checked', 'mcp', 'Models recorded dated image check results.',
+    hostedImageCheckedSchema, { serverId: 'mcp_1', attemptId: 1, imageDigest: DIGEST_EXAMPLE,
+      platform: 'linux/amd64', checks: { signature: receipt, licence: receipt,
+        vulnerability: scanReceipt, malware: scanReceipt } }),
   // MCP catalogue, grants and connections
   event(
     'mcp.server_registered',

@@ -368,6 +368,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `mcp.server_registered` | admin | catalogue (draft; transport kind and optional catalogue reference) | remote: validate SSRF and discover; hosted installation: wait for image checks (not built); older hosted: review startup contract |
+| `mcp.image_checked` | models system principal | dated signature, licence, vulnerability and malware receipts; catalogue sequence only | Admission reads fold the first matching result. No discovery, scan, start or dispatch. Replay preserves dates and policy revision. |
 | `mcp.server_discovered` | reaction | catalogue (exact tool snapshots, digests, check and expiry dates, server identity and rejection reasons; old undated records remain unavailable) | — |
 | `mcp.server_reviewed` | Owner/Admin | exact catalogue, connection, account mode and tool review digests with chosen modes | restrictions apply immediately; widening disables publication |
 | `mcp.catalogue_checked` | models catalogue watch | catalogue (checked saved definitions for the exact server and silo; unchanged checks preserve policyRevision, failed checks advance it and clear expiry) | old approvals cancel on their next read after a failure, even if evidence was renewed meanwhile |

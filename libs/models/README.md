@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|delivers configuration; checks calls and spending; tests per-call model keys, CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks open spending before provider switch-on; saves hosted registration, publication receipts, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
+  models -->|checks open spending before provider switch-on; saves hosted image results and registration, publication receipts, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -296,3 +296,6 @@ const model = modelForTask('chat_turn');
 - [README.robot.md](README.robot.md): exact prices, limits, settings, event rules and test detail.
 - [The server](../../apps/server/README.md) holds the start file for the models process.
 - [The glossary](../../GLOSSARY.md#models-process) explains the running process and AI gateway.
+
+Hosted image admission reports dated check results. All four checks must pass before
+an image is admitted. Admission grants no tool access and starts no process.

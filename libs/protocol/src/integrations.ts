@@ -1,4 +1,5 @@
-import { mcpPublicationIntentDataSchema, mcpConfigurationObservationSchema } from '@opencrane/events';
+import { hostedImageCheckedSchema, mcpConfigurationObservationSchema,
+  mcpPublicationIntentDataSchema } from '@opencrane/events';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { z } from 'zod';
 
@@ -60,3 +61,10 @@ export const toolPolicySchema = z.object({
     readOnly: z.boolean(), costCents: z.literal(0).optional(), mode: z.enum(['allow', 'ask', 'block']), suggestion: z.enum(['allow', 'ask']) })),
 });
 export type ToolPolicy = z.infer<typeof toolPolicySchema>;
+
+export const hostedAdmissionSchema = z.strictObject({
+  ...hostedImageCheckedSchema.shape,
+  queuedAt: z.iso.datetime(),
+  status: z.enum(['checking', 'rejected', 'unavailable', 'admitted', 'expired']),
+  checks: hostedImageCheckedSchema.shape.checks.optional(),
+});

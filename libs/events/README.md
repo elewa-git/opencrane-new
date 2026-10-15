@@ -26,7 +26,7 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks child requests, hosted registration, startup, saved turn and spending stop references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
+  server["apps/server<br/>back end"] -.->|checks child requests, hosted image results, registration, startup, saved turn and spending stop references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, subscriptions, nightly memory reviews and records, and cleanup results| events
@@ -207,3 +207,6 @@ const result = parseEventByType({ type: 'not.registered' });
 
 Tool send admission records share the server's tool-rule stream. They order a call
 against Block and tool holds. Replaying these records never sends a call.
+
+Hosted image admission reports dated check results. All four checks must pass before
+an image is admitted. Admission grants no tool access and starts no process.

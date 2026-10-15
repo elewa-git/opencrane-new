@@ -1,3 +1,5 @@
+import { readHostedAdmission } from '@opencrane/models';
+import { hostedAdmissionSchema } from '@opencrane/protocol';
 import { AuthorityApplying, registerHosted, hostedRegistrationChange } from '@opencrane/models';
 import { activeMember, readActiveMember, GroupRefused } from '../members/groups.ts';
 import { installWorker } from './install-worker.ts';
@@ -36,10 +38,12 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
     '/api/org/integrations', '/api/org/models',
     '/api/org/integrations/:serverId/tools', '/api/org/integrations/:serverId/review',
     '/api/org/integrations/:serverId/publication', '/api/org/integrations/:serverId/discovery',
+    '/api/org/integrations/:serverId/admission',
     '/api/org/integrations/discovery', '/api/org/integrations/changes/:commandId',
   ];
   for (const path of paths) {
-    const readOnly = path.endsWith('/discovery') || path.endsWith('/:commandId');
+    const readOnly = path.endsWith('/discovery') || path.endsWith('/:commandId') ||
+      path.endsWith('/admission');
     const method: ('GET' | 'POST')[] = readOnly ? ['GET'] : ['GET', 'POST'];
     async function handleIntegration(request: FastifyRequest, reply: FastifyReply) {
       const session = sessionFor(request, config, now());
@@ -60,7 +64,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
           return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
         }
         if (options.store) {
-          if (path.endsWith('/:commandId')) {
+          if (path.endsWith('/:commandId') || path.endsWith('/admission')) {
             await readActiveMember(options.store, options.binding, memberId, 'admin');
           } else {
             const authority = { requiredRole: 'admin' as const };
@@ -77,6 +81,14 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
 }
 
 async function authorisedRequest(path: string, request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string, now: Date) {
+      if (path.endsWith('/admission')) {
+        if (!options.store) return reply.code(503).send({ status: 'unavailable' });
+        const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
+        const { serverId } = params.parse(request.params);
+        const admission = await readHostedAdmission(options.store, options.silo, serverId);
+        if (!admission) return reply.code(404).send({ status: 'not_found' });
+        return reply.send(hostedAdmissionSchema.parse(admission));
+      }
       if (path.endsWith('/:commandId')) {
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
         const params = z.object({ commandId: z.string() }).parse(request.params);

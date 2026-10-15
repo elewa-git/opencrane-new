@@ -69,3 +69,6 @@ export { renderGatewayConfiguration, type GatewayRenderSettings } from './gatewa
 export { RootBudgetRefused, rootTotals } from './root-budget.ts';
 export { registerHosted, hostedRegistrationChange } from './hosted-registration.ts';
 export { gatewayDelivery } from './gateway-delivery.ts';
+
+export { writeHostedAdmission, readHostedAdmission, foldHostedAdmission }
+  from './hosted-admission.ts';

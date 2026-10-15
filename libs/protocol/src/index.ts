@@ -94,3 +94,5 @@ export {
 export { memberAccessSchema, memberDepartureSchema, type MemberAccessRow } from './member-inventory.ts';
 
 export { toolAccessExplanationSchema, type ToolExplanation } from './member-inventory.ts';
+
+export { hostedAdmissionSchema } from './integrations.ts';

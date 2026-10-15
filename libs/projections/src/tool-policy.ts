@@ -21,7 +21,7 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   checkPolicyIdentity(state, event, data);
   const identity = { silo: event.silo, serverId: String(data['serverId']) };
   // Advance the write position without changing approvals or catalogue evidence.
-  if (event.type === 'mcp.dispatch_admitted') {
+  if (event.type === 'mcp.dispatch_admitted' || event.type === 'mcp.image_checked') {
     return { ...state, sequence };
   }
   if (event.type === 'mcp.configuration_observed') {

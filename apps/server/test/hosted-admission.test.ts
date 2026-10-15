@@ -112,8 +112,10 @@ async function savesResultAndReplays() {
   expect((await status(serverId)).json()).toMatchObject({ status: 'checking',
     queuedAt: expect.any(String) });
   const payload = result(serverId);
+  payload.checks.signature = { ...dated,
+    expiresAt: new Date(now.getTime() + 1_800_000).toISOString() };
   const append = nats.store.append.bind(nats.store);
-  async function lostReply(input: Parameters<typeof append>[0]) {
+  async function lostReply(input: Parameters<typeof append>[0]): ReturnType<typeof append> {
     await append(input);
     throw new Error('Lost reply');
   }
@@ -128,7 +130,7 @@ async function savesResultAndReplays() {
   expect(saved[1]?.event).toMatchObject({ type: 'mcp.image_checked', source: 'models',
     principal: { kind: 'system', id: 'models' }, data: payload });
   expect((await status(serverId)).json()).toMatchObject({ status: 'admitted' });
-  const expired = new Date(now.getTime() + 3_600_000);
+  const expired = new Date(now.getTime() + 1_800_000);
   expect(await readHostedAdmission(nats.store, 'test', serverId, expired))
     .toMatchObject({ status: 'expired' });
   const workerApp = Fastify();
@@ -170,6 +172,10 @@ const invalid = [
   { checks: { signature: { verdict: 'not_run' } } },
   { checks: { signature: { ...dated, verdict: 'fail' } } },
   { checks: { signature: { ...dated, reportDigest: undefined } } },
+  { checks: { signature: { ...dated, engineVersion: undefined } } },
+  { checks: { signature: { ...dated, expiresAt: undefined } } },
+  { checks: { malware: { ...scanned, databaseDigest: undefined } } },
+  { checks: { vulnerability: { ...scanned, databaseUpdatedAt: undefined } } },
 ];
 async function refusesResult(patch: Record<string, unknown>) {
   const serverId = await installed();
@@ -187,7 +193,7 @@ async function refusesResult(patch: Record<string, unknown>) {
 }
 it.each(invalid)('refuses invalid writer and stored results %j', refusesResult);
 
-async function checksVerdictsAndPrincipals() {
+async function checksVerdictsAndPrincipals(verdict: 'fail' | 'unavailable') {
   const serverId = await installed();
   const valid = result(serverId);
   const rows = await registrations();
@@ -207,14 +213,16 @@ async function checksVerdictsAndPrincipals() {
     expect(foldHostedAdmission([...rows, forged], 'test', serverId, now))
       .toMatchObject({ status: 'checking' });
   }
-  const unavailable = { ...dated, verdict: 'unavailable' };
-  const unavailableResult = { ...valid, checks: { ...valid.checks, signature: unavailable } };
-  expect((await writeHostedAdmission(nats.store, 'test', unavailableResult, now)).status)
+  const receipt = verdict === 'fail' ? failed : { ...dated, verdict: 'unavailable' };
+  const savedResult = { ...valid, checks: { ...valid.checks, signature: receipt } };
+  expect((await writeHostedAdmission(nats.store, 'test', savedResult, now)).status)
     .toBe('appended');
-  expect((await status(serverId)).json()).toMatchObject({ status: 'unavailable' });
+  const expected = verdict === 'fail' ? 'rejected' : 'unavailable';
+  expect((await status(serverId)).json()).toMatchObject({ status: expected,
+    checks: { signature: receipt } });
 }
-it('reports failed and unavailable checks and ignores forged stored results',
-  checksVerdictsAndPrincipals);
+it.each(['fail', 'unavailable'] as const)(
+  'reports %s checks and ignores forged stored results', checksVerdictsAndPrincipals);
 
 async function protectsReads() {
   const serverId = await installed();
@@ -237,3 +245,65 @@ async function protectsReads() {
   expect((await status(serverId)).statusCode).toBe(403);
 }
 it('checks current admin access once even when the IAM receipt takes over two seconds', protectsReads);
+
+async function refusesForeignAndRemoteServers() {
+  const serverId = await installed();
+  expect((await writeHostedAdmission(nats.store, 'other', result(serverId), now)).status)
+    .toBe('conflict');
+  expect(await readHostedAdmission(nats.store, 'other', serverId, now)).toBeUndefined();
+  const foreign = envelope('other', 'mcp-foreign', 'mcp.server_registered',
+    { serverId: 'foreign', registeredBy: 'alice', kind: 'hosted', locator: command.locator,
+      installation: { attemptId: 1, platform: command.platform, upstream: command.upstream } });
+  foreign.principal = { kind: 'human', id: 'alice' };
+  await nats.store.append({ event: foreign, expectedSequence: 0 });
+  expect((await status('foreign')).statusCode).toBe(404);
+  const remote = envelope('test', 'mcp-remote', 'mcp.server_registered',
+    { serverId: 'remote', registeredBy: 'alice', kind: 'remote', locator: 'https://example.com' });
+  remote.principal = { kind: 'human', id: 'alice' };
+  await nats.store.append({ event: remote, expectedSequence: 0 });
+  expect((await writeHostedAdmission(nats.store, 'test', result('remote'), now)).status)
+    .toBe('conflict');
+  expect(await registrations()).toHaveLength(3);
+  const session = { sub: 'alice', orgId: 'another-org', roles: ['owner'],
+    authTime: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 };
+  const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
+  const response = await app.inject({ method: 'GET',
+    url: `/api/org/integrations/${serverId}/admission`, headers: { cookie } });
+  expect(response.statusCode).toBe(403);
+}
+it('refuses foreign and remote servers and a session from another organisation',
+  refusesForeignAndRemoteServers);
+
+async function expiresOldestDatabaseAndIgnoresSecondResult() {
+  const serverId = await installed();
+  const valid = result(serverId);
+  const malware = { ...scanned,
+    databaseUpdatedAt: new Date(now.getTime() - 86_399_000).toISOString() };
+  const payload = { ...valid, checks: { ...valid.checks, malware } };
+  expect((await writeHostedAdmission(nats.store, 'test', payload, now)).status).toBe('appended');
+  const rows = await registrations();
+  const boundary = new Date(now.getTime() + 1_000);
+  expect(foldHostedAdmission(rows, 'test', serverId, new Date(boundary.getTime() - 1)))
+    .toMatchObject({ status: 'admitted' });
+  expect(foldHostedAdmission(rows, 'test', serverId, boundary)).toMatchObject({ status: 'expired' });
+  const second = envelope('test', `mcp-${serverId}`, 'mcp.image_checked', valid, 'second', now);
+  expect(foldHostedAdmission([...rows, { event: second, sequence: 99 }], 'test', serverId, boundary))
+    .toMatchObject({ status: 'expired' });
+}
+it('expires at the oldest database boundary and ignores a second saved result',
+  expiresOldestDatabaseAndIgnoresSecondResult);
+
+async function serialisesDifferentResults() {
+  const serverId = await installed();
+  const first = result(serverId);
+  const second = { ...first, checks: { ...first.checks,
+    signature: { ...dated, engineVersion: '2' } } };
+  const firstSave = writeHostedAdmission(nats.store, 'test', first, now);
+  const secondSave = writeHostedAdmission(nats.store, 'test', second, now);
+  const outcomes = await Promise.all([firstSave, secondSave]);
+  expect(outcomes).toEqual(expect.arrayContaining([
+    { status: 'appended' }, { status: 'conflict' },
+  ]));
+  expect(await registrations()).toHaveLength(2);
+}
+it('records only one result when different writers race', serialisesDifferentResults);

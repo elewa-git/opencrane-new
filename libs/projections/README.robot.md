@@ -662,3 +662,10 @@ configuration, and cannot establish live readiness.
 `conversation.child_requested` is skipped before the conversation feed is written,
 like `agent.memory_context_recorded`. Rebuild repeats that omission. The separate
 child creation still rebuilds its recorded participants and OpenFGA receipts.
+
+## Hosted image admission receipts
+
+`mcp.image_checked` advances tool-policy sequence only. It preserves policyRevision,
+publication, catalogue dates and discovery state. Catalogue replay uses the same
+fold, starts no work and appends no event. Admission expiry is derived by models
+from the original event dates when read, without a timer or database business rule.
