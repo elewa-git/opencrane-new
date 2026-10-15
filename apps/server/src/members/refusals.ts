@@ -11,14 +11,26 @@ export function refusalDigest(value: unknown): string {
 
 export async function refusalHistory(store: RefusalStore, silo: string,
   memberId: string, deadline: number): Promise<StoredEvent[]> {
+  const rows = await refusalAuditHistory(store, silo, memberId, deadline);
+  return rows.filter(isRefusal);
+}
+
+function isRefusal(row: StoredEvent) {
+  return row.event.type === 'member.command_refused';
+}
+
+async function refusalAuditHistory(store: RefusalStore, silo: string,
+  memberId: string, deadline: number): Promise<StoredEvent[]> {
   const subject = `memberaudit-${memberId}`;
   const rows: StoredEvent[] = [];
   for await (const row of store.readStream(subject, 1, deadline)) {
-    const data = memberCommandRefusedSchema.parse(row.event.data);
     if (row.event.silo !== silo || row.event.subject !== subject
-      || row.event.type !== 'member.command_refused' || data.memberId !== memberId
       || rows.length >= 10_000) {
       throw new Error('Refusal history unavailable');
+    }
+    if (isRefusal(row)) {
+      const data = memberCommandRefusedSchema.parse(row.event.data);
+      if (data.memberId !== memberId) throw new Error('Refusal history unavailable');
     }
     rows.push(row);
   }
@@ -43,9 +55,10 @@ export async function recordMemberRefusal(store: RefusalStore, silo: string, act
   const key = refusalDigest([silo, actor, operation, input.memberId, reason, day]);
   const deadline = performance.now() + 2_000;
   try {
-    const rows = await refusalHistory(store, silo, input.memberId, deadline);
+    // Keep the last sequence from all audit types for the conditional append.
+    const rows = await refusalAuditHistory(store, silo, input.memberId, deadline);
     function matches(row: StoredEvent) {
-      return row.event.commandId === key && row.event.principal?.id === actor;
+      return isRefusal(row) && row.event.commandId === key && row.event.principal?.id === actor;
     }
     if (rows.some(matches)) {
       return true;

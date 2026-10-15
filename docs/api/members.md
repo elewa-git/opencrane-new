@@ -345,11 +345,12 @@ History and inventory reads finish before the two-second access check begins.
 
 The receipt includes the original ids, member, sequence, time, reviewed revision,
 `removedAt` and `access: revoked`. GET `/api/members/:memberId/changes/:commandId`
-adds separate content and IAM progress. Revoked access does not wait for either.
+adds separate content and IAM progress, plus `cleanup`. Revoked access does not wait
+for any of them.
 An exact retry returns the original receipt; changed arguments return
 `command_id_reused`. Status reads save nothing. Removed callers receive 403,
 including for status. An Admin who removes themselves and loses the reply
-learns the result from that 403. Cleanup status remains unavailable.
+learns the result from that 403.
 
 The dispatcher reacts to reviewed removals by removing current group memberships,
 revoking direct and personal-assistant grants, and deactivating personal assistants.
@@ -365,7 +366,23 @@ The worker records `member.departure_cleanup_completed` on `memberaudit-<memberI
 after confirming saved changes and the group/grant OpenFGA receipts. Its `sections`
 hold at most 100 saved event ids each for `groups`, `grants`, `assistant` and `computer`.
 Earlier attempts' results are included. `removalId` names the saved removal.
-This record changes no access. API cleanup status remains for the next change.
+This record changes no access.
+
+The status GET reads that audit stream under its own two-second deadline before
+checking current admin access. `cleanup` is `{ state: 'applying' }` for the first
+15 minutes after `removedAt`, then `{ state: 'unknown' }`. Removals without a
+reviewed revision report `unknown` immediately. Failed, timed-out, invalid or
+oversized audit reads also report `unknown`; the removal still returns HTTP 200
+with `access: revoked` and its projection progress. The audit limit is 10,000 rows.
+
+A valid completion must match the silo, audit stream, member and saved removal id.
+It returns `{ state: 'complete', completedAt, sections }`, using that event's time
+and sections only. The earliest matching row decides; duplicate sections are never
+combined. A completion still takes precedence after 15 minutes. A returning person's
+new member id has its own cleanup status. Refusal records do not change cleanup,
+and cleanup records do not prevent invitation refusals being saved or read.
+Rebuilding the member tables preserves cleanup status. The POST receipt and exact
+retries remain unchanged.
 
 ## Access and departure inventory
 

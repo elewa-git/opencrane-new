@@ -32,8 +32,9 @@ let db: ReturnType<typeof pgDb>;
 let options: GroupOptions;
 let counter = 0;
 let keyDirectory: string;
-async function append(subject: string, type: string, data: unknown) {
-  const record = { ...event(`removal-${++counter}`, subject, type), time: new Date().toISOString(), data };
+async function append(subject: string, type: string, data: unknown,
+  time = new Date().toISOString()) {
+  const record = { ...event(`removal-${++counter}`, subject, type), time, data };
   const command = { event: record, expectedSequence: await nats.store.head(subject) };
   expect((await nats.store.append(command)).status).toBe('appended');
   return record;
@@ -111,6 +112,7 @@ async function reconcilesRemoval() {
   expect(response.statusCode, response.body).toBe(200);
   expect(response.json()).toMatchObject({ status: 'recorded', access: 'revoked',
     commandId: input.commandId, reviewRevision: input.reviewRevision });
+  expect(response.json()).not.toHaveProperty('cleanup');
   const before = await nats.store.head();
   expect((await request('lost-reply', 'remove', input)).json()).toEqual(response.json());
   const changed = { ...input, reviewRevision: '0'.repeat(64) };
@@ -509,7 +511,10 @@ async function completedCleanup() {
   const memberId = 'completed-cleanup';
   const removal = await savedRemoval(memberId);
   await completeCleanup(memberId, 'another-removal');
-  const first = await completeCleanup(memberId, removal.id);
+  const completedAt = new Date(Date.parse(removal.time) + 16 * 60_000).toISOString();
+  const data = { memberId, removalId: removal.id, sections: cleanupSections };
+  const first = await append(`memberaudit-${memberId}`,
+    'member.departure_cleanup_completed', data, completedAt);
   const duplicate = { memberId, removalId: removal.id,
     sections: { groups: ['later-result'], grants: [], assistant: [], computer: [] } };
   await append(`memberaudit-${memberId}`, 'member.departure_cleanup_completed', duplicate);
@@ -554,22 +559,23 @@ async function separateAdmissions() {
   await completeCleanup('admission-b', first.id);
   await completeCleanup('admission-a', second.id);
   const pending = { state: 'applying' };
-  expect((await removalStatus(options, 'owner', 'admission-a', first.commandId))?.cleanup)
+  expect((await removalStatus(options, 'owner', 'admission-a', first.commandId!))?.cleanup)
     .toEqual(pending);
-  expect((await removalStatus(options, 'owner', 'admission-b', second.commandId))?.cleanup)
+  expect((await removalStatus(options, 'owner', 'admission-b', second.commandId!))?.cleanup)
     .toEqual(pending);
   const completion = await completeCleanup('admission-a', first.id);
   const input = { memberId: 'admission-a', commandId: 'refused-return' };
   expect(await recordMemberRefusal(nats.store, 'test', 'owner', 'invite', input,
     'access_refused', new Date())).toBe(true);
-  expect((await removalStatus(options, 'owner', 'admission-a', first.commandId))?.cleanup)
+  expect((await removalStatus(options, 'owner', 'admission-a', first.commandId!))?.cleanup)
     .toEqual({ state: 'complete', completedAt: completion.time, sections: cleanupSections });
-  expect((await removalStatus(options, 'owner', 'admission-b', second.commandId))?.cleanup)
+  expect((await removalStatus(options, 'owner', 'admission-b', second.commandId!))?.cleanup)
     .toEqual(pending);
 }
 it('keeps cleanup with its removal across two admissions and refusal records', separateAdmissions);
 
-const auditFailures = ['timeout', 'failed', 'silo', 'subject', 'member', 'schema', 'overflow'];
+const auditFailures = ['timeout', 'failed', 'silo', 'subject', 'member', 'schema',
+  'late-schema', 'limit', 'overflow'];
 async function unavailableCleanup(failure: string) {
   const memberId = `cleanup-${failure}`;
   const removal = await savedRemoval(memberId);
@@ -583,13 +589,14 @@ async function unavailableCleanup(failure: string) {
     expect(deadline - performance.now()).toBeLessThanOrEqual(2000);
     if (failure === 'failed') throw new Error('private upstream failure');
     if (failure === 'timeout') {
-      await new Promise(resolveDelay);
+      await new Promise<void>(resolveDelay);
       yield* read(subject, from, deadline);
       return;
     }
     for await (const row of read(subject, from, deadline)) {
-      if (failure === 'overflow') {
-        for (let index = 0; index < 10_001; index += 1) yield row;
+      if (failure === 'overflow' || failure === 'limit') {
+        const count = failure === 'limit' ? 10_000 : 10_001;
+        for (let index = 0; index < count; index += 1) yield row;
         return;
       }
       const changed = { ...row.event };
@@ -598,7 +605,8 @@ async function unavailableCleanup(failure: string) {
       if (failure === 'member') {
         changed.data = { memberId: 'other', removalId: removal.id, sections: cleanupSections };
       }
-      if (failure === 'schema') {
+      if (failure === 'late-schema') yield row;
+      if (failure === 'schema' || failure === 'late-schema') {
         changed.data = { memberId, removalId: removal.id,
           sections: { ...cleanupSections, computer: ['private@example.test'] } };
       }
@@ -612,8 +620,9 @@ async function unavailableCleanup(failure: string) {
   readSpy.mockImplementation(faultyRead);
   const response = await request(memberId, `changes/${removal.commandId}`);
   expect(response.statusCode, response.body).toBe(200);
+  const state = failure === 'limit' ? 'complete' : 'unknown';
   expect(response.json()).toMatchObject({ access: 'revoked', projection: {},
-    cleanup: { state: 'unknown' } });
+    cleanup: { state } });
   expect(response.body).not.toContain('private');
 }
 it.each(auditFailures)('keeps removal status available on an unsafe audit read: %s',

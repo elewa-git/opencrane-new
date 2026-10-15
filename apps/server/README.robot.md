@@ -2008,6 +2008,16 @@ This change adds no member removal route or dependency.
 
 The [removal contract](../../docs/api/members.md#reviewed-member-removal) covers
 review conflicts, receipts and delayed table and permission updates.
+The status GET adds cleanup from the member audit stream before checking current
+admin access. The read has its own two-second deadline and 10,000-row limit.
+Without a completion, reviewed removals stay applying for 15 minutes from the saved
+removal time, then become unknown. Legacy removals and failed or unsafe reads are
+unknown. The first valid matching completion supplies its own time and sections,
+even after that bound. POST receipts and exact retries stay unchanged.
+Refusal history validates every row's silo and subject, counts all audit types and
+parses only refusals. Refusal appends use the last sequence across all audit types.
+The removal and refusal tests cover time bounds, failed audit reads, current access,
+duplicate completions, separate admissions and unchanged status after member replay.
 Removal compares the reviewed revision, then checks the inventory category positions
 again before append. These checks remain separate from the small member and ownership
 streams that decide access. The conditional append checks the target member position;

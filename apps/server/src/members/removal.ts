@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { memberRemovedDataSchema } from '@opencrane/events';
+import { departureCleanupCompletedSchema, memberRemovedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { activeMember, currentMembership, history, ownershipWriteAccess,
   readActiveMember } from '@opencrane/models';
@@ -15,6 +15,14 @@ const removalBody = z.object({
 }).strict();
 type Input = z.infer<typeof removalBody>;
 export class RemovalConflict extends Error {}
+
+// Allow longer than cleanup-departure's six 60-second attempts plus backoff in
+// libs/handlers/src/queue.ts. Elapsed time never proves that cleanup finished.
+const cleanupApplyingMs = 15 * 60_000;
+const cleanupReadMs = 2_000;
+type Cleanup = { state: 'applying' | 'unknown' }
+  | { state: 'complete'; completedAt: string;
+    sections: z.infer<typeof departureCleanupCompletedSchema>['sections'] };
 
 function receipt(row: StoredEvent) {
   const data = memberRemovedDataSchema.parse(row.event.data);
@@ -96,7 +104,7 @@ async function requireCurrentInventory(inventory: Awaited<ReturnType<typeof memb
 }
 
 export async function removalStatus(options: GroupOptions, actor: string,
-  memberId: string, commandId: string) {
+  memberId: string, commandId: string, now = new Date()) {
   const rows = await history(options.store, `member-${memberId}`, options.silo,
     performance.now() + 10_000);
   function matches(row: StoredEvent) {
@@ -104,7 +112,41 @@ export async function removalStatus(options: GroupOptions, actor: string,
   }
   const row = rows.find(matches);
   if (!row) return undefined;
+  const cleanup = await cleanupStatus(options, memberId, row, now);
   await readActiveMember(options.store, options.binding, actor, 'admin');
   const projection = await projectionProgress(options, row, undefined);
-  return { ...receipt(row), projection };
+  return { ...receipt(row), projection, cleanup };
+}
+
+async function cleanupStatus(options: GroupOptions, memberId: string,
+  removal: StoredEvent, now: Date): Promise<Cleanup> {
+  const removed = memberRemovedDataSchema.parse(removal.event.data);
+  if (!removed.reviewRevision) return { state: 'unknown' };
+  const subject = `memberaudit-${memberId}`;
+  const deadline = performance.now() + cleanupReadMs;
+  let completed: Cleanup | undefined;
+  let count = 0;
+  try {
+    for await (const row of options.store.readStream(subject, 1, deadline)) {
+      count += 1;
+      if (row.event.silo !== options.silo || row.event.subject !== subject || count > 10_000) {
+        return { state: 'unknown' };
+      }
+      if (row.event.type !== 'member.departure_cleanup_completed') continue;
+      const data = departureCleanupCompletedSchema.parse(row.event.data);
+      if (data.memberId !== memberId) return { state: 'unknown' };
+      if (data.removalId === removal.event.id && !completed) {
+        completed = { state: 'complete', completedAt: row.event.time, sections: data.sections };
+      }
+    }
+  } catch {
+    // Preserve revoked access and projection progress when cleanup cannot be read safely.
+    return { state: 'unknown' };
+  }
+  // Check every row before trusting the first matching completion.
+  if (completed) return completed;
+  if (now.getTime() - Date.parse(removal.event.time) >= cleanupApplyingMs) {
+    return { state: 'unknown' };
+  }
+  return { state: 'applying' };
 }
