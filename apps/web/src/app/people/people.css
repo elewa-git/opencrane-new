@@ -52,6 +52,10 @@ p, small { color: var(--oc-ink-admin-muted); }
 .member-name-link { display: inline-flex; align-items: center; min-width: 44px; min-height: 44px;
   color: inherit; text-decoration: underline; }
 .member-detail-page { display: grid; gap: 18px; min-width: 0; }
+.member-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+oc-hinge-drawer section { margin: 12px 0; padding: 12px; border: 1px solid var(--oc-border-default);
+  border-radius: var(--oc-radius-card); overflow-wrap: anywhere; }
+oc-hinge-drawer section h3 { margin-top: 0; }
 .member-crumb { color: var(--oc-accent-dark); overflow-wrap: anywhere; }
 .member-crumb a { display: inline-flex; align-items: center; min-height: 44px;
   color: inherit; }

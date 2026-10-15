@@ -72,7 +72,8 @@
       } @else if (peopleGroupId) {
         <oc-group-detail-screen [groupId]="peopleGroupId" />
       } @else if (peopleMemberId) {
-        <oc-member-detail-screen [memberId]="peopleMemberId" />
+        <oc-member-detail-screen [memberId]="peopleMemberId"
+          [organisationName]="organisation" />
       } @else {
         <oc-people-screen [organisationName]="organisation" />
       }

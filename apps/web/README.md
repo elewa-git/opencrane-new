@@ -14,8 +14,8 @@ flowchart LR
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
-  web -->|opens| integrations["Integrations pages<br/>register, package checks, changes, tools and access explanations"]
-  web -->|opens and clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
+  web -->|opens| integrations["Integrations pages<br/>register, add, package checks, changes, tools and access explanations"]
+  web -->|reviews invitations and removals; clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
   web -->|reads, stores and forgets| memory["Memory panel<br/>scopes, personal facts, sources, safe receipts and forget outcomes"]
 ```
 
@@ -99,6 +99,9 @@ assistant check open rather than guessing an answer.
 - Shows each member's recorded groups and grants in a table that becomes labelled cards
   on phones. A missing member or lost access clears the page. A failed refresh keeps
   earlier details with separate times for member and grant data.
+- Lets Owners and Admins review a member's departure before removal. The review names
+  lost access, work needing a separate decision and saved history. An uncertain removal
+  stays tied to its original request and can be checked without sending it again.
 - Lets organisation admins create a shared assistant for a group with selected grants
   and a fixed paying group, including groups managed by an identity provider. Group
   membership does not grant desktop access.

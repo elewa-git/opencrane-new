@@ -4,6 +4,9 @@
     <div class="paper-card access-state" role="alert">
       <p>Names, groups and access were cleared.</p>
       @if (denialStatus() === 401) { <p>Sign in again to check your access.</p> }
+      @if (lostAfterRemoval()) {
+        <p>If you removed yourself, the removal was saved.</p>
+      }
       <a class="button primary" href="/org">Go to organisation</a>
     </div>
   } @else if (state() === 'missing') {
@@ -23,8 +26,17 @@
             <p>{{ full.email }} · Member since {{ joinedDate() }}</p>
           }
         </div>
-        <button type="button" class="button secondary" (click)="refresh()"
-          [disabled]="state() === 'loading'">Refresh</button>
+        <div class="member-actions">
+          <button type="button" class="button secondary" (click)="refresh()"
+            [disabled]="state() === 'loading'">Refresh</button>
+          @if (detail() && person.role === 'owner') {
+            <a class="button secondary" href="/org/people/owners">Owners step down first</a>
+          } @else if (detail() && person.permissions.remove) {
+            <button #removeOpener type="button" class="button destructive"
+              (click)="openDeparture(removeOpener)">Remove from
+              {{ organisationName() }}</button>
+          }
+        </div>
       </div>
       @if (state() === 'failed' || accessState() === 'failed') {
         <p class="refresh-notice" role="status">
@@ -121,3 +133,73 @@
     }
   }
 </section>
+<oc-hinge-drawer [open]="drawerOpen()"
+  [title]="'Remove ' + name() + ' from ' + organisationName() + '?'"
+  backLabel="Cancel" [returnFocusTo]="reviewOpener" (closed)="closeDeparture()">
+  @if (removalState() === 'sending') {
+    <p role="status">Removing {{ name() }}…</p>
+  } @else if (removalState() === 'removed') {
+    <h3>Removed · {{ removedTime() }}</h3>
+    <p>{{ removalNotice() }}</p>
+    <p>{{ progressLabel('iam') }}</p>
+    <p>{{ progressLabel('content') }}</p>
+    <p>Clean-up status isn't available yet</p>
+    <button type="button" class="button secondary" [disabled]="checkingStatus()"
+      (click)="checkRemovalStatus()">Check status</button>
+  } @else if (removalState() === 'unknown') {
+    <p role="status">{{ removalNotice() }}</p>
+    <button type="button" class="button secondary" [disabled]="checkingStatus()"
+      (click)="checkRemovalStatus()">Check status</button>
+  } @else {
+    @if (departureState() === 'loading') {
+      <p role="status">Checking what changes when {{ name() }} leaves…</p>
+    } @else if (departureState() === 'failed') {
+      <p>Departure details are unavailable right now.</p>
+      <button type="button" class="button secondary" (click)="readDeparture()">
+        Try again</button>
+    } @else if (departure(); as review) {
+      @if (!review.complete) {
+        <p role="status">The review is not complete. Removal is unavailable.</p>
+        @for (section of review.unavailableSections; track $index) {
+          <p>{{ sectionLabel(section) }}</p>
+        }
+        <button type="button" class="button secondary" (click)="readDeparture()">
+          Try again</button>
+      }
+      @if (removalNotice()) {
+        <p role="status">{{ removalNotice() }}</p>
+        @if (removalNotice() === 'Owners step down first.') {
+          <a href="/org/people/owners">Owners step down first</a>
+        }
+      }
+      <section><h3>Access lost</h3>
+        @for (row of review.accessLost; track row.resourceType + row.resourceId) {
+          <p>{{ row.label || row.resourceId }}</p>
+        } @empty { @if (review.complete) { <p>No recorded access to lose</p> } }
+      </section>
+      <section><h3>Needs a decision</h3>
+        @for (work of review.ownedSharedWork; track work) {
+          <p>{{ work }} · A separate decision is needed before removal.</p>
+        } @empty { @if (review.complete) { <p>No shared work needs a decision</p> } }
+        <h4>Routines · {{ historyStatusLabel(review.routines.status) }}</h4>
+        <p>{{ review.routines.message }}</p>
+        <h4>Personal connections ·
+          {{ historyStatusLabel(review.personalConnections.status) }}</h4>
+        <p>{{ review.personalConnections.message }}</p>
+      </section>
+      <section><h3>Kept</h3>
+        @if (review.retainedHistory) {
+          <p>Saved conversation records: {{ review.retainedHistory.count }};
+            private chats stay private.</p>
+        } @else { <p>Saved history could not be checked.</p> }
+      </section>
+    }
+  }
+  <div overlayFooter class="overlay-actions">
+    @if (drawerOpen() && removalState() === 'idle' && member()?.role !== 'owner') {
+      <button type="button" class="button destructive" [disabled]="!canRemove()"
+        (click)="removeMember()">Remove {{ name() }}</button>
+    }
+    <button type="button" class="button secondary" (click)="closeDeparture()">Cancel</button>
+  </div>
+</oc-hinge-drawer>

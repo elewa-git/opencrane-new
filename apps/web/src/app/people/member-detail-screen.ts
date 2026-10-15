@@ -3,8 +3,11 @@ import {
   type OnDestroy, type OnInit,
 } from '@angular/core';
 import { GrainLoader } from '../ui/grain-loader';
+import { HingeDrawer } from '../ui/hinge-drawer';
 import { checkTimeLabel } from './group-wording';
-import { fetchMember, fetchMemberAccess, type Access, type Detail, type Header } from './members-api';
+import { fetchDeparture, fetchMember, fetchMemberAccess, fetchRemovalStatus,
+  sendMemberRemoval, type Access, type Departure, type Detail, type Header,
+  type RemovalReceipt } from './members-api';
 
 type ScreenState = 'loading' | 'ready' | 'failed' | 'missing' | 'access';
 type AccessState = 'idle' | 'loading' | 'ready' | 'failed';
@@ -14,13 +17,14 @@ type Check = Row['eligibility']['person'];
 
 @Component({
   selector: 'oc-member-detail-screen',
-  imports: [GrainLoader],
+  imports: [GrainLoader, HingeDrawer],
   templateUrl: './member-detail-screen.html',
   styleUrls: ['./people.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MemberDetailScreen implements OnInit, OnDestroy {
   readonly memberId = input.required<string>();
+  readonly organisationName = input('the organisation');
   protected readonly member = signal<Header | Detail | undefined>(undefined);
   protected readonly detail = signal<Detail | undefined>(undefined);
   protected readonly access = signal<Access | undefined>(undefined);
@@ -29,13 +33,25 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
   protected readonly memberLoadedAt = signal<string | undefined>(undefined);
   protected readonly accessLoadedAt = signal<string | undefined>(undefined);
   protected readonly denialStatus = signal<number | undefined>(undefined);
+  protected readonly drawerOpen = signal(false);
+  protected readonly departure = signal<Departure | undefined>(undefined);
+  protected readonly departureState = signal<'loading' | 'ready' | 'failed'>('loading');
+  protected readonly removalState = signal<'idle' | 'sending' | 'unknown' | 'removed'>('idle');
+  protected readonly removalNotice = signal('');
+  protected readonly removalReceipt = signal<RemovalReceipt | undefined>(undefined);
+  protected readonly checkingStatus = signal(false);
+  protected readonly lostAfterRemoval = signal(false);
   protected readonly checkLabel = checkLabel;
   protected readonly sectionLabel = sectionLabel;
   protected readonly sourceLabel = sourceLabel;
+  protected readonly historyStatusLabel = historyStatusLabel;
   protected readonly groupSource = groupSource;
   private readonly request = new AbortController();
   private readonly accessHeading = viewChild<ElementRef<HTMLElement>>('accessHeading');
   private generation = 0;
+  private drawerGeneration = 0;
+  private commandId: string | undefined;
+  protected reviewOpener: HTMLButtonElement | undefined;
   private focusTimer: number | undefined;
 
   ngOnInit(): void { void this.refresh(); }
@@ -69,6 +85,127 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
       }
     }
     return assistantId;
+  }
+
+  protected openDeparture(opener: HTMLButtonElement): void {
+    if (!this.detail() || this.member()?.role === 'owner' || this.state() !== 'ready') return;
+    this.reviewOpener = opener;
+    this.drawerOpen.set(true);
+    if (!this.commandId) {
+      this.removalState.set('idle');
+      this.removalNotice.set('');
+      void this.readDeparture();
+    }
+  }
+
+  protected closeDeparture(): void {
+    this.drawerGeneration += 1;
+    this.drawerOpen.set(false);
+    this.departure.set(undefined);
+    if (!this.commandId) this.removalState.set('idle');
+    if (this.commandId && this.removalState() === 'sending') {
+      this.removalState.set('unknown');
+      this.removalNotice.set('The result is unknown. Check status before taking another action.');
+    }
+  }
+
+  protected async readDeparture(): Promise<void> {
+    if (!this.drawerOpen() || this.commandId) return;
+    const generation = ++this.drawerGeneration;
+    this.departure.set(undefined);
+    this.departureState.set('loading');
+    const result = await fetchDeparture(this.memberId(), this.request.signal);
+    if (result.kind === 'denied') { this.clearForAccessLoss(result.status); return; }
+    if (generation !== this.drawerGeneration || !this.drawerOpen()) return;
+    if (result.kind !== 'ok') {
+      this.departureState.set('failed');
+      return;
+    }
+    this.departure.set(result.value);
+    this.departureState.set('ready');
+  }
+
+  protected canRemove(): boolean {
+    const review = this.departure();
+    return this.drawerOpen() && this.removalState() === 'idle'
+      && this.departureState() === 'ready' && !!review?.complete
+      && review.permissions.remove && review.ownedSharedWork.length === 0;
+  }
+
+  protected async removeMember(): Promise<void> {
+    const review = this.departure();
+    if (!this.canRemove() || !review) return;
+    const generation = this.drawerGeneration;
+    const commandId = crypto.randomUUID();
+    this.commandId = commandId;
+    this.removalState.set('sending');
+    const body = { commandId, expectedSequence: review.memberSequence,
+      reviewRevision: review.reviewRevision };
+    const result = await sendMemberRemoval(this.memberId(), body, this.request.signal);
+    if (result.kind === 'denied') { this.clearForAccessLoss(result.status); return; }
+    if (generation !== this.drawerGeneration || !this.drawerOpen()) return;
+    if (result.kind === 'ok') {
+      this.showRemovalReceipt(result.value);
+      if (!result.value.projection) void this.checkRemovalStatus();
+      return;
+    }
+    if (result.kind === 'conflict') {
+      this.commandId = undefined;
+      this.removalState.set('idle');
+      if (result.reason === 'ownership_stream_required') {
+        this.removalNotice.set('Owners step down first.');
+      } else {
+        this.removalNotice.set('The review changed. Check it again before removing.');
+      }
+      await this.readDeparture();
+      return;
+    }
+    this.removalState.set('unknown');
+    this.removalNotice.set('The result is unknown. Check status before taking another action.');
+  }
+
+  protected async checkRemovalStatus(): Promise<void> {
+    const commandId = this.commandId;
+    if (!commandId || this.checkingStatus()) return;
+    const generation = this.drawerGeneration;
+    this.checkingStatus.set(true);
+    const result = await fetchRemovalStatus(this.memberId(), commandId, this.request.signal);
+    this.checkingStatus.set(false);
+    if (result.kind === 'denied') { this.clearForAccessLoss(result.status); return; }
+    if (generation !== this.drawerGeneration || !this.drawerOpen()) return;
+    if (result.kind === 'ok') { this.showRemovalReceipt(result.value); return; }
+    if (this.removalReceipt()) {
+      this.removalNotice.set('Access ended. Progress is not available yet.');
+      return;
+    }
+    this.removalState.set('unknown');
+    if (result.kind === 'missing') {
+      this.removalNotice.set('No result recorded yet; the original request may still arrive.');
+    } else {
+      this.removalNotice.set('Status is unavailable. Check again later.');
+    }
+  }
+
+  private showRemovalReceipt(receipt: RemovalReceipt): void {
+    this.removalReceipt.set(receipt);
+    this.removalState.set('removed');
+    this.removalNotice.set('Access ended when the removal was saved.');
+  }
+
+  protected removedTime(): string {
+    const time = this.removalReceipt()?.removedAt;
+    if (!time) return '';
+    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short',
+      year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' };
+    return `${new Date(time).toLocaleString('en-GB', options)} UTC`;
+  }
+
+  protected progressLabel(part: 'iam' | 'content'): string {
+    const state = this.removalReceipt()?.projection?.[part];
+    const label = part === 'iam' ? 'IAM' : 'Content';
+    if (state === 'current') return `${label} is current`;
+    if (state === 'applying') return `${label} is still applying`;
+    return `${label} status is not available yet`;
   }
 
   protected async refresh(): Promise<void> {
@@ -135,6 +272,7 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     this.member.set(undefined);
     this.detail.set(undefined);
     this.access.set(undefined);
+    this.clearDeparture();
     this.memberLoadedAt.set(undefined);
     this.accessLoadedAt.set(undefined);
     this.accessState.set('idle');
@@ -147,12 +285,23 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     this.member.set(undefined);
     this.detail.set(undefined);
     this.access.set(undefined);
+    this.lostAfterRemoval.set(!!this.commandId);
+    this.clearDeparture();
     this.memberLoadedAt.set(undefined);
     this.accessLoadedAt.set(undefined);
     this.denialStatus.set(status);
     this.accessState.set('idle');
     this.state.set('access');
     this.focusTimer = globalThis.setTimeout(() => this.accessHeading()?.nativeElement.focus(), 0);
+  }
+
+  private clearDeparture(): void {
+    this.drawerGeneration += 1;
+    this.drawerOpen.set(false);
+    this.departure.set(undefined);
+    this.removalReceipt.set(undefined);
+    this.commandId = undefined;
+    this.removalNotice.set('');
   }
 }
 
@@ -189,4 +338,10 @@ const sectionWords: Record<string, string> = {
 
 function sectionLabel(code: string): string {
   return sectionWords[code] ?? 'Another part of access could not be checked';
+}
+
+function historyStatusLabel(status: Departure['routines']['status']): string {
+  if (status === 'absent_on_version') return 'None possible on this version';
+  if (status === 'unsupported_history') return 'Past records cannot be checked';
+  return 'Unavailable';
 }
