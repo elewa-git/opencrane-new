@@ -61,9 +61,10 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
   if (socket.readyState !== socket.OPEN) return;
   const context: Parameters<typeof turnCommand>[1] = { silo: options.silo, ...input };
   if (options.binding) context.binding = options.binding;
-  if (report.type === 'agent.turn_started' &&
-      await childRequestHeld(options, report.conversationId)) {
-    throw new ReportRejected('Child request queued');
+  if (report.type === 'agent.turn_started') {
+    const facts = await readChatFacts(options.store, options.silo,
+      report.conversationId, report.turnId);
+    if (await childRequestHeld(options, facts.created)) throw new ReportRejected('Child request queued');
   }
   const result = await recordReport(options.store, options.keys, context, value);
   const acknowledgement: {

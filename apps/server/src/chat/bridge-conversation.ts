@@ -181,8 +181,8 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
     await refreshStops();
     return control;
   }
-  agentSession(rows);
-  if (await childRequestHeld(options, conversation.conversationId)) {
+  const created = agentSession(rows);
+  if (await childRequestHeld(options, created)) {
     return { pending: true, retry: true };
   }
   const message = pendingMessage(rows);
