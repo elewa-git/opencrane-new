@@ -18,7 +18,7 @@ function digest(value: string) {
 export async function readRecallContext(options: MemoryOptions, context: MemoryContext) {
   // Read history before starting the final short access checks.
   const chat = await readChatFacts(options.store, options.silo, context.conversation, context.turn);
-  if (chat.closed) {
+  if (chat.conversationClosed) {
     throw new Error('Memory turn ended');
   }
   const events = chat.memoryContext?.events.values();
