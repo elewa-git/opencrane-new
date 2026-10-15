@@ -851,11 +851,12 @@ and checks unloaded threads. A failed cleanup leaves proof unavailable.
 appear in either receipt. `bridge_unavailable` returns the request and epoch if proof
 fails or takes 30 seconds. Neither receipt grants desktop control.
 
-Not in this PR: server delivery within two seconds of saved intent (including idle
-computers and first-message reconnect ordering), server receipt checks for binding,
-epoch, empty inventory and unavailable executor/browser proof, pausing/paused events,
-supervisor calls, hold cancellation, budget release, automation proof and crash recovery.
-Delivery must land with receipt checks because the server closes on unknown messages.
+The server now delivers this gate after saved intent, including to idle computers,
+and before `resume` on every reconnect. It checks the receipt's binding, first epoch,
+empty inventory and unavailable executor/browser proofs before retaining it in memory
+on that link. Invalid receipts close with 1008. No receipt is saved in the event log.
+Pausing/paused events, supervisor calls, hold cancellation, budget release, automation
+proof and crash recovery remain later work.
 Writer access and fresh-install qualification are also absent. The local tests use
 real authenticated sockets and stub Codex replies; they do not qualify a live computer.
 The stop and refusal tests use real issuer keys and bridge sockets. Invalid gates

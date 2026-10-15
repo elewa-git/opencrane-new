@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { setTimeout as delay } from 'node:timers/promises';
+import { readComputerControl } from '@opencrane/auth';
+import type { bridgeControl } from './bridge-control.ts';
 import type { Logger } from '@opencrane/observability';
 import { history } from '../../../ops/src/lifecycle.ts';
 import { creationEvent } from './private-session.ts';
@@ -14,12 +17,18 @@ type Progress = ConversationProgress & {
   computerEventId: string | undefined;
   kind: string | undefined;
 };
+type ConversationLink = Awaited<ReturnType<Parameters<typeof processConversation>[5]>>;
+type Connection = (computerId: string, assistantId: string) =>
+  Promise<ConversationLink & { control: ReturnType<typeof bridgeControl> }>;
+const computerData = z.object({ computerId: z.string() });
 const assistantKindData = z.object({ kind: z.enum(['personal', 'team']) });
 
 export function assistantProcessor(options: WatchOptions, tokens: Tokens, refused: Set<string>,
-  connection: Parameters<typeof processConversation>[5],
+  connection: Connection,
   connectionId: (assistantId: string) => number | undefined, logger: Logger) {
   const seen = new Map<string, Progress>();
+  let watchedAssistants = new Set<string>();
+  const readingSnapshots = new Map<string, Promise<Snapshot>>();
   const kinds = new Map<string, string>();
   const snapshots = new Map<string, { head: number; assistant: Snapshot }>();
   const creationReadFailures = new Set<string>();
@@ -33,7 +42,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     logger.error(details, message);
   }
 
-  async function snapshot(assistantId: string) {
+  async function readSnapshot(assistantId: string) {
     let kind = kinds.get(assistantId);
     if (!kind) {
       try {
@@ -66,6 +75,18 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     const cached = { head, assistant };
     snapshots.set(assistantId, cached);
     return assistant;
+  }
+
+  function snapshot(assistantId: string) {
+    const reading = readingSnapshots.get(assistantId);
+    if (reading) return reading;
+    function finished() {
+      readingSnapshots.delete(assistantId);
+    }
+    // Share computer reads between the independent gate and conversation checks.
+    const pending = readSnapshot(assistantId).finally(finished);
+    readingSnapshots.set(assistantId, pending);
+    return pending;
   }
 
   async function process(conversation: AgentSession, assistant: Snapshot,
@@ -120,6 +141,43 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     return results.includes(true);
   }
 
+  async function processControl(assistantId: string) {
+    const assistant = await snapshot(assistantId);
+    if (assistant.controlPending && assistant.current?.type === 'computer.ready') {
+      const computer = computerData.parse(assistant.current.data);
+      const control = await readComputerControl(options.store, options.silo, assistantId);
+      if (control?.phase === 'requested' && !refused.has(computer.computerId)) {
+        const link = await connection(computer.computerId, assistantId);
+        await link.control.send();
+      }
+    }
+  }
+
+  async function watchControls(signal: AbortSignal) {
+    const checking = new Map<string, Promise<void>>();
+    function failed() {
+      logger.warn('Bridge control check unavailable; retrying next poll');
+    }
+    function start(assistantId: string) {
+      if (checking.has(assistantId)) return;
+      function finished() {
+        checking.delete(assistantId);
+      }
+      const checked = processControl(assistantId).catch(failed);
+      checking.set(assistantId, checked.finally(finished));
+    }
+    try {
+      while (!signal.aborted) {
+        for (const assistantId of watchedAssistants) start(assistantId);
+        await delay(250, undefined, { signal });
+      }
+    } catch (error) {
+      if (!signal.aborted) throw error;
+    } finally {
+      await Promise.all(checking.values());
+    }
+  }
+
   function forgetMissing(sessions: AgentSession[]) {
     const conversationIds = new Set<string>();
     const assistantIds = new Set<string>();
@@ -127,6 +185,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       conversationIds.add(session.conversationId);
       assistantIds.add(session.assistantId);
     }
+    watchedAssistants = assistantIds;
     for (const conversationId of seen.keys()) {
       if (!conversationIds.has(conversationId)) seen.delete(conversationId);
     }
@@ -135,5 +194,5 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
   }
 
-  return { processAssistant, forgetMissing };
+  return { processAssistant, watchControls, forgetMissing };
 }

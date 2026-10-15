@@ -202,6 +202,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   const pendingDeliveries = uploads.length + stops.length;
   if (!message && pendingDeliveries === 0) return { pending: false, retry: false };
   if (current.type === 'computer.suspended') {
+    if (assistant.controlPending) return { pending: true, retry: true };
     await resumeComputer(options.store, tokens, options.silo, conversation.assistantId);
     return { pending: true, retry: true };
   }

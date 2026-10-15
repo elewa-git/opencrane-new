@@ -14,7 +14,7 @@ import { listOpenConversations } from '@opencrane/projections';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
-import { resumeComputer } from '../../../ops/src/lifecycle.ts';
+import { bridgeControl, readyBridgePass } from './bridge-control.ts';
 import { turnCommand, requireTurnMember, TurnAdmissionRejected } from './turns.ts';
 import { readChatFacts } from './chat-summary.ts';
 import { privateContext } from './private-context.ts';
@@ -199,7 +199,7 @@ async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: W
 
 function reportReceiver(options: BridgeOptions, input: BridgeInput,
   tokens: Tokens | undefined, socket: WebSocket, refuse: (reason: string) => void,
-  approvals: ReturnType<typeof bridgeApprovals>) {
+  approvals: ReturnType<typeof bridgeApprovals>, control: ReturnType<typeof bridgeControl>) {
   function reportFailure(error: unknown) {
     if (error instanceof ReportRejected) {
       refuse(error.message);
@@ -215,6 +215,7 @@ function reportReceiver(options: BridgeOptions, input: BridgeInput,
     try {
       const bytes = messageBytes(raw);
       const value: unknown = JSON.parse(bytes.toString());
+      if (control.receive(value)) return;
       if (receiptData.safeParse(value).success) return;
       if (approvals.receive(value)) return;
       const report = reportDetails.parse(value);
@@ -257,6 +258,29 @@ function reportReceiver(options: BridgeOptions, input: BridgeInput,
   return { receiveReport, settled };
 }
 
+async function resumeBridgeReports(options: BridgeOptions, input: BridgeInput,
+  socket: WebSocket, control: ReturnType<typeof bridgeControl>) {
+  function pollControl() {
+    void control.send();
+  }
+  // Check this socket while setup is still reading reports. The watcher takes over afterwards.
+  const timer = setInterval(pollControl, 250);
+  function stopPolling() {
+    clearInterval(timer);
+  }
+  socket.once('close', stopPolling);
+  try {
+    await control.send();
+    const position = await reportPosition(options.store, options.silo, input.computerId);
+    await control.send();
+    const resume = { type: 'resume', since: position, approvalWaiting: true };
+    socket.send(JSON.stringify(resume));
+  } finally {
+    stopPolling();
+    socket.off('close', stopPolling);
+  }
+}
+
 export async function connectBridge(options: BridgeOptions, input: BridgeInput, tokens?: Tokens) {
   const socketOptions = { headers: { 'x-bridge-token': input.bearer },
     maxPayload: 256 * 1024, handshakeTimeout: 5000 };
@@ -278,11 +302,14 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   }
   const sentStops = new Map<string, number>();
   const approvals = bridgeApprovals(options.store, options.silo, input.assistantId, socket, sentStops);
-  const reports = reportReceiver(options, input, tokens, socket, refuse, approvals);
+  const control = bridgeControl(options, input, tokens, socket, refuse);
+  function closed(code: number) {
+    if (code === 1008 && !control.receipt) rejection ??= 'Bridge gate refused';
+  }
+  socket.once('close', closed);
+  const reports = reportReceiver(options, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
-  const position = await reportPosition(options.store, options.silo, input.computerId);
-  const resume = { type: 'resume', since: position, approvalWaiting: true };
-  socket.send(JSON.stringify(resume));
+  await resumeBridgeReports(options, input, socket, control);
   const delivered = new Set<string>();
   let transfers = Promise.resolve();
   function deliver(file: Upload, bytes: Buffer, checkControl?: () => Promise<boolean>) {
@@ -298,10 +325,11 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   async function settled() {
     const reportsDone = reports.settled();
     await approvals.settled();
+    await control.settled();
     return reportsDone;
   }
   return {
-    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting,
+    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control,
     get rejection() { return rejection; },
     settled,
   };
@@ -364,6 +392,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     return connectionIds.get(assistantId);
   }
   const processor = assistantProcessor(options, tokens, refused, connection, connectionId, logger);
+  const controls = processor.watchControls(signal);
   try {
     while (!signal.aborted) {
       try {
@@ -398,6 +427,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   } catch (error) {
     if (!signal.aborted) throw error;
   } finally {
+    await controls;
     const active = [...links.values()];
     for (const link of active) link.socket.terminate();
     const pending = active.map(settledBridge);
@@ -413,7 +443,7 @@ function isAgentSession(conversation: Conversation): conversation is AgentSessio
 async function openBridge(options: WatchOptions, tokens: Tokens, kube: SandboxClient,
   proxyUrl: string, computer: Pick<BridgeInput, 'computerId' | 'assistantId'>,
   refused: Set<string>, logger: Logger) {
-  const token = await resumeComputer(options.store, tokens, options.silo, computer.assistantId);
+  const token = await readyBridgePass(options, computer, tokens);
   await kube.credentials(computer.computerId, token, tokens.jwks.keys[0], true);
   const proxy = proxyUrl.replace('http:', 'ws:');
   const pod = `${proxy}/api/v1/namespaces/${kube.namespace}/pods/${computer.computerId}:8081`;
@@ -426,6 +456,7 @@ async function openBridge(options: WatchOptions, tokens: Tokens, kube: SandboxCl
     logger.error(details, 'Bridge recovery stopped; report rejected');
   }
   connected.socket.once('close', recordRejection);
+  if (connected.socket.readyState === connected.socket.CLOSED) recordRejection();
   return connected;
 }
 
