@@ -5,6 +5,7 @@ import { Duplex, PassThrough } from 'node:stream';
 import { encodeSession } from '@opencrane/auth';
 import { grantStream } from '@opencrane/authz';
 import { history } from '@opencrane/models';
+import { parseEventByType } from '@opencrane/events';
 import { afterEach, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import * as access from '../src/computers/view-access.ts';
@@ -18,7 +19,7 @@ function restoreMocks() {
 }
 afterEach(restoreMocks);
 
-async function admissionFixture() {
+async function admissionFixture(lifetimeSeconds = 120) {
   let mode: Mode = 'real';
   let unavailableCalls = 0;
   let calls = 0;
@@ -51,7 +52,7 @@ async function admissionFixture() {
   authority.mockImplementation(check);
   const identity = {
     sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
-    exp: Math.floor(Date.now() / 1000) + 120,
+    exp: Math.floor(Date.now() / 1000) + lifetimeSeconds,
   };
   const headers = {
     origin: new URL(fixture.config.redirectUri).origin, 'x-opencrane-view': '1',
@@ -65,8 +66,9 @@ async function admissionFixture() {
     unavailableCalls = transientFailures;
     calls = 0;
   }
+  let address: string | undefined;
   async function connect(ticket: string) {
-    const address = await fixture.app.listen({ host: '127.0.0.1', port: 0 });
+    address ??= await fixture.app.listen({ host: '127.0.0.1', port: 0 });
     const url = `${address.replace('http:', 'ws:')}/ws/conversations/chat/view`;
     const socket = new WebSocket(url, ['binary', ticket], { headers });
     socket.on('error', ignoreError);
@@ -205,3 +207,109 @@ it.each([
   { mode: 'unavailable', code: 4503, reason: 'unavailable' },
   { mode: 'deny', code: 4003, reason: 'access_changed' },
 ] as const)('closes a displayed view with $code for $mode checks', closesForCheckFailure, 30_000);
+
+async function capacityReturnsAfterFailuresAndClose() {
+  const fixture = await admissionFixture();
+  const sockets: WebSocket[] = [];
+  const computer = {
+    assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
+  };
+  vi.mocked(access.viewAccess).mockResolvedValue(computer);
+  async function connect(ticket: string) {
+    const socket = await fixture.connect(ticket);
+    sockets.push(socket);
+    return socket;
+  }
+  async function issue() {
+    const response = await fixture.post();
+    expect(response.statusCode).toBe(200);
+    return response.json<{ ticket: string; sessionId: string }>();
+  }
+  try {
+    // Exhaust the limit if a refused upgrade forgets to return its opening place.
+    for (let index = 0; index < 17; index++) {
+      const rejected = await connect('not-a-ticket');
+      const response = await once(rejected, 'unexpected-response');
+      expect(response[1]).toMatchObject({ statusCode: 403 });
+      rejected.terminate();
+    }
+    const tickets: string[] = [];
+    for (let index = 0; index < 17; index++) tickets.push((await issue()).ticket);
+    for (let index = 0; index < 16; index++) {
+      const socket = await connect(tickets[index]!);
+      await once(socket, 'open');
+    }
+    expect((await fixture.post()).statusCode).toBe(403);
+    const first = sockets[17]!;
+    const closed = once(first, 'close');
+    first.close();
+    await closed;
+    // Let upstream close and socket close both reach the same stop operation.
+    await issue();
+    const replacement = await connect(tickets[16]!);
+    await once(replacement, 'open');
+    expect((await fixture.post()).statusCode).toBe(403);
+  } finally {
+    for (const socket of sockets) socket.terminate();
+    await fixture.close();
+  }
+}
+it('returns capacity after failed upgrades and releases a closed session only once',
+  capacityReturnsAfterFailuresAndClose, 30_000);
+
+async function stopAuditOnce(reason: 'disconnected' | 'shutdown') {
+  const fixture = await admissionFixture();
+  const write = vi.spyOn(fixture.nats.store, 'append');
+  let socket: WebSocket | undefined;
+  try {
+    const admission = await fixture.post();
+    const issued = admission.json<{ ticket: string; sessionId: string }>();
+    socket = await fixture.connect(issued.ticket);
+    await once(socket, 'open');
+    const closed = once(socket, 'close');
+    if (reason === 'shutdown') {
+      await fixture.app.close();
+    } else {
+      socket.close(1000);
+    }
+    expect((await closed)[0]).toBe(1000);
+    async function stopped() {
+      return (await fixture.records(issued.sessionId)).length === 2;
+    }
+    await until(stopped);
+    await fixture.app.close();
+    const records = await fixture.records(issued.sessionId);
+    expect(records).toHaveLength(2);
+    expect(records[1]?.event.data).toMatchObject({ reason });
+    function isStop(call: (typeof write.mock.calls)[number]) {
+      const parsed = parseEventByType(call[0].event);
+      return parsed.success && parsed.event.type === 'computer.view_stopped';
+    }
+    const stops = write.mock.calls.filter(isStop);
+    expect(stops).toHaveLength(1);
+  } finally {
+    socket?.terminate();
+    await fixture.close();
+  }
+}
+it.each(['disconnected', 'shutdown'] as const)(
+  'records one stop audit for %s despite repeated transport closes', stopAuditOnce, 30_000,
+);
+
+async function closesExpiredSession() {
+  const fixture = await admissionFixture(5);
+  let socket: WebSocket | undefined;
+  try {
+    const admission = await fixture.post();
+    const issued = admission.json<{ ticket: string; sessionId: string }>();
+    socket = await fixture.connect(issued.ticket);
+    await once(socket, 'open');
+    const closed = await once(socket, 'close');
+    expect(closed[0]).toBe(4003);
+    expect(String(closed[1])).toBe('expired');
+  } finally {
+    socket?.terminate();
+    await fixture.close();
+  }
+}
+it('closes an expired session with the existing access close code', closesExpiredSession, 30_000);
