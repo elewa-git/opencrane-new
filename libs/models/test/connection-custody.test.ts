@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import type { AppendCommand } from '@opencrane/event-store';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, rm, readdir, readFile, stat } from 'node:fs/promises';
@@ -440,21 +442,49 @@ async function candidateFixture(appendUntil = stage.appendUntil,
   }
   return { store, input, subject, db, reconcile, invalidate, activate };
 }
-async function keepsUnknownAppend() {
+async function closesUnknownAppend() {
   const test = await candidateFixture();
-  expect(await test.reconcile()).toEqual({ status: 'retained' });
-  expect(test.store.secret).toBeDefined();
-  expect(test.store.deletes).toBe(0);
+  const append = vi.spyOn(events.store, 'append');
+  try {
+    expect(await test.reconcile()).toEqual({ status: 'deleted' });
+    expect(append).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      expectedSequence: test.input.expectedSequence,
+    }));
+    expect(await test.reconcile()).toEqual({ status: 'retained' });
+    expect(append).toHaveBeenCalledTimes(1);
+  } finally {
+    append.mockRestore();
+  }
+  const rows = await history(events.store, test.subject, 'test');
+  expect(rows).toHaveLength(1);
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(['test', test.subject, 'connection.operation_closed',
+    test.input.operationId]));
+  expect(rows[0]!.event).toMatchObject({ id: hash.digest('hex'),
+    type: 'connection.operation_closed', principal: { kind: 'system', id: 'models' },
+    data: { userId: test.input.userId, serverId: test.input.serverId,
+      profile: test.input.profileId, operationId: test.input.operationId, generation: 1,
+      expectedSequence: 0, appendUntil: test.input.appendUntil, reason: 'append_deadline_passed' },
+  });
+  expect(test.store.preconditions).toEqual({ uid: 'uid-original', resourceVersion: '1' });
+  expect(test.store.deletes).toBe(1);
+  expect(JSON.stringify(rows)).not.toContain(material);
 }
-it('retains an unknown append even after its deadline without a conflicting event', keepsUnknownAppend);
+it('closes an expired idle stage conditionally and deletes its exact identity once',
+  closesUnknownAppend);
 
-async function keepsExpiredRotationWithoutLaterEvent() {
-  const test = await candidateFixture(stage.appendUntil, 1, 2);
+async function closesExpiredRotationWithoutLaterEvent() {
+  const test = await candidateFixture(stage.appendUntil, await events.store.head() + 1, 2);
   const previousOperationId = `previous-${test.input.operationId}`;
-  const previousReference = 'secret:previous-generation';
+  const previousStore = await fixture();
+  const previousStage = { ...test.input, generation: 1, expectedSequence: 0,
+    operationId: previousOperationId };
+  const previousSaved = await previousStore.custody.stage(previousStage, material);
+  const previousReference = `secret:${previousSaved.identity!.reference}`;
   const previousActivation = {
     connectionId: test.input.connectionId, ownerKind: 'personal', purpose: 'personal',
-    generation: 1, uid: 'previous-uid', resourceVersion: 'previous-version',
+    generation: 1, uid: previousSaved.identity!.uid,
+    resourceVersion: previousSaved.identity!.resourceVersion,
     endpointDigest: test.input.endpointDigest, operationId: previousOperationId,
     changedBy: test.input.userId, expectedSequence: 0,
     appendUntil: test.input.appendUntil, reason: 'bearer_create',
@@ -479,13 +509,34 @@ async function keepsExpiredRotationWithoutLaterEvent() {
   expect(test.input.appendUntil).toBeLessThan(Date.now());
 
   const result = await reconcileConnectionStage(events.store, test.db, custody, test.input);
-  expect(result).toEqual({ status: 'retained' });
-  expect(removal).not.toHaveBeenCalled();
-  expect(test.store.secret).toBeDefined();
-  expect(test.store.deletes).toBe(0);
+  expect(result).toEqual({ status: 'deleted' });
+  expect(removal).toHaveBeenCalledExactlyOnceWith(test.input, recovered.identity);
+  const closedRows = await history(events.store, test.subject, 'test');
+  expect(closedRows).toHaveLength(2);
+  expect(foldConnection(closedRows)).toMatchObject({ status: 'saved_unverified',
+    data: savedProfile.data, sequence: closedRows[1]!.sequence });
+  expect(test.store.deletes).toBe(1);
+  expect(await reconcileConnectionStage(events.store, test.db,
+    previousStore.restart(), previousStage)).toEqual({ status: 'retained' });
+  expect(previousStore.deletes).toBe(0);
+  expect(await previousStore.custody.recover(previousStage)).toMatchObject({ status: 'recovered' });
+  const provider = vi.spyOn(globalThis, 'fetch');
+  const release = vi.spyOn(events.store, 'append');
+  const recovery = vi.spyOn(custody, 'recover');
+  removal.mockClear();
+  try {
+    foldConnection(closedRows);
+    expect(provider).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+    expect(recovery).not.toHaveBeenCalled();
+    expect(removal).not.toHaveBeenCalled();
+  } finally {
+    provider.mockRestore();
+    release.mockRestore();
+  }
 }
-it('retains an expired rotation while its expected profile position is still current',
-  keepsExpiredRotationWithoutLaterEvent);
+it('closes an expired rotation and preserves the current generation and reference',
+  closesExpiredRotationWithoutLaterEvent);
 
 async function keepsCurrentAndReplay() {
   const test = await candidateFixture();
@@ -612,11 +663,119 @@ async function excludesConcurrentStage() {
 }
 it('keeps material while another worker holds staging coordination', excludesConcurrentStage);
 
-async function keepsUnexpiredStage() {
+async function keepsUnexpiredStage(laterEvent: boolean) {
   const test = await candidateFixture(Date.now() + 60_000);
-  await test.invalidate();
+  if (laterEvent) {
+    await test.invalidate();
+  }
   expect(await test.reconcile()).toEqual({ status: 'retained' });
   expect(test.store.deletes).toBe(0);
 }
-it('keeps a staged secret before its append deadline even with a conflicting event',
-  keepsUnexpiredStage);
+it.each([false, true])('keeps an unexpired stage (later event: %s)', keepsUnexpiredStage);
+
+async function refusesUnconfirmedClosure(outcome: 'conflict' | 'unavailable' | 'throw' | 'lost' | 'unconfirmed') {
+  const test = await candidateFixture();
+  const append = events.store.append.bind(events.store);
+  async function failClosure(command: AppendCommand) {
+    if (outcome === 'throw') {
+      throw new Error(material);
+    }
+    if (outcome === 'unconfirmed') {
+      return { status: 'appended' as const, sequence: 1 };
+    }
+    if (outcome === 'lost') {
+      await append(command);
+    }
+    if (outcome === 'conflict') {
+      return { status: 'conflict' as const };
+    }
+    return { status: 'unavailable' as const, cause: new Error(material) };
+  }
+  const fault = vi.spyOn(events.store, 'append');
+  fault.mockImplementationOnce(failClosure);
+  const custody = test.store.restart();
+  const remove = vi.spyOn(custody, 'remove');
+  try {
+    expect(await reconcileConnectionStage(events.store, test.db, custody, test.input))
+      .toEqual({ status: 'retained' });
+    expect(fault).toHaveBeenCalledTimes(1);
+    expect(remove).not.toHaveBeenCalled();
+    expect(test.store.secret).toBeDefined();
+    if (outcome === 'lost') {
+      expect(await test.reconcile()).toEqual({ status: 'deleted' });
+      expect(fault).toHaveBeenCalledTimes(1);
+      expect(await history(events.store, test.subject, 'test')).toHaveLength(1);
+    }
+  } finally {
+    fault.mockRestore();
+  }
+}
+it.each(['conflict', 'unavailable', 'throw', 'lost', 'unconfirmed'] as const)(
+  'retains material on closure %s and recovers a lost reply without another append',
+  refusesUnconfirmedClosure);
+
+async function refusesChangedPrivateRecord(field: 'expectedSequence' | 'appendUntil') {
+  const test = await candidateFixture();
+  const changed = { ...test.input, [field]: test.input[field] + 1 };
+  const append = vi.spyOn(events.store, 'append');
+  try {
+    expect(await reconcileConnectionStage(events.store, test.db, test.store.restart(), changed))
+      .toEqual({ status: 'retained' });
+    expect(append).not.toHaveBeenCalled();
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    append.mockRestore();
+  }
+}
+it.each(['expectedSequence', 'appendUntil'] as const)(
+  'refuses closure when %s differs from the private record', refusesChangedPrivateRecord);
+
+async function keepsEarlierPosition() {
+  const test = await candidateFixture(stage.appendUntil, await events.store.head() + 5);
+  await test.activate();
+  // Keep a valid saved profile with a different reference below the stage's expected position.
+  const rows = await history(events.store, test.subject, 'test');
+  const changed = structuredClone(rows);
+  const dataSchema = z.looseObject({ secretRef: z.string() });
+  const data = dataSchema.parse(changed[0]!.event.data);
+  data.secretRef = 'secret:another';
+  changed[0]!.event.data = data;
+  async function* earlierHistory() {
+    yield* await Promise.resolve(changed);
+  }
+  const read = vi.spyOn(events.store, 'readStream');
+  read.mockImplementation(earlierHistory);
+  try {
+    expect(await test.reconcile()).toEqual({ status: 'retained' });
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    read.mockRestore();
+  }
+}
+it('retains a candidate when history has not reached its expected position', keepsEarlierPosition);
+
+async function refusesInvalidClosureCandidate() {
+  const test = await candidateFixture(stage.appendUntil, 0, 2);
+  const append = vi.spyOn(events.store, 'append');
+  try {
+    expect(await test.reconcile()).toEqual({ status: 'retained' });
+    expect(append).not.toHaveBeenCalled();
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    append.mockRestore();
+  }
+}
+it('refuses to close a generation that does not follow the saved profile',
+  refusesInvalidClosureCandidate);
+
+async function keepsInvalidClosureProof() {
+  const test = await candidateFixture();
+  const data = { userId: test.input.userId, serverId: test.input.serverId,
+    profile: test.input.profileId, operationId: test.input.operationId, generation: 2,
+    expectedSequence: 0, appendUntil: test.input.appendUntil, reason: 'append_deadline_passed' };
+  const event = envelope('test', test.subject, 'connection.operation_closed', data);
+  await events.seed([event]);
+  expect(await test.reconcile()).toEqual({ status: 'retained' });
+  expect(test.store.deletes).toBe(0);
+}
+it('retains material after an invalid saved closure', keepsInvalidClosureProof);

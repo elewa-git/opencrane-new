@@ -552,6 +552,16 @@ The conversation contains no cents, ceiling, payer or copied budget reasons.
 `stop-budget-turns` receives ceiling changes and exhaustion, including per-turn stops.
 No root event is added. Stop schemas live outside the near-full `data.ts`.
 
+## Expired bearer save closure
+
+`connection.operation_closed` requires userId, serverId, profile, operationId, generation,
+expectedSequence, appendUntil and the fixed `append_deadline_passed` reason. It carries no
+credential or provider outcome. The connection fold requires the fixed system principal
+`models`, matching bindings, the previous position and a time after the deadline.
+The event id is SHA-256 of JSON `[silo, subject, "connection.operation_closed", operationId]`.
+Live reconciliation appends at the private stage's expected position. Replay only rebuilds
+references and closed operations; it performs no custody, provider or release work.
+
 ## Gateway load observations
 
 `gateway.configuration_observed` records generation, recordDigest, configDigest,

@@ -30,7 +30,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, subscriptions, nightly memory records and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, private and shared turns, root allowances, overruns, spending and safe spending stop references| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, expired saves, control, private and shared turns, root allowances, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
@@ -127,6 +127,9 @@ New group chats record at most 97 people, including their creator. Older saved
 events keep their original reading rules.
 
 Archive and read choices name one person and their join. They contain no chat text.
+
+Define records that close expired connection saves without carrying credentials.
+These records let live cleanup prove a delayed save can no longer succeed.
 
 ## Processes it handles
 

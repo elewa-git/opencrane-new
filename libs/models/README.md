@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|delivers and probes configuration; checks calls, holds and stops against queued work; tests private CONNECT routing| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks open spending before provider switch-on; saves hosted registration, publication, gateway, root allowance, overrun, spending, connection and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
+  models -->|checks open spending before provider switch-on; saves hosted registration, publication, gateway, root allowance, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package.
@@ -245,9 +245,11 @@ Owners can revoke their own profiles. Admins can block a member's personal conne
 to one server, including later reconnects with a new profile. Both changes keep the
 stored token until cleanup can prove deletion is safe.
 A live maintenance function checks one staged secret while holding the same lock as
-staging and saving. It keeps current references and uncertain saves. After the save
-deadline, a conflicting event can prove the old save cannot succeed; only then can
-cleanup delete that exact stored version. Automatic scanning is still planned.
+staging and saving. It keeps current references. After the save deadline, it records
+that the unsaved operation is closed, so a delayed save cannot succeed. Only a confirmed
+closure or another saved conflict permits deletion of that exact stored version.
+Closing a replacement keeps the previous token and records the closed generation number.
+A later replacement uses the next number. Automatic scanning is still planned.
 The event store checks profile changes and admin blocks together when it saves a profile.
 If the block is saved first, the profile save is refused, even if its access check has finished.
 A simultaneous change to another connection can also refuse the save; the caller can retry.
