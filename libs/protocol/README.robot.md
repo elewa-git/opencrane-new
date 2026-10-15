@@ -228,3 +228,9 @@ the observation date. It is a saved fact, not a live Ready status or call permis
 matching reasons, work execution and observed positions. Reasons allow optional
 `limitCents`, which the server includes only for the human message's author.
 No names, scope ids, configuration references or spending totals are accepted.
+
+## Reviewed child answers
+
+Final text publication follows the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
+`chatRowSchema` includes `publicationKind: final`. The server selects the
+published entry fields before decrypting text for HTTP and sockets.

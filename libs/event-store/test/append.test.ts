@@ -1,3 +1,4 @@
+import { getEventDefinition } from '@opencrane/events';
 import { TimeoutError } from '@nats-io/transport-node';
 import { EventStore, type AppendCommand } from '../src/index.ts';
 import { afterEach, expect, it, vi } from "vitest";
@@ -412,3 +413,34 @@ async function preservesUncertainAccessFailure() {
   expect(await fixture.store.head('member-alice')).toBe(0);
 }
 it('keeps an unavailable access check uncertain without publishing', preservesUncertainAccessFailure);
+
+async function checksPublicationPositionAtNats() {
+  fixture = await natsFixture();
+  const client = jetstream(fixture.connection);
+  const manager = await jetstreamManager(fixture.connection);
+  const store = new EventStore(client, manager);
+  const definition = getEventDefinition('conversation.child_result_published')!;
+  const publication = { ...event('publication', 'conversation-parent', definition.type),
+    data: definition.example };
+  const publish = client.publish.bind(client);
+  let injected = false;
+  async function saveLossBeforePublish(...args: Parameters<typeof publish>) {
+    if (!injected) {
+      injected = true;
+      const loss = { ...event('lost', 'conversation-child', 'agent.output_lost'),
+        data: { conversationId: 'child', turnId: 'turn' } };
+      await fixture.seed([loss]);
+    }
+    return publish(...args);
+  }
+  client.publish = saveLossBeforePublish;
+  const command = { event: publication, expectedSequence: 0, expectedGlobalSequence: 0,
+    historyChecked: true as const };
+  expect(await store.append(command)).toEqual({ status: 'conflict' });
+  expect(injected).toBe(true);
+  expect(await fixture.store.head('conversation-parent')).toBe(0);
+  const refreshed = { ...command, expectedGlobalSequence: await fixture.store.head() };
+  expect(await store.append(refreshed)).toEqual({ status: 'appended', sequence: 2 });
+}
+it('checks the publication log position atomically when NATS receives the write',
+  checksPublicationPositionAtNats);
