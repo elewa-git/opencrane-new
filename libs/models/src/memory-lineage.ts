@@ -1,7 +1,7 @@
 import { memoryWrittenDataSchema, memoryWrittenEventSchema, parseEventByType,
   type EventEnvelope, type MemoryIdentity } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
-import { memoryIdentity } from '@opencrane/projections';
+import { memoryIdentity, shouldReplaceMemoryRevision } from '@opencrane/projections';
 
 const changeIdentity = memoryWrittenDataSchema.pick({ scopeId: true, memoryId: true });
 const changeFields = changeIdentity.strip();
@@ -12,13 +12,10 @@ type Write = ReturnType<typeof memoryWrittenEventSchema.parse>;
 type Custody = { status: (identity: MemoryIdentity) => 'available' | 'destroyed' | 'missing' };
 
 function newerWrite(previous: Write | undefined, next: Write) {
-  if (!previous || !('schemaVersion' in previous.data)) {
-    return true;
-  }
-  if (!('schemaVersion' in next.data)) {
-    return false;
-  }
-  return next.data.revision > previous.data.revision;
+  const previousRevision = previous && 'schemaVersion' in previous.data
+    ? previous.data.revision : null;
+  const nextRevision = 'schemaVersion' in next.data ? next.data.revision : null;
+  return shouldReplaceMemoryRevision(previousRevision, nextRevision);
 }
 
 function recordChange(event: EventEnvelope, scopeId: string, hidden: Map<string, Status>) {

@@ -6,6 +6,7 @@ import type { Projection } from './runner.ts';
 import type { StoredEvent } from '@opencrane/event-store';
 import { memoryErasureHistory } from './memory-erasure.ts';
 import { memoryIdentity } from './memory-keys.ts';
+import { shouldReplaceMemoryRevision } from './memory-revision.ts';
 
 type SavedMemoryWrite = ReturnType<typeof memoryWrittenEventSchema.parse>['data'];
 type MemoryWrite = Extract<SavedMemoryWrite, { schemaVersion: 1 }>;
@@ -101,13 +102,11 @@ async function writeMemory(
     await writeChange(db, event, data, current, position);
     return;
   }
-  // Keep a newer or equal revision, including when an old event has no known owner.
-  const previousRevision = previous.rows[0]?.revision;
-  if (previousRevision !== undefined && previousRevision !== null) {
-    if (current === null || Number(previousRevision) >= current.revision) {
-      await writeChange(db, event, data, current, position);
-      return;
-    }
+  const storedRevision = previous.rows[0]?.revision;
+  const previousRevision = storedRevision == null ? null : Number(storedRevision);
+  if (!shouldReplaceMemoryRevision(previousRevision, current?.revision ?? null)) {
+    await writeChange(db, event, data, current, position);
+    return;
   }
   // Build the search vector explicitly from the current text. Keep SQL limited to indexing.
   await db.query(`INSERT INTO memory_facts VALUES

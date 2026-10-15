@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { history, memoryReferences } from '@opencrane/models';
-import { memoryErasureHistory, selectMaintenanceInputs } from '@opencrane/projections';
+import { memoryErasureHistory, selectMaintenanceInputs,
+  shouldReplaceMemoryRevision } from '@opencrane/projections';
 import type { MaintenanceFact } from '@opencrane/projections';
 import {
   memoryMaintenanceBoundDataSchema,
@@ -66,6 +67,10 @@ async function scopeFacts(rows: StoredEvent[], silo: string, scopeId: string,
       continue;
     }
     const data = parsed.data;
+    const previous = facts.get(data.memoryId);
+    if (!shouldReplaceMemoryRevision(previous?.revision, data.revision)) {
+      continue;
+    }
     const encryptedBytes = Buffer.from(data.ciphertext, 'base64').byteLength;
     const fact = { memoryId: data.memoryId, revision: data.revision,
       expiresAt: data.expiresAt, pinned: data.pinned, position: row.sequence,
