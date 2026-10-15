@@ -21,7 +21,7 @@ with `libs/events`.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -->|saves changes within the retry time limit or until cancellation| store["libs/event-store<br/>checked event writes and stream ownership"]
+  server["apps/server<br/>back end"] -->|saves changes within the access and retry limits| store["libs/event-store<br/>checked event writes and stream ownership"]
   models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes and provider switch-on positions| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams, counts names and finds numbered events| nats["NATS JetStream<br/>event service"]
@@ -39,6 +39,8 @@ flowchart LR
   Refuse repeated dependencies and a key reference that belongs to another memory revision.
 - Stop retries when the caller's access time limit expires or permission is withdrawn.
   Do not retry when the required wait uses all remaining permission time.
+- Recheck a caller's access before saving when requested. Refuse if a saved event
+  arrives between that check and the write.
 - Return the earlier result when a caller repeats the same request.
 - Let callers that have checked their history save a change without reading that
   history again. A conflict still checks for an earlier copy of the request.

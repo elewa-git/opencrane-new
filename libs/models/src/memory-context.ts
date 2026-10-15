@@ -59,7 +59,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
   const activity = await liveMemoryTurn(store, binding, claims, parsed, deadline);
   let writeAuthority: Awaited<ReturnType<typeof decisionAuthorityFence>> | undefined;
   const rights = await check(deadline);
-  return { ...rights, confirm: check };
+  return { ...rights, confirm: check, writeAuthority };
 
   async function check(checkDeadline = deadline) {
     const authority = writeAuthority ?? await decisionAuthorityFence(store, performance.now(), [],

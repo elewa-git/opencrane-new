@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links and later grant changes, tool reviews, hosted registration, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links, later grant changes and access changes through saving, tool reviews, hosted registration, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes, internal child requests and creation, authenticated instance observations and stops, owner and admin stops, control intent, memory facts, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|saved child leave results| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
@@ -39,6 +39,9 @@ The server checks access again after reading the latest memory references. Remov
 restoring a grant during the write still refuses it.
 
 ## What it is responsible for
+
+Personal memory writes refuse access withdrawn before the fact is saved, including a
+removed write grant or a disabled assistant. They keep the original access time limit.
 
 Give Owners and Admins a member directory and current management flags for
 active people. An ordinary Member receives only a small header for one person.

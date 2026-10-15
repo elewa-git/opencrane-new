@@ -1806,7 +1806,8 @@ async function rightsWithdrawnBeforeAppend(kind: string) {
   const originalAppend = setup.nats.store.append.bind(setup.nats.store);
   let changed = false;
   async function append(command: Parameters<typeof originalAppend>[0]) {
-    if (Reflect.get(command.event as object, 'type') === 'memory.written') {
+    const eventType = z.object({ type: z.string() }).parse(command.event).type;
+    if (eventType === 'memory.written') {
       expect(changed).toBe(false);
       changed = true;
       if (kind === 'memory_write') {

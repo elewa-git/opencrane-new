@@ -2517,7 +2517,16 @@ After that tail read it checks rights again under the original deadline. The wri
 its original access snapshot, so revoking and restoring a grant cannot revive that check.
 The production MCP route tests change the assistant's write grant during this read,
 with and without restoring it. Both require HTTP 403 and an unchanged memory stream.
-It keeps the existing conditional scope append and command receipt recovery.
+The store now receives that original `decisionAuthorityFence` as `checkAccess`.
+It samples the log position, checks the small access streams and uses the existing
+NATS conditional publish to require both that log position and the memory scope position.
+A saved change after the check therefore refuses the append too. This does not read or
+watch conversation history. The original two-second deadline still applies.
+The route tests also revoke the write grant and disable the assistant immediately before
+calling the real store append. Both require HTTP 403 and an unchanged memory stream.
+A definite conflict returns HTTP 403 after checking for an earlier saved command.
+A changed access stream also returns HTTP 403 and keeps the command recovery record.
+Lost replies and failed access reads keep the existing unknown result and receipt recovery.
 
 Row 2 still needs complete loaded-set checks before model/tool dispatch and turn grant
 renewal, after #396 and p4-11-pr2c. Correction target proofs remain deferred; agents cannot

@@ -59,13 +59,15 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       }
       if (parsed.input?.operation === 'remember') {
         const input = parsed.input;
+        const writeAuthority = rights.writeAuthority!;
         if (input.sources.length > 0) throw new Error('Agent source refused');
         checkRecallProof(config.cookieSecret, context, input.recallProof, input.dependsOn,
           evidence.inputGeneration);
         const confirm = confirmAgentLineage(options, context, evidence, input.dependsOn,
           rights.confirm, deadline);
-        const agent = { deadline, conversation: context.conversation, turn: context.turn,
-          requestId: context.requestId, confirm };
+        const agent = { deadline: writeAuthority.deadline,
+          conversation: context.conversation, turn: context.turn,
+          requestId: context.requestId, confirm, checkAccess: writeAuthority };
         const { operation: _operation, scopeId: _scopeId, recallProof: _proof, ...command } = input;
         const receipt = await remember(options, context.requester, rights.scope, command, agent);
         result = { content: [], structuredContent: receipt };

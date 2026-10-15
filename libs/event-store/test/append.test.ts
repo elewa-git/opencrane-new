@@ -384,8 +384,9 @@ async function refusesExpiryDuringAccessCheck() {
   fixture = await natsFixture();
   const started = performance.now();
   const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
-  async function checkAccess() {
+  function checkAccess() {
     clock.mockReturnValue(started + 2001);
+    return Promise.resolve();
   }
   const command = { event: event('expired-access-check'), expectedSequence: 0,
     deadline: started + 2000, historyChecked: true as const, checkAccess };

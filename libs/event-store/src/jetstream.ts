@@ -19,6 +19,7 @@ import {
 import type { EventEnvelope } from "@opencrane/events";
 import {
   decodeEvent,
+  matchesConversationRead,
   sameCommand,
   validateCommand,
   wireSubject,
@@ -41,13 +42,6 @@ function conversationReadSubject(subject: string, includeConversationCloses: boo
   const conversationId = subject.slice('conversation-'.length);
   // Use one indexed query for both close formats. Filter other categories before returning rows.
   return `ev.*.${conversationId}`;
-}
-
-function matchesConversationRead(event: EventEnvelope, subject: string): boolean {
-  if (event.subject === subject) return true;
-  const conversationId = subject.slice('conversation-'.length);
-  return event.subject === `participation-${conversationId}` &&
-    event.type === 'conversation.closed';
 }
 
 const streamName = "EVENTS";
@@ -264,7 +258,7 @@ export class EventStore {
       }
       try {
         return await this.attempt(event, command.expectedSequence, deadline, command.expectedSubject,
-          command.expectedGlobalSequence, command.historyChecked, command.signal);
+          command.expectedGlobalSequence, command.historyChecked, command.signal, command.checkAccess);
       } catch (error) {
         if (command.signal?.aborted) {
           return { status: "unavailable", cause: command.signal.reason };
@@ -315,6 +309,7 @@ export class EventStore {
     expectedGlobalSequence?: number,
     historyChecked?: true,
     signal?: AbortSignal,
+    checkAccess?: () => Promise<unknown>,
   ): Promise<AppendResult> {
     if (!historyChecked) {
       const previous = await this.previous(event, deadline);
@@ -334,6 +329,16 @@ export class EventStore {
         }
       } else if (expectedSequence !== 0) {
         return { status: 'conflict' };
+      }
+    }
+    if (checkAccess) {
+      // Bind the access check to the publish. A saved change in between refuses the append.
+      expectedGlobalSequence ??= await this.head(undefined, deadline);
+      try {
+        await checkAccess();
+      } catch (cause) {
+        // Keep an earlier publish with a lost reply uncertain until the caller reconciles it.
+        return { status: 'unavailable', cause };
       }
     }
     // Recheck after awaited reads, immediately before starting a new publish.
