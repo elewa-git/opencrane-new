@@ -64,6 +64,20 @@ export function capturedByLine(
   return `Captured by you · ${capturedAt} · ${imageSize(facts.width, facts.height)}`;
 }
 import type { ChatAttachment } from './chat-state';
+import type { ChatConversation } from '@opencrane/protocol';
+
+export function isOwnedAgentFile(
+  path: string, files: string[], selectedId: string,
+  conversations: ChatConversation[], memberId: string,
+): boolean {
+  if (!files.includes(path)) return false;
+  for (const conversation of conversations) {
+    if (conversation.conversationId === selectedId) {
+      return conversation.createdBy === memberId;
+    }
+  }
+  return false;
+}
 
 export function screenshotIdFromFile(file: ChatAttachment): string {
   return file.fileId;

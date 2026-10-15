@@ -38,7 +38,7 @@ function resolveNextMoment(resolve) {
 }
 
 function afterNextFrame() {
-  return new Promise(requestAnimationFrame);
+  return new Promise(globalThis.requestAnimationFrame);
 }
 
 function isFocused(element) {

@@ -39,7 +39,7 @@ import { LiveView } from '../live-view/live-view';
 import {
   capturedByLine, displayTextParts, fileName, fileScreenshotCreator, fileType, fileUrl,
   hasScreenshotFile,
-  isScreenshotAttachment, screenshotFacts, screenshotFactsForPath, screenshotIdFromFile,
+  isOwnedAgentFile, isScreenshotAttachment, screenshotFacts, screenshotFactsForPath, screenshotIdFromFile,
   screenshotWithId, shortTime, utcDateTime,
   type ScreenshotFacts,
 } from './file-presentation';
@@ -494,17 +494,9 @@ export class Workspace implements OnInit {
   protected canDownloadPreview(path: string): boolean {
     if (this.isClosedConversation()) return false;
     // Keep downloads available for files made by this conversation's owner.
-    return this.canDownload(path) || this.isOwnedAgentFile(path);
-  }
-  private isOwnedAgentFile(path: string): boolean {
-    if (!this.files().includes(path)) return false;
-    const conversationId = this.chat.selected();
-    for (const conversation of this.chat.conversations()) {
-      if (conversation.conversationId === conversationId) {
-        return conversation.createdBy === this.chat.memberId();
-      }
-    }
-    return false;
+    const ownedAgentFile = isOwnedAgentFile(
+      path, this.files(), this.chat.selected(), this.chat.conversations(), this.chat.memberId());
+    return this.canDownload(path) || ownedAgentFile;
   }
   protected name(path: string): string { return fileName(path); }
   protected type(path: string): string { return fileType(path); }

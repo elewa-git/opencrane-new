@@ -18,6 +18,14 @@ export function workspaceTitle(
   return sessionSlug('Personal session');
 }
 
+export function selectedSessionPayingGroupId(
+  conversations: ChatConversation[], selectedId: string,
+): string {
+  const selectedRow = conversations.find(isSelectedConversation.bind(null, selectedId));
+  if (!selectedRow || selectedRow.mode !== 'agent_session') return '';
+  return selectedRow.payingGroupId ?? '';
+}
+
 export type ConversationSection = 'recent' | 'archived';
 type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
 

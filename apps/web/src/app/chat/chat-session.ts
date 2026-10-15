@@ -10,8 +10,8 @@ import { conversationStatus, isActiveTurn, isBudgetStop, lastConfirmedTurnAt,
 import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
 import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
-import { displayAgentSessions, includeRequestedConversation, isSelectedConversation,
-  isTeamConversation, resumeAgentSession }
+import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
+  resumeAgentSession, selectedSessionPayingGroupId }
   from './conversations-data';
 
 @Injectable()
@@ -80,8 +80,7 @@ export class ChatSession implements OnDestroy {
   private pending: { id: string; conversationId: string; text: string;
     executionMode?: 'memory_free' } | undefined;
   private subscription = this.socket.received.subscribe(message => this.receive(message));
-  private readonly accessLossSubscription = this.socket.accessLost.subscribe(
-    this.clearDenied.bind(this));
+  private readonly accessLossSubscription = this.socket.accessLost.subscribe(this.clearDenied.bind(this));
 
   constructor() {
     effect(onCleanup => {
@@ -254,9 +253,7 @@ export class ChatSession implements OnDestroy {
   }
   reconnect(): void { if (!this.denied()) this.socket.connect(); }
   selectedPayingGroupId(): string {
-    const selectedRow = this.conversations().find(isSelectedConversation.bind(null, this.selected()));
-    if (!selectedRow || selectedRow.mode !== 'agent_session') return '';
-    return selectedRow.payingGroupId ?? '';
+    return selectedSessionPayingGroupId(this.conversations(), this.selected());
   }
   async stop(): Promise<void> {
     await this.stopState.stop();
