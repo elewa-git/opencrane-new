@@ -152,3 +152,14 @@ it('unarchives using the archived row and announces the confirmed choice once', 
   expect(test.archive.notice())
     .toBe('You moved this conversation back to Recent. Only your list changed.');
 });
+
+it('releases a current command when a later archive choice is already in the server row', async () => {
+  const test = fixture();
+  test.setRow({ ...recent, archivePosition: 13 });
+  await test.archive.change();
+  expect(test.archive.row()?.archived).toBe(false);
+  expect(test.archive.row()?.archivePosition).toBe(13);
+  expect(test.archive.commandId()).toBe('');
+  expect(test.archive.canChange()).toBe(true);
+  expect(test.archive.notice()).toContain('another device');
+});
