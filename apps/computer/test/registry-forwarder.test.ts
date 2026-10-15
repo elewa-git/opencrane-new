@@ -73,8 +73,10 @@ async function interruptsBuild(signal: 'SIGTERM' | 'SIGINT', phase = 'download')
     dockerScript = `#!/bin/sh
 case "$*" in
  *--rm*-i*)
-  cat >/dev/null
+  cat >/dev/null &
+  reader_pid=$!
   echo image-check-ready
+  wait "$reader_pid"
   sleep 60
   ;;
  inspect*) echo 127.0.0.1;;
