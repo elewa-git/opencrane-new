@@ -392,3 +392,87 @@ async function changesAfterChildHistory(change: string) {
 it.each(['lost', 'message', 'other-turn'])(
   'checks result validity after complete child history loads: %s',
   changesAfterChildHistory, 120_000);
+
+async function verifyPublicationWindow(caseName: string) {
+  const [window, change] = caseName.split(':');
+  const context = await childFixture();
+  try {
+    const input = await savedResult(context);
+    const review = await request(context, 'publication-review', input);
+    expect(review.statusCode, review.body).toBe(200);
+    const payload = { id: 'verify-window', text: 'Reviewed answer',
+      review: review.json<{ review: string }>().review };
+    const parentBefore = await parentHistory(context);
+    const childPosition = await context.nats.store.head('conversation-child');
+    let injected = false;
+    let readCompleteHistory = false;
+    async function injectChange() {
+      if (injected) return;
+      injected = true;
+      if (change === 'message') {
+        const encrypted = context.keys.encrypt('test', 'child', 'Unrelated child message');
+        const data = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
+          contentType: 'text', ...encrypted };
+        await context.append('conversation-child', 'message.posted', data, false);
+      } else {
+        const otherTurn = change === 'other-turn' || change === 'other-failed';
+        const failed = change === 'failed' || change === 'other-failed';
+        const turnId = otherTurn ? 'other-turn' : 'saved-turn';
+        const type = failed ? 'agent.turn_failed' : 'agent.output_lost';
+        const data = { conversationId: 'child', turnId,
+          ...(failed ? { reason: 'bridge_interrupted' } : {}) };
+        await context.append('conversation-child', type, data, false);
+      }
+    }
+    const read = context.nats.store.readStream.bind(context.nats.store);
+    async function* interceptRead(...args: Parameters<typeof read>) {
+      let completed = false;
+      for await (const row of read(...args)) {
+        if (row.event.type === 'agent.turn_completed') completed = true;
+        yield row;
+      }
+      if (args[0] === 'conversation-child' && completed) readCompleteHistory = true;
+      // Finish both parts of chatHistory, then insert the change before returning.
+      if (window === 'history' && readCompleteHistory && args[0] === 'participation-child') {
+        await injectChange();
+      }
+      // The incremental recheck starts immediately after the saved content position.
+      if (window === 'recheck' && args[0] === 'conversation-child' &&
+          args[1] === childPosition + 1) await injectChange();
+    }
+    context.nats.store.readStream = interceptRead;
+    const append = context.nats.store.append.bind(context.nats.store);
+    async function interceptAppend(...args: Parameters<typeof append>) {
+      if (window === 'append' && z.object({ type: z.string() }).parse(args[0].event).type ===
+          'conversation.child_result_published') {
+        await injectChange();
+      }
+      return append(...args);
+    }
+    context.nats.store.append = interceptAppend;
+    const response = await request(context, 'publications', payload);
+    const parentAfter = await parentHistory(context);
+    const childAfter = [];
+    for await (const row of read('conversation-child')) childAfter.push(row);
+    expect(injected).toBe(true);
+    const lastChild = childAfter.at(-1)!;
+    expect(lastChild.sequence).toBeGreaterThan(childPosition);
+    if (change === 'lost' || change === 'failed') {
+      expect.soft(response.statusCode, response.body).toBe(409);
+      expect.soft(response.json()).toEqual({ status: 'review_stale' });
+      expect(parentAfter).toEqual(parentBefore);
+    } else {
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({ status: 'appended' });
+      expect(parentAfter).toHaveLength(parentBefore.length + 1);
+    }
+  } finally {
+    await context.close();
+  }
+}
+it.each(['history:lost', 'history:message', 'history:other-turn',
+  'recheck:lost', 'recheck:message', 'recheck:other-turn',
+  'append:lost', 'append:message', 'append:other-turn',
+  'history:failed', 'recheck:failed', 'append:failed',
+  'history:other-failed', 'recheck:other-failed', 'append:other-failed'])(
+  'keeps selected result valid through the parent append: %s', verifyPublicationWindow, 120_000);
