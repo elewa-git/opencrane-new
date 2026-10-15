@@ -6,19 +6,14 @@ import { budgetCeilingSetDataSchema, budgetCallDispatchAdmittedDataSchema,
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budgetStopMessage,
-  exceededReasons, observedPayload, requireDispatchReservation, type BudgetState, type ModelCall } from './state.ts';
+  exceededReasons, observedPayload, requireDispatchReservation, type BudgetState, type ModelCall,
+  type ModelUsage } from './state.ts';
 
 import { history } from './event-history.ts';
 import { checkRootReservation, setRootAllowance, stopRootAtCeiling,
   stopRootOnOverrun } from './root-budget.ts';
+import { readRootStopEvidence, saveRootStop, type RootStopReason } from './root-stop-evidence.ts';
 export { history } from './event-history.ts';
-
-type ModelUsage = {
-  inputTokens: number;
-  outputTokens: number;
-  cachedInputTokens?: number | undefined;
-  cacheWriteTokens?: number | undefined;
-};
 
 // Keep a hold for three minutes so usage reports have time to arrive.
 const SETTLE_TIMEOUT_MS = 180_000;
@@ -141,6 +136,12 @@ export class BudgetActor {
   setRootAllowance(raw: unknown, firstCallBoundCents: number) {
     const save = () => setRootAllowance(this.state, this.silo, this.now(), raw,
       firstCallBoundCents, this.append.bind(this));
+    return this.serial(save);
+  }
+  async stopRoot(rootId: string, reason: RootStopReason, subject: string, position: number) {
+    const source = await readRootStopEvidence(this.store, subject, position);
+    const append = this.append.bind(this);
+    const save = saveRootStop.bind(undefined, this.state, this.silo, rootId, reason, source, append);
     return this.serial(save);
   }
   reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>, admittedAt?: number,

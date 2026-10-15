@@ -417,7 +417,14 @@ Root totals count those calls over their whole lifetime, across budget periods.
 availableCents, ceiling_stop with the existing budget stopId, or
 budget_reservation_exceeded with the reservationId whose actual cost exceeded its hold.
 The actor saves an overrun stop before the full settlement and the existing alert.
-The first stop wins and refunds nothing. External stop reasons and dispatch checks follow separately.
+`requester_stop`, `turn_ended` and `access_revoked` each carry sourceSubject,
+sourcePosition and sourceEventId. The actor reads exactly that event before queueing,
+then checks its silo and the saved root binding before appending. Requester evidence
+is a member `agent.turn_stop_requested`, never the budget form. Turn-end evidence
+is a matching chat `computer.turn_closed`, `agent.turn_completed` or `agent.turn_failed`.
+Access-loss evidence is requester removal or close on the root's participation stream,
+or removal on the requester's member stream. Parent changes are not accepted.
+The first stop stays permanent and refunds nothing. Dispatch checks follow separately.
 These internal records have no caller, route or reaction yet.
 
 The Phase 2 model actor records the global monthly `ceilingCents` and

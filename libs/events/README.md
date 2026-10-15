@@ -30,7 +30,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, subscriptions, nightly memory reviews and records, and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication receipts and gateway records, tool admission, personal connection references and blocks, expired saves, control, private and shared turns, root allowances, overruns, spending and safe spending stop references| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication receipts and gateway records, tool admission, personal connection references and blocks, expired saves, control, private and shared turns, root allowances, source-linked root stops, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
@@ -45,7 +45,9 @@ value calculated from those definitions. Older records remain readable for repla
 
 Root allowance records fix one turn's spending bound. Root stop records prevent
 further holds without refunding earlier calls. They include calls that cost more
-than their hold, and always keep the first stop reason. These records start no work.
+than their hold, and always keep the first stop reason. A requester Stop, turn end
+or access loss names the exact saved event that caused the stop. The budget actor
+checks that event before saving the stop. These records start no work.
 
 Define publication requests, ordered gateway records and exact live gateway observations
 without private review text. Each tool server can keep a receipt for its publication request.
