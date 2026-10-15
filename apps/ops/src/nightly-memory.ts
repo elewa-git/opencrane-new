@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { history } from '@opencrane/models';
+import { history, memoryReferences } from '@opencrane/models';
 import { memoryErasureHistory, selectMaintenanceInputs } from '@opencrane/projections';
 import type { MaintenanceFact } from '@opencrane/projections';
 import {
@@ -23,9 +23,30 @@ function digest(value: unknown): string {
   return hash.digest('hex');
 }
 
-async function scopeFacts(rows: StoredEvent[], silo: string, scopeId: string) {
+function metadataCustodyStatus() {
+  // Select metadata only; dispatch stays disabled and no key is opened here.
+  return 'available' as const;
+}
+
+function factStatus(fact: MaintenanceFact, scopeId: string, hidden: Set<string>,
+  references: ReturnType<typeof memoryReferences>, intendedAt: string): string {
+  if (hidden.has(fact.memoryId)) {
+    return 'erased';
+  }
+  if (fact.expiresAt !== null && Date.parse(fact.expiresAt) <= Date.parse(intendedAt)) {
+    // Keep due expiry metadata for review without loading the expired value.
+    return 'available';
+  }
+  const reference = { scopeId, memoryId: fact.memoryId, revision: fact.revision };
+  return references.current(reference) === 'current' ? 'available' : 'invalid';
+}
+
+async function scopeFacts(rows: StoredEvent[], silo: string, scopeId: string,
+  intendedAt: string) {
   const erasure = await memoryErasureHistory(rows);
   const hidden = erasure.hidden(silo, scopeId);
+  const custody = { status: metadataCustodyStatus };
+  const references = memoryReferences(rows, silo, scopeId, custody, Date.parse(intendedAt));
   const facts = new Map<string, MaintenanceFact>();
   let lastChangePosition = 0;
   let lastForgetPosition = 0;
@@ -46,10 +67,10 @@ async function scopeFacts(rows: StoredEvent[], silo: string, scopeId: string) {
     }
     const data = parsed.data;
     const encryptedBytes = Buffer.from(data.ciphertext, 'base64').byteLength;
-    const status = hidden.has(data.memoryId) ? 'erased' : 'available';
     const fact = { memoryId: data.memoryId, revision: data.revision,
       expiresAt: data.expiresAt, pinned: data.pinned, position: row.sequence,
-      encryptedBytes, status };
+      encryptedBytes, status: 'available' };
+    fact.status = factStatus(fact, scopeId, hidden, references, intendedAt);
     facts.set(data.memoryId, fact);
   }
   return { facts: [...facts.values()], lastChangePosition, lastForgetPosition };
@@ -93,7 +114,7 @@ async function recordScope(store: EventStore, silo: string, scopeId: string,
   if (!binding?.enabled || Date.parse(boundAt) >= boundaryTime) {
     return;
   }
-  const scope = await scopeFacts(rows, silo, scopeId);
+  const scope = await scopeFacts(rows, silo, scopeId, intendedAt);
   const inputs = selectMaintenanceInputs(scope.facts, runs,
     scope.lastChangePosition, scope.lastForgetPosition, intendedAt);
   if (!inputs.dirty) {
