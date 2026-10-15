@@ -67,7 +67,7 @@ function memoryHistory(rows: StoredEvent[], silo: string, scopeId: string) {
 }
 
 function ownStatus(history: ReturnType<typeof memoryHistory>, scopeId: string,
-  custody: Custody, reference: Reference, checkedAt: number): Status {
+  custody: Custody, reference: Reference, checkedAt?: number): Status {
   if (reference.scopeId !== scopeId) {
     return 'invalid';
   }
@@ -87,7 +87,7 @@ function ownStatus(history: ReturnType<typeof memoryHistory>, scopeId: string,
     return 'superseded';
   }
   if ('schemaVersion' in saved.data && saved.data.expiresAt !== null &&
-      Date.parse(saved.data.expiresAt) <= checkedAt) {
+      Date.parse(saved.data.expiresAt) <= (checkedAt ?? Date.now())) {
     return 'invalid';
   }
   const status = custody.status(identity);
@@ -105,8 +105,7 @@ export function memoryReferences(rows: StoredEvent[], silo: string, scopeId: str
   custody: Custody, checkedAt?: number) {
   const history = memoryHistory(rows, silo, scopeId);
   function current(reference: Reference): Status {
-    const now = checkedAt ?? Date.now();
-    const status = ownStatus(history, scopeId, custody, reference, now);
+    const status = ownStatus(history, scopeId, custody, reference, checkedAt);
     if (status !== 'current') {
       return status;
     }
@@ -125,7 +124,9 @@ export function memoryReferences(rows: StoredEvent[], silo: string, scopeId: str
       if (complete.has(id)) {
         continue;
       }
-      if (visiting.has(id) || ownStatus(history, scopeId, custody, step.reference, now) !== 'current') {
+      const invalidDependency = visiting.has(id) ||
+        ownStatus(history, scopeId, custody, step.reference, checkedAt) !== 'current';
+      if (invalidDependency) {
         return 'invalid';
       }
       visiting.add(id);

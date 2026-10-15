@@ -13,7 +13,7 @@ flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events, departures, owner appointments and memory facts| ops["apps/ops<br/>workers and memory replay"]
   ops -->|records departure changes, confirmed computer losses and spending stops| nats
-  ops -.->|uses| libs["libs/*<br/>shared code"]
+  ops -.->|checks memory history and revisions| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables and jobs; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates and checks permissions| fga["OpenFGA<br/>permission service"]
@@ -60,7 +60,9 @@ It records why a dirty scope is blocked or missed. Failed triggers keep their or
 until startup or a later night can record the missed result. It sends no memory task to a computer.
 It records `no_changes` when a forgotten fact leaves nothing eligible. Later nights skip
 that reviewed change. It takes at most 32 whole facts in saved order and stops when
-the next fact would exceed the 16 KiB input limit.
+the next fact would exceed the 16 KiB input limit. It excludes facts that depend on
+expired facts, using the intended nightly time. Repeated writes keep the original
+revision's expiry and saved position.
 
 A member joins. When private key storage is configured, the dispatcher prepares one
 key for their private answers, including members without an assistant. It checks

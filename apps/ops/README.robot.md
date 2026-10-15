@@ -516,6 +516,12 @@ share one TypeScript selection rule. Forgotten and dependent hidden facts are ex
 Up to 32 oldest eligible references fit as whole escaped blocks within 16 KiB.
 The first fact that does not fit stops the prefix; there is no backfill.
 Due unpinned expiry contributes metadata only. Due pins are excluded.
+The scanner uses `memoryReferences` at `intendedAt` to exclude ordinary inputs whose
+historical dependencies have expired. It checks metadata without opening keys.
+`shouldReplaceMemoryRevision` keeps the first equal revision in the scanner,
+projection and reference checker, including that write's expiry and position.
+Reviews compare expiry against the reviewed run's `intendedAt`, not its later
+`selectedAt`. Expiry after the intended boundary stays due for a later night.
 A `no_changes` record reviews its exact input revisions and the last fact-change
 position. Omitted and newer revisions stay dirty. A forgotten-only change records
 `no_changes` once; cleanup records do not make it dirty.

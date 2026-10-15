@@ -26,6 +26,7 @@ flowchart LR
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
   projections -->|omits child requests; saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, nightly records, tool holds and private instance stops and reports| projections
+  server -.->|selects nightly memory inputs| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
 ```
@@ -33,6 +34,10 @@ flowchart LR
 ## What it is responsible for
 
 Keep publication requests separate from permission to call tools.
+
+Keep the first write at an equal memory revision, including its expiry and saved
+position. The nightly scanner shares this rule. A nightly review covers expiry only
+through its intended time, so a delayed selection cannot hide later expiry.
 
 Private memory reference records stay in the saved event log. They do not enter
 the chat read table, so history pages and live chat show only public rows.

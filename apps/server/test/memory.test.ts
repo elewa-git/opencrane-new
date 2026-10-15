@@ -2815,8 +2815,8 @@ async function originalBinding() {
   await append(written.subject, 'memory.written', written.data);
   const expiredPin = await write('dreamer', 'person', 'expired-nightly-pin',
     'A pinned fact', true, 'acme', [], '2026-10-12T01:59:00.000Z');
-  const pinnedData = memoryWrittenDataSchema.parse(expiredPin.data);
-  const repeatedPin = { ...pinnedData, expiresAt: null };
+  const savedPin = memoryWrittenEventSchema.parse(expiredPin);
+  const repeatedPin = { ...savedPin.data, expiresAt: null };
   await append(expiredPin.subject, 'memory.written', repeatedPin);
   await runner.run(projection);
   const repeatedStatus = await get(`${path('dreamer')}/maintenance`, 'dreamer');

@@ -261,7 +261,8 @@ views, generated columns or stored procedures. The order index is
 `memory_dependencies` retains same-scope links from every saved revision. Its primary key
 includes the revision of the fact that used the source. Rebuild memory offline to recover
 previously discarded links.
-TypeScript checks the existing revision before replacing a fact; older links remain.
+`shouldReplaceMemoryRevision` checks the existing revision before replacing a fact;
+older links remain. The scanner and reference checker share this TypeScript rule.
 A stale or repeated write keeps the current row and still records the saved event.
 `memory_changes` stores only command, principal, fact, revision, outcome, position
 and time. Its outcome is `written`, `quarantined` or `forgotten`, independent of key availability.
@@ -638,7 +639,8 @@ a scheduler, model, tool, computer or spending port. Rebuild memory on upgrade
 with readers and workers stopped to create this new table.
 The shared TypeScript selector compares these reviewed references with current fact
 metadata. It reads encrypted byte lengths without decrypting. SQL stores rows and
-does not decide which facts are dirty.
+does not decide which facts are dirty. A review covers expiry through its `intendedAt`
+boundary. Selection delays cannot count later expiry as already reviewed.
 
 ## Publication preparation (P3-4 PR 2a; Part of #45)
 

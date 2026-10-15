@@ -157,6 +157,28 @@ async function expiredDependency() {
 }
 it('selects expired dependency metadata without the dependent fact', expiredDependency, 30_000);
 
+async function dependencyExpiresAfterBoundary() {
+  await setup(false);
+  const source = { ...written('source'), expiresAt: '2026-10-12T02:05:00.000Z' };
+  const dependent = { ...written('dependent'), expiresAt: null,
+    dependsOn: [{ scopeId, memoryId: 'source', revision: 1 }] };
+  await append('memory.written', source);
+  const sourcePosition = await services.nats.store.head();
+  await append('memory.written', dependent);
+  const dependentPosition = await services.nats.store.head();
+  await scan('2026-10-12T02:10:00Z');
+  const saved = await records();
+  expect(saved).toHaveLength(1);
+  const run = memoryMaintenanceRecordedDataSchema.parse(saved[0]);
+  expect(run.inputRefs).toEqual([
+    { memoryId: 'source', revision: 1,
+      expiresAt: '2026-10-12T02:05:00.000Z', position: sourcePosition },
+    { memoryId: 'dependent', revision: 1, expiresAt: null, position: dependentPosition },
+  ]);
+}
+it('checks dependency expiry at the intended boundary despite delayed selection',
+  dependencyExpiresAfterBoundary, 30_000);
+
 async function repeatedExpiredPin() {
   await setup(false);
   const original = { ...written('pinned'), pinned: true,

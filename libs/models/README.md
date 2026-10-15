@@ -13,7 +13,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks public tool addresses, reads, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  server["apps/server and apps/ops<br/>back end and workers"] -.->|checks public tool addresses, reads, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
   models -->|checks revision, spending, the catalogue and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
@@ -23,7 +23,8 @@ flowchart LR
   models -->|checks open spending before provider switch-on; saves hosted registration, publication, gateway, root allowance, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
 ```
 
-apps/ops confirms owner appointments for this package.
+apps/ops confirms owner appointments for this package. Its nightly memory scan also uses this library to check saved dependencies at the intended nightly time. Its nightly memory scan also
+uses this library to check saved dependencies at the intended nightly time.
 
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
 A change to the tools or their rules ends that approval.
