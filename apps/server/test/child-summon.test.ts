@@ -1,3 +1,6 @@
+import * as authz from '@opencrane/authz';
+import { eventEnvelopeSchema } from '@opencrane/events';
+import { z } from 'zod';
 import { once } from 'node:events';
 import { WebSocket, WebSocketServer } from 'ws';
 import { until } from '@opencrane/authz/testing';
@@ -10,9 +13,14 @@ import { conversations } from '@opencrane/projections';
 import { chatHistory } from '../src/chat/commands.ts';
 import { summonFixture } from './support/child-summon.ts';
 
+const eventSchema = eventEnvelopeSchema(z.unknown());
 let context: Awaited<ReturnType<typeof summonFixture>>;
-async function initialise() { context = await summonFixture(); }
-async function close() { await context?.close(); }
+async function initialise() {
+  context = await summonFixture();
+}
+async function close() {
+  await context?.close();
+}
 beforeAll(initialise, 60_000);
 afterAll(close);
 afterEach(vi.restoreAllMocks);
@@ -76,10 +84,11 @@ async function recovers(stage: string) {
   const original = context.nats.store.append.bind(context.nats.store);
   async function loseReply(command: Parameters<typeof original>[0]) {
     const result = await original(command);
-    if (command.event.type === 'conversation.created') {
-      await context.auth.handler.handle(command.event, context.db);
+    const event = eventSchema.parse(command.event);
+    if (event.type === 'conversation.created') {
+      await context.auth.handler.handle(event, context.db);
     }
-    if (command.event.type === stage) throw new Error('Lost reply');
+    if (event.type === stage) throw new Error('Lost reply');
     return result;
   }
   const spy = vi.spyOn(context.nats.store, 'append').mockImplementation(loseReply);
@@ -107,7 +116,8 @@ async function recovers(stage: string) {
   expect((await context.request(input.conversationId, 'children', start)).json())
     .toEqual(response.json());
   vi.restoreAllMocks();
-  for (const patch of [{ participantIds: ['alice'] }, { allowanceBoundCents: 999 }]) {
+  for (const patch of [{ participantIds: ['alice'] }, { allowanceBoundCents: 999 },
+    { assistantId: 'other-helper' }]) {
     const changed = await review({ ...input, ...patch });
     expect((await context.request(input.conversationId, 'children', changed)).statusCode).toBe(409);
   }
@@ -131,7 +141,9 @@ it.each(['conversation.child_requested', 'conversation.created', 'message.posted
 async function holdsWork() {
   const input = await context.parent();
   const start = await review(input);
-  expect((await context.request(input.conversationId, 'children', start)).statusCode).toBe(425);
+  const starts = await Promise.all([context.request(input.conversationId, 'children', start),
+    context.request(input.conversationId, 'children', start)]);
+  for (const response of starts) expect(response.statusCode, response.body).toBe(425);
   const saved = await context.intent(input.conversationId);
   const rows = await chatHistory(context.nats.store, 'test', saved.childConversationId);
   await context.auth.handler.handle(rows[0]!.event, context.db);
@@ -146,7 +158,9 @@ async function holdsWork() {
   const computer = { computerId: 'computer', assistantId: 'helper', generation: 1, podUid: 'test' };
   const ready = await context.append('computer-helper', 'computer.ready', computer, false);
   const before = await context.nats.store.head();
-  async function connection(): Promise<never> { throw new Error('Must not deliver'); }
+  function connection(): Promise<never> {
+    return Promise.reject(new Error('Must not deliver'));
+  }
   for (const type of ['computer.ready', 'computer.suspended']) {
     const lifecycle = [{ sequence: before, event: { ...ready, type } }];
     const assistant = assistantSnapshot(lifecycle, 'team', 'test');
@@ -156,13 +170,16 @@ async function holdsWork() {
   const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   await once(server, 'listening');
   const address = server.address();
-  if (typeof address === 'string') throw new Error('Expected port');
+  if (!address || typeof address === 'string') throw new Error('Expected port');
   const peerPromise = once(server, 'connection');
   const bridge = await connectBridge(context.options, { computerId: 'computer', assistantId: 'helper',
     url: `ws://127.0.0.1:${address.port}`, bearer: 'test' }, context.tokens);
-  const [peer] = await peerPromise;
+  const connected: unknown[] = await peerPromise;
+  const peer = connected[0];
   const received: unknown[] = [];
-  function receive(bytes: Buffer) { received.push(JSON.parse(bytes.toString()) as unknown); }
+  function receive(bytes: Buffer) {
+    received.push(JSON.parse(bytes.toString()) as unknown);
+  }
   if (!(peer instanceof WebSocket)) throw new Error('Expected socket');
   peer.on('message', receive);
   try {
@@ -170,7 +187,12 @@ async function holdsWork() {
       assistantId: 'helper', conversationId: saved.childConversationId, turnId: saved.firstInputId,
       requesterId: 'alice', executionMode: 'restricted', sharingClass: 'shared_only', threadId: 'thread' };
     peer.send(JSON.stringify(report));
-    function finished() { return bridge.rejection !== undefined || received.length > 0; }
+    function isAck(frame: unknown) {
+      return z.object({ type: z.literal('ack') }).safeParse(frame).success;
+    }
+    function finished() {
+      return bridge.rejection !== undefined || received.some(isAck);
+    }
     await until(finished);
     await bridge.settled();
     expect(await context.nats.store.head()).toBe(before);
@@ -182,3 +204,24 @@ async function holdsWork() {
   }
 }
 it('holds delivery, resume, admission and tokens for a saved child request', holdsWork);
+
+async function retriesPermissionOutage() {
+  const input = await context.parent();
+  const start = await review(input);
+  const original = authz.memberAuthorisation;
+  function unavailable() {
+    const result = { allowed: false as const, status: 'unavailable' as const,
+      error: new Error('Authorisation check unavailable') };
+    return Promise.resolve(result);
+  }
+  function withOutage(...args: Parameters<typeof original>) {
+    return { ...original(...args), actsFor: unavailable };
+  }
+  vi.spyOn(authz, 'memberAuthorisation').mockImplementation(withOutage);
+  const { conversationId, ...payload } = input;
+  const before = await context.nats.store.head();
+  expect((await context.request(conversationId, 'child-review', payload)).statusCode).toBe(503);
+  expect((await context.request(conversationId, 'children', start)).statusCode).toBe(503);
+  expect(await context.nats.store.head()).toBe(before);
+}
+it('returns a retryable outage when assistant permission cannot be checked', retriesPermissionOutage);
