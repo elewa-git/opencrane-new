@@ -209,7 +209,7 @@ it('sends one reviewed removal and shows saved access with separate progress', a
   const screen = page(fixture).querySelector('.member-detail-page');
   expect(screen?.textContent).toContain('Removed ·');
   expect(screen?.textContent).toContain('Clean-up status not yet reported');
-  expect(screen?.querySelector('h2')).toBeNull();
+  expect(screen?.querySelector('.member-summary')).toBeNull();
   expect(screen?.textContent).not.toContain('Groups');
   expect(screen?.textContent).not.toContain('Remove from');
   expect(page(fixture).querySelector('dialog[open]')).toBeNull();

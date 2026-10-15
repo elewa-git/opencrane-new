@@ -101,7 +101,8 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
   protected closeDeparture(): void {
     this.drawerGeneration += 1;
     this.drawerOpen.set(false);
-    this.departure.set(undefined);
+    // Keep the reviewed computer facts while a removal command can still be confirmed.
+    if (!this.commandId) this.departure.set(undefined);
     if (!this.commandId) this.removalState.set('idle');
     if (this.commandId && this.removalState() === 'sending') {
       this.removalState.set('unknown');
@@ -172,7 +173,8 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     const result = await fetchRemovalStatus(this.memberId(), commandId, this.request.signal);
     this.checkingStatus.set(false);
     if (result.kind === 'denied') { this.clearForAccessLoss(result.status); return; }
-    if (generation !== this.drawerGeneration || !this.drawerOpen()) return;
+    if (this.removalState() !== 'removed'
+      && (generation !== this.drawerGeneration || !this.drawerOpen())) return;
     if (result.kind === 'ok') { this.showRemovalReceipt(result.value); return; }
     if (this.removalReceipt()) {
       this.removalNotice.set('Access ended. Progress is not available yet.');
@@ -187,9 +189,11 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
   }
 
   private showRemovalReceipt(receipt: RemovalReceipt): void {
+    this.generation += 1;
     this.removalReceipt.set(receipt);
     this.removalState.set('removed');
     this.removalNotice.set('Access ended when the removal was saved.');
+    this.closeDeparture();
   }
 
   protected removedTime(): string {
@@ -209,7 +213,8 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
   }
 
   protected async refresh(): Promise<void> {
-    if (this.state() === 'access' || this.request.signal.aborted) return;
+    if (this.state() === 'access' || this.removalState() === 'removed'
+      || this.request.signal.aborted) return;
     const generation = ++this.generation;
     this.state.set('loading');
     const result = await fetchMember(this.memberId(), this.request.signal);
@@ -218,11 +223,11 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
       this.clearForAccessLoss(result.status);
       return;
     }
+    if (generation !== this.generation) return;
     if (result.kind === 'missing') {
       this.clearForMissingMember();
       return;
     }
-    if (generation !== this.generation) return;
     if (result.kind !== 'ok') {
       this.state.set('failed');
       return;
@@ -252,11 +257,11 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
       this.clearForAccessLoss(result.status);
       return;
     }
+    if (generation !== this.generation) return;
     if (result.kind === 'missing') {
       this.clearForMissingMember();
       return;
     }
-    if (generation !== this.generation) return;
     if (result.kind !== 'ok') {
       this.accessState.set('failed');
       return;

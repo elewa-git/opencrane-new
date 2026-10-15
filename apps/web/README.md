@@ -100,8 +100,10 @@ assistant check open rather than guessing an answer.
   on phones. A missing member or lost access clears the page. A failed refresh keeps
   earlier details with separate times for member and grant data.
 - Lets Owners and Admins review a member's departure before removal. The review names
-  lost access, work needing a separate decision and saved history. An uncertain removal
-  stays tied to its original request and can be checked without sending it again.
+  ending organisation and group membership, lost tools, a recorded personal computer,
+  work needing a separate decision and saved history. A confirmed removal replaces the
+  old member detail with its outcome. An uncertain removal stays tied to its original
+  request and can be checked without sending it again.
 - Lets organisation admins create a shared assistant for a group with selected grants
   and a fixed paying group, including groups managed by an identity provider. Group
   membership does not grant desktop access.

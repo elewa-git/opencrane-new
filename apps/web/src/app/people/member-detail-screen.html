@@ -13,6 +13,28 @@
     <h1>Member not found</h1>
     <p>This person could not be found.</p>
     <a class="button secondary" href="/org/people">Back to Members</a>
+  } @else if (removalState() === 'removed') {
+    <nav class="member-crumb" aria-label="Breadcrumb">
+      <a href="/org/people">People &amp; groups</a> ›
+      <a href="/org/people">Members</a> › {{ name() }}
+    </nav>
+    <h1>{{ name() }} was removed from {{ organisationName() }}</h1>
+    <section class="paper-card member-removal-outcome" role="status">
+      <h2>Removed · {{ removedTime() }}</h2>
+      <p>{{ removalNotice() }}</p>
+      <p>{{ progressLabel('iam') }}</p>
+      <p>{{ progressLabel('content') }}</p>
+      @for (computer of departure()?.personalComputer; track computer.assistantId) {
+        <p>Personal computer for assistant {{ computer.assistantId }}
+          @if (computer.computerId) { · {{ computer.computerId }} }
+          · Clean-up status not yet reported</p>
+      } @empty {
+        <p>Clean-up status not yet reported</p>
+      }
+      <button type="button" class="button secondary" [disabled]="checkingStatus()"
+        (click)="checkRemovalStatus()">Check status</button>
+    </section>
+    <a class="button secondary member-outcome-back" href="/org/people">Back to Members</a>
   } @else {
     @if (member(); as person) {
       <nav class="member-crumb" aria-label="Breadcrumb">
@@ -138,14 +160,6 @@
   backLabel="Cancel" [returnFocusTo]="reviewOpener" (closed)="closeDeparture()">
   @if (removalState() === 'sending') {
     <p role="status">Removing {{ name() }}…</p>
-  } @else if (removalState() === 'removed') {
-    <h3>Removed · {{ removedTime() }}</h3>
-    <p>{{ removalNotice() }}</p>
-    <p>{{ progressLabel('iam') }}</p>
-    <p>{{ progressLabel('content') }}</p>
-    <p>Clean-up status isn't available yet</p>
-    <button type="button" class="button secondary" [disabled]="checkingStatus()"
-      (click)="checkRemovalStatus()">Check status</button>
   } @else if (removalState() === 'unknown') {
     <p role="status">{{ removalNotice() }}</p>
     <button type="button" class="button secondary" [disabled]="checkingStatus()"
@@ -173,10 +187,26 @@
         }
       }
       <section><h3>Access lost</h3>
+        <p>Organisation membership ends.</p>
+        @for (group of detail()?.groups; track group.groupId) {
+          <p>Group membership ends: {{ group.name }}.</p>
+        }
         @for (row of review.accessLost; track row.resourceType + row.resourceId) {
           <p>{{ row.label || row.resourceId }}</p>
-        } @empty { @if (review.complete) { <p>No recorded access to lose</p> } }
+        } @empty {
+          @if (review.complete) { <p>No tools or shared assistants to hand over</p> }
+        }
       </section>
+      @if (review.personalComputer.length > 0) {
+        <section><h3>Personal computer affected</h3>
+          @for (computer of review.personalComputer; track computer.assistantId) {
+            <p>Assistant {{ computer.assistantId }}
+              @if (computer.computerId) { · Computer {{ computer.computerId }} }
+              · Reported status: {{ computer.status }}.
+              Clean-up status not yet reported.</p>
+          }
+        </section>
+      }
       <section><h3>Needs a decision</h3>
         @for (work of review.ownedSharedWork; track work) {
           <p>{{ work }} · A separate decision is needed before removal.</p>

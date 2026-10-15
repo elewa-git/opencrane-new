@@ -11,7 +11,8 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 const frames = { review: 'PPL-50', incomplete: 'PPL-51', removing: 'PPL-52',
   removed: 'PPL-52', unknown: 'PPL-52' };
 const member = { memberId: 'alex', displayName: 'Alex Kim', email: 'alex@example.test',
-  role: 'member', status: 'joined', joinedAt: '2026-03-12T10:00:00Z', groups: [],
+  role: 'member', status: 'joined', joinedAt: '2026-03-12T10:00:00Z',
+  groups: [{ groupId: 'design', name: 'Design', membershipSource: 'local' }],
   permissions: { changeRole: true, remove: true, manageOwnership: true },
   memberSequence: 2, ownershipSequence: 1,
   personalAssistant: { status: 'unavailable' }, rejoinedAt: { status: 'unavailable' } };
@@ -19,14 +20,14 @@ const access = { checkedAt: '2026-10-15T10:00:00Z', complete: true,
   unavailableSections: [], rows: [] };
 const departure = { checkedAt: '2026-10-15T10:00:00Z', complete: true,
   unavailableSections: [], memberSequence: 2, ownershipSequence: 1,
-  reviewRevision: 'a'.repeat(64), accessLost: [{ resourceType: 'model',
-    resourceId: 'model-a', label: 'A shared model', relation: 'use', sources: [],
-    eligibility: { person: 'allowed', assistants: [], availability: 'unavailable' } }],
+  reviewRevision: 'a'.repeat(64), accessLost: [],
   ownedSharedWork: [], routines: { status: 'absent_on_version',
     message: 'No routines can be created on this version.' },
   personalConnections: { status: 'absent_on_version',
     message: 'No personal connections can be created on this version.' },
-  personalComputer: [], retainedHistory: { count: 1, firstAt: null, lastAt: null },
+  personalComputer: [{ assistantId: 'assistant-a', computerId: 'computer-a',
+    status: 'running' }],
+  retainedHistory: { count: 1, firstAt: null, lastAt: null },
   permissions: { remove: true } };
 const receipt = { status: 'recorded', removedAt: '2026-10-15T10:05:00Z',
   access: 'revoked', projection: { iam: 'applying', content: 'current' } };
@@ -76,7 +77,8 @@ async function serve(route, scenario) {
 
 function readLayout() {
   let small = 0;
-  const targets = globalThis.document.querySelectorAll('dialog[open] button, dialog[open] a');
+  const targets = globalThis.document.querySelectorAll(
+    'dialog[open] button, dialog[open] a, .member-removal-outcome button, .member-outcome-back');
   for (const target of targets) {
     const bounds = target.getBoundingClientRect();
     if (bounds.width < 44 || bounds.height < 44) small += 1;
@@ -102,13 +104,27 @@ async function capture(browser, width, scenario) {
   if (scenario === 'incomplete') {
     await page.getByText('The review is not complete.').waitFor();
   } else {
-    await page.getByText('A shared model').waitFor();
+    await page.getByText('No tools or shared assistants to hand over').waitFor();
     if (scenario !== 'review') {
       await page.getByRole('button', { name: 'Remove Alex Kim' }).click();
       if (scenario === 'removing') await page.getByText('Removing Alex Kim…').waitFor();
       if (scenario === 'removed') await page.getByText('Removed ·').waitFor();
       if (scenario === 'unknown') await page.getByText('The result is unknown.').waitFor();
     }
+  }
+  if (scenario === 'review') {
+    const drawer = page.locator('dialog[open]');
+    assert.equal(await drawer.getByText('Organisation membership ends.').count(), 1);
+    assert.equal(await drawer.getByText('Group membership ends: Design.').count(), 1);
+    assert.equal(await drawer.getByText(/Computer computer-a/).count(), 1);
+    assert.equal(await drawer.getByText('No recorded access to lose').count(), 0);
+  }
+  if (scenario === 'removed') {
+    const outcome = page.locator('.member-detail-page');
+    assert.equal(await page.locator('dialog[open]').count(), 0);
+    assert.equal(await outcome.getByText(/computer-a.*Clean-up status not yet reported/).count(), 1);
+    assert.equal(await outcome.locator('.member-summary').count(), 0);
+    assert.equal(await outcome.getByRole('button', { name: /Remove/ }).count(), 0);
   }
   await checkLayout(page);
   if (scenario === 'review') {
@@ -132,7 +148,10 @@ try {
   }
 } finally { await browser.close(); }
 await writeFile(resolve(output, 'receipt.md'), '# Member departure screen check\n\n'
-  + 'PASS: Ten intercepted API captures at 1280px and 390px. Reduced motion, no '
-  + 'horizontal overflow, controls at least 44px, and focus returns after Cancel.\n\n'
+  + 'PASS: Ten intercepted API captures at 1280px and 390px. The review names ending '
+  + 'organisation and group membership, a recorded computer, and an empty tool list. '
+  + 'The confirmed outcome replaces the member detail and says computer clean-up is not '
+  + 'yet reported. Reduced motion, no horizontal overflow, controls at least 44px, and '
+  + 'focus returns after Cancel.\n\n'
   + 'PARTIAL: No live server or fresh-install journey was run. The current status API '
   + 'does not report clean-up progress.\n');
