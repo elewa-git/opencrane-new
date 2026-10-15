@@ -264,7 +264,8 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     rejection = reason;
     socket.close(1008, reason);
   }
-  const approvals = bridgeApprovals(options.store, options.silo, input.assistantId, socket);
+  const sentStops = new Map<string, number>();
+  const approvals = bridgeApprovals(options.store, options.silo, input.assistantId, socket, sentStops);
   const reports = reportReceiver(options, input, tokens, socket, refuse, approvals);
   socket.on('message', reports.receiveReport);
   const position = await reportPosition(options.store, options.silo, input.computerId);
@@ -288,7 +289,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     return reportsDone;
   }
   return {
-    socket, deliver, delivered, sentTurns, approvals, approvalWaiting,
+    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting,
     get rejection() { return rejection; },
     settled,
   };

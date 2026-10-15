@@ -1,7 +1,9 @@
+import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import { chatMembership } from './participation.ts';
 import { isComputerLifecycle, readComputerControl } from '@opencrane/auth';
 import type { Client } from 'minio/dist/esm/minio.mjs';
-import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
+import { agentTurnStopRequestedDataSchema, fileDeliveredDataSchema, fileUploadedDataSchema }
+  from '@opencrane/events';
 import type { WebSocket } from 'ws';
 import type { connectMcpCatalogue, listConversations } from '@opencrane/projections';
 import { memberAuthorisation } from '@opencrane/authz';
@@ -33,6 +35,7 @@ type BridgeLink = {
   socket: WebSocket;
   delivered: Set<string>;
   sentTurns: Map<string, TurnDelivery>;
+  sentStops: Map<string, number>;
   deliver: (file: Upload, bytes: Buffer, controlPending?: ControlCheck) => Promise<void>;
 };
 type ControlCheck = () => Promise<boolean>;
@@ -52,6 +55,7 @@ function pendingMessage(rows: ChatRows) {
   const completed = new Set<string>();
   const started = new Set<string>();
   const stopped = new Set<string>();
+  const budgetStopped = new Set<string>();
   for (const row of rows) {
     if (['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) {
       completed.add(turnIdData.parse(row.event.data).turnId);
@@ -60,11 +64,14 @@ function pendingMessage(rows: ChatRows) {
       started.add(turnIdData.parse(row.event.data).turnId);
     }
     if (row.event.type === 'agent.turn_stop_requested') {
-      stopped.add(turnIdData.parse(row.event.data).turnId);
+      const stop = agentTurnStopRequestedDataSchema.parse(row.event.data);
+      stopped.add(stop.turnId);
+      if ('reason' in stop) budgetStopped.add(stop.turnId);
     }
   }
   function isPending(row: ChatRows[number]) {
     return row.event.type === 'message.posted' && !completed.has(row.event.id) &&
+      !budgetStopped.has(row.event.id) &&
       (!stopped.has(row.event.id) || started.has(row.event.id));
   }
   return rows.find(isPending);
@@ -155,30 +162,45 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   conversation: AgentSession, assistant: ReturnType<typeof assistantSnapshot>,
   refused: Set<string>, connection: Connection,
   computerHistoryUnavailable = false, checkControl?: ControlCheck): Promise<ConversationProgress> {
-  async function controlPending() {
-    if (checkControl) return checkControl();
-    const control = await readComputerControl(options.store, options.silo, conversation.assistantId);
-    return control !== undefined;
-  }
   const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
+  async function refreshStops(beforeTurn = false) {
+    await readNewConversationRows(options, conversation.conversationId, rows, beforeTurn);
+    sendBudgetStops(link, pendingBudgetStops(rows, assistant.closed));
+  }
+  async function controlPending() {
+    let control: boolean;
+    if (checkControl) {
+      control = await checkControl();
+    } else {
+      const savedControl = await readComputerControl(options.store, options.silo,
+        conversation.assistantId);
+      control = savedControl !== undefined;
+    }
+    // Read new Stops after the wait, before releasing a file or turn frame.
+    await refreshStops();
+    return control;
+  }
   agentSession(rows);
   const message = pendingMessage(rows);
+  const stops = pendingBudgetStops(rows, assistant.closed);
+  const waitingWork = message !== undefined || stops.length > 0;
   function isConversationClosed(row: ChatRows[number]) {
     return row.event.type === 'conversation.closed';
   }
   if (rows.some(isConversationClosed)) return { pending: false, retry: false };
   const current = assistant.current;
   if (!current) {
-    const pending = computerHistoryUnavailable && message !== undefined;
+    const pending = computerHistoryUnavailable && waitingWork;
     return { pending, retry: pending };
   }
-  if (!assistant.kind) return { pending: message !== undefined, retry: message !== undefined };
+  if (!assistant.kind) return { pending: waitingWork, retry: waitingWork };
   const computer = computerData.parse(current.data);
   await recoverTerminalTurns(options, computer.computerId, conversation.assistantId,
     conversation.conversationId, rows, assistant.closed);
   const allUploads = conversationUploads(rows, assistant.kind);
   const uploads = pendingUploads(rows, allUploads, computer.computerId);
-  if (!message && !uploads.length) return { pending: false, retry: false };
+  const pendingDeliveries = uploads.length + stops.length;
+  if (!message && pendingDeliveries === 0) return { pending: false, retry: false };
   if (current.type === 'computer.suspended') {
     await resumeComputer(options.store, tokens, options.silo, conversation.assistantId);
     return { pending: true, retry: true };
@@ -187,6 +209,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
     return { pending: true, retry: true };
   }
   const link = await connection(computer.computerId, conversation.assistantId);
+  await refreshStops();
   const control = await controlPending();
   if (control) {
     // Keep explicit stops available while control holds new turns and uploads.
@@ -196,17 +219,42 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   await deliverUploads(options, link, uploads, controlPending);
   if (message) {
     await sendWaitingTurn(options, link, conversation, rows, allUploads, message,
-      assistant.kind, assistant.started, controlPending);
+      assistant.kind, assistant.started, controlPending, refreshStops);
     sendStop(link.socket, rows, message, conversation.conversationId);
   }
-  const unacceptedMessage = message !== undefined && !assistant.started.has(message.event.id);
-  const retry = uploads.length > 0 || unacceptedMessage;
+  const remainingStops = pendingBudgetStops(rows, assistant.closed);
+  const retry = needsDeliveryRetry(message, assistant.started, uploads.length + remainingStops.length);
   return { pending: true, retry, connectionId: link.connectionId };
+}
+
+async function readNewConversationRows(options: WatchOptions, conversationId: string,
+  rows: ChatRows, beforeTurn = false) {
+  const subject = `conversation-${conversationId}`;
+  let position = 0;
+  for (const row of rows) {
+    if (row.event.subject === subject) position = Math.max(position, row.sequence);
+  }
+  const deadline = performance.now() + 10_000;
+  if (!beforeTurn) {
+    const latest = await options.store.head(subject, deadline);
+    if (latest <= position) return;
+  }
+  for await (const row of options.store.readStream(subject, position + 1, deadline)) {
+    if (row.event.silo !== options.silo) throw new Error('Conversation silo mismatch');
+    rows.push(row);
+  }
+}
+
+function needsDeliveryRetry(message: ChatRows[number] | undefined,
+  started: Set<string>, pendingDeliveries: number) {
+  const unacceptedMessage = message !== undefined && !started.has(message.event.id);
+  return pendingDeliveries > 0 || unacceptedMessage;
 }
 
 async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   conversation: AgentSession, rows: ChatRows, uploads: Upload[],
-  message: ChatRows[number], kind: string, started: Set<string>, controlPending: ControlCheck) {
+  message: ChatRows[number], kind: string, started: Set<string>, controlPending: ControlCheck,
+  refreshStops: (beforeTurn: boolean) => Promise<void>) {
   const requested = z.object({ executionMode: z.literal('memory_free').optional() })
     .parse(message.event.data);
   const mode = requiredExecutionMode(kind, requested.executionMode);
@@ -233,7 +281,10 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   const active = await chatMembership(options.store, options.silo, turn.requesterId);
   if (!active) throw new TurnAdmissionRejected('Active silo membership required');
   const control = await controlPending();
-  if (control) return;
+  // Read from the last stored row even if a position reply said nothing had changed.
+  // Catch Stops saved while that reply was waiting, then send without another wait.
+  await refreshStops(true);
+  if (control || pendingMessage(rows)?.event.id !== message.event.id) return;
   link.socket.send(JSON.stringify(turn));
 }
 
@@ -366,8 +417,9 @@ function sendStop(socket: WebSocket, rows: ChatRows,
   if (!message) return;
   const turnId = message.event.id;
   function isStopRequest(row: ChatRows[number]) {
-    return row.event.type === 'agent.turn_stop_requested' &&
-      turnIdData.parse(row.event.data).turnId === turnId;
+    if (row.event.type !== 'agent.turn_stop_requested') return false;
+    const stop = agentTurnStopRequestedDataSchema.parse(row.event.data);
+    return !('reason' in stop) && stop.turnId === turnId;
   }
   if (rows.some(isStopRequest)) {
     socket.send(JSON.stringify({ type: 'stop', turnId, conversationId }));

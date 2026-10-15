@@ -19,6 +19,7 @@ flowchart LR
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; sends individual stops; checks reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
+  server -.->|sends spending Stops before files, turns and approval replies| computer
 ```
 
 Tool discovery records the exact definitions and how long the check remains valid.
@@ -41,6 +42,12 @@ active people. An ordinary Member receives only a small header for one person.
 
 The provider list reports that model access routes are available. Those routes let
 admins read and change grants for people, groups and assistants.
+
+The bridge sends a saved spending Stop before files, new work or approval replies
+for that turn. It checks for new Stops after waiting for a connection or preparing
+work, then reads again immediately before sending a turn. It repeats an unfinished
+Stop after a lost message or reconnection. Work stopped by a spending limit stays
+stopped when that limit rises. Other turns on the same computer can continue.
 
 Let owners and admins request publication of an exact reviewed tool list. Calls remain disabled.
 

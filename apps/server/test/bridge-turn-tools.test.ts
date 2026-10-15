@@ -97,6 +97,10 @@ function bridgeFixture(options: {
   rowsBySubject.set('member-person', [storedEvent(1, joined)]);
   const reads: string[] = [];
   const store = {
+    head(subject: string) {
+      const events = rowsBySubject.get(subject) ?? [];
+      return Promise.resolve(events.at(-1)?.sequence ?? 0);
+    },
     async *readStream(subject: string) {
       await Promise.resolve();
       reads.push(subject);

@@ -1,3 +1,4 @@
+import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import type { EventStore } from '@opencrane/event-store';
 import { toolApprovalRequestedDataSchema } from '@opencrane/events';
 import { history, readApproval } from '@opencrane/models';
@@ -29,7 +30,7 @@ function matchesRequest(request: z.infer<typeof toolApprovalRequestedDataSchema>
 }
 
 export function bridgeApprovals(store: EventStore, silo: string, assistantId: string,
-  socket: Pick<WebSocket, 'readyState' | 'send'>) {
+  socket: Pick<WebSocket, 'readyState' | 'send'>, sentStops = new Map<string, number>()) {
   const waiting = new Map<string, Waiting>();
 
   function receive(value: unknown) {
@@ -81,6 +82,7 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
     const result = await readApproval(store, silo, entry.approvalId, { deadline });
     if (socket.readyState !== WebSocket.OPEN) return;
     if (result.state !== 'requested') {
+      await sendSavedStop(entry, deadline);
       sendSettlement(entry.approvalId, result.state);
       waiting.delete(entry.approvalId);
       return;
@@ -90,6 +92,19 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
     entry.conversationHead = conversationHead;
     entry.policyHead = checkedPolicyHead;
     entry.expiresAt = Date.parse(request.expiresAt);
+  }
+
+  async function sendSavedStop(entry: Waiting, deadline: number) {
+    // Check after approval reads: a Stop may have been saved while they were waiting.
+    const rows = await history(store, `conversation-${entry.conversationId}`, silo, deadline);
+    const stops = pendingBudgetStops(rows, new Set());
+    function isWaitingTurn(stop: typeof stops[number]) {
+      return stop.turnId === entry.turnId;
+    }
+    const matchingStops = stops.filter(isWaitingTurn);
+    if (socket.readyState !== WebSocket.OPEN) return;
+    const link = { socket, sentStops };
+    sendBudgetStops(link, matchingStops);
   }
 
   function start(entry: Waiting, overallHead: number) {

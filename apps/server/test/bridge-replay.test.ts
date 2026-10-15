@@ -1297,6 +1297,100 @@ async function wakesApprovalsThroughWatcher() {
 it('wakes the right computer through watchBridges while another hold leaves reports and turns free',
   wakesApprovalsThroughWatcher);
 
+async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: number) {
+  const setup = await approvalWatcherFixture();
+  const { fixture, dbs, stop, sockets, frames, work, append } = setup;
+  const approvalId = 'a'.repeat(64);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  function isTurn(value: unknown) {
+    return typeof value === 'object' && value !== null && Reflect.get(value, 'type') === 'turn';
+  }
+  function turnArrived() {
+    const received = frames.get('computer');
+    return received?.some(isTurn) === true;
+  }
+  function isSettlement(value: unknown) {
+    return typeof value === 'object' && value !== null &&
+      Reflect.get(value, 'type') === 'approval_settled';
+  }
+  function settlementArrived() {
+    const received = frames.get('computer');
+    return received?.some(isSettlement) === true;
+  }
+  function isStopOrSettlement(value: unknown) {
+    return typeof value === 'object' && value !== null &&
+      ['stop', 'approval_settled'].includes(String(Reflect.get(value, 'type')));
+  }
+  try {
+    await until(turnArrived);
+    const read = fixture.store.readStream.bind(fixture.store);
+    const reads = vi.spyOn(fixture.store, 'readStream');
+    function isApprovalRead(call: typeof reads.mock.calls[number]) {
+      return call[0] === `approval-${approvalId}`;
+    }
+    function approvalWasRead() {
+      return reads.mock.calls.filter(isApprovalRead).length >= 2;
+    }
+    const signal = { type: 'approval_waiting', approvalId,
+      conversationId: 'alice', turnId: 'message-alice' };
+    const computer = sockets.get('computer')!;
+    computer.send(JSON.stringify(signal));
+    await until(approvalWasRead);
+    const head = fixture.store.head.bind(fixture.store);
+    async function pauseNextPoll(subject?: string, deadline?: number) {
+      if (subject === undefined) {
+        entered.resolve();
+        await release.promise;
+      }
+      return head(subject, deadline);
+    }
+    vi.spyOn(fixture.store, 'head').mockImplementation(pauseNextPoll);
+    await entered.promise;
+    let delayedComputerReads = 0;
+    let delayedApprovalRead = false;
+    async function* delayedRead(subject: string, from?: number, deadline?: number) {
+      if (subject === 'computer-assistant') {
+        delayedComputerReads++;
+        await delay(computerDelay);
+      }
+      if (subject === `approval-${approvalId}` && !delayedApprovalRead) {
+        delayedApprovalRead = true;
+        await delay(approvalDelay);
+      }
+      yield* read(subject, from, deadline);
+    }
+    reads.mockImplementation(delayedRead);
+    const started = { conversationId: 'alice', turnId: 'message-alice',
+      assistantId: 'assistant', computerId: 'computer', requesterId: 'alice',
+      task: 'chat_turn', threadId: 'alice-thread', executionMode: 'memory_free' };
+    await append('computer-assistant', 'computer.turn_started', started);
+    const savedStop = { conversationId: 'alice', turnId: 'message-alice',
+      reason: 'budget', stopId: 'saved-budget-stop' };
+    await append('conversation-alice', 'agent.turn_stop_requested', savedStop);
+    release.resolve();
+    await until(settlementArrived, 5000);
+    const received = frames.get('computer')!;
+    const ordered = received.filter(isStopOrSettlement);
+    expect(ordered).toEqual([
+      { type: 'stop', ...savedStop },
+      { type: 'approval_settled', approvalId, state: 'cancelled' },
+    ]);
+    expect(delayedComputerReads).toBeGreaterThan(0);
+    expect(delayedApprovalRead).toBe(true);
+  } finally {
+    release.resolve();
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await fixture.close();
+    await dbs.close();
+  }
+}
+it.each([[300, 0], [0, 300], [300, 300], [0, 0]])(
+  'sends Stop before approval wake with computer delay %i ms and approval delay %i ms',
+  stopsBeforeApprovalWake);
+
 async function reissuesSavedProviderModel() {
   const fixture = await replayFixture(['alice']);
   let link: Awaited<ReturnType<typeof fixture.connect>> | undefined;
