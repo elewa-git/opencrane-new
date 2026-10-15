@@ -15,7 +15,7 @@ flowchart LR
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices and access"]
   web -->|opens| integrations["Integrations pages<br/>register, add, changes, tools and access explanations"]
-  web -->|opens and clears on lost access| people["People pages<br/>members, groups, owners and invitations"]
+  web -->|opens and clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
   web -->|reads and stores| memory["Memory panel<br/>scopes, facts, sources and safe receipts"]
 ```
 
@@ -79,6 +79,8 @@ assistant check open rather than guessing an answer.
   once a policy has been read.
 - Lists current members with search and more pages. A refused member read clears both
   member and group details. A temporary read failure keeps loaded rows visible.
+- Lets Owners and Admins add an active organisation member to a local group from its page.
+  It checks that the group and access records are current before showing the addition as done.
 - Shows each member's recorded groups and grants in a table that becomes labelled cards
   on phones. A missing member or lost access clears the page. A failed refresh keeps
   earlier details with separate times for member and grant data.
@@ -128,7 +130,8 @@ assistant check open rather than guessing an answer.
 7. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.
 8. **An admin checks a change.** The website shows organisation history to people with access.
 9. **An Owner or Admin opens People & groups.** The website checks group reads,
-   shows members and grants, creates groups and removes a member after review.
+   shows members and grants, creates groups, adds a member to a local group and removes
+   a member after review.
    An organisation admin can also create a shared assistant for a group, even when an
    identity provider manages the group's members. The assistant keeps one paying group
    for its private member sessions.

@@ -1,8 +1,6 @@
 <div class="group-summary"><p>{{ memberCountLabel(group().members.length) }} ·
   {{ group().membershipSource === 'local' ? 'local group' : 'identity-provider group' }} ·
   {{ grantCountLabel(useGrants(group().access.grants).length) }}</p>
-  <a class="button primary" [href]="'/org/people/groups/' + group().groupId +
-    '/assistants/new'">Create shared assistant</a>
 </div>
 @if (group().membershipSource === 'identity_provider') {
   <aside class="supplied"><strong><span class="lock" aria-hidden="true"></span>
@@ -37,7 +35,9 @@
 <section class="paper-card members-section">
   <h2>Members</h2>
   @if (pendingMemberId() !== undefined) {
-    <p>A removal is in progress. Check its status before starting another one.</p>
+    <p>@if (pendingAction() === 'add') {
+      An addition is in progress. Check its status before starting another one.
+    } @else { A removal is in progress. Check its status before starting another one. }</p>
   }
   @if (membersUnavailable()) {
     <oc-shared-state kind="failed" message="Couldn't refresh this group"
@@ -56,7 +56,7 @@
           @if (canManage() && member.membershipSource === 'local') {
             <button type="button" class="button remove-button"
               [attr.aria-label]="'Remove ' + member.displayName + ' from ' + group().name"
-              [disabled]="pendingMemberId() !== undefined"
+              [disabled]="changesBlocked()"
               (click)="requestRemove(member, $event)">Remove</button>
           }
         </li>
@@ -65,9 +65,3 @@
   }
   @if (!membersUnavailable()) { <footer>{{ memberCountLabel(group().members.length) }}</footer> }
 </section>
-@if (group().membershipSource === 'local') {
-  <section class="add-members"><oc-shared-state kind="not_configured"
-    message="Adding members isn't available yet"
-    detail="Choosing people needs a list of organisation members, which isn't available yet."
-    [showAction]="false" /></section>
-}

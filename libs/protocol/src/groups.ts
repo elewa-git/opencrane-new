@@ -52,4 +52,9 @@ export const removeMemberCommandSchema = z.object({
   commandId: id,
   memberId: id,
 }).strict();
+export const addMemberCommandSchema = z.object({
+  action: z.literal('add'),
+  commandId: id,
+  memberId: id,
+}).strict();
 export type GroupRow = z.infer<typeof groupRowSchema>;

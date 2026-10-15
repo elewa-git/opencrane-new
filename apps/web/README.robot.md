@@ -86,6 +86,13 @@ save again. A saved tool policy stays visible until the server replies with new 
 Connected state and access grants remain unavailable until the server provides those details.
 People & groups reads flat group rows from `/api/groups`, validates them through
 the shared protocol package and creates groups through the same-origin API.
+The local group page searches `/api/members` after a 250 ms pause with at most 100
+characters, an empty `after` cursor and a limit of 20. Show more follows `next` and
+removes repeated ids. The add command uses a new UUID once. A pending addition blocks
+other adds and removals. Check status reads only its original command id. A 404 offers
+an exact same-body resend. A confirmed addition rereads the group after both content
+and IAM are current. A denied search clears the group and late results; a temporary
+search failure keeps the group on screen.
 The default Members tab reads `/api/members?q=&after=&limit=20`. Search starts a new
 page, and `next` loads more rows. A request generation drops older successful and
 ordinary failed search replies. Any live 401 or 403 clears member and group rows,

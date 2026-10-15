@@ -64,7 +64,8 @@ export {
 export { budgetStopStatusSchema, type BudgetStopStatus } from './budgets.ts';
 export { budgetCommandSchema, budgetSummarySchema, type BudgetSummary } from './budgets.ts';
 export { groupRowSchema, groupsResponseSchema, groupReceiptSchema, groupChangeSchema,
-  createGroupCommandSchema, removeMemberCommandSchema, type GroupRow } from './groups.ts';
+  createGroupCommandSchema, removeMemberCommandSchema, addMemberCommandSchema,
+  type GroupRow } from './groups.ts';
 export {
   effectStatusSchema,
   effectListResponseSchema,

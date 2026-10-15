@@ -1,0 +1,40 @@
+<section class="group-add-panel" aria-label="Add people to {{ group().name }}">
+  <h2>Add people to {{ group().name }}</h2>
+  <p>Only active members of your organisation appear.</p>
+  <label class="sr-only" for="group-add-search">Search name or email</label>
+  <input #searchField id="group-add-search" type="search" autocomplete="off"
+    placeholder="Search name or email" [value]="query()" (input)="changed($event)"
+    (keydown)="escape($event)" />
+  @if (resultsVisible()) {
+    @if (state() === 'failed') {
+      <p>Member search is unavailable right now.</p>
+      <button type="button" class="button secondary" (click)="retry()">Try again</button>
+    } @else if (state() === 'ready' && rows().length === 0 && !next()) {
+      <p>No matching members</p>
+    }
+    @if (rows().length) {
+      <div class="group-add-table">
+        <div class="group-add-head"><span>Person</span><span>Groups</span><span>Action</span></div>
+        @for (member of rows(); track member.memberId) {
+          <div class="group-add-row">
+            <div data-label="Person"><strong>{{ name(member) }}</strong>
+              @if (member.displayName) { <small>{{ member.email }}</small> }
+            </div>
+            <div data-label="Groups">
+              @if (alreadyMember(member)) { Already a member }
+              @else { {{ otherGroups(member) }} }
+            </div>
+            <div data-label="Action"><button type="button" class="button"
+              [class.primary]="!alreadyMember(member)"
+              [disabled]="pending() || alreadyMember(member)" (click)="add(member)">
+              {{ alreadyMember(member) ? 'Added' : 'Add' }}</button></div>
+          </div>
+        }
+      </div>
+    }
+    @if (next()) {
+      <button type="button" class="button secondary" [disabled]="state() === 'loading'"
+        (click)="showMore()">Show more</button>
+    }
+  }
+</section>

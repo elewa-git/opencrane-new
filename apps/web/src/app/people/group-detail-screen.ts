@@ -6,14 +6,18 @@ import type { GroupRow } from '@opencrane/protocol';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
 import { GrainLoader } from '../ui/grain-loader';
 import { ModalSheet } from '../ui/modal-sheet';
-import { fetchGroup, followChange, sendRemoveMember, type Outcome } from './groups-api';
+import { fetchGroup, followChange, sendAddMember, sendRemoveMember,
+  type Outcome } from './groups-api';
+import { GroupAddPanel } from './group-add-panel';
+import type { MemberDirectory } from './member-search-api';
 import { GroupDetail, type RemoveRequested } from './group-detail';
 import { checkTimeLabel, grantResourceLabel } from './group-wording';
 
 type ScreenState = 'loading' | 'ready' | 'missing' | 'failed' | 'access';
 type ActionState = 'idle' | 'applying' | 'unknown' | 'conflict' | 'refused' | 'confirmed';
 type Member = GroupRow['members'][number];
-type PendingRemoval = { commandId: string; memberId: string; displayName: string };
+type PendingChange = { action: 'add' | 'remove'; commandId: string;
+  memberId: string; displayName: string };
 const ACCEPTED_REMOVAL_DETAIL = 'The server accepted the change. Its records are not current yet.';
 const UNKNOWN_REMOVAL_DETAIL =
   'We could not tell whether the server recorded it. Check its status before retrying.';
@@ -22,8 +26,9 @@ const MEMBERSHIP_CHANGED_DETAIL =
   'your identity provider.';
 
 @Component({ selector: 'oc-group-detail-screen',
-  imports: [SharedState, GroupDetail, ModalSheet, GrainLoader],
-  templateUrl: './group-detail-screen.html', styleUrls: ['./people.css'],
+  imports: [SharedState, GroupDetail, GroupAddPanel, ModalSheet, GrainLoader],
+  templateUrl: './group-detail-screen.html',
+  styleUrls: ['./people.css', './group-add-panel.css'],
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class GroupDetailScreen implements OnInit, OnDestroy {
   readonly groupId = input.required<string>();
@@ -34,8 +39,9 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
   protected readonly statusMessage = signal('Loading group…');
   protected readonly detail = signal('');
   protected readonly reviewOpen = signal(false);
+  protected readonly addOpen = signal(false);
   protected readonly reviewMember = signal<Member | undefined>(undefined);
-  protected readonly pendingRemoval = signal<PendingRemoval | undefined>(undefined);
+  protected readonly pendingChange = signal<PendingChange | undefined>(undefined);
   protected readonly membersUnavailable = signal(false);
   protected readonly changeReference = signal<string | undefined>(undefined);
   protected readonly grantResourceLabel = grantResourceLabel;
@@ -48,6 +54,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
   private receiptSeen = false;
   protected readonly retryAfterNotFound = signal(false);
   private readonly headingElement = viewChild<ElementRef<HTMLElement>>('detailHeading');
+  private readonly addPanel = viewChild(GroupAddPanel);
 
   ngOnInit(): void { void this.load(); }
   ngOnDestroy(): void {
@@ -74,12 +81,38 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
 
   protected openReview(requested: RemoveRequested): void {
     const group = this.group();
-    if (this.pendingRemoval() || !group || group.membershipSource !== 'local'
+    if (this.changesBlocked() || !group || group.membershipSource !== 'local'
         || requested.member.membershipSource !== 'local') return;
     this.reviewOpener = requested.opener;
     this.reviewMember.set(requested.member);
     this.draftCommand = { commandId: crypto.randomUUID(), memberId: requested.member.memberId };
     this.reviewOpen.set(true);
+  }
+
+  protected openAdd(): void {
+    const group = this.group();
+    if (!group || group.membershipSource !== 'local' || this.changesBlocked()) return;
+    this.addOpen.set(true);
+    globalThis.setTimeout(this.focusAddPanel.bind(this), 0);
+  }
+
+  private focusAddPanel(): void {
+    this.addPanel()?.focus();
+  }
+
+  protected addMember(member: MemberDirectory['rows'][number]): void {
+    const group = this.group();
+    if (!group || group.membershipSource !== 'local' || this.changesBlocked()) return;
+    const displayName = member.displayName || member.email;
+    this.pendingChange.set({ action: 'add', commandId: crypto.randomUUID(),
+      memberId: member.memberId, displayName });
+    this.receiptSeen = false;
+    this.changeReference.set(this.pendingChange()?.commandId);
+    this.actionState.set('applying');
+    this.statusKind.set('applying');
+    this.statusMessage.set(`Adding ${displayName} to ${group.name}…`);
+    this.detail.set('');
+    void this.sendChange();
   }
 
   protected closeReview(): void {
@@ -92,9 +125,9 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     const group = this.group();
     const member = this.reviewMember();
     const command = this.draftCommand;
-    if (!group || !member || !command || this.pendingRemoval()) return;
+    if (!group || !member || !command || this.pendingChange()) return;
     this.reviewOpen.set(false);
-    this.pendingRemoval.set({ commandId: command.commandId,
+    this.pendingChange.set({ action: 'remove', commandId: command.commandId,
       memberId: member.memberId, displayName: member.displayName });
     this.receiptSeen = false;
     this.changeReference.set(command.commandId);
@@ -102,7 +135,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     this.statusKind.set('applying');
     this.statusMessage.set(`Sending the removal request for ${member.displayName}…`);
     this.detail.set('');
-    await this.sendRemoval();
+    await this.sendChange();
   }
 
   protected async refresh(): Promise<void> {
@@ -119,26 +152,34 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
   }
 
   protected async checkStatus(): Promise<void> {
-    const pendingRemoval = this.pendingRemoval();
-    if (!pendingRemoval || this.pollInFlight()) return;
+    const pendingChange = this.pendingChange();
+    if (!pendingChange || this.pollInFlight()) return;
     this.actionState.set(this.receiptSeen ? 'applying' : 'unknown');
     this.statusKind.set(this.receiptSeen ? 'applying' : 'unknown');
     const groupName = this.group()?.name ?? 'the group';
-    this.statusMessage.set(checkingRemovalMessage(pendingRemoval.displayName, groupName));
-    await this.followRemoval();
+    if (pendingChange.action === 'remove') {
+      this.statusMessage.set(checkingRemovalMessage(pendingChange.displayName, groupName));
+    } else {
+      this.statusMessage.set(`Checking the addition for ${pendingChange.displayName}…`);
+    }
+    await this.followPendingChange();
   }
 
   protected async resendRemoval(): Promise<void> {
-    const pendingRemoval = this.pendingRemoval();
-    if (!pendingRemoval || this.pollInFlight()) return;
+    const pendingChange = this.pendingChange();
+    if (!pendingChange || this.pollInFlight()) return;
     this.actionState.set('applying');
     this.statusKind.set('applying');
-    this.statusMessage.set(`Sending the same removal request for ${pendingRemoval.displayName}…`);
-    await this.sendRemoval();
+    if (pendingChange.action === 'remove') {
+      this.statusMessage.set(`Sending the same removal request for ${pendingChange.displayName}…`);
+    } else {
+      this.statusMessage.set(`Adding ${pendingChange.displayName} to ${this.groupName()}…`);
+    }
+    await this.sendChange();
   }
 
   protected async load(): Promise<void> {
-    if (this.readInFlight || this.pollInFlight() || this.pendingRemoval()
+    if (this.readInFlight || this.pollInFlight() || this.pendingChange()
         || this.request.signal.aborted) return;
     this.readInFlight = true;
     this.state.set('loading');
@@ -150,34 +191,40 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     this.acceptRead(result);
   }
 
-  private async sendRemoval(): Promise<void> {
-    const pendingRemoval = this.pendingRemoval();
-    if (!pendingRemoval || this.request.signal.aborted) return;
-    const body = { action: 'remove' as const, commandId: pendingRemoval.commandId,
-      memberId: pendingRemoval.memberId };
-    const result = await sendRemoveMember(this.groupId(), body, this.request.signal);
+  private async sendChange(): Promise<void> {
+    const pendingChange = this.pendingChange();
+    if (!pendingChange || this.request.signal.aborted) return;
+    const body = { action: pendingChange.action, commandId: pendingChange.commandId,
+      memberId: pendingChange.memberId };
+    const result = pendingChange.action === 'add'
+      ? await sendAddMember(this.groupId(), body, this.request.signal)
+      : await sendRemoveMember(this.groupId(), body, this.request.signal);
     if (this.request.signal.aborted) return;
     if (result.kind === 'ok') {
       this.receiptSeen = true;
-      const pendingRemoval = this.pendingRemoval();
-      if (pendingRemoval) {
+      const pendingChange = this.pendingChange();
+      if (pendingChange) {
         this.actionState.set('applying');
         this.statusKind.set('applying');
-        this.statusMessage.set(`Still applying the removal for ${pendingRemoval.displayName}`);
+        if (pendingChange.action === 'remove') {
+          this.statusMessage.set(`Still applying the removal for ${pendingChange.displayName}`);
+        } else {
+          this.statusMessage.set(`Adding ${pendingChange.displayName} to ${this.groupName()}…`);
+        }
         this.detail.set('The server accepted the change. Checking that its records are current.');
       }
-      await this.followRemoval();
+      await this.followPendingChange();
       return;
     }
-    await this.handleRemovalFailure(result);
+    await this.handleChangeFailure(result);
   }
 
-  private async followRemoval(): Promise<void> {
-    const pendingRemoval = this.pendingRemoval();
-    if (!pendingRemoval || this.request.signal.aborted) return;
+  private async followPendingChange(): Promise<void> {
+    const pendingChange = this.pendingChange();
+    if (!pendingChange || this.request.signal.aborted) return;
     this.pollInFlight.set(true);
     const result = await followChange(
-      this.groupId(), pendingRemoval.commandId, this.request.signal,
+      this.groupId(), pendingChange.commandId, this.request.signal,
     );
     this.pollInFlight.set(false);
     if (this.request.signal.aborted) return;
@@ -197,12 +244,17 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
       if (this.receiptSeen) {
         this.actionState.set('applying');
         this.statusKind.set('applying');
-        this.statusMessage.set(`Still applying the removal for ${pendingRemoval.displayName}`);
+        if (pendingChange.action === 'remove') {
+          this.statusMessage.set(`Still applying the removal for ${pendingChange.displayName}`);
+        } else {
+          this.statusMessage.set(`Adding ${pendingChange.displayName} to ${this.groupName()}…`);
+        }
         this.detail.set(ACCEPTED_REMOVAL_DETAIL);
       } else {
         this.actionState.set('unknown');
         this.statusKind.set('unknown');
-        this.statusMessage.set("Couldn't confirm the removal");
+        this.statusMessage.set(pendingChange.action === 'remove'
+          ? "Couldn't confirm the removal" : "Couldn't confirm the addition");
         this.detail.set(UNKNOWN_REMOVAL_DETAIL);
       }
       return;
@@ -210,7 +262,11 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     this.retryAfterNotFound.set(false);
     this.actionState.set('confirmed');
     this.statusKind.set('confirmed');
-    this.statusMessage.set(`Removed ${pendingRemoval.displayName} from ${this.groupName()}`);
+    if (pendingChange.action === 'remove') {
+      this.statusMessage.set(`Removed ${pendingChange.displayName} from ${this.groupName()}`);
+    } else {
+      this.statusMessage.set(`Added ${pendingChange.displayName} to ${this.groupName()}`);
+    }
     const checkedAt = checkTimeLabel(result.checkedAt);
     this.detail.set(
       `Group and access records were current when checked at ${checkedAt} UTC.`,
@@ -219,7 +275,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     await this.readAfterConfirmedChange();
   }
 
-  private async handleRemovalFailure(
+  private async handleChangeFailure(
     result: Exclude<Awaited<ReturnType<typeof sendRemoveMember>>, { kind: 'ok' }>,
   ): Promise<void> {
     if (result.kind === 'access_changed') {
@@ -227,7 +283,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
       return;
     }
     if (result.kind === 'conflict') {
-      this.clearPendingRemoval();
+      this.clearPendingChange();
       this.actionState.set('conflict');
       this.statusKind.set('failed');
       this.statusMessage.set('Membership changed while you were looking');
@@ -244,7 +300,8 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     }
     this.actionState.set('unknown');
     this.statusKind.set('unknown');
-    this.statusMessage.set("Couldn't confirm the removal");
+    this.statusMessage.set(this.pendingChange()?.action === 'remove'
+      ? "Couldn't confirm the removal" : "Couldn't confirm the addition");
     this.detail.set(UNKNOWN_REMOVAL_DETAIL);
   }
 
@@ -258,7 +315,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     if (result.kind === 'ok') {
       if (!result.value) {
         this.acceptRead(result);
-        this.clearPendingRemoval();
+        this.clearPendingChange();
         return;
       }
       this.acceptGroup(result.value);
@@ -266,20 +323,22 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     let refusalDetail = '';
     if (result.kind === 'ok') refusalDetail = MEMBERSHIP_CHANGED_DETAIL;
     this.showRefusedRemoval(refusalDetail);
-    this.clearPendingRemoval();
+    this.clearPendingChange();
   }
 
   private showRefusedRemoval(detail: string): void {
     this.actionState.set('refused');
     this.statusKind.set('refused');
-    this.statusMessage.set('This removal was refused. Nothing changed.');
+    this.statusMessage.set(this.pendingChange()?.action === 'add'
+      ? 'This addition was refused. Nothing changed.'
+      : 'This removal was refused. Nothing changed.');
     this.detail.set(detail);
   }
 
   private async refreshAfterNotice(): Promise<void> {
     const result = await this.readGroupOnce();
     if (this.request.signal.aborted) return;
-    this.clearPendingRemoval();
+    this.clearPendingChange();
     this.actionState.set('idle');
     this.changeReference.set(undefined);
     this.retryAfterNotFound.set(false);
@@ -300,7 +359,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     }
     if (result.kind !== 'ok' || !result.value) {
       this.membersUnavailable.set(true);
-      this.pendingRemoval.set(undefined);
+      this.pendingChange.set(undefined);
       this.reviewMember.set(undefined);
       this.focusHeadingSoon();
       return;
@@ -308,7 +367,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     this.acceptGroup(result.value);
     this.membersUnavailable.set(false);
     this.retryAfterNotFound.set(false);
-    this.pendingRemoval.set(undefined);
+    this.pendingChange.set(undefined);
     this.reviewMember.set(undefined);
     this.focusHeadingSoon();
   }
@@ -355,8 +414,8 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     this.state.set('ready');
   }
 
-  private clearPendingRemoval(): void {
-    this.pendingRemoval.set(undefined);
+  private clearPendingChange(): void {
+    this.pendingChange.set(undefined);
     this.receiptSeen = false;
     this.reviewMember.set(undefined);
     this.draftCommand = undefined;
@@ -366,15 +425,21 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     return this.group()?.name ?? 'the group';
   }
 
-  private clearForAccessChange(status?: number): void {
+  protected changesBlocked(): boolean {
+    return !!this.pendingChange() || this.actionState() === 'conflict'
+      || this.actionState() === 'refused';
+  }
+
+  protected clearForAccessChange(status?: number): void {
     // Clear protected names and command references before a late reply can draw them again.
     this.request.abort();
     this.group.set(undefined);
     this.reviewMember.set(undefined);
     this.draftCommand = undefined;
-    this.pendingRemoval.set(undefined);
+    this.pendingChange.set(undefined);
     this.changeReference.set(undefined);
     this.reviewOpen.set(false);
+    this.addOpen.set(false);
     this.membersUnavailable.set(false);
     this.state.set('access');
     this.actionState.set('idle');

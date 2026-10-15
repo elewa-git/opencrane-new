@@ -20,7 +20,10 @@ it('sends an add command to the group with exactly the supplied body', async () 
   expect(result.kind).toBe('ok');
   expect(fetcher).toHaveBeenCalledOnce();
   expect(fetcher.mock.calls[0]?.[0]).toBe('/api/groups/sales');
-  expect(JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string)).toEqual(body);
+  const options: unknown = fetcher.mock.calls[0]?.[1];
+  if (!options || typeof options !== 'object' || !('body' in options)
+      || typeof options.body !== 'string') throw new Error('Expected a JSON request body');
+  expect(JSON.parse(options.body)).toEqual(body);
   vi.unstubAllGlobals();
 });
 

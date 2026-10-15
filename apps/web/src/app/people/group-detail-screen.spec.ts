@@ -83,13 +83,19 @@ function rootElement(fixture: ComponentFixture<GroupDetailScreen>): HTMLElement 
 afterEach(() => vi.unstubAllGlobals());
 
 it('opens member search from the local group header and keeps supplied groups locked', async () => {
-  const local = await mount(response({ rows: [group] }));
+  const fixture = await mountWithFetch(replyOnce(response({ rows: [group] })));
+  const local = rootElement(fixture);
   expect(local.querySelector('header.detail-heading .button.primary')?.textContent)
     .toContain('Add members');
+  expect(local.querySelector('header.detail-heading a.button.secondary')?.textContent)
+    .toContain('Create shared assistant');
   findButton(local, 'Add members').click();
+  fixture.detectChanges();
   expect(local.textContent).toContain('Add people to Sales team');
   expect(local.textContent).toContain('Only active members of your organisation appear.');
-  expect(globalThis.document.activeElement?.tagName).toBe('INPUT');
+  await vi.waitFor(() => expect(globalThis.document.activeElement?.tagName).toBe('INPUT'));
+  fixture.destroy();
+  TestBed.resetTestingModule();
   const supplied = await mount(response({ rows: [suppliedGroup] }), suppliedGroup.groupId);
   expect(supplied.textContent).toContain('Membership comes from your identity provider');
   expect([...supplied.querySelectorAll('button')].some((button) =>
@@ -137,7 +143,7 @@ it('adds one person and waits for both records before showing Added', async () =
 
 it('lets admins create a shared assistant for an identity-provider group', async () => {
   const root = await mount(response({ rows: [suppliedGroup] }), suppliedGroup.groupId);
-  const link = root.querySelector<HTMLAnchorElement>('a.button.primary');
+  const link = root.querySelector<HTMLAnchorElement>('a.button.secondary');
   expect(link?.textContent?.trim()).toBe('Create shared assistant');
   expect(link?.getAttribute('href')).toBe(
     '/org/people/groups/identity-provider-group/assistants/new');

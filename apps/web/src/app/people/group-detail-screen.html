@@ -5,6 +5,16 @@
 }
 <header class="detail-heading" [attr.aria-busy]="state() === 'loading'">
   <h1 #detailHeading tabindex="-1">{{ heading() }}</h1>
+  @if (state() === 'ready' && group()) {
+    <div class="detail-actions">
+      @if (group()!.membershipSource === 'local') {
+        <button type="button" class="button primary" [disabled]="changesBlocked()"
+          (click)="openAdd()">Add members</button>
+      }
+      <a class="button secondary" [href]="'/org/people/groups/' + group()!.groupId +
+        '/assistants/new'">Create shared assistant</a>
+    </div>
+  }
   @if (state() === 'loading') {
     <div class="detail-skeleton" aria-hidden="true">
       <oc-grain-loader width="100%" height="12px" />
@@ -50,8 +60,14 @@
   } @else { <span class="sr-only">{{ statusMessage() }}</span> }
 </div>
 @if (state() === 'ready' && group()) {
+  @if (addOpen() && group()!.membershipSource === 'local') {
+    <oc-group-add-panel [group]="group()!" [pending]="changesBlocked()"
+      (addRequested)="addMember($event)" (accessLost)="clearForAccessChange($event)" />
+  }
   <oc-group-detail [group]="group()!" [canManage]="group()!.membershipSource === 'local'"
-    [pendingMemberId]="pendingRemoval()?.memberId ?? undefined"
+    [pendingMemberId]="pendingChange()?.memberId ?? undefined"
+    [pendingAction]="pendingChange()?.action"
+    [changesBlocked]="changesBlocked()"
     [membersUnavailable]="membersUnavailable()"
     (removeRequested)="openReview($event)" (refreshRequested)="refreshMembers()" />
 }
