@@ -14,7 +14,7 @@ flowchart LR
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys, grants and reads facts| providers["Provider pages<br/>keys, checks, model choices and access"]
-  web -->|opens| integrations["Integrations pages<br/>register, add, tools and access explanations"]
+  web -->|opens| integrations["Integrations pages<br/>register, add, changes, tools and access explanations"]
   web -->|opens and clears on lost access| people["People pages<br/>members, groups, owners and invitations"]
   web -->|reads and stores| memory["Memory panel<br/>scopes, facts, sources and safe receipts"]
 ```
@@ -67,8 +67,10 @@ loads more people, groups or assistants when requested.
   `/org/people/groups/<id>` and `/org/people/owners`, an integration register and detail at
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting
   modes for each tool, as well as models, spending and change history.
-- Shows when changed tools pause an integration, compares saved tool details and explains
-  when its last successful check has expired. The changes page opens tool review.
+- Shows when changed tools pause an integration. The changes page compares the saved
+  field types and limits, titles and other details. A failed policy read is visible;
+  earlier rows keep their last successful check time. The page opens tool review
+  once a policy has been read.
 - Lists current members with search and more pages. A refused member read clears both
   member and group details. A temporary read failure keeps loaded rows visible.
 - Shows each member's recorded groups and grants in a table that becomes labelled cards

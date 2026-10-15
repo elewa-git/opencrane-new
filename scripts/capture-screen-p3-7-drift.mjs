@@ -13,6 +13,7 @@ const expiresAt = '2026-10-15T08:45:00.000Z';
 const captureTime = Date.now();
 const freshCheckedAt = new Date(captureTime - 60_000).toISOString();
 const freshExpiresAt = new Date(captureTime + 240_000).toISOString();
+let stalePolicyReads = 0;
 
 function declaration(name, revision, description, inputSchema) {
   const definition = JSON.stringify({ name, description, inputSchema });
@@ -73,6 +74,12 @@ async function serve(route, scenario) {
     return;
   }
   if (pathname === '/api/org/integrations/odoo/tools') {
+    if (scenario === 'INT-41-policy-failed' ||
+        (scenario === 'INT-41-policy-stale' && stalePolicyReads > 0)) {
+      await route.fulfill({ status: 503, json: { status: 'unavailable' } });
+      return;
+    }
+    if (scenario === 'INT-41-policy-stale') stalePolicyReads += 1;
     await route.fulfill({ json: policy(scenario) });
     return;
   }
@@ -104,24 +111,43 @@ async function checkLayout(page, width, scenario) {
     const bounds = await actions.nth(index).boundingBox();
     assert(bounds && bounds.height >= 44, `${scenario} action has a 44px target`);
   }
-  if (scenario === 'INT-41') {
+  if (scenario === 'INT-41' || scenario === 'INT-41-policy-stale') {
     const labels = page.locator('.change-row h3');
     assert.equal(await labels.count(), 12);
   }
 }
 
 async function capture(browser, scenario, width) {
+  stalePolicyReads = 0;
   const context = await browser.newContext({ viewport: { width, height: 900 },
     reducedMotion: 'reduce' });
   const page = await context.newPage();
   const serveScenario = (route) => serve(route, scenario);
   await page.route(`${origin}/**`, serveScenario);
-  const suffix = scenario === 'INT-41' ? '/changes' : '';
+  const suffix = scenario.startsWith('INT-41') ? '/changes' : '';
   try {
     await page.goto(`${origin}/org/integrations/odoo${suffix}`);
+    if (scenario === 'INT-41-policy-stale') {
+      await page.locator('.change-row').first().waitFor();
+      await page.locator('#integration-refresh').click();
+    }
     const expected = scenario === 'INT-42' ? 'Last check expired' :
-      scenario === 'INT-41' ? 'Review changed tools' : 'is paused: its tools changed';
+      scenario.includes('policy-') ? "Couldn't check the tool policy" :
+        scenario === 'INT-41' ? 'Review changed tools' : 'is paused: its tools changed';
     await page.getByText(expected, { exact: false }).first().waitFor();
+    if (scenario === 'INT-41-policy-failed') {
+      assert.equal(await page.getByText('Review tools', { exact: true }).count(), 0);
+    }
+    if (scenario === 'INT-41') {
+      const comparison = await page.locator('.changes-list').innerText();
+      assert.match(comparison, /maxLength: 500/);
+      assert.match(comparison, /maxLength: 2000/);
+      assert.match(comparison, /internal: boolean/);
+    }
+    if (scenario === 'INT-41-policy-stale') {
+      await page.getByText('Showing rows from the last successful read',
+        { exact: false }).waitFor();
+    }
     await page.evaluate(() => globalThis.document.fonts.ready);
     await checkLayout(page, width, scenario);
     await page.screenshot({ path: resolve(output, `${scenario}-${width}.png`), fullPage: true });
@@ -150,7 +176,8 @@ async function checkLongName(browser) {
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
-  for (const scenario of ['INT-40', 'INT-41', 'INT-42']) {
+  for (const scenario of ['INT-40', 'INT-41', 'INT-42',
+    'INT-41-policy-failed', 'INT-41-policy-stale']) {
     for (const width of [1280, 390]) await capture(browser, scenario, width);
   }
   await checkLongName(browser);
@@ -159,8 +186,10 @@ try {
 }
 await writeFile(resolve(output, 'receipt.md'), `# Paused integration screens
 
-PASS: Captured six intercepted screens at 1280px and 390px with reduced motion.
+PASS: Captured ten intercepted screens at 1280px and 390px with reduced motion.
 PASS: Checked horizontal overflow, the phone menu target, action targets and phone row labels.
+PASS: Checked that the comparison shows the old 500 and new 2000 character limits and the new internal field.
+PASS: Captured a failed first policy read without a Review tools link and a failed refresh with dated retained rows.
 NOT RUN: Live installation and fresh catalogue checks.
 
 The detail page uses the saved tool policy because no changes read is available yet.

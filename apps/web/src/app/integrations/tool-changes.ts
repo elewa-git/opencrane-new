@@ -19,9 +19,13 @@ export interface ToolComparison {
 
 interface Definition {
   name?: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
+  annotations?: unknown;
+  metadata?: unknown;
+  _meta?: unknown;
 }
 
 export function compareToolCatalogues(policy: ToolPolicy): ToolComparison | null {
@@ -68,9 +72,29 @@ function compareTool(
         JSON.stringify(afterDefinition?.outputSchema)) fields.push('Output schema changed');
   } else kind = 'Details changed';
 
-  return { name, kind, before: detailText(oldTool, beforeDefinition),
-    after: detailText(currentTool, afterDefinition),
+  if (oldTool && currentTool && oldTool.revision !== currentTool.revision) {
+    fields.push(...detailChanges(beforeDefinition, afterDefinition));
+  }
+
+  return { name, kind,
+    before: detailText(oldTool, beforeDefinition, afterDefinition),
+    after: detailText(currentTool, afterDefinition, beforeDefinition),
     access: accessText(name, kind, policy), fields };
+}
+
+function detailChanges(before: Definition | null, after: Definition | null): string[] {
+  if (!before || !after) return [];
+  const changes: string[] = [];
+  if (before.title !== after.title) changes.push('Title changed');
+  if (before.description !== after.description) changes.push('Description changed');
+  if (JSON.stringify(before.annotations) !== JSON.stringify(after.annotations)) {
+    changes.push('Annotations changed');
+  }
+  if (JSON.stringify(before.metadata) !== JSON.stringify(after.metadata) ||
+      JSON.stringify(before._meta) !== JSON.stringify(after._meta)) {
+    changes.push('Metadata changed');
+  }
+  return changes;
 }
 
 function readDefinition(value: string | undefined, name: string): Definition | null {
@@ -128,11 +152,80 @@ function topLevelFields(schema: unknown): Map<string, unknown> {
   return new Map(Object.entries(properties));
 }
 
-function detailText(tool: SavedTool | undefined, definition: Definition | null): string {
+function detailText(
+  tool: SavedTool | undefined, definition: Definition | null, other: Definition | null,
+): string {
   if (!tool) return 'Not present';
   if (!definition) return 'Details not saved';
+  const lines = [descriptionText(definition)];
+  appendTitle(lines, definition, other);
+  appendSavedValue(lines, 'Annotations', definition.annotations, other?.annotations);
+  appendSavedValue(lines, 'Metadata', definition.metadata ?? definition._meta,
+    other?.metadata ?? other?._meta);
+  appendInputFields(lines, definition.inputSchema, other?.inputSchema);
+  appendOutputSchema(lines, definition.outputSchema, other?.outputSchema);
+  return lines.join('\n');
+}
+
+function descriptionText(definition: Definition): string {
   if (typeof definition.description !== 'string') return 'No description saved';
   return definition.description.slice(0, 300);
+}
+
+function appendTitle(lines: string[], definition: Definition, other: Definition | null): void {
+  if (typeof definition.title !== 'string' && typeof other?.title !== 'string') return;
+  lines.push(`Title: ${definition.title?.slice(0, 120) ?? 'Not saved'}`);
+}
+
+function appendOutputSchema(lines: string[], schema: unknown, otherSchema: unknown): void {
+  if (JSON.stringify(schema) === JSON.stringify(otherSchema)) return;
+  appendSavedValue(lines, 'Output schema', schema, otherSchema);
+}
+
+function appendSavedValue(
+  lines: string[], label: string, value: unknown, otherValue: unknown,
+): void {
+  if (value === undefined && otherValue === undefined) return;
+  if (value === undefined) {
+    lines.push(`${label}: Not saved`);
+    return;
+  }
+  const text = JSON.stringify(value);
+  if (text) lines.push(`${label}: ${text.slice(0, 200)}`);
+}
+
+function appendInputFields(lines: string[], schema: unknown, otherSchema: unknown): void {
+  const fields = topLevelFields(schema);
+  const otherFields = topLevelFields(otherSchema);
+  let shown = 0;
+  for (const [name, value] of fields) {
+    if (otherFields.has(name) && JSON.stringify(value) === JSON.stringify(otherFields.get(name))) {
+      continue;
+    }
+    if (shown === 10) {
+      lines.push('More input fields changed');
+      break;
+    }
+    const detail = fieldText(value);
+    lines.push(`Input ${name.slice(0, 100)}: ${detail}`);
+    shown += 1;
+  }
+  if (shown === 0 && JSON.stringify(schema) !== JSON.stringify(otherSchema)) {
+    appendSavedValue(lines, 'Input schema', schema, otherSchema);
+  }
+}
+
+function fieldText(value: unknown): string {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return JSON.stringify(value)?.slice(0, 180) ?? 'unknown';
+  }
+  const parts: string[] = [];
+  if ('type' in value && typeof value.type === 'string') parts.push(value.type);
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === 'type') continue;
+    parts.push(`${key}: ${JSON.stringify(entry)}`);
+  }
+  return parts.join('; ').slice(0, 180);
 }
 
 function accessText(name: string, kind: ToolChangeRow['kind'], policy: ToolPolicy): string {

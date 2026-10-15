@@ -70,8 +70,12 @@ clears the register and detail page before showing the shared access-lost messag
 `/org/integrations/<id>/changes` uses the detail page's two reads and refresh handling.
 It accepts ids matching `[\w-]{1,200}`. The policy's saved catalogue snapshots supply
 added, removed, schema-changed and details-changed rows. Missing or equal snapshots show
-no counts and ask for a full review. Tool definitions are shown as plain text, with
-descriptions limited to 300 characters. An expired catalogue says that calls stay paused;
+no counts and ask for a full review. Tool definitions are shown as plain text. Descriptions
+are limited to 300 characters; changed input fields show their types and limits, with at
+most ten fields and 180 characters of detail per field. Titles, annotations and metadata
+are also bounded. A failed tool policy read shows a visible notice. It hides Review tools
+until a policy has loaded, or labels retained comparison rows with their last check time.
+An expired catalogue says that calls stay paused;
 there is no check-start API or restore action here. Run
 `npm run visual:screen-p3-7-drift` for intercepted desktop and phone captures.
 

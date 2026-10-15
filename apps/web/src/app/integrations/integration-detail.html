@@ -64,18 +64,25 @@
     <header class="detail-heading">
       <div class="heading-copy">
         <h1>Review changed tools</h1>
-        <p>{{ integration.name }} · Last successful check {{ checkedTime() }}</p>
+        <p>{{ integration.name }} ·
+          {{ policy() ? 'Last successful check ' + checkedTime() : 'Tool policy not checked' }}</p>
       </div>
       <div class="actions">
         <a class="button secondary" [href]="'/org/integrations/' + integration.serverId">Back</a>
-        @if (showRefresh() || state() === 'failed' || refreshing()) {
-          <button id="integration-refresh" class="button secondary" type="button"
-            (click)="refresh()" [attr.aria-disabled]="refreshing()">
-            {{ refreshing() ? 'Refreshing…' : 'Refresh' }}
-          </button>
-        }
+        <button id="integration-refresh" class="button secondary" type="button"
+          (click)="refresh()" [attr.aria-disabled]="refreshing()">
+          {{ refreshing() ? 'Refreshing…' : 'Refresh' }}
+        </button>
       </div>
     </header>
+    @if (toolsReadState() === 'failed' && !refreshing()) {
+      <div class="policy-failure" aria-hidden="true">
+        <oc-shared-state kind="failed" message="Couldn't check the tool policy."
+          [detail]="policy() ? 'Showing rows from the last successful read: ' + checkedTime()
+            : 'No saved tool comparison is available. Refresh to try again.'"
+          [showAction]="false" />
+      </div>
+    }
     @if (driftHeld()) {
       <div class="draft-notice">
         <h2>{{ integration.name }} is paused: its tools changed</h2>
@@ -109,11 +116,13 @@
       <p class="draft-notice">The earlier list isn't saved, so review every tool.</p>
     }
     <p>There's no rollback. Reviewing saves your choices, but restoring calls isn't available yet.</p>
-    <div class="actions">
-      <a class="button primary" [href]="'/org/integrations/' + integration.serverId + '/tools'">
-        Review tools
-      </a>
-    </div>
+    @if (policy()) {
+      <div class="actions">
+        <a class="button primary" [href]="'/org/integrations/' + integration.serverId + '/tools'">
+          Review tools
+        </a>
+      </div>
+    }
   } @else {
   <header class="detail-heading">
     <div class="heading-copy">
