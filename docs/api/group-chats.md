@@ -68,3 +68,37 @@ Joining the parent later cannot restore a removed child join. A new explicit
 invitation is required. An explicit child join survives parent or creator departure.
 
 Child creation, origin and summary routes are not provided by this change.
+
+## Reviewed child publication
+
+`POST /api/conversations/:child/publication-review` accepts strict
+`{publicationKind: "final", resultEventId, text, fileIds?}`. Text is trimmed and must
+contain 1–32,000 characters. Any file list, including an empty list, returns
+409 `files_unavailable` without file details. Interim publication is not available yet.
+
+The result must be a visible saved `agent.message_completed` from a restricted
+shared-only turn with `agent.turn_completed` and no `agent.output_lost`. The publisher
+must read the child, post to its open immediate parent and see its original source
+message there. A closed child can still publish. Review returns `status: reviewed`,
+`text`, `publicationKind`, `parentConversationId`, `audience` (member ids),
+`publishedBy`, signed `review` and `expiresAt` (Unix milliseconds). It saves nothing.
+Cancel needs no request. The review expires after ten minutes and binds the exact
+text hash, publisher, silo, parent, child, result id/position and parent access position.
+
+`POST /api/conversations/:child/publications` accepts strict `{id, review, text}`.
+It records one `conversation.child_result_published` encrypted with the parent's key
+and returns `{status: "appended", sequence}`. The recorded origin chooses the parent.
+The existing parent `changes/:id` GET confirms the save after projection.
+
+An identical retry returns the saved sequence even after expiry or an audience change,
+while requiring current child and parent read access. Changed input under that id,
+edited text, expired review, moved/lost result or changed audience returns 409
+`review_stale`. Unrelated messages do not invalidate review. Parent closure returns
+409 `parent_closed`. Unknown, foreign, non-child, denied or substituted ids and reviews
+return the same 403 `{status: "refused"}`. Outages return 503 `unavailable`.
+Malformed input returns 400. Replies use no-store and writes check the website Origin.
+
+History loads before the short write check watches only member and participation
+streams. Parent messages and sockets show text, `authorId`, `publicationKind` and
+`contentType: "text"` to all current parent readers. They omit the child link, result,
+turn and review digest. Publication starts no computer or model work.

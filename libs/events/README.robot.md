@@ -601,3 +601,9 @@ It records serverId, changeRef, reviewRevision, fragmentDigest, sourceSequence,
 generation, recordDigest, configDigest, processRef and observedAt. These are saved
 configuration references, with no request bodies or credentials. The event parser
 requires the matching MCP subject. This receipt grants no call permission.
+
+## Reviewed child answers
+
+Final text publication follows the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
+`childResultPublishedDataSchema` requires final result and turn references,
+a SHA-256 review digest and parent-key ciphertext. It accepts no file or plaintext field.

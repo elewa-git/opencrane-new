@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { conversationCreatedDataSchema, fileUploadedDataSchema } from '@opencrane/events';
+import { conversationCreatedDataSchema, fileUploadedDataSchema,
+  childResultPublishedDataSchema } from '@opencrane/events';
 import { chatRowSchema } from '@opencrane/protocol';
 
 const rowDisplayData = chatRowSchema.shape.data.strip();
@@ -20,11 +21,17 @@ const displayTypes = new Set([
   'file.delivered', 'tool.dispatch_recorded', 'decision.recorded',
 ]);
 const encryptedTextTypes = new Set([
-  'message.posted', 'agent.message_delta', 'agent.message_completed', 'agent.reasoning_summarised',
+  'conversation.child_result_published', 'message.posted', 'agent.message_delta',
+  'agent.message_completed', 'agent.reasoning_summarised',
 ]);
 
 // Select display fields before decrypting. Saved access references are not chat content.
 export function chatDisplayData(type: string, input: unknown) {
+  if (type === 'conversation.child_result_published') {
+    const saved = childResultPublishedDataSchema.parse(input);
+    return { authorId: saved.publishedBy, publicationKind: saved.publicationKind,
+      contentType: saved.contentType };
+  }
   if (type === 'conversation.created') {
     const created = conversationCreatedDataSchema.parse(input);
     if (!('contextKind' in created)) return created;

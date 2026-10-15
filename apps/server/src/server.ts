@@ -1,3 +1,4 @@
+import { registerPublicationRoutes } from './chat/publications.ts';
 import { registerSurveyRoutes } from './onboarding/routes.ts';
 import { registerRoleRoutes } from './members/role-routes.ts';
 import { registerInvitationEmail,
@@ -107,6 +108,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerEffectRoutes(app, authConfig, options.integrations);
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
+  registerPublicationRoutes(app, authConfig, options.chat);
   registerSurveyRoutes(app, authConfig, options.onboarding);
   registerAssistantRoutes(app, authConfig, options.chat);
   registerAuditRoutes(app, authConfig, options.audit);

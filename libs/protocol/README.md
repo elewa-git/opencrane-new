@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
-  server["apps/server<br/>back end"] -.->|image admission, member flags, access replies, child invitations, publication facts, gateway receipts, saved chat choices and spending stop replies| protocol
+  server["apps/server<br/>back end"] -.->|image admission, member flags, access replies, child invitations, published answers, publication facts, gateway receipts, saved chat choices and spending stop replies| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list shapes"]
@@ -21,6 +21,9 @@ Tool rule messages include saved tool lists and their check and expiry dates.
 They also identify the server and silo, and carry the rule revision used by waiting approvals.
 
 ## What it is responsible for
+
+Published child answers carry the publisher and publication kind in parent chat replies.
+They carry no child link or hidden result references.
 
 Describe saved publication requests and their gateway receipts separately from tool availability.
 A saved receipt alone cannot prove that a gateway is still running.

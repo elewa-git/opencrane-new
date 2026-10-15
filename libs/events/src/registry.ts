@@ -1,3 +1,4 @@
+import { childPublicationEvent } from './child-publication.ts';
 import { childRequestEvent } from './child-request.ts';
 import {
   gatewayConfigurationEvent,
@@ -72,6 +73,7 @@ const maintenanceRecordedExample: MaintenanceRecord = {
 export const eventRegistry: readonly EventDefinition[] = [
   memoryContextEvent,
   childRequestEvent,
+  childPublicationEvent,
   event('memory.maintenance_recorded', 'scope',
     'One scope night was claimed or skipped without dispatch.', memoryMaintenanceRecordedDataSchema,
     maintenanceRecordedExample),

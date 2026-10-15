@@ -2789,3 +2789,10 @@ and failed or timed-out reads.
 Tests use real dependencies and a fresh store connection. No read appends or sends work.
 Live qualification is NOT RUN. WebSocket status, call status and restart/leader
 reconciliation remain part b; root stops remain with #90.
+
+## Reviewed child answers
+
+Final text publication follows the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
+`test/child-publication.test.ts` covers real NATS, PostgreSQL and OpenFGA,
+retries, access refusals, closure, HTTP/socket display and projection replay.
+Interim publication, files, screens and fresh-install qualification remain NOT RUN.
