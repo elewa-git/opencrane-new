@@ -244,6 +244,37 @@ async function unavailable(subject: string) {
 }
 it.each(failures)('fails closed for %s', unavailable);
 
+const outsiderFailures = ['computer read', 'missing saved stop'] as const;
+async function refusesOutsiderBeforeReportingFailure(failure: typeof outsiderFailures[number]) {
+  await stop();
+  if (failure === 'missing saved stop') {
+    turnId = await message();
+    await setup.append('conversation-conversation', 'agent.turn_stop_requested', {
+      conversationId: 'conversation', turnId, reason: 'budget', stopId: 'unknown' });
+  } else {
+    const original = setup.nats.store.readStream.bind(setup.nats.store);
+    async function* failComputerRead(stream: string, from?: number, deadline?: number) {
+      if (stream === 'computer-assistant') {
+        throw new Error('Unusable saved data');
+      }
+      yield* original(stream, from, deadline);
+    }
+    vi.spyOn(setup.nats.store, 'readStream').mockImplementation(failComputerRead);
+  }
+  const unknown = await read('unknown', 'outsider');
+  expect(unknown.statusCode).toBe(403);
+  expect(unknown.json()).toEqual({ status: 'refused' });
+  const existing = await read(turnId, 'outsider');
+  expect(existing.statusCode).toBe(unknown.statusCode);
+  expect(existing.body).toBe(unknown.body);
+  expect(existing.headers['cache-control']).toBe('no-store');
+  const authorised = await read();
+  expect(authorised.statusCode).toBe(503);
+  expect(authorised.json()).toEqual({ status: 'unavailable' });
+}
+it.each(outsiderFailures)('refuses an outsider equally for unknown turns and %s failures',
+  refusesOutsiderBeforeReportingFailure);
+
 async function slowRead(removal: boolean) {
   await stop();
   const original = setup.nats.store.readStream.bind(setup.nats.store);
