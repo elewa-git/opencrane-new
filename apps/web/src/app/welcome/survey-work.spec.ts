@@ -12,6 +12,11 @@ const oneStep = { state: 'survey', survey: {
 const twoSteps = { state: 'survey', survey: {
   generation: 2, position: 8, nextStep: 3, steps: [firstStep, secondStep],
 } };
+const fourSteps = { state: 'survey', survey: {
+  generation: 2, position: 10, nextStep: null, steps: [firstStep, secondStep,
+    { time: '2026-10-14T09:32:00.000Z', answers: { step: 3, style: 'Brief' } },
+    { time: '2026-10-14T09:33:00.000Z', answers: { step: 4, tasks: 'Planning' } }],
+} };
 const groups = { rows: [{ groupId: 'group-a', name: 'Teachers' }], next: null };
 
 function reply(value: unknown, status = 200): Promise<Response> {
@@ -239,6 +244,128 @@ describe('survey work step', () => {
     await Promise.resolve();
     fixture.detectChanges();
     expect(element.textContent).not.toContain('Private group');
+  });
+
+  for (const status of [401, 403]) {
+    it(`clears step one after Back and a late ${status} group read`, async () => {
+      const { fixture, element, fetchSpy } = open(twoSteps);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(element.textContent).toContain('Step 3 of 4');
+      });
+      let finishGroups: ((response: Response) => void) | undefined;
+      fetchSpy.mockImplementation((url) => {
+        if (url === '/api/chat/groups?limit=16') {
+          return new Promise<Response>(resolve => { finishGroups = resolve; });
+        }
+        return reply(twoSteps);
+      });
+      element.querySelector<HTMLButtonElement>('button')?.click();
+      fixture.detectChanges();
+      const back = Array.from(element.querySelectorAll('button'))
+        .find(button => button.textContent?.trim() === 'Back');
+      back?.click();
+      fixture.detectChanges();
+      expect(element.querySelector<HTMLInputElement>('#survey-name')?.value).toBe('Alex');
+      finishGroups?.(await reply({}, status));
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(element.textContent).toContain(status === 401
+          ? 'Your session has expired' : 'Your access has changed');
+      });
+      expect(element.querySelector('#survey-name')).toBeNull();
+      expect(element.textContent).not.toContain('Alex');
+    });
+  }
+
+  it('lets an older refused group read clear a newer successful read', async () => {
+    const { fixture, element, fetchSpy } = open(twoSteps);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Step 3 of 4');
+    });
+    let finishOlder: ((response: Response) => void) | undefined;
+    let groupReads = 0;
+    fetchSpy.mockImplementation((url) => {
+      if (url === '/api/chat/groups?limit=16') {
+        groupReads += 1;
+        if (groupReads === 1) {
+          return new Promise<Response>(resolve => { finishOlder = resolve; });
+        }
+        return reply(groups);
+      }
+      return reply(twoSteps);
+    });
+    element.querySelector<HTMLButtonElement>('button')?.click();
+    fixture.detectChanges();
+    const back = Array.from(element.querySelectorAll('button'))
+      .find(button => button.textContent?.trim() === 'Back');
+    back?.click();
+    fixture.detectChanges();
+    element.querySelector<HTMLButtonElement>('button[type=submit]')?.click();
+    await ready(fixture, element);
+    finishOlder?.(await reply({}, 403));
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Your access has changed');
+    });
+    expect(groupReads).toBe(2);
+    expect(element.querySelector('#survey-work')).toBeNull();
+  });
+
+  it('asks before an edited work answer clears saved later steps', async () => {
+    const { fixture, element, fetchSpy } = open(fourSteps);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Step 4 of 4');
+    });
+    element.querySelector<HTMLButtonElement>('button')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Step 3 of 4');
+    });
+    element.querySelector<HTMLButtonElement>('button')?.click();
+    await ready(fixture, element);
+    expect(element.textContent).toContain('Changing step 2 clears later saved answers');
+    enter(element, 'Mentoring');
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Save and review later steps');
+    expect(requestsFor(fetchSpy, '/api/onboarding/survey')).toHaveLength(0);
+    fetchSpy.mockImplementation((url) => {
+      if (url === '/api/onboarding/survey') return reply({ status: 'confirmed' });
+      if (url === '/api/onboarding') return reply(twoSteps);
+      if (url === '/api/chat/groups?limit=16') return reply(groups);
+      return reply({ authenticated: true, user: { name: 'Alex' } });
+    });
+    element.querySelector<HTMLButtonElement>('button[type=submit]')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Step 3 of 4');
+    });
+    expect(requestsFor(fetchSpy, '/api/onboarding/survey')).toHaveLength(1);
+    expect(requestsFor(fetchSpy, '/api/onboarding')).toHaveLength(2);
+  });
+
+  it('asks before replacing saved groups when the work text is unchanged', async () => {
+    const changedGroups = { rows: [{ groupId: 'group-b', name: 'Editors' }], next: null };
+    const { fixture, element, fetchSpy } = open(twoSteps, changedGroups);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Step 3 of 4');
+    });
+    element.querySelector<HTMLButtonElement>('button')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Editors');
+    });
+    expect(element.textContent).toContain('Your current groups differ from your saved groups');
+    enter(element, 'Teaching');
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Replace saved groups');
+    expect(requestsFor(fetchSpy, '/api/onboarding/survey')).toHaveLength(0);
+    element.querySelector<HTMLButtonElement>('button[type=submit]')?.click();
+    await vi.waitFor(() => expect(requestsFor(fetchSpy, '/api/onboarding/survey')).toHaveLength(1));
+    expect(postedBody(fetchSpy).answers.groupIds).toEqual(['group-b']);
   });
 
   for (const status of [401, 403]) {
