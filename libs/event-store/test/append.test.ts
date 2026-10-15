@@ -398,3 +398,16 @@ async function refusesExpiryDuringAccessCheck() {
 }
 it('refuses an append when its access check exceeds the original deadline',
   refusesExpiryDuringAccessCheck);
+
+async function preservesUncertainAccessFailure() {
+  fixture = await natsFixture();
+  const cause = new Error('Access read unavailable');
+  function checkAccess() {
+    return Promise.reject(cause);
+  }
+  const command = { event: event('unavailable-access-check'), expectedSequence: 0,
+    deadline: performance.now() + 2000, historyChecked: true as const, checkAccess };
+  expect(await fixture.store.append(command)).toEqual({ status: 'unavailable', cause });
+  expect(await fixture.store.head('member-alice')).toBe(0);
+}
+it('keeps an unavailable access check uncertain without publishing', preservesUncertainAccessFailure);

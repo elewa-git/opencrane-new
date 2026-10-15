@@ -1029,7 +1029,7 @@ async function refusesRevocationWhileReadingAdmission() {
     }
   }
   const agent = { deadline, conversation: context.conversation, turn: context.turn,
-    requestId: context.requestId, confirm: confirmWrite };
+    requestId: context.requestId, confirm: confirmWrite, checkAccess: rights.writeAuthority! };
   const { remember } = await import('../src/memory/commands.ts');
   const { scopeId: _scope, recallProof: _proof, ...command } = body.params.arguments;
   const head = vi.spyOn(setup.nats.store, 'head').mockImplementation(readHead);
@@ -1076,7 +1076,7 @@ async function admittedRemember(body: Awaited<ReturnType<typeof recalledRemember
     const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
       binding: setup.binding, feed: { memberId }, keyDirectory: dirname(setup.options.configFile) };
     const agent = { deadline, conversation: context.conversation, turn: context.turn,
-      requestId: context.requestId, confirm: rights.confirm };
+      requestId: context.requestId, confirm: rights.confirm, checkAccess: rights.writeAuthority! };
     const { remember: commandRemember } = await import('../src/memory/commands.ts');
     const { scopeId: _scope, recallProof: _proof, ...command } = body.params.arguments;
     const receipt = await commandRemember(memory, 'alice', rights.scope, command, agent);
@@ -1479,7 +1479,7 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
       expect(await target.nats.store.head(`scope-${selectedId}`)).toBe(before);
       const { remember: commandRemember } = await import('../src/memory/commands.ts');
       const agent = { deadline: performance.now() + 2000, conversation: 'conversation',
-        turn: 'turn', requestId: claims.requestId, confirm: confirmAgent };
+        turn: 'turn', requestId: claims.requestId, confirm: confirmAgent, checkAccess: confirmAgent };
       const scope = { scopeId: selectedId, scopeKind, ownerId };
       await expect(commandRemember(memory, 'alice', scope, argumentsValue, agent))
         .rejects.toThrow('agent_person_scope_only');
@@ -1503,7 +1503,7 @@ async function otherPerson() {
   const scope = { scopeId: memoryScopeId('test', 'person', 'bob'),
     scopeKind: 'person' as const, ownerId: 'bob' };
   const agent = { deadline: performance.now() + 2000, conversation: 'conversation',
-    turn: 'turn', requestId: '11111111-1111-4111-8111-111111111111', confirm: confirmAgent };
+    turn: 'turn', requestId: '11111111-1111-4111-8111-111111111111', confirm: confirmAgent, checkAccess: confirmAgent };
   const append = vi.spyOn(setup.nats.store, 'append');
   try {
     await expect(commandRemember(memory, 'alice', scope, body.params.arguments, agent))
@@ -1533,7 +1533,7 @@ async function expiredDependency() {
   const dependency = { scopeId, memoryId: identity.memoryId, revision: 1 };
   const input = { ...body.params.arguments, dependsOn: [dependency] };
   const agent = { deadline: performance.now() + 2000, conversation: 'conversation',
-    turn: 'turn', requestId: '11111111-1111-4111-8111-111111111111', confirm: confirmAgent };
+    turn: 'turn', requestId: '11111111-1111-4111-8111-111111111111', confirm: confirmAgent, checkAccess: confirmAgent };
   const clock = vi.spyOn(Date, 'now').mockReturnValue(expires);
   const append = vi.spyOn(setup.nats.store, 'append');
   try {
