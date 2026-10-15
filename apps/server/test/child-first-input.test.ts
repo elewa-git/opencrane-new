@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -8,7 +8,7 @@ import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/aut
 import { databases, openfga } from '@opencrane/authz/testing';
 import { conversationKeys, conversations, computers, pgDb, ProjectionRunner }
   from '@opencrane/projections';
-import { childRequestedDataSchema } from '@opencrane/events';
+import { childRequestedDataSchema, conversationCreatedDataSchema, eventEnvelopeSchema } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { addChildFirstInput, createRequestedChild, requestChild }
   from '../src/chat/child-requests.ts';
@@ -23,6 +23,7 @@ let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
 let directory: string;
 let counter = 0;
+const creationSchema = eventEnvelopeSchema(conversationCreatedDataSchema);
 const sourceText = '  Reviewed **source**\nwith exact spacing.  ';
 async function append(saved: StoredEvent['event'], apply = true) {
   const command = { event: saved, expectedSequence: await nats.store.head(saved.subject) };
@@ -67,6 +68,7 @@ async function close() {
   if (directory) await rm(directory, { recursive: true, force: true });
 }
 afterAll(close);
+afterEach(vi.restoreAllMocks);
 async function post(conversationId: string, authorId: string, text: string) {
   const encrypted = options.keys.encrypt('test', conversationId, text);
   const data = { conversationId, authorId, authorKind: 'human', contentType: 'markdown',
@@ -113,14 +115,19 @@ async function copiesAfterReceipt() {
   const firstHead = heads.mock.invocationCallOrder[0]!;
   const subjects = [`conversation-${input.conversationId}`, `conversation-${data.childConversationId}`];
   for (const subject of subjects) {
+    function matchesSubject(call: unknown[]) {
+      return call[0] === subject;
+    }
     const index = reads.mock.calls.findIndex(matchesSubject);
-    function matchesSubject(call: unknown[]) { return call[0] === subject; }
     expect(reads.mock.invocationCallOrder[index]).toBeLessThan(firstHead);
     expect(reads.mock.calls[index]![2]).toBeGreaterThan(performance.now() + 5000);
   }
+  const watched = new Set<string>();
   for (const [subject] of heads.mock.calls) {
-    if (subject) expect(subject).toMatch(/^(member|participation|assistant|team)-/u);
+    if (subject) watched.add(subject);
   }
+  expect(watched).toEqual(new Set(['member-alice', 'assistant-assistant', 'team-owners',
+    'team-payer', `participation-${input.conversationId}`, `participation-${data.childConversationId}`]));
   expect(first.event).toMatchObject({ id: data.firstInputId, commandId: data.firstInputId,
     source: 'opencrane-server', principal: { kind: 'human', id: 'alice' },
     data: { authorId: 'alice', authorKind: 'human', contentType: 'markdown' } });
@@ -135,14 +142,15 @@ async function copiesAfterReceipt() {
     { verifyAgainst: options.binding });
   expect(rebuilt.verified).toBe(true);
   expect(appends).not.toHaveBeenCalled();
-  vi.restoreAllMocks();
 }
+
 it('copies only the exact source after the receipt, with short access checks and quiet rebuilds',
   copiesAfterReceipt);
 
 async function refusesChangedState(kind: string) {
   const prepared = await prepare(kind !== 'no child');
   const { input, data } = prepared;
+  let removal: StoredEvent['event'] | undefined;
   if (prepared.creation) await applyCreation(prepared);
   if (kind === 'parent closed' || kind === 'child closed') {
     let conversationId = input.conversationId;
@@ -159,7 +167,7 @@ async function refusesChangedState(kind: string) {
     }
   }
   if (kind === 'silo removed') {
-    await save('member-alice', 'member.removed',
+    removal = await save('member-alice', 'member.removed',
       { memberId: 'alice', removedBy: 'bob', reason: 'left' }, false);
   }
   if (kind === 'later entry') {
@@ -170,6 +178,7 @@ async function refusesChangedState(kind: string) {
   await expect(addChildFirstInput(options, 'alice', input)).rejects.toThrow();
   expect(await nats.store.head()).toBe(before);
   if (kind === 'silo removed') {
+    await auth.handler.handle(removal!, options.db);
     await save('member-alice', 'member.joined', { memberId: 'alice', role: 'member',
       email: 'alice@example.test', displayName: 'Alice' });
   }
@@ -214,7 +223,9 @@ async function concurrentCalls() {
   const append = nats.store.append.bind(nats.store);
   let release!: () => void;
   const bothReady = new Promise<void>(ready);
-  function ready(resolve: () => void) { release = resolve; }
+  function ready(resolve: () => void) {
+    release = resolve;
+  }
   let calls = 0;
   async function together(command: Parameters<typeof append>[0]) {
     calls += 1;
@@ -228,7 +239,9 @@ async function concurrentCalls() {
     addChildFirstInput(options, 'alice', prepared.input)]);
   expect(results[0]).toEqual(results[1]);
   expect(spy).toHaveBeenCalledTimes(2);
-  for (const [command] of spy.mock.calls) expect(command.event.type).toBe('message.posted');
+  for (const [command] of spy.mock.calls) {
+    expect(command.event).toMatchObject({ type: 'message.posted' });
+  }
   spy.mockRestore();
   expect(await chatHistory(nats.store, 'test', prepared.data.childConversationId))
     .toEqual([prepared.creation, results[0]]);
@@ -251,7 +264,6 @@ async function refusesDifferentInput(patch: string) {
   if (patch === 'executionMode') payload = { ...payload, executionMode: 'memory_free' };
   if (patch === 'keyId') payload = { ...payload, keyId: 'key:other' };
   if (patch === 'ciphertext') payload = { ...payload, ciphertext: 'bm90LWNpcGhlcnRleHQ=' };
-  if (patch === 'conversationId') payload = { ...payload, conversationId: input.conversationId };
   const saved = { ...event(data.firstInputId, `conversation-${data.childConversationId}`,
     'message.posted'), commandId: data.firstInputId,
     principal: { kind: 'human' as const, id: 'alice' }, data: payload };
@@ -259,22 +271,37 @@ async function refusesDifferentInput(patch: string) {
   if (patch === 'principal') saved.principal.id = 'bob';
   if (patch === 'source') saved.source = 'other-server';
   if (patch === 'correlation') saved.correlation = { request: 'unexpected' };
+  if (patch === 'type') {
+    saved.type = 'agent.turn_stop_requested';
+    saved.data = { conversationId: data.childConversationId, turnId: 'turn', requestedBy: 'alice' };
+  }
   await append(saved, false);
   const before = await nats.store.head();
   await expect(addChildFirstInput(options, 'alice', input)).rejects.toThrow(ChatConflict);
   expect(await nats.store.head()).toBe(before);
 }
 it.each(['text', 'authorId', 'authorKind', 'contentType', 'executionMode', 'keyId',
-  'ciphertext', 'conversationId', 'commandId', 'principal', 'source', 'correlation'])(
+  'ciphertext', 'commandId', 'principal', 'source', 'correlation', 'type'])(
   'refuses an existing input with different %s', refusesDifferentInput);
 
-async function refusesChangedCreation() {
+async function refusesChangedCreation(field: string) {
   const prepared = await prepare(false);
   const original = nats.store.append.bind(nats.store);
   async function changeOrigin(command: Parameters<typeof original>[0]) {
-    const data = command.event.data as { origin: object };
-    const changed = { ...command.event, data: { ...data,
-      origin: { ...data.origin, firstInputId: 'different-input' } } };
+    const saved = creationSchema.parse(command.event);
+    const data = saved.data;
+    if (!('contextKind' in data)) throw new Error('Shared child required');
+    const changedData = { ...data };
+    if (field === 'firstInputId') {
+      changedData.origin = { ...data.origin, firstInputId: 'different-input' };
+    }
+    if (field === 'assistant') changedData.assistantId = 'other';
+    if (field === 'payer') changedData.payingGroupId = 'other';
+    if (field === 'audience') changedData.initialJoins = [data.initialJoins[0]!];
+    if (field === 'intent') {
+      changedData.origin = { ...data.origin, intentEventId: 'other-intent' };
+    }
+    const changed = { ...saved, data: changedData };
     const changedCommand = { ...command, event: changed };
     return original(changedCommand);
   }
@@ -288,4 +315,5 @@ async function refusesChangedCreation() {
   await expect(addChildFirstInput(options, 'alice', prepared.input)).rejects.toThrow(ChatConflict);
   expect(await nats.store.head()).toBe(before);
 }
-it('refuses a saved creation whose first input differs from the intent', refusesChangedCreation);
+it.each(['firstInputId', 'assistant', 'payer', 'audience', 'intent'])(
+  'refuses a saved creation with different %s from the intent', refusesChangedCreation);

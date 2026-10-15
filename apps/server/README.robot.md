@@ -2585,9 +2585,9 @@ Success returns status and the original saved sequence. Changed retry input conf
 The server computes fragmentDigest, saves one MCP event and writes no grants or approvals.
 Only credential-free, current reviewed catalogues qualify. No preparation worker is connected.
 
-## Internal child requests (P4-8 PR 6, first part)
+## Internal child requests (P4-8 PR 6 and PR 6b)
 
-`chat/child-requests.ts` exports review, intent and creation commands only. The parent
+`chat/child-requests.ts` exports review, intent, creation and first-input commands. The parent
 history loads with a ten-second deadline before the two-second access check. Each write
 checks membership, current parent joins, assistant permission and owner/payer membership.
 The source must be the requester's own human message in an open group. The default
@@ -2596,8 +2596,23 @@ id for the same source returns the original intent. Stage ids hash silo, parent 
 Creation copies the saved joins, including people later removed; inherited access still
 checks the original joins. It never replaces them with new people. Parent closure blocks
 creation at admission; closing immediately afterwards is not an atomic cross-stream check.
-First-input copying and its OpenFGA receipt wait follow in the next part. No route, job,
-activation, token or spending action calls these functions. Live qualification: NOT RUN.
+`addChildFirstInput` takes the same input as creation, with `keys` in its options.
+It reads parent and child history with separate ten-second deadlines, then checks
+current requester access within one two-second write check. It watches only member,
+participation, assistant and team streams. The child must already exist and match the
+saved intent, including `origin.firstInputId`. Its creation must have an OpenFGA receipt;
+otherwise the command throws `ParticipationApplying` and appends nothing.
+
+The command decrypts only the source and encrypts its exact text under the child's key.
+It appends one `message.posted`, with the requester as human author and principal, the
+original content type and no execution mode. The intent's first-input id is both event
+and command id. The expected sequence is the creation's position. Saved retries compare
+decrypted text and the other command fields, returning the original row and ciphertext.
+A different saved record throws `ChatConflict`, including after NATS deduplication expires.
+`test/child-first-input.test.ts` uses real NATS, PostgreSQL and OpenFGA to check these rules,
+concurrent calls, neighbouring parent messages staying private and rebuilds saving no events.
+No route, job, activation, token or spending action calls these functions.
+Live qualification: NOT RUN.
 
 ## Hosted registration — first part of P3-6 PR 4
 

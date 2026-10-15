@@ -12,7 +12,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links, later grant changes and access changes through saving, tool reviews, hosted registration, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
-  server -->|records changes, internal child requests and creation, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -->|records changes, internal child requests and creation with first inputs, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|saved child leave results| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -237,8 +237,10 @@ command id. The image stays Checking while image admission is unfinished.
 Registration does not fetch an image, discover tools or start a process.
 
 Internal child-chat commands review a person’s own group message, save their chosen
-people and assistant, and create the named child. Repeating a request returns the same
-saved records. These commands have no public route and do not send an input or start work.
+people and assistant, and create the named child. A separate command waits for its
+permissions to apply, then copies only the reviewed message under the child’s own key.
+Repeating a request returns the same saved records. These commands have no public route
+and do not start assistant work.
 
 A person continues a shared child chat. The server gives the assistant completed
 exchanges from that child, including replies to other people. It leaves out parent

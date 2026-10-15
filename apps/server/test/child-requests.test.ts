@@ -42,7 +42,7 @@ async function initialise() {
   directory = await mkdtemp(`${tmpdir()}/child-requests-`);
   const db = pgDb(storage.queue);
   const binding = await createStore(fga.apiUrl, 'test');
-  options = { silo: 'test', store: nats.store, db, binding };
+  options = { silo: 'test', store: nats.store, db, binding, keys: conversationKeys(directory) };
   auth = memberAuthorisation(binding, nats.store);
   runner = new ProjectionRunner(db, nats.reader, createLogger('child-test'));
   await runner.initialise(computers);
