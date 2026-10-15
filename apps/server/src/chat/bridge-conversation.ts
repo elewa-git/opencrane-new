@@ -185,9 +185,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   if (await childRequestHeld(options, created)) {
     return { pending: true, retry: true };
   }
-  const message = pendingMessage(rows);
-  const stops = pendingBudgetStops(rows, assistant.closed);
-  const waitingWork = message !== undefined || stops.length > 0;
+  const { message, stops, waitingWork } = pendingConversationWork(rows, assistant.closed);
   function isConversationClosed(row: ChatRows[number]) {
     return row.event.type === 'conversation.closed';
   }
@@ -230,6 +228,13 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   const remainingStops = pendingBudgetStops(rows, assistant.closed);
   const retry = needsDeliveryRetry(message, assistant.started, uploads.length + remainingStops.length);
   return { pending: true, retry, connectionId: link.connectionId };
+}
+
+function pendingConversationWork(rows: ChatRows, closedTurns: Set<string>) {
+  const message = pendingMessage(rows);
+  const stops = pendingBudgetStops(rows, closedTurns);
+  const waitingWork = message !== undefined || stops.length > 0;
+  return { message, stops, waitingWork };
 }
 
 async function readNewConversationRows(options: WatchOptions, conversationId: string,
