@@ -14,6 +14,14 @@ const savedProgress = {
     answers: { step: 1, preferredName: 'Alex', pronouns: null },
   }] },
 };
+const threeSavedSteps = {
+  state: 'survey',
+  survey: { generation: 1, position: 3, nextStep: 4, steps: [
+    savedProgress.survey.steps[0],
+    { time: '2026-10-14T09:31:00.000Z', answers: { step: 2, work: 'Teaching' } },
+    { time: '2026-10-14T09:32:00.000Z', answers: { step: 3, style: 'Brief' } },
+  ] },
+};
 
 function json(value: unknown, status = 200): Promise<Response> {
   const response = new Response(JSON.stringify(value), {
@@ -252,8 +260,104 @@ describe('welcome survey', () => {
       fixture.detectChanges();
       expect(element.textContent).toContain('Start again');
     });
+    expect(element.textContent).toContain('Try loading again');
     element.querySelector<HTMLButtonElement>('button')?.click();
     fixture.detectChanges();
     expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey')).toHaveLength(0);
   });
+
+  it('shows recovered saved steps and asks before replacing the first answer', async () => {
+    let progressReads = 0;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+      if (url === '/api/onboarding') {
+        progressReads += 1;
+        if (progressReads === 1) return json({ status: 'unavailable' }, 503);
+        return json(threeSavedSteps);
+      }
+      if (url === '/auth/me') return json({ authenticated: true, user: { name: 'Alex' } });
+      return json({ status: 'unexpected' }, 503);
+    });
+    TestBed.configureTestingModule({ imports: [SurveyScreen] });
+    const fixture = TestBed.createComponent(SurveyScreen);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Start again');
+    });
+    element.querySelector<HTMLButtonElement>('button')!.click();
+    fixture.detectChanges();
+    const name = element.querySelector<HTMLInputElement>('#survey-name')!;
+    name.value = 'Taylor';
+    name.dispatchEvent(new Event('input'));
+    element.querySelector<HTMLButtonElement>('button[type=submit]')!.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Keep saved progress');
+    });
+    expect(element.textContent).toContain('Alex');
+    expect(element.textContent).toContain('Step 2');
+    expect(element.textContent).toContain('Step 3');
+    expect(element.textContent).toContain('later steps need review');
+    expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey')).toHaveLength(0);
+    const keep = Array.from(element.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Keep saved progress'));
+    keep!.click();
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Step 4 of 4');
+    expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey')).toHaveLength(0);
+  });
+
+  for (const [identityStatus, identityBody, expectedMessage] of [
+    [200, { authenticated: false, user: null }, 'Your session has expired'],
+    [401, { status: 'signed_out' }, 'Your session has expired'],
+    [403, { status: 'refused' }, 'Your access has changed'],
+  ] as const) {
+    it(`clears saved answers after a late ${identityStatus} identity refusal`, async () => {
+      let finishIdentity: ((response: Response) => void) | undefined;
+      let finishSave: ((response: Response) => void) | undefined;
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+        if (url === '/api/onboarding') return json(savedProgress);
+        if (url === '/auth/me') {
+          return new Promise<Response>((resolve) => { finishIdentity = resolve; });
+        }
+        if (url === '/api/onboarding/survey') {
+          return new Promise<Response>((resolve) => { finishSave = resolve; });
+        }
+        return json({ status: 'unexpected' }, 503);
+      });
+      TestBed.configureTestingModule({ imports: [SurveyScreen] });
+      const fixture = TestBed.createComponent(SurveyScreen);
+      fixture.detectChanges();
+      const element = fixture.nativeElement as HTMLElement;
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(element.textContent).toContain('Step 2 of 4');
+        expect(element.textContent).toContain('Step 1 saved');
+      });
+      element.querySelector<HTMLButtonElement>('button')!.click();
+      fixture.detectChanges();
+      const name = element.querySelector<HTMLInputElement>('#survey-name')!;
+      expect(name.value).toBe('Alex');
+      name.value = 'Taylor';
+      name.dispatchEvent(new Event('input'));
+      element.querySelector<HTMLButtonElement>('button[type=submit]')!.click();
+      await vi.waitFor(() => expect(finishSave).toBeDefined());
+      expect(finishIdentity).toBeDefined();
+      finishIdentity!(await json(identityBody, identityStatus));
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(element.textContent).toContain(expectedMessage);
+      });
+      expect(element.textContent).not.toContain('Alex');
+      expect(element.textContent).not.toContain('Taylor');
+      expect(element.querySelector('#survey-name')).toBeNull();
+      finishSave!(await json({ status: 'confirmed' }));
+      await Promise.resolve();
+      fixture.detectChanges();
+      expect(element.textContent).toContain(expectedMessage);
+      expect(element.querySelector('#survey-name')).toBeNull();
+      expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey')).toHaveLength(1);
+    });
+  }
 });
