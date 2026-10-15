@@ -89,12 +89,22 @@ function applyConfigurationObservation(state: ToolPolicy, event: EventEnvelope,
   // Keep only the first receipt for the unchanged publication request.
   if (state.configurationObservation || !intent || receipt.changeRef !== intent.commandId ||
       receipt.fragmentDigest !== intent.fragmentDigest ||
+      receipt.reviewRevision !== intent.reviewRevision ||
       receipt.reviewRevision !== state.reviewRevision ||
       receipt.reviewRevision !== state.policyRevision ||
       receipt.sourceSequence <= intent.expectedSequence || receipt.sourceSequence > state.sequence) {
     return next;
   }
-  return { ...next, configurationObservation: receipt };
+  const observed = { ...next, configurationObservation: receipt };
+  const candidate = { ...observed, driftHeld: false, published: true };
+  // Restore only while this exact post-drift review still has fresh evidence.
+  // Limit this transition to restoring a saved hold.
+  if (state.driftHeld === true &&
+      isToolPolicyAvailable(candidate, Date.parse(event.time)) &&
+      isToolPolicyAvailable(candidate, Date.parse(receipt.observedAt))) {
+    return candidate;
+  }
+  return observed;
 }
 
 function applyRejection(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy {
@@ -192,7 +202,9 @@ function applyCheck(state: ToolPolicy, data: Record<string, unknown>, sequence: 
   if (data['outcome'] === 'failed') {
     // End old approvals even if a successful check arrives before anyone reads them.
     return { ...state, sequence, policyRevision: sequence, expiresAt: null,
-      configurationObservation: undefined };
+      configurationObservation: undefined,
+      driftHeld: state.driftHeld === true || state.publication !== undefined,
+      published: state.publication ? false : state.published };
   }
   if (!state.catalogue || data['schemaDigest'] !== state.catalogue.schemaDigest) {
     throw new Error('Catalogue check does not match the saved snapshot');

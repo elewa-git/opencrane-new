@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review and publication receipts and status, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review, restoration and publication status, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
   projections -->|omits child requests; saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image results, nightly records, tool holds and private instance stops and reports| projections
@@ -33,11 +33,13 @@ flowchart LR
 
 ## What it is responsible for
 
-Keep publication requests and their gateway receipts separate from permission to call tools.
+Keep publication requests and gateway receipts separate from permission to call tools.
 Receipts advance the saved position without changing tool rules or waiting approvals.
-Publication status compares the saved request, gateway observation and server receipt
-in one database snapshot. A missing match stays Applying or Unknown. Rebuilding these
-tables repeats the same checks without sending configuration or probing the gateway.
+A receipt can release a changed server's hold only for its current review and fresh checks.
+It does not change the rules or revive an old approval. Publication status compares the
+saved request, gateway observation and server receipt in one database snapshot. A missing
+match stays Applying or Unknown. Rebuilding these tables repeats the checks without
+sending configuration or probing the gateway.
 
 Keep the first write at an equal memory revision, including its expiry and saved
 position. The nightly scanner shares this rule. A nightly review covers expiry only
@@ -62,7 +64,8 @@ keeps calls blocked.
 
 A saved tool change holds the whole server, including tools whose definitions stayed
 the same. Fresh checks, another review and restarting a worker cannot lift that hold.
-Restoration needs a confirmed publication path, which is not built yet.
+A matching gateway receipt for the new review releases the saved hold. The running
+watch still checks the tool list before calls resume. Rebuilding tables sends no calls.
 
 - Keep dated tool snapshots and the earlier list after a change.
 

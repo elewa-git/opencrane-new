@@ -463,8 +463,8 @@ and the comparison screens belong to later rows of the accepted design.
 
 `mcp.tools_changed` sets `driftHeld: true` in the shared event fold. Discovery,
 review, registration and unchanged checks preserve the hold. Legacy publication
-cannot set `published` while held. No event currently clears `driftHeld`: #45 has
-no exact configuration acknowledgement on this base, so restoration stays unavailable.
+cannot set `published` while held. A matching `mcp.configuration_observed` can now
+clear `driftHeld` after exact review and publication, as described below.
 There is no second publication path. Failed freshness checks alone can recover after
 an unchanged successful check, but old approvals remain invalid.
 
@@ -652,7 +652,7 @@ generation entry. Rebuilding the catalogue repeats the same fold and starts no p
 
 `configurationObservation` holds the first matching per-operation gateway receipt.
 The fold checks its publication change, fragment digest, review and source position.
-Receipt events advance sequence only. Changed policy or publication clears the field;
+Receipt events preserve policyRevision. Changed policy or publication clears the field;
 unchanged checks and dispatch admission keep it. The catalogue stores it in the existing
 policy JSON, without new columns. Rebuild repeats this fold without probing or writing
 configuration, and cannot establish live readiness.
@@ -662,6 +662,17 @@ configuration, and cannot establish live readiness.
 `conversation.child_requested` is skipped before the conversation feed is written,
 like `agent.memory_context_recorded`. Rebuild repeats that omission. The separate
 child creation still rebuilds its recorded participants and OpenFGA receipts.
+
+### Acknowledged restoration (#48 PR 3c)
+
+A receipt must name the current publication intent's review as well as the current
+policy review. While drift is held, it restores publication only if the evidence is
+fresh at observation and event time. Old, duplicate and superseded receipts cannot
+restore a later drift. The existing delivery helper checks exact gateway generation
+and digests before writing this receipt. The fold does not probe a gateway during replay.
+A failed check holds intent-backed publication and advances the approval revision.
+Recovery needs another exact review, publication and live receipt.
+The live watch starts closed after restart; rebuilt tables alone cannot authorise a send.
 
 ## Hosted image admission receipts
 

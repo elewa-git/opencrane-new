@@ -1,15 +1,18 @@
+import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
-import { mcpCatalogue } from '@opencrane/projections';
+import { applyToolPolicy, mcpCatalogue } from '@opencrane/projections';
+import { mcpConfigurationObservationSchema } from '@opencrane/events';
+import { envelope } from '../src/actor.ts';
 import { reviewToolPolicy, publishToolPolicy } from '../src/tool-policy.ts';
 import { prepareGatewayConfiguration } from '../src/gateway-generation.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
-import { freePort, gatewayFixture } from './gateway-delivery-fixture.ts';
+import { freePort } from './gateway-delivery-fixture.ts';
 import type { AppendCommand } from '@opencrane/event-store';
 import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
-import { expect, it, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { mcpCatalogueWatch } from '../src/mcp-catalogue-watch.ts';
 import { conversations } from '@opencrane/projections';
 import { budgetStopHandler } from '../src/index.ts';
@@ -1049,118 +1052,179 @@ async function publishRestoration(setup: Fixture, commandId: string) {
 
 const restorationCases = ['exact', 'legacy', 'review only', 'intent only', 'new intent',
   'unpublish', 'second drift', 'expired', 'failed check', 'older generation',
-  'restart before', 'restart after', 'duplicate after drift'] as const;
-async function restoresReviewedDrift(change: typeof restorationCases[number]) {
+  'restart before', 'restart after', 'restart recovery', 'duplicate after drift'] as const;
+type RestorationCase = typeof restorationCases[number];
+type RestorationFixture = Awaited<ReturnType<typeof restorationFixture>>;
+
+async function restorationFixture() {
   const setup = await fixture();
-  let watch: ReturnType<typeof mcpCatalogueWatch> | undefined;
-  try {
-    const headers = await prepare(setup);
-    const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
-    const capture = vi.fn().mockResolvedValue(initial.catalogue);
-    const options = { serverIds: ['fixture'], capture,
-      requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
-    watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
-    setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
-    await watch.check('fixture');
-    const approvalId = await grantToolApproval(setup, headers);
-    const added = toolEvidence({ name: 'another', reviewed: false, costCents: 0 });
-    const changed = { ...initial.catalogue!, ...catalogueEvidence([tool, added]) };
-    capture.mockResolvedValue(changed);
-    await watch.check('fixture');
-    expect(() => watch!.requireCurrent('fixture')).toThrow();
-    const cancelled = await readApproval(setup.nats.store, 'test', approvalId);
-    expect(cancelled.state).toBe('cancelled');
-    if (change === 'legacy') {
-      await setup.append('mcp-fixture', 'mcp.server_published',
-        { serverId: 'fixture', publishedBy: 'alice' });
-    } else {
-      await reviewRestoration(setup, 'review-restoration');
-    }
-    if (change !== 'legacy' && change !== 'review only') {
-      const record = await publishRestoration(setup, 'restore');
-      const gateway = await gatewayFixture();
-      const settings = { ...gateway.options,
-        memoryRoute: { serverId: 'memory', connectionId: 'internal', upstream: 'unused' } };
-      const deliveryOptions = { mode: 'live' as const, store: setup.nats.store, silo: 'test',
-        child: gateway.child, configFile: gateway.options.configFile,
-        controlPort: await freePort(), settings };
-      const delivery = gatewayDelivery(deliveryOptions);
-      await delivery.deliver(record);
-      if (change === 'new intent' || change === 'older generation') {
-        const newer = await publishRestoration(setup, 'restore-newer');
-        if (change === 'older generation') await delivery.deliver(newer);
-        await delivery.deliver(record);
-      } else if (change === 'unpublish') {
-        await setup.append('mcp-fixture', 'mcp.server_unpublished',
-          { serverId: 'fixture', unpublishedBy: 'alice' });
-      } else if (change === 'second drift') {
-        capture.mockResolvedValue(initial.catalogue);
-        await watch.check('fixture');
-      } else if (change === 'failed check') {
-        capture.mockRejectedValueOnce(new Error('Capture unavailable'));
-        await expect(watch.check('fixture')).rejects.toThrow();
-      } else if (change === 'expired') {
-        const checkedAt = new Date(Date.now() - 1000).toISOString();
-        const expiresAt = new Date(Date.now() - 1).toISOString();
-        await setup.append('mcp-fixture', 'mcp.catalogue_checked', { serverId: 'fixture',
-          outcome: 'unchanged', schemaDigest: changed.schemaDigest, checkedAt, expiresAt });
-      } else if (change === 'restart before') {
-        watch.close();
-        await setup.restart();
-        watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
-        setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
-        expect(() => watch!.requireCurrent('fixture')).toThrow();
-        await watch.check('fixture');
-      }
-      async function acknowledged() {
-        expect(await delivery.observe()).not.toBeNull();
-      }
-      const succeeds = ['exact', 'restart after', 'duplicate after drift'].includes(change);
-      if (succeeds) {
-        await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
-        const restored = await readToolPolicy(setup.nats.store, 'test', 'fixture');
-        expect(restored).toMatchObject({ driftHeld: false, published: true });
-        await watch.check('fixture');
-        expect(() => watch!.requireCurrent('fixture')).not.toThrow();
-        const position = restored.sequence;
-        await delivery.observe();
-        const repeated = await readToolPolicy(setup.nats.store, 'test', 'fixture');
-        expect(repeated.policyRevision).toBe(restored.policyRevision);
-        expect(repeated.sequence).toBeGreaterThanOrEqual(position);
-        if (change === 'restart after') {
-          watch.close();
-          await setup.restart();
-          watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
-          setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
-          expect(() => watch!.requireCurrent('fixture')).toThrow();
-          await watch.check('fixture');
-        } else if (change === 'duplicate after drift') {
-          capture.mockResolvedValue(initial.catalogue);
-          await watch.check('fixture');
-          expect(await delivery.observe()).toBeNull();
-        }
-      } else if (change !== 'intent only') {
-        expect(await delivery.observe()).toBeNull();
-      }
-    }
-    const request = { method: 'POST', headers, body };
-    const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
-      request);
-    if (change === 'exact') {
-      expect(response.status, await response.text()).toBe(200);
-      const value = response.headers.get('x-opencrane-mcp-permit')!;
-      expect((await send(setup, value)).status).toBe(200);
-      expect(setup.received()).toBe(1);
-      const oldApproval = await readApproval(setup.nats.store, 'test', approvalId);
-      expect(oldApproval.state).toBe('cancelled');
-      await verifyRestorationReplay(setup);
-    } else {
-      expect(response.status, await response.text()).toBe(403);
-      expect(setup.received()).toBe(0);
-    }
-  } finally {
-    watch?.close();
+  async function closeSetup() {
     await setup.close();
+  }
+  onTestFinished(closeSetup);
+  const headers = await prepare(setup);
+  const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  const capture = vi.fn().mockResolvedValue(initial.catalogue);
+  const options = { serverIds: ['fixture'], capture,
+    requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+  const watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+  const context = { setup, headers, initial, capture, options, watch };
+  function closeWatch() {
+    context.watch.close();
+  }
+  onTestFinished(closeWatch);
+  setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+  await watch.check('fixture');
+  const approvalId = await grantToolApproval(setup, headers);
+  const added = toolEvidence({ name: 'another', reviewed: false, costCents: 0 });
+  const changed = { ...initial.catalogue!, ...catalogueEvidence([tool, added]) };
+  capture.mockResolvedValue(changed);
+  await watch.check('fixture');
+  function requireCurrent() {
+    watch.requireCurrent('fixture');
+  }
+  expect(requireCurrent).toThrow();
+  return Object.assign(context, { approvalId, changed });
+}
+
+async function restorationDelivery(setup: Fixture) {
+  const settings = { ...setup.options,
+    memoryRoute: { serverId: 'memory', connectionId: 'internal', upstream: 'unused' } };
+  const options = { mode: 'live' as const, store: setup.nats.store, silo: 'test',
+    child: setup.gatewayChild()!, configFile: setup.options.configFile,
+    controlPort: await freePort(), settings };
+  const delivery = gatewayDelivery(options);
+  async function waitForWitness(record: Awaited<ReturnType<typeof publishRestoration>>) {
+    const bytes = await readFile(options.configFile, 'utf8');
+    const path = /\/configuration\/\d+\/[a-f0-9-]+/u.exec(bytes)![0];
+    const url = `http://127.0.0.1:${options.controlPort}${path}`;
+    async function servesWitness() {
+      const response = await fetch(url, { signal: AbortSignal.timeout(1000) });
+      expect(response.status).toBe(200);
+      const identity: unknown = await response.json();
+      expect(identity).toMatchObject({ generation: record.generation,
+        recordDigest: record.recordDigest });
+    }
+    await expect.poll(servesWitness, { timeout: 5000 }).toBeUndefined();
+  }
+  return { ...delivery, waitForWitness };
+}
+
+async function restartRestoration(context: RestorationFixture) {
+  context.watch.close();
+  await context.setup.restart();
+  context.watch = mcpCatalogueWatch(context.setup.nats.store, 'test', context.options);
+  context.setup.dispatchOptions.requireCatalogue = context.watch.requireCurrent;
+  function requireCurrent() {
+    context.watch.requireCurrent('fixture');
+  }
+  expect(requireCurrent).toThrow();
+  await context.watch.check('fixture');
+}
+
+async function invalidateRestoration(context: RestorationFixture, change: RestorationCase,
+  delivery: Awaited<ReturnType<typeof restorationDelivery>>,
+  record: Awaited<ReturnType<typeof publishRestoration>>) {
+  const { setup, capture, watch } = context;
+  if (change === 'new intent' || change === 'older generation') {
+    const newer = await publishRestoration(setup, 'restore-newer');
+    if (change === 'older generation') await delivery.deliver(newer);
+    await delivery.deliver(record);
+  } else if (change === 'unpublish') {
+    await setup.append('mcp-fixture', 'mcp.server_unpublished',
+      { serverId: 'fixture', unpublishedBy: 'alice' });
+  } else if (change === 'second drift') {
+    capture.mockResolvedValue(context.initial.catalogue);
+    await watch.check('fixture');
+  } else if (change === 'failed check') {
+    capture.mockRejectedValueOnce(new Error('Capture unavailable'));
+    await expect(watch.check('fixture')).rejects.toThrow();
+  } else if (change === 'expired') {
+    const checkedAt = new Date(Date.now() - 1000).toISOString();
+    const expiresAt = new Date(Date.now() - 1).toISOString();
+    await setup.append('mcp-fixture', 'mcp.catalogue_checked', { serverId: 'fixture',
+      outcome: 'unchanged', schemaDigest: context.changed.schemaDigest, checkedAt, expiresAt });
+  } else if (change === 'restart before') {
+    await restartRestoration(context);
+  }
+}
+
+async function observeRestoration(context: RestorationFixture, change: RestorationCase,
+  delivery: Awaited<ReturnType<typeof restorationDelivery>>) {
+  const { setup, watch } = context;
+  async function acknowledged() {
+    expect(await delivery.observe()).not.toBeNull();
+  }
+  const succeeds = ['exact', 'restart after', 'restart recovery',
+    'duplicate after drift'].includes(change);
+  if (!succeeds) {
+    if (change !== 'intent only') expect(await delivery.observe()).toBeNull();
+    return;
+  }
+  await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
+  const restored = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(restored).toMatchObject({ driftHeld: false, published: true });
+  await watch.check('fixture');
+  watch.requireCurrent('fixture');
+  const checked = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  await delivery.observe();
+  const repeated = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(repeated).toEqual(checked);
+  if (change === 'restart after' || change === 'restart recovery') {
+    await restartRestoration(context);
+    await setup.append('mcp-fixture', 'mcp.server_published',
+      { serverId: 'fixture', publishedBy: 'alice' });
+    const held = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    expect(held).toMatchObject({ driftHeld: true, published: false });
+    if (change === 'restart recovery') {
+      delivery = await restorationDelivery(setup);
+      await reviewRestoration(setup, 'review-restart');
+      const replacement = await publishRestoration(setup, 'publish-restart');
+      await delivery.deliver(replacement);
+      await delivery.waitForWitness(replacement);
+      await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
+      await context.watch.check('fixture');
+    }
+  } else if (change === 'duplicate after drift') {
+    context.capture.mockResolvedValue(context.initial.catalogue);
+    await watch.check('fixture');
+    expect(await delivery.observe()).toBeNull();
+  }
+}
+
+async function restoresReviewedDrift(change: RestorationCase) {
+  const context = await restorationFixture();
+  const { setup, headers, approvalId } = context;
+  if (change === 'legacy') {
+    await setup.append('mcp-fixture', 'mcp.server_published',
+      { serverId: 'fixture', publishedBy: 'alice' });
+  } else {
+    await reviewRestoration(setup, 'review-restoration');
+  }
+  if (change !== 'legacy' && change !== 'review only') {
+    const record = await publishRestoration(setup, 'restore');
+    if (change === 'exact') await refuseUnrelatedRestorationReceipts(setup, headers, record);
+    const delivery = await restorationDelivery(setup);
+    await delivery.deliver(record);
+    await delivery.waitForWitness(record);
+    await invalidateRestoration(context, change, delivery, record);
+    if (change !== 'restart before') await delivery.waitForWitness(record);
+    await observeRestoration(context, change, delivery);
+  }
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    request);
+  if (change === 'exact' || change === 'restart recovery') {
+    expect(response.status, await response.text()).toBe(200);
+    const value = response.headers.get('x-opencrane-mcp-permit')!;
+    expect((await send(setup, value)).status).toBe(200);
+    expect(setup.received()).toBe(1);
+    const oldApproval = await readApproval(setup.nats.store, 'test', approvalId);
+    expect(oldApproval.state).toBe('cancelled');
+    await verifyRestorationReplay(setup);
+  } else {
+    expect(response.status, await response.text()).toBe(403);
+    expect(setup.received()).toBe(0);
   }
 }
 it.each(restorationCases)('restores drift only through exact live publication: %s',
@@ -1181,4 +1245,53 @@ async function verifyRestorationReplay(setup: Fixture) {
   expect(after.rows).toEqual(before.rows);
   expect(await setup.nats.store.head()).toBe(position);
   expect(setup.received()).toBe(1);
+}
+
+async function refuseUnrelatedRestorationReceipts(setup: Fixture,
+  headers: Record<string, string>, record: Awaited<ReturnType<typeof publishRestoration>>) {
+  const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  const member = record.members[0]!;
+  const receipt = { serverId: 'fixture', changeRef: member.changeRef,
+    reviewRevision: member.entry.reviewRevision, fragmentDigest: member.fragmentDigest,
+    sourceSequence: member.sourceSequence, generation: record.generation,
+    recordDigest: record.recordDigest, configDigest: 'a'.repeat(64),
+    processRef: '00000000-0000-4000-8000-000000000001', observedAt: new Date().toISOString() };
+  const substitutions = [{ changeRef: 'unknown' }, { fragmentDigest: 'b'.repeat(64) },
+    { reviewRevision: 1 }, { sourceSequence: 1 }, { sourceSequence: policy.sequence + 1000 }];
+  for (const substitution of substitutions) {
+    const data = { ...receipt, ...substitution };
+    await setup.append('mcp-fixture', 'mcp.configuration_observed', data);
+    const refused = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    expect(refused).toMatchObject({ driftHeld: true, published: false });
+    const request = { method: 'POST', headers, body };
+    const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+      request);
+    expect(response.status).toBe(403);
+    expect(setup.received()).toBe(0);
+  }
+  for (const outcome of ['failed', 'unknown']) {
+    const invalid = { ...receipt, outcome };
+    expect(mcpConfigurationObservationSchema.safeParse(invalid).success).toBe(false);
+  }
+  for (const silo of ['test', 'other']) {
+    const serverId = silo === 'test' ? 'other' : 'fixture';
+    const data = { ...receipt, serverId };
+    const event = envelope(silo, `mcp-${serverId}`, 'mcp.configuration_observed', data);
+    function applyForeignReceipt() {
+      return applyToolPolicy(policy, event, policy.sequence + 1);
+    }
+    expect(applyForeignReceipt).toThrow('identity mismatch');
+  }
+  const event = envelope('test', 'mcp-fixture', 'mcp.configuration_observed', receipt);
+  const expired = { ...policy, expiresAt: event.time };
+  const failed = { ...policy, expiresAt: null };
+  for (const unavailable of [expired, failed]) {
+    const refused = applyToolPolicy(unavailable, event, policy.sequence + 1);
+    expect(refused).toMatchObject({ driftHeld: true, published: false });
+  }
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    request);
+  expect(response.status).toBe(403);
+  expect(setup.received()).toBe(0);
 }

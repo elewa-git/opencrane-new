@@ -1,0 +1,1 @@
+Changed tool servers can resume after an exact new review, publication and live gateway receipt while their checks are fresh. The catalogue watch recaptures before reopening calls; stale receipts and old approvals stay refused. Configuration reload cancellation and fresh-install qualification remain separate work.

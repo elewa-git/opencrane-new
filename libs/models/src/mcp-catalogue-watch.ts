@@ -100,6 +100,8 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       // Close dispatch before trying the append. An unavailable event store must not reopen it.
       state.held = true;
       state.driftHeld = true;
+      // Require a confirmed drift append before a later receipt can release this hold.
+      state.driftSequence = Infinity;
       type = 'mcp.tools_changed';
       data = { serverId, previousSchemaDigest: policy.catalogue.schemaDigest,
         newSchemaDigest: catalogue.schemaDigest, catalogue };
@@ -112,6 +114,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       const command = { event, expectedSequence: sequence, deadline, signal };
       const result = await store.append(command);
       if (result.status !== 'appended') throw new Error('Catalogue append unconfirmed');
+      if (changed) state.driftSequence = result.sequence;
       signal.throwIfAborted();
     }
     await saveCapture(policy.sequence);
@@ -124,8 +127,9 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       await options.requireLeader();
       await saveCapture(policy.sequence);
     }
-    state.expiresAt = Date.parse(catalogue.expiresAt);
-    state.held = changed || policy.driftHeld === true || state.driftHeld;
+    policy = await readToolPolicy(store, silo, serverId, deadline);
+    signal.throwIfAborted();
+    refreshWatchState(state, policy, catalogue);
   }
 
   async function saveFailure(serverId: string, signal?: AbortSignal) {
@@ -162,8 +166,23 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
   return { check, requireCurrent, tick, close };
 }
 
+function refreshWatchState(state: ReturnType<typeof newWatch>,
+  policy: Awaited<ReturnType<typeof readToolPolicy>>, catalogue: Catalogue) {
+  state.expiresAt = Date.parse(catalogue.expiresAt!);
+  const receipt = policy.configurationObservation;
+  if (policy.driftHeld === true) {
+    state.driftHeld = true;
+  } else if (receipt && receipt.sourceSequence > state.driftSequence && policy.published &&
+      policy.catalogue?.schemaDigest === catalogue.schemaDigest) {
+    state.driftHeld = false;
+  }
+  // Keep freshness separate from drift so refreshing a held server preserves its review.
+  state.held = false;
+}
+
 function newWatch() {
-  return { held: true, driftHeld: false, expiresAt: 0, nextCheck: 0, failures: 0,
+  return { held: true, driftHeld: false, driftSequence: 0,
+    expiresAt: 0, nextCheck: 0, failures: 0,
     active: undefined as Promise<void> | undefined,
     controller: undefined as AbortController | undefined };
 }

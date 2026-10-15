@@ -13,8 +13,8 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stop reasons| models["libs/models<br/>AI rules, control, provider choice and spending"]
-  models -->|checks revision, spending, the catalogue and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  models -->|checks revision, spending, catalogue holds and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
@@ -71,7 +71,10 @@ This internal API has no child-chat caller yet.
   It checks again before returning that reply, so a withdrawal or replacement makes it invalid.
   Each server gets one saved receipt for its publication request. Receipts and calls
   keep that request current unless the reviewed rules or intent change.
-  A Ready read is not built yet.
+  A changed tool list stays held until a new review and publication receive a matching
+  receipt while the checks are fresh. The watch then recaptures before reopening calls.
+  Old approvals stay cancelled. A restart begins held and cannot use saved receipts alone.
+  Background delivery and a Ready read are not built yet.
 - Provide an optional gateway route for testing CONNECT, the HTTP request that
   opens a byte tunnel. It uses only the private relay address returned by the
   decision service. Normal startup keeps this route off. Computers cannot use it

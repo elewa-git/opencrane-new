@@ -1922,16 +1922,17 @@ read an approval during the gap. Uninterrupted renewal keeps that revision uncha
 The watch closes dispatch before appending drift or failure. A failed drift append leaves
 that process held. Successful unchanged checks can recover a freshness pause only after
 failure was saved; they retain the newer approval revision. Saved drift and local drift
-holds never clear here. Existing `mcp.tools_changed` records retain both snapshots.
+holds clear only through the restoration rules below. Existing `mcp.tools_changed`
+records retain both snapshots.
 The models process retains its existing database leader check. No conversation access
 stream, authority implementation or authority test is changed.
 
 This split does not implement in-process configuration reload, pending approval cancellation
-on reload, instance-start observation, configuration acknowledgement or restoration.
+on reload or instance-start observation. Acknowledged restoration is described below.
 The current routes reload by restarting the models process; its startup invalidates old
 approvals. Recapture of an independently restarted backend still needs instance lifecycle
-wiring. No exact acknowledgement event or completed #45 publication path exists on this
-base, so there is no restoration path or late-ack acceptance path to test.
+wiring. The gateway delivery helper now provides exact receipts; background delivery
+and live generation admission remain separate work under #45.
 Fresh-install qualification is NOT RUN. The rest of row 3 remains PARTIAL.
 
 ### Watch checks, 13 October 2026
@@ -2153,8 +2154,10 @@ same policyRevision as at sourceSequence. Receipts, call admissions and unchange
 keep it current. Withdrawal, changed policy, failed checks and replacement intents do not.
 The delivery checks the latest preparation again before each receipt and before returning.
 The fold retains only a receipt matching its intent and review; no receipt enables calls.
-Publication status is read by `libs/projections` from the catalogue tables.
-Generation admission and fresh-install qualification remain separate work.
+A matching receipt can release a reviewed drift hold. Publication status is read by
+`libs/projections` from the catalogue tables. Initial publication and the Ready read
+remain unavailable here. Worker wiring, startup route removal, generation admission
+and fresh-install qualification remain separate work.
 
 Tests use the pinned gateway, disposable NATS and PostgreSQL. The replay CLI compares
 rebuilt policy with the live projection; it writes no events or gateway configuration.
@@ -2182,3 +2185,34 @@ present its route bytes are unchanged. Replay performs no delivery or observatio
 The delivery tests also check projection-only Ready/Applying/Disabled/Unknown reads,
 receipt mismatches, failure deadlines and replay. Generation admission and final-send checks remain row 4. Fresh-install
 qualification is NOT RUN. The approval journey prints SKIP until rows 4, 5 and 14.
+
+## Reviewed drift restoration (#48 PR 3c, first part)
+
+Publication preparation accepts a held server only after its exact current catalogue has
+been reviewed and its evidence remains fresh. This does not open dispatch. The existing
+`gatewayDelivery.observe` checks the current complete generation, live process and digests
+before saving `mcp.configuration_observed`; no second acknowledgement path is added.
+
+The shared fold compares the receipt with the current intent, review revision, fragment
+digest and source position. Evidence must be valid at both observation and event time.
+Only then does it clear `driftHeld` and restore publication. Initial publication activation
+still belongs to #45. A failed check clears publication and holds intent-backed servers, so
+startup recapture or legacy publication cannot reuse an old receipt. A new review and
+publication can restore them again. Failure also advances the approval revision.
+
+The watch keeps freshness and drift holds separately. A successful capture does not
+invalidate a review merely because drift is held. It clears its local drift hold only
+after rereading the restored policy, matching the captured digest and finding a receipt
+whose source follows the saved drift. A failed drift append has no such position and
+stays held. Restart always starts closed and records failure before recapture.
+
+`mcp-dispatch.test.ts` uses product review/publication commands, a real gateway witness,
+NATS, PostgreSQL, OpenFGA and a recording upstream. Restoration sends once; pending,
+stale, withdrawn and failed attempts send zero requests. The replay CLI compares the
+live catalogue with its rebuild without sending or appending events. Pre-drift approvals
+stay cancelled. Receipt schema and fold checks also cover foreign and malformed receipts.
+
+Scope is PARTIAL: configuration reload cancellation, unchanged-other-server approval
+retention, hosted per-start capture, zero-TTL per-call capture and credentialed discovery
+are not implemented here. Fresh-install qualification is NOT RUN. The access-check code
+and its two named regression files are unchanged.
