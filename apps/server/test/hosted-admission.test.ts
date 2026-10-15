@@ -310,3 +310,27 @@ async function serialisesDifferentResults() {
   expect(await registrations()).toHaveLength(2);
 }
 it('records only one result when different writers race', serialisesDifferentResults);
+
+const refusedPrincipals = [
+  { kind: 'human', id: 'alice' },
+  { kind: 'human', id: 'models' },
+  { kind: 'system', id: 'server' },
+] as const;
+
+async function refusesOtherResultWriters(principal: typeof refusedPrincipals[number]) {
+  const serverId = await installed();
+  const before = await registrations();
+  const event = envelope('test', `mcp-${serverId}`, 'mcp.image_checked',
+    result(serverId), 'refused-result', now);
+  event.principal = principal;
+  const expectedSequence = before[0]!.sequence;
+  const outcome = await nats.store.append({ event, expectedSequence });
+  expect.soft(outcome).toEqual({ status: 'rejected', reason: 'invalid_event' });
+  expect.soft(await registrations()).toEqual(before);
+  const response = await status(serverId);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'checking' });
+}
+it.each(refusedPrincipals)(
+  'refuses result principal %j without changing saved events or admission',
+  refusesOtherResultWriters);
