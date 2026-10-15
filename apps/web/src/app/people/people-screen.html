@@ -1,16 +1,23 @@
 <div class="page-heading">
   <div><h1 tabindex="-1">People &amp; groups</h1>
-    <p>Flat groups for {{ organisationName() }}. A group grants only what is attached to it.
-      It never reveals private conversations or memory.</p></div>
+    <p>People and groups in {{ organisationName() }}. Groups grant only what is attached to them.
+      They never reveal private conversations or memory.</p></div>
   <div class="page-actions">
     <a class="button secondary" href="/org/people/owners">Owners</a>
     <button type="button" class="button secondary" (click)="load()"
+      [hidden]="selectedTab() !== 'groups'"
       [disabled]="state() === 'loading' || state() === 'retrying' || state() === 'access'">
       {{ state() === 'retrying' ? 'Refreshing…' : 'Refresh list' }}</button>
     <button #createButton type="button" class="button primary"
+      [hidden]="selectedTab() !== 'groups'"
       [disabled]="state() === 'access'" (click)="openDrawer(createButton)">New group</button>
   </div>
 </div>
+@if (state() === 'access') {
+  <oc-shared-state kind="access_changed" message="Your access changed"
+    [detail]="accessDetail()" [showAction]="false" [announce]="true" />
+}
+@if (selectedTab() === 'groups' && state() !== 'access') {
 <div>
   @if (state() === 'loading') {
     <oc-shared-state kind="checking" message="Loading groups…" [announce]="true" />
@@ -39,10 +46,6 @@
   } @else if (operationKind() === 'refused') {
     <oc-shared-state kind="refused" [message]="operation()" [showAction]="false"
       [announce]="true" />
-  } @else if (state() === 'access') {
-    <oc-shared-state kind="access_changed" message="Your access changed"
-      [detail]="accessDetail()"
-      [showAction]="false" [announce]="true" />
   } @else if (state() === 'failed' && !loadedAt()) {
     <oc-shared-state kind="failed" message="Groups are unavailable right now"
       detail="Nothing changed. Reading again is safe." [safeToRetry]="true"
@@ -61,14 +64,14 @@
     <p>Reference: <code>{{ changeReference() }}</code></p>
   }
 </div>
+}
 @if (state() !== 'access') {
   <div class="tabs" role="tablist" aria-label="People and groups">
     @for (tab of tabs; track tab.id) {
       <button type="button" role="tab" [id]="'people-tab-' + tab.id"
         aria-controls="people-panel" [attr.aria-selected]="selectedTab() === tab.id"
         [attr.tabindex]="selectedTab() === tab.id ? 0 : -1" (click)="select(tab.id)"
-        (keydown)="tabKeydown($event)">{{ tab.label }}{{ tab.id === 'groups' && loadedAt() ?
-          ' · ' + rows().length : '' }}</button>
+        (keydown)="tabKeydown($event)">{{ tab.label }}</button>
     }
   </div>
   <section id="people-panel" role="tabpanel" tabindex="0"
@@ -106,8 +109,7 @@
       }
       </div>
     } @else if (selectedTab() === 'members') {
-      <oc-shared-state kind="not_configured" message="Not available yet"
-        detail="The member list isn't available yet." [showAction]="false" />
+      <oc-members-list (accessLost)="clearForAccessChange($event)" />
     } @else {
       <oc-shared-state kind="not_configured" message="Not available yet"
         detail="Invitations aren't available yet." [showAction]="false" />

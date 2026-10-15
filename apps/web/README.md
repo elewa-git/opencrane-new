@@ -15,7 +15,7 @@ flowchart LR
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
-  web -->|opens| people["People pages<br/>members, groups and owners"]
+  web -->|opens and clears on lost access| people["People pages<br/>member directory, groups and owners"]
   web -->|reads and stores| memory["Memory panel<br/>scopes, facts, sources and safe receipts"]
 ```
 
@@ -50,6 +50,8 @@ flowchart LR
   `/org/people/groups/<id>` and `/org/people/owners`, an integration register and detail at
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting
   modes for each tool, as well as models, spending and change history.
+- Lists current members with search and more pages. A refused member read clears both
+  member and group details. A temporary read failure keeps loaded rows visible.
 - Lets organisation admins create a shared assistant for a group with selected grants
   and a fixed paying group, including groups managed by an identity provider. Group
   membership does not grant desktop access.

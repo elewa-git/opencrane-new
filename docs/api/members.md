@@ -6,12 +6,18 @@ Reads use `no-store`, verified session identity, current events and IAM; they ap
 | --- | --- |
 | `GET /api/members/:memberId` | Active Members get only `memberId`, `displayName`, `role` and false management flags. Inactive targets return 404. |
 | Same route for Owner/Admin | Adds email, joined status, recorded `joinedAt`, groups with id/name/membership source, `memberSequence` and `ownershipSequence`. |
-| `GET /api/members?q=&after=&limit=20` | Owner/Admin-only name/email search. Returns `rows`, `next`, `counts`, `checkedAt`, `projection.content` and `permissions.invite: false`. |
+| `GET /api/members?q=&after=&limit=20` | Owner/Admin-only name/email search. Returns `rows`, `next`, `counts`, `checkedAt`, `projection.content` and `permissions.invite: true`. |
 
-Only Owners get `manageOwnership: true` for the existing ownership API. Role/removal flags stay false.
+Only Owners get `manageOwnership: true` for the existing ownership API. For an
+active non-owner target, Owner/Admin detail replies set `changeRole` and `remove`
+to true, including when the caller is the target. Owner targets keep both false.
+These flags describe the caller's current role and the target's current role.
+Commands still check authority and reviewed positions when sent.
 `personalAssistant` and `rejoinedAt` return `{ status: unavailable }`.
 The access and departure reads are described below.
-Existing screens stay unchanged.
+The Members tab uses the directory read for search and bounded pages. It shows
+only current counts. It keeps loaded rows after an unavailable read and clears
+them after a 401 or 403. Member detail remains a separate screen change.
 
 Paging follows colleagues: default 20, maximum 50, query ≤100 characters, ids ≤200 safe characters.
 Event checks exclude departed candidates. Pages can be short/empty; follow `next`.

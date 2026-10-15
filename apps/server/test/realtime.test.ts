@@ -430,7 +430,9 @@ async function readsBoundedDirectory() {
   const detailResponse = await memberRead('/api/members/alice');
   const detail = memberDetailSchema.parse(await detailResponse.json());
   expect(detail).toMatchObject({ email: 'alice@example.com', role: 'admin',
-    joinedAt: '2026-10-01T00:00:00Z', personalAssistant: { status: 'unavailable' } });
+    joinedAt: '2026-10-01T00:00:00Z', personalAssistant: { status: 'unavailable' },
+    permissions: { changeRole: true, remove: true, manageOwnership: false } });
+  expect(page.permissions.invite).toBe(true);
   const next = await memberRead('/api/members?after=alice&limit=1');
   expect(await next.json()).toMatchObject({ rows: [{ memberId: 'bob' }], next: 'bob' });
   const searched = await memberRead('/api/members?q=alice%40example.com');
@@ -448,6 +450,23 @@ async function readsBoundedDirectory() {
 }
 it('pages the member projection, searches contact email and never calls page length a total',
   readsBoundedDirectory);
+
+it('sets management flags from current roles without writing an event', async () => {
+  await append('bootstrap-owner', 'silo.owner_bootstrapped', {
+    memberId: 'bootstrap-owner', role: 'owner',
+    email: 'owner@example.test', displayName: 'Owner',
+    identity: { issuer: config.issuerUrl, sub: 'oidc-bootstrap-owner' } });
+  await append('bob', 'member.joined', { email: 'bob@example.test' });
+  const before = await nats.store.head();
+  const ordinary = memberDetailSchema.parse(await (await memberRead('/api/members/bob')).json());
+  expect(ordinary.permissions).toEqual({ changeRole: true, remove: true,
+    manageOwnership: false });
+  const owner = memberDetailSchema.parse(
+    await (await memberRead('/api/members/bootstrap-owner')).json());
+  expect(owner.permissions).toEqual({ changeRole: false, remove: false,
+    manageOwnership: false });
+  expect(await nats.store.head()).toBe(before);
+});
 
 async function closesWithDelayedContent(change: 'member.role_changed' | 'member.removed') {
   const client = await connect();

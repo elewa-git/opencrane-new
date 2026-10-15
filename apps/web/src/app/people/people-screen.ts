@@ -8,6 +8,7 @@ import { GrainLoader } from '../ui/grain-loader';
 import { fetchGroups, followChange, sendCreateGroup } from './groups-api';
 import { isDuplicateName, newGroupId, checkTimeLabel } from './group-wording';
 import { GroupsList } from './groups-list';
+import { MembersList } from './members-list';
 
 type LoadState = 'loading' | 'ready' | 'failed' | 'retrying' | 'access';
 type Tab = 'members' | 'groups' | 'invitations';
@@ -15,7 +16,7 @@ type PendingCreate = { commandId: string; groupId: string; name: string; receipt
 
 @Component({
   selector: 'oc-people-screen',
-  imports: [SharedState, HingeDrawer, GroupsList, GrainLoader],
+  imports: [SharedState, HingeDrawer, GroupsList, MembersList, GrainLoader],
   templateUrl: './people-screen.html', styleUrls: ['./people.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -23,7 +24,8 @@ export class PeopleScreen implements OnInit, OnDestroy {
   readonly organisationName = input.required<string>();
   protected readonly rows = signal<GroupRow[]>([]);
   protected readonly state = signal<LoadState>('loading');
-  protected readonly selectedTab = signal<Tab>('groups');
+  protected readonly selectedTab = signal<Tab>(
+    globalThis.location.search === '?tab=groups' ? 'groups' : 'members');
   protected readonly query = signal('');
   protected readonly loadedAt = signal<string | undefined>(undefined);
   protected readonly drawerOpen = signal(false);
@@ -48,10 +50,15 @@ export class PeopleScreen implements OnInit, OnDestroy {
   private pendingCreate: PendingCreate | undefined;
   protected readonly retryAfterNotFound = signal(false);
 
-  ngOnInit(): void { void this.load(); }
+  ngOnInit(): void {
+    if (this.selectedTab() === 'groups') void this.load();
+  }
   ngOnDestroy(): void { this.request.abort(); }
 
-  protected select(tab: Tab): void { this.selectedTab.set(tab); }
+  protected select(tab: Tab): void {
+    this.selectedTab.set(tab);
+    if (tab === 'groups' && !this.loadedAt() && this.state() !== 'access') void this.load();
+  }
   protected openDrawer(button: HTMLButtonElement): void {
     if (!this.hasUnresolvedCreate()) this.pendingCreate = undefined;
     this.opener = button;
@@ -278,11 +285,13 @@ export class PeopleScreen implements OnInit, OnDestroy {
     this.operationKind.set('refused');
     this.changeReference.set(undefined);
   }
-  private clearForAccessChange(status?: number): void {
+  protected clearForAccessChange(status?: number): void {
     // Clear protected names and references before a late response can redraw them.
     this.request.abort();
     this.rows.set([]);
+    this.query.set('');
     this.loadedAt.set(undefined);
+    this.highlightedGroupId.set(undefined);
     this.draftName.set('');
     this.drawerOpen.set(false);
     this.pendingCreate = undefined;
@@ -292,8 +301,8 @@ export class PeopleScreen implements OnInit, OnDestroy {
     this.operationKind.set('access_changed');
     this.operation.set('Your access changed');
     this.accessDetail.set(status === 401
-      ? 'Group details were cleared. Your session ended. Sign in again to continue.'
-      : 'Group details were cleared. Managing groups needs the Owner or Admin role.');
+      ? 'People and group details were cleared. Your session ended. Sign in again to continue.'
+      : 'People and group details were cleared. Managing them needs the Owner or Admin role.');
   }
 }
 

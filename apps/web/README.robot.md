@@ -28,6 +28,12 @@ save again. A saved tool policy stays visible until the server replies with new 
 Connected state and access grants remain unavailable until the server provides those details.
 People & groups reads flat group rows from `/api/groups`, validates them through
 the shared protocol package and creates groups through the same-origin API.
+The default Members tab reads `/api/members?q=&after=&limit=20`. Search starts a new
+page, and `next` loads more rows. A request generation drops older successful and
+ordinary failed search replies. Any live 401 or 403 clears member and group rows,
+closes the tabs and stops later replies from showing names. Member rows are read-only
+in this part.
+`?tab=groups` opens the existing Groups tab, including from group detail pages.
 Group details link to a shared assistant draft at
 `/org/people/groups/<id>/assistants/new`. The draft reads the owner group, listed groups,
 `/api/assistants` and `/api/org/models`. It offers that group's active model and tool grants.
