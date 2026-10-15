@@ -547,7 +547,7 @@ async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]
     await setup.append('participation-conversation', 'conversation.closed', data);
     closed = true;
     stages.push('closed');
-    expect(await savedContext()).toMatchObject({ closed: true, conversationClosed: true });
+    expect(await savedContext()).toMatchObject({ turnEnded: false, conversationClosed: true });
   }
   async function raceClose(command: Parameters<typeof append>[0]) {
     const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
@@ -586,7 +586,7 @@ async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]
       expectedStages = ['prepared', 'closed', 'loaded'];
     }
     expect(stages).toEqual(expectedStages);
-    const expected = { closed: true, conversationClosed: true, memoryContext: {
+    const expected = { turnEnded: false, conversationClosed: true, memoryContext: {
       status: 'ended', reason: 'ended', references, recallCalls, executionAvailable: false } };
     // Use the writer's cached summary and a separate store identity for cold replay.
     const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };

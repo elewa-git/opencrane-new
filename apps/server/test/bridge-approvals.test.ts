@@ -120,7 +120,7 @@ async function sendsSavedState(state: string) {
 it.each(['approved', 'denied', 'expired', 'cancelled', 'outcome_unknown'])(
   'sends the saved %s state once, including after reconnect', sendsSavedState,
 );
-async function checksChangedConversation() {
+async function checksChangedConversation(subject: string) {
   await seedRequest({ policySequence: await seedLiveTurn() });
   const { approvals, send } = watcher();
   approvals.receive(waiting);
@@ -129,16 +129,20 @@ async function checksChangedConversation() {
   const read = vi.spyOn(nats.store, 'readStream');
   await poll(approvals);
   expect(read).not.toHaveBeenCalled();
-  await append('conversation-chat', 'agent.turn_stop_requested', {
-    conversationId: 'chat', turnId: 'turn', requestedBy: 'alice',
-  });
+  if (subject === 'stop') {
+    await append('conversation-chat', 'agent.turn_stop_requested', {
+      conversationId: 'chat', turnId: 'turn', requestedBy: 'alice',
+    });
+  } else {
+    await append(subject, 'conversation.closed', { conversationId: 'chat', closedBy: 'alice' });
+  }
   await poll(approvals);
   expect(send).toHaveBeenCalledWith(JSON.stringify({
     type: 'approval_settled', approvalId, state: 'cancelled',
   }));
 }
-it('reads only changed streams and cancels when the conversation closes',
-  checksChangedConversation);
+it.each(['stop', 'conversation-chat', 'participation-chat'])(
+  'reads only changed streams and cancels after %s', checksChangedConversation);
 
 async function retriesFailedRead() {
   await seedRequest({ policySequence: await seedLiveTurn() });
