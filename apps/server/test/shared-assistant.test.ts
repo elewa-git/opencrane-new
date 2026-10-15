@@ -551,7 +551,7 @@ async function refusesOnlyOneTurn(refusal: string) {
     expect(link.rejection).toBeUndefined();
     if (refusal === 'payer') {
       const stopped = await request('POST', `/api/conversations/${prefix}-alice/messages`,
-      { id: 'stop-unpaid', stopTurnId: `message-${prefix}-alice` }, 'alice');
+        { id: 'stop-unpaid', stopTurnId: `message-${prefix}-alice` }, 'alice');
       expect(stopped.statusCode, stopped.body).toBe(200);
     }
     send('bob');

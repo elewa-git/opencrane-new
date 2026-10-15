@@ -601,3 +601,36 @@ async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]
 }
 it.each(closeOrders)('retains ended recall accounting when closure lands %s',
   replaysRecallClosedDuringAppend);
+
+async function refusesCallsAfterClose(subject: string) {
+  const permit = await memoryPass(call, 'recall');
+  expect((await setup.call()).status).toBe(200);
+  expect(setup.received()).toBe(1);
+  const reservations = setup.actor.state.reservations.length;
+  const dispatches = setup.actor.state.dispatches.length;
+  const received = backendRequests;
+  await setup.append(subject, 'conversation.closed', {
+    conversationId: 'conversation', closedBy: 'alice',
+  });
+  const model = await setup.call();
+  expect(model.status, model.text).toBe(403);
+  const memory = await setup.call(headers, call, route);
+  expect(memory.status, memory.text).toBe(403);
+  const dispatched = await dispatchMemory(permit, call);
+  expect(dispatched.status, await dispatched.text()).toBe(403);
+  expect(backendRequests).toBe(received);
+  expect(setup.received()).toBe(1);
+  expect(setup.actor.state.reservations).toHaveLength(reservations);
+  expect(setup.actor.state.dispatches).toHaveLength(dispatches);
+  await setup.settled();
+  await setup.settled();
+  expect(setup.actor.state.reservations[0]?.settledCents).toBeGreaterThan(0);
+  const settlements = [];
+  for await (const row of setup.nats.store.readStream('budget-test')) {
+    if (row.event.type === 'budget.settled') settlements.push(row);
+  }
+  expect(settlements).toHaveLength(1);
+}
+it.each(['conversation-conversation', 'participation-conversation'])(
+  'refuses new model and memory calls after %s closes and settles dispatched usage once',
+  refusesCallsAfterClose);
