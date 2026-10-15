@@ -173,8 +173,8 @@ and reports whether content and IAM have applied the saved event. A missing
 command returns 404 `unknown`; a request still running may yet save it. An
 uncertain append returns 503 `unknown`, while a failed check before append returns
 503 `unavailable`. The browser grant editor now supports one-row grant and remove saves. It checks
-content and IAM status, then reads a fresh list before reporting Saved. Reload
-recovery and candidate Load more remain pending. The fresh-install journey is NOT RUN.
+content and IAM status, then reads a fresh list before reporting Saved. After reload, it checks the saved command reference without repeating the POST.
+The candidate picker uses the returned next value for Load more. The fresh-install journey is NOT RUN.
 
 ## Model calls during grant changes
 

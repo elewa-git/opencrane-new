@@ -2,8 +2,12 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ModelAccessEditor } from './model-access-editor';
 
-function openDialog(this: HTMLDialogElement): void { this.setAttribute('open', ''); }
-function closeDialog(this: HTMLDialogElement): void { this.removeAttribute('open'); }
+function openDialog(this: HTMLDialogElement): void {
+  this.setAttribute('open', '');
+}
+function closeDialog(this: HTMLDialogElement): void {
+  this.removeAttribute('open');
+}
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
   configurable: true, writable: true, value: openDialog,
 });
@@ -32,21 +36,30 @@ function reply(body: unknown, code = 200): Response {
   return new Response(JSON.stringify(body), { status: code });
 }
 function page(ids: string[], next: string | null): Response {
-  function row(id: string) { return { id, displayName: `Candidate ${id}` }; }
+  function row(id: string) {
+    return { id, displayName: `Candidate ${id}` };
+  }
   const rows = ids.map(row);
   return reply({ rows, next, loadedAt: time, projection: access.projection });
 }
 function held() {
   let release!: (response: Response) => void;
-  function capture(resolve: (response: Response) => void) { release = resolve; }
+  function capture(resolve: (response: Response) => void) {
+    release = resolve;
+  }
   const promise = new Promise<Response>(capture);
   return { promise, release };
 }
 async function mount(handler: Handler): Promise<ModelAccessEditor> {
   function fetchReply(input: RequestInfo | URL, options?: RequestInit) {
-    return Promise.resolve(handler(String(input), options));
+    let url: string;
+    if (typeof input === 'string') url = input;
+    else if (input instanceof URL) url = input.href;
+    else url = input.url;
+    return Promise.resolve(handler(url, options));
   }
   vi.stubGlobal('fetch', fetchReply);
+  TestBed.resetTestingModule();
   TestBed.configureTestingModule({ imports: [ModelAccessEditor] });
   fixture = TestBed.createComponent(ModelAccessEditor);
   fixture.detectChanges();
@@ -55,7 +68,8 @@ async function mount(handler: Handler): Promise<ModelAccessEditor> {
   return fixture.componentInstance;
 }
 function button(name: string): HTMLButtonElement | undefined {
-  const root: HTMLElement = fixture.nativeElement as HTMLElement;
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('Expected an editor element');
   for (const candidate of root.querySelectorAll('button')) {
     if (candidate.textContent?.trim() === name) return candidate;
   }
@@ -66,12 +80,19 @@ async function more(): Promise<void> {
   const target = button('Load more');
   expect(target).toBeDefined();
   target?.click();
-  await fixture.whenStable();
+  function finished() {
+    expect(fixture.componentInstance['picking']()).toBe(false);
+  }
+  await vi.waitFor(finished);
   fixture.detectChanges();
 }
-function store(): void { sessionStorage.setItem(key, JSON.stringify(reference)); }
+function store(): void {
+  sessionStorage.setItem(key, JSON.stringify(reference));
+}
 function rows(editor: ModelAccessEditor): string[] {
-  function id(row: { id: string }) { return row.id; }
+  function id(row: { id: string }) {
+    return row.id;
+  }
   return editor['candidates']()?.rows.map(id) ?? [];
 }
 function cleanUp(): void {
@@ -82,7 +103,7 @@ function cleanUp(): void {
 }
 afterEach(cleanUp);
 
-it('pages with the same kind and cursor, deduplicates, retries and prevents double reads', async () => {
+async function pagesCandidates(): Promise<void> {
   const requests: string[] = [];
   const pending = held();
   let failed = true;
@@ -109,9 +130,11 @@ it('pages with the same kind and cursor, deduplicates, retries and prevents doub
     `${base}/candidates?kind=team&after=cursor&limit=50`]);
   expect(rows(editor)).toEqual(['one', 'two']);
   expect(button('Load more')).toBeUndefined();
-});
+}
+it('pages with the same kind and cursor, deduplicates, retries and prevents double reads',
+  pagesCandidates);
 
-it('resets paging on a kind switch and ignores successful replies after switch or close', async () => {
+async function discardsOldCandidates(): Promise<void> {
   const pending = held();
   const requests: string[] = [];
   function serve(url: string) {
@@ -135,85 +158,108 @@ it('resets paging on a kind switch and ignores successful replies after switch o
   editor.close();
   await closing;
   expect(rows(editor)).toEqual([]);
-});
+}
+it('resets paging on a kind switch and ignores successful replies after switch or close',
+  discardsOldCandidates);
 
+async function recoversStoredCommand(operation: 'grant' | 'revoke'): Promise<void> {
+  const pending = held();
+  const posts: string[] = [];
+  const reads: string[] = [];
+  let stored: unknown;
+  let commandId = '';
+  function serve(url: string, options?: RequestInit) {
+    if (options?.method === 'POST') {
+      stored = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+      if (typeof stored === 'object' && stored !== null && 'commandId' in stored
+        && typeof stored.commandId === 'string') commandId = stored.commandId;
+      posts.push(typeof options.body === 'string' ? options.body : '');
+      return pending.promise;
+    }
+    if (url.includes('/changes/')) {
+      reads.push(url);
+      const receiptOperation = operation === 'grant' ? 'grant.given' : 'grant.revoked';
+      return reply({ ...status, commandId, operation: receiptOperation });
+    }
+    return reply(access);
+  }
+  const editor = await mount(serve);
+  editor['choose'](operation, 'team', 'private-grantee');
+  const saving = editor['save']();
+  await editor['save']();
+  expect(commandId).toMatch(/^[\w-]+$/u);
+  expect(stored).toEqual({ modelId, commandId, operation });
+  fixture.destroy();
+  const restored = await mount(serve);
+  expect(restored['phase']()).toBe('saved');
+  expect(sessionStorage.getItem(key)).toBeNull();
+  expect(posts).toHaveLength(1);
+  expect(reads).toEqual([`${base}/changes/${commandId}`]);
+  pending.release(reply({}, 503));
+  await saving;
+}
 it.each(['grant', 'revoke'] as const)('stores only the %s reference before POST and recovers without POST',
-  async operation => {
-    const pending = held();
-    const posts: string[] = [];
-    const reads: string[] = [];
-    let stored: unknown;
-    let commandId = '';
-    function serve(url: string, options?: RequestInit) {
-      if (options?.method === 'POST') {
-        stored = JSON.parse(sessionStorage.getItem(key) ?? 'null');
-        commandId = (stored as typeof reference | null)?.commandId ?? '';
-        posts.push(String(options.body));
-        return pending.promise;
-      }
-      if (url.includes('/changes/')) {
-        reads.push(url);
-        const receiptOperation = operation === 'grant' ? 'grant.given' : 'grant.revoked';
-        return reply({ ...status, commandId, operation: receiptOperation });
-      }
+  recoversStoredCommand);
+
+async function keepsRecoveryReadOnly(outcome: string | number): Promise<void> {
+  store();
+  const requests: string[] = [];
+  const methods: string[] = [];
+  let lists = 0;
+  function serve(url: string, options?: RequestInit): Response {
+    methods.push(options?.method ?? 'GET');
+    if (!url.includes('/changes/')) {
+      lists += 1;
+      if (outcome === 'list' && lists > 1) return reply({}, 503);
       return reply(access);
     }
-    const editor = await mount(serve);
-    editor['choose'](operation, 'team', 'private-grantee');
-    const saving = editor['save']();
-    await editor['save']();
-    expect(stored).toEqual({ modelId, commandId: expect.any(String), operation });
-    fixture.destroy();
-    const restored = await mount(serve);
-    expect(restored['phase']()).toBe('saved');
-    expect(sessionStorage.getItem(key)).toBeNull();
-    expect(posts).toHaveLength(1);
-    expect(reads).toEqual([`${base}/changes/${commandId}`]);
-    pending.release(reply({}, 503));
-    await saving;
-  });
-
-it.each([404, 503, 0, 'applying', 'commandId', 'modelId', 'operation', 'content', 'list'])(
-  'keeps reload recovery read-only for %s', async outcome => {
-    store();
-    const requests: string[] = [];
-    const methods: string[] = [];
-    let lists = 0;
-    function serve(url: string, options?: RequestInit): Response {
-      methods.push(options?.method ?? 'GET');
-      if (!url.includes('/changes/')) {
-        lists += 1;
-        if (outcome === 'list' && lists > 1) return reply({}, 503);
-        return reply(access);
-      }
-      requests.push(url);
-      if (outcome === 0) throw new Error('Offline');
-      if (typeof outcome === 'number') return reply({ status: 'unavailable' }, outcome);
-      if (outcome === 'applying') {
-        return reply({ ...status, projection: { content: 'current', iam: 'applying' } });
-      }
-      if (outcome === 'content') {
-        return reply({ ...status, projection: { content: 'applying', iam: 'current' } });
-      }
-      if (outcome === 'list') return reply(status);
-      const other = outcome === 'operation' ? 'grant.given' : 'another';
-      return reply({ ...status, [outcome]: other });
+    requests.push(url);
+    if (outcome === 0) throw new Error('Offline');
+    if (typeof outcome === 'number') return reply({ status: 'unavailable' }, outcome);
+    if (outcome === 'applying') {
+      return reply({ ...status, projection: { content: 'current', iam: 'applying' } });
     }
-    const editor = await mount(serve);
-    const applying = outcome === 'applying' || outcome === 'content' || outcome === 'list';
-    expect(editor['phase']()).toBe(applying ? 'applying' : 'unknown');
-    expect(requests).toHaveLength(applying && outcome !== 'list' ? 3 : 1);
-    expect(new Set(requests)).toEqual(new Set([`${base}/changes/${reference.commandId}`]));
-    expect(button('Check status')).toBeDefined();
-    expect(button('Try again')).toBeUndefined();
-    expect(button('Save access')).toBeUndefined();
-    await editor['send']();
-    await editor['check']();
-    expect(methods).not.toContain('POST');
-    expect(sessionStorage.getItem(key)).not.toBeNull();
-  });
+    if (outcome === 'content') {
+      return reply({ ...status, projection: { content: 'applying', iam: 'current' } });
+    }
+    if (outcome === 'list') return reply(status);
+    const other = outcome === 'operation' ? 'grant.given' : 'another';
+    return reply({ ...status, [outcome]: other });
+  }
+  const editor = await mount(serve);
+  const applying = outcome === 'applying' || outcome === 'content';
+  expect(editor['phase']()).toBe(applying ? 'applying' : 'unknown');
+  expect(requests).toHaveLength(applying ? 3 : 1);
+  expect(new Set(requests)).toEqual(new Set([`${base}/changes/${reference.commandId}`]));
+  expect(button('Check status')).toBeDefined();
+  expect(button('Try again')).toBeUndefined();
+  expect(button('Save access')).toBeUndefined();
+  await editor['send']();
+  await editor['check']();
+  expect(methods).not.toContain('POST');
+  expect(sessionStorage.getItem(key)).not.toBeNull();
+}
+it.each([404, 503, 0, 'applying', 'commandId', 'modelId', 'operation', 'content', 'list'])(
+  'keeps reload recovery read-only for %s', keepsRecoveryReadOnly);
 
-it.each([401, 403])('clears every stored reference on %s from any read or parent denial', async code => {
+async function keepsFailedAccessUnknown(code: number): Promise<void> {
+  store();
+  const requests: string[] = [];
+  function serve(url: string) {
+    requests.push(url);
+    if (code === 0) throw new Error('Offline');
+    return reply({ status: 'unavailable' }, code);
+  }
+  const editor = await mount(serve);
+  expect(editor['phase']()).toBe('unknown');
+  expect(requests).toEqual([base]);
+  expect(button('Check status')).toBeDefined();
+  expect(button('Save access')).toBeUndefined();
+  expect(button('Try again')).toBeUndefined();
+}
+it.each([404, 503, 0])('keeps a failed access read after reload unknown: %s', keepsFailedAccessUnknown);
+
+async function clearsDeniedRecovery(code: number): Promise<void> {
   for (const read of ['', '/candidates', '/changes/', 'parent']) {
     function serve(url: string) {
       if (read !== 'parent' && url.includes(`${base}${read}`)) return reply({}, code);
@@ -232,18 +278,23 @@ it.each([401, 403])('clears every stored reference on %s from any read or parent
     expect(editor['phase']()).toBe('access');
     fixture.destroy();
   }
-});
+}
+it.each([401, 403])('clears every stored reference on %s from any read or parent denial',
+  clearsDeniedRecovery);
 
-it.each(['broken', JSON.stringify({ ...reference, body: {} }),
-  JSON.stringify({ ...reference, modelId: 'another' })])('drops an invalid stored entry: %s', async value => {
+async function discardsInvalidRecovery(value: string): Promise<void> {
   sessionStorage.setItem(key, value);
-  function serve() { return reply(access); }
+  function serve() {
+    return reply(access);
+  }
   const editor = await mount(serve);
   expect(editor['phase']()).toBe('ready');
   expect(sessionStorage.getItem(key)).toBeNull();
-});
+}
+it.each(['', 'broken', JSON.stringify({ ...reference, body: {} }),
+  JSON.stringify({ ...reference, modelId: 'another' })])('drops an invalid stored entry: %s', discardsInvalidRecovery);
 
-it.each([409, 200, 503])('removes a reference on a proved POST outcome %s', async code => {
+async function removesProvedOutcome(code: number): Promise<void> {
   const stored: (string | null)[] = [];
   function serve(_url: string, options?: RequestInit) {
     if (options?.method !== 'POST') return reply(access);
@@ -258,10 +309,13 @@ it.each([409, 200, 503])('removes a reference on a proved POST outcome %s', asyn
   if (code === 503) await editor['send']();
   expect(stored).toHaveLength(code === 503 ? 2 : 1);
   expect(stored).not.toContain(null);
-});
+}
+it.each([409, 200, 503])('removes a reference on a proved POST outcome %s', removesProvedOutcome);
 
-it('continues safely when storage throws', async () => {
-  function blocked(): never { throw new Error('Storage blocked'); }
+async function handlesBlockedStorage(): Promise<void> {
+  function blocked(): never {
+    throw new Error('Storage blocked');
+  }
   vi.spyOn(Storage.prototype, 'getItem').mockImplementation(blocked);
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(blocked);
   vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(blocked);
@@ -273,4 +327,5 @@ it('continues safely when storage throws', async () => {
   editor['choose']('revoke', 'team', 'one');
   await editor['save']();
   expect(editor['phase']()).toBe('no_effect');
-});
+}
+it('continues safely when storage throws', handlesBlockedStorage);

@@ -1,4 +1,4 @@
-/* global document, window, sessionStorage */
+/* global document, window */
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
@@ -60,7 +60,8 @@ async function serve(route, state) {
   } else if (path.includes('/changes/')) {
     state.statusReads += 1;
     response = json({ ...receipt(state), currentSequence: 5,
-      projection: { content: 'current', iam: state.current ? 'current' : 'applying' } });
+      projection: { content: 'current', iam: state.current ? 'current' : 'applying' },
+      ...state.statusPatch });
     if (state.statusNetwork) return route.abort();
     if (state.statusCode) response = json({ status: 'unavailable' }, state.statusCode);
     if (state.mode === 'unknown' || state.mode === 'network') {
@@ -307,7 +308,7 @@ async function reloadCases(browser, width) {
   const candidateReads = run.state.requests.filter(isCandidateRead);
   assert.equal(candidateReads[1].query, '?kind=member&after=next-id&limit=50');
   await run.page.close();
-  for (const outcome of ['saved', 'applying', 404, 503, 'network']) {
+  for (const outcome of ['saved', 'applying', 404, 503, 'network', 'commandId', 'modelId', 'operation']) {
     run = await open(browser, width, { holdPost: true });
     await remove(run.dialog);
     await run.page.waitForFunction(hasStoredCommand);
@@ -319,6 +320,10 @@ async function reloadCases(browser, width) {
     run.state.list = { ...access, expectedSequence: 5, grants: [], grantTotal: 0 };
     if (typeof outcome === 'number') run.state.statusCode = outcome;
     run.state.statusNetwork = outcome === 'network';
+    if (['commandId', 'modelId', 'operation'].includes(outcome)) {
+      const other = outcome === 'operation' ? 'grant.given' : 'another';
+      run.state.statusPatch = { [outcome]: other };
+    }
     await run.page.reload();
     await run.opener.click();
     let message = 'Outcome unknown';
@@ -345,7 +350,9 @@ async function reloadCases(browser, width) {
     await run.page.close();
   }
 }
-function hasStoredCommand() { return sessionStorage.length > 0; }
+function hasStoredCommand() {
+  return sessionStorage.length > 0;
+}
 function isCandidateRead(request) { return request.path.endsWith('/candidates'); }
 function isStatusRead(request) { return request.path.includes('/changes/'); }
 function queryOf(request) { return request.query; }

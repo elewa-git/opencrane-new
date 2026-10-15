@@ -581,6 +581,12 @@ Each active registry model and task route opens a shared drawer. It uses the
 with the shared protocol schemas. One selected row produces one command. Only a proved
 pre-append failure offers Try again, with identical bytes. Uncertain outcomes retain
 that command in memory across drawer closes and offer GET-only status checks.
+Before each POST, sessionStorage keeps one strict record per model with only modelId,
+commandId and operation (grant or revoke). Opening Access after reload reads this
+reference without a request body, reads access and checks the original command.
+Unknown replies, including 404 and 503, cannot offer another save. Bad entries are
+dropped; blocked storage does not interrupt the editor. Saved, conflict, no_effect
+and proved unavailable replies remove the record. Access loss clears every model record.
 Each check makes at most three status reads. Saved waits for content and IAM to be
 current and for a fresh grant list. Access refusal clears details and ignores late replies.
 Either parent provider or registry GET returning 401/403 clears the page and drawer
@@ -588,8 +594,11 @@ immediately, without waiting for the other GET. Both parent and drawer reads are
 The browser checks hold the other parent GET and a candidate GET pending, then release
 successful replies after refusal to prove that names and controls cannot return.
 Run `npm run visual:screen-p4-22-access -- --check` to check without rewriting captures.
-The picker shows up to 50 candidates of one kind. Reload recovery and Load more are
-pending; reloading discards the pending command. Names never enter storage or addresses.
+The picker reads 50 candidates of one kind at a time. Load more uses next as after,
+keeps existing rows on failure and removes duplicate ids. Switching kind resets paging.
+Names never enter storage or addresses.
 Configured uses and grant paging are absent from the API, so no Missing rows are inferred.
 `npm run visual:screen-p4-22-access` uses intercepted HTTP replies and the web build.
-The [screen receipt](../../docs/process/screen-p4-22-access/receipt.md) records its limits.
+Adding `-- --part2` writes only the new paging and reload captures.
+The [original screen receipt](../../docs/process/screen-p4-22-access/receipt.md) and
+[reload and paging receipt](../../docs/process/screen-p4-22-access2/receipt.md) record the limits.

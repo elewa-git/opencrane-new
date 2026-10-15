@@ -1,0 +1,1 @@
+- Model access candidates now offer Load more. Reopening Access after a page reload checks an unfinished save using its original command id, without sending it again.

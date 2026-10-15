@@ -12,7 +12,14 @@ type Kind = Command['granteeKind'];
 type Edit = Pick<Command, 'action' | 'granteeKind' | 'granteeId'>;
 type Phase = 'ready' | 'loading' | 'applying' | 'saved' | 'conflict' | 'unavailable'
   | 'unknown' | 'access' | 'failed' | 'no_effect';
-type Pending = { body: Command; phase: 'applying' | 'unknown' | 'unavailable' };
+const recoverySchema = z.object({
+  modelId: modelAccessResponseSchema.shape.modelId,
+  commandId: modelAccessCommandSchema.shape.commandId,
+  operation: z.enum(['grant', 'revoke']),
+}).strict();
+type Recovery = z.infer<typeof recoverySchema>;
+type Pending = Recovery & { body?: Command; phase: 'applying' | 'unknown' | 'unavailable' };
+const storagePrefix = 'model-access:';
 const failureSchema = z.object({ status: z.string(), reason: z.string().optional() });
 const reasons: Record<string, string> = {
   model_unavailable: 'This model is no longer available for this change.',
@@ -64,6 +71,7 @@ export class ModelAccessEditor implements OnDestroy {
     const opened = this.opened();
     this.close();
     this.pending.clear();
+    clearStoredCommands();
     this.phase.set('access');
     this.opened.set(opened);
   }
@@ -73,8 +81,14 @@ export class ModelAccessEditor implements OnDestroy {
     this.model.set(model);
     this.opener = opener;
     this.opened.set(true);
+    const recovered = this.pending.has(model) ? undefined : readStoredCommand(model);
+    if (recovered) {
+      this.pending.set(model, { ...recovered, phase: 'unknown' });
+    }
     this.phase.set(this.pending.get(model)?.phase ?? 'loading');
-    await this.refresh();
+    const generation = this.generation;
+    const fresh = await this.refresh();
+    if (recovered && fresh && generation === this.generation) await this.check();
   }
   close(): void {
     this.request.abort();
@@ -138,27 +152,47 @@ export class ModelAccessEditor implements OnDestroy {
     if (this.locked() || (this.picking() && this.kind() === kind)) return;
     this.kind.set(kind);
     this.candidates.set(undefined);
+    await this.readCandidates();
+  }
+  protected async loadMore(): Promise<void> {
+    const next = this.candidates()?.next;
+    if (!next || this.picking() || this.locked()) return;
+    await this.readCandidates(next);
+  }
+  private async readCandidates(after?: string): Promise<void> {
     this.picking.set(true);
+    this.detail.set('');
     const read = ++this.candidateRead;
-    const reply = await this.call(`/candidates?kind=${kind}&limit=50`);
+    const cursor = after ? `&after=${encodeURIComponent(after)}` : '';
+    const reply = await this.call(`/candidates?kind=${this.kind()}${cursor}&limit=50`);
     if (!reply || read !== this.candidateRead) return;
     this.picking.set(false);
     const parsed = modelAccessCandidatesResponseSchema.safeParse(reply.data);
-    if (reply.code === 200 && parsed.success) this.candidates.set(parsed.data);
-    else this.detail.set('Candidates could not be loaded. Choose a source to read again.');
+    if (reply.code !== 200 || !parsed.success) {
+      this.detail.set('Candidates could not be loaded. Try the same action again.');
+      return;
+    }
+    const rows = new Map<string, ModelAccessCandidatesResponse['rows'][number]>();
+    if (after) {
+      for (const row of this.candidates()?.rows ?? []) rows.set(row.id, row);
+    }
+    for (const row of parsed.data.rows) rows.set(row.id, row);
+    this.candidates.set({ ...parsed.data, rows: [...rows.values()] });
   }
   protected async save(): Promise<void> {
     const edit = this.edit();
     const list = this.list();
     if (!edit || !list || this.busy() || this.pending.has(this.model())) return;
     const body = { commandId: crypto.randomUUID(), expectedSequence: list.expectedSequence, ...edit };
-    this.pending.set(this.model(), { body, phase: 'unknown' });
+    this.pending.set(this.model(), { body, phase: 'unknown', modelId: this.model(),
+      commandId: body.commandId, operation: body.action });
     this.edit.set(undefined);
     await this.send();
   }
   protected async send(): Promise<void> {
     const pending = this.pending.get(this.model());
-    if (!pending || this.busy()) return;
+    if (!pending?.body || this.busy()) return;
+    storeCommand(pending);
     this.busy.set(true);
     this.phase.set('applying');
     // Treat a closed drawer or lost reply as uncertain until a status read proves the result.
@@ -168,7 +202,7 @@ export class ModelAccessEditor implements OnDestroy {
     this.busy.set(false);
     const receipt = modelAccessReceiptSchema.safeParse(reply.data);
     if (reply.code === 200 && receipt.success
-      && receipt.data.commandId === pending.body.commandId) {
+      && this.matchesCommand(receipt.data, pending)) {
       pending.phase = 'applying';
       await this.check();
       return;
@@ -180,12 +214,14 @@ export class ModelAccessEditor implements OnDestroy {
     const status = failure.data?.status;
     if (reply.code === 409 || (reply.code === 200 && status === 'no_effect')) {
       this.pending.delete(this.model());
+      removeStoredCommand(this.model());
       this.phase.set(reply.code === 409 ? 'conflict' : 'no_effect');
       this.detail.set(reasons[failure.data?.reason ?? ''] ?? 'The grant list may have changed.');
       if (status === 'no_effect') this.detail.set('');
       return;
     }
     pending.phase = reply.code === 503 && status === 'unavailable' ? 'unavailable' : 'unknown';
+    if (pending.phase === 'unavailable') removeStoredCommand(this.model());
     this.phase.set(pending.phase);
   }
   protected async check(): Promise<void> {
@@ -194,11 +230,11 @@ export class ModelAccessEditor implements OnDestroy {
     const generation = this.generation;
     this.busy.set(true);
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const reply = await this.call(`/changes/${pending.body.commandId}`);
+      const reply = await this.call(`/changes/${pending.commandId}`);
       if (!reply) return;
       const parsed = modelAccessChangeSchema.safeParse(reply.data);
       if (reply.code !== 200 || !parsed.success
-        || parsed.data.commandId !== pending.body.commandId || parsed.data.modelId !== this.model()) {
+        || !this.matchesCommand(parsed.data, pending)) {
         pending.phase = 'unknown';
         break;
       }
@@ -209,11 +245,17 @@ export class ModelAccessEditor implements OnDestroy {
         const fresh = await this.refresh();
         if (generation !== this.generation) return;
         if (fresh && this.confirmSaved(parsed.data.sequence)) return;
+        if (!fresh) pending.phase = 'unknown';
         break;
       }
     }
     this.busy.set(false);
     this.phase.set(pending.phase);
+  }
+  private matchesCommand(receipt: z.infer<typeof modelAccessReceiptSchema>, pending: Pending): boolean {
+    const operation = pending.operation === 'grant' ? 'grant.given' : 'grant.revoked';
+    return receipt.commandId === pending.commandId && receipt.modelId === pending.modelId
+      && receipt.operation === operation;
   }
   private confirmSaved(sequence: number): boolean {
     const list = this.list();
@@ -221,6 +263,7 @@ export class ModelAccessEditor implements OnDestroy {
       return false;
     }
     this.pending.delete(this.model());
+    removeStoredCommand(this.model());
     this.phase.set('saved');
     return true;
   }
@@ -251,4 +294,46 @@ export class ModelAccessEditor implements OnDestroy {
 }
 function isGranted(grant: ModelAccessResponse['grants'][number]): boolean {
   return grant.state === 'granted';
+}
+
+function readStoredCommand(modelId: string): Recovery | undefined {
+  try {
+    const value = sessionStorage.getItem(storagePrefix + modelId);
+    if (value === null) return undefined;
+    const parsed = recoverySchema.safeParse(JSON.parse(value));
+    if (parsed.success && parsed.data.modelId === modelId) return parsed.data;
+  } catch {
+    // Discard unreadable entries without exposing their contents.
+  }
+  removeStoredCommand(modelId);
+  return undefined;
+}
+function storeCommand(pending: Pending): void {
+  const reference: Recovery = { modelId: pending.modelId, commandId: pending.commandId,
+    operation: pending.operation };
+  try {
+    sessionStorage.setItem(storagePrefix + pending.modelId, JSON.stringify(reference));
+  } catch {
+    // Keep the in-memory command when the browser blocks storage.
+    return;
+  }
+}
+function removeStoredCommand(modelId: string): void {
+  try {
+    sessionStorage.removeItem(storagePrefix + modelId);
+  } catch {
+    // Allow status checks to finish when storage is unavailable.
+    return;
+  }
+}
+function clearStoredCommands(): void {
+  try {
+    for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = sessionStorage.key(index);
+      if (key?.startsWith(storagePrefix)) sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Clear visible details even when the browser blocks storage.
+    return;
+  }
 }

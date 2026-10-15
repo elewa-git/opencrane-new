@@ -23,7 +23,8 @@ flowchart LR
 
 Admins can grant or remove model access for one person, group or assistant at a time.
 The editor checks that each save has taken effect. An uncertain reply offers a status
-check with the original request id.
+check with the original request id, including after a page reload. The candidate list
+loads more people, groups or assistants when requested.
 
 - Shows sign-in and the first-owner claim page.
 - Lets a person enter their name and optional pronouns for the welcome survey.
