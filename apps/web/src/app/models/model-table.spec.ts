@@ -182,6 +182,40 @@ it('hides revoked rows and only says No audience for a complete list', async () 
   expect(page.querySelector('.model-table')?.textContent).not.toContain('Sales');
 });
 
+it('keeps an applying empty grant list unchecked', async () => {
+  const fixture = await mount(path => {
+    if (path.endsWith('/access')) {
+      return response({ ...access, grants: [], grantTotal: 0,
+        projection: { content: 'applying', sequence: 4 } });
+    }
+    return ordinary(path);
+  });
+  const page = screenElement(fixture);
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(page.querySelector('.model-table')?.textContent).toContain('Still updating');
+  });
+  const content = page.querySelector('.model-table')?.textContent ?? '';
+  expect(content).toContain('Assistant access not checked');
+  expect(content).not.toContain('No audience');
+  expect(content).not.toContain('not usable by');
+});
+
+it('shows No audience for a current empty grant list', async () => {
+  const fixture = await mount(path => {
+    if (path.endsWith('/access')) {
+      return response({ ...access, grants: [], grantTotal: 0 });
+    }
+    return ordinary(path);
+  });
+  const page = screenElement(fixture);
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(page.querySelector('.model-table')?.textContent).toContain('No audience');
+  });
+  expect(page.querySelector('.model-table')?.textContent).not.toContain('Still updating');
+});
+
 it('labels direct and assistant grants and an applying row from the access reply', async () => {
   const direct = { ...grant, granteeKind: 'member', granteeId: 'alice',
     displayName: 'Alice', source: 'direct', projection: 'applying' };
@@ -237,6 +271,28 @@ it.each(['paused', 'granted'])('keeps Enabled for %s assistant access', async ca
   });
   expect(page.querySelector('.model-table')?.textContent).not.toContain('not usable');
 });
+
+it('does not clear assistant access when a default covers an unnamed personal assistant',
+  async () => {
+    const defaultBinding = { ...binding, kind: 'silo_default', dependantId: 'silo',
+      assistantCount: 2 };
+    const assistantGrant = { ...grant, granteeKind: 'assistant', granteeId: 'helper',
+      displayName: 'Helper', source: 'assistant' };
+    const fixture = await mount(path => {
+      if (path.endsWith('/bindings')) return response({ rows: [defaultBinding] });
+      if (path.endsWith('/access')) {
+        return response({ ...access, grants: [assistantGrant], grantTotal: 1 });
+      }
+      return ordinary(path);
+    });
+    const page = screenElement(fixture);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.querySelector('.model-table')?.textContent)
+        .toContain('Assistant access not checked');
+    });
+    expect(page.querySelector('.model-table')?.textContent).not.toContain('not usable by');
+  });
 
 it('keeps a loaded row after a failed refresh and locks provider actions', async () => {
   let fail = false;
