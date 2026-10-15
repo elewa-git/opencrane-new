@@ -64,6 +64,41 @@ describe('changed tool comparison', () => {
     expect(result?.rows[0]?.fields.join(' ')).toContain('Output schema changed');
   });
 
+  it('shows old and new field limits and marks an added field', () => {
+    const oldInput = { type: 'object', properties: {
+      note: { type: 'string', maxLength: 500 },
+    } };
+    const newInput = { type: 'object', properties: {
+      note: { type: 'string', maxLength: 2000 },
+      internal: { type: 'boolean' },
+    } };
+    const result = compareToolCatalogues(policy(
+      [tool('update_note', 'Updates a draft order note', oldInput)],
+      [tool('update_note', 'Updates a draft order note', newInput)],
+    ));
+    const changed = result?.rows[0];
+    expect(changed?.kind).toBe('Schema changed');
+    expect(changed?.before).toContain('maxLength: 500');
+    expect(changed?.after).toContain('maxLength: 2000');
+    expect(changed?.after).toContain('internal: boolean');
+    expect(changed?.fields).toContain('Input fields added: internal');
+  });
+
+  it('shows both titles when only a title changes', () => {
+    const oldTool = tool('lookup', 'Looks up an order', input);
+    const newTool = tool('lookup', 'Looks up an order', input);
+    oldTool.definition = JSON.stringify({ name: 'lookup', title: 'Find order',
+      description: 'Looks up an order', inputSchema: input });
+    newTool.definition = JSON.stringify({ name: 'lookup', title: 'Search orders',
+      description: 'Looks up an order', inputSchema: input });
+    newTool.revision = digest(newTool.definition);
+    const result = compareToolCatalogues(policy([oldTool], [newTool]));
+    expect(result?.rows[0]?.kind).toBe('Details changed');
+    expect(result?.rows[0]?.before).toContain('Find order');
+    expect(result?.rows[0]?.after).toContain('Search orders');
+    expect(result?.rows[0]?.fields).toContain('Title changed');
+  });
+
   it('withholds counts when either snapshot is absent or digests match', () => {
     const saved = tool('same', 'Same', input);
     expect(compareToolCatalogues(policy(null, [saved]))).toBeNull();

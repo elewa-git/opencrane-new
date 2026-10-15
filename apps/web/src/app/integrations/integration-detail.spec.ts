@@ -147,6 +147,41 @@ describe('integration detail', () => {
     fixture.destroy();
   });
 
+  it.each([
+    ['503', new Response(null, { status: 503 })],
+    ['bad JSON', response({ unexpected: true })],
+  ])('shows a visible policy failure for %s without claiming review is ready',
+    async (_reason, policyReply) => {
+      const fixture = createChanges(policyReply);
+      await vi.waitFor(() => expect(root(fixture).querySelector('.policy-failure')).not.toBeNull());
+      const notice = root(fixture).querySelector('.policy-failure');
+      expect(notice?.textContent).toContain("Couldn't check the tool policy");
+      expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(0);
+      expect(root(fixture).textContent).not.toContain('Review tools');
+      fixture.destroy();
+    });
+
+  it('keeps comparison rows and labels their check time after a policy refresh fails', async () => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response(listResponse(row('ready', 'Published'))))
+      .mockResolvedValueOnce(response(driftPolicy()))
+      .mockResolvedValueOnce(response(listResponse(row('ready', 'Published'))))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }));
+    const fixture = TestBed.createComponent(IntegrationDetail);
+    fixture.componentRef.setInput('serverId', 'fixture-server');
+    fixture.componentRef.setInput('view', 'changes');
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(2));
+    const refresh = root(fixture).querySelector<HTMLButtonElement>('#integration-refresh');
+    refresh?.click();
+    await vi.waitFor(() => expect(root(fixture).querySelector('.policy-failure')).not.toBeNull());
+    expect(root(fixture).querySelector('.policy-failure')?.textContent)
+      .toContain('last successful read');
+    expect(root(fixture).textContent).toContain('5 Oct 2026, 09:14 UTC');
+    expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(2);
+    fixture.destroy();
+  });
+
   it('shows no comparison after a refused register read', async () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(null, { status: 403 }));
