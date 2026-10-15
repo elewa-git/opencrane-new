@@ -288,6 +288,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   socket.on('message', reports.receiveReport);
   await control.send();
   const position = await reportPosition(options.store, options.silo, input.computerId);
+  await control.send();
   const resume = { type: 'resume', since: position, approvalWaiting: true };
   socket.send(JSON.stringify(resume));
   const delivered = new Set<string>();

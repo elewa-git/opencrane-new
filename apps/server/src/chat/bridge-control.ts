@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { WebSocket } from 'ws';
 import { computerSummary, readComputerControl, type ComputerControl, type tokenIssuer }
   from '@opencrane/auth';
@@ -104,12 +105,12 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
     logger.warn('Bridge gate unavailable');
   }
   async function sendOnce() {
-    if (sent || rejected || socket.readyState !== socket.OPEN) return;
+    if (sent || rejected || socket.readyState !== socket.OPEN) return false;
     try {
       const subject = `computer-${computer.assistantId}`;
       const position = await options.store.head(subject);
       const control = await readComputerControl(options.store, options.silo, computer.assistantId);
-      if (control?.phase !== 'requested') return;
+      if (control?.phase !== 'requested') return false;
       const saved = await facts(options, computer);
       if (!tokens) throw new Error('Bridge issuer unavailable');
       const binding = requireReadyControl(control, saved, computer);
@@ -118,11 +119,10 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
         assistant: computer.assistantId, podUid: control.podUid, ...binding };
       const issued = await tokens.takeoverGate(claims);
       if (await options.store.head(subject, fresh.deadline) !== position) {
-        unavailable();
-        return;
+        return true;
       }
       await fresh();
-      if (sent || rejected || socket.readyState !== socket.OPEN) return;
+      if (sent || rejected || socket.readyState !== socket.OPEN) return false;
       sent = binding;
       const frame = { type: 'bridge_gate', gate: issued.value };
       socket.send(JSON.stringify(frame));
@@ -131,13 +131,21 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
       // Keep signing and validation errors from exposing the gate or saved request.
       unavailable();
     }
+    return false;
+  }
+  async function sendUntilChecked() {
+    // Read the request and check membership again if signing raced a computer change.
+    // Keep resume waiting until that request is sent or no longer qualifies for a gate.
+    while (await sendOnce()) {
+      await delay(250);
+    }
   }
   function finishedSending() {
     sending = undefined;
   }
   function send() {
     // Share the current attempt so timer and connection checks never sign in parallel.
-    if (!sending) sending = sendOnce().finally(finishedSending);
+    if (!sending) sending = sendUntilChecked().finally(finishedSending);
     return sending;
   }
   function poll() {
