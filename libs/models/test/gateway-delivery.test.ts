@@ -649,3 +649,23 @@ async function changedStateRefusesMemberAppend(change: 'withdrawal' | 'preparati
 }
 it.each(['withdrawal', 'preparation'] as const)(
   'lets a %s refuse the conditional server receipt append', changedStateRefusesMemberAppend);
+
+async function refusesOldDelivery() {
+  const setup = await fixture();
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  const { recordDigest: _digest, ...previous } = setup.record;
+  const saved = { ...previous, generation: 2, changeRef: 'next' };
+  const next = { ...saved, recordDigest: publicationDigest(saved) };
+  await setup.nats.seed([envelope('test', 'gateway-config-test',
+    'gateway.configuration_requested', next)]);
+  await setup.delivery.deliver(next);
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  const bytes = await readFile(setup.options.configFile);
+  const position = await setup.nats.store.head();
+  await expect(setup.delivery.deliver(setup.record)).rejects.toThrow('Gateway delivery unavailable');
+  expect(await readFile(setup.options.configFile)).toEqual(bytes);
+  expect(await setup.delivery.observe()).toBeNull();
+  expect(await setup.nats.store.head()).toBe(position);
+}
+it('refuses an older saved record passed directly to delivery without changing the file',
+  refusesOldDelivery);
