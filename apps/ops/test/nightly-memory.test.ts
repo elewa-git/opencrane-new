@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { afterEach, expect, it, vi } from 'vitest';
-import { setTimeout as delay } from 'node:timers/promises';
 import { PgBoss, TestClock, type Db } from 'pg-boss';
 import { scheduleNightly } from '../../../libs/handlers/src/queue.ts';
 import { event } from '@opencrane/event-store/testing';
@@ -67,23 +66,6 @@ async function records() {
     }
   }
   return rows;
-}
-async function waitForMemoryProjection(runner: ProjectionRunner, deadline: number) {
-  while (Date.now() < deadline) {
-    const eventPosition = await services.nats.store.head();
-    const checkpoint = await services.db.query<{ sequence: string }>(
-      "SELECT sequence FROM projection_checkpoints WHERE name='memory'");
-    if (Number(checkpoint.rows[0]?.sequence) >= eventPosition) {
-      return;
-    }
-    await runner.run(projection);
-    await delay(25);
-  }
-  throw new Error('Timed out waiting for memory projection to reach the event log');
-}
-function metadataIsBehind(error: unknown) {
-  return error instanceof Error && error.message ===
-    'Nightly memory metadata is behind the event log';
 }
 async function waitForMemoryProjection(runner: ProjectionRunner, deadline: number) {
   while (Date.now() < deadline) {
