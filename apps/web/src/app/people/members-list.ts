@@ -20,6 +20,7 @@ type State = 'loading' | 'ready' | 'failed' | 'access';
 })
 export class MembersList implements OnInit, OnDestroy {
   readonly accessLost = output<number>();
+  readonly invitePermission = output<boolean>();
   protected readonly rows = signal<Member[]>([]);
   protected readonly state = signal<State>('loading');
   protected readonly search = signal('');
@@ -106,6 +107,7 @@ export class MembersList implements OnInit, OnDestroy {
       return;
     }
     const directory = result.value;
+    this.invitePermission.emit(directory.permissions.invite);
     if (after) {
       const known = new Set(this.rows().map(memberId));
       const additional: Member[] = [];
@@ -153,6 +155,7 @@ export class MembersList implements OnInit, OnDestroy {
     this.next.set(null);
     this.count.set(undefined);
     this.loadedAt.set(undefined);
+    this.invitePermission.emit(false);
     this.state.set('access');
     this.accessLost.emit(status);
   }

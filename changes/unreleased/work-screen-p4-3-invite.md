@@ -1,0 +1,1 @@
+- Owners and Admins can create an email invitation, copy its link and check the status of a request whose reply was lost.

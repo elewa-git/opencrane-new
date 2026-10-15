@@ -3,6 +3,11 @@
     <p>People and groups in {{ organisationName() }}. Groups grant only what is attached to them.
       They never reveal private conversations or memory.</p></div>
   <div class="page-actions">
+    @if (inviteAllowed() && state() !== 'access') {
+      <button #inviteButton type="button" class="button primary"
+        [disabled]="invitePanel()?.unavailable()"
+        (click)="openInvite(inviteButton)">Invite people</button>
+    }
     <a class="button secondary" href="/org/people/owners">Owners</a>
     <button type="button" class="button secondary" (click)="load()"
       [hidden]="selectedTab() !== 'groups'"
@@ -109,10 +114,8 @@
       }
       </div>
     } @else if (selectedTab() === 'members') {
-      <oc-members-list (accessLost)="clearForAccessChange($event)" />
-    } @else {
-      <oc-shared-state kind="not_configured" message="Not available yet"
-        detail="Invitations aren't available yet." [showAction]="false" />
+      <oc-members-list (accessLost)="clearForAccessChange($event)"
+        (invitePermission)="inviteAllowed.set($event)" />
     }
   </section>
 }
@@ -151,3 +154,6 @@
       (click)="create()">{{ sending() ? 'Creating…' : 'Create group' }}</button>
   </div>
 </oc-hinge-drawer>
+<oc-invite-panel [allowed]="inviteAllowed()" [selectedTab]="selectedTab()"
+  (accessLost)="clearForAccessChange($event)"
+  (showInvitations)="select('invitations')" />

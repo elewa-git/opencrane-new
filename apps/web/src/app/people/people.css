@@ -30,8 +30,10 @@ p, small { color: var(--oc-ink-admin-muted); }
 .tabs button[aria-selected=true] { box-shadow: inset 0 -3px 0 var(--oc-accent); font-weight: 700; }
 .sr-only, .column-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-#group-search, #group-name { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px;
+#group-search, #group-name, #invite-email, #invite-role, #invite-assistant,
+#invitation-link { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px;
   border: 1px solid var(--oc-border-input); border-radius: var(--oc-radius-control); }
+#invitation-link { font-family: var(--oc-font-mono); }
 #group-search { margin: 0 0 14px; }
 .members-register { padding: 14px; }
 #member-search { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px;
@@ -110,6 +112,8 @@ nav[aria-label=Breadcrumb] a { display: inline-flex; min-height: 44px; align-ite
   background: var(--oc-accent); color: var(--oc-ink); padding: 8px 14px;
   font-weight: 650; text-decoration: none; }
 .paper-card { padding: 18px; }
+.invitation-unknown { max-width: 700px; }
+.invite-entry { margin-top: 14px; }
 .paper-card h2 { margin-top: 0; }
 .paper-card code, .members small { overflow-wrap: anywhere; font-family: var(--oc-font-mono); }
 .members-section { margin-top: 16px; }

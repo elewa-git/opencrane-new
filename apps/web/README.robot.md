@@ -76,6 +76,13 @@ loaded data and offers GET-only retry. Member and access load times stay separat
 only one read succeeds. Grants use three columns on desktop and labelled cards on phones.
 Tool explanations are not shown in this part. Screen captures use intercepted reads;
 see [the receipt](../../docs/process/screen-p4-3-detail/receipt.md).
+The Members read also supplies `permissions.invite`. When true, People & groups shows
+Invite people. The drawer checks the email with `/api/invitations/identity`, creates
+one invitation command and reads `/api/invitations/:memberId/command-changes/:commandId`
+for the link and exact expiry. A lost create reply keeps both random ids in memory and
+offers GET-only Check status on the Invitations tab. The tab's list remains unavailable.
+No email is sent. The link's join page is separate work. Closing the drawer discards
+its draft; access refusal clears it and ignores late replies.
 `?tab=groups` opens the existing Groups tab, including from group detail pages.
 Group details link to a shared assistant draft at
 `/org/people/groups/<id>/assistants/new`. The draft reads the owner group, listed groups,
