@@ -6,8 +6,8 @@ import { budgetCeilingSetDataSchema, budgetCallDispatchAdmittedDataSchema,
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budgetStopMessage,
-  exceededReasons, observedPayload, requireDispatchReservation, type BudgetState, type ModelCall,
-  type ModelUsage } from './state.ts';
+  exceededReasons, observedPayload, requireDispatchReservation, checkedManagedReservation,
+  type BudgetState, type ModelCall, type ModelUsage } from './state.ts';
 
 import { history } from './event-history.ts';
 import { checkRootReservation, setRootAllowance, stopRootAtCeiling,
@@ -69,13 +69,13 @@ export class BudgetActor {
   }
   private async append(type: string, payload: unknown, id: string = randomUUID(),
     confirmAccess?: () => Promise<void>) {
-    this.requireReservationWrites(type);
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
+    this.requireReservationWrites(event, confirmAccess);
     // Reuse replayed history; configure checks its caller's command id before this append.
     const command = { event, expectedSequence: this.sequence, historyChecked: true as const };
     let result = await this.store.append(command);
     if (result.status === 'conflict' && await this.advancePastSwitchOn()) {
-      this.requireReservationWrites(type);
+      this.requireReservationWrites(event, confirmAccess);
       // Keep the caller's original access deadline when a spending-limit write retries.
       await confirmAccess?.();
       // Retry this saved hold's progress once, using the position after switch-on.
@@ -89,8 +89,10 @@ export class BudgetActor {
     this.sequence = result.sequence;
     this.apply(event);
   }
-  private requireReservationWrites(type: string) {
-    if (type === 'budget.reserved' && this.reservationsStopped) {
+  private requireReservationWrites(event: EventEnvelope, confirmAccess?: () => Promise<void>) {
+    if (event.type !== 'budget.reserved' || !this.reservationsStopped) return;
+    // Require validated call facts and the check used again after a switch-on race.
+    if (!confirmAccess || !checkedManagedReservation(event)) {
       throw new Error('Provider setup changed');
     }
   }
@@ -173,7 +175,7 @@ export class BudgetActor {
       const id = randomUUID();
       await this.append('budget.reserved', { reservationId: id, permitId: id, amountCents,
         payingGroupId: call.payingGroupId, assistantId: call.assistantId, modelCall: call,
-        dispatchGate: 1, ...(rootId === undefined ? {} : { rootId }) });
+        dispatchGate: 1, ...(rootId === undefined ? {} : { rootId }) }, undefined, fresh);
       return id;
     });
   }

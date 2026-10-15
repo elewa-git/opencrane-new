@@ -5,6 +5,7 @@ import { closesDecisionTurn, invalidatesApproval } from './approvals.ts';
 import { outputReportTypes, type decisionAuthorityFence } from './authority.ts';
 import { data } from './state.ts';
 import { managedProviderCallsEnabled } from './provider-turns.ts';
+import { decisionProvider } from './decision-provider.ts';
 import { decisionChatSummary } from './decision-summary.ts';
 
 const harmlessConversationTypes = [
@@ -26,19 +27,25 @@ export async function confirmDecisionAccess(activity: Awaited<ReturnType<typeof 
 }
 
 export async function decisionActivity(store: EventStore, silo: string, assistantId: string,
-  conversationId: string, turnId: string, deadline: number) {
+  conversationId: string, turnId: string, deadline: number,
+  choice?: { providerId: string; model: string }) {
   const head = await store.head(undefined, deadline);
   const managedCallsEnabled = await managedProviderCallsEnabled(store, silo, deadline);
   const activity = await readTurnActivity(store, silo, assistantId, conversationId,
     turnId, deadline, head);
+  const provider = choice === undefined ? undefined
+    : await decisionProvider(store, silo, choice, deadline, head);
   async function confirm(deadline: number, needsApproval: boolean) {
     const enabledNow = await managedProviderCallsEnabled(store, silo, deadline);
     if (enabledNow !== managedCallsEnabled) {
       throw new Error('Provider setup changed');
     }
-    return activity.confirm(deadline, needsApproval);
+    const providerChanged = await provider?.confirm(deadline);
+    const activityChanged = await activity.confirm(deadline, needsApproval);
+    return activityChanged || providerChanged === true;
   }
-  return { ...activity, confirm, managedCallsEnabled };
+  const providerFacts = provider === undefined ? {} : { provider };
+  return { ...activity, confirm, managedCallsEnabled, ...providerFacts };
 }
 
 export async function approvalActivity(store: EventStore, silo: string, assistantId: string,

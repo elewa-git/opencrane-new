@@ -96,6 +96,13 @@ const callSchema = optionalProviderTurnBindingSchema.safeExtend({
   conversationId: z.string(), turnId: z.string(), threadId: z.string(),
   payingGroupId: z.string().optional(), contextDigest: z.string(),
 });
+export function checkedManagedReservation(event: EventEnvelope) {
+  const input = data(event);
+  const call = callSchema.parse(input['modelCall']);
+  return input['dispatchGate'] === 1 && call.providerId !== undefined &&
+    call.bindingSequence !== undefined && call.requestId !== undefined &&
+    call.generation !== undefined;
+}
 export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
   rootId: z.string().optional(), call: callSchema, dispatchGate: z.literal(1).optional(),

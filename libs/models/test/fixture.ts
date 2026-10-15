@@ -135,6 +135,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
 
   let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
   const admitted: string[] = [], observations: Promise<void>[] = [];
+  const providerAuthHashes = new Map<string, string>();
   let upstreamBody = '';
   const mcpPrecondition = { revision: undefined as string | undefined, generation: 'instance-1' };
   let mcpResponse = { status: 200, marker: false, body: '{"jsonrpc":"2.0","id":1,"result":{"content":[]}}' };
@@ -166,6 +167,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     }));
     received++; providerHeaders = Object.keys(req.headers);
     providerAuthHash = createHash('sha256').update(req.headers.authorization ?? '').digest('hex');
+    providerAuthHashes.set(requestId, providerAuthHash);
     const body: Buffer[] = [];
     req.on('data', (chunk: Buffer) => { upstreamBody += chunk.toString('utf8'); body.push(chunk); });
     req.on('end', () => providerRequests.push({ time: new Date().toISOString(), path: req.url ?? '', method: req.method ?? '',
@@ -289,7 +291,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
-    decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
+    providerAuthHashes, decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
     usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
     mcpReply(status: number, marker: boolean, body: string) {
       mcpResponse = { status, marker, body };

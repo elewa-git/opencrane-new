@@ -291,17 +291,29 @@ and OpenFGA. It checks two different keys, token counts, caller header isolation
 provider errors, decision refusals and absence of key values from gateway logs,
 events and responses. This is a gateway test, not proof of managed admission.
 
-The requested P4-22 PR 5a was split at this proof. An integration attempt reached
-`BudgetActor.requireReservationWrites`: after `provider.managed_calls_enabled`,
-the actor refuses every new `budget.reserved`, including a bound managed call.
-Restart also restores that refusal. The task prohibited changes to `actor.ts`, so
-this part leaves the production managed decision path unimplemented (HTTP 404).
-Completing admission needs an explicit actor change that permits checked managed
-reservations while continuing to refuse legacy calls. No guard is bypassed here.
-Provider summaries, custody isolation, admission races and the switch-on/restart
-settlement proof remain unbuilt in this part. Startup selection, fallback-key
-refusal, static-route removal and dev-stack wiring remain for 5b. No stack or
-paid provider call was used to prove this route.
+PR 5b adds `/authorize/models/managed`. It requires switch-on and signed claims
+matching the recorded turn. `decision-provider` keeps at most 64 exact-provider
+summaries, each holding only the latest configuration and verification facts.
+It checks the same-silo OpenAI connection, saved-key command and enabled model,
+recomputes the custody reference and reads the key before the disconnect guard.
+History, custody and rechecks share the original two-second deadline. Rechecks
+start at the position captured before history, including changes before authority
+opens. Model removal refuses; verification, rotation and binding changes do not.
+
+The actor validates the reservation before either switch-on guard. Only complete
+managed calls with a request id, generation, dispatch gate and access callback
+can reserve after switch-on. A switch-on conflict repeats that callback; another
+budget writer still stops this actor. Refusal before send permission releases at
+zero. Later usage keeps the saved payer and tariff, with once-only settlement.
+
+Own checks and remaining qualification are recorded in the PR. Tests cover real
+switch-on, restart without custody reads or new holds, model-selection races,
+a warmed 5,000-event provider history, shared custody and concurrent credentials.
+Cold catch-up can refuse at two seconds and continue in the background; a later call
+uses the caught-up summary. The local cold 5,000-event read exceeded that deadline and refused; it is not a
+passing cold-admission performance result.
+Startup selection, fallback-key refusal, static-route removal and dev-stack custody
+wiring remain for PR 5c. No stack or paid provider call proves this route yet.
 
 - `BudgetActor` loads the NATS budget stream and serialises reserve/settle
   commands. Each command does one conditional append. The process entrypoint

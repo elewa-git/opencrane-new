@@ -22,5 +22,6 @@ export function parseTurnToken(raw: unknown) {
 }
 
 export function requireManagedTurnClaims(raw: unknown, enabled: boolean) {
-  if (enabled) managedTurnSchema.parse(raw);
+  if (enabled) return managedTurnSchema.parse(raw);
+  return undefined;
 }

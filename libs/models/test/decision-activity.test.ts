@@ -4,6 +4,7 @@ import { readStreamSummary, type StoredEvent } from '@opencrane/event-store';
 import { decisionChatSummary } from '../src/decision-summary.ts';
 import { outputReportTypes } from '../src/authority.ts';
 import { decisionActivity } from '../src/decision-activity.ts';
+import { providerSecretRef } from '../src/providers.ts';
 import { envelope } from '../src/actor.ts';
 
 function activityEvent(id: string, subject: string, type: string) {
@@ -243,3 +244,44 @@ async function memoryEvidence(change: typeof memoryChanges[number]) {
   }
 }
 it.each(memoryChanges)('checks $action memory evidence for $turnId', memoryEvidence);
+
+async function checksLongProviderHistory() {
+  const nats = await natsFixture();
+  try {
+    const provider = { providerId: 'primary', revision: 1, changedBy: 'alice' };
+    const created = envelope('test', 'provider-primary', 'provider.created', {
+      ...provider, provider: 'openai', name: 'Primary',
+    });
+    const saved = envelope('test', 'provider-primary', 'provider.key_saved', {
+      ...provider, revision: 2, secretRef: providerSecretRef('test', 'primary', 'saved'),
+    }, 'saved');
+    const selected = envelope('test', 'provider-primary', 'provider.models_selected', {
+      ...provider, revision: 3, models: ['gpt-6-luna'],
+    });
+    const events = [created, saved, selected];
+    for (let index = 3; index < 5000; index++) {
+      events.push(envelope('test', 'provider-primary', 'provider.verification_recorded', {
+        ...provider, revision: 3, kind: 'reachability', attemptId: `check-${index}`, outcome: 'pass',
+      }));
+    }
+    await nats.seed(events);
+    const choice = { providerId: 'primary', model: 'gpt-6-luna' };
+    await decisionActivity(nats.store, 'test', 'assistant', 'chat', 'turn', Infinity, choice);
+    const started = performance.now();
+    const deadline = started + 2000;
+    const activity = await decisionActivity(nats.store, 'test', 'assistant', 'chat', 'turn',
+      deadline, choice);
+    await activity.confirm(deadline, false);
+    expect(performance.now() - started).toBeLessThan(2000);
+    const reads = countReads(nats.store);
+    await decisionActivity(nats.store, 'test', 'assistant', 'chat', 'turn',
+      performance.now() + 2000, choice);
+    function providerRead(call: typeof reads.calls[number]) {
+      return call.subject === 'provider-primary';
+    }
+    expectNoWholeReads(reads.calls.filter(providerRead));
+  } finally {
+    await nats.close();
+  }
+}
+it('rechecks a warmed 5,000-event provider history within the shared two seconds', checksLongProviderHistory);

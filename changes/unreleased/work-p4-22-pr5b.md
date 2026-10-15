@@ -1,0 +1,1 @@
+Managed model admission checks the signed connection choice, current model selection and saved key before holding money. Removed models refuse calls and release unsent holds at zero; checked calls retain their original payer and tariff. The route remains off until gateway startup and custody wiring are completed.

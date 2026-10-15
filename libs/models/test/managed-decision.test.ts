@@ -1,11 +1,16 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { expect, it, onTestFinished, vi } from 'vitest';
+import { parseEventByType } from '@opencrane/events';
+import { natsFixture } from '@opencrane/event-store/testing';
+import { decisionActivity } from '../src/decision-activity.ts';
 import { fixture } from './fixture.ts';
 import { providerSecrets } from '../src/provider-secrets.ts';
 import { providerSecretRef } from '../src/providers.ts';
 import { startDecision } from '../src/decision.ts';
-import { envelope, history } from '../src/actor.ts';
+import { providerSwitchOn } from '../src/provider-switch-on.ts';
+import { BudgetActor, envelope, history } from '../src/actor.ts';
 import { ingestUsage } from '../src/gateway.ts';
 import { data, priceTableId, totals } from '../src/state.ts';
 
@@ -13,9 +18,33 @@ const choice = { providerId: 'primary', bindingSequence: 42 };
 const provider = { providerId: 'primary', revision: 3, changedBy: 'alice' };
 const credential = 'managed-decision-fixture-value';
 
+async function switchOn(setup: Awaited<ReturnType<typeof fixture>>) {
+  await setup.append('computer-assistant', 'computer.turn_closed', {
+    assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+    turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', status: 'completed',
+  });
+  await setup.append('provider-primary', 'provider.verification_recorded', {
+    ...provider, kind: 'reachability', attemptId: 'check', outcome: 'pass',
+  });
+  await setup.append('provider-primary', 'provider.model_binding_set', {
+    ...provider, kind: 'silo_default', dependantId: 'test', task: 'chat_turn',
+    state: 'active', model: 'gpt-6-luna', expectedProviderSequence: 0,
+    previousBindingSequence: 0,
+  });
+  await setup.append('provider-primary', 'provider.managed_calls_drain_set', {
+    ...provider, draining: true, expectedProviderSequence: 0, expectedDrainSequence: 0,
+  });
+  const position = await setup.nats.store.head('provider-primary');
+  const input = { commandId: 'switch', expectedRevision: 3,
+    expectedProviderSequence: position, expectedDrainSequence: position };
+  await providerSwitchOn(setup.nats.store, setup.binding, 'alice', 'primary', input);
+}
+
 async function managedFixture(problem = '') {
   const setup = await fixture();
-  onTestFinished(setup.close);
+  onTestFinished(setup.close.bind(setup));
+  // Stop background delivery before adding deliberately foreign history.
+  if (problem === 'foreign') await setup.stopDispatch();
   const secrets = providerSecrets(`${dirname(setup.options.keyFile)}/custody`);
   const commandId = randomUUID();
   const reference = providerSecretRef('test', 'primary', commandId);
@@ -33,14 +62,18 @@ async function managedFixture(problem = '') {
     const selected = envelope('test', 'provider-primary', 'provider.models_selected', {
       ...provider, models: problem === 'model' ? ['gpt-6.1-sol'] : ['gpt-6-luna'],
     });
-    const events = [created, saved, selected];
+    if (problem === 'saved') selected.data = { ...provider, revision: 2, models: ['gpt-6-luna'] };
+    const events = problem === 'saved' ? [created, selected] : [created, saved, selected];
     if (problem === 'foreign') {
       for (const event of events) event.silo = 'other';
     }
     await setup.nats.seed(events);
+    if (!problem) await setup.auth.handler.handle(created, setup.db);
   }
   if (problem === 'custody') await secrets.remove(reference);
-  if (problem !== 'marker') {
+  if (!problem) {
+    await switchOn(setup);
+  } else if (problem !== 'marker') {
     await setup.append('budget-test', 'provider.managed_calls_enabled', {
       ...provider, expectedProviderSequence: 0,
     });
@@ -51,7 +84,13 @@ async function managedFixture(problem = '') {
   await setup.append('computer-assistant', 'computer.turn_started', turn);
   const claims = { ...setup.t, ...choice, turn: 'bound' };
   if (problem !== 'claims') {
-    setup.headers['x-turn-token'] = await setup.sign(claims, 'decision-service');
+    const ttl = problem === 'expired' ? -1 : 120;
+    setup.headers['x-turn-token'] = await setup.sign(claims, 'decision-service', ttl);
+  }
+  if (problem === 'closed') {
+    await setup.append('computer-assistant', 'computer.turn_closed', {
+      ...turn, status: 'completed',
+    });
   }
   const options = { secrets, gatewayUrl: 'http://unused.test' };
   const decision = await startDecision(setup.actor, setup.identity, setup.binding,
@@ -64,8 +103,11 @@ async function managedFixture(problem = '') {
 
 async function admitsAndSettles() {
   const setup = await managedFixture();
-  expect((await setup.call()).status).toBe(200);
+  const response = await setup.call();
+  expect(response.status).toBe(200);
+  expect(response.text).not.toContain(credential);
   await setup.settled();
+  expect(await readFile(setup.options.usageFile, 'utf8')).not.toContain(credential);
   expect(setup.received()).toBe(1);
   expect(setup.actor.state.reservations).toHaveLength(1);
   const reservation = setup.actor.state.reservations[0]!;
@@ -86,6 +128,17 @@ async function admitsAndSettles() {
   }
   expect(rows.filter(isSettlement)).toHaveLength(1);
   expect(JSON.stringify([...rows, ...decisions, ...effects])).not.toContain(credential);
+  const reads = vi.spyOn(setup.secrets, 'read');
+  const recovered = new BudgetActor(setup.nats.store, 'test');
+  await recovered.start();
+  const options = { secrets: setup.secrets, gatewayUrl: 'http://unused.test' };
+  const restarted = await startDecision(recovered, setup.identity, setup.binding,
+    0, setup.keys, options);
+  onTestFinished(restarted.close);
+  expect(reads).not.toHaveBeenCalled();
+  expect(recovered.state.reservations).toEqual(setup.actor.state.reservations);
+  expect(setup.received()).toBe(1);
+  reads.mockRestore();
 }
 it('admits a bound managed call and settles its saved decision once', admitsAndSettles);
 
@@ -95,13 +148,14 @@ async function refusesBeforeHold(problem: string) {
   expect(setup.received()).toBe(0);
   expect(setup.actor.state.reservations).toHaveLength(0);
 }
-it.each(['unknown', 'foreign', 'claims', 'marker', 'reference', 'custody', 'model', 'provider'])(
+it.each(['unknown', 'foreign', 'claims', 'marker', 'reference', 'custody', 'model',
+  'provider', 'expired', 'closed', 'saved'])(
   'refuses %s before holding money or sending', refusesBeforeHold);
 
 async function changesAfterRead(stage: 'summary' | 'audit', keepModel: boolean) {
   const setup = await managedFixture();
   const append = setup.nats.store.append.bind(setup.nats.store);
-  const read = setup.secrets.read;
+  const readStream = setup.nats.store.readStream.bind(setup.nats.store);
   let changed = false;
   async function selectModels() {
     if (changed) return;
@@ -111,21 +165,21 @@ async function changesAfterRead(stage: 'summary' | 'audit', keepModel: boolean) 
       ...provider, revision: 4, models,
     });
   }
-  async function afterRead(reference: string) {
-    const value = await read(reference);
-    if (stage === 'summary') await selectModels();
-    return value;
+  async function* afterSummary(...args: Parameters<typeof readStream>) {
+    for await (const row of readStream(...args)) yield row;
+    if (stage === 'summary' && args[0] === 'provider-primary') await selectModels();
   }
   async function afterAudit(command: Parameters<typeof append>[0]) {
     const result = await append(command);
-    if (stage === 'audit' && command.event.type === 'decision.recorded' &&
-        data(command.event)['outcome'] === 'allow') await selectModels();
+    const parsed = parseEventByType(command.event);
+    if (stage === 'audit' && parsed.success && parsed.event.type === 'decision.recorded' &&
+        data(parsed.event)['outcome'] === 'allow') await selectModels();
     return result;
   }
-  const reads = vi.spyOn(setup.secrets, 'read').mockImplementation(afterRead);
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(afterSummary);
   const writes = vi.spyOn(setup.nats.store, 'append').mockImplementation(afterAudit);
-  onTestFinished(reads.mockRestore);
-  onTestFinished(writes.mockRestore);
+  onTestFinished(reads.mockRestore.bind(reads));
+  onTestFinished(writes.mockRestore.bind(writes));
   const result = await setup.call();
   expect(changed).toBe(true);
   if (keepModel) {
@@ -141,3 +195,93 @@ async function changesAfterRead(stage: 'summary' | 'audit', keepModel: boolean) 
 }
 it.each([['summary', false], ['audit', false], ['summary', true], ['audit', true]] as const)(
   'checks model selection after %s (kept: %s)', changesAfterRead);
+
+async function keepsHarmlessChanges() {
+  const setup = await managedFixture();
+  const read = setup.secrets.read.bind(setup.secrets);
+  async function changeAfterRead(reference: string) {
+    const value = await read(reference);
+    await setup.append('provider-primary', 'provider.verification_recorded', {
+      ...provider, kind: 'reachability', attemptId: 'later', outcome: 'fail',
+    });
+    await setup.append('provider-primary', 'provider.model_binding_set', {
+      ...provider, kind: 'assistant', dependantId: 'assistant', task: 'chat_turn',
+      state: 'paused', reason: 'Paused by an administrator', model: 'gpt-6-luna',
+      expectedProviderSequence: 0, previousBindingSequence: 0,
+    });
+    const saved = envelope('test', 'provider-primary', 'provider.key_saved', {
+      ...provider, revision: 4, secretRef: providerSecretRef('test', 'primary', 'rotation'),
+    }, 'rotation');
+    await setup.nats.seed([saved]);
+    await setup.secrets.remove(reference);
+    return value;
+  }
+  const reads = vi.spyOn(setup.secrets, 'read').mockImplementation(changeAfterRead);
+  onTestFinished(reads.mockRestore.bind(reads));
+  expect((await setup.call()).status).toBe(200);
+  await setup.settled();
+  expect(setup.received()).toBe(1);
+}
+it('allows a checked call through verification, binding changes and rotation', keepsHarmlessChanges);
+
+async function keepsConcurrentCredentialsSeparate() {
+  const setup = await managedFixture();
+  const second = { providerId: 'secondary', changedBy: 'alice' };
+  await setup.append('provider-secondary', 'provider.created', {
+    ...second, revision: 1, provider: 'openai', name: 'Second',
+  });
+  const reference = providerSecretRef('test', 'secondary', 'second');
+  await setup.secrets.save(reference, 'second-fixture-value');
+  const saved = envelope('test', 'provider-secondary', 'provider.key_saved', {
+    ...second, revision: 2, secretRef: reference,
+  }, 'second');
+  await setup.nats.seed([saved]);
+  await setup.append('provider-secondary', 'provider.models_selected', {
+    ...second, revision: 3, models: ['gpt-6-luna'],
+  });
+  await setup.append('computer-assistant', 'computer.turn_started', {
+    assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+    turnId: 'second', threadId: 'thread', requesterId: 'alice', task: 'chat_turn',
+    payingGroupId: 'personal-default', providerId: 'secondary', bindingSequence: 43,
+    model: 'gpt-6-luna',
+  });
+  const claims = { ...setup.t, providerId: 'secondary', bindingSequence: 43, turn: 'second' };
+  const token = await setup.sign(claims, 'decision-service');
+  const calls = [setup.call(), setup.call({ 'x-turn-token': token })];
+  const responses = await Promise.all(calls);
+  for (const response of responses) expect(response.status).toBe(200);
+  await setup.settled();
+  expect(setup.received()).toBe(2);
+  for (const reservation of setup.actor.state.reservations) {
+    const value = reservation.call.providerId === 'primary' ? credential : 'second-fixture-value';
+    const hash = createHash('sha256');
+    hash.update(`Bearer ${value}`);
+    expect(setup.providerAuthHashes.get(reservation.call.requestId!)).toBe(hash.digest('hex'));
+  }
+}
+it('keeps concurrent calls tied to their own connection credential', keepsConcurrentCredentialsSeparate);
+
+async function isolatesSharedCustody() {
+  const setup = await managedFixture();
+  const other = await natsFixture();
+  onTestFinished(other.close.bind(other));
+  const rows = await history(setup.nats.store, 'provider-primary', 'test');
+  const commandId = rows[1]!.event.commandId!;
+  const reference = providerSecretRef('other', 'primary', commandId);
+  await setup.secrets.save(reference, 'other-silo-fixture-value');
+  const initial = rows.slice(0, 3);
+  function otherSilo(row: typeof rows[number]) {
+    const payload = data(row.event);
+    if (row.event.type === 'provider.key_saved') payload['secretRef'] = reference;
+    return { ...row.event, silo: 'other', data: payload };
+  }
+  await other.seed(initial.map(otherSilo));
+  const binding = { providerId: 'primary', model: 'gpt-6-luna' };
+  const first = await decisionActivity(setup.nats.store, 'test', 'assistant',
+    'conversation', 'bound', performance.now() + 2000, binding);
+  const second = await decisionActivity(other.store, 'other', 'assistant',
+    'conversation', 'bound', performance.now() + 2000, binding);
+  expect(await first.provider?.credential(setup.secrets)).toBe(credential);
+  expect(await second.provider?.credential(setup.secrets)).toBe('other-silo-fixture-value');
+}
+it('keeps two silos with identical connection ids separate in shared custody', isolatesSharedCustody);

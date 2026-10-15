@@ -534,13 +534,14 @@ async function admitsOnlyCheckedManagedHolds(restart: boolean) {
     checks++;
     return Promise.resolve();
   }
+  const reservationId = await actor.reserve(call, 1, confirm);
+  expect(checks).toBe(restart ? 1 : 2);
   await expect(actor.reserve(call, 1)).rejects.toThrow('Provider setup changed');
   const incomplete = { ...call, bindingSequence: undefined };
   await expect(actor.reserve(incomplete, 1, confirm)).rejects.toThrow();
   const legacy = { ...call, providerId: undefined, bindingSequence: undefined };
   await expect(actor.reserve(legacy, 1, confirm)).rejects.toThrow('Provider setup changed');
-  const reservationId = await actor.reserve(call, 1, confirm);
-  expect(checks).toBeGreaterThan(0);
+
   expect(actor.state.reservations).toHaveLength(1);
   expect(actor.state.reservations[0]?.call).toEqual(call);
   await actor.releaseUndispatched(reservationId);
