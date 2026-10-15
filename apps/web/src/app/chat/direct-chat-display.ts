@@ -140,7 +140,21 @@ export function directConversationHeaderTitle(
   recipient: { memberId: string; displayName: string | null } | undefined,
 ): string {
   if (!conversation) return directRecipientName(recipient);
+  if (conversation.mode === 'group' && conversation.title?.trim()) {
+    return conversation.title.trim();
+  }
   return directConversationTitle(conversation, memberId, colleagues);
+}
+
+export function directPendingNavigationTitle(
+  archiveCommandId: string, participantChangeUnsettled: boolean, composerBusy: boolean,
+): string | null {
+  if (archiveCommandId) return 'Check the archive change before leaving this chat.';
+  if (participantChangeUnsettled) {
+    return 'Check the participant change before leaving this chat.';
+  }
+  if (composerBusy) return 'Wait until this message is confirmed.';
+  return null;
 }
 
 export function directConversationMode(conversation: ChatConversation | undefined)

@@ -38,6 +38,141 @@ function reply(body: unknown, status = 200): Response {
   });
 }
 
+it('moves a confirmed chat from the server row and clears it when archive access is denied', async () => {
+  const api = createFetchFixture();
+  let archived = false;
+  let denyNext = false;
+  let commandId = '';
+  function archiveReplies(request: RequestRecord): Response | undefined {
+    const url = new URL(request.url, location.origin);
+    if (url.pathname === '/api/conversations' && request.method === 'GET') {
+      const section = url.searchParams.get('section') ?? 'recent';
+      const row = { ...conversation('existing', 'bob'), joinEventId: 'join-one',
+        archived, archivePosition: archived ? 12 : 0 };
+      const rows = section === (archived ? 'archived' : 'recent') ? [row] : [];
+      return reply({ rows, nextCursor: null });
+    }
+    if (url.pathname.endsWith('/state') && request.method === 'POST') {
+      if (denyNext) return reply({}, 403);
+      commandId = String(request.body?.['id']);
+      archived = true;
+      return reply({ status: 'appended', sequence: 12 });
+    }
+    if (url.pathname.includes('/changes/')) {
+      return reply({ status: 'appended', conversationId: 'existing', commandId,
+        type: 'conversation.archive_set', sequence: 12,
+        projection: { content: 'current', iam: 'current' } });
+    }
+    return undefined;
+  }
+  api.override(archiveReplies);
+  const fixture = await mountWithoutReady(api, 'existing');
+  function hasArchiveButton(): void {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.archive-button')).not.toBeNull();
+  }
+  await vi.waitFor(hasArchiveButton);
+  const archiveButton = root(fixture).querySelector<HTMLButtonElement>('.archive-button');
+  expect(archiveButton?.textContent?.trim()).toBe('Archive');
+  archiveButton?.click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('You archived this conversation. Only your list changed.');
+  expect(root(fixture).querySelector('.archive-button')?.textContent?.trim()).toBe('Unarchive');
+  denyNext = true;
+  root(fixture).querySelector<HTMLButtonElement>('.archive-button')?.click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('You no longer have access');
+  expect(root(fixture).textContent).not.toContain('Is the Tuesday slot still open?');
+  expect(root(fixture).querySelector('.archive-button')).toBeNull();
+});
+
+it('keeps an uncertain archive command through Recent, Archived, another chat and Back', async () => {
+  const api = createFetchFixture();
+  let checkedCommandId = '';
+  function lostArchiveReply(request: RequestRecord): Response | undefined {
+    const url = new URL(request.url, location.origin);
+    if (url.pathname === '/api/conversations' && request.method === 'GET') {
+      const rows = [
+        { ...conversation('existing', 'bob'), joinEventId: 'join-one',
+          archived: false, archivePosition: 0 },
+        { ...conversation('other-chat', 'carol'), joinEventId: 'join-two',
+          archived: false, archivePosition: 0 },
+      ];
+      return reply({ rows, nextCursor: null });
+    }
+    if (url.pathname.endsWith('/state') && request.method === 'POST') {
+      return reply({}, 503);
+    }
+    if (url.pathname.includes('/changes/')) {
+      checkedCommandId = url.pathname.split('/').at(-1) ?? '';
+      return reply({}, 404);
+    }
+    return undefined;
+  }
+  api.override(lostArchiveReply);
+  const fixture = await mountWithoutReady(api, 'existing');
+  await waitForText(fixture, 'Is the Tuesday slot still open?');
+  root(fixture).querySelector<HTMLButtonElement>('.archive-button')?.click();
+  await settle(fixture);
+  const firstPost = api.requests.find(request => request.method === 'POST'
+    && request.url.endsWith('/state'));
+  const originalBody = firstPost?.body;
+  const commandId = String(originalBody?.['id']);
+  expect(commandId).not.toBe('undefined');
+
+  const links = [
+    'a[href="/workspace/conversations"]',
+    'a[href="/workspace/conversations?section=archived"]',
+    '.back-link[href="/workspace"]',
+  ];
+  for (const selector of links) {
+    const link = root(fixture).querySelector<HTMLAnchorElement>(selector);
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link?.dispatchEvent(click);
+    expect(click.defaultPrevented, selector).toBe(true);
+  }
+  const otherChat = Array.from(root(fixture).querySelectorAll<HTMLButtonElement>(
+    '.conversation-row')).find(button => button.textContent?.includes('Chris Njeri'));
+  otherChat?.click();
+  await settle(fixture);
+  expect(root(fixture).querySelector('h1')?.textContent).toContain('Grace Achieng');
+  expect(root(fixture).textContent).toContain('Check status');
+  expect(root(fixture).textContent).toContain('before leaving this chat');
+  root(fixture).querySelector<HTMLButtonElement>('.archive-notice button')?.click();
+  await settle(fixture);
+  expect(checkedCommandId).toBe(commandId);
+  expect(root(fixture).textContent).toContain('No record of this change yet.');
+  root(fixture).querySelector<HTMLButtonElement>('.archive-notice button:last-child')?.click();
+  await settle(fixture);
+  const posts = api.requests.filter(request => request.method === 'POST'
+    && request.url.endsWith('/state'));
+  expect(posts).toHaveLength(2);
+  expect(posts[1]?.body).toEqual(originalBody);
+  fixture.destroy();
+});
+
+it('shows the server title in a group chat header and its tooltip', async () => {
+  const api = createFetchFixture();
+  const title = 'Planning next week and checking every open question together';
+  function titledGroup(request: RequestRecord): Response | undefined {
+    const url = new URL(request.url, location.origin);
+    if (url.pathname === '/api/conversations' && request.method === 'GET') {
+      const group = { conversationId: 'group-chat', mode: 'group', title,
+        participantIds: ['alice', 'bob'], createdBy: 'alice',
+        createdAt: '2026-10-06T09:00:00Z' };
+      return reply({ rows: [group], nextCursor: null });
+    }
+    return undefined;
+  }
+  api.override(titledGroup);
+  const fixture = await mountWithoutReady(api, 'group-chat');
+  await settle(fixture);
+  const heading = root(fixture).querySelector('h1');
+  expect(heading?.textContent?.trim()).toBe(title);
+  expect(heading?.title).toBe(title);
+  fixture.destroy();
+});
+
 function objectValue(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   return Object.fromEntries(Object.entries(value));

@@ -1,21 +1,21 @@
 <div class="workspace direct-workspace">
   <aside class="rail" aria-label="Workspace navigation">
     <a class="brand" href="/workspace"
-      [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+      [attr.aria-disabled]="pendingNavigationBlocked()"
       (click)="protectPendingNavigation($event)"><strong>Open<span>Crane</span></strong></a>
     <nav class="rail-content" aria-label="Workspace">
       <a class="rail-action" href="/workspace"
-        [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+        [attr.aria-disabled]="pendingNavigationBlocked()"
         (click)="protectPendingNavigation($event)">Ask your assistant</a>
       <h2>People</h2>
       <a class="rail-action active" href="/workspace/direct"
-        [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+        [attr.aria-disabled]="pendingNavigationBlocked()"
         (click)="protectPendingNavigation($event)">New direct chat</a>
       <a class="rail-action" href="/workspace/conversations"
-        [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+        [attr.aria-disabled]="pendingNavigationBlocked()"
         (click)="protectPendingNavigation($event)">Recent conversations</a>
       <a class="rail-action" href="/workspace/conversations?section=archived"
-        [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+        [attr.aria-disabled]="pendingNavigationBlocked()"
         (click)="protectPendingNavigation($event)">Archived</a>
       <h2>Direct conversations</h2>
       @if (listState() === 'loading' && conversations().length === 0) {
@@ -28,8 +28,9 @@
         @for (conversation of conversations(); track conversation.conversationId) {
           @if (conversation.mode === 'direct' || conversation.mode === 'group') {
             <button class="conversation-row" type="button"
-              [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
-              [attr.title]="composerBusy() ? 'Wait until this message is confirmed.' : null"
+              [attr.aria-disabled]="pendingNavigationBlocked()"
+              [attr.title]="pendingNavigationTitle(
+                archive.commandId(), !!participantManager.commandId(), composerBusy())"
               [class.selected]="selectedConversationId() === conversation.conversationId"
               [attr.aria-current]="selectedConversationId() === conversation.conversationId ? 'page' : null"
               (click)="selectConversation(conversation.conversationId)">
@@ -40,7 +41,7 @@
       }
     </nav>
     <footer class="rail-footer"><a href="/org/people"
-      [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+      [attr.aria-disabled]="pendingNavigationBlocked()"
       (click)="protectPendingNavigation($event)">People &amp; groups</a></footer>
   </aside>
 
@@ -50,9 +51,12 @@
         aria-label="Open direct conversations" [attr.aria-expanded]="navigationOpen()"
         [disabled]="composerBusy()" (click)="navigationOpen.set(true)">☰</button>
       <a class="back-link" href="/workspace" aria-label="Back to workspace"
-        [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+        [attr.aria-disabled]="pendingNavigationBlocked()"
         (click)="protectPendingNavigation($event)">‹</a>
-      <h1 tabindex="-1" #accessHeading>
+      <h1 tabindex="-1" #accessHeading
+        [attr.title]="selectedConversationId()
+          ? headerTitle(selectedConversation(), currentMemberId, knownColleagues(), colleague())
+          : null">
         @if (pageState() === 'access_changed' || pageState() === 'not_found') { Unavailable }
         @else if (selectedConversationId()) {
           {{ headerTitle(selectedConversation(), currentMemberId, knownColleagues(), colleague()) }}
@@ -67,6 +71,10 @@
         <span class="header-status">Group</span>
       } @else if (colleague()) { <span class="header-status">Direct · 2 people</span> }
       @if (pageState() === 'ready') {
+        @if (archive.row()?.joinEventId && archive.row()?.archivePosition !== undefined) {
+          <button class="archive-button" type="button" [disabled]="!archive.canChange()"
+            (click)="archive.change()">{{ archive.row()?.archived ? 'Unarchive' : 'Archive' }}</button>
+        }
         @if (selectedConversation()?.mode === 'group') {
           <button #participantOpener class="participant-open" type="button"
             (click)="openParticipants()">Participants</button>
@@ -177,6 +185,23 @@
             }
           </section>
         } @else {
+        @if (archive.notice()) {
+          <div class="archive-notice" role="status">
+            <span>{{ archive.notice() }}</span>
+            @if (archive.commandId()) {
+              <span>Check the archive change before leaving this chat.</span>
+            }
+            @if (archive.canCheck()) {
+              <button type="button" [disabled]="archive.checking()"
+                (click)="archive.checkStatus()">
+                {{ archive.checking() ? 'Checking…' : 'Check status' }}
+              </button>
+            }
+            @if (archive.canRetry()) {
+              <button type="button" (click)="archive.retry()">Try again</button>
+            }
+          </div>
+        }
         @if (pageError() && pageState() === 'ready') {
           <div class="refresh-error"><span>{{ pageError() }} Previously loaded conversations are kept.</span>
             <button class="button secondary" type="button" [attr.aria-disabled]="refreshing()"
@@ -211,6 +236,11 @@
             (selectionChanged)="selectionChanged($event)" />
           }
           @if (colleague() || selectedConversation()?.mode === 'group') {
+          @if (archive.row()?.archived) {
+            <p class="archive-transcript-note" role="status">
+              You archived this conversation. Only your list changed.
+            </p>
+          }
           @if (historyState() === 'loading') {
             <p class="empty-transcript">Loading messages…</p>
           } @else if (historyState() === 'failed') {
@@ -297,20 +327,22 @@
 </div>
 <oc-navigation-menu [open]="navigationOpen()" label="Direct conversations"
   [returnFocusTo]="navigationOpener" (closed)="navigationOpen.set(false)">
-  <a href="/workspace" [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+  <a href="/workspace" [attr.aria-disabled]="pendingNavigationBlocked()"
     (click)="protectPendingNavigation($event)">Ask your assistant</a>
   <a href="/workspace/direct"
-    [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
+    [attr.aria-disabled]="pendingNavigationBlocked()"
         (click)="protectPendingNavigation($event)">New direct chat</a>
-  <a href="/workspace/conversations">Recent conversations</a>
-  <a href="/workspace/conversations?section=archived">Archived</a>
+  <a href="/workspace/conversations" [attr.aria-disabled]="pendingNavigationBlocked()"
+    (click)="protectPendingNavigation($event)">Recent conversations</a>
+  <a href="/workspace/conversations?section=archived"
+    [attr.aria-disabled]="pendingNavigationBlocked()"
+    (click)="protectPendingNavigation($event)">Archived</a>
   @for (conversation of conversations(); track conversation.conversationId) {
     @if (conversation.mode === 'direct' || conversation.mode === 'group') {
       <button class="conversation-row" type="button"
-              [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
-              [attr.title]="participantChangeUnsettled()
-                ? 'Check the participant change before leaving this chat.'
-                : composerBusy() ? 'Wait until this message is confirmed.' : null"
+              [attr.aria-disabled]="pendingNavigationBlocked()"
+              [attr.title]="pendingNavigationTitle(
+                archive.commandId(), !!participantManager.commandId(), composerBusy())"
         [class.selected]="selectedConversationId() === conversation.conversationId"
         (click)="selectConversation(conversation.conversationId)">
         {{ conversationTitle(conversation, currentMemberId, knownColleagues()) }}

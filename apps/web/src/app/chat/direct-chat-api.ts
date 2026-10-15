@@ -1,6 +1,6 @@
 import {
   chatChangeSchema, chatColleaguesSchema, chatContextSchema, chatFeedSchema,
-  chatListSchema, chatParticipantCommandSchema, chatParticipantsSchema,
+  chatListSchema, chatParticipantCommandSchema, chatParticipantsSchema, chatStateCommandSchema,
 } from '@opencrane/protocol';
 import type { ChatRow } from '@opencrane/protocol';
 import { z } from 'zod';
@@ -119,10 +119,19 @@ export async function sendDirectMessage(
 
 export async function checkDirectChange(
   conversationId: string, commandId: string, signal: AbortSignal,
+  fetcher: typeof fetch = fetch,
 ) {
   const conversation = encodeURIComponent(conversationId);
   const command = encodeURIComponent(commandId);
-  return read(`/api/conversations/${conversation}/changes/${command}`, signal, chatChangeSchema);
+  return read(`/api/conversations/${conversation}/changes/${command}`, signal,
+    chatChangeSchema, fetcher);
+}
+
+export async function changeArchive(conversationId: string,
+  body: Extract<z.infer<typeof chatStateCommandSchema>, { action: 'archive' }>,
+  signal: AbortSignal, fetcher: typeof fetch = fetch) {
+  const id = encodeURIComponent(conversationId);
+  return write(`/api/conversations/${id}/state`, body, signal, appendReceiptSchema, fetcher);
 }
 
 export async function fetchParticipants(conversationId: string, signal: AbortSignal) {
@@ -136,10 +145,11 @@ export async function changeParticipant(conversationId: string,
   return write(`/api/conversations/${id}/participants`, body, signal, appendReceiptSchema);
 }
 
-async function read<T>(url: string, signal: AbortSignal, schema: z.ZodType<T>)
+async function read<T>(url: string, signal: AbortSignal, schema: z.ZodType<T>,
+  fetcher: typeof fetch = fetch)
   : Promise<DirectOutcome<T>> {
   try {
-    const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
+    const response = await fetcher(url, { headers: { accept: 'application/json' }, signal });
     if (!response.ok) return failure(response.status);
     const raw: unknown = await response.json();
     const parsed = schema.safeParse(raw);
@@ -152,9 +162,10 @@ async function read<T>(url: string, signal: AbortSignal, schema: z.ZodType<T>)
 
 async function write<T>(
   url: string, body: unknown, signal: AbortSignal, schema: z.ZodType<T>,
+  fetcher: typeof fetch = fetch,
 ): Promise<DirectOutcome<T>> {
   try {
-    const response = await fetch(url, {
+    const response = await fetcher(url, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body), signal,
     });

@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>chat, survey recovery and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>chat, saved archive choices, survey recovery and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys, grants and reads facts| providers["Provider pages<br/>keys, checks, model choices and access"]
@@ -53,6 +53,10 @@ check with the original request id.
 - Shows Recent and Archived conversations at `/workspace/conversations`. People can
   search titles, load more results and open an older chat from its saved link. If the
   list changes during that search, the website starts it again once.
+- Lets people archive or unarchive a direct or group chat from its header. The server
+  saves the choice for their own list. An archived chat stays readable and can still
+  receive messages. An uncertain save keeps the person in that chat until they check
+  its status. Group chat headers show the full saved title.
 - Gives admins pages for People & groups at `/org/people`,
   `/org/people/groups/<id>` and `/org/people/owners`, an integration register and detail at
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting

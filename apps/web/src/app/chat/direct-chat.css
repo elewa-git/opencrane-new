@@ -29,7 +29,15 @@
   min-width: 44px; min-height: 44px; color: #2b3133; font-size: 22px; text-decoration: none; }
 .navigation-toggle { display: none; min-width: 44px; min-height: 44px; }
 .header-status { color: var(--oc-ink-muted); font-size: 11px; white-space: nowrap; }
-.refresh-button { min-width: 44px; min-height: 44px; }
+.refresh-button,.archive-button { min-width: 44px; min-height: 44px; }
+.archive-button { border: 0; background: transparent; color: #2b3133;
+  font: inherit; cursor: pointer; }
+.archive-notice { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 16px; padding: 10px 14px; border: 1px solid #d9dfe0;
+  border-radius: 7px; background: #fff; font-size: 13px; }
+.archive-notice button { min-height: 44px; min-width: 44px; }
+.archive-transcript-note { margin: 18px auto; text-align: center; color: #4f575a;
+  font-size: 13px; }
 .participant-open,.participant-back,.participant-action,.participant-leave {
   min-width: 44px; min-height: 44px; padding: 8px 12px; border: 1px solid #cdd4d5;
   border-radius: 6px; background: #fff; color: #2b3133; cursor: pointer;
