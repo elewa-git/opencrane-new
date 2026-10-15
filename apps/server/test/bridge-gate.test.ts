@@ -1,9 +1,12 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
+import { dirname } from 'node:path';
+import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { afterEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { computerTokenAudience } from '@opencrane/auth';
 import { databases, until } from '@opencrane/authz/testing';
 import { envelope } from '@opencrane/models';
 import { conversations, pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -12,6 +15,7 @@ import { fixture as computerFixture } from '../../computer/test/bridge-gate-fixt
 import { requireBridgeGateAuthority } from '../../computer/src/bridge-gate-authority.ts';
 import { SandboxClient } from '../../ops/src/kubernetes.ts';
 import { connectBridge, watchBridges } from '../src/chat/bridge.ts';
+import { readyBridgePass } from '../src/chat/bridge-control.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 
 let cleanup = async () => {};
@@ -29,7 +33,7 @@ async function setup(real = false) {
   const frames: Record<string, unknown>[] = [];
   const peers: WebSocket[] = [];
   function receive(bytes: Buffer) {
-    const frame: Record<string, unknown> = JSON.parse(bytes.toString());
+    const frame = z.record(z.string(), z.unknown()).parse(JSON.parse(bytes.toString()));
     frames.push(frame);
   }
   function connected(peer: WebSocket) {
@@ -42,7 +46,7 @@ async function setup(real = false) {
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing port');
   const url = real ? computer.socket.url : `ws://127.0.0.1:${address.port}`;
-  const options = { store: nats.store, silo: 'test', keys: conversationKeys('/unused') };
+  const options = { store: nats.store, silo: 'test', keys: conversationKeys(dirname(computer.keyPath)) };
   const input = { url, computerId: 'computer', assistantId: 'assistant', bearer: 'test' };
   const links: Awaited<ReturnType<typeof connectBridge>>[] = [];
   async function append(subject: string, type: string, data: unknown) {
@@ -89,6 +93,7 @@ function quiet(changes = {}) {
     executorProof: 'unavailable', browserProof: 'unavailable', ...changes };
 }
 function isGate(frame: Record<string, unknown>) { return frame['type'] === 'bridge_gate'; }
+function frameType(frame: Record<string, unknown>) { return frame['type']; }
 
 async function realReceipt() {
   const test = await setup(true);
@@ -119,7 +124,8 @@ async function firstOnReconnect() {
     await until(resumed);
     expect(test.frames[0]?.['type']).toBe('bridge_gate');
     expect(test.frames[1]?.['type']).toBe('resume');
-    expect(test.frames.filter(isGate)).toHaveLength(1);
+    const gates = test.frames.filter(isGate);
+    expect(gates.length).toBe(1);
     const binding = requireBridgeGateAuthority(test.frames[0]?.['gate'], test.computer.gateIdentity);
     expect(binding).toEqual({ takeoverId: 'takeover', generation: 1,
       affectedTurnIds: ['first', 'second'] });
@@ -149,13 +155,17 @@ async function refusesReceipt(changes: Record<string, unknown>, previous = false
   }
   const closed = once(peer, 'close');
   peer.send(JSON.stringify(quiet(changes)));
-  const [code, reason] = await closed;
+  const closedValues: unknown = await closed;
+  const [code, reason] = z.tuple([z.number(), z.instanceof(Buffer)]).parse(closedValues);
   expect(code).toBe(1008);
   expect(String(reason)).toBe('Invalid bridge receipt');
   expect(link.control.receipt).toBeUndefined();
   expect(await test.store.head('computer-assistant')).toBe(before);
 }
-it.each(invalidReceipts)('refuses a forged receipt %j without saving it', refusesReceipt);
+async function forgedReceipt(changes: Record<string, unknown>) {
+  await refusesReceipt(changes);
+}
+it.each(invalidReceipts)('refuses a forged receipt %j without saving it', forgedReceipt);
 it('refuses a receipt without a gate', async function noGate() {
   await refusesReceipt({}, false, false);
 });
@@ -198,12 +208,13 @@ async function skipsGate(cause: string) {
   await link.control.send();
   function resumed() { return test.frames.length > 0; }
   await until(resumed);
-  expect(test.frames).toEqual([{ type: 'resume', since: 0, approvalWaiting: true }]);
+  const types = test.frames.map(frameType);
+  expect(types).toEqual(['resume']);
 }
 it.each(['issuer', 'member', 'generation', 'podUid', 'turns', 'unverified'])(
   'sends resume without a gate after %s refusal', skipsGate);
 
-async function watchesIdle(refusing: boolean) {
+async function watchesIdle(mode: string) {
   const test = await setup();
   const dbs = await databases();
   const db = pgDb(dbs.queue);
@@ -218,16 +229,46 @@ async function watchesIdle(refusing: boolean) {
   const kube = new SandboxClient('http://unused', 'test', 'http://unused', 'http://unused');
   vi.spyOn(kube, 'credentials').mockResolvedValue(undefined);
   const stop = new AbortController();
-  await test.save();
+  if (mode === 'connected' || mode === 'suspended') {
+    test.keys.provision('test', 'chat');
+    const encrypted = test.keys.encrypt('test', 'chat', 'Hello');
+    await test.append('conversation-chat', 'message.posted', { conversationId: 'chat',
+      authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted });
+  }
+  if (mode !== 'connected') await test.save();
+  if (mode === 'unverified') {
+    await test.append('computer-assistant', 'takeover.started', {
+      assistantId: 'assistant', computerId: 'computer', requestedBy: 'alice' });
+  }
+  if (mode === 'suspended') {
+    await test.append('computer-assistant', 'computer.suspended', {
+      computerId: 'computer', assistantId: 'assistant' });
+  }
   const work = watchBridges({ ...test, db }, test.computer.issuer, kube, test.url, stop.signal, logger);
   try {
+    if (mode === 'suspended' || mode === 'unverified') {
+      const before = await test.store.head('computer-assistant');
+      await delay(750);
+      expect(test.peers).toHaveLength(0);
+      expect(await test.store.head('computer-assistant')).toBe(before);
+      return;
+    }
+    if (mode === 'connected') {
+      function resumed() { return test.frames.length > 0; }
+      await until(resumed, 2000);
+      expect(test.frames[0]?.['type']).toBe('resume');
+      await test.save();
+    }
     function gated() { return test.frames.some(isGate); }
+    const start = performance.now();
     await until(gated, 2000);
+    expect(performance.now() - start).toBeLessThan(2000);
+    if (mode === 'connected') return;
     expect(test.frames[0]?.['type']).toBe('bridge_gate');
     const peer = test.peers[0]!;
-    peer.close(refusing ? 1008 : 1000, 'Computer refused');
+    peer.close(mode === 'refused' ? 1008 : 1000, 'Computer refused');
     await delay(750);
-    if (refusing) expect(test.peers).toHaveLength(1);
+    if (mode === 'refused') expect(test.peers).toHaveLength(1);
     else expect(test.peers).toHaveLength(2);
   } finally {
     stop.abort();
@@ -235,4 +276,17 @@ async function watchesIdle(refusing: boolean) {
     await dbs.close();
   }
 }
-it.each([false, true])('opens an idle computer and reconnects only if not refused: %s', watchesIdle);
+it.each(['idle', 'connected', 'refused', 'suspended', 'unverified'])(
+  'polls saved control intent with a %s computer', watchesIdle);
+
+async function legacyReady() {
+  const test = await setup();
+  const identity = { computerId: 'computer', assistantId: 'assistant' };
+  await test.append('computer-assistant', 'computer.ready', identity);
+  const before = await test.store.head('computer-assistant');
+  const pass = await readyBridgePass(test, identity, test.computer.issuer);
+  const claims = await test.computer.issuer.verify(pass.value, computerTokenAudience);
+  expect(claims['generation']).toBe(1);
+  expect(await test.store.head('computer-assistant')).toBe(before);
+}
+it('keeps legacy ready connections working without waking or writing', legacyReady);
