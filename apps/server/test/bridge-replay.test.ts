@@ -303,6 +303,14 @@ async function deliversNewMessagesAfterIdle() {
   const state = vi.spyOn(kube, 'state');
   const reads = vi.spyOn(fixture.store, 'readStream');
   const heads = vi.spyOn(fixture.store, 'head');
+  // Wait for complete main polls; the control watcher also checks positions.
+  function isMainPoll(call: Parameters<typeof fixture.store.head>) {
+    return call[0] === undefined;
+  }
+  function mainPollCount() {
+    const polls = heads.mock.calls.filter(isMainPoll);
+    return polls.length;
+  }
   const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   try {
@@ -310,15 +318,15 @@ async function deliversNewMessagesAfterIdle() {
       return reads.mock.calls.length >= 2;
     }
     await until(initialHistoryWasRead);
-    const initialPasses = heads.mock.calls.length;
+    const initialPasses = mainPollCount();
     function idlePassFinished() {
-      return heads.mock.calls.length >= initialPasses + 2;
+      return mainPollCount() >= initialPasses + 2;
     }
     await until(idlePassFinished);
     reads.mockClear();
-    const idlePasses = heads.mock.calls.length;
+    const idlePasses = mainPollCount();
     function moreIdlePassesFinished() {
-      return heads.mock.calls.length >= idlePasses + 3;
+      return mainPollCount() >= idlePasses + 3;
     }
     await until(moreIdlePassesFinished);
     expect(reads).not.toHaveBeenCalled();
