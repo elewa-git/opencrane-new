@@ -216,7 +216,7 @@ export function includeRequestedConversation(
   return [...rows, requested];
 }
 
-export function isSelectedConversation(conversationId: string, row: ChatConversation): boolean {
+function isSelectedConversation(conversationId: string, row: ChatConversation): boolean {
   return row.conversationId === conversationId;
 }
 
