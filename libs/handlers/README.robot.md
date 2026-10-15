@@ -273,3 +273,8 @@ failed triggers before scanning the new occurrence and removes a failed trigger
 only after the scan succeeds. `deleteAfterSeconds=0` keeps failed jobs indefinitely.
 The trigger body still contains only the silo. Startup queues a new trigger, so
 restart and the next nightly delivery both recover exhausted triggers.
+
+## Gateway publication ordering
+
+`prepare-gateway-configuration` jobs use `gateway-config-<silo>` as their queue key,
+including historical jobs created by the subscription upgrade. Server streams stay separate.

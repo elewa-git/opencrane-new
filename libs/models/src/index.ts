@@ -64,7 +64,8 @@ export { providerSwitchOn, providerSwitchOnChange } from './provider-switch-on.t
 export { isPublicAddress, remoteEndpoint } from './address-policy.ts';
 export { publishToolPolicy } from './tool-policy.ts';
 export { publicationEntry } from './publication.ts';
-export { prepareGatewayConfiguration, gatewayConfigurationCurrent } from './gateway-generation.ts';
+export { prepareGatewayConfiguration, gatewayConfigurationCurrent, PublicationUnavailable }
+  from './gateway-generation.ts';
 export { renderGatewayConfiguration, type GatewayRenderSettings } from './gateway-renderer.ts';
 export { RootBudgetRefused, rootTotals } from './root-budget.ts';
 export { registerHosted, hostedRegistrationChange } from './hosted-registration.ts';
@@ -72,3 +73,5 @@ export { gatewayDelivery } from './gateway-delivery.ts';
 
 export { readHostedAdmission, foldHostedAdmission }
   from './hosted-admission.ts';
+
+export { gatewayConfigurationWorker } from './gateway-configuration-worker.ts';

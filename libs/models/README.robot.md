@@ -2134,3 +2134,27 @@ wiring, startup route removal, generation admission and fresh-install qualificat
 
 Tests use the pinned gateway, disposable NATS and PostgreSQL. The replay CLI compares
 rebuilt policy with the live projection; it writes no events or gateway configuration.
+
+## Ordered gateway delivery (P3-4 PR 3c; Part of #45)
+
+Preparation drops carried members whose source policy or publication is no longer
+current. Delivery refuses any record except the latest saved current one before
+replacing the file. The worker keeps one delivery object and allows no overlapping
+ticks. Lost observation or receipt replies recover fixed ids on a later probe.
+Leadership is checked before file replacement, probes and receipt appends.
+Delivery requires the root PostgreSQL `Db`, not the connection already holding the
+budget lock. It takes `gateway-configuration:<silo>`, the same advisory lock as the
+preparation handler. It checks currentness after acquiring that lock and again after
+the final leadership query. The synchronous rename immediately follows that last
+check, while preparation still waits. Obsolete delivery leaves the old file untouched.
+`prepareGatewayConfiguration` remains the event-only helper; a live caller must hold
+this shared lock, as the ops handler does. PostgreSQL stores no publication state.
+Regression tests use separate PostgreSQL connections to prove both paths wait on
+this key. Delayed leadership queries save a newer generation or reject leadership;
+refused delivery preserves the file and appends no receipt.
+Render settings come from the startup gateway options. Memory is optional; when
+present its route bytes are unchanged. Replay performs no delivery or observation.
+
+Left for part d: Ready/applying/disabled/unknown reads and their failure/deadline
+coverage. Generation admission and final-send checks remain row 4. Fresh-install
+qualification is NOT RUN. The approval journey prints SKIP until rows 4, 5 and 14.

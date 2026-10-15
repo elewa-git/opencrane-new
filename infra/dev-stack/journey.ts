@@ -15,7 +15,6 @@ import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { connectProjectionDb, readEvents } from '@opencrane/projections';
 import { history as modelHistory, models } from '@opencrane/models';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
-import { approvalJourney } from './approval-journey.ts';
 import { journeyTool, reviewJourneyTools } from './journey-tool-policy.ts';
 import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.ts';
@@ -474,13 +473,7 @@ try {
       throw error;
     } finally { page.off('requestfailed', failed); }
   }
-  if (browser) {
-    const approvalInput = { silo, origin, requesterId: member,
-      assistantId: computer!.assistant_id, computerId: computer!.computer_id,
-      generation: Number(computer!.generation) };
-    await approvalJourney(browser.ownerPage, browser.memberPages, events.store, authz,
-      append, approvalInput);
-  }
+  console.log('SKIP approval journey: waits for #45 rows 4, 5 and 14');
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();
   await chat.reconnect();

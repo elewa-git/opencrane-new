@@ -607,3 +607,8 @@ requires the matching MCP subject. This receipt grants no call permission.
 Final text publication follows the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
 `childResultPublishedDataSchema` requires final result and turn references,
 a SHA-256 review digest and parent-key ciphertext. It accepts no file or plaintext field.
+
+## Gateway publication subscription
+
+`prepare-gateway-configuration` subscribes only to `mcp.server_published`.
+No event type or field was added. Withdrawal-only preparation remains deferred.

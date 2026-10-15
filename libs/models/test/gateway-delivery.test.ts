@@ -1,5 +1,6 @@
+import { dirname } from 'node:path';
 import { ChildProcess, execFile } from 'node:child_process';
-import { readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { z } from 'zod';
 import { promisify } from 'node:util';
@@ -18,6 +19,7 @@ import { publicationDigest } from '../src/publication.ts';
 import { gatewayConfigurationCurrent, prepareGatewayConfiguration }
   from '../src/gateway-generation.ts';
 import { startGateway } from '../src/gateway.ts';
+import { gatewayConfigurationWorker } from '../src/gateway-configuration-worker.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
 import { freePort, gatewayFixture } from './gateway-delivery-fixture.ts';
 
@@ -29,6 +31,9 @@ async function fixture() {
     await nats.close();
   }
   onTestFinished(closeNats);
+  const storage = await databases();
+  onTestFinished(storage.close.bind(storage));
+  const db = pgDb(storage.queue);
   const setup = await gatewayFixture();
   const faulty = await lostReplyStore(nats.connection);
   function declaration(name: string) {
@@ -70,7 +75,7 @@ async function fixture() {
   await nats.seed([envelope('test', 'gateway-config-test', 'gateway.configuration_requested', record)]);
   const settings = { ...setup.options,
     memoryRoute: { serverId: 'memory', connectionId: 'internal', upstream: 'unused' } };
-  const options = { mode: 'live' as const, store: faulty.store, silo: 'test', child: setup.child,
+  const options = { db, mode: 'live' as const, store: faulty.store, silo: 'test', child: setup.child,
     configFile: setup.options.configFile, controlPort: await freePort(), settings };
   const delivery = gatewayDelivery(options);
   await delivery.deliver(record);
@@ -649,3 +654,186 @@ async function changedStateRefusesMemberAppend(change: 'withdrawal' | 'preparati
 }
 it.each(['withdrawal', 'preparation'] as const)(
   'lets a %s refuse the conditional server receipt append', changedStateRefusesMemberAppend);
+
+async function refusesOldDelivery() {
+  const setup = await fixture();
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  const { recordDigest: _digest, ...previous } = setup.record;
+  const saved = { ...previous, generation: 2, changeRef: 'next' };
+  const next = { ...saved, recordDigest: publicationDigest(saved) };
+  await setup.nats.seed([envelope('test', 'gateway-config-test',
+    'gateway.configuration_requested', next)]);
+  await setup.delivery.deliver(next);
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  const bytes = await readFile(setup.options.configFile);
+  const position = await setup.nats.store.head();
+  await expect(setup.delivery.deliver(setup.record)).rejects.toThrow('Gateway delivery unavailable');
+  expect(await readFile(setup.options.configFile)).toEqual(bytes);
+  expect(await setup.delivery.observe()).toBeNull();
+  expect(await setup.nats.store.head()).toBe(position);
+}
+it('refuses an older saved record passed directly to delivery without changing the file',
+  refusesOldDelivery);
+
+async function reconcilesLatestOnly() {
+  const setup = await fixture();
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  const previousRows = await history(setup.nats.store, 'gateway-config-test', 'test');
+  const previousObservation = gatewayObservationSchema.parse(previousRows.at(-1)!.event.data);
+  const { recordDigest: _digest, ...previous } = setup.record;
+  const saved = { ...previous, generation: 2, changeRef: 'latest' };
+  const next = { ...saved, recordDigest: publicationDigest(saved) };
+  await setup.nats.seed([envelope('test', 'gateway-config-test',
+    'gateway.configuration_requested', next)]);
+  let leader = true;
+  function requireLeader() {
+    if (!leader) return Promise.reject(new Error('Leadership lost'));
+    return Promise.resolve();
+  }
+  const options = { ...setup.options, requireLeader };
+  const worker = gatewayConfigurationWorker(options);
+  onTestFinished(worker.close);
+  async function observed() {
+    await worker.check();
+    const rows = await history(setup.nats.store, 'gateway-config-test', 'test');
+    expect(rows.at(-1)!.event.data).toMatchObject({ generation: 2, outcome: 'loaded' });
+  }
+  setup.faulty.loseNextReply();
+  await expect.poll(observed, { timeout: 5000 }).toBeUndefined();
+  const oldPath = `/configuration/1/${previousObservation.processRef}`;
+  const oldWitness = await fetch(`http://127.0.0.1:${options.controlPort}${oldPath}`,
+    { signal: AbortSignal.timeout(1000) });
+  expect(oldWitness.status).toBe(404);
+  const file = await stat(setup.options.configFile);
+  await worker.check();
+  expect((await stat(setup.options.configFile)).ino).toBe(file.ino);
+  expect(await memberReceipts(setup)).toHaveLength(1);
+  leader = false;
+  await expect(worker.check()).rejects.toThrow();
+  expect((await stat(setup.options.configFile)).ino).toBe(file.ino);
+  const replay = gatewayConfigurationWorker({ ...options, mode: 'replay' });
+  const position = await setup.nats.store.head();
+  await replay.check();
+  expect(await setup.nats.store.head()).toBe(position);
+}
+it('reconciles only the latest generation, recovers a lost reply and stops on lost leadership',
+  reconcilesLatestOnly);
+
+async function refusesPreparationDuringLeadershipCheck(query: number) {
+  const setup = await fixture();
+  const before = await readFile(setup.options.configFile);
+  let changed = false;
+  let queries = 0;
+  async function requireLeader() {
+    queries++;
+    if (queries !== query) return;
+    changed = true;
+    const { recordDigest: _digest, ...previous } = setup.record;
+    const saved = { ...previous, generation: 2, changeRef: 'during-leadership' };
+    const next = { ...saved, recordDigest: publicationDigest(saved) };
+    const event = envelope('test', 'gateway-config-test', 'gateway.configuration_requested', next);
+    await setup.nats.seed([event]);
+  }
+  const options = { ...setup.options, requireLeader };
+  const delivery = gatewayDelivery(options);
+  await expect(delivery.deliver(setup.record)).rejects.toThrow('Gateway delivery unavailable');
+  expect(changed).toBe(true);
+  expect(await readFile(setup.options.configFile)).toEqual(before);
+  expect(await gatewayConfigurationCurrent(setup.nats.store, 'test', setup.record)).toBe(false);
+  expect(await delivery.observe()).toBeNull();
+  expect(await memberReceipts(setup)).toHaveLength(0);
+  expect(await history(setup.nats.store, 'gateway-config-test', 'test')).toHaveLength(2);
+}
+it.each([1, 2])('refuses a generation superseded while leadership query %s waits',
+  refusesPreparationDuringLeadershipCheck);
+
+async function losesLeadershipDuringReplacement(query: number) {
+  const setup = await fixture();
+  const before = await readFile(setup.options.configFile);
+  const inode = (await stat(setup.options.configFile)).ino;
+  const position = await setup.nats.store.head();
+  let checked = false;
+  let queries = 0;
+  async function requireLeader() {
+    queries++;
+    if (queries !== query) return;
+    const files = await readdir(dirname(setup.options.configFile));
+    function sibling(file: string) {
+      return file.endsWith('.next');
+    }
+    expect(files.some(sibling)).toBe(true);
+    checked = true;
+    throw new Error('Leadership lost during replacement');
+  }
+  const options = { ...setup.options, requireLeader };
+  const delivery = gatewayDelivery(options);
+  await expect(delivery.deliver(setup.record)).rejects.toThrow('Gateway delivery unavailable');
+  expect(checked).toBe(true);
+  expect(await readFile(setup.options.configFile)).toEqual(before);
+  expect((await stat(setup.options.configFile)).ino).toBe(inode);
+  expect(await delivery.observe()).toBeNull();
+  expect(await memberReceipts(setup)).toHaveLength(0);
+  expect(await setup.nats.store.head()).toBe(position);
+  const files = await readdir(dirname(setup.options.configFile));
+  function sibling(file: string) {
+    return file.endsWith('.next');
+  }
+  expect(files.some(sibling)).toBe(false);
+}
+it.each([1, 2])('keeps the old file and saves no receipt when replacement query %s loses leadership',
+  losesLeadershipDuringReplacement);
+
+async function waitsForPreparationLock() {
+  const setup = await fixture();
+  const bytes = await readFile(setup.options.configFile);
+  const db = setup.options.db;
+  let release = function releaseLock() {};
+  function hold(resolve: () => void) {
+    release = resolve;
+  }
+  const held = new Promise<void>(hold);
+  let entered = function enteredLock() {};
+  function notify(resolve: () => void) {
+    entered = resolve;
+  }
+  const acquired = new Promise<void>(notify);
+  async function prepareWhileLocked() {
+    entered();
+    await held;
+  }
+  const preparation = db.lock!('gateway-configuration:test', prepareWhileLocked);
+  await acquired;
+  const delivery = gatewayDelivery(setup.options);
+  function succeeded() {
+    return 'delivered';
+  }
+  function failed(error: unknown) {
+    return error instanceof Error ? error.message : 'unknown error';
+  }
+  const result = delivery.deliver(setup.record).then(succeeded, failed);
+  async function waitingLocks() {
+    const result = await db.query<{ count: number }>(`SELECT count(*)::int AS count
+      FROM pg_locks WHERE locktype = 'advisory' AND NOT granted
+      AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`);
+    return result.rows[0]!.count;
+  }
+  try {
+    await expect.poll(waitingLocks, { timeout: 2000 }).toBe(1);
+    expect(await readFile(setup.options.configFile)).toEqual(bytes);
+    const { recordDigest: _digest, ...previous } = setup.record;
+    const saved = { ...previous, generation: 2, changeRef: 'locked-preparation' };
+    const next = { ...saved, recordDigest: publicationDigest(saved) };
+    await setup.nats.seed([envelope('test', 'gateway-config-test',
+      'gateway.configuration_requested', next)]);
+  } finally {
+    release();
+    await preparation;
+    await result;
+  }
+  expect(await result).toBe('Gateway delivery unavailable');
+  expect(await readFile(setup.options.configFile)).toEqual(bytes);
+  expect(await delivery.observe()).toBeNull();
+  expect(await memberReceipts(setup)).toHaveLength(0);
+}
+it('waits for preparation on another database connection and refuses its obsolete file',
+  waitsForPreparationLock);

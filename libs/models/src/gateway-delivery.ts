@@ -1,6 +1,8 @@
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { rename, rm, writeFile } from 'node:fs/promises';
+import { renameSync } from 'node:fs';
+import { rm, writeFile } from 'node:fs/promises';
+import type { Db } from '@opencrane/projections';
 import { gatewayConfigurationSchema, gatewayObservationSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { z } from 'zod';
@@ -15,11 +17,12 @@ const configuration = z.looseObject({
   gateways: z.record(z.string(), z.unknown()), routes: z.array(z.unknown()),
 });
 
-async function replaceConfiguration(file: string, config: unknown) {
+async function replaceConfiguration(file: string, config: unknown,
+  replace: (sibling: string) => Promise<void>) {
   const sibling = `${file}.${randomUUID()}.next`;
   try {
     await writeFile(sibling, JSON.stringify(config), { mode: 0o600, flag: 'wx' });
-    await rename(sibling, file);
+    await replace(sibling);
   } finally {
     await rm(sibling, { force: true });
   }
@@ -27,13 +30,18 @@ async function replaceConfiguration(file: string, config: unknown) {
 
 export function gatewayDelivery(options: {
   store: Pick<EventStore, 'append' | 'head' | 'readEvent' | 'readStream'>;
-  silo: string; child: ChildProcess; configFile: string; controlPort: number;
+  db: Db; silo: string; child: ChildProcess; configFile: string; controlPort: number;
   settings: GatewayRenderSettings; mode: 'live' | 'replay';
+  requireLeader?: () => Promise<void>;
 }) {
   const processRef = randomUUID();
   const subject = `gateway-config-${options.silo}`;
   let active: { record: Configuration; configDigest: string; response: string; path: string } | null = null;
   let writing = false;
+
+  async function requireLeader() {
+    await options.requireLeader?.();
+  }
 
   function alive() {
     return options.child.pid !== undefined && options.child.exitCode === null &&
@@ -47,6 +55,9 @@ export function gatewayDelivery(options: {
     active = null;
     try {
       const record = gatewayConfigurationSchema.parse(input);
+      if (!await gatewayConfigurationCurrent(options.store, options.silo, record)) {
+        throw new Error('Gateway delivery unavailable');
+      }
       const rendered = renderGatewayConfiguration(record, options.settings);
       const parsed: unknown = JSON.parse(rendered.configBytes.toString('utf8'));
       const config = configuration.parse(parsed);
@@ -61,7 +72,25 @@ export function gatewayDelivery(options: {
         policies: { authorization: { rules: ['source.address == "127.0.0.1"'] },
           directResponse: { status: 200, body: response } } };
       config.routes.push(controlRoute);
-      await replaceConfiguration(options.configFile, config);
+      async function replace(sibling: string) {
+        await requireLeader();
+        if (!options.db.lock) throw new Error('Gateway locking unavailable');
+        async function replaceLatest() {
+          if (!await gatewayConfigurationCurrent(options.store, options.silo, record)) {
+            throw new Error('Gateway delivery unavailable');
+          }
+          await requireLeader();
+          // Recheck after leadership waits. Hold preparation until the rename finishes.
+          if (!await gatewayConfigurationCurrent(options.store, options.silo, record)) {
+            throw new Error('Gateway delivery unavailable');
+          }
+          if (!alive()) throw new Error('Gateway delivery unavailable');
+          // Avoid yielding between the final check and the atomic file replacement.
+          renameSync(sibling, options.configFile);
+        }
+        await options.db.lock(`gateway-configuration:${options.silo}`, replaceLatest);
+      }
+      await replaceConfiguration(options.configFile, config, replace);
       active = { record, configDigest: rendered.configDigest, response, path };
     } catch {
       throw new Error('Gateway delivery unavailable');
@@ -115,6 +144,7 @@ export function gatewayDelivery(options: {
     const event = envelope(options.silo, subject, 'mcp.configuration_observed', data, id);
     // Refuse withdrawal on this server and newer preparations on the gateway stream.
     const command = { event, expectedSequence: state.sequence, expectedGlobalSequence, deadline };
+    await requireLeader();
     const result = await options.store.append(command);
     return result.status === 'appended';
   }
@@ -123,6 +153,7 @@ export function gatewayDelivery(options: {
     const delivered = active;
     if (!delivered || !usable(delivered)) return null;
     try {
+      await requireLeader();
       const url = `http://127.0.0.1:${options.controlPort}${delivered.path}`;
       const response = await fetch(url, { signal: AbortSignal.timeout(1000), redirect: 'error' });
       if (response.status !== 200 || await response.text() !== delivered.response) return null;
@@ -141,6 +172,7 @@ export function gatewayDelivery(options: {
         processRef, outcome: 'loaded', observedAt: new Date().toISOString() };
       const event = envelope(options.silo, subject, 'gateway.configuration_observed', data, id);
       const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0 };
+      await requireLeader();
       const result = await options.store.append(command);
       if (result.status !== 'appended' || !usable(delivered)) return null;
       const row = await options.store.readEvent(result.sequence);

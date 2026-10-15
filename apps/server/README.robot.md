@@ -557,7 +557,7 @@ one of its required settings is missing.
 | `MODEL_KEY_FILE` | Models | No | `.keys/.openai-key` in the repository root | Path to the gateway's default provider key file. |
 | `MODEL_READINESS_PORT` | Models | Yes | None | Port used to check whether the AI gateway is ready. |
 | `MODEL_UPSTREAM` | Models | No | Unset | Optional upstream address for the AI gateway. |
-| `MODEL_MCP_ROUTES` | Models | No | Empty list | JSON list of tool-server routes for the AI gateway. |
+| `MODEL_GATEWAY_CONTROL_PORT` | Models | Yes | None | Private port for exact configuration replies; never forward it. |
 | `BOOTSTRAP_TOKEN_FILE` | Bootstrap command | Yes | None | Private file where the one-time token hash and expiry are stored. |
 
 Set `NATS_URL`, `SILO_ID` and `OIDC_EXPECTED_ORG_ID` to enable membership acceptance.
@@ -969,12 +969,9 @@ Chromium at 1280/390px.
 These fixtures create disposable NATS/OpenFGA instances and private Postgres databases.
 They do not use the shared dev stack or a paid upstream.
 
-The model process accepts optional `MODEL_MCP_ROUTES`, a JSON array of
-`{serverId, connectionId, upstream}` records, to configure the existing gateway
-MCP routes. The default is empty. Deployment configuration owns these destinations;
-callers cannot supply them. Set `CONVERSATION_KEYS_DIR` to the same private directory
-as the server so the decision process can encrypt and verify approval reviews.
-The dev stack routes its credential-free recording fixture to its loopback stub.
+The model process ignores `MODEL_MCP_ROUTES`. Dispatch and catalogue watching use
+empty route lists until generation admission is connected. `CONVERSATION_KEYS_DIR`
+still names the server's private directory for encrypted approval reviews.
 
 Read-only desktop sessions use `POST /api/conversations/:id/view` and
 `/ws/conversations/:id/view` for the WebSocket. The POST requires the session, exact Origin and
@@ -1727,9 +1724,8 @@ Discovery requires MCP access without requiring a personal memory read grant.
 Private remember calls are refused even with plausible shared source references.
 Shared-only execution remains unavailable, and native turns receive no memory tools.
 
-The models process needs `TOKEN_SIGNING_KEY_FILE`. `MODEL_MCP_ROUTES` must include
-`{ "serverId": "memory", "connectionId": "server", "upstream": "<server-host>:<port>",
-"generation": "<instance-id>", "revisionHeader": "x-opencrane-mcp-revision" }`.
+Memory calls need `TOKEN_SIGNING_KEY_FILE` and an explicit internal route.
+The startup environment no longer supplies that route; production wiring is pending.
 `MEMORY_MCP_GENERATION` on the memory backend must match this generation. It has no default;
 missing configuration refuses calls. Use a unique value for each backend process and route
 to that exact process, never a Service alias shared by different instances. Replacement
@@ -2428,7 +2424,7 @@ NOT RUN: full root suite and fresh-install qualification.
 
 ## Final configured MCP sends
 
-`MODEL_MCP_ROUTES` uses the shared `mcpDispatchRouteSchema` from `libs/models`.
+Explicit dispatch routes use `mcpDispatchRouteSchema`; the startup list is empty.
 Routes without a generation and the reviewed atomic revision header remain unavailable.
 All installed servers use this path, including Odoo; no adapter chooses a weaker rule.
 The models process reuses its silo leadership lock. It checks that connection immediately
@@ -2606,7 +2602,7 @@ Managed gateway startup, fallback-key refusal, switch-off, retirement and UI are
 
 ## Dispatch catalogue capture (#48 PR 3b, first split)
 
-`models-main.ts` starts the shared catalogue watch for `MODEL_MCP_ROUTES`.
+`models-main.ts` starts the shared catalogue watch with no configured servers.
 `watch-capture.ts` sends only `server/discover` and `tools/list` to the operator's
 configured dispatch destination, with the configured generation and no caller credentials.
 It refuses redirects, sessions, invalid replies and responses over 4 MiB. It reuses
@@ -2825,3 +2821,13 @@ failure after complete history, after the incremental read and immediately befor
 append. The event-store test also saves a change inside the NATS publish call.
 Saved publication retries keep their existing receipt and current-access checks.
 Interim publication, files, screens and fresh-install qualification remain NOT RUN.
+
+## Gateway configuration worker
+
+The budget leader starts one configuration worker with the gateway child. It reads
+only `gateway-config-<silo>`, delivers the latest current request and probes it on
+later ticks without rewriting it. The worker receives the root PostgreSQL `Db`
+for the shared per-silo preparation and replacement lock; it must not use the
+connection already holding the budget leadership lock. Restart creates a new process reference and
+requires another delivery and probe. Dispatch and catalogue watch receive empty
+route lists; `MODEL_MCP_ROUTES` is ignored. No call is enabled by this worker.

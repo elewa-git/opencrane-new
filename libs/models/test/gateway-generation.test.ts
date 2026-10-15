@@ -110,16 +110,15 @@ async function preparesReplacementIntents() {
 
   const third = await prepareGatewayConfiguration(store, 'test', 'alpha', 'alpha-2');
   expect(third.generation).toBe(3);
-  expect(third.members).toHaveLength(2);
-  expect(third.members[0]).toEqual(second.members[1]);
-  expect(third.members[1]).toMatchObject({ changeRef: 'alpha-2',
+  expect(third.members).toHaveLength(1);
+  expect(third.members[0]).toMatchObject({ changeRef: 'alpha-2',
     entry: { serverId: 'alpha', tools: [{ name: 'read', mode: 'block' }] } });
-  expect(await gatewayConfigurationCurrent(store, 'test', third)).toBe(false);
+  expect(await gatewayConfigurationCurrent(store, 'test', third)).toBe(true);
 
   const fourth = await prepareGatewayConfiguration(store, 'test', 'bravo', 'bravo-2');
   expect(fourth.generation).toBe(4);
   expect(fourth.members).toHaveLength(2);
-  expect(fourth.members[0]).toEqual(third.members[1]);
+  expect(fourth.members[0]).toEqual(third.members[0]);
   expect(fourth.members[1]).toMatchObject({ changeRef: 'bravo-2',
     entry: { serverId: 'bravo', tools: [{ name: 'read', mode: 'block' }] } });
   expect(await gatewayConfigurationCurrent(store, 'test', fourth)).toBe(true);

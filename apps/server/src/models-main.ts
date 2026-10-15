@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process';
 import { captureDispatchCatalogue } from './integrations/watch-capture.ts';
 import { conversationKeys } from './chat/keys.ts';
 // The lease chooses which process runs this worker. Budget decisions still only
@@ -8,7 +9,8 @@ import { resolve } from 'node:path';
 import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { connectProjectionDb } from '@opencrane/projections';
 import { providerSecrets, BudgetActor, startDecision, startGateway,
-  ingestUsage, mcpDispatchRouteSchema, mcpCatalogueWatch } from '@opencrane/models';
+  ingestUsage, mcpDispatchRouteSchema, mcpCatalogueWatch, gatewayConfigurationWorker
+} from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import type { JSONWebKeySet } from 'jose';
@@ -69,8 +71,9 @@ try {
         gatewayUrl: `http://127.0.0.1:${required('MODEL_GATEWAY_PORT')}`,
       };
     }
-    const mcpRoutes = z.array(mcpDispatchRouteSchema)
-      .parse(JSON.parse(process.env['MODEL_MCP_ROUTES'] ?? '[]'));
+    const mcpRoutes = z.array(mcpDispatchRouteSchema).parse([]);
+    const controlPort = Number(required('MODEL_GATEWAY_CONTROL_PORT'));
+    const gatewayBinary = required('AGENTGATEWAY_BINARY');
     async function requireDispatchLeader() {
       if (stop.signal.aborted) throw new Error('Models process stopped');
       await locked.query('SELECT 1');
@@ -98,19 +101,37 @@ try {
     const decision = await startDecision(actor, identity, binding, decisionPort,
       keys, verification, dispatchOptions);
     let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
+    let configurationWorker: ReturnType<typeof gatewayConfigurationWorker> | undefined;
+    function configurationFailed(error: unknown) {
+      const errorName = error instanceof Error ? error.name : typeof error;
+      logger.error({ operation: 'models.gateway_configuration', errorName });
+    }
+    function spawned(child: ChildProcess) {
+      const options = { db: db.db, store: events.store, silo, child, settings: gatewayOptions,
+        configFile: gatewayOptions.configFile,
+        controlPort, mode: 'live' as const,
+        requireLeader: requireDispatchLeader };
+      configurationWorker = gatewayConfigurationWorker(options);
+    }
+    const gatewayOptions = {
+      binary: gatewayBinary, configFile: `${directory}/gateway.json`,
+      usageFile: `${directory}/usage.jsonl`,
+      keyFile: process.env['MODEL_KEY_FILE'] ?? resolve(import.meta.dirname, '../../../.keys/.openai-key'),
+      port: Number(required('MODEL_GATEWAY_PORT')),
+      readinessPort: Number(required('MODEL_READINESS_PORT')),
+      decisionUrl: decision.url, issuer: required('TOKEN_ISSUER'),
+      ...(process.env['MODEL_UPSTREAM'] ? { upstream: process.env['MODEL_UPSTREAM'] } : {}),
+      mcpRoutes, onChildSpawn: spawned,
+    };
     try {
-      gateway = await startGateway({ binary: required('AGENTGATEWAY_BINARY'), configFile: `${directory}/gateway.json`,
-        usageFile: `${directory}/usage.jsonl`, keyFile: process.env['MODEL_KEY_FILE'] ?? resolve(import.meta.dirname, '../../../.keys/.openai-key'), port: Number(required('MODEL_GATEWAY_PORT')),
-        readinessPort: Number(required('MODEL_READINESS_PORT')), decisionUrl: decision.url, issuer: required('TOKEN_ISSUER'),
-        ...(process.env['MODEL_UPSTREAM'] ? { upstream: process.env['MODEL_UPSTREAM'] } : {}),
-        mcpRoutes,
-      });
+      gateway = await startGateway(gatewayOptions);
       const usageCursor = { offset: 0 };
       let eventStoreUnavailableSince: number | undefined;
       let eventStoreUnavailableErrorName: string | undefined;
       while (!stop.signal.aborted) {
         await locked.query('SELECT 1'); // Lease connection loss must stop admission.
         watch.tick(watchFailed);
+        configurationWorker!.tick(configurationFailed);
         if (!gateway.healthy()) throw new Error('Gateway stopped');
         let budgetTickSucceeded = false;
         try {
@@ -134,7 +155,12 @@ try {
         }
         await delay(100, undefined, { signal: stop.signal });
       }
-    } finally { watch.close(); await gateway?.stop(); await decision.close(); }
+    } finally {
+      watch.close();
+      await configurationWorker?.close();
+      await gateway?.stop();
+      await decision.close();
+    }
   });
 } catch (error) {
   if (!stop.signal.aborted) throw error;

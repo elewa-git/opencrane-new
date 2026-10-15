@@ -410,7 +410,7 @@ async function up(fresh: boolean) {
     DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default',
     MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
     CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
-    MODEL_MCP_ROUTES: JSON.stringify([approvalRoute]),
+    MODEL_GATEWAY_CONTROL_PORT: settings['MODEL_GATEWAY_CONTROL_PORT']!,
     MODEL_STUB_MCP_GENERATION: approvalRoute.generation,
     MODEL_STUB_MCP_REVISION: approvalRevision,
     MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, MODEL_KEY_FILE: `${directory}/model-stub-key`,

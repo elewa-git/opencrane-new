@@ -7,6 +7,13 @@ import { publicationDigest, publicationEntry } from './publication.ts';
 type Configuration = ReturnType<typeof gatewayConfigurationSchema.parse>;
 type ConfigurationStore = Pick<EventStore, 'append' | 'head' | 'readEvent' | 'readStream'>;
 
+export class PublicationUnavailable extends Error {
+  constructor() {
+    super('Publication is unavailable');
+    this.name = 'PublicationUnavailable';
+  }
+}
+
 function requested(row: StoredEvent) {
   return row.event.type === 'gateway.configuration_requested';
 }
@@ -34,7 +41,7 @@ async function currentMember(store: ConfigurationStore, silo: string, serverId: 
   if (!intent || intent.commandId !== changeRef || !entry ||
       intent.reviewRevision !== entry.reviewRevision ||
       intent.fragmentDigest !== publicationDigest(entry)) {
-    throw new Error('Publication is unavailable');
+    throw new PublicationUnavailable();
   }
   return { entry, changeRef, sourceSequence: state.sequence, fragmentDigest: intent.fragmentDigest };
 }
@@ -81,6 +88,19 @@ export async function gatewayConfigurationCurrent(store: ConfigurationStore, sil
   return latest !== undefined && configurationFromRow(latest).recordDigest === recordDigest;
 }
 
+async function currentCarriedMembers(store: ConfigurationStore, silo: string,
+  previous: Configuration | undefined, serverId: string) {
+  const members: Configuration['members'] = [];
+  for (const member of previous?.members ?? []) {
+    if (member.entry.serverId === serverId) continue;
+    const rows = await history(store, exactMcpSubject(member.entry.serverId), silo);
+    if (gatewayMemberCurrent(rows, member)) {
+      members.push(member);
+    }
+  }
+  return members;
+}
+
 export async function prepareGatewayConfiguration(store: ConfigurationStore, silo: string,
   serverId: string, changeRef: string): Promise<Configuration> {
   const subject = `gateway-config-${silo}`;
@@ -97,20 +117,13 @@ export async function prepareGatewayConfiguration(store: ConfigurationStore, sil
           return member.entry.serverId === serverId && member.changeRef === changeRef;
         }
         if (!record.members.some(matchesIntent)) {
-          throw new Error('Publication conflicts');
+          throw new PublicationUnavailable();
         }
         return record;
       }
     }
     const previous = records.at(-1);
-    const members: Configuration['members'] = [];
-    for (const member of previous?.members ?? []) {
-      if (member.entry.serverId === serverId) {
-        continue;
-      }
-      // Keep the review used by the last generation while another intent awaits preparation.
-      members.push(member);
-    }
+    const members = await currentCarriedMembers(store, silo, previous, serverId);
     const changed = await currentMember(store, silo, serverId, changeRef);
     members.push(changed);
     const saved = { changeRef, generation: (previous?.generation ?? 0) + 1,

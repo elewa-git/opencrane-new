@@ -254,9 +254,14 @@ it('refuses distinct paths that would share a gateway route name', refusesAmbigu
 function fixedRoutesStayUnchanged() {
   const fixed: GatewayRenderSettings = { port: settings.port, readinessPort: settings.readinessPort,
     decisionUrl: settings.decisionUrl, issuer: settings.issuer, keyFile: settings.keyFile,
-    memoryRoute: settings.memoryRoute };
-  for (const options of [fixed, settings]) {
-    const memoryRoutes = [options.memoryRoute];
+    memoryRoute: settings.memoryRoute! };
+  const { memoryRoute: _memory, ...withoutMemory } = settings;
+  const configurations: GatewayRenderSettings[] = [fixed, settings, withoutMemory];
+  for (const options of configurations) {
+    const memoryRoutes = [];
+    if (options.memoryRoute) {
+      memoryRoutes.push(options.memoryRoute);
+    }
     const expected = gatewayConfig(options.port, options.readinessPort, options.decisionUrl,
       options.keyFile, options.issuer, options.upstream, memoryRoutes, options.egressDecisionUrl);
     const rendered = renderGatewayConfiguration(record([]), options);

@@ -13,10 +13,10 @@ flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links, later grant changes and access changes through saving, tool reviews, hosted image status and registration, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes and child answers only while their reviewed results remain valid, internal child requests and creation with first inputs, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
-  nats -->|saved child leave results, spending stop reasons and departure cleanup| server
+  nats -->|saved child leave results, spending stop reasons, departure cleanup and gateway configurations| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools, nightly memory status and history| postgres
+  server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, nightly memory status and history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; sends individual stops; acknowledges and checks reports, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies| computer
@@ -246,6 +246,11 @@ A participant can read why a chat turn stopped for spending. Only the person who
 asked for that turn sees its limit. Reading the saved result starts no work.
 Failed reads still check access before reporting that the result is unavailable.
 
+The models process shares a PostgreSQL lock with the preparation worker while
+replacing the gateway file. It delivers the latest saved configuration and checks its
+reply while it holds the budget worker lease. Startup settings supply no tool routes.
+Reviewed tool calls stay unavailable until generation checks are connected.
+
 A shared child chat's creator can invite someone after acknowledging that all shared
 history will be visible. The invite gives access only to that child. The creator can
 remove others, and others can leave. Saved removals stop reads and live connections
@@ -274,7 +279,7 @@ These checks do not change access to read the chat or view the desktop.
 
 The models process checks each configured tool server at startup and before its saved
 list expires. Calls pause when a check fails or finds a change. A changed server stays
-paused until the publication work can confirm a new configuration; that part is not built yet.
+paused until calls can check the observed configuration; that part is not built yet.
 
 The person who set up nightly memory upkeep can read its blocked and missed history.
 These reads contain dates and fact references, with no saved memory text or new work.
