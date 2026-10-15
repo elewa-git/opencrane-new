@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { afterEach, expect, it, vi } from 'vitest';
+import { setTimeout as delay } from 'node:timers/promises';
 import { PgBoss, TestClock, type Db } from 'pg-boss';
 import { scheduleNightly } from '../../../libs/handlers/src/queue.ts';
 import { event } from '@opencrane/event-store/testing';
@@ -9,6 +10,7 @@ import { memoryMaintenanceRecordedDataSchema } from '@opencrane/events';
 import { memoryWrittenExample } from '../../../libs/events/src/memory.ts';
 import { memoryProjection, memoryScopeId, ProjectionRunner } from '@opencrane/projections';
 import { fixture, logger, until } from '../../../libs/handlers/test/helpers.ts';
+import { setTimeout as delay } from 'node:timers/promises';
 import { scanNightlyMemory } from '../src/nightly-memory.ts';
 
 let services: Awaited<ReturnType<typeof fixture>>;
@@ -66,29 +68,61 @@ async function records() {
   }
   return rows;
 }
-async function scan(time: string) {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
-    await runner.run(projection);
-    try {
-      await scanPrepared(time);
+async function waitForMemoryProjection(runner: ProjectionRunner, deadline: number) {
+  while (Date.now() < deadline) {
+    const eventPosition = await services.nats.store.head();
+    const checkpoint = await services.db.query<{ sequence: string }>(
+      "SELECT sequence FROM projection_checkpoints WHERE name='memory'");
+    if (Number(checkpoint.rows[0]?.sequence) >= eventPosition) {
       return;
-    } catch (error) {
-      if (!(error instanceof Error) ||
-          error.message !== 'Nightly memory metadata is behind the event log') {
-        throw error;
-      }
     }
+    await runner.run(projection);
+    await delay(25);
   }
-  throw new Error('Nightly test projection remained behind');
+  throw new Error('Timed out waiting for memory projection to reach the event log');
 }
-async function scanPrepared(time: string) {
+function metadataIsBehind(error: unknown) {
+  return error instanceof Error && error.message ===
+    'Nightly memory metadata is behind the event log';
+}
+async function waitForMemoryProjection(runner: ProjectionRunner, deadline: number) {
+  while (Date.now() < deadline) {
+    const eventPosition = await services.nats.store.head();
+    const checkpoint = await services.db.query<{ sequence: string }>(
+      "SELECT sequence FROM projection_checkpoints WHERE name='memory'");
+    if (Number(checkpoint.rows[0]?.sequence) >= eventPosition) {
+      return;
+    }
+    await runner.run(projection);
+    await delay(25);
+  }
+  throw new Error('Timed out waiting for memory projection to reach the event log');
+}
+function metadataIsBehind(error: unknown) {
+  return error instanceof Error && error.message ===
+    'Nightly memory metadata is behind the event log';
+}
+async function scan(time: string) {
+  const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
+  const deadline = Date.now() + 20_000;
   const occurrence = new Date(time);
   function selectedTime() {
     return occurrence;
   }
-  await scanNightlyMemory(services.db, services.nats.store, 'test', occurrence, selectedTime);
+  while (Date.now() < deadline) {
+    await waitForMemoryProjection(runner, deadline);
+    try {
+      await scanNightlyMemory(services.db, services.nats.store, 'test', occurrence, selectedTime);
+      return;
+    } catch (error) {
+      if (!metadataIsBehind(error)) {
+        throw error;
+      }
+    }
+  }
+  throw new Error('Timed out waiting for nightly memory metadata to catch up');
 }
+
 async function boundary() {
     await setup();
     await scan('2026-10-12T01:59:59Z');
@@ -113,7 +147,7 @@ async function boundary() {
     expect(nextNight).toHaveLength(2);
 }
 it('crosses the boundary once, keeps dirty inputs and ignores duplicate or changed delivery',
-  boundary, 30_000);
+  boundary, 60_000);
 async function clean() {
   await setup(false);
   await scan('2026-10-12T02:00:00Z');

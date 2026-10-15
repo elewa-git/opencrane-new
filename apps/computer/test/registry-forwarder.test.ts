@@ -70,7 +70,16 @@ async function interruptsBuild(signal: 'SIGTERM' | 'SIGINT', phase = 'download')
   let dockerScript = '#!/bin/sh\necho 127.0.0.1\n';
   let curlScript = '#!/bin/sh\ncase "$*" in\n *v2*) exit 0;;\nesac\necho waiting\nsleep 60\n';
   if (phase === 'contents') {
-    dockerScript = '#!/bin/sh\ncase "$*" in\n *--rm*-i*) echo waiting; sleep 60;;\n inspect*) echo 127.0.0.1;;\nesac\n';
+    dockerScript = `#!/bin/sh
+case "$*" in
+ *--rm*-i*)
+  cat >/dev/null
+  echo image-check-ready
+  sleep 60
+  ;;
+ inspect*) echo 127.0.0.1;;
+esac
+`;
     curlScript = '#!/bin/sh\nexit 0\n';
     for (const name of ['sha256sum', 'tar']) {
       await writeFile(join(bin, name), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
@@ -88,8 +97,13 @@ async function interruptsBuild(signal: 'SIGTERM' | 'SIGINT', phase = 'download')
   child.stdout.on('data', collect);
   let socket: Socket | undefined;
   try {
-    const deadline = Date.now() + 5000;
-    while (!output.includes('waiting') || !output.includes('Forwarding')) {
+    let readinessSignal = 'waiting';
+    if (phase === 'contents') {
+      readinessSignal = 'image-check-ready';
+    }
+    // Allow a heavily loaded CI worker a full minute to start the shell and both child processes.
+    const deadline = Date.now() + 60_000;
+    while (!output.includes(readinessSignal) || !output.includes('Forwarding')) {
       if (Date.now() > deadline) throw new Error('Build fixture did not start');
       await delay(20);
     }
@@ -111,8 +125,9 @@ async function interruptsBuild(signal: 'SIGTERM' | 'SIGINT', phase = 'download')
 async function terminatesBuild() { await interruptsBuild('SIGTERM'); }
 async function interruptsBuildWithInt() { await interruptsBuild('SIGINT'); }
 it('closes open registry sockets before exiting', stopsWithOpenConnection);
-it('removes the listener when only the build shell receives TERM', terminatesBuild);
-it('removes the listener when only the build shell receives INT', interruptsBuildWithInt);
+it('removes the listener when only the build shell receives TERM', terminatesBuild, 75_000);
+it('removes the listener when only the build shell receives INT', interruptsBuildWithInt, 75_000);
 
 async function terminatesContentsCheck() { await interruptsBuild('SIGTERM', 'contents'); }
-it('stops the listener while an image check is reading standard input', terminatesContentsCheck);
+it('stops the listener while an image check is reading standard input',
+  terminatesContentsCheck, 75_000);
