@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { getEventDefinition, hostedImageCheckedSchema } from '@opencrane/events';
+import { getEventDefinition, hostedImageCheckedSchema, type EventEnvelope } from '@opencrane/events';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
 import { z } from 'zod';
@@ -41,8 +41,7 @@ function resultStatus(result: Result, now: number): Admission['status'] {
   return 'admitted';
 }
 
-export function foldHostedAdmission(rows: StoredEvent[], silo: string, serverId: string,
-  now = new Date()): Admission | undefined {
+function queuedAdmission(rows: StoredEvent[], silo: string, serverId: string): Admission | undefined {
   const first = rows[0]?.event;
   if (!first || first.type !== 'mcp.server_registered' || first.silo !== silo ||
       first.subject !== `mcp-${serverId}` || first.principal?.kind !== 'human') return;
@@ -55,13 +54,16 @@ export function foldHostedAdmission(rows: StoredEvent[], silo: string, serverId:
   const installation = z.object({ attemptId: z.literal(1),
     platform: hostedImageCheckedSchema.shape.platform }).parse(registration['installation']);
   const imageDigest = String(registration['locator']).split('@sha256:')[1]!;
-  const queued: Admission = { serverId, ...installation, imageDigest,
-    queuedAt: first.time, status: 'checking' };
+  return { serverId, ...installation, imageDigest, queuedAt: first.time, status: 'checking' };
+}
+
+export function foldHostedAdmission(rows: StoredEvent[], silo: string, serverId: string,
+  now = new Date()): Admission | undefined {
+  const queued = queuedAdmission(rows, silo, serverId);
+  if (!queued) return;
   for (const row of rows.slice(1)) {
     const event = row.event;
-    if (event.type !== 'mcp.image_checked' || event.silo !== silo ||
-        event.subject !== first.subject || event.source !== 'models' ||
-        event.principal?.kind !== 'system' || event.principal.id !== 'models') continue;
+    if (!modelsResult(event, silo, serverId)) continue;
     const checked = hostedImageCheckedSchema.safeParse(event.data);
     if (!checked.success || !matches(queued, checked.data)) continue;
     const recordedAt = Date.parse(event.time);
@@ -72,6 +74,11 @@ export function foldHostedAdmission(rows: StoredEvent[], silo: string, serverId:
   return queued;
 }
 
+function modelsResult(event: EventEnvelope, silo: string, serverId: string) {
+  return event.type === 'mcp.image_checked' && event.silo === silo &&
+    event.subject === `mcp-${serverId}` && event.source === 'models' &&
+    event.principal?.kind === 'system' && event.principal.id === 'models';
+}
 function matches(state: Admission, result: Result) {
   return state.serverId === result.serverId && state.attemptId === result.attemptId &&
     state.imageDigest === result.imageDigest && state.platform === result.platform;
@@ -120,9 +127,8 @@ export async function writeHostedAdmission(store: EventStore, silo: string, raw:
   if (appended.status !== 'appended') return appended;
   // Check saved bytes because simultaneous retries can reach event-store deduplication.
   const saved = await store.readEvent(appended.sequence);
-  if (!same(saved.event.data, result) || saved.event.source !== 'models' ||
-      saved.event.principal?.kind !== 'system' || saved.event.principal.id !== 'models' ||
-      saved.event.silo !== silo || saved.event.subject !== subject ||
-      saved.event.type !== 'mcp.image_checked') return conflict;
+  if (!same(saved.event.data, result) || !modelsResult(saved.event, silo, result.serverId)) {
+    return conflict;
+  }
   return { status: 'appended' as const };
 }

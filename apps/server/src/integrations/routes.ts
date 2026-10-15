@@ -81,18 +81,8 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
 }
 
 async function authorisedRequest(path: string, request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string, now: Date) {
-      if (path.endsWith('/admission')) {
-        if (!options.store) return reply.code(503).send({ status: 'unavailable' });
-        const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
-        const { serverId } = params.parse(request.params);
-        const admission = await readHostedAdmission(options.store, options.silo, serverId);
-        if (!admission) return reply.code(404).send({ status: 'not_found' });
-        return reply.send(hostedAdmissionSchema.parse(admission));
-      }
-      if (path.endsWith('/:commandId')) {
-        if (!options.store) return reply.code(503).send({ status: 'unavailable' });
-        const params = z.object({ commandId: z.string() }).parse(request.params);
-        return reply.send(await hostedRegistrationChange(options.store, options.silo, params.commandId));
+      if (path.endsWith('/admission') || path.endsWith('/:commandId')) {
+        return hostedStatus(path, request, reply, options);
       }
       if (path.endsWith('/discovery')) {
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
@@ -120,6 +110,20 @@ async function authorisedRequest(path: string, request: FastifyRequest, reply: F
       const response: IntegrationsResponse = { rows: await options.catalogue.rows(options.silo), loadedAt: now.toISOString() };
       return reply.send(response);
  }
+
+async function hostedStatus(path: string, request: FastifyRequest, reply: FastifyReply,
+  options: IntegrationOptions) {
+  if (!options.store) return reply.code(503).send({ status: 'unavailable' });
+  if (path.endsWith('/:commandId')) {
+    const params = z.object({ commandId: z.string() }).parse(request.params);
+    return reply.send(await hostedRegistrationChange(options.store, options.silo, params.commandId));
+  }
+  const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
+  const { serverId } = params.parse(request.params);
+  const admission = await readHostedAdmission(options.store, options.silo, serverId);
+  if (!admission) return reply.code(404).send({ status: 'not_found' });
+  return reply.send(hostedAdmissionSchema.parse(admission));
+}
 
 async function registerIntegration(request: FastifyRequest, reply: FastifyReply,
   config: AuthConfig, options: IntegrationOptions, memberId: string) {

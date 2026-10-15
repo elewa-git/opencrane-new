@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { execFile } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -109,8 +110,9 @@ async function installed() {
 }
 async function savesResultAndReplays() {
   const serverId = await installed();
-  expect((await status(serverId)).json()).toMatchObject({ status: 'checking',
-    queuedAt: expect.any(String) });
+  const queued = (await status(serverId)).json<{ status: string; queuedAt: string }>();
+  expect(queued.status).toBe('checking');
+  expect(Number.isFinite(Date.parse(queued.queuedAt))).toBe(true);
   const payload = result(serverId);
   payload.checks.signature = { ...dated,
     expiresAt: new Date(now.getTime() + 1_800_000).toISOString() };
@@ -180,7 +182,8 @@ const invalid = [
 async function refusesResult(patch: Record<string, unknown>) {
   const serverId = await installed();
   const valid = result(serverId);
-  const checks = { ...valid.checks, ...(patch['checks'] as object ?? {}) };
+  const checkPatch = z.record(z.string(), z.unknown()).parse(patch['checks'] ?? {});
+  const checks = { ...valid.checks, ...checkPatch };
   const payload = { ...valid, ...patch, checks };
   expect((await writeHostedAdmission(nats.store, 'test', payload, now)).status).toBe('conflict');
   const rows = await history(nats.store, `mcp-${serverId}`, 'test');
