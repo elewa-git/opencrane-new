@@ -37,6 +37,7 @@ async function scriptedDecision(setup: Fixture, reply: Reply) {
       response.end(JSON.stringify(setup.identity.jwks));
       return;
     }
+    expect(request.headers['x-provider-key']).toBeUndefined();
     paths.push(request.url ?? '');
     if (!reply.allowed) {
       response.writeHead(403);
@@ -134,11 +135,11 @@ async function keepsProductionRefused() {
     Object.assign(setup.options, managed);
     await setup.restart();
     const response = await setup.call();
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(403);
     expect(setup.received()).toBe(0);
     expect(setup.actor.state.reservations).toHaveLength(0);
   } finally {
     await setup.close();
   }
 }
-it('keeps the managed route refused by the production decision service', keepsProductionRefused);
+it('refuses a managed route without switch-on or bound claims', keepsProductionRefused);

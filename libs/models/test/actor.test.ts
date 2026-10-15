@@ -518,3 +518,33 @@ async function settlesExpiredLegacyHoldAfterReplay() {
 }
 it('settles later usage for an expired legacy hold without reopening admission after replay',
   settlesExpiredLegacyHoldAfterReplay);
+
+async function admitsOnlyCheckedManagedHolds(restart: boolean) {
+  await saveSwitchOn();
+  if (restart) {
+    actor = new BudgetActor(nats.store, 'test', now);
+    await actor.start();
+  }
+  const call = { providerId: 'primary', bindingSequence: 42, requestId: 'managed',
+    model: 'gpt-6-luna', priceTableId, computerId: 'computer', generation: 1,
+    assistantId: 'assistant', requesterId: 'alice', conversationId: 'conversation',
+    turnId: 'turn', threadId: 'thread', payingGroupId: 'group', contextDigest: 'a'.repeat(64) };
+  let checks = 0;
+  function confirm() {
+    checks++;
+    return Promise.resolve();
+  }
+  await expect(actor.reserve(call, 1)).rejects.toThrow('Provider setup changed');
+  const incomplete = { ...call, bindingSequence: undefined };
+  await expect(actor.reserve(incomplete, 1, confirm)).rejects.toThrow();
+  const legacy = { ...call, providerId: undefined, bindingSequence: undefined };
+  await expect(actor.reserve(legacy, 1, confirm)).rejects.toThrow('Provider setup changed');
+  const reservationId = await actor.reserve(call, 1, confirm);
+  expect(checks).toBeGreaterThan(0);
+  expect(actor.state.reservations).toHaveLength(1);
+  expect(actor.state.reservations[0]?.call).toEqual(call);
+  await actor.releaseUndispatched(reservationId);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 0, monthCents: 0 });
+}
+it.each([false, true])('admits only validated, checked managed holds after switch-on (restart: %s)',
+  admitsOnlyCheckedManagedHolds);
