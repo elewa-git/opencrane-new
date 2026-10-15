@@ -24,10 +24,10 @@ const providerSummary: SummaryKind<ProviderSummary> = {
 };
 
 export async function decisionProvider(store: EventStore, silo: string,
-  choice: { providerId: string; model: string }, deadline: number, head: number) {
+  choice: { providerId: string; model: string }, historyDeadline: number, head: number) {
   const subject = `provider-${choice.providerId}`;
   const current = await readStreamSummary(store, silo, subject,
-    providerSummary, deadline, takeProvider);
+    providerSummary, historyDeadline, takeProvider);
   const state = current.state;
   if (!state || state.providerId !== choice.providerId || state.provider !== 'openai' ||
       !state.secretRef || !current.savedCommandId || !state.enabledModels.includes(choice.model)) {
@@ -54,7 +54,7 @@ export async function decisionProvider(store: EventStore, silo: string,
     position = latest;
     return true;
   }
-  async function credential(secrets: ProviderSecrets | undefined) {
+  async function credential(secrets: ProviderSecrets | undefined, deadline: number) {
     if (!secrets) throw new Error('Provider custody unavailable');
     const value = await readCredential(secrets, reference, deadline);
     // Reject unusable credentials before holding money or constructing response headers.

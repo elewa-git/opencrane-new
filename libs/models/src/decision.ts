@@ -178,12 +178,13 @@ function knownDecisionRoute(url: string | undefined) {
 
 async function modelPermission(call: ModelCall, requestId: string,
   turnToken: z.infer<typeof legacyTurnSchema>,
-  activity: Awaited<ReturnType<typeof decisionActivity>>, providers?: ProviderVerificationOptions) {
+  activity: Awaited<ReturnType<typeof decisionActivity>>, deadline: number,
+  providers?: ProviderVerificationOptions) {
   if (activity.provider) {
     call.providerId = turnToken.providerId;
     call.bindingSequence = turnToken.bindingSequence;
   }
-  const credential = await activity.provider?.credential(providers?.secrets);
+  const credential = await activity.provider?.credential(providers?.secrets, deadline);
   return { credential, modelCall: { ...call, requestId } };
 }
 
@@ -262,18 +263,19 @@ export async function startDecision(
       await checkNativeCall(actor.store, actor.silo, computer, turnToken,
         checked.sequence, decisionDeadline);
       const managedTurn = requireManagedTurnClaims(checked.turn, managedRoute);
-      // Share two seconds between history and access because the gateway waits only that long.
-      // Read new activity before watching the small streams that decide access.
+      // Load managed history before starting the short access check.
+      const historyDeadline = managedRoute ? performance.now() + 10_000 : decisionDeadline;
       const activity = await decisionActivity(actor.store, actor.silo,
-        computer.assistant, turnToken.conversation, turnToken.turn, decisionDeadline, managedTurn);
+        computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);
       requireManagedTurnClaims(checked.turn, activity.managedCallsEnabled);
       const conversation = activity.conversation;
       requireActiveConversationTurn(conversation, turnToken.turn);
       const turn = activeTurn(turnToken, activity.computer, checked.sequence);
       const admittedAt = queuedPosition(conversation, turn);
-      const grants = await modelGrantHistory(actor, turnToken.model, route, decisionDeadline);
+      const grants = await modelGrantHistory(actor, turnToken.model, route, historyDeadline);
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const authority = await decisionAuthorityFence(actor.store, started,
+      const accessStarted = managedRoute ? performance.now() : started;
+      const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);
       let needsApproval = false;
       async function confirmAccess() {
@@ -369,7 +371,7 @@ export async function startDecision(
         'model', body.model, fresh, conversation, turn, grants);
       contextDigest = call.contextDigest;
       const { credential, modelCall } = await modelPermission(
-        call, requestId, turnToken, activity, providers);
+        call, requestId, turnToken, activity, fresh.deadline, providers);
       requireConnectedClient(req, res);
       // Keep the original turn stopped after a limit increase, before holding any money.
       const reservation = await actor.reserve(modelCall, amountCents, fresh, admittedAt);

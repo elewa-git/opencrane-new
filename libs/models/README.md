@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|locks preparation during replacement; delivers and probes only the latest current configuration; checks calls, spending, holds, stops and managed model calls; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|locks preparation during replacement; delivers and probes only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on; saves hosted image results and registration, publication receipts, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions; checks private child calls and root activity before refusing them| store["libs/event-store<br/>event log"]
 ```
@@ -78,8 +78,9 @@ This internal API has no child-chat caller yet.
   until destination checks and guarded sockets are ready.
 - Provide an optional AI gateway route that uses the key in each decision reply.
   It keeps the provider's token counts and excludes caller credentials from the
-  upstream request. Normal startup does not select it. The decision service still
-  refuses these calls, so managed chat is not available yet.
+  upstream request. The decision service reads provider history before starting its
+  short access check, then checks the saved turn, provider and key before holding money.
+  Normal startup does not select this route, so managed chat is not available yet.
 - Read private tool-instance status and original changes for their current member owner.
   Save an owner stop request with one event. Wake stays refused until hosted admission
   and personal profiles are available. No instance starts or credentials are released.

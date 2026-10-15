@@ -296,9 +296,12 @@ matching the recorded turn. `decision-provider` keeps at most 64 exact-provider
 summaries, each holding only the latest configuration and verification facts.
 It checks the same-silo OpenAI connection, saved-key command and enabled model,
 recomputes the custody reference and reads the key before the disconnect guard.
-History, custody and rechecks share the original two-second deadline. Rechecks
-start at the position captured before history, including changes before authority
-opens. Model removal refuses; verification, rotation and binding changes do not.
+Managed history reads have their own ten-second limit. After history is loaded,
+access checks start a fresh two-second limit, shared by custody reads and rechecks.
+Only the small access streams are watched. Activity rechecks start at the position
+captured before history, so changes during loading still refuse the call.
+Model removal refuses; verification, rotation and binding changes do not.
+A disconnected client is refused before money is held.
 
 The actor validates the reservation before either switch-on guard. Only complete
 managed calls with a request id, generation, dispatch gate and access callback
@@ -308,10 +311,11 @@ zero. Later usage keeps the saved payer and tariff, with once-only settlement.
 
 Own checks and remaining qualification are recorded in the PR. Tests cover real
 switch-on, restart without custody reads or new holds, model-selection races,
-a warmed 5,000-event provider history, shared custody and concurrent credentials.
-Cold catch-up can refuse at two seconds and continue in the background; a later call
-uses the caught-up summary. The local cold 5,000-event read exceeded that deadline and refused; it is not a
-passing cold-admission performance result.
+cold and warmed 5,000-event provider histories, shared custody and concurrent credentials.
+The cold-history test calls the decision HTTP endpoint and delivers 5,000 saved
+events to an empty decision summary after a controlled delay beyond two seconds. It also checks the fixed refusal and zero money held after the history
+limit, and refusal when access changes after history. The gateway still stops waiting
+after two seconds; these tests do not claim a cold call through that gateway succeeds.
 Startup selection, fallback-key refusal, static-route removal and dev-stack custody
 wiring remain for PR 5c. No stack or paid provider call proves this route yet.
 
@@ -559,7 +563,7 @@ reached OpenFGA before admission. Decision receipts cover the requester, assista
 and team grants, including revoked team grants. Another member's direct grant
 needs no receipt for this call.
 
-Decisions share one two-second budget for computer credentials, new
+Legacy model and MCP decisions share one two-second budget for computer credentials, new
 computer/conversation events and the access check. The gateway stops waiting
 for authorisation after two seconds, so the decision must fit within that limit.
 Decisions capture a log position before reading the histories. After reading

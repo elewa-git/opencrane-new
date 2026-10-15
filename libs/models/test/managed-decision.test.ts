@@ -282,8 +282,8 @@ async function isolatesSharedCustody() {
     'conversation', 'bound', performance.now() + 2000, binding);
   const second = await decisionActivity(other.store, 'other', 'assistant',
     'conversation', 'bound', performance.now() + 2000, binding);
-  expect(await first.provider?.credential(setup.secrets)).toBe(credential);
-  expect(await second.provider?.credential(setup.secrets)).toBe('other-silo-fixture-value');
+  expect(await first.provider?.credential(setup.secrets, performance.now() + 2000)).toBe(credential);
+  expect(await second.provider?.credential(setup.secrets, performance.now() + 2000)).toBe('other-silo-fixture-value');
 }
 it('keeps two silos with identical connection ids separate in shared custody', isolatesSharedCustody);
 
