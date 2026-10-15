@@ -2782,7 +2782,10 @@ only the message author receives `limitCents`. Work includes this chat's visible
 recorded turns only. A terminal report, computer close or loss proves execution ended.
 `positions.stop` is the budget stop position; `turn` is its chat stop record position
 or null. The other positions are the last conversation, computer and budget rows read.
-Missing stop details, unfinished handler work and failed or timed-out reads return 503.
+Loading failures still pass through that read-access check before any reply.
+Callers without access receive the same 403 refusal as for an unknown turn.
+Authorised readers receive 503 for missing stop details, unfinished handler work,
+and failed or timed-out reads.
 Tests use real dependencies and a fresh store connection. No read appends or sends work.
 Live qualification is NOT RUN. WebSocket status, call status and restart/leader
 reconciliation remain part b; root stops remain with #90.

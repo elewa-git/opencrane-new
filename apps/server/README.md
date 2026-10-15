@@ -238,6 +238,7 @@ can confirm it ended. Public closing and freezing displayed output are not built
 
 A participant can read why a chat turn stopped for spending. Only the person who
 asked for that turn sees its limit. Reading the saved result starts no work.
+Failed reads still check access before reporting that the result is unavailable.
 
 A shared child chat's creator can invite someone after acknowledging that all shared
 history will be visible. The invite gives access only to that child. The creator can

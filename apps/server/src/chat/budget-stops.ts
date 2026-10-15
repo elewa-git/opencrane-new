@@ -34,10 +34,20 @@ export function registerBudgetStopRoutes(app: FastifyInstance, config: AuthConfi
     try {
       const { conversationId } = parameters.parse(request.params);
       const { turnId } = query.parse(request.query);
-      const loaded = await load(options, conversationId, turnId);
+      let loaded: Awaited<ReturnType<typeof load>>;
+      let loadingError: Error | undefined;
+      try {
+        loaded = await load(options, conversationId, turnId);
+      } catch (error) {
+        loadingError = new Error('Turn unavailable', { cause: error });
+      }
       const checks = { write: false, conversationId };
-      // Check access after all history reads so a removal during loading takes effect.
+      // Check access even after failed reads so outsiders cannot discover saved turns.
+      // Keep this check after loading so a removal during loading takes effect.
       const { memberId, access } = await requireMember(request, reply, config, options, checks);
+      if (loadingError) {
+        throw loadingError;
+      }
       if (!loaded || loaded.message.sequence < access.historyPosition) {
         return reply.code(403).send({ status: 'refused' });
       }
