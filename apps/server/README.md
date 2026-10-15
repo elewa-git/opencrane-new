@@ -13,7 +13,7 @@ flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links, later grant changes and access changes through saving, tool reviews, hosted image status and registration, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes and child answers only while their reviewed results remain valid, internal child requests and creation with first inputs, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
-  nats -->|saved child leave results and spending stop reasons| server
+  nats -->|saved child leave results, spending stop reasons and departure cleanup| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools, nightly memory status and history| postgres
@@ -115,6 +115,7 @@ have not been checked. Unrelated read receipts do not require reading the event 
 
 - Returns missing approval details and accepts requester retries after verified non-dispatch.
 - Lets admins review a departure, remove access and recover the saved removal receipt.
+  Reports whether cleanup is still applying, complete or unknown from saved events.
   Other members can keep posting messages and updating chat tables during removal.
 - Records owner appointments as requests. Counts a successor only after confirmation.
 - Lets owners and admins save provider choices and pauses, count affected assistants
