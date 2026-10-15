@@ -1357,6 +1357,8 @@ it.each(['direct', 'group'])(
     const socketCount = api.sockets.length;
     expect(root(fixture).textContent).toContain('Is the Tuesday slot still open?');
     socket?.onclose?.(new CloseEvent('close', { code: 1008 }));
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('You no longer have access');
     await settle(fixture);
 
     expect(root(fixture).textContent).toContain('You no longer have access');

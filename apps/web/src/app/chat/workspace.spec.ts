@@ -480,6 +480,7 @@ it('clears an open session after a bare policy close without another socket', as
 
   context.socket.onclose?.(new CloseEvent('close', { code: 1008 }));
   context.fixture.detectChanges();
+  expect(context.root.textContent).toContain('You no longer have access');
   await context.fixture.whenStable();
   context.fixture.detectChanges();
   await new Promise(requestAnimationFrame);

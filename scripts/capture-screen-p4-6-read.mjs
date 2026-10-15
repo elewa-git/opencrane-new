@@ -126,7 +126,6 @@ async function capture(browser, frame, width) {
       const notice = page.getByText('You no longer have access');
       await notice.waitFor();
       await page.evaluate(afterNextFrame);
-      await page.evaluate(afterNextFrame);
       const bounds = await notice.boundingBox();
       assert(bounds && bounds.y >= 56 && bounds.y < 400,
         'The access notice stays near the top of the transcript');
