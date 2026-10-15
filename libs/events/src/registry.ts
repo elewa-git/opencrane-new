@@ -61,7 +61,8 @@ const maintenanceRecordedExample: MaintenanceRecord = {
   intendedAt: '2026-10-12T02:00:00.000Z',
   selectedAt: '2026-10-12T02:00:00.000Z',
   inputRefs: [],
-  action: 'refused', reason: 'qualification_blocked',
+  reviewedPosition: 0,
+  action: 'no_changes', reason: null,
 };
 
 export const eventRegistry: readonly EventDefinition[] = [

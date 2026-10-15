@@ -5,6 +5,7 @@ import { authorityFence, history, readActiveMember } from '@opencrane/models';
 import { memoryMaintenanceBoundDataSchema, memoryMaintenanceRecordedDataSchema,
   parseEventByType } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
+import { selectMaintenanceInputs, type MaintenanceFact } from '@opencrane/projections';
 import { memoryAccessChecks, scopeAccess, readAssistant, MemoryRefused,
   type MemoryOptions, type Scope } from './access.ts';
 import { MemoryConflict, memorySnapshot } from './reads.ts';
@@ -21,9 +22,59 @@ export function bindingReceipt(row: StoredEvent) {
   return { outcome: 'saved', binding, savedAt: row.event.time, dispatch: 'disabled' };
 }
 
+function nextNight(now: Date, savedAt: string | null): string {
+  const after = Math.max(now.getTime(), Date.parse(savedAt ?? '1970-01-01T00:00:00Z'));
+  const boundary = new Date(after);
+  boundary.setUTCHours(2, 0, 0, 0);
+  if (boundary.getTime() <= after) {
+    boundary.setUTCDate(boundary.getUTCDate() + 1);
+  }
+  return boundary.toISOString();
+}
+
+type FactRow = { memory_id: string; revision: string; expires_at: string | null;
+  pinned: boolean; position: string; content_status: string; ciphertext: string };
+
+function maintenanceFact(row: FactRow): MaintenanceFact {
+  return { memoryId: row.memory_id, revision: Number(row.revision),
+    expiresAt: row.expires_at, pinned: row.pinned, position: Number(row.position),
+    status: row.content_status, encryptedBytes: Buffer.from(row.ciphertext, 'base64').byteLength };
+}
+
+type MaintenanceRun = ReturnType<typeof memoryMaintenanceRecordedDataSchema.parse>;
+
+async function factChangeStatus(options: MemoryOptions, scope: Scope, position: number,
+  runs: MaintenanceRun[], savedAt: string | null) {
+  const facts = await options.db.query<FactRow>(`SELECT memory_id, revision, expires_at,
+    pinned, position, content_status, ciphertext FROM memory_facts
+    WHERE silo=$1 AND scope_id=$2 AND position<=$3`,
+  [options.silo, scope.scopeId, position]);
+  const changes = await options.db.query<{ position: string; outcome: string }>(
+    `SELECT position, outcome FROM memory_changes
+     WHERE silo=$1 AND scope_id=$2 AND position<=$3`,
+    [options.silo, scope.scopeId, position]);
+  let lastChangePosition = 0;
+  let lastForgetPosition = 0;
+  for (const change of changes.rows) {
+    const changePosition = Number(change.position);
+    lastChangePosition = Math.max(lastChangePosition, changePosition);
+    if (change.outcome === 'forgotten') {
+      lastForgetPosition = Math.max(lastForgetPosition, changePosition);
+    }
+  }
+  const factMetadata = facts.rows.map(maintenanceFact);
+  const now = new Date();
+  const selection = selectMaintenanceInputs(factMetadata, runs,
+    lastChangePosition, lastForgetPosition, now.toISOString());
+  const status = selection.dirty ? 'qualification_blocked' : 'clean';
+  const nextAt = selection.dirty ? nextNight(now, savedAt) : null;
+  return { status, nextAt, waitingCount: selection.waitingCount };
+}
+
 export async function maintenanceStatus(options: MemoryOptions, scope: Scope, requester: string) {
   const snapshot = await memorySnapshot(options, scope);
-  const result = await options.db.query<{ data: unknown }>(`SELECT binding.data
+  const result = await options.db.query<{ data: unknown; saved_at: string | null }>(
+    `SELECT binding.data, binding.saved_at
     FROM projection_checkpoints checkpoint JOIN projection_generations generation USING (name)
     LEFT JOIN memory_maintenance_bindings binding ON binding.silo=$1 AND binding.scope_id=$2
     WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3 AND generation.generation=$4`,
@@ -39,29 +90,40 @@ export async function maintenanceStatus(options: MemoryOptions, scope: Scope, re
       throw new MemoryRefused();
     }
     status = 'disabled';
-    if (binding.enabled) {
-      status = 'qualification_blocked';
-    }
   }
   const runs = await options.db.query<{ data: unknown }>(
     `SELECT run.data FROM projection_checkpoints checkpoint
      JOIN projection_generations generation USING (name)
      LEFT JOIN LATERAL (SELECT data FROM memory_maintenance_runs
-       WHERE silo=$1 AND scope_id=$2 AND position<=$3 ORDER BY position DESC LIMIT 20) run ON true
+       WHERE silo=$1 AND scope_id=$2 AND position<=$3 ORDER BY position DESC) run ON true
      WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3 AND generation.generation=$4`,
     [options.silo, scope.scopeId, snapshot.position, snapshot.generation]);
   if (!runs.rows.length) {
     throw new Error('Memory maintenance history unavailable');
   }
+  const allRuns = [];
+  for (const row of runs.rows) {
+    if (row.data !== null) {
+      allRuns.push(memoryMaintenanceRecordedDataSchema.parse(row.data));
+    }
+  }
+  let waitingCount = 0;
+  let nextAt: string | null = null;
+  if (binding?.enabled) {
+    const state = await factChangeStatus(options, scope, snapshot.position,
+      allRuns, result.rows[0].saved_at);
+    status = state.status;
+    nextAt = state.nextAt;
+    waitingCount = state.waitingCount;
+  }
   const history = [];
-  const empty = { status, binding, dispatch: 'disabled', nextAt: null, history: [] };
+  const empty = { status, binding, dispatch: 'disabled', nextAt, waitingCount, history: [] };
   const encodedEmpty = JSON.stringify(empty);
   let bytes = Buffer.byteLength(encodedEmpty);
-  for (const row of runs.rows) {
-    if (row.data === null) {
-      continue;
+  for (const run of allRuns) {
+    if (history.length === 20) {
+      break;
     }
-    const run = memoryMaintenanceRecordedDataSchema.parse(row.data);
     const encodedRun = JSON.stringify(run);
     bytes += Buffer.byteLength(encodedRun) + 1;
     if (bytes > 16_384) {
@@ -69,7 +131,7 @@ export async function maintenanceStatus(options: MemoryOptions, scope: Scope, re
     }
     history.push(run);
   }
-  return { status, binding, dispatch: 'disabled', nextAt: null, history };
+  return { status, binding, dispatch: 'disabled', nextAt, waitingCount, history };
 }
 
 function requireMatchingScope(scope: Scope, input: BindingInput,

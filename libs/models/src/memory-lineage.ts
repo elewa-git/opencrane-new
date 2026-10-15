@@ -1,7 +1,7 @@
 import { memoryWrittenDataSchema, memoryWrittenEventSchema, parseEventByType,
   type EventEnvelope, type MemoryIdentity } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
-import { memoryIdentity } from '@opencrane/projections';
+import { memoryIdentity, shouldReplaceMemoryRevision } from '@opencrane/projections';
 
 const changeIdentity = memoryWrittenDataSchema.pick({ scopeId: true, memoryId: true });
 const changeFields = changeIdentity.strip();
@@ -12,13 +12,10 @@ type Write = ReturnType<typeof memoryWrittenEventSchema.parse>;
 type Custody = { status: (identity: MemoryIdentity) => 'available' | 'destroyed' | 'missing' };
 
 function newerWrite(previous: Write | undefined, next: Write) {
-  if (!previous || !('schemaVersion' in previous.data)) {
-    return true;
-  }
-  if (!('schemaVersion' in next.data)) {
-    return false;
-  }
-  return next.data.revision > previous.data.revision;
+  const previousRevision = previous && 'schemaVersion' in previous.data
+    ? previous.data.revision : null;
+  const nextRevision = 'schemaVersion' in next.data ? next.data.revision : null;
+  return shouldReplaceMemoryRevision(previousRevision, nextRevision);
 }
 
 function recordChange(event: EventEnvelope, scopeId: string, hidden: Map<string, Status>) {
@@ -70,7 +67,7 @@ function memoryHistory(rows: StoredEvent[], silo: string, scopeId: string) {
 }
 
 function ownStatus(history: ReturnType<typeof memoryHistory>, scopeId: string,
-  custody: Custody, reference: Reference): Status {
+  custody: Custody, reference: Reference, checkedAt?: number): Status {
   if (reference.scopeId !== scopeId) {
     return 'invalid';
   }
@@ -90,7 +87,7 @@ function ownStatus(history: ReturnType<typeof memoryHistory>, scopeId: string,
     return 'superseded';
   }
   if ('schemaVersion' in saved.data && saved.data.expiresAt !== null &&
-      Date.parse(saved.data.expiresAt) <= Date.now()) {
+      Date.parse(saved.data.expiresAt) <= (checkedAt ?? Date.now())) {
     return 'invalid';
   }
   const status = custody.status(identity);
@@ -105,10 +102,10 @@ function ownStatus(history: ReturnType<typeof memoryHistory>, scopeId: string,
 
 /** Check saved references without decrypting any fact text. */
 export function memoryReferences(rows: StoredEvent[], silo: string, scopeId: string,
-  custody: Custody) {
+  custody: Custody, checkedAt?: number) {
   const history = memoryHistory(rows, silo, scopeId);
   function current(reference: Reference): Status {
-    const status = ownStatus(history, scopeId, custody, reference);
+    const status = ownStatus(history, scopeId, custody, reference, checkedAt);
     if (status !== 'current') {
       return status;
     }
@@ -127,7 +124,9 @@ export function memoryReferences(rows: StoredEvent[], silo: string, scopeId: str
       if (complete.has(id)) {
         continue;
       }
-      if (visiting.has(id) || ownStatus(history, scopeId, custody, step.reference) !== 'current') {
+      const invalidDependency = visiting.has(id) ||
+        ownStatus(history, scopeId, custody, step.reference, checkedAt) !== 'current';
+      if (invalidDependency) {
         return 'invalid';
       }
       visiting.add(id);

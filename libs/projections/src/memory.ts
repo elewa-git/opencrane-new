@@ -6,6 +6,7 @@ import type { Projection } from './runner.ts';
 import type { StoredEvent } from '@opencrane/event-store';
 import { memoryErasureHistory } from './memory-erasure.ts';
 import { memoryIdentity } from './memory-keys.ts';
+import { shouldReplaceMemoryRevision } from './memory-revision.ts';
 
 type SavedMemoryWrite = ReturnType<typeof memoryWrittenEventSchema.parse>['data'];
 type MemoryWrite = Extract<SavedMemoryWrite, { schemaVersion: 1 }>;
@@ -16,7 +17,9 @@ async function create(db: Query): Promise<void> {
     position BIGINT NOT NULL, PRIMARY KEY (silo, scope_id, event_id))`);
   await db.query(`CREATE TABLE IF NOT EXISTS memory_maintenance_bindings (
     silo TEXT NOT NULL, scope_id TEXT NOT NULL, data JSONB NOT NULL, position BIGINT NOT NULL,
+    saved_at TEXT,
     PRIMARY KEY (silo, scope_id))`);
+  await db.query('ALTER TABLE memory_maintenance_bindings ADD COLUMN IF NOT EXISTS saved_at TEXT');
   await db.query(`CREATE TABLE IF NOT EXISTS memory_facts (
     silo TEXT NOT NULL, scope_id TEXT NOT NULL, memory_id TEXT NOT NULL,
     scope_kind TEXT, owner_id TEXT, revision BIGINT, kind TEXT, pinned BOOLEAN,
@@ -99,13 +102,11 @@ async function writeMemory(
     await writeChange(db, event, data, current, position);
     return;
   }
-  // Keep a newer or equal revision, including when an old event has no known owner.
-  const previousRevision = previous.rows[0]?.revision;
-  if (previousRevision !== undefined && previousRevision !== null) {
-    if (current === null || Number(previousRevision) >= current.revision) {
-      await writeChange(db, event, data, current, position);
-      return;
-    }
+  const storedRevision = previous.rows[0]?.revision;
+  const previousRevision = storedRevision == null ? null : Number(storedRevision);
+  if (!shouldReplaceMemoryRevision(previousRevision, current?.revision ?? null)) {
+    await writeChange(db, event, data, current, position);
+    return;
   }
   // Build the search vector explicitly from the current text. Keep SQL limited to indexing.
   await db.query(`INSERT INTO memory_facts VALUES
@@ -174,10 +175,11 @@ function prepareMaintenance(envelope: EventEnvelope) {
   const schema = binding ? memoryMaintenanceBoundDataSchema : memoryMaintenanceRecordedDataSchema;
   const data = schema.parse(envelope.data);
   async function applyMaintenance(db: Query, _event: EventEnvelope, position: number) {
-    const values = [envelope.silo, data.scopeId, JSON.stringify(data), position];
+    const values = [envelope.silo, data.scopeId, JSON.stringify(data), position, envelope.time];
     if (binding) {
-      await db.query(`INSERT INTO memory_maintenance_bindings VALUES ($1,$2,$3,$4)
-        ON CONFLICT (silo, scope_id) DO UPDATE SET data=$3, position=$4`, values);
+      await db.query(`INSERT INTO memory_maintenance_bindings
+        (silo, scope_id, data, position, saved_at) VALUES ($1,$2,$3,$4,$5)
+        ON CONFLICT (silo, scope_id) DO UPDATE SET data=$3, position=$4, saved_at=$5`, values);
     } else {
       const runValues = [envelope.silo, data.scopeId, envelope.id, JSON.stringify(data), position];
       await db.query('INSERT INTO memory_maintenance_runs VALUES ($1,$2,$3,$4,$5)', runValues);

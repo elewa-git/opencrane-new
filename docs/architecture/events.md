@@ -562,7 +562,7 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `memory.maintenance_recorded` | Native nightly scheduler | Payload-free scope night history | No dispatch or spending |
+| `memory.maintenance_recorded` | Native nightly scheduler | Payload-free scope night history; `no_changes` reviews exact input revisions and a content position | No dispatch or spending |
 | `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | Native scheduling records intent only; no dispatch or spending |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
 | `memory.corrected` | OpenCrane memory MCP (planned); nightly dreaming job (planned) | Postgres memory projection (planned) | correction cleanup is planned |

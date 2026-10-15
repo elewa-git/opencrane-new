@@ -2112,9 +2112,11 @@ replies return unknown; the original `/changes/:commandId` GET checks saved hist
 
 `GET /api/memory/:scopeId/maintenance` checks scope read access once and requires
 caught-up memory tables and an unchanged table generation. It returns the current
-binding and `not_configured`, `disabled` or `qualification_blocked`. Dispatch is
-always disabled and `nextAt` is null. All responses use no-store. There is no run,
-retry or scheduler endpoint. The nightly worker records blocked and missed nights,
+binding and `not_configured`, `disabled`, `clean` or `qualification_blocked`.
+Dirty status includes `waitingCount` and the first 02:00 UTC after both now and
+the binding save time. Clean status has `nextAt: null`. Dispatch is always disabled.
+All responses use no-store. There is no run,
+retry or scheduler endpoint. The nightly worker records blocked, missed and empty nights,
 and the GET includes their bounded history as described below. No allowance is
 allocated and nothing can spend. The cap records consent.
 

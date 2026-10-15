@@ -67,8 +67,22 @@ async function records() {
   return rows;
 }
 async function scan(time: string) {
-  const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
-  await runner.run(projection);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
+    await runner.run(projection);
+    try {
+      await scanPrepared(time);
+      return;
+    } catch (error) {
+      if (!(error instanceof Error) ||
+          error.message !== 'Nightly memory metadata is behind the event log') {
+        throw error;
+      }
+    }
+  }
+  throw new Error('Nightly test projection remained behind');
+}
+async function scanPrepared(time: string) {
   const occurrence = new Date(time);
   function selectedTime() {
     return occurrence;
@@ -108,6 +122,138 @@ async function clean() {
 }
 it('leaves a clean scope alone',
   clean, 30_000);
+async function forgottenOnly() {
+  await setup();
+  const dependent = { ...written('dependent'),
+    dependsOn: [{ scopeId, memoryId: 'memory_1', revision: 1 }] };
+  await append('memory.written', dependent);
+  const forgotten = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
+    memoryId: 'memory_1', revision: 2, expectedRevision: 1 };
+  await append('memory.forgotten', forgotten);
+  await scan('2026-10-12T02:00:00Z');
+  const first = await records();
+  expect(first).toMatchObject([{ action: 'no_changes', reason: null, inputRefs: [] }]);
+  await scan('2026-10-13T02:00:00Z');
+  expect(await records()).toEqual(first);
+}
+it('reviews forgotten and dependent hidden facts once without dispatch', forgottenOnly, 30_000);
+
+async function expiredDependency() {
+  await setup(false);
+  const source = { ...written('source'), expiresAt: '2026-10-12T01:59:00.000Z' };
+  const dependent = { ...written('dependent'), expiresAt: null,
+    dependsOn: [{ scopeId, memoryId: 'source', revision: 1 }] };
+  await append('memory.written', source);
+  const sourcePosition = await services.nats.store.head();
+  await append('memory.written', dependent);
+  await scan('2026-10-12T02:10:00Z');
+  const saved = await records();
+  expect(saved).toHaveLength(1);
+  const run = memoryMaintenanceRecordedDataSchema.parse(saved[0]);
+  expect(run.inputRefs).toEqual([{ memoryId: 'source', revision: 1,
+    expiresAt: '2026-10-12T01:59:00.000Z', position: sourcePosition }]);
+  expect(run.action).toBe('refused');
+  expect(run.reason).toBe('qualification_blocked');
+}
+it('selects expired dependency metadata without the dependent fact', expiredDependency, 30_000);
+
+async function dependencyExpiresAfterBoundary() {
+  await setup(false);
+  const source = { ...written('source'), expiresAt: '2026-10-12T02:05:00.000Z' };
+  const dependent = { ...written('dependent'), expiresAt: null,
+    dependsOn: [{ scopeId, memoryId: 'source', revision: 1 }] };
+  await append('memory.written', source);
+  const sourcePosition = await services.nats.store.head();
+  await append('memory.written', dependent);
+  const dependentPosition = await services.nats.store.head();
+  await scan('2026-10-12T02:10:00Z');
+  const saved = await records();
+  expect(saved).toHaveLength(1);
+  const run = memoryMaintenanceRecordedDataSchema.parse(saved[0]);
+  expect(run.inputRefs).toEqual([
+    { memoryId: 'source', revision: 1,
+      expiresAt: '2026-10-12T02:05:00.000Z', position: sourcePosition },
+    { memoryId: 'dependent', revision: 1, expiresAt: null, position: dependentPosition },
+  ]);
+}
+it('checks dependency expiry at the intended boundary despite delayed selection',
+  dependencyExpiresAfterBoundary, 30_000);
+
+async function repeatedExpiredPin() {
+  await setup(false);
+  const original = { ...written('pinned'), pinned: true,
+    expiresAt: '2026-10-12T01:59:00.000Z' };
+  await append('memory.written', original);
+  const repeated = { ...original, expiresAt: null };
+  await append('memory.written', repeated);
+  await scan('2026-10-12T02:00:00Z');
+  expect(await records()).toEqual([]);
+}
+it('keeps a repeated expired pin out of nightly selection', repeatedExpiredPin, 30_000);
+
+async function repeatedReviewedFact() {
+  await setup(false);
+  const original = written('reviewed');
+  await append('memory.written', original);
+  await scan('2026-10-12T02:00:00Z');
+  const first = memoryMaintenanceRecordedDataSchema.parse((await records())[0]);
+  const reviewed = { ...first, action: 'no_changes', reason: null,
+    reviewedPosition: first.inputRefs[0]!.position };
+  await append('memory.maintenance_recorded', reviewed);
+  const before = await records();
+  await append('memory.written', original);
+  await scan('2026-10-13T02:00:00Z');
+  expect(await records()).toEqual(before);
+}
+it('keeps an identical repeat clean after an exact nightly review', repeatedReviewedFact, 30_000);
+
+async function boundedPrefix() {
+  await setup(false);
+  for (let index = 0; index < 33; index++) {
+    const fact = written(`fact_${String(index).padStart(2, '0')}`);
+    await append('memory.written', fact);
+  }
+  await scan('2026-10-12T02:00:00Z');
+  const first = memoryMaintenanceRecordedDataSchema.parse((await records())[0]);
+  expect(first).toMatchObject({ action: 'refused', reason: 'qualification_blocked' });
+  expect(first.inputRefs).toHaveLength(32);
+  const reviewed = { ...first, action: 'no_changes', reason: null,
+    reviewedPosition: first.inputRefs.at(-1)!.position };
+  await append('memory.maintenance_recorded', reviewed);
+  await scan('2026-10-13T02:00:00Z');
+  const saved = await records();
+  expect(saved).toHaveLength(3);
+  expect(saved[2]).toMatchObject({ inputRefs: [expect.objectContaining({ memoryId: 'fact_32' })] });
+}
+it('reviews only the saved prefix and carries omitted facts into the next night',
+  boundedPrefix, 30_000);
+
+async function replayNoChanges() {
+  await setup();
+  await scan('2026-10-12T02:00:00Z');
+  const first = memoryMaintenanceRecordedDataSchema.parse((await records())[0]);
+  const reviewed = { ...first, action: 'no_changes', reason: null,
+    reviewedPosition: first.inputRefs[0]!.position };
+  await append('memory.maintenance_recorded', reviewed);
+  const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
+  await runner.run(projection);
+  const sql = `SELECT data FROM memory_maintenance_runs WHERE scope_id=$1 ORDER BY position`;
+  const before = await services.db.query<{ data: unknown }>(sql, [scopeId]);
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  try {
+    await runner.rebuild(projection);
+    await runner.rebuild(projection);
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    fetch.mockRestore();
+  }
+  const after = await services.db.query<{ data: unknown }>(sql, [scopeId]);
+  expect(after.rows).toEqual(before.rows);
+  const saved = memoryMaintenanceRecordedDataSchema.parse(after.rows[1]?.data);
+  expect(saved).toMatchObject({ action: 'no_changes', reviewedPosition: reviewed.reviewedPosition });
+}
+it('rebuilds reviewed records twice with unavailable decryption and no fetch',
+  replayNoChanges, 30_000);
 async function missed() {
   await setup();
   await scan('2026-10-12T02:15:00Z');
