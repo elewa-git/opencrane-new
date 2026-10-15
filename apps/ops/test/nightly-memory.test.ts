@@ -138,6 +138,25 @@ async function forgottenOnly() {
 }
 it('reviews forgotten and dependent hidden facts once without dispatch', forgottenOnly, 30_000);
 
+async function expiredDependency() {
+  await setup(false);
+  const source = { ...written('source'), expiresAt: '2026-10-12T01:59:00.000Z' };
+  const dependent = { ...written('dependent'), expiresAt: null,
+    dependsOn: [{ scopeId, memoryId: 'source', revision: 1 }] };
+  await append('memory.written', source);
+  const sourcePosition = await services.nats.store.head();
+  await append('memory.written', dependent);
+  await scan('2026-10-12T02:10:00Z');
+  const saved = await records();
+  expect(saved).toHaveLength(1);
+  const run = memoryMaintenanceRecordedDataSchema.parse(saved[0]);
+  expect(run.inputRefs).toEqual([{ memoryId: 'source', revision: 1,
+    expiresAt: '2026-10-12T01:59:00.000Z', position: sourcePosition }]);
+  expect(run.action).toBe('refused');
+  expect(run.reason).toBe('qualification_blocked');
+}
+it('selects expired dependency metadata without the dependent fact', expiredDependency, 30_000);
+
 async function boundedPrefix() {
   await setup(false);
   for (let index = 0; index < 33; index++) {
