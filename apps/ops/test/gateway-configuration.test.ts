@@ -1,3 +1,5 @@
+import { databases } from '@opencrane/authz/testing';
+import { pgDb } from '@opencrane/projections';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
@@ -10,7 +12,11 @@ async function serialPublications() {
   const nats = await natsFixture();
   onTestFinished(nats.close.bind(nats));
   const faulty = await lostReplyStore(nats.connection);
-  const handler = prepareGatewayConfigurationHandler(faulty.store, 'test');
+  const storage = await databases();
+  onTestFinished(storage.close);
+  const db = pgDb(storage.queue);
+  const argumentsWithLock = [faulty.store, 'test', db] as const;
+  const handler = prepareGatewayConfigurationHandler(...argumentsWithLock);
   function unusedQuery(): Promise<never> {
     return Promise.reject(new Error('Preparation must not write SQL'));
   }
@@ -50,7 +56,37 @@ async function serialPublications() {
   await expect(handler.handle(alpha, transaction)).rejects.toThrow('Gateway preparation unavailable');
   failedRead.mockRestore();
   faulty.loseNextReply();
-  await handler.handle(alpha, transaction);
+  let release = function releaseLock() {};
+  function hold(resolve: () => void) {
+    release = resolve;
+  }
+  const held = new Promise<void>(hold);
+  let entered = function enteredLock() {};
+  function notify(resolve: () => void) {
+    entered = resolve;
+  }
+  const acquired = new Promise<void>(notify);
+  async function replacementInProgress() {
+    entered();
+    await held;
+  }
+  const replacement = db.lock!('gateway-configuration:test', replacementInProgress);
+  await acquired;
+  const preparation = handler.handle(alpha, transaction);
+  async function waitingLocks() {
+    const result = await db.query<{ count: number }>(`SELECT count(*)::int AS count
+      FROM pg_locks WHERE locktype = 'advisory' AND NOT granted
+      AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`);
+    return result.rows[0]!.count;
+  }
+  try {
+    await expect.poll(waitingLocks, { timeout: 2000 }).toBe(1);
+    expect(await history(nats.store, 'gateway-config-test', 'test')).toHaveLength(0);
+  } finally {
+    release();
+    await replacement;
+    await preparation;
+  }
   await handler.handle(bravo, transaction);
   const rows = await history(nats.store, 'gateway-config-test', 'test');
   expect(rows).toHaveLength(2);
