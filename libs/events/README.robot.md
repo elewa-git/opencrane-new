@@ -526,6 +526,13 @@ Requester, turn-ended and access-revoked stop commands follow in the next part.
 Trusted call ids, grant/dispatch checks and the child dispatcher remain in row 5.
 There is no route, caller, running-turn fan-out or model call in this part.
 
+## Child request contract
+
+`conversation.child_requested` belongs to the parent conversation. Its strict schema
+requires 1–97 distinct original parent joins before the source, including the requester,
+and an integer allowance bound of 1–1,000 cents. Its envelope requires the server source,
+a human requester principal, matching subject and command id, and no computer report.
+
 ## Hosted registration — first part of P3-6 PR 4
 
 Hosted registration may carry a complete `installation`: attemptId 1, platform

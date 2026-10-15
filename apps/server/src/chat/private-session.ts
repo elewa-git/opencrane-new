@@ -4,7 +4,7 @@ import {
 } from '@opencrane/models';
 import type { EventStore } from '@opencrane/event-store';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { activeMember, readActiveMember, GroupRefused } from '../members/groups.ts';
+import { readActiveMember, GroupRefused } from '../members/groups.ts';
 
 type SessionAuthorityOptions = { silo: string; store: EventStore; binding: Binding };
 const sessionSchema = z.object({
@@ -130,12 +130,11 @@ export async function sharedAssistantAuthority(options: SessionAuthorityOptions,
   assistantId: string, payingGroupId: string,
   fresh: Awaited<ReturnType<typeof authorityFence>>) {
   fresh.include(`member-${memberId}`, `assistant-${assistantId}`);
-  const memberAuthority = { requiredRole: 'member' as const, fresh };
-  await activeMember(options.store, options.binding, memberId, memberAuthority);
   const event = await creationEvent(options.store, options.silo,
     `assistant-${assistantId}`, 'assistant.created', fresh.deadline);
   const assistant = assistantSchema.parse(event.data);
   fresh.include(`team-${assistant.ownerId}`, `team-${payingGroupId}`);
+  // Check active membership and its receipts with each group; ownership is not required.
   for (const groupId of new Set([assistant.ownerId, payingGroupId])) {
     await groupMembership(options.store, options.silo, memberId,
       groupId, options.binding, fresh.deadline);
