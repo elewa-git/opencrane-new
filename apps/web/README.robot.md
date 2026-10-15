@@ -21,6 +21,12 @@ No survey answer is stored in the address, console or browser storage.
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
+`/org/integrations/:serverId/access/explanation?requester=&assistant=&tool=` sends
+the strict API query names `requesterId`, `assistantId` and `toolName` after checking
+the address. It parses the server reply with `toolAccessExplanationSchema`. A missing
+grant reply has no sources, profile or policy details. A failed refresh keeps dated
+rows dimmed. Any 401 or 403 clears them and cancels other reads. Name lookups are
+left for a later part; the page uses generic person and assistant names.
 `/workspace/conversations` reads the server's Recent list. `?section=archived` reads
 Archived. Search stays in memory and uses at most 100 characters. Each request uses
 20 rows and the returned cursor. A changed list reloads page one once. Temporary

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { assistantCreateGroupId, normalisePathname, organisationPage,
-  organisationPageLabel, peopleMemberId } from './pages';
+  organisationPageLabel, peopleMemberId, toolExplanationServerId } from './pages';
 
 function checkTrailingSlash(pathname: string): void {
   expect(organisationPage(`${pathname}/`)).toBe(organisationPage(pathname));
@@ -38,6 +38,13 @@ it('routes a safe member id inside People & groups', () => {
   expect(peopleMemberId('/org/people/members/alex-kim')).toBe('alex-kim');
   expect(organisationPage('/org/people/members/alex-kim')).toBe('people');
   expect(peopleMemberId('/org/people/members/alex%40example.test')).toBeUndefined();
+});
+
+it('routes only safe integration explanation ids', () => {
+  expect(toolExplanationServerId('/org/integrations/odoo/access/explanation')).toBe('odoo');
+  expect(organisationPage('/org/integrations/odoo/access/explanation')).toBe('integrations');
+  expect(toolExplanationServerId('/org/integrations/' + 'x'.repeat(201) +
+    '/access/explanation')).toBe('x'.repeat(201));
 });
 
 function checkNonNavigationPages(): void {

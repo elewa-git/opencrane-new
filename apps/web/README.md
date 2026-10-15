@@ -14,7 +14,7 @@ flowchart LR
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys, grants and reads facts| providers["Provider pages<br/>keys, checks, model choices and access"]
-  web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
+  web -->|opens| integrations["Integrations pages<br/>register, tools and access explanations"]
   web -->|opens and clears on lost access| people["People pages<br/>member directory, groups and owners"]
   web -->|reads and stores| memory["Memory panel<br/>scopes, facts, sources and safe receipts"]
 ```
@@ -70,6 +70,8 @@ check with the original request id.
   and a fixed paying group, including groups managed by an identity provider. Group
   membership does not grant desktop access.
 - Clears private information when the server refuses access.
+- Explains a named tool's person grant, assistant grant and account state. A failed check
+  stays unknown, and a refused read clears the explanation.
 - Lets a signed-in person open Memory in the workspace session panel to read permitted
   scopes, search facts, inspect source status and store a fact with a checked receipt.
 - Adapts the workspace and menus for phones and desktop screens.
@@ -104,7 +106,7 @@ check with the original request id.
    live connection needs to catch up, the website reloads the current participants from the
    server. Access loss clears protected chat details and late replies.
 5. **An admin adds a tool server.** MCP (Model Context Protocol) lets an assistant use tools from another server. The website accepts a remote HTTPS address and shows the discovery result. When tools are ready, the admin can continue to set each tool to Allow automatically, Ask or Block. If a save reply is lost, the website checks the saved modes before offering another action. It never sends the save again.
-6. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. Connection, access grants and publishing wait for their server support.
+6. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. A tool access explanation shows the two grants and account check from a dated server reply. It does not say that a call can run.
 7. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.
 8. **An admin checks a change.** The website shows organisation history to people with access.
 9. **An Owner or Admin opens People & groups.** The website checks group reads,

@@ -16,6 +16,12 @@ export function peopleMemberId(pathname: string): string | undefined {
   return peopleMemberPath.exec(normalisePathname(pathname))?.[1];
 }
 
+const explanationPath = /^\/org\/integrations\/([^/]*)\/access\/explanation$/u;
+
+export function toolExplanationServerId(pathname: string): string | undefined {
+  return explanationPath.exec(normalisePathname(pathname))?.[1];
+}
+
 export function peopleGroupId(pathname: string): string | undefined {
   return peopleGroupPath.exec(normalisePathname(pathname))?.[1];
 }
@@ -43,6 +49,9 @@ export function organisationPage(pathname: string): OrganisationPage | undefined
     return 'people';
   }
   if (pathname === '/org/integrations/new') {
+    return 'integrations';
+  }
+  if (toolExplanationServerId(pathname) !== undefined) {
     return 'integrations';
   }
   if (/^\/org\/integrations\/[\w-]+\/tools$/u.test(pathname)) {
