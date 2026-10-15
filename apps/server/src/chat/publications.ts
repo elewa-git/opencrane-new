@@ -57,6 +57,7 @@ async function load(options: ChatOptions, memberId: string, child: string) {
   const access = await conversationParticipation(options, memberId, child);
   if (!('contextKind' in access.created)) throw new ChatRefused();
   const origin = access.created.origin;
+  await chatAccess(options, { memberId, conversationId: origin.parentConversationId });
   // Load both histories before opening the short check of who may publish.
   const parentRows = await chatHistory(options.store, options.silo, origin.parentConversationId);
   const childRows = await chatHistory(options.store, options.silo, child);
@@ -193,7 +194,15 @@ async function publish(options: ChatOptions, memberId: string, loaded: Loaded,
 export function registerPublicationRoutes(app: FastifyInstance, config: AuthConfig,
   options?: ChatOptions) {
   const base = '/api/conversations/:conversationId';
-  const routeOptions = { bodyLimit: 160_000 };
+  function requestLog() {
+    return { operation: 'child-publication' };
+  }
+  const logSerializers = { req: requestLog };
+  function invalidBody(_error: unknown, _request: FastifyRequest, reply: FastifyReply) {
+    reply.header('cache-control', 'no-store');
+    return reply.code(400).send({ status: 'refused' });
+  }
+  const routeOptions = { bodyLimit: 160_000, logSerializers, errorHandler: invalidBody };
   app.post(`${base}/publication-review`, routeOptions, handler);
   app.post(`${base}/publications`, routeOptions, handler);
   async function handler(request: FastifyRequest, reply: FastifyReply) {

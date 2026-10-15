@@ -1,3 +1,4 @@
+import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { chatMessageSchema } from '@opencrane/protocol';
 import { once } from 'node:events';
@@ -101,6 +102,15 @@ it('reviews without saving and publishes one credited parent entry across retry 
 
 async function refusesChangedReview(change: string) {
   const context = await childFixture();
+  const warnings: unknown[] = [];
+  function recordWarning(...args: unknown[]) {
+    warnings.push(args);
+  }
+  function captureWarnings(request: FastifyRequest) {
+    vi.spyOn(request.log, 'warn').mockImplementation(recordWarning);
+    return Promise.resolve();
+  }
+  context.app.addHook('onRequest', captureWarnings);
   try {
     const input = await savedResult(context);
     const reviewed = await request(context, 'publication-review', input);
@@ -129,7 +139,9 @@ async function refusesChangedReview(change: string) {
     if (['moved', 'missing', 'incomplete', 'unshared', 'delta', 'outage'].includes(change)) {
       const read = context.nats.store.readStream.bind(context.nats.store);
       async function* moved(...args: Parameters<typeof read>) {
-        if (change === 'outage') throw new Error('Upstream unavailable');
+        if (change === 'outage' && args[0] === 'conversation-parent') {
+          throw new Error('Private upstream detail');
+        }
         for await (const row of read(...args)) {
           const selected = row.event.id === input.resultEventId;
           if (selected && change === 'missing') continue;
@@ -146,14 +158,13 @@ async function refusesChangedReview(change: string) {
       context.nats.store.readStream = moved;
     }
     const before = await context.nats.store.head();
-    const warning = vi.spyOn(context.app.log, 'warn');
     const sent = await request(context, 'publications', payload);
     let expected = 409;
     if (change === 'outage') {
       expected = 503;
       status = 'unavailable';
-      expect(warning).toHaveBeenCalledWith({ operation: 'child-publication' },
-        'Publication unavailable');
+      expect(warnings).toEqual([[{ operation: 'child-publication' },
+        'Publication unavailable']]);
     }
     expect(sent.statusCode, sent.body).toBe(expected);
     expect(sent.json()).toEqual({ status });
@@ -230,6 +241,13 @@ async function refusesFiles(fileIds: string[]) {
   const context = await childFixture();
   try {
     const input = { ...await savedResult(context), fileIds };
+    const malformed = { method: 'POST' as const,
+      url: '/api/conversations/child/publication-review',
+      headers: { ...context.headers(), 'content-type': 'application/json' },
+      payload: '{"text":"private-body' };
+    const invalid = await context.app.inject(malformed);
+    expect(invalid.json()).toEqual({ status: 'refused' });
+    expect(invalid.headers['cache-control']).toBe('no-store');
     const before = await context.nats.store.head();
     const response = await request(context, 'publication-review', input);
     expect(response.statusCode, response.body).toBe(409);
