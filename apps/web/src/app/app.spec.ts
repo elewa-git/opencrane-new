@@ -425,13 +425,14 @@ describe('personal settings shell', () => {
     const status = root(fixture).querySelector('[role="status"][aria-live="polite"]');
     expect(status?.textContent).toContain('Identity loaded from your current session');
     expect(status?.textContent).not.toContain('Taylor Example');
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
     const request = fetchSpy.mock.calls[0];
     if (!request) throw new Error('Expected an identity request');
     expect(request[0]).toBe('/auth/me');
     const requestOptions = request[1];
     expect(requestOptions?.cache).toBe('no-store');
     expect(requestOptions?.signal).toBeInstanceOf(AbortSignal);
+    expect(fetchSpy.mock.calls[1]?.[0]).toBe('/api/onboarding');
   });
 
   it('shows no invented identity name when the provider omitted it', async () => {
@@ -514,7 +515,7 @@ describe('personal settings shell', () => {
     fetchSpy.mockResolvedValueOnce(response(identity));
     button(root(fixture), 'Try again').click();
     await vi.waitFor(() => expect(root(fixture).textContent).toContain('Taylor Example'));
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(3));
     expect(globalThis.document.activeElement).toBe(root(fixture).querySelector('h1'));
     expect(root(fixture).querySelector('.sr-only')?.textContent?.trim())
       .toContain('Identity loaded from your current session.');

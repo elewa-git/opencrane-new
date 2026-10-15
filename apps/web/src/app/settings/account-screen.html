@@ -27,5 +27,8 @@
     <oc-shared-state kind="not_configured" message="Profile details not available yet"
       detail="Email, organisation, role and groups, and preferred display name are not available yet."
       [showAction]="false" />
+    @if (surveyLink()) {
+      <p class="survey-link"><a href="/welcome/survey">Continue welcome survey</a></p>
+    }
   }
 </section>
