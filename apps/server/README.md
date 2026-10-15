@@ -17,7 +17,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, nightly memory status and history| postgres
-  server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
+  server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates without waiting for chats; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies| computer
 ```
@@ -252,7 +252,9 @@ reply while it holds the budget worker lease. Startup settings supply no tool ro
 Reviewed tool calls stay unavailable until generation checks are connected.
 
 After saved control intent, the server sends a signed request to stop computer work.
-An idle computer receives it too, and a new connection receives it before report replay.
+An idle computer receives it too. Slow chat reads, file uploads and report replay do
+not delay this request. If a turn finishes while the request is being signed, the
+server checks it again before telling the computer to resume reports.
 The server checks the computer's reply and keeps it only for that connection.
 This does not grant desktop control or save proof that all computer work has stopped.
 

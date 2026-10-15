@@ -2840,10 +2840,19 @@ route lists; `MODEL_MCP_ROUTES` is ignored. No call is enabled by this worker.
 checks the requester's membership again with `requireTurnMember`. Missing signing
 support, changed identity, removed membership or more than 64 affected turns sends
 no gate and logs only `Bridge gate unavailable`. The normal `resume` frame still follows.
-The watcher opens idle ready computers and retries lost connections. It does not
-reconnect refused computers or wake suspended computers for saved control intent.
+A separate watcher checks idle ready computers every 250 ms and retries lost
+connections. Each assistant has one check in progress. This watcher does not wait
+for conversation reads or uploads. It does not reconnect refused computers or wake
+suspended computers for saved control intent.
 
-Every new connection sends the gate before `resume`. Receipt parsing runs before
+Each open link checks for a gate every 250 ms, including while the server reads
+saved reports. Timer and connection checks share one signing attempt. A computer
+stream change during signing causes a fresh request, identity and membership check
+before another signing attempt. Connection setup waits for this retry before sending
+`resume`, and checks again after report replay in case intent arrived during replay.
+Sending the gate or closing the socket stops that link's timer.
+
+Every new connection sends a qualifying gate before `resume`. Receipt parsing runs before
 report parsing. Only strict `bridge_quiet` and `bridge_unavailable` replies matching
 that connection's takeover id, generation and sorted affected turns are accepted.
 The first accepted epoch cannot change. Quiet requires empty preparation, running,
@@ -2854,6 +2863,10 @@ in-memory receipt and closes with 1008 and `Invalid bridge receipt`. A computer'
 events or API replies. Receipts live only on the connection, with no durable write.
 
 Tests use real NATS, signing keys, sockets and the real computer bridge with a saved
-signing identity. Scripted replies cover forged receipts. Fresh-install qualification
+signing identity. PostgreSQL supplies the watcher's conversation list. Tests hold chat
+reads for 2,300 ms and require a verified gate within two seconds, for both idle and
+connected computers. They hold report replay, close a turn during signing and hold
+signing across replay completion. Each requires the gate before resume. Scripted
+replies cover forged receipts. Fresh-install qualification
 is NOT RUN. Pausing events, supervisor calls, full quiet proof, writer access, leases
 and recovery remain later work. The existing access checks and event schemas are unchanged.
