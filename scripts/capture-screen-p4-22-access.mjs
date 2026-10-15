@@ -1,4 +1,4 @@
-/* global document, window */
+/* global document, window, sessionStorage */
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
@@ -6,6 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 
 const output = resolve('docs/process/screen-p4-22-access');
+const newOutput = resolve('docs/process/screen-p4-22-access2');
 const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://model-access.opencrane.test';
 const modelId = 'gpt-6.1-sol';
@@ -51,6 +52,7 @@ async function serve(route, state) {
       taskRouting: { chat_turn: { model: modelId, reason: 'Chat' } } });
   } else if (request.method() === 'POST') {
     state.posts.push(request.postDataJSON());
+    if (state.holdPost) return;
     await delay(80);
     if (state.mode === 'network') return route.abort();
     response = json({ status: state.mode, reason: state.reason }, state.code);
@@ -59,6 +61,8 @@ async function serve(route, state) {
     state.statusReads += 1;
     response = json({ ...receipt(state), currentSequence: 5,
       projection: { content: 'current', iam: state.current ? 'current' : 'applying' } });
+    if (state.statusNetwork) return route.abort();
+    if (state.statusCode) response = json({ status: 'unavailable' }, state.statusCode);
     if (state.mode === 'unknown' || state.mode === 'network') {
       response = json({ status: 'unknown' }, 404);
     }
@@ -66,7 +70,7 @@ async function serve(route, state) {
     const kind = url.searchParams.get('kind');
     if (kind === 'member' && state.slowCandidates) await delay(700);
     response = json({ rows: [{ id: `${kind}-two`, displayName: `${kind} candidate`,
-      memberCount: kind === 'team' ? 12 : undefined }], next: null, loadedAt: time,
+      memberCount: kind === 'team' ? 12 : undefined }], next: state.paging && !url.searchParams.has('after') ? 'next-id' : null, loadedAt: time,
       projection: access.projection });
   } else {
     if (state.slow) await delay(800);
@@ -78,7 +82,8 @@ async function serve(route, state) {
 }
 function receipt(state) {
   return { status: 'appended', modelId, commandId: state.posts[0]?.commandId,
-    operation: 'grant.revoked', sequence: 5, changeId: 'change-one' };
+    operation: state.posts[0]?.action === 'grant' ? 'grant.given' : 'grant.revoked',
+    sequence: 5, changeId: 'change-one' };
 }
 async function open(browser, width, patch = {}) {
   const state = { mode: 'appended', code: 200, list: access, posts: [], requests: [],
@@ -94,11 +99,13 @@ async function open(browser, width, patch = {}) {
   return { page, state, dialog, opener };
 }
 async function capture(page, name, width) {
+  const added = name === 'MOD-31-load-more' || name.startsWith('MOD-31-recovered-');
   if (process.argv.includes('--check')) return;
+  if (process.argv.includes('--part2') && !added) return;
   await page.evaluate(fontsReady);
   const problems = await page.evaluate(layoutProblems);
   assert.deepEqual(problems, []);
-  await page.screenshot({ path: resolve(output, `${name}-${width}.png`), fullPage: true });
+  await page.screenshot({ path: resolve(added ? newOutput : output, `${name}-${width}.png`), fullPage: true });
 }
 async function fontsReady() { await document.fonts.ready; }
 function layoutProblems() {
@@ -281,16 +288,76 @@ async function parentDenialCases(browser) {
     }
   }
 }
+function storedEntries() {
+  const result = [];
+  for (let index = 0; index < sessionStorage.length; index += 1) {
+    const key = sessionStorage.key(index);
+    if (key.startsWith('model-access:')) result.push(JSON.parse(sessionStorage.getItem(key)));
+  }
+  return result;
+}
+async function reloadCases(browser, width) {
+  let run = await open(browser, width, { paging: true });
+  await run.dialog.getByRole('button', { name: 'Person', exact: true }).click();
+  await run.dialog.getByRole('button', { name: 'Load more', exact: true }).waitFor();
+  await capture(run.page, 'MOD-31-load-more', width);
+  await run.dialog.getByRole('button', { name: 'Load more', exact: true }).click();
+  await run.dialog.getByRole('button', { name: 'Load more', exact: true }).waitFor({ state: 'hidden' });
+  assert.equal(await run.dialog.getByText('member candidate', { exact: true }).count(), 1);
+  const candidateReads = run.state.requests.filter(isCandidateRead);
+  assert.equal(candidateReads[1].query, '?kind=member&after=next-id&limit=50');
+  await run.page.close();
+  for (const outcome of ['saved', 'applying', 404, 503, 'network']) {
+    run = await open(browser, width, { holdPost: true });
+    await remove(run.dialog);
+    await run.page.waitForFunction(hasStoredCommand);
+    assert.equal(run.state.posts.length, 1);
+    const commandId = run.state.posts[0].commandId;
+    assert.deepEqual(await run.page.evaluate(storedEntries), [{ modelId, commandId,
+      operation: 'revoke' }]);
+    run.state.current = outcome === 'saved';
+    run.state.list = { ...access, expectedSequence: 5, grants: [], grantTotal: 0 };
+    if (typeof outcome === 'number') run.state.statusCode = outcome;
+    run.state.statusNetwork = outcome === 'network';
+    await run.page.reload();
+    await run.opener.click();
+    let message = 'Outcome unknown';
+    if (outcome === 'saved') message = 'Saved';
+    if (outcome === 'applying') message = 'Applying';
+    await run.dialog.getByText(message, { exact: true }).waitFor();
+    if (outcome === 'saved') {
+      assert.deepEqual(await run.page.evaluate(storedEntries), []);
+    } else {
+      const check = run.dialog.getByRole('button', { name: 'Check status', exact: true });
+      await check.click();
+      await run.dialog.getByText(message, { exact: true }).waitFor();
+      assert.equal(await run.dialog.getByRole('button', { name: 'Try again' }).count(), 0);
+      assert.equal(await run.dialog.getByRole('button', { name: 'Save access' }).count(), 0);
+      if (outcome === 'applying' || outcome === 404) {
+        const name = outcome === 'applying' ? 'applying' : 'unknown';
+        await capture(run.page, `MOD-31-recovered-${name}`, width);
+      }
+    }
+    assert.equal(run.state.posts.length, 1);
+    const checks = run.state.requests.filter(isStatusRead);
+    assert.ok(checks.length > 0);
+    for (const check of checks) assert.equal(check.path, `${base}/changes/${commandId}`);
+    await run.page.close();
+  }
+}
+function hasStoredCommand() { return sessionStorage.length > 0; }
 function isCandidateRead(request) { return request.path.endsWith('/candidates'); }
 function isStatusRead(request) { return request.path.includes('/changes/'); }
 function queryOf(request) { return request.query; }
 await mkdir(output, { recursive: true });
+await mkdir(newOutput, { recursive: true });
 const browser = await chromium.launch();
 try {
   await parentDenialCases(browser);
   if (!process.argv.includes('--parent-denial-only')) {
     for (const width of [1280, 390]) await cases(browser, width);
     await additionalCases(browser);
+    for (const width of [1280, 390]) await reloadCases(browser, width);
   }
 } finally {
   await browser.close();
