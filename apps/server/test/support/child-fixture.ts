@@ -83,11 +83,22 @@ export async function childFixture() {
 }
 
 export async function childSession(context: Awaited<ReturnType<typeof childFixture>>,
-  conversationId = 'child') {
+  conversationId = 'child', options: { parentSource?: boolean } = {}) {
   const parentData = { conversationId: 'parent', createdBy: 'alice', mode: 'group',
     participantIds: ['alice', 'bob'] };
   const parent = await context.append('conversation-parent', 'conversation.created', parentData);
   const parentJoinPosition = await context.nats.store.head('conversation-parent');
+  let sourceMessageId = 'hidden-source';
+  let sourcePosition = parentJoinPosition + 1;
+  if (options.parentSource) {
+    context.keys.provision('test', 'parent');
+    const encrypted = context.keys.encrypt('test', 'parent', 'The parent source message');
+    const sourceData = { conversationId: 'parent', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...encrypted };
+    const source = await context.append('conversation-parent', 'message.posted', sourceData, false);
+    sourceMessageId = source.id;
+    sourcePosition = await context.nats.store.head('conversation-parent');
+  }
   const teamData = { teamId: 'child-team', name: 'Child assistant', createdBy: 'alice' };
   await context.append('team-child-team', 'team.created', teamData);
   const assistantData = { assistantId: 'child-assistant', kind: 'team', ownerId: 'child-team',
@@ -102,8 +113,8 @@ export async function childSession(context: Awaited<ReturnType<typeof childFixtu
   const childData = {
     conversationId, createdBy: 'alice', mode: 'agent_session', contextKind: 'shared_child',
     assistantId: 'child-assistant', payingGroupId: 'child-team', initialJoins,
-    origin: { parentConversationId: 'parent', sourceMessageId: 'hidden-source',
-      sourcePosition: parentJoinPosition + 1, intentEventId: 'hidden-intent',
+    origin: { parentConversationId: 'parent', sourceMessageId,
+      sourcePosition, intentEventId: 'hidden-intent',
       intentPosition: parentJoinPosition + 2, requestId: 'hidden-request',
       firstInputId: 'hidden-input' },
   };
