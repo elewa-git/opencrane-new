@@ -2142,6 +2142,16 @@ current. Delivery refuses any record except the latest saved current one before
 replacing the file. The worker keeps one delivery object and allows no overlapping
 ticks. Lost observation or receipt replies recover fixed ids on a later probe.
 Leadership is checked before file replacement, probes and receipt appends.
+Delivery requires the root PostgreSQL `Db`, not the connection already holding the
+budget lock. It takes `gateway-configuration:<silo>`, the same advisory lock as the
+preparation handler. It checks currentness after acquiring that lock and again after
+the final leadership query. The synchronous rename immediately follows that last
+check, while preparation still waits. Obsolete delivery leaves the old file untouched.
+`prepareGatewayConfiguration` remains the event-only helper; a live caller must hold
+this shared lock, as the ops handler does. PostgreSQL stores no publication state.
+Regression tests use separate PostgreSQL connections to prove both paths wait on
+this key. Delayed leadership queries save a newer generation or reject leadership;
+refused delivery preserves the file and appends no receipt.
 Render settings come from the startup gateway options. Memory is optional; when
 present its route bytes are unchanged. Replay performs no delivery or observation.
 

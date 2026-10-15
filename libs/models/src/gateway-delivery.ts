@@ -1,6 +1,8 @@
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { rename, rm, writeFile } from 'node:fs/promises';
+import { renameSync } from 'node:fs';
+import { rm, writeFile } from 'node:fs/promises';
+import type { Db } from '@opencrane/projections';
 import { gatewayConfigurationSchema, gatewayObservationSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { z } from 'zod';
@@ -16,12 +18,11 @@ const configuration = z.looseObject({
 });
 
 async function replaceConfiguration(file: string, config: unknown,
-  beforeReplace: () => Promise<void>) {
+  replace: (sibling: string) => Promise<void>) {
   const sibling = `${file}.${randomUUID()}.next`;
   try {
     await writeFile(sibling, JSON.stringify(config), { mode: 0o600, flag: 'wx' });
-    await beforeReplace();
-    await rename(sibling, file);
+    await replace(sibling);
   } finally {
     await rm(sibling, { force: true });
   }
@@ -29,7 +30,7 @@ async function replaceConfiguration(file: string, config: unknown,
 
 export function gatewayDelivery(options: {
   store: Pick<EventStore, 'append' | 'head' | 'readEvent' | 'readStream'>;
-  silo: string; child: ChildProcess; configFile: string; controlPort: number;
+  db: Db; silo: string; child: ChildProcess; configFile: string; controlPort: number;
   settings: GatewayRenderSettings; mode: 'live' | 'replay';
   requireLeader?: () => Promise<void>;
 }) {
@@ -71,14 +72,25 @@ export function gatewayDelivery(options: {
         policies: { authorization: { rules: ['source.address == "127.0.0.1"'] },
           directResponse: { status: 200, body: response } } };
       config.routes.push(controlRoute);
-      async function beforeReplace() {
-        if (!await gatewayConfigurationCurrent(options.store, options.silo, record)) {
-          throw new Error('Gateway delivery unavailable');
-        }
+      async function replace(sibling: string) {
         await requireLeader();
-        if (!alive()) throw new Error('Gateway delivery unavailable');
+        if (!options.db.lock) throw new Error('Gateway locking unavailable');
+        async function replaceLatest() {
+          if (!await gatewayConfigurationCurrent(options.store, options.silo, record)) {
+            throw new Error('Gateway delivery unavailable');
+          }
+          await requireLeader();
+          // Recheck after leadership waits. Hold preparation until the rename finishes.
+          if (!await gatewayConfigurationCurrent(options.store, options.silo, record)) {
+            throw new Error('Gateway delivery unavailable');
+          }
+          if (!alive()) throw new Error('Gateway delivery unavailable');
+          // Avoid yielding between the final check and the atomic file replacement.
+          renameSync(sibling, options.configFile);
+        }
+        await options.db.lock(`gateway-configuration:${options.silo}`, replaceLatest);
       }
-      await replaceConfiguration(options.configFile, config, beforeReplace);
+      await replaceConfiguration(options.configFile, config, replace);
       active = { record, configDigest: rendered.configDigest, response, path };
     } catch {
       throw new Error('Gateway delivery unavailable');

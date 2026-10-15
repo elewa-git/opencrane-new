@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|delivers and probes only the latest current configuration; checks calls, spending, holds and stops against queued work; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|locks preparation during replacement; delivers and probes only the latest current configuration; checks calls, spending, holds and stops against queued work; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on; saves hosted image results and registration, publication receipts, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions; checks private child calls and root activity before refusing them| store["libs/event-store<br/>event log"]
 ```
@@ -66,6 +66,8 @@ This internal API has no child-chat caller yet.
 - Turn a saved gateway record into repeatable configuration bytes. Keep the existing
   model and memory routes, and add rules for the reviewed tools. The models worker
   writes only the latest current configuration and records its exact reply from the running gateway.
+  Hold a shared PostgreSQL lock during the final checks and file replacement, so
+  the preparation worker cannot save a newer generation in between.
   It checks again before returning that reply, so a withdrawal or replacement makes it invalid.
   Each server gets one saved receipt for its publication request. Receipts and calls
   keep that request current unless the reviewed rules or intent change.

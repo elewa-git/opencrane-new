@@ -625,6 +625,9 @@ uses a throwaway namespace and an on-node image with imagePullPolicy Never.
 ## Gateway publication preparation
 
 `prepare-gateway-configuration` handles `mcp.server_published`, verifies the saved
-trigger and calls `prepareGatewayConfiguration`. Legacy or stale intent completes
+trigger and calls `prepareGatewayConfiguration` under the PostgreSQL advisory lock
+`gateway-configuration:<silo>`. The handler receives the root `Db` from the worker,
+so it obtains a separate connection and shares the lock with gateway delivery.
+Legacy or stale intent completes
 without an append. Store failures retry. Enable it through the normal offline
 handler subscription upgrade before restarting the dispatcher. Replay never runs it.

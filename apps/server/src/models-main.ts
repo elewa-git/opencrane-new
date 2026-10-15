@@ -107,7 +107,7 @@ try {
       logger.error({ operation: 'models.gateway_configuration', errorName });
     }
     function spawned(child: ChildProcess) {
-      const options = { store: events.store, silo, child, settings: gatewayOptions,
+      const options = { db: db.db, store: events.store, silo, child, settings: gatewayOptions,
         configFile: gatewayOptions.configFile,
         controlPort, mode: 'live' as const,
         requireLeader: requireDispatchLeader };

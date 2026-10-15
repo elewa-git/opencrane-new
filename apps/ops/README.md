@@ -15,7 +15,7 @@ flowchart LR
   ops -->|records gateway preparations, departure changes and spending stops| nats
   ops -.->|checks memory history and revisions| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
-  ops -->|updates tables and jobs; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
+  ops -->|updates tables and jobs; locks gateway preparation; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates and checks permissions| fga["OpenFGA<br/>permission service"]
   ops -->|updates computers, delivers passes and keys, stops private tools| kube["Kubernetes<br/>computer manager"]
 ```
@@ -49,7 +49,9 @@ flowchart LR
 
 The dispatcher prepares one complete gateway configuration for each current reviewed
 publication request. Jobs for the same silo run in saved order. Old or withdrawn
-requests do nothing. Rebuilding tables never prepares or delivers configuration.
+requests do nothing. Preparation and file replacement share a PostgreSQL lock, so
+a newer saved generation cannot be overtaken by an older file. Rebuilding tables
+never prepares or delivers configuration.
 
 A spending stop creates durable jobs on the existing dispatcher. Each job checks
 saved admissions and records Stop for affected turns, even with no computer connected.

@@ -2826,6 +2826,8 @@ Interim publication, files, screens and fresh-install qualification remain NOT R
 
 The budget leader starts one configuration worker with the gateway child. It reads
 only `gateway-config-<silo>`, delivers the latest current request and probes it on
-later ticks without rewriting it. Restart creates a new process reference and
+later ticks without rewriting it. The worker receives the root PostgreSQL `Db`
+for the shared per-silo preparation and replacement lock; it must not use the
+connection already holding the budget leadership lock. Restart creates a new process reference and
 requires another delivery and probe. Dispatch and catalogue watch receive empty
 route lists; `MODEL_MCP_ROUTES` is ignored. No call is enabled by this worker.

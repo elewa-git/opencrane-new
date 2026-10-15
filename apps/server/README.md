@@ -16,7 +16,7 @@ flowchart LR
   nats -->|saved child leave results, spending stop reasons, departure cleanup and gateway configurations| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools, nightly memory status and history| postgres
+  server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, nightly memory status and history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; sends individual stops; acknowledges and checks reports, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies| computer
@@ -246,7 +246,8 @@ A participant can read why a chat turn stopped for spending. Only the person who
 asked for that turn sees its limit. Reading the saved result starts no work.
 Failed reads still check access before reporting that the result is unavailable.
 
-The models process delivers the latest saved gateway configuration and checks its
+The models process shares a PostgreSQL lock with the preparation worker while
+replacing the gateway file. It delivers the latest saved configuration and checks its
 reply while it holds the budget worker lease. Startup settings supply no tool routes.
 Reviewed tool calls stay unavailable until generation checks are connected.
 
