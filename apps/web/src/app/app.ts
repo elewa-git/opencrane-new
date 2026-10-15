@@ -67,6 +67,8 @@ export class App {
   protected readonly installPage = this.pathname === '/org/integrations/new';
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(this.pathname)?.[1];
   protected readonly explanationServer = toolExplanationServerId(this.pathname);
+  protected readonly changesServer = /^\/org\/integrations\/([\w-]{1,200})\/changes$/u
+    .exec(this.pathname)?.[1];
   protected readonly detailServer = this.installPage
     ? undefined
     : /^\/org\/integrations\/([\w-]+)$/u.exec(this.pathname)?.[1];

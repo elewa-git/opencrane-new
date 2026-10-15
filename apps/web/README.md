@@ -67,6 +67,8 @@ loads more people, groups or assistants when requested.
   `/org/people/groups/<id>` and `/org/people/owners`, an integration register and detail at
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting
   modes for each tool, as well as models, spending and change history.
+- Shows when changed tools pause an integration, compares saved tool details and explains
+  when its last successful check has expired. The changes page opens tool review.
 - Lists current members with search and more pages. A refused member read clears both
   member and group details. A temporary read failure keeps loaded rows visible.
 - Shows each member's recorded groups and grants in a table that becomes labelled cards

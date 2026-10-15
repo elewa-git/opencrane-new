@@ -24,7 +24,7 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  min-height: 44px;
   padding: 8px 14px;
   border: 1px solid var(--oc-border-input);
   border-radius: 8px;
@@ -40,6 +40,24 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
   border-radius: 12px;
   background: var(--oc-warning-notice);
 }
+.draft-notice h2 { margin: 0 0 8px; font-size: 18px; }
+.draft-notice p { margin-top: 6px; }
+.changes-list { display: grid; gap: 12px; min-width: 0; }
+.change-row {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--oc-border-default);
+  border-radius: 12px;
+  background: white;
+  overflow-wrap: anywhere;
+}
+.change-title { display: flex; justify-content: space-between; gap: 12px; }
+.change-title h2 { margin: 0; font-size: 17px; overflow-wrap: anywhere; min-width: 0; }
+.change-title strong { flex: none; font-size: 13px; }
+.change-columns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.change-columns > div { min-width: 0; }
+.change-columns h3 { margin: 14px 0 5px; font-size: 12px; }
+.change-columns p, .field-list { white-space: pre-wrap; overflow-wrap: anywhere; }
 .loading { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .loading > .loading-message { grid-column: 1 / -1; }
 .skeleton-card {
@@ -75,4 +93,6 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
   .loading { grid-template-columns: minmax(0, 1fr); }
   .message-state { justify-items: stretch; }
   .message-state button { min-height: 44px; }
+  .change-title, .change-columns { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .change-row { padding: 14px; }
 }

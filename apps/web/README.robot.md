@@ -67,6 +67,13 @@ register first, then reads the matching server's tool policy. It shows a server 
 as the register read succeeds. A failed list refresh keeps the row, says that availability
 was not checked, and hides that message while another refresh is running. A 401 or 403
 clears the register and detail page before showing the shared access-lost message.
+`/org/integrations/<id>/changes` uses the detail page's two reads and refresh handling.
+It accepts ids matching `[\w-]{1,200}`. The policy's saved catalogue snapshots supply
+added, removed, schema-changed and details-changed rows. Missing or equal snapshots show
+no counts and ask for a full review. Tool definitions are shown as plain text, with
+descriptions limited to 300 characters. An expired catalogue says that calls stay paused;
+there is no check-start API or restore action here. Run
+`npm run visual:screen-p3-7-drift` for intercepted desktop and phone captures.
 
 The add page accepts a remote HTTPS address and follows discovery status. When discovery
 returns an inventory, the page links to Tools & access. That page saves a changed tool

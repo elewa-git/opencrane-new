@@ -12,6 +12,7 @@ import { IntegrationsAccessLost } from './integrations-access-lost';
 import { IntegrationFacts } from './integration-facts';
 import { buildIntegrationFacts, type ToolsReadState } from './integration-facts-map';
 import { needsReview } from './integration-status';
+import { compareToolCatalogues } from './tool-changes';
 
 type DetailState = 'loading' | 'ready' | 'failed' | 'not-found' | 'access';
 
@@ -24,6 +25,7 @@ type DetailState = 'loading' | 'ready' | 'failed' | 'not-found' | 'access';
 })
 export class IntegrationDetail implements OnInit, OnDestroy {
   readonly serverId = input.required<string>();
+  readonly view = input<'detail' | 'changes'>('detail');
   protected readonly row = signal<IntegrationRow | undefined>(undefined);
   protected readonly policy = signal<ToolPolicy | undefined>(undefined);
   protected readonly loadedAt = signal('');
@@ -33,6 +35,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   protected readonly showRefresh = signal(false);
   protected readonly hasRenderedProtectedContent = signal(false);
   protected readonly facts = computed(this.integrationFacts.bind(this));
+  protected readonly comparison = computed(this.toolComparison.bind(this));
   protected readonly needsReview = needsReview;
   protected readonly skeletonWidths = ['78%', '52%', '66%', '44%'];
 
@@ -97,6 +100,34 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC',
     };
     return `${new Date(value).toLocaleTimeString('en-GB', options)} UTC`;
+  }
+
+  protected driftHeld(): boolean {
+    return this.policy()?.driftHeld === true;
+  }
+
+  protected driftSummary(): string {
+    const counts = this.comparison()?.counts;
+    if (!counts) return "The earlier list isn't saved, so review every tool.";
+    return `Found ${counts.added} added, ${counts.removed} removed and ${counts.changed} changed`;
+  }
+
+  protected checkExpired(): boolean {
+    const policy = this.policy();
+    if (!policy?.catalogue) return false;
+    return policy.expiresAt === null || Date.parse(policy.expiresAt) <= Date.now();
+  }
+
+  protected checkedTime(): string {
+    const checkedAt = this.policy()?.catalogue?.checkedAt ?? this.policy()?.checkedAt;
+    if (!checkedAt) return 'unknown';
+    return new Date(checkedAt).toLocaleString('en-GB', { dateStyle: 'medium',
+      timeStyle: 'short', timeZone: 'UTC' }) + ' UTC';
+  }
+
+  private toolComparison() {
+    const policy = this.policy();
+    return policy ? compareToolCatalogues(policy) : null;
   }
 
   private integrationFacts() {

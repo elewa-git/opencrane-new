@@ -1,4 +1,4 @@
-import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
+import { toolPolicySchema } from '@opencrane/protocol';
 import { describe, expect, it } from 'vitest';
 import { compareToolCatalogues } from './tool-changes';
 
@@ -29,7 +29,7 @@ function policy(before: ReturnType<typeof tool>[] | null, after: ReturnType<type
     published: false, driftHeld: true, sequence: 2, previousCatalogue,
     catalogue: currentCatalogue, checkedAt, expiresAt,
     tools: after?.map(({ name, revision }) => ({ name, revision, reviewed: false,
-      readOnly: false, mode: 'block', suggestion: 'ask' })) ?? [] }) as ToolPolicy;
+      readOnly: false, mode: 'block', suggestion: 'ask' })) ?? [] });
 }
 
 describe('changed tool comparison', () => {
@@ -60,7 +60,7 @@ describe('changed tool comparison', () => {
       { type: 'object', properties: { result: { type: 'string' } } });
     const result = compareToolCatalogues(policy([oldTool], [newTool]));
     expect(result?.rows[0]?.kind).toBe('Schema changed');
-    expect(result?.rows[0]?.fields.join(' ')).toContain('and 2 more');
+    expect(result?.rows[0]?.fields.join(' ')).toContain('and 3 more');
     expect(result?.rows[0]?.fields.join(' ')).toContain('Output schema changed');
   });
 
@@ -79,5 +79,15 @@ describe('changed tool comparison', () => {
     const result = compareToolCatalogues(policy([before], [after]));
     expect(result?.rows[0]?.before).toBe('Details not saved');
     expect(result?.rows[0]?.after).toBe('Details not saved');
+  });
+
+  it('limits untrusted descriptions without changing the tool name', () => {
+    const name = 'x'.repeat(2000);
+    const before = tool(name, 'Before', input);
+    const after = tool(name, '<img src=x onerror=alert(1)>'.repeat(100), input);
+    const result = compareToolCatalogues(policy([before], [after]));
+    expect(result?.rows[0]?.name).toHaveLength(2000);
+    expect(result?.rows[0]?.kind).toBe('Details changed');
+    expect(result?.rows[0]?.after).toHaveLength(300);
   });
 });
