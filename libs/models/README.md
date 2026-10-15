@@ -57,6 +57,7 @@ for that root permanently. A call that costs more than its hold also stops the r
 while its full cost and an alert are saved. Other roots can still use the payer.
 An internal command also stops a root after its requester stops it, its turn ends,
 or its requester loses access. It checks the saved event and keeps a reference to it.
+An earlier removal cannot stop a new root after the requester has been re-invited.
 The first stop stays permanent, and later usage still counts. No caller uses this
 command yet.
 This internal API has no child-chat caller yet.

@@ -1955,6 +1955,8 @@ The first saved stop is returned on valid retries, including a later different r
 Only member Stop counts as requester evidence; the budget Stop form is refused.
 Chat turn close, completion or failure counts as turn-end evidence. Requester removal
 or close on participation, or requester removal on member, counts as access loss.
+Access-loss evidence must not precede the root's saved admission position. An old
+removal cannot stop a new root after re-invitation; the old root stays stopped.
 Parent removal and creator departure remain for activation reconciliation.
 `libs/models/test/root-stop-evidence.test.ts` checks exact references, rejected evidence, serial
 ordering, lost replies, duplicate-window expiry, old writers and PostgreSQL replay.

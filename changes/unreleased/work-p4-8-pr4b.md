@@ -1,1 +1,2 @@
 - Child chat budgets can now save a permanent stop tied to a requester's Stop, the turn ending or the requester losing access. The internal command keeps the first reason, refuses unrelated evidence and still counts late costs. Callers and running-turn interruption are not connected yet.
+- Re-invited child chat participants can start a new root without an old removal stopping it. A removal saved after that root's admission still stops it, and the old root stays stopped.

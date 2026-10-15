@@ -73,6 +73,10 @@ export async function saveRootStop(state: BudgetState, silo: string, rootId: str
   if (!root || source.event.silo !== silo || !matchesReason(root, reason, source.event)) {
     throw new Error('Root stop evidence refused');
   }
+  // Reject access loss from before this root existed, including removal before re-invitation.
+  if (reason === 'access_revoked' && source.sequence < root.position) {
+    throw new Error('Root stop evidence refused');
+  }
   // Keep the first saved reason even when a later valid source gives another reason.
   if (root.stop) return root.stop;
   const stop = { rootId, reason, sourceSubject: source.event.subject,
