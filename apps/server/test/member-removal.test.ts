@@ -13,6 +13,10 @@ import { computers, conversations, members, pgDb, ProjectionRunner,
   readEvents } from '@opencrane/projections';
 import { memberDepartureSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
+import type { GroupOptions } from '../src/members/group-routes.ts';
+import { removalStatus } from '../src/members/removal.ts';
+import { invitationChange } from '../src/members/invitations.ts';
+import { recordMemberRefusal } from '../src/members/refusals.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -25,10 +29,11 @@ let app: ReturnType<typeof buildServer>;
 let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
 let db: ReturnType<typeof pgDb>;
+let options: GroupOptions;
 let counter = 0;
 let keyDirectory: string;
 async function append(subject: string, type: string, data: unknown) {
-  const record = { ...event(`removal-${++counter}`, subject, type), data };
+  const record = { ...event(`removal-${++counter}`, subject, type), time: new Date().toISOString(), data };
   const command = { event: record, expectedSequence: await nats.store.head(subject) };
   expect((await nats.store.append(command)).status).toBe('appended');
   return record;
@@ -84,7 +89,7 @@ async function initialise() {
   function memberId(_silo: string, _issuer: string, subject: string) {
     return Promise.resolve(subject);
   }
-  const options = { silo: 'test', store: nats.store, db, binding, feed: { memberId } };
+  options = { silo: 'test', store: nats.store, db, binding, feed: { memberId } };
   const serverOptions = { memberReads: options, ownership: options };
   app = buildServer(config, serverOptions);
 }
@@ -113,6 +118,7 @@ async function reconcilesRemoval() {
     .toMatchObject({ status: 'refused', reason: 'command_id_reused' });
   const status = await request('lost-reply', `changes/${input.commandId}`);
   expect(status.json()).toMatchObject({ ...response.json<Record<string, unknown>>(),
+    cleanup: { state: 'applying' },
     projection: { content: 'applying', iam: 'applying' } });
   expect(await nats.store.head()).toBe(before);
   expect((await request('owner', 'departure', undefined, 'lost-reply')).statusCode).toBe(403);
@@ -465,3 +471,191 @@ async function refusesTargetChangeBeforeAppend() {
 }
 it('refuses removal when the target stream changes after the final check',
   refusesTargetChangeBeforeAppend);
+
+const cleanupSections = {
+  groups: ['group-result'], grants: ['grant-result'],
+  assistant: ['assistant-result'], computer: ['computer-result'],
+};
+async function savedRemoval(memberId: string, reviewed = true) {
+  await join(memberId);
+  const data = { memberId, removedBy: 'owner',
+    reviewRevision: reviewed ? 'a'.repeat(64) : undefined };
+  return append(`member-${memberId}`, 'member.removed', data);
+}
+async function completeCleanup(memberId: string, removalId: string) {
+  const data = { memberId, removalId, sections: cleanupSections };
+  return append(`memberaudit-${memberId}`, 'member.departure_cleanup_completed', data);
+}
+async function cleanupAtBound(offset: number) {
+  const memberId = `cleanup-bound-${offset}`;
+  const removal = await savedRemoval(memberId);
+  const now = new Date(Date.parse(removal.time) + 15 * 60_000 + offset);
+  const status = await removalStatus(options, 'owner', memberId, removal.commandId, now);
+  const state = offset < 0 ? 'applying' : 'unknown';
+  expect(status).toMatchObject({ access: 'revoked', cleanup: { state } });
+}
+it.each([-1000, 1000])('reports cleanup one second either side of fifteen minutes: %s',
+  cleanupAtBound);
+
+async function legacyCleanup() {
+  const removal = await savedRemoval('legacy-cleanup', false);
+  const response = await request('legacy-cleanup', `changes/${removal.commandId}`);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ access: 'revoked', cleanup: { state: 'unknown' } });
+}
+it('reports unknown cleanup immediately for a removal without a review', legacyCleanup);
+
+async function completedCleanup() {
+  const memberId = 'completed-cleanup';
+  const removal = await savedRemoval(memberId);
+  await completeCleanup(memberId, 'another-removal');
+  const first = await completeCleanup(memberId, removal.id);
+  const duplicate = { memberId, removalId: removal.id,
+    sections: { groups: ['later-result'], grants: [], assistant: [], computer: [] } };
+  await append(`memberaudit-${memberId}`, 'member.departure_cleanup_completed', duplicate);
+  const expected = { state: 'complete', completedAt: first.time, sections: cleanupSections };
+  const before = await nats.store.head();
+  const response = await request(memberId, `changes/${removal.commandId}`);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ cleanup: expected, access: 'revoked', projection: {} });
+  const now = new Date(Date.parse(removal.time) + 16 * 60_000);
+  const late = await removalStatus(options, 'owner', memberId, removal.commandId, now);
+  expect(late?.cleanup).toEqual(expected);
+  await runner.rebuild(members);
+  const replayed = await request(memberId, `changes/${removal.commandId}`);
+  expect(replayed.json()).toMatchObject({ cleanup: expected });
+  expect(await nats.store.head()).toBe(before);
+  const denied = await request(memberId, `changes/${removal.commandId}`, undefined, memberId);
+  expect(denied.statusCode).toBe(403);
+  await join('cleanup-reader');
+  const ordinary = await request(memberId, `changes/${removal.commandId}`,
+    undefined, 'cleanup-reader');
+  expect(ordinary.statusCode).toBe(403);
+}
+it('uses the first saved completion unchanged after the bound and replay', completedCleanup);
+
+async function separateAdmissions() {
+  for (const memberId of ['admission-a', 'admission-b']) {
+    const identity = { issuer: config.issuerUrl, sub: 'returning-person' };
+    await append(`member-${memberId}`, 'member.invited', {
+      memberId, email: 'returning@example.test', role: 'member', invitedBy: 'owner',
+      invitationId: `invite-${memberId}`, invitedIdentity: identity,
+      expiresAt: '2030-01-01T00:00:00Z',
+    });
+    await join(memberId);
+    await append(`member-${memberId}`, 'member.removed', {
+      memberId, removedBy: 'owner', reviewRevision: 'a'.repeat(64),
+    });
+  }
+  const firstRows = await history(nats.reader, 'member-admission-a', 'test');
+  const secondRows = await history(nats.reader, 'member-admission-b', 'test');
+  const first = firstRows.at(-1)!.event;
+  const second = secondRows.at(-1)!.event;
+  await completeCleanup('admission-b', first.id);
+  await completeCleanup('admission-a', second.id);
+  const pending = { state: 'applying' };
+  expect((await removalStatus(options, 'owner', 'admission-a', first.commandId))?.cleanup)
+    .toEqual(pending);
+  expect((await removalStatus(options, 'owner', 'admission-b', second.commandId))?.cleanup)
+    .toEqual(pending);
+  const completion = await completeCleanup('admission-a', first.id);
+  const input = { memberId: 'admission-a', commandId: 'refused-return' };
+  expect(await recordMemberRefusal(nats.store, 'test', 'owner', 'invite', input,
+    'access_refused', new Date())).toBe(true);
+  expect((await removalStatus(options, 'owner', 'admission-a', first.commandId))?.cleanup)
+    .toEqual({ state: 'complete', completedAt: completion.time, sections: cleanupSections });
+  expect((await removalStatus(options, 'owner', 'admission-b', second.commandId))?.cleanup)
+    .toEqual(pending);
+}
+it('keeps cleanup with its removal across two admissions and refusal records', separateAdmissions);
+
+const auditFailures = ['timeout', 'failed', 'silo', 'subject', 'member', 'schema', 'overflow'];
+async function unavailableCleanup(failure: string) {
+  const memberId = `cleanup-${failure}`;
+  const removal = await savedRemoval(memberId);
+  await completeCleanup(memberId, removal.id);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* faultyRead(subject: string, from = 1, deadline = Infinity) {
+    if (subject !== `memberaudit-${memberId}`) {
+      yield* read(subject, from, deadline);
+      return;
+    }
+    expect(deadline - performance.now()).toBeLessThanOrEqual(2000);
+    if (failure === 'failed') throw new Error('private upstream failure');
+    if (failure === 'timeout') {
+      await new Promise(resolveDelay);
+      yield* read(subject, from, deadline);
+      return;
+    }
+    for await (const row of read(subject, from, deadline)) {
+      if (failure === 'overflow') {
+        for (let index = 0; index < 10_001; index += 1) yield row;
+        return;
+      }
+      const changed = { ...row.event };
+      if (failure === 'silo') changed.silo = 'other';
+      if (failure === 'subject') changed.subject = 'memberaudit-other';
+      if (failure === 'member') {
+        changed.data = { memberId: 'other', removalId: removal.id, sections: cleanupSections };
+      }
+      if (failure === 'schema') {
+        changed.data = { memberId, removalId: removal.id,
+          sections: { ...cleanupSections, computer: ['private@example.test'] } };
+      }
+      yield { ...row, event: changed };
+    }
+  }
+  function resolveDelay(resolve: () => void) {
+    setTimeout(resolve, 2100);
+  }
+  const readSpy = vi.spyOn(nats.store, 'readStream');
+  readSpy.mockImplementation(faultyRead);
+  const response = await request(memberId, `changes/${removal.commandId}`);
+  expect(response.statusCode, response.body).toBe(200);
+  expect(response.json()).toMatchObject({ access: 'revoked', projection: {},
+    cleanup: { state: 'unknown' } });
+  expect(response.body).not.toContain('private');
+}
+it.each(auditFailures)('keeps removal status available on an unsafe audit read: %s',
+  unavailableCleanup);
+
+async function removalDuringCleanupRead() {
+  const memberId = 'cleanup-access-order';
+  const removal = await savedRemoval(memberId);
+  await join('departing-admin');
+  await append('member-departing-admin', 'member.role_changed', {
+    memberId: 'departing-admin', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+  });
+  await project();
+  const read = nats.store.readStream.bind(nats.store);
+  async function* removeReader(subject: string, from = 1, deadline = Infinity) {
+    if (subject === `memberaudit-${memberId}`) {
+      await append('member-departing-admin', 'member.removed', {
+        memberId: 'departing-admin', removedBy: 'owner',
+      });
+    }
+    yield* read(subject, from, deadline);
+  }
+  const readSpy = vi.spyOn(nats.store, 'readStream');
+  readSpy.mockImplementation(removeReader);
+  const response = await request(memberId, `changes/${removal.commandId}`,
+    undefined, 'departing-admin');
+  expect(response.statusCode).toBe(403);
+}
+it('checks current access after reading cleanup', removalDuringCleanupRead);
+
+async function invitationRefusalAfterCleanup() {
+  const memberId = 'cleanup-invitation-refusal';
+  await completeCleanup(memberId, 'saved-removal');
+  const input = { memberId, commandId: 'refused-invitation' };
+  const recorded = await recordMemberRefusal(nats.store, 'test', 'owner', 'invite', input,
+    'access_refused', new Date());
+  expect(recorded).toBe(true);
+  const status = await invitationChange(nats.store, options.binding, 'owner', memberId,
+    input.commandId, db, 'https://example.test');
+  expect(status).toMatchObject({ status: 'refused', reason: 'access_refused' });
+  const missing = await invitationChange(nats.store, options.binding, 'owner', memberId,
+    'unknown-command', db, 'https://example.test');
+  expect(missing).toMatchObject({ status: 'not_found' });
+}
+it('records and reads invitation refusals after a cleanup completion', invitationRefusalAfterCleanup);

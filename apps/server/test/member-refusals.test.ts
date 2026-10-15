@@ -35,7 +35,6 @@ function refusalStore(row: StoredEvent, count = 1) {
 const invalidHistory = [
   { ...saved, event: { ...record, silo: 'another-silo' } },
   { ...saved, event: { ...record, subject: 'memberaudit-another-person' } },
-  { ...saved, event: { ...record, type: 'member.invited' } },
   { ...saved, event: { ...record, data: { ...data, memberId: 'another-person' } } },
   { ...saved, event: { ...record, data: { ...data, reason: 'private free text' } } },
 ];
@@ -138,3 +137,14 @@ async function hidesRawCommandReference(commandId: string) {
 it.each(['sk_live_private_secret_canary', 'Alice_Smith'])(
   'stores no raw command reference for %s', hidesRawCommandReference,
 );
+
+async function ignoresOtherAuditRows() {
+  const unrelated = { ...saved, event: { ...record, type: 'member.departure_cleanup_completed' } };
+  const store = refusalStore(unrelated);
+  expect(await refusalHistory(store, 'acme', memberId, performance.now() + 10_000))
+    .toEqual([]);
+  const oversized = refusalStore(unrelated, 10_001);
+  await expect(refusalHistory(oversized, 'acme', memberId, performance.now() + 10_000))
+    .rejects.toThrow('Refusal history unavailable');
+}
+it('skips other audit types but counts them towards the history limit', ignoresOtherAuditRows);
