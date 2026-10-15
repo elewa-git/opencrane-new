@@ -70,8 +70,9 @@ async function directCheck(context: Context, fields: Record<string, unknown>) {
   const turn = parseTurnToken({ iat: 1, exp: 121, ...fields });
   const computer = { assistant: 'assistant', computer: 'computer', generation: 1 };
   const checked = await context.credentials.check(context.headers);
-  return checkNativeCall(context.nats.store, 'test', computer, turn, checked.sequence,
-    performance.now() + 2000);
+  const started = performance.now();
+  return checkNativeCall(context.nats.store, context.binding, computer, turn, checked.sequence,
+    started, started + 2000);
 }
 async function checkRoutes(context: Context, fields: Record<string, unknown>, expected: string) {
   const position = await context.nats.store.head('budget-test');
@@ -205,3 +206,31 @@ async function sharedCalls(change: string) {
 }
 it.each(['valid', 'parent removal', 'child closure', 'missing sharing class', 'parent rejoin'])(
   'checks shared chains at both depths on every route: %s', sharedCalls);
+
+async function removedDuringAccess() {
+  const context = await fixture(2000, 20000, false, root.model, true);
+  try {
+    const children = await sharedSetup(context);
+    await context.stopDispatch();
+    const original = context.nats.store.readStream.bind(context.nats.store);
+    let removed = false;
+    async function* readStream(...args: Parameters<typeof original>) {
+      yield* original(...args);
+      if (args[0] === 'team-sales' && !removed) {
+        removed = true;
+        const removal = { conversationId: 'parent', participantId: 'alice', removedBy: 'alice' };
+        await context.append('participation-parent', 'participant.removed', removal);
+      }
+    }
+    vi.spyOn(context.nats.store, 'readStream').mockImplementation(readStream);
+    const fields = claims(context, children[0]!);
+    await expect(directCheck(context, fields)).rejects.toThrow('Shared participation refused');
+    expect(removed).toBe(true);
+    expect((await context.auth.conversation('alice', 'child', 'post')).allowed).toBe(true);
+    await checkRoutes(context, fields, 'Request refused or decision service unavailable');
+  } finally {
+    vi.restoreAllMocks();
+    await context.close();
+  }
+}
+it('rechecks shared participation after it changes during the access check', removedDuringAccess);

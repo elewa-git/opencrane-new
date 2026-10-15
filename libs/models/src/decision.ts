@@ -267,10 +267,10 @@ export async function startDecision(
       const checked = await credentials.check(req.headers, undefined, decisionDeadline);
       const computer = computerSchema.parse(checked.computer);
       const turnToken = parseTurnToken(checked.turn);
-      await checkNativeCall(actor.store, actor.silo, computer, turnToken,
-        checked.sequence, decisionDeadline);
+      await checkNativeCall(actor.store, binding, computer, turnToken,
+        checked.sequence, started, decisionDeadline);
       const managedTurn = requireManagedTurnClaims(checked.turn, managedRoute);
-      // Load managed history before starting the short access check.
+      // Read managed history before starting the short access check.
       const historyDeadline = decisionHistoryDeadline(managedRoute, decisionDeadline);
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);

@@ -1,7 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import { readStreamSummary, type EventStore } from '@opencrane/event-store';
+import type { Binding } from '@opencrane/authz';
 import { computerTurnStartedDataSchema } from '@opencrane/events';
-import { admissions, readDescendantAgreement, requireParent, requireRoot,
+import { admissions, descendantAccess, readDescendantAgreement, requireParent, requireRoot,
   requireRootActivity, requireSavedAdmission } from './descendant-admission.ts';
 import { decisionActivity } from './decision-activity.ts';
 import { requireCurrentComputer, requireTurnDelegation } from './turn-binding-check.ts';
@@ -40,9 +41,10 @@ function requireClaims(computer: Computer, turn: SignedTurn, binding: Descendant
   }
 }
 
-/** Check saved identity and root activity without granting permission or holding money. */
-export async function checkNativeCall(store: EventStore, silo: string, computer: Computer,
-  turn: SignedTurn, computerSequence: number, deadline: number): Promise<void> {
+/** Check saved identity, root activity and current access before refusing native calls. */
+export async function checkNativeCall(store: EventStore, access: Binding, computer: Computer,
+  turn: SignedTurn, computerSequence: number, started: number, deadline: number): Promise<void> {
+  const silo = access.silo;
   requireTurnDelegation(turn);
   if (turn.task !== 'native_descendant') return;
   const delegationId = turn.delegation.at(-1)!;
@@ -78,8 +80,6 @@ export async function checkNativeCall(store: EventStore, silo: string, computer:
     binding.conversationId, binding.rootTurnId, deadline);
   requireCurrentComputer(activity.computer.lifecycle, computerSequence);
   requireRootActivity(activity, binding, summary.computer.lifecycle);
-  await activity.confirm(deadline, false);
-  // Keep shared calls refused until their current participation checks are connected.
-  if (binding.dataClass !== 'private') throw new Error('Shared descendant calls refused');
+  await descendantAccess(store, access, binding, activity, deadline, started);
   throw new NativeDelegationDisabled();
 }

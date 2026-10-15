@@ -1,0 +1,1 @@
+Native child calls now recheck current model access, shared chat participation and the saved paying group. Revoked grants and lost access refuse even while OpenFGA still allows them. Calls that pass these checks remain disabled before any money is held.

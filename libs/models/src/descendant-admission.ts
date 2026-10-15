@@ -121,36 +121,7 @@ export async function admitDescendant(store: EventStore, access: Binding,
     const activity = await decisionActivity(store, access.silo, binding.assistantId,
       binding.conversationId, binding.rootTurnId, deadline);
     requireRootActivity(activity, binding, facts.summary.computer.lifecycle);
-    let confirmSharedAccess: Awaited<ReturnType<typeof sharedAdmissionAccess>> | undefined;
-    if (binding.dataClass === 'shared') {
-      confirmSharedAccess = await sharedAdmissionAccess(store, access.silo,
-        activity.conversation, binding.requesterId, deadline);
-    }
-    const grants = await readDecisionGrants(store, access.silo, binding.model!, deadline);
-    const subjects = [`member-${binding.requesterId}`, `assistant-${binding.assistantId}`];
-    const authority = await decisionAuthorityFence(store, performance.now(), subjects,
-      binding.requesterId, binding.assistantId, grants);
-    async function confirmAdmission() {
-      while (true) {
-        const activityChanged = await activity.confirm(authority.deadline, false);
-        const sharedAccessChanged = await confirmSharedAccess?.(authority.deadline);
-        const authorityChanged = await authority();
-        if (!activityChanged && !sharedAccessChanged && !authorityChanged) {
-          return;
-        }
-      }
-    }
-    const limits = { include: authority.include, head: authority.head, deadline: authority.deadline };
-    const fresh = Object.assign(confirmAdmission, limits);
-    await currentAuthority(store, access, binding.requesterId, binding.assistantId,
-      binding.conversationId, 'model', binding.model!, fresh, activity.conversation, grants);
-    await requireSharedPayer(store, access.silo, binding, fresh.deadline);
-    if (binding.payingGroupId !== 'personal-default') {
-      fresh.include(`team-${binding.payingGroupId}`);
-      await groupMembership(store, access.silo, binding.requesterId, binding.payingGroupId,
-        access, fresh.deadline);
-    }
-    await fresh();
+    const fresh = await descendantAccess(store, access, binding, activity, deadline);
     if (existing) {
       return saveDelegationStart(store, existing.start, start, fresh.deadline);
     }
@@ -174,6 +145,42 @@ export async function admitDescendant(store: EventStore, access: Binding,
     }
   }
   throw new Error('Descendant admission contention or deadline');
+}
+
+/** Recheck access to the saved model and payer before admission or a native call. */
+export async function descendantAccess(store: EventStore, access: Binding, binding: Descendant,
+  activity: Awaited<ReturnType<typeof decisionActivity>>, deadline: number, started?: number) {
+  let confirmSharedAccess: Awaited<ReturnType<typeof sharedAdmissionAccess>> | undefined;
+  if (binding.dataClass === 'shared') {
+    confirmSharedAccess = await sharedAdmissionAccess(store, access.silo,
+      activity.conversation, binding.requesterId, deadline);
+  }
+  const grants = await readDecisionGrants(store, access.silo, binding.model!, deadline);
+  const subjects = [`member-${binding.requesterId}`, `assistant-${binding.assistantId}`];
+  const authority = await decisionAuthorityFence(store, started ?? performance.now(), subjects,
+    binding.requesterId, binding.assistantId, grants, deadline);
+  async function confirmAccess() {
+    while (true) {
+      const activityChanged = await activity.confirm(authority.deadline, false);
+      const sharedAccessChanged = await confirmSharedAccess?.(authority.deadline);
+      const authorityChanged = await authority();
+      if (!activityChanged && !sharedAccessChanged && !authorityChanged) {
+        return;
+      }
+    }
+  }
+  const limits = { include: authority.include, head: authority.head, deadline: authority.deadline };
+  const fresh = Object.assign(confirmAccess, limits);
+  await currentAuthority(store, access, binding.requesterId, binding.assistantId,
+    binding.conversationId, 'model', binding.model!, fresh, activity.conversation, grants);
+  await requireSharedPayer(store, access.silo, binding, fresh.deadline);
+  if (binding.payingGroupId !== 'personal-default') {
+    fresh.include(`team-${binding.payingGroupId}`);
+    await groupMembership(store, access.silo, binding.requesterId, binding.payingGroupId,
+      access, fresh.deadline);
+  }
+  await fresh();
+  return fresh;
 }
 
 async function readDelegationStart(store: EventStore, delegationId: string, deadline: number,

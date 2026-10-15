@@ -20,7 +20,7 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; delivers and probes only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks open spending before provider switch-on; saves hosted image results and registration, publication receipts, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions; checks private child calls and root activity before refusing them| store["libs/event-store<br/>event log"]
+  models -->|checks access and saved work; records admissions and spending| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -251,9 +251,13 @@ Retries add only a missing start. A read checks that both records agree and that
 computer admission is still open. Missing, older or conflicting records refuse the check.
 Shared admissions keep the root’s shared-only class and check current parent participation
 and the chat’s and assistant’s paying group. Private admissions stay private.
-A private native call checks both saved records, its parent chain and the root’s activity.
-It then returns a fixed refusal before reading the request body or holding money.
-Current access checks for these calls and shared native call checks are still planned.
+A native child call checks both saved records, its parent chain and the root’s activity.
+It rechecks access to the saved model and paying group. Shared calls also check that
+the requester still has access to the child chat. Leaving and rejoining its parent
+does not restore inherited access; a new explicit child join can.
+A revoked grant refuses even while the permissions service still allows it.
+A call that passes these checks still returns a fixed refusal before reading the
+request body or holding money.
 Native execution remains disabled.
 
 An isolated gateway test opens a CONNECT tunnel after the decision is saved and

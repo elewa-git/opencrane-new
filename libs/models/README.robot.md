@@ -124,8 +124,8 @@ pass. A private turn cannot claim the class, and a shared child cannot omit it.
 `admitDescendant` saves `computer.turn_started` and then a version 1
 `delegation.started` for a signed internal decision. Each stage makes its own conditional
 append to one stream. It returns `{ admission, start }`, both original stored events.
-No route or production signer calls it. Native call decisions remain for the next part
-of #93 row 2; root allowance checks remain for #90 PR 4.
+No route or production signer calls it. Native calls remain disabled; root allowance
+checks remain for #90 PR 4.
 The native bridge, thread grants and Stop work remain in later design rows.
 
 The decision uses ES256, the configured issuer, audience `delegation-admission`,
@@ -188,21 +188,29 @@ create no budget event, hold, token or upstream call. Live native qualification:
 
 Native calls pass through `native-call-check.ts` before conversation activity for an
 ordinary turn, request body reads, policy, approval, budget checks, holds or dispatch.
-Private native chains have the requester followed by one or two saved delegation ids.
+Private and shared native chains have the requester followed by one or two saved delegation ids.
 Every signed turn claim and the authenticated computer identity must match the saved
 admission. The selected model must also belong to its recorded scope. Both records
 and parent records load within the decision's original two-second deadline, before
 any authority check. The shared admission helpers check root and parent bindings.
 Root Stop, completion, closure and computer changes refuse; unrelated activity does not.
-A matching private call ends with `NativeDelegationDisabled`; `decisionError` exposes
-only its fixed message. Earlier errors remain generic. No new watched stream is added.
+A matching call ends with `NativeDelegationDisabled`; `decisionError` exposes
+its fixed message. Access errors contain no ids. No new watched stream is added.
 
-P4-11 PR 2d is the first part of the native decision checks. Current access, inherited
-revocation, shared participation and payer membership checks remain for part e.
-Shared calls still refuse generically. The fixed disabled refusal proves saved-record
-and root checks passed; it does not claim current access was granted. The payer stays
-in the saved record and no call reaches a spending operation. Root allowance integration,
-minting, bridge work and Stop execution remain outside this change.
+`descendantAccess` in `descendant-admission.ts` supplies the same access checks to
+admission and native calls. It checks current requester and assistant permissions on
+the saved model, applied grant receipts, shared participation and the saved payer's
+team membership. The call supplies the original decision start and deadline to every
+store read and the two-second authority check. Histories load before that check;
+confirmation reads only later activity. No additional stream is watched.
+Shared calls require the saved shared-only class. Parent leave/rejoin cannot restore
+an inherited child join; a new explicit child join can. The personal-assistant test
+uses a team payer saved only on the turn records, so another team cannot substitute.
+`test/native-call-access.test.ts` proves both depths reach the disabled refusal on the
+model, MCP and memory routes, then refuse stale revocations and lost participation or
+payer membership. Invalid JSON and observed reads prove these checks precede body,
+policy and approval handling. Budget positions, holds and dispatches stay unchanged.
+Root allowance integration, minting, bridge work and Stop execution remain separate.
 `test/native-call-check.test.ts` uses admissions made by `admitDescendant`, real fixtures,
 individual changed claims, unavailable reads and exact final refusals on model, MCP
 and memory decision routes. Native credentials remain disabled. Live qualification: NOT RUN.
