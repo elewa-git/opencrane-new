@@ -431,3 +431,47 @@ async function stopDuringPreparation(wait: string) {
 }
 it.each(['object read', 'membership read'])(
   'sends a Stop saved during %s before releasing the prepared work', stopDuringPreparation);
+
+async function stopDuringFinalPositionReply() {
+  fixture = await budgetBridge();
+  const test = fixture;
+  const turn = await test.message('first');
+  await test.start(turn);
+  await test.process();
+  expect(test.frames.filter(isTurn)).toHaveLength(1);
+  await test.reconnect();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const head = test.store.head.bind(test.store);
+  let conversationReads = 0;
+  async function delayFinalPosition(subject?: string, deadline?: number) {
+    const position = await head(subject, deadline);
+    if (subject === 'conversation-first') {
+      conversationReads++;
+      if (conversationReads === 4) {
+        entered.resolve();
+        await release.promise;
+      }
+    }
+    return position;
+  }
+  vi.spyOn(test.store, 'head').mockImplementation(delayFinalPosition);
+  const processing = test.process();
+  try {
+    await entered.promise;
+    await test.stop(turn);
+  } finally {
+    release.resolve();
+    await processing;
+  }
+  expect.soft(test.frames.filter(isWork)[0]).toEqual({
+    type: 'stop', ...turn, reason: 'budget', stopId: 'first-stop',
+  });
+  expect.soft(test.frames.filter(isTurn)).toEqual([]);
+  await test.process();
+  expect(test.frames.filter(isStop)).toEqual([
+    { type: 'stop', ...turn, reason: 'budget', stopId: 'first-stop' },
+  ]);
+}
+it('sends a Stop saved during the final position reply without redelivering the turn',
+  stopDuringFinalPositionReply);
