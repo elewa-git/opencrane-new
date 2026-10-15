@@ -14,8 +14,8 @@ flowchart LR
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys, grants and reads facts| providers["Provider pages<br/>keys, checks, model choices and access"]
-  web -->|opens| integrations["Integrations pages<br/>register, tools and access explanations"]
-  web -->|opens and clears on lost access| people["People pages<br/>member directory, groups and owners"]
+  web -->|opens| integrations["Integrations pages<br/>register, add, tools and access explanations"]
+  web -->|opens and clears on lost access| people["People pages<br/>members, groups, owners and invitations"]
   web -->|reads and stores| memory["Memory panel<br/>scopes, facts, sources and safe receipts"]
 ```
 
@@ -31,6 +31,8 @@ loads more people, groups or assistants when requested.
   It shows saved progress, checks an uncertain save, and asks before changing
   an answer recovered after a failed read. Lost access clears the answers.
 - Lets people start conversations, send messages and stop a reply.
+- Lets Owners and Admins create an email invitation and copy its link. If the reply is
+  lost, the People page checks that request's status before showing a link.
 - Lets organisation admins create shared assistants for groups and members start private
   sessions with them.
 - Lets someone choose one colleague for a direct conversation between two people.

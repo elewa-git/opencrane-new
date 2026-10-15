@@ -104,6 +104,27 @@ afterEach(() => {
   history.replaceState(null, '', '/org/people');
 });
 
+it.each([true, false])('shows Invite people only when permission is %s', async (allowed) => {
+  history.replaceState(null, '', '/org/people');
+  const unavailable = { status: 'unavailable', value: null };
+  const directory = { rows: [], next: null, counts: { members: unavailable,
+    groups: unavailable, pendingInvitations: unavailable, acceptedInvitations: unavailable },
+  checkedAt: '2026-10-15T12:00:00Z', projection: { content: 'current' },
+  permissions: { invite: allowed } };
+  const fixture = await mountWithFetch(() => reply(directory));
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    if (allowed) {
+      expect([...rootElement(fixture).querySelectorAll('button')].some((candidate) =>
+        candidate.textContent?.trim() === 'Invite people')).toBe(true);
+    } else {
+      expect(rootElement(fixture).textContent).not.toContain('Loading members…');
+      expect([...rootElement(fixture).querySelectorAll('button')].some((candidate) =>
+        candidate.textContent?.trim() === 'Invite people')).toBe(false);
+    }
+  });
+});
+
 it('shows typed rows with one link per group and one status region', async () => {
   const root = await mount({ rows: [sampleGroup] });
   const item = root.querySelector('[aria-label="Groups"] li');

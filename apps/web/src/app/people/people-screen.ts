@@ -1,5 +1,6 @@
 import {
   ChangeDetectionStrategy, Component, computed, input, signal, type OnDestroy, type OnInit,
+  viewChild,
 } from '@angular/core';
 import type { GroupRow } from '@opencrane/protocol';
 import { SharedState } from '../shared-state/shared-state';
@@ -9,6 +10,7 @@ import { fetchGroups, followChange, sendCreateGroup } from './groups-api';
 import { isDuplicateName, newGroupId, checkTimeLabel } from './group-wording';
 import { GroupsList } from './groups-list';
 import { MembersList } from './members-list';
+import { InvitePanel } from './invite-panel';
 
 type LoadState = 'loading' | 'ready' | 'failed' | 'retrying' | 'access';
 type Tab = 'members' | 'groups' | 'invitations';
@@ -16,7 +18,7 @@ type PendingCreate = { commandId: string; groupId: string; name: string; receipt
 
 @Component({
   selector: 'oc-people-screen',
-  imports: [SharedState, HingeDrawer, GroupsList, MembersList, GrainLoader],
+  imports: [SharedState, HingeDrawer, GroupsList, MembersList, GrainLoader, InvitePanel],
   templateUrl: './people-screen.html', styleUrls: ['./people.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -38,6 +40,8 @@ export class PeopleScreen implements OnInit, OnDestroy {
   protected readonly highlightedGroupId = signal<string | undefined>(undefined);
   protected readonly checkTime = signal<string | undefined>(undefined);
   protected readonly draftError = signal('');
+  protected readonly inviteAllowed = signal(false);
+  protected readonly invitePanel = viewChild(InvitePanel);
   protected readonly accessDetail = signal('');
   protected readonly visibleRows = computed(() => this.filteredRows());
   protected readonly tabs: readonly { id: Tab; label: string }[] = [
@@ -58,6 +62,9 @@ export class PeopleScreen implements OnInit, OnDestroy {
   protected select(tab: Tab): void {
     this.selectedTab.set(tab);
     if (tab === 'groups' && !this.loadedAt() && this.state() !== 'access') void this.load();
+  }
+  protected openInvite(button: HTMLButtonElement): void {
+    this.invitePanel()?.open(button);
   }
   protected openDrawer(button: HTMLButtonElement): void {
     if (!this.hasUnresolvedCreate()) this.pendingCreate = undefined;
@@ -287,8 +294,10 @@ export class PeopleScreen implements OnInit, OnDestroy {
   }
   protected clearForAccessChange(status?: number): void {
     // Clear protected names and references before a late response can redraw them.
+    this.invitePanel()?.clearAccess();
     this.request.abort();
     this.rows.set([]);
+    this.inviteAllowed.set(false);
     this.query.set('');
     this.loadedAt.set(undefined);
     this.highlightedGroupId.set(undefined);

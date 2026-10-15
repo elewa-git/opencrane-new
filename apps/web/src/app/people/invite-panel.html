@@ -1,0 +1,65 @@
+@if (selectedTab() === 'invitations' && allowed()) {
+  @if (stage() === 'unknown') {
+    <div class="paper-card invitation-unknown">
+      <oc-shared-state kind="unknown" message="Invitation status unknown"
+        [detail]="statusMessage()" [changeReference]="commandReference()"
+        [hideReferenceFromAnnouncement]="true" [actionBusy]="checking()"
+        (action)="checkStatus()" [announce]="true" />
+    </div>
+  } @else {
+    <oc-shared-state kind="not_configured" message="Not available yet"
+      detail="The invitation list and acceptance details are not available yet."
+      [showAction]="false" />
+    @if (!unavailable()) {
+      <button type="button" class="button primary invite-entry"
+        (click)="openFromTab($event)">Invite people</button>
+    }
+  }
+}
+<oc-hinge-drawer [open]="opened()" title="Invite people" backLabel="Cancel"
+  [returnFocusTo]="opener" (closed)="drawerClosed()">
+  @if (stage() === 'link') {
+    <div class="supplied"><div><strong>Link created. No email was sent.</strong>
+      <p>Send this link to {{ email() }} yourself.</p></div></div>
+    <label for="invitation-link">Invitation link</label>
+    <input id="invitation-link" type="text" readonly [value]="link()"
+      (focus)="selectLink()" />
+    <p>Expires {{ expiryLabel() }}. This link is for {{ email() }}.</p>
+    <p role="status" aria-live="polite">{{ copyMessage() }}</p>
+  } @else {
+    <form (submit)="$event.preventDefault(); create()" novalidate>
+      <label for="invite-email">Person email</label>
+      <input id="invite-email" type="email" autocomplete="email" maxlength="254"
+        [value]="email()" (input)="emailChanged($event)"
+        [attr.aria-invalid]="error() ? 'true' : null"
+        aria-describedby="invite-email-hint invite-email-error" />
+      <p id="invite-email-hint">The person is confirmed when they accept the invitation.</p>
+      <p id="invite-email-error" class="field-error" aria-live="polite">{{ error() }}</p>
+      <label for="invite-role">Role</label>
+      <select id="invite-role" [value]="role()" (change)="roleChanged($event)">
+        <option value="member">Member</option><option value="admin">Admin</option>
+      </select>
+      <p>Owners are appointed through the owner flow.</p>
+      <label for="invite-assistant">Personal assistant</label>
+      <select id="invite-assistant" [value]="assistant()"
+        (change)="assistantChanged($event)">
+        <option value="provision">Provision</option><option value="none">None</option>
+      </select>
+      <p>Expires seven days after creation.</p>
+      @if (stage() === 'refused') {
+        <oc-shared-state kind="refused" [message]="refusal()"
+          [showAction]="false" [announce]="true" />
+      }
+    </form>
+  }
+  <div overlayFooter class="overlay-actions">
+    @if (stage() === 'link') {
+      <button type="button" class="button secondary" (click)="copy()">Copy link</button>
+      <button type="button" class="button primary" (click)="close()">Done</button>
+    } @else {
+      <button type="button" class="button secondary" (click)="close()">Cancel</button>
+      <button type="button" class="button primary" [disabled]="sending() || checking()"
+        (click)="create()">{{ sending() ? 'Creating…' : 'Create' }}</button>
+    }
+  </div>
+</oc-hinge-drawer>
