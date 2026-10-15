@@ -1,5 +1,5 @@
 <main class="provider-page">
-  @if (!setupOpen() && !replaceOpen()) {
+  @if (!setupOpen() && !replaceOpen() && !accessEditor.opened()) {
   <div class="live-status" role="status" aria-live="polite" aria-atomic="true">
     {{ liveStatus() }}
   </div>
@@ -98,16 +98,21 @@
       }
     </section>
 
-    <section class="grants-gap" aria-labelledby="grant-gap-title">
-      <h2 id="grant-gap-title">Model access</h2>
-      <oc-shared-state kind="not_configured" message="Not available yet"
-        [detail]="accessExplanation()" [showAction]="false" />
+  }
+  @if (registry().length > 0) {
+    <section class="grants-gap" aria-labelledby="grant-title">
+      <h2 id="grant-title">Model access</h2>
+      @for (model of registry(); track model) {
+        <div><strong>{{ model }}</strong>
+          <button #accessButton class="button secondary" type="button"
+            (click)="accessEditor.open(model, accessButton)">Access</button>
+        </div>
+      }
     </section>
 
     <section class="model-register" aria-labelledby="model-register-title">
       <h2 id="model-register-title">Models and task routes</h2>
-      <p class="register-note">Task routes come from the current model registry. The API does not
-        show who has access to a model.</p>
+      <p class="register-note">Task routes come from the current model registry.</p>
       @if (routeRows().length > 0) {
         <div class="route-header" aria-hidden="true">
           <span>Task</span><span>Model</span><span>Provider</span><span>Access</span>
@@ -117,7 +122,8 @@
             <strong>{{ route.task }}</strong>
             <span>{{ route.model }}</span>
             <span>{{ route.providerName }}</span>
-            <span class="route-access">Not available yet</span>
+            <button #routeAccess class="button secondary" type="button"
+              (click)="accessEditor.open(route.model, routeAccess)">Access</button>
           </article>
         }
       } @else {
@@ -305,8 +311,8 @@
       @if (step() === 'access') {
         <section class="access-unavailable">
           <h3>Who can use these models?</h3>
-          <oc-shared-state kind="not_configured" message="Not available yet"
-            [detail]="accessExplanation()" [showAction]="false" />
+          <p>Grant access from each model's Access button.
+            Both the requester and the assistant need access.</p>
         </section>
       }
 
@@ -320,8 +326,8 @@
             <oc-integration-facts [facts]="providerFacts(provider)" />
             <p>Enabled models: {{ provider.enabledModels.length }}.</p>
           }
-          <oc-shared-state kind="not_configured" message="Model access not available yet"
-            [detail]="accessExplanation()" [showAction]="false" />
+          <p>Grant access from each model's Access button.
+            Both the requester and the assistant need access.</p>
           <p class="evidence-note">These checks are evidence only. They do not prove a conversation
             works or guarantee a fallback.</p>
         </section>
@@ -425,3 +431,7 @@
     </div>
   </oc-modal-sheet>
 </main>
+
+<oc-model-access-editor #accessEditor [routing]="routing()"
+  [denied]="loadState() === 'access' || loadState() === 'forbidden'"
+  (lostAccess)="clearProtectedData()" />

@@ -13,13 +13,17 @@ flowchart LR
   web["apps/web<br/>chat, paged conversation lists and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
-  web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
+  web -->|saves keys, grants and reads facts| providers["Provider pages<br/>keys, checks, model choices and access"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
   web -->|opens and clears on lost access| people["People pages<br/>member directory, groups and owners"]
   web -->|reads and stores| memory["Memory panel<br/>scopes, facts, sources and safe receipts"]
 ```
 
 ## What it is responsible for
+
+Admins can grant or remove model access for one person, group or assistant at a time.
+The editor checks that each save has taken effect. An uncertain reply offers a status
+check with the original request id.
 
 - Shows sign-in and the first-owner claim page.
 - Lets people start conversations, send messages and stop a reply.

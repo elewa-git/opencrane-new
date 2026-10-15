@@ -139,16 +139,12 @@ async function verify(request: FastifyRequest, reply: FastifyReply,
 }
 async function read(request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) {
-  const fresh = await providerAuthority(options.store, options.binding, memberId);
+  await readActiveMember(options.store, options.binding, memberId, 'admin');
   const input = parameters.parse(request.params);
-  if (input.providerId) {
-    fresh.include(`provider-${input.providerId}`);
-  }
   const rows = await readProviders(options.db, options.silo, input.providerId);
   const publicRows = rows.map(providerRow);
-  await fresh();
   return reply.send({ rows: publicRows, loadedAt: new Date().toISOString(),
-    access: { grantsAvailable: false, reason: 'p4_22_required' } });
+    access: { grantsAvailable: true, reason: 'model_access_routes' } });
 }
 async function writeKey(request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) {

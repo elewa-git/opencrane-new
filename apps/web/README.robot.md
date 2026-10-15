@@ -530,3 +530,23 @@ The phone picker is a modal dialog with trapped keyboard focus; Back returns foc
 opener. Access loss clears the shared socket message cache along with the page's drafts,
 names, participant rows and transcript. The socket service ignores handlers left over from
 the closed connection.
+
+## Model access editor
+
+Each active registry model and task route opens a shared drawer. It uses the
+[model grant API](../../docs/api/providers.md#changing-model-grants) and validates replies
+with the shared protocol schemas. One selected row produces one command. Only a proved
+pre-append failure offers Try again, with identical bytes. Uncertain outcomes retain
+that command in memory across drawer closes and offer GET-only status checks.
+Each check makes at most three status reads. Saved waits for content and IAM to be
+current and for a fresh grant list. Access refusal clears details and ignores late replies.
+Either parent provider or registry GET returning 401/403 clears the page and drawer
+immediately, without waiting for the other GET. Both parent and drawer reads are aborted.
+The browser checks hold the other parent GET and a candidate GET pending, then release
+successful replies after refusal to prove that names and controls cannot return.
+Run `npm run visual:screen-p4-22-access -- --check` to check without rewriting captures.
+The picker shows up to 50 candidates of one kind. Reload recovery and Load more are
+pending; reloading discards the pending command. Names never enter storage or addresses.
+Configured uses and grant paging are absent from the API, so no Missing rows are inferred.
+`npm run visual:screen-p4-22-access` uses intercepted HTTP replies and the web build.
+The [screen receipt](../../docs/process/screen-p4-22-access/receipt.md) records its limits.

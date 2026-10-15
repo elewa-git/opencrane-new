@@ -1542,13 +1542,19 @@ restored. [Check record](../../docs/process/approval-watcher-review-fixes.md).
 
 ## Model grant changes
 
+Provider GET replies advertise `grantsAvailable: true` with `reason: "model_access_routes"`.
+Provider list/detail, model grant and candidate GETs check current Owner/Admin access
+once with `readActiveMember`. They do not start the two-second write check or watch
+provider activity. Slow database reads and saved verification results cannot refuse
+an already authorised read. Writes retain their existing access checks.
+
 `POST /api/org/models/:modelId/access` accepts only `{commandId, expectedSequence,
 action: "grant" | "revoke", granteeKind, granteeId}` in at most 2 KiB. It requires
 an organisation session, exact Origin and current Owner/Admin events plus OpenFGA.
 Targets for grants must exist in this silo; people must be active members. Revokes
 can remove a departed person's grant. Grants require an active registry model;
 retired models stay revocable and unknown model ids are refused. A grant changes
-neither provider selection nor paying-group membership. The browser editor stays unavailable.
+neither provider selection nor paying-group membership. The browser editor uses these routes for one-row grant and remove saves.
 
 POST and status GET check current Owner/Admin access before reading grant history.
 History has a ten-second limit before the two-second check on caller and ownership.

@@ -28,6 +28,7 @@ let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let dbs: Awaited<ReturnType<typeof databases>>;
 let runner: ProjectionRunner;
+let database: ReturnType<typeof pgDb>;
 let app: ReturnType<typeof buildServer>;
 let secretDirectory: string;
 let secrets: ReturnType<typeof providerSecrets>;
@@ -99,8 +100,9 @@ async function initialise() {
   gateway = await startGateway({ binary, port, readinessPort, decisionUrl: decision.url,
     issuer, upstream: `127.0.0.1:${upstreamAddress.port}`, keyFile: `${secretDirectory}/legacy-key`,
     configFile: `${secretDirectory}/gateway.json`, usageFile: `${secretDirectory}/usage.jsonl` });
+  database = pgDb(dbs.queue);
   app = buildServer(config, { providers: {
-    silo: 'acme', store: nats.store, binding, db: pgDb(dbs.queue), feed: { memberId }, secrets,
+    silo: 'acme', store: nats.store, binding, db: database, feed: { memberId }, secrets,
     verification: { decisionUrl: decision.url, tokens },
   } });
 }
@@ -186,6 +188,63 @@ async function skipsWithoutClaimingReady() {
 }
 it('records an explicit skipped test separately without ready or model-answer PASS',
   skipsWithoutClaimingReady);
+async function readsDuringVerification() {
+  const originalQuery = database.query.bind(database);
+  async function queryDuringVerification<Row extends Record<string, unknown>>(
+    sql: string, values?: unknown[],
+  ) {
+    const rows = await originalQuery<Row>(sql, values);
+    if (sql.includes('FROM providers')) {
+      const verification = { commandId: 'skip-during-detail', expectedRevision: 2, action: 'skip' };
+      const saved = await request('POST', '/api/org/providers/primary/verify', verification);
+      expect(saved.statusCode).toBe(200);
+      expect(saved.json()).toMatchObject({ status: 'appended' });
+    }
+    return rows;
+  }
+  database.query = queryDuringVerification;
+  try {
+    const detail = await request('GET', '/api/org/providers/primary');
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json()).toMatchObject({ rows: [{ providerId: 'primary', revision: 2 }] });
+  } finally {
+    database.query = originalQuery;
+  }
+}
+it('returns provider details when a harmless verification is saved during the database read',
+  readsDuringVerification);
+
+async function readsAfterSlowDatabase() {
+  const originalQuery = database.query.bind(database);
+  const now = performance.now.bind(performance);
+  const clock = vi.spyOn(performance, 'now');
+  async function slowQuery<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+    const rows = await originalQuery<Row>(sql, values);
+    clock.mockReturnValue(now() + 2100);
+    return rows;
+  }
+  database.query = slowQuery;
+  try {
+    const detail = await request('GET', '/api/org/providers/primary');
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json()).toMatchObject({ rows: [{ providerId: 'primary', revision: 2 }] });
+  } finally {
+    database.query = originalQuery;
+    clock.mockRestore();
+  }
+}
+it('returns provider details when the database read takes more than two seconds',
+  readsAfterSlowDatabase);
+
+async function refusesMemberProviderReads() {
+  for (const url of ['/api/org/providers', '/api/org/providers/primary']) {
+    const response = await request('GET', url, undefined, 'idp-bob');
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+  }
+}
+it('refuses provider lists and details to a non-admin member', refusesMemberProviderReads);
+
 async function checksThroughRealGateway() {
   const checked = await request('POST', '/api/org/providers/primary/verify',
     { commandId: 'reach-primary', expectedRevision: 2, action: 'reachability' });
@@ -363,7 +422,7 @@ async function selectsRegistryModelsWithoutGrants() {
   await runner.run(providers);
   expect((await request('GET', '/api/org/providers/primary')).json()).toMatchObject({
     rows: [{ enabledModels: ['gpt-6-luna', 'gpt-6.1-sol'] }],
-    access: { grantsAvailable: false, reason: 'p4_22_required' } });
+    access: { grantsAvailable: true, reason: 'model_access_routes' } });
   expect((await request('POST', '/api/org/providers', { ...body,
     commandId: 'unknown-model', expectedRevision: 4, models: ['made-up'] })).statusCode).toBe(403);
 }

@@ -134,13 +134,10 @@ model (`reason: "unknown_price"`); 409 stale revision, changed quote or command
 conflict; 503 unavailable infrastructure. Status reads use 404 for an absent command. Accepted asynchronous
 work can still have a refused, failed or unknown recorded outcome.
 
-`access.grantsAvailable` stays false with `reason: "p4_22_required"` until the
-grant edit and receipt routes are available. The two read routes above are
-available to HTTP clients now. Their response says not available yet for provider
-bindings, enabled-model state, key facts, verification facts and configured
-assistant uses. Do not show invented users, assistant counts, retirement
-consequences or access completion. The Claude Design screens and fresh-install
-qualification remain pending on the UI foundation.
+`access.grantsAvailable` is true with `reason: "model_access_routes"`. The browser
+opens the model access editor from each model's Access button. Access reads still
+mark provider bindings, enabled-model state, keys, verification and configured
+assistant uses as not available yet. The editor does not infer missing users.
 
 ## Changing model grants
 
@@ -175,7 +172,9 @@ and never write OpenFGA tuples. The status GET checks current caller access once
 and reports whether content and IAM have applied the saved event. A missing
 command returns 404 `unknown`; a request still running may yet save it. An
 uncertain append returns 503 `unknown`, while a failed check before append returns
-503 `unavailable`. The browser grant editor and fresh-install journey remain pending.
+503 `unavailable`. The browser grant editor now supports one-row grant and remove saves. It checks
+content and IAM status, then reads a fresh list before reporting Saved. Reload
+recovery and candidate Load more remain pending. The fresh-install journey is NOT RUN.
 
 ## Model calls during grant changes
 
