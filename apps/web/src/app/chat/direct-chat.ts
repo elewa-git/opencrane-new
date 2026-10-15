@@ -108,6 +108,8 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly recordedMessage = this.sending.recordedMessage;
   private readonly socket = inject(WebSocketService);
   private readonly subscription = this.socket.received.subscribe(this.receive.bind(this));
+  private readonly accessLossSubscription = this.socket.accessLost.subscribe(
+    this.clearAfterAccessChange.bind(this));
   private historyRequest: AbortController | undefined;
   private listRequest: AbortController | undefined;
   protected currentMemberId = '';
@@ -148,6 +150,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.archive.clear();
     this.readMarker.purge();
     this.subscription.unsubscribe();
+    this.accessLossSubscription.unsubscribe();
     this.socket.disconnect();
   }
 

@@ -14,7 +14,7 @@
       <div class="header-title">
         <div class="header-main">
           @if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }
-          <h1 #accessHeading tabindex="-1" [class.draft-title]="!chat.selected()">
+          <h1 [class.draft-title]="!chat.selected()">
             {{ chat.denied() || chat.requestedUnavailable() || chat.requestedLookupFailed() ? 'Unavailable' : title() }}
           </h1>
         </div>
@@ -60,7 +60,7 @@
         </div> }
         @if (chat.error() && !chat.queued()) { <div class="error" role="alert">{{ chat.error() }} @if (!chat.queued()) { <button type="button" (click)="chat.load()">Retry</button> } @if (chat.denied()) { <a href="/">Sign in</a> }</div> }
         @if (chat.denied()) {
-          <div class="access-lock">
+          <div class="access-lock" #accessNotice tabindex="-1">
           <oc-shared-state kind="access_changed" message="You no longer have access"
             detail="Transcript, drafts, names, files and counts were cleared. Late results won't appear."
             [showAction]="false" />

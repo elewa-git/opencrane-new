@@ -75,11 +75,13 @@ abort a pending read. Read ids and positions remain in memory only.
 
 Both open transcript pages clear protected content on a refused history, list or status
 read, or a socket refusal. The direct/group page also clears after a refused read save.
+Both pages also clear on a bare WebSocket close with code 1008 and do not reconnect that socket.
 The workspace clears its address selection and
 aborts an upload. Its revision prevents late list and history replies from restoring
 content. Assistant-session read markers remain for the next part.
 `npm run visual:screen-p4-6-read` captures the two lock screens and an open
-group chat with a checked read body at two widths using intercepted API replies.
+group chat with a checked read body at two widths using intercepted API replies. The
+phone check measures each header action's full box and the lock notice after rendering.
 The Integrations register searches and filters that read. Its detail page reads the
 register first, then reads the matching server's tool policy. It shows a server row as soon
 as the register read succeeds. A failed list refresh keeps the row, says that availability

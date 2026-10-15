@@ -80,6 +80,8 @@ export class ChatSession implements OnDestroy {
   private pending: { id: string; conversationId: string; text: string;
     executionMode?: 'memory_free' } | undefined;
   private subscription = this.socket.received.subscribe(message => this.receive(message));
+  private readonly accessLossSubscription = this.socket.accessLost.subscribe(
+    this.clearDenied.bind(this));
 
   constructor() {
     effect(onCleanup => {
@@ -264,6 +266,7 @@ export class ChatSession implements OnDestroy {
     this.stopState.reset();
     ++this.revision;
     this.subscription.unsubscribe();
+    this.accessLossSubscription.unsubscribe();
     this.socket.disconnect();
   }
 

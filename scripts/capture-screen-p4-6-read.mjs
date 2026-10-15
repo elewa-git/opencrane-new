@@ -38,11 +38,7 @@ function resolveNextMoment(resolve) {
 }
 
 function afterNextFrame() {
-  return new Promise(resolveAfterFrame);
-}
-
-function resolveAfterFrame(resolve) {
-  requestAnimationFrame(resolve);
+  return new Promise(requestAnimationFrame);
 }
 
 function isFocused(element) {
@@ -138,8 +134,10 @@ async function capture(browser, frame, width) {
         'The complete access notice stays inside the viewport');
       const heading = page.getByRole('heading', { name: 'Unavailable' });
       assert.equal(await heading.count(), 1);
-      assert(await heading.evaluate(isFocused),
-        'Focus moves to the unavailable heading');
+      const focusTarget = frame === 'workspace-clear'
+        ? page.locator('.access-lock') : heading;
+      assert(await focusTarget.evaluate(isFocused),
+        'Focus moves to the unavailable notice');
       assert.equal(await page.locator('oc-chat-composer').count(), 0);
     }
     await page.evaluate(waitForFonts);
@@ -175,7 +173,8 @@ try {
     + 'PASS: Intercepted pages at 1280px and 390px with reduced motion. '
     + 'Both unavailable screens and the open group chat have no horizontal overflow. '
     + 'The group chat sent one read command for its rendered message. '
-    + 'The checked visible actions meet 44px.\n\n'
+    + 'Every visible header action fits inside the viewport and meets 44px. '
+    + 'The complete lock notice remains in view after the next frame.\n\n'
     + `Captures: ${filenames.join(', ')}.\n`;
   await writeFile(`${output}/receipt.md`, receipt);
   console.log(`Captured ${filenames.length} screens`);

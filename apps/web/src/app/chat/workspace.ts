@@ -114,7 +114,7 @@ export class Workspace implements OnInit {
   private focusComposerAfterNavigation = false;
   private previousCaptureConversation = this.chat.selected();
   private previousCaptureDenied = this.chat.denied();
-  private readonly accessHeading = viewChild<ElementRef<HTMLElement>>('accessHeading');
+  private readonly accessNotice = viewChild<ElementRef<HTMLElement>>('accessNotice');
   private focusAccess = false;
   constructor() {
     effect(this.rememberRecoveryFocus.bind(this));
@@ -381,7 +381,9 @@ export class Workspace implements OnInit {
   private afterRender(): void {
     if (this.focusAccess) {
       this.focusAccess = false;
-      this.accessHeading()?.nativeElement.focus();
+      const transcript = this.transcriptElement()?.nativeElement;
+      if (transcript) transcript.scrollTop = 0;
+      this.accessNotice()?.nativeElement.focus({ preventScroll: true });
     }
     const turns = this.chat.turns();
     const recovery = this.chat.computer() + String(this.chat.recoveredLostTurn());
@@ -390,12 +392,15 @@ export class Workspace implements OnInit {
     if (content !== this.lastTranscript) {
       this.lastTranscript = content;
       const element = this.transcriptElement()?.nativeElement;
-      if (element) requestAnimationFrame(this.scrollTranscriptToBottom.bind(this, element));
+      if (element && !this.chat.denied()) {
+        requestAnimationFrame(this.scrollTranscriptToBottom.bind(this, element));
+      }
     }
     this.focusPendingComposer();
     this.restoreRecoveryFocus();
   }
   private scrollTranscriptToBottom(element: HTMLElement): void {
+    if (this.chat.denied()) return;
     element.scrollTop = element.scrollHeight;
   }
   private isPanelExpanded(): boolean {

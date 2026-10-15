@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>sign-in, chat, saved read and archive choices, welcome survey and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>sign-in, chat, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, status reads, live updates and access closures| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices and access"]
@@ -53,6 +53,8 @@ assistant check open rather than guessing an answer.
   means the server recorded it; it does not say that anyone received it.
 - Saves how far someone has read in a direct or group chat after the newest message appears.
   Losing access clears its messages, draft, names and files, even when an older reply arrives later.
+  A closed live connection that reports lost access clears an open chat as well. The lock notice
+  receives keyboard focus, and phone headers show every chat action without clipping.
 - Lets a group creator add or remove participants and lets other people leave. It locks
   the creator in place, marks a colleague who left the company as removed, and checks an
   uncertain change by reading its original status. Losing access clears the conversation.
