@@ -3,15 +3,18 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { setTimeout as delay } from 'node:timers/promises';
 import { OpenFgaClient } from '@openfga/sdk';
 import { conversations, members } from '@opencrane/projections';
-import { chatListSchema } from '@opencrane/protocol';
+import { chatListSchema, chatOriginSchema } from '@opencrane/protocol';
 import { envelope } from '@opencrane/models';
 import { z } from 'zod';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { childFixture, childSession } from './support/child-fixture.ts';
 
 type Fixture = Awaited<ReturnType<typeof childFixture>>;
 let context: Fixture;
-async function setup() { context = await childFixture(); }
+async function setup() {
+  context = await childFixture();
+}
 async function cleanup() {
   vi.restoreAllMocks();
   await context.close();
@@ -46,6 +49,11 @@ async function read(code: number, memberId = 'bob', conversationId = 'child') {
   const response = await get(memberId, conversationId);
   expect(response.statusCode, response.body).toBe(code);
   expect(response.headers['cache-control']).toBe('no-store');
+  if (code === 200) {
+    const body = chatOriginSchema.parse(response.json());
+    const extra = { ...body, reason: 'hidden' };
+    expect(chatOriginSchema.safeParse(extra).success).toBe(false);
+  }
   expect(await savedState()).toEqual(before);
   if (response.json<{ status: string }>().status !== 'linked') {
     expect(decrypt).not.toHaveBeenCalled();
@@ -89,12 +97,15 @@ async function linked() {
     sourcePosition: z.number() }) }).parse(child.data).origin;
   const request = { url: '/api/conversations', headers: context.headers('bob') };
   const list = chatListSchema.parse((await context.app.inject(request)).json());
-  function parent(row: (typeof list.rows)[number]) { return row.conversationId === 'parent'; }
+  function parent(row: (typeof list.rows)[number]) {
+    return row.conversationId === 'parent';
+  }
   const title = list.rows.find(parent)?.title;
-  expect(title).toBe('the-parent-source-message');
+  expect(title).toBe('the-parent-source-messag');
   const response = await read(200);
-  expect(response.json()).toEqual({ status: 'linked', parentConversationId: 'parent',
-    parentTitle: title, ...origin });
+  const expected = { status: 'linked', parentConversationId: 'parent',
+    parentTitle: title, ...origin };
+  expect(response.json()).toEqual(expected);
 }
 it('links the visible source with exactly the reader’s Conversations list title', linked);
 
@@ -132,8 +143,8 @@ async function foreignIds() {
   const privateChat = { conversationId: 'private', createdBy: 'alice', mode: 'agent_session',
     assistantId: 'assistant' };
   await context.append('conversation-private', 'conversation.created', privateChat);
-  const foreign = envelope('other-silo', 'conversation-foreign', 'conversation.created',
-    { ...direct, conversationId: 'foreign' });
+  const foreignData = { ...direct, conversationId: 'foreign' };
+  const foreign = envelope('other-silo', 'conversation-foreign', 'conversation.created', foreignData);
   await context.nats.seed([foreign]);
   const refused = await get('alice', 'missing', 'messages');
   expect(refused.statusCode).toBe(403);
@@ -141,8 +152,8 @@ async function foreignIds() {
     expect((await read(403, 'alice', id)).body).toBe(refused.body);
   }
   expect((await read(403, 'jane')).body).toBe(refused.body);
-  await context.append('member-bob', 'member.removed',
-    { memberId: 'bob', removedBy: 'alice' }, false);
+  const removal = { memberId: 'bob', removedBy: 'alice' };
+  await context.append('member-bob', 'member.removed', removal, false);
   expect((await read(403)).body).toBe(refused.body);
 }
 it('matches foreign messages refusal for outsiders, inactive members and every non-child id',
@@ -162,15 +173,16 @@ it.each(['parent', 'child'])('classifies unapplied %s access', applying);
 async function outageProxy(conversationId: string) {
   const binding = context.options.binding;
   const original = binding.apiUrl;
-  const object = `conversation:${Buffer.from(JSON.stringify(['test', conversationId]))
-    .toString('base64url')}`;
+  const identity = Buffer.from(JSON.stringify(['test', conversationId]));
+  const object = `conversation:${identity.toString('base64url')}`;
   async function forward(request: IncomingMessage, reply: ServerResponse) {
     const chunks: Buffer[] = [];
     for await (const chunk of request) {
       if (!Buffer.isBuffer(chunk)) throw new Error('Unexpected proxy body');
       chunks.push(chunk);
     }
-    const body = Buffer.concat(chunks).toString();
+    const encoded = Buffer.concat(chunks);
+    const body = encoded.toString();
     if (request.url?.endsWith('/check') && body.includes(object)) {
       reply.writeHead(503);
       reply.end('{}');
@@ -183,7 +195,10 @@ async function outageProxy(conversationId: string) {
     reply.end(await response.text());
   }
   function handle(request: IncomingMessage, reply: ServerResponse) {
-    function fail() { reply.writeHead(500); reply.end(); }
+    function fail() {
+      reply.writeHead(500);
+      reply.end();
+    }
     void forward(request, reply).catch(fail);
   }
   const proxy = createServer(handle);
@@ -202,20 +217,32 @@ async function outageProxy(conversationId: string) {
 async function unavailable(conversationId: string) {
   await seeded();
   const close = await outageProxy(conversationId);
-  try { expect((await read(503)).body).toBe('{"status":"unavailable"}'); }
-  finally { await close(); }
+  try {
+    expect((await read(503)).body).toBe('{"status":"unavailable"}');
+  } finally {
+    await close();
+  }
 }
 it.each(['parent', 'child'])('keeps %s IAM outages retryable', unavailable, 60_000);
 
 async function sourceGuard(field: string) {
   await seeded();
-  const logged = vi.spyOn(context.app.log, 'error');
+  const logged: unknown[][] = [];
+  function recordError(...values: unknown[]) {
+    logged.push(values);
+  }
+  function capture(request: FastifyRequest, _reply: FastifyReply, done: () => void) {
+    vi.spyOn(request.log, 'error').mockImplementation(recordError);
+    done();
+  }
+  context.app.addHook('onRequest', capture);
   const original = context.nats.store.readStream.bind(context.nats.store);
   async function* readStream(subject: string, from = 1, deadline = Infinity) {
     for await (const row of original(subject, from, deadline)) {
       if (subject === 'conversation-parent' && from > 1) {
         if (field === 'outage') throw new Error('Store unavailable: parent');
         const changed = structuredClone(row);
+        if (field === 'position') changed.sequence += 1;
         if (field === 'id') changed.event.id = 'different-source';
         if (field === 'type') changed.event.type = 'conversation.closed';
         if (field === 'silo') changed.event.silo = 'another';
@@ -228,9 +255,10 @@ async function sourceGuard(field: string) {
   const response = await read(field === 'outage' ? 503 : 200);
   const status = field === 'outage' ? 'unavailable' : 'restricted';
   expect(response.body).toBe(JSON.stringify({ status }));
-  expect(JSON.stringify(logged.mock.calls)).not.toContain('parent');
+  if (field === 'outage') expect(logged).toHaveLength(1);
+  expect(JSON.stringify(logged)).not.toContain('parent');
 }
-it.each(['id', 'type', 'silo', 'parent', 'outage'])(
+it.each(['position', 'id', 'type', 'silo', 'parent', 'outage'])(
   'checks the exact saved source: %s', sourceGuard);
 
 async function delayedContent(kind: string) {
@@ -257,21 +285,35 @@ async function delayedContent(kind: string) {
   else vi.spyOn(context.nats.store, 'readStream').mockImplementation(readStream);
   let before = await savedState();
   const pending = get().then(completed);
-  function completed(response: Awaited<ReturnType<typeof get>>) { return response; }
+  function completed(response: Awaited<ReturnType<typeof get>>) {
+    return response;
+  }
   try {
     await Promise.race([held.promise, delay(5000)]);
     if (kind === 'removal') {
       await remove('child', 'bob');
       before = await savedState();
-    } else await delay(2100);
-  } finally { release.resolve(); }
+    } else if (kind === 'timeout') await delay(10_100);
+    else await delay(2100);
+  } finally {
+    release.resolve();
+  }
   const response = await pending;
-  expect(response.statusCode, response.body).toBe(kind === 'removal' ? 403 : 200);
-  expect(response.json()).toMatchObject({ status: kind === 'removal' ? 'refused' : 'linked' });
+  let code = 200;
+  let status = 'linked';
+  if (kind === 'removal') {
+    code = 403;
+    status = 'refused';
+  } else if (kind === 'timeout') {
+    code = 503;
+    status = 'unavailable';
+  }
+  expect(response.statusCode, response.body).toBe(code);
+  expect(response.json()).toMatchObject({ status });
   expect(response.headers['cache-control']).toBe('no-store');
   expect(await savedState()).toEqual(before);
 }
-it.each(['source', 'title', 'removal'])(
+it.each(['source', 'title', 'removal', 'timeout'])(
   'allows slow content but checks access after source loading: %s', delayedContent);
 
 async function viewerTitle() {
@@ -289,17 +331,21 @@ async function viewerTitle() {
     origin: { ...origin, sourceMessageId: source.id, sourcePosition,
       intentPosition: sourcePosition + 1 } };
   await context.append('conversation-later-child', 'conversation.created', data);
-  await add('child', 'jane');
   const explicit = { conversationId: 'later-child', participantId: 'jane', addedBy: 'alice',
     contextKind: 'shared_child', joinKind: 'explicit_child', reviewPosition: sourcePosition };
   await context.append('participation-later-child', 'participant.added', explicit);
   await context.runner.run(conversations);
   const request = { url: '/api/conversations', headers: context.headers('jane') };
   const list = chatListSchema.parse((await context.app.inject(request)).json());
-  function parent(row: (typeof list.rows)[number]) { return row.conversationId === 'parent'; }
+  function parent(row: (typeof list.rows)[number]) {
+    return row.conversationId === 'parent';
+  }
   const title = list.rows.find(parent)?.title;
   expect(title).toBe('a-later-visible-source');
-  expect((await read(200, 'jane', 'later-child')).json()).toEqual({ status: 'linked',
-    parentConversationId: 'parent', parentTitle: title, sourceMessageId: source.id, sourcePosition });
+  const expected = { status: 'linked', parentConversationId: 'parent', parentTitle: title,
+    sourceMessageId: source.id, sourcePosition };
+  expect((await read(200, 'jane', 'later-child')).json()).toEqual(expected);
+  await remove('parent', 'jane');
+  expect((await read(200, 'jane', 'later-child')).body).toBe('{"status":"restricted"}');
 }
 it('uses the reader’s parent history start when choosing the linked title', viewerTitle);

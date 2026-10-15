@@ -241,3 +241,9 @@ published entry fields before decrypting text for HTTP and sockets.
 `childReviewInputSchema`, `childStartInputSchema` and `childRequestStatusSchema` check
 the [child request API](../../docs/api/group-chats.md#reviewed-child-requests).
 Unknown and queued status replies are strict; saved failure outcomes await the next part.
+
+## Child origin replies
+
+`chatOriginSchema` accepts exactly a linked parent id, title, source message id and
+positive source position, or `{status: "restricted"}` alone. Both alternatives reject
+extra fields. See the [origin contract](../../docs/api/group-chats.md#child-origin).

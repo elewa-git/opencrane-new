@@ -3,7 +3,8 @@ import { participantCommand, participantList } from './participants.ts';
 import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { creationEvent, privateSessionReader, sharedAssistantAuthority,
   writePrivateSession } from './private-session.ts';
-import { sessionSlug } from '@opencrane/protocol';
+import { summary } from './list-summary.ts';
+import { childOrigin } from './origin.ts';
 import { conversationListQuery, conversationListCursor, ConversationListChanged,
   ConversationListIncomplete }
   from './list-cursor.ts';
@@ -79,6 +80,7 @@ async function conversationComputerState(options: ChatOptions, conversationId: s
 
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
   app.get('/api/chat', handler);
+  app.get('/api/conversations/:conversationId/origin', handler);
   app.get('/api/chat/colleagues', handler);
   app.get('/api/chat/groups', handler);
   app.get('/api/chat/groups/:groupId', handler);
@@ -111,6 +113,14 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
     try {
       const { conversationId, commandId } = parameters.parse(request.params);
       const participants = request.routeOptions.url === participantsRoute.url;
+      const origin = request.routeOptions.url === '/api/conversations/:conversationId/origin';
+      if (origin) {
+        const checks = { write: false };
+        const context = await requireMember(request, reply, config, options, checks);
+        const result = await childOrigin(context.options, context.memberId,
+          idSchema.parse(conversationId));
+        return reply.send(result);
+      }
       const preferences = request.routeOptions.url === stateRoute.url;
       let accessConversationId = conversationId;
       // Keep participant access in its existing read and command functions.
@@ -314,60 +324,6 @@ async function personalContext(options: ChatOptions, memberId: string) {
   }
   return { memberId, displayName: member.rows[0]?.display_name ?? null, assistantId,
     memoryAdmission };
-}
-
-type SummaryRow = { type: string; data: unknown };
-function isFirstMessage(row: SummaryRow) {
-  return row.type === 'message.posted';
-}
-function changesStatus(row: SummaryRow) {
-  return [
-    'message.posted', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed',
-    'agent.turn_stop_requested', 'conversation.closed',
-  ].includes(row.type);
-}
-function conversationStatus(rows: SummaryRow[], last: SummaryRow | undefined, mode: string) {
-  if (last?.type === 'conversation.closed') return 'closed';
-  if (mode !== 'agent_session' || !last) return 'open';
-  if (last.type === 'agent.turn_failed') return 'failed';
-  if (last.type === 'agent.turn_stop_requested') return 'stopped';
-  if (last.type === 'agent.turn_completed') {
-    const turnId = z.object({ turnId: z.string() }).parse(last.data).turnId;
-    const outputWasLost = outputWasLostForTurn(rows, turnId);
-    return outputWasLost ? 'lost' : 'done';
-  }
-  return 'working';
-}
-function outputWasLostForTurn(rows: SummaryRow[], turnId: string): boolean {
-  for (const row of rows) {
-    if (row.type !== 'agent.output_lost') continue;
-    const lostTurnId = z.object({ turnId: z.string() }).parse(row.data).turnId;
-    if (lostTurnId === turnId) return true;
-  }
-  return false;
-}
-async function summary(options: ChatOptions, conversationId: string, mode: string,
-  joinPosition: number) {
-  const result = await options.db.query<SummaryRow>(
-    `WITH visible_first AS (
-      SELECT type, data FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
-        AND position >= $3 AND type = 'message.posted' ORDER BY position LIMIT 1
-    ), visible_last AS (
-      SELECT type, data FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
-        AND position >= $3 AND type IN ('message.posted', 'agent.turn_started',
-          'agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested',
-          'conversation.closed') ORDER BY position DESC LIMIT 1
-    ), lost_output AS (
-      SELECT type, data FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
-        AND position >= $3 AND type = 'agent.output_lost'
-        AND data->>'turnId' = (SELECT data->>'turnId' FROM visible_last) LIMIT 1
-    ) SELECT * FROM visible_first UNION ALL SELECT * FROM visible_last
-      UNION ALL SELECT * FROM lost_output`, [options.silo, conversationId, joinPosition]);
-  const first = result.rows.find(isFirstMessage);
-  const last = result.rows.findLast(changesStatus);
-  let title = 'New session';
-  if (first) title = sessionSlug(options.keys.decrypt(options.silo, conversationId, first.data));
-  return { title, status: conversationStatus(result.rows, last, mode) };
 }
 
 async function write(

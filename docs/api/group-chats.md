@@ -139,3 +139,21 @@ person's ids alike. The requester receives `{requestId, state: 'queued'}` and
 All replies disable caching. New children stay held before delivery, computer resume,
 start admission and token issue. They reserve and spend zero cents. Activation and
 turn admission are not available through these routes yet.
+
+## Child origin
+
+`GET /api/conversations/:conversationId/origin` returns one of these strict replies:
+
+- `{status: "linked", parentConversationId, parentTitle, sourceMessageId, sourcePosition}`
+  when the reader can read both the child and its exact parent source message.
+  The title matches this reader's Conversations list title.
+- Exactly `{status: "restricted"}` when parent access is refused or still applying,
+  the source is missing or does not match, or it predates the reader's parent join.
+
+Restricted replies give no reason or parent details. Linked replies contain no source
+text or other parent metadata. Removed inherited participants receive 403 even after
+rejoining the parent. Explicit child invitations remain independent of parent access.
+Missing, foreign, non-child and denied child ids return the same 403 `{status: "refused"}`
+as messages GET. Unapplied child access returns 425 `{status: "access_applying"}`.
+IAM or store outages return 503 `{status: "unavailable"}`, including parent check failures.
+All replies use `Cache-Control: no-store`. This read saves no events or other state.
