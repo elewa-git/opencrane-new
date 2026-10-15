@@ -32,7 +32,7 @@ async function fixture() {
   }
   onTestFinished(closeNats);
   const storage = await databases();
-  onTestFinished(storage.close);
+  onTestFinished(storage.close.bind(storage));
   const db = pgDb(storage.queue);
   const setup = await gatewayFixture();
   const faulty = await lostReplyStore(nats.connection);

@@ -13,7 +13,7 @@ async function serialPublications() {
   onTestFinished(nats.close.bind(nats));
   const faulty = await lostReplyStore(nats.connection);
   const storage = await databases();
-  onTestFinished(storage.close);
+  onTestFinished(storage.close.bind(storage));
   const db = pgDb(storage.queue);
   const handler = prepareGatewayConfigurationHandler(faulty.store, 'test', db);
   function unusedQuery(): Promise<never> {
