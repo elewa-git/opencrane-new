@@ -30,6 +30,16 @@ from page one searches Recent, then Archived, with up to five 50-row pages per s
 If either list changes during the search, it starts again at Recent page one once.
 A second change offers Retry. An exhausted search shows the generic unavailable screen;
 an outage can be retried.
+The direct and group chat header shows Archive or Unarchive only when its current
+server list row has `joinEventId` and `archivePosition`. It posts one `archive`
+state command with that row's join, choice and expected position. A 200 receipt
+reads the change once. `applying` keeps the pending command and offers Check status.
+A lost reply or 425/503 keeps the same id and body; 404 offers a same-body retry.
+409 reloads the list and selected row before another choice. 400 drops the command.
+401/403 clears the chat and pending command. Late replies from another chat are ignored.
+Only a current projection reload changes the displayed choice. The archived transcript
+line is a page notice, not a saved message or unread item. The assistant workspace
+header does not yet have this control.
 The Integrations register searches and filters that read. Its detail page reads the
 register first, then reads the matching server's tool policy. It shows a server row as soon
 as the register read succeeds. A failed list refresh keeps the row, says that availability

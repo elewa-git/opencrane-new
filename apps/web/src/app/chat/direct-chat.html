@@ -52,7 +52,10 @@
       <a class="back-link" href="/workspace" aria-label="Back to workspace"
         [attr.aria-disabled]="composerBusy() || participantChangeUnsettled()"
         (click)="protectPendingNavigation($event)">‹</a>
-      <h1 tabindex="-1" #accessHeading>
+      <h1 tabindex="-1" #accessHeading
+        [attr.title]="selectedConversationId()
+          ? headerTitle(selectedConversation(), currentMemberId, knownColleagues(), colleague())
+          : null">
         @if (pageState() === 'access_changed' || pageState() === 'not_found') { Unavailable }
         @else if (selectedConversationId()) {
           {{ headerTitle(selectedConversation(), currentMemberId, knownColleagues(), colleague()) }}
@@ -67,6 +70,10 @@
         <span class="header-status">Group</span>
       } @else if (colleague()) { <span class="header-status">Direct · 2 people</span> }
       @if (pageState() === 'ready') {
+        @if (archive.row()?.joinEventId && archive.row()?.archivePosition !== undefined) {
+          <button class="archive-button" type="button" [disabled]="!archive.canChange()"
+            (click)="archive.change()">{{ archive.row()?.archived ? 'Unarchive' : 'Archive' }}</button>
+        }
         @if (selectedConversation()?.mode === 'group') {
           <button #participantOpener class="participant-open" type="button"
             (click)="openParticipants()">Participants</button>
@@ -177,6 +184,20 @@
             }
           </section>
         } @else {
+        @if (archive.notice()) {
+          <div class="archive-notice" role="status">
+            <span>{{ archive.notice() }}</span>
+            @if (archive.canCheck()) {
+              <button type="button" [disabled]="archive.checking()"
+                (click)="archive.checkStatus()">
+                {{ archive.checking() ? 'Checking…' : 'Check status' }}
+              </button>
+            }
+            @if (archive.canRetry()) {
+              <button type="button" (click)="archive.retry()">Try again</button>
+            }
+          </div>
+        }
         @if (pageError() && pageState() === 'ready') {
           <div class="refresh-error"><span>{{ pageError() }} Previously loaded conversations are kept.</span>
             <button class="button secondary" type="button" [attr.aria-disabled]="refreshing()"
@@ -211,6 +232,11 @@
             (selectionChanged)="selectionChanged($event)" />
           }
           @if (colleague() || selectedConversation()?.mode === 'group') {
+          @if (archive.row()?.archived) {
+            <p class="archive-transcript-note" role="status">
+              You archived this conversation. Only your list changed.
+            </p>
+          }
           @if (historyState() === 'loading') {
             <p class="empty-transcript">Loading messages…</p>
           } @else if (historyState() === 'failed') {

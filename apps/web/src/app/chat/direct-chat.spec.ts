@@ -38,6 +38,54 @@ function reply(body: unknown, status = 200): Response {
   });
 }
 
+it('moves a confirmed chat from the server row and clears it when archive access is denied', async () => {
+  const api = createFetchFixture();
+  let archived = false;
+  let denyNext = false;
+  let commandId = '';
+  function archiveReplies(request: RequestRecord): Response | undefined {
+    const url = new URL(request.url, location.origin);
+    if (url.pathname === '/api/conversations' && request.method === 'GET') {
+      const section = url.searchParams.get('section') ?? 'recent';
+      const row = { ...conversation('existing', 'bob'), joinEventId: 'join-one',
+        archived, archivePosition: archived ? 12 : 0 };
+      const rows = section === (archived ? 'archived' : 'recent') ? [row] : [];
+      return reply({ rows, nextCursor: null });
+    }
+    if (url.pathname.endsWith('/state') && request.method === 'POST') {
+      if (denyNext) return reply({}, 403);
+      commandId = String(request.body?.['id']);
+      archived = true;
+      return reply({ status: 'appended', sequence: 12 });
+    }
+    if (url.pathname.includes('/changes/')) {
+      return reply({ status: 'appended', conversationId: 'existing', commandId,
+        type: 'conversation.archive_set', sequence: 12,
+        projection: { content: 'current', iam: 'current' } });
+    }
+    return undefined;
+  }
+  api.override(archiveReplies);
+  const fixture = await mountWithoutReady(api, 'existing');
+  function hasArchiveButton(): void {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.archive-button')).not.toBeNull();
+  }
+  await vi.waitFor(hasArchiveButton);
+  const archiveButton = root(fixture).querySelector<HTMLButtonElement>('.archive-button');
+  expect(archiveButton?.textContent?.trim()).toBe('Archive');
+  archiveButton?.click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('You archived this conversation. Only your list changed.');
+  expect(root(fixture).querySelector('.archive-button')?.textContent?.trim()).toBe('Unarchive');
+  denyNext = true;
+  root(fixture).querySelector<HTMLButtonElement>('.archive-button')?.click();
+  await settle(fixture);
+  expect(root(fixture).textContent).toContain('You no longer have access');
+  expect(root(fixture).textContent).not.toContain('Is the Tuesday slot still open?');
+  expect(root(fixture).querySelector('.archive-button')).toBeNull();
+});
+
 function objectValue(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   return Object.fromEntries(Object.entries(value));

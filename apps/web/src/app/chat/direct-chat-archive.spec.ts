@@ -13,22 +13,36 @@ function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
 }
 
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  return Object.fromEntries(Object.entries(value));
+}
+
 function fixture() {
   const requests: { url: string; method: string; body?: Record<string, unknown> }[] = [];
   let postReply = response({ status: 'appended', sequence: 12 });
   let statusReply = response({ status: 'appended', conversationId: 'chat', commandId: 'archive-id',
-    type: 'conversation.archived', sequence: 12,
+    type: 'conversation.archive_set', sequence: 12,
     projection: { content: 'current', iam: 'current' } });
   let row: ChatConversation = archived;
-  const reload = vi.fn(async () => row);
+  function reloadRow(): Promise<ChatConversation> {
+    return Promise.resolve(row);
+  }
+  const reload = vi.fn(reloadRow);
   const accessChanged = vi.fn();
-  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
+  function archiveFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    let url: string;
+    if (typeof input === 'string') url = input;
+    else if (input instanceof Request) url = input.url;
+    else url = input.href;
     const method = init?.method ?? 'GET';
-    const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
-    requests.push({ url, method, body });
-    return method === 'POST' ? postReply : statusReply;
-  });
+    const body = typeof init?.body === 'string'
+      ? objectValue(JSON.parse(init.body) as unknown) : undefined;
+    if (body) requests.push({ url, method, body });
+    else requests.push({ url, method });
+    return Promise.resolve(method === 'POST' ? postReply : statusReply);
+  }
+  const fetcher = vi.fn(archiveFetch);
   const archive = new DirectChatArchive(() => 'chat', () => true, reload, accessChanged, fetcher);
   archive.setRow(recent);
   return {
@@ -42,7 +56,7 @@ function fixture() {
 it('sends one archive command with the saved row fields and waits for current', async () => {
   const test = fixture();
   test.setStatus(response({ status: 'appended', conversationId: 'chat', commandId: 'archive-id',
-    type: 'conversation.archived', sequence: 12,
+    type: 'conversation.archive_set', sequence: 12,
     projection: { content: 'applying', iam: 'current' } }));
   await test.archive.change();
   await test.archive.change();
@@ -56,12 +70,12 @@ it('sends one archive command with the saved row fields and waits for current', 
   await test.archive.checkStatus();
   expect(test.requests.filter(request => request.method === 'POST')).toHaveLength(1);
   test.setStatus(response({ status: 'appended', conversationId: 'chat', commandId: String(body?.['id']),
-    type: 'conversation.archived', sequence: 12,
+    type: 'conversation.archive_set', sequence: 12,
     projection: { content: 'current', iam: 'current' } }));
   await test.archive.checkStatus();
   expect(test.reload).toHaveBeenCalledOnce();
   expect(test.archive.row()?.archived).toBe(true);
-  expect(test.archive.notice()).toBe('You archived this conversation. Only your list changed.');
+  expect(test.archive.notice()).toBe('');
 });
 
 it('keeps one command after a lost reply, checks status, and retries only after 404', async () => {
@@ -111,4 +125,30 @@ it('ignores an older reply after the selected chat changes', async () => {
   await change;
   expect(archive.row()?.conversationId).toBe('new');
   expect(test.reload).not.toHaveBeenCalled();
+});
+
+it('checks an uncertain 425 without another POST and clears on denied status', async () => {
+  const test = fixture();
+  test.setPost(response({}, 425));
+  await test.archive.change();
+  expect(test.archive.commandId()).not.toBe('');
+  test.setStatus(response({}, 401));
+  await test.archive.checkStatus();
+  expect(test.requests.filter(request => request.method === 'POST')).toHaveLength(1);
+  expect(test.accessChanged).toHaveBeenCalledOnce();
+  expect(test.archive.commandId()).toBe('');
+  expect(test.archive.notice()).toBe('');
+  expect(test.archive.row()).toBeUndefined();
+});
+
+it('unarchives using the archived row and announces the confirmed choice once', async () => {
+  const test = fixture();
+  test.archive.setRow(archived);
+  test.setRow({ ...recent, archivePosition: 13 });
+  await test.archive.change();
+  expect(test.requests[0]?.body).toMatchObject({ archived: false, joinEventId: 'join-one',
+    expectedArchivePosition: 12 });
+  expect(test.archive.row()?.archived).toBe(false);
+  expect(test.archive.notice())
+    .toBe('You moved this conversation back to Recent. Only your list changed.');
 });
