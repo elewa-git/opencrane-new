@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { setTimeout as delay } from 'node:timers/promises';
+import { listOpenConversations } from '@opencrane/projections';
 import { readComputerControl } from '@opencrane/auth';
 import type { bridgeControl } from './bridge-control.ts';
 import type { Logger } from '@opencrane/observability';
@@ -113,17 +115,6 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       // Read the chats to find waiting messages, without sending to an unknown computer.
       assistant = assistantSnapshot([], kinds.get(assistantId), options.silo);
     }
-    let controlWaiting = false;
-    if (assistant.controlPending && assistant.current?.type === 'computer.ready') {
-      const computer = computerData.parse(assistant.current.data);
-      const control = await readComputerControl(options.store, options.silo, assistantId);
-      if (control?.phase === 'requested' && !refused.has(computer.computerId)) {
-        const link = await connection(computer.computerId, assistantId);
-        await link.control.send();
-        // Keep checking idle links so a lost connection sends the gate again.
-        controlWaiting = true;
-      }
-    }
     async function checkControl() {
       // Check the position again after slow reads; reuse history until the computer changes.
       const current = await snapshot(assistantId);
@@ -134,7 +125,52 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
     const processing = sessions.map(processSession);
     const results = await Promise.all(processing);
-    return controlWaiting || results.includes(true);
+    return results.includes(true);
+  }
+
+  async function processControl(assistantId: string) {
+    const assistant = await snapshot(assistantId);
+    if (assistant.controlPending && assistant.current?.type === 'computer.ready') {
+      const computer = computerData.parse(assistant.current.data);
+      const control = await readComputerControl(options.store, options.silo, assistantId);
+      if (control?.phase === 'requested' && !refused.has(computer.computerId)) {
+        const link = await connection(computer.computerId, assistantId);
+        await link.control.send();
+      }
+    }
+  }
+
+  async function watchControls(signal: AbortSignal) {
+    const checking = new Map<string, Promise<void>>();
+    function failed() {
+      logger.warn('Bridge control check unavailable; retrying next poll');
+    }
+    function start(assistantId: string) {
+      if (checking.has(assistantId)) return;
+      function finished() {
+        checking.delete(assistantId);
+      }
+      const checked = processControl(assistantId).catch(failed);
+      checking.set(assistantId, checked.finally(finished));
+    }
+    try {
+      while (!signal.aborted) {
+        try {
+          const conversations = await listOpenConversations(options.db, options.silo);
+          for (const conversation of conversations) {
+            if (signal.aborted) break;
+            if (conversation.mode === 'agent_session') start(conversation.assistantId);
+          }
+        } catch {
+          failed();
+        }
+        await delay(250, undefined, { signal });
+      }
+    } catch (error) {
+      if (!signal.aborted) throw error;
+    } finally {
+      await Promise.all(checking.values());
+    }
   }
 
   function forgetMissing(sessions: AgentSession[]) {
@@ -152,5 +188,5 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
   }
 
-  return { processAssistant, forgetMissing };
+  return { processAssistant, watchControls, forgetMissing };
 }

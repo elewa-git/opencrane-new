@@ -286,8 +286,8 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   socket.once('close', closed);
   const reports = reportReceiver(options, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
-  const position = await reportPosition(options.store, options.silo, input.computerId);
   await control.send();
+  const position = await reportPosition(options.store, options.silo, input.computerId);
   const resume = { type: 'resume', since: position, approvalWaiting: true };
   socket.send(JSON.stringify(resume));
   const delivered = new Set<string>();
@@ -305,6 +305,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   async function settled() {
     const reportsDone = reports.settled();
     await approvals.settled();
+    await control.settled();
     return reportsDone;
   }
   return {
@@ -371,6 +372,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     return connectionIds.get(assistantId);
   }
   const processor = assistantProcessor(options, tokens, refused, connection, connectionId, logger);
+  const controls = processor.watchControls(signal);
   try {
     while (!signal.aborted) {
       try {
@@ -405,6 +407,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   } catch (error) {
     if (!signal.aborted) throw error;
   } finally {
+    await controls;
     const active = [...links.values()];
     for (const link of active) link.socket.terminate();
     const pending = active.map(settledBridge);
