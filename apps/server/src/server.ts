@@ -1,3 +1,4 @@
+import { registerChildRoutes } from './chat/child-routes.ts';
 import { registerPublicationRoutes } from './chat/publications.ts';
 import { registerSurveyRoutes } from './onboarding/routes.ts';
 import { registerRoleRoutes } from './members/role-routes.ts';
@@ -109,6 +110,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
   registerPublicationRoutes(app, authConfig, options.chat);
+  registerChildRoutes(app, authConfig, options.chat);
   registerSurveyRoutes(app, authConfig, options.onboarding);
   registerAssistantRoutes(app, authConfig, options.chat);
   registerAuditRoutes(app, authConfig, options.audit);

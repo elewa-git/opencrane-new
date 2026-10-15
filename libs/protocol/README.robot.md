@@ -235,3 +235,9 @@ No names, scope ids, configuration references or spending totals are accepted.
 Final text publication follows the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
 `chatRowSchema` includes `publicationKind: final`. The server selects the
 published entry fields before decrypting text for HTTP and sockets.
+
+## Reviewed child requests
+
+`childReviewInputSchema`, `childStartInputSchema` and `childRequestStatusSchema` check
+the [child request API](../../docs/api/group-chats.md#reviewed-child-requests).
+Unknown and queued status replies are strict; saved failure outcomes await the next part.

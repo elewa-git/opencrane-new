@@ -15,8 +15,10 @@ export async function summonFixture() {
     await context.append(`team-${teamId}`, 'team.member_added',
       { teamId, memberId: 'alice', addedBy: 'alice' });
   }
-  await context.append('assistant-helper', 'assistant.created',
-    { assistantId: 'helper', ownerId: 'owners', kind: 'team', payingGroupId: 'payer' });
+  for (const assistantId of ['helper', 'other-helper']) {
+    await context.append(`assistant-${assistantId}`, 'assistant.created',
+      { assistantId, ownerId: 'owners', kind: 'team', payingGroupId: 'payer' });
+  }
   const keyOptions = { namedCurve: 'P-256',
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
     publicKeyEncoding: { type: 'spki', format: 'pem' } } as const;

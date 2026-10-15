@@ -1,3 +1,4 @@
+import { childRequestHeld } from './child-hold.ts';
 import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import { chatMembership } from './participation.ts';
 import { isComputerLifecycle, readComputerControl } from '@opencrane/auth';
@@ -181,6 +182,9 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
     return control;
   }
   agentSession(rows);
+  if (await childRequestHeld(options, conversation.conversationId)) {
+    return { pending: true, retry: true };
+  }
   const message = pendingMessage(rows);
   const stops = pendingBudgetStops(rows, assistant.closed);
   const waitingWork = message !== undefined || stops.length > 0;

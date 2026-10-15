@@ -121,7 +121,9 @@ export async function sharedAssistantRead(options: SessionAuthorityOptions, memb
   if (!await auth.applied(created.id)) {
     throw new AuthorityApplying('Assistant is still being applied');
   }
-  if (!(await auth.actsFor(memberId, assistantId)).allowed) {
+  const permission = await auth.actsFor(memberId, assistantId);
+  if (permission.status === 'unavailable') throw permission.error;
+  if (!permission.allowed) {
     throw new GroupRefused('Assistant authority unavailable');
   }
 }
@@ -143,7 +145,9 @@ export async function sharedAssistantAuthority(options: SessionAuthorityOptions,
   if (!await auth.applied(event.id)) {
     throw new AuthorityApplying('Assistant is still being applied');
   }
-  if (!(await auth.actsFor(memberId, assistantId)).allowed) {
+  const permission = await auth.actsFor(memberId, assistantId);
+  if (permission.status === 'unavailable') throw permission.error;
+  if (!permission.allowed) {
     throw new GroupRefused('Assistant authority unavailable');
   }
   await fresh();

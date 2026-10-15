@@ -1,3 +1,4 @@
+import { childRequestHeld } from './child-hold.ts';
 import { createHash } from 'node:crypto';
 import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
 import { sendFile } from '../files/delivery.ts';
@@ -60,6 +61,10 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
   if (socket.readyState !== socket.OPEN) return;
   const context: Parameters<typeof turnCommand>[1] = { silo: options.silo, ...input };
   if (options.binding) context.binding = options.binding;
+  if (report.type === 'agent.turn_started' &&
+      await childRequestHeld(options, report.conversationId)) {
+    throw new ReportRejected('Child request queued');
+  }
   const result = await recordReport(options.store, options.keys, context, value);
   const acknowledgement: {
     type: string; sequence: number; token?: string; expiresAt?: number;

@@ -1372,7 +1372,9 @@ async function sharesOnlyChildHistory() {
     const saved = appends.mock.invocationCallOrder[appends.mock.calls.findIndex(isStart)]!;
     let historyAfterAdmission = false;
     for (const [index, call] of reads.mock.calls.entries()) {
-      if (call[0].startsWith('conversation-')) {
+      if (call[0] === `conversation-${test.parentId}`) {
+        expect(call[1]).toBe(test.created.origin.intentPosition);
+      } else if (call[0].startsWith('conversation-')) {
         expect(call[0]).toBe(`conversation-${test.conversationId}`);
       }
       if (call[0] === `conversation-${test.conversationId}`
@@ -1416,7 +1418,7 @@ async function sharesOnlyChildHistory() {
     await test.close();
   }
 }
-it('delivers only child exchanges across senders after admission without reading the parent',
+it('delivers only child exchanges after admission and point-reads the parent intent',
   sharesOnlyChildHistory);
 
 async function refusesMismatchedSharedHistory(sharedCreation: boolean) {
