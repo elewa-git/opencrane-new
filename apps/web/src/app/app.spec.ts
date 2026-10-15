@@ -419,6 +419,39 @@ it('opens the member detail page inside the organisation shell', async () => {
   globalThis.history.replaceState({}, '', '/');
 });
 
+describe('tool access explanation route', () => {
+  beforeEach(() => globalThis.history.replaceState({}, '',
+    '/org/integrations/odoo/access/explanation?requester=alex&assistant=helper&tool=orders.read'));
+  afterEach(() => { fetchSpy?.mockRestore(); globalThis.history.replaceState({}, '', '/'); });
+
+  it('sends only the API query names and shows a checked missing grant', async () => {
+    const missing = {
+      serverId: 'odoo', requesterId: 'alex', assistantId: 'helper',
+      toolName: 'orders.read', checkedAt: '2026-10-04T08:40:00.000Z',
+      person: 'allowed', assistant: 'denied', actsFor: 'allowed',
+      reasons: ['missing_assistant_grant'], complete: false, availability: 'unavailable',
+    };
+    const fixture = await create(response(missing));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Missing'));
+    const firstUrl = String(fetchSpy.mock.calls[0]?.[0]);
+    expect(firstUrl).toContain('requesterId=alex');
+    expect(firstUrl).toContain('assistantId=helper');
+    expect(firstUrl).toContain('toolName=orders.read');
+    expect(root(fixture).textContent).toContain('Checked 4 Oct 2026, 08:40 UTC');
+    expect(root(fixture).textContent).not.toContain('missing_assistant_grant');
+    expect(root(fixture).textContent).not.toContain('Publishing');
+  });
+
+  it('does not send an invalid address', async () => {
+    globalThis.history.replaceState({}, '',
+      '/org/integrations/odoo/access/explanation?requester=alex&assistant=helper&tool=bad%20tool');
+    const fixture = await create();
+    expect(root(fixture).textContent).toContain('The link is incomplete');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+});
+
 describe('personal settings shell', () => {
   beforeEach(() => globalThis.history.replaceState({}, '', '/account'));
   afterEach(() => {
