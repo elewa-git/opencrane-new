@@ -13,5 +13,8 @@ export function dispatcherHandlerNames(env: NodeJS.ProcessEnv): HandlerName[] {
   if (env["MODEL_DECISION_URL"]) {
     names.push("settle-budget");
   }
+  if (env["MCP_KUBE_NAMESPACE"]?.trim()) {
+    names.push("stop-mcp-instance");
+  }
   return names;
 }

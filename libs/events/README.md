@@ -29,7 +29,7 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks hosted registration, startup, saved turn references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, subscriptions, nightly memory records and cleanup results| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, subscriptions, nightly memory records and cleanup results| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication and gateway records, tool admission, personal connection references and blocks, control, private and shared turns, root allowances, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
@@ -55,6 +55,7 @@ without private review text. An observation alone permits no call.
   fixed-length value calculated from the encrypted bytes.
 
 - Define private tool-instance starts, observations, and owner or admin stop requests.
+  Name the background reaction that stops a private tool after a saved request.
   Require a system writer and change reference for new worker observations.
   These records contain identity and timing details, with no credentials or callable status.
   A counter names the version of startup access material, separately from process starts.

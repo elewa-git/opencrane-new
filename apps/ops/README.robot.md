@@ -577,3 +577,35 @@ histories; missing or delayed projection data fails the job for retry. Deploymen
 must upgrade dispatcher subscriptions using the existing handler upgrade command.
 Conversation rebuild still requires readers and workers to be stopped.
 Bridge delivery ordering is separate follow-up work.
+
+## Personal MCP stop
+
+`MCP_KUBE_NAMESPACE` enables `stop-mcp-instance` in both the dispatcher manifest and
+the worker. Kubectl uses `KUBECONFIG`. Changing the manifest needs the existing stopped
+handler upgrade procedure. Rebuilds never run this reaction. Wake, apply and release
+remain unavailable; namespace admission, RBAC, NetworkPolicy and quota are later work.
+
+The future wake worker must create one StatefulSet per run, with replicas 0 or 1, named
+`mcp-<first 32 hex of instanceId>-<runGeneration>`. Its labels are
+`opencrane.ai/mcp-instance` (first 32 hex) and `opencrane.ai/mcp-run` (decimal run).
+Annotations `opencrane.ai/mcp-instance` and `opencrane.ai/mcp-spec` hold the full instance
+id and workloadSpecDigest. The Pod's controller reference must name that StatefulSet's UID.
+
+The handler reads silo-checked history within ten seconds and folds the saved run.
+Only a matching saved stop in stopping phase with a recorded Pod UID may act.
+One merge patch includes UID and resourceVersion, sets replicas to zero and writes
+`opencrane.ai/mcp-stop` as the JSON pair `[stopEventId, statefulSetUid]`. After the Pod
+goes, DELETE carries both UID and resourceVersion preconditions. Each kubectl call
+has a ten-second bound and a 2 MB output limit; reconciliation has a 30-second loop
+bound. An in-progress call may finish after that loop deadline. Errors use fixed text.
+
+Redelivery reads objects again. Only the recorded Pod controller or this stop's marker
+proves ownership. Other objects with this run's name or labels block absence and stay
+untouched. The handler rereads the current run before conditionally saving absence.
+Its event id is SHA-256 of the JSON pair `[silo, stopEventId]`; conflicts reread up to
+three times. Missing objects permit absence only for the saved stopping run and Pod.
+
+`test/mcp-personal-k3d.test.ts` uses real Kubernetes, NATS, PostgreSQL and OpenFGA.
+Set `MCP_PERSONAL_K3D=1`, `DEV_STACK_ID` to a claimed secondary slot and `PG_TEST_URL`
+to a disposable test database. Run with `--maxWorkers=1`. The test checks slot ownership,
+uses a throwaway namespace and an on-node image with imagePullPolicy Never.

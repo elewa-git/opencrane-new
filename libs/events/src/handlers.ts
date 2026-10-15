@@ -1,6 +1,7 @@
 // Named subscriptions from the event catalogue. An implementation is enabled
 // only when its host registers it; this does not enable the future reactions.
 export const handlerSubscriptions = {
+  "stop-mcp-instance": ["mcp.instance_stop_requested"],
   "cleanup-departure": ["member.removed"],
   "cleanup-memory": ["memory.forgotten"],
   "stop-budget-turns": ["budget.ceiling_set", "budget.exhausted"],

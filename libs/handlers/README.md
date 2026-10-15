@@ -23,11 +23,11 @@ names each reaction's event types;
 uses pg-boss, a job queue stored in PostgreSQL.
 The reactions themselves live elsewhere. `libs/authz` updates permissions.
 `libs/models` handles budgets, model access and ownership. `apps/ops` creates
-assistants and claims computers.
+assistants, claims computers and stops private tool processes when configured.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|starts work| handlers["libs/handlers<br/>reaction jobs"]
+  ops["apps/ops<br/>workers"] -->|starts work, including private tool stops| handlers["libs/handlers<br/>reaction jobs"]
   nats["NATS JetStream<br/>event log"] -->|new events, appointments and upgrade history| handlers
   reactions["libs/models and libs/authz<br/>registered reactions"] -.->|registers reactions| handlers
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]

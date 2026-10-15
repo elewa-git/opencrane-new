@@ -153,6 +153,7 @@ NATS, PostgreSQL and OpenFGA where those services hold the result.
 
 | Handler | Event type | Current-state check | Test |
 | --- | --- | --- | --- |
+| stop-mcp-instance | mcp.instance_stop_requested | Require the saved current stop and Pod UID; prove Kubernetes ownership before stopping; reread before recording absence. Enabled only with MCP_KUBE_NAMESPACE. | mcp-personal-k3d |
 | cleanup-departure | member.removed | Require the saved reviewed removal; read current indexed resources; keep one removal outcome per resource. Suspend only idle personal computers; require group/grant OpenFGA receipts before one completion record. Busy computers use existing retries. | departure-cleanup |
 | prepare-personal-key | member.joined | Check current membership; retain the existing private key, including for none. | personal-keys |
 | prepare-personal-key | silo.owner_bootstrapped | Skip a removed owner; retain the existing private key. | personal-keys |
