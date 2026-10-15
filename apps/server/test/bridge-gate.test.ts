@@ -395,7 +395,7 @@ it.each([true, false])('sends the gate before report replay finishes, intent sav
 async function gateAfterTurnCloses() {
   const test = await setup();
   await test.save();
-  const sign = test.computer.issuer.takeoverGate;
+  const sign = test.computer.issuer.takeoverGate.bind(test.computer.issuer);
   let changed = false;
   async function closeDuringSigning(...args: Parameters<typeof sign>) {
     const issued = await sign(...args);
@@ -433,7 +433,7 @@ async function gateSigningDuringReplay() {
     yield* subscribe(...args);
   }
   vi.spyOn(test.store, 'subscribe').mockImplementation(holdReplay);
-  const sign = test.computer.issuer.takeoverGate;
+  const sign = test.computer.issuer.takeoverGate.bind(test.computer.issuer);
   async function holdSigning(...args: Parameters<typeof sign>) {
     signing.resolve();
     await signRelease.promise;

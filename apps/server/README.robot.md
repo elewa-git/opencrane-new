@@ -2840,17 +2840,19 @@ route lists; `MODEL_MCP_ROUTES` is ignored. No call is enabled by this worker.
 checks the requester's membership again with `requireTurnMember`. Missing signing
 support, changed identity, removed membership or more than 64 affected turns sends
 no gate and logs only `Bridge gate unavailable`. The normal `resume` frame still follows.
-A separate watcher checks idle ready computers every 250 ms and retries lost
-connections. Each assistant has one check in progress. This watcher does not wait
-for conversation reads or uploads. It does not reconnect refused computers or wake
+A separate watcher checks known assistants every 250 ms and retries lost
+connections. It reuses the conversation list from the main poll and shares computer
+reads with that poll. Each assistant has one check in progress. This watcher does
+not wait for conversation reads or uploads. It does not reconnect refused computers or wake
 suspended computers for saved control intent.
 
-Each open link checks for a gate every 250 ms, including while the server reads
-saved reports. Timer and connection checks share one signing attempt. A computer
+During connection setup, each link checks for a gate every 250 ms while the server
+reads saved reports. Timer and connection checks share one signing attempt. A computer
 stream change during signing causes a fresh request, identity and membership check
 before another signing attempt. Connection setup waits for this retry before sending
 `resume`, and checks again after report replay in case intent arrived during replay.
-Sending the gate or closing the socket stops that link's timer.
+Finishing setup or closing the socket stops that link's timer. The independent
+watcher continues to check for saved intent afterwards.
 
 Every new connection sends a qualifying gate before `resume`. Receipt parsing runs before
 report parsing. Only strict `bridge_quiet` and `bridge_unavailable` replies matching

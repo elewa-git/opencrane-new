@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
-import { listOpenConversations } from '@opencrane/projections';
 import { readComputerControl } from '@opencrane/auth';
 import type { bridgeControl } from './bridge-control.ts';
 import type { Logger } from '@opencrane/observability';
@@ -28,6 +27,8 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
   connection: Connection,
   connectionId: (assistantId: string) => number | undefined, logger: Logger) {
   const seen = new Map<string, Progress>();
+  let watchedAssistants = new Set<string>();
+  const readingSnapshots = new Map<string, Promise<Snapshot>>();
   const kinds = new Map<string, string>();
   const snapshots = new Map<string, { head: number; assistant: Snapshot }>();
   const creationReadFailures = new Set<string>();
@@ -41,7 +42,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     logger.error(details, message);
   }
 
-  async function snapshot(assistantId: string) {
+  async function readSnapshot(assistantId: string) {
     let kind = kinds.get(assistantId);
     if (!kind) {
       try {
@@ -74,6 +75,18 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     const cached = { head, assistant };
     snapshots.set(assistantId, cached);
     return assistant;
+  }
+
+  function snapshot(assistantId: string) {
+    const reading = readingSnapshots.get(assistantId);
+    if (reading) return reading;
+    function finished() {
+      readingSnapshots.delete(assistantId);
+    }
+    // Share computer reads between the independent gate and conversation checks.
+    const pending = readSnapshot(assistantId).finally(finished);
+    readingSnapshots.set(assistantId, pending);
+    return pending;
   }
 
   async function process(conversation: AgentSession, assistant: Snapshot,
@@ -155,15 +168,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
     try {
       while (!signal.aborted) {
-        try {
-          const conversations = await listOpenConversations(options.db, options.silo);
-          for (const conversation of conversations) {
-            if (signal.aborted) break;
-            if (conversation.mode === 'agent_session') start(conversation.assistantId);
-          }
-        } catch {
-          failed();
-        }
+        for (const assistantId of watchedAssistants) start(assistantId);
         await delay(250, undefined, { signal });
       }
     } catch (error) {
@@ -180,6 +185,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       conversationIds.add(session.conversationId);
       assistantIds.add(session.assistantId);
     }
+    watchedAssistants = assistantIds;
     for (const conversationId of seen.keys()) {
       if (!conversationIds.has(conversationId)) seen.delete(conversationId);
     }

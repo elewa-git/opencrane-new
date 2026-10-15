@@ -258,6 +258,29 @@ function reportReceiver(options: BridgeOptions, input: BridgeInput,
   return { receiveReport, settled };
 }
 
+async function resumeBridgeReports(options: BridgeOptions, input: BridgeInput,
+  socket: WebSocket, control: ReturnType<typeof bridgeControl>) {
+  function pollControl() {
+    void control.send();
+  }
+  // Check this socket while setup is still reading reports. The watcher takes over afterwards.
+  const timer = setInterval(pollControl, 250);
+  function stopPolling() {
+    clearInterval(timer);
+  }
+  socket.once('close', stopPolling);
+  try {
+    await control.send();
+    const position = await reportPosition(options.store, options.silo, input.computerId);
+    await control.send();
+    const resume = { type: 'resume', since: position, approvalWaiting: true };
+    socket.send(JSON.stringify(resume));
+  } finally {
+    stopPolling();
+    socket.off('close', stopPolling);
+  }
+}
+
 export async function connectBridge(options: BridgeOptions, input: BridgeInput, tokens?: Tokens) {
   const socketOptions = { headers: { 'x-bridge-token': input.bearer },
     maxPayload: 256 * 1024, handshakeTimeout: 5000 };
@@ -286,11 +309,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   socket.once('close', closed);
   const reports = reportReceiver(options, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
-  await control.send();
-  const position = await reportPosition(options.store, options.silo, input.computerId);
-  await control.send();
-  const resume = { type: 'resume', since: position, approvalWaiting: true };
-  socket.send(JSON.stringify(resume));
+  await resumeBridgeReports(options, input, socket, control);
   const delivered = new Set<string>();
   let transfers = Promise.resolve();
   function deliver(file: Upload, bytes: Buffer, checkControl?: () => Promise<boolean>) {

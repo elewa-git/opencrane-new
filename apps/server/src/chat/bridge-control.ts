@@ -126,7 +126,6 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
       sent = binding;
       const frame = { type: 'bridge_gate', gate: issued.value };
       socket.send(JSON.stringify(frame));
-      stopPolling();
     } catch {
       // Keep signing and validation errors from exposing the gate or saved request.
       unavailable();
@@ -148,18 +147,9 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
     if (!sending) sending = sendUntilChecked().finally(finishedSending);
     return sending;
   }
-  function poll() {
-    void send();
-  }
-  function stopPolling() {
-    clearInterval(timer);
-  }
   function settled() {
     return sending;
   }
-  // Check this link even while chat reads, uploads or report replay are waiting.
-  const timer = setInterval(poll, 250);
-  socket.once('close', stopPolling);
   function receive(value: unknown) {
     if (typeof value !== 'object' || value === null) return false;
     const type: unknown = Reflect.get(value, 'type');
