@@ -553,7 +553,6 @@ The conversation contains no cents, ceiling, payer or copied budget reasons.
 No root event is added. Stop schemas live outside the near-full `data.ts`.
 The package exports `agentTurnStopRequestedDataSchema` for bridge delivery.
 
-
 ## Expired bearer save closure
 
 `connection.operation_closed` requires userId, serverId, profile, operationId, generation,
