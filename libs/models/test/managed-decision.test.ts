@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -285,3 +286,115 @@ async function isolatesSharedCustody() {
   expect(await second.provider?.credential(setup.secrets)).toBe('other-silo-fixture-value');
 }
 it('keeps two silos with identical connection ids separate in shared custody', isolatesSharedCustody);
+
+async function managedDecision(setup: Awaited<ReturnType<typeof managedFixture>>) {
+  const body = { model: 'gpt-6-luna', input: 'OK', max_output_tokens: 128, stream: true };
+  const request = { method: 'POST', headers: setup.headers, body: JSON.stringify(body) };
+  return fetch(`${setup.options.decisionUrl}/authorize/models/managed`, request);
+}
+
+async function admitsColdProviderHistory() {
+  const setup = await managedFixture();
+  const rows = await history(setup.nats.store, 'provider-primary', 'test');
+  const events = [];
+  for (let index = rows.length; index < 5000; index++) {
+    const payload = { ...provider, kind: 'reachability', attemptId: `cold-${index}`,
+      outcome: 'pass' };
+    events.push(envelope('test', 'provider-primary', 'provider.verification_recorded', payload));
+  }
+  await setup.nats.seed(events);
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  let coldRows = 0;
+  let historyDuration = 0;
+  async function* slowColdHistory(...args: Parameters<typeof read>) {
+    if (args[0] !== 'provider-primary' || args[1] !== 1) {
+      yield* read(...args);
+      return;
+    }
+    const started = performance.now();
+    await delay(2100);
+    for await (const row of read(...args)) {
+      coldRows++;
+      yield row;
+    }
+    historyDuration = performance.now() - started;
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(slowColdHistory);
+  onTestFinished(reads.mockRestore.bind(reads));
+  const response = await managedDecision(setup);
+  expect(response.status, await response.text()).toBe(200);
+  expect(coldRows).toBe(5000);
+  expect(historyDuration).toBeGreaterThan(2000);
+  expect(historyDuration).toBeLessThan(10_000);
+  expect(setup.actor.state.reservations).toHaveLength(1);
+  expect(setup.actor.state.reservations[0]?.call).toMatchObject(choice);
+  expect(setup.received()).toBe(0);
+}
+it('admits a cold 5,000-event provider history taking more than two seconds',
+  admitsColdProviderHistory, 120_000);
+
+async function refusesExpiredProviderHistory() {
+  const setup = await managedFixture();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  const resumed = Promise.withResolvers<void>();
+  let reading = false;
+  async function* stalledProviderHistory(...args: Parameters<typeof read>) {
+    if (args[0] === 'provider-primary') {
+      reading = true;
+      await resumed.promise;
+    }
+    yield* read(...args);
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(stalledProviderHistory);
+  onTestFinished(reads.mockRestore.bind(reads));
+  const started = performance.now();
+  try {
+    const response = await managedDecision(setup);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      error: 'Request refused or decision service unavailable',
+    });
+    expect(reading).toBe(true);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(10_000);
+    expect(performance.now() - started).toBeLessThan(12_000);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    expect(totals(setup.actor.state)).toMatchObject({ reservedCents: 0, monthCents: 0 });
+    expect(setup.received()).toBe(0);
+  } finally {
+    resumed.resolve();
+  }
+}
+it('refuses provider history past its own ten-second limit with no money held',
+  refusesExpiredProviderHistory);
+
+async function refusesAccessChangeAfterProviderHistory() {
+  const setup = await managedFixture();
+  await setup.stopDispatch();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  let changed = false;
+  async function* removeAfterHistory(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === 'provider-primary' && !changed) {
+      changed = true;
+      await setup.append('member-alice', 'member.removed', {
+        memberId: 'alice', removedBy: 'alice',
+      });
+    }
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(removeAfterHistory);
+  onTestFinished(reads.mockRestore.bind(reads));
+  const response = await managedDecision(setup);
+  expect(changed).toBe(true);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({
+    error: 'Request refused or decision service unavailable',
+  });
+  expect(setup.actor.state.reservations).toHaveLength(0);
+  expect(totals(setup.actor.state)).toMatchObject({ reservedCents: 0, monthCents: 0 });
+  expect(setup.received()).toBe(0);
+}
+it('refuses access removed after provider history before any money is held',
+  refusesAccessChangeAfterProviderHistory);
