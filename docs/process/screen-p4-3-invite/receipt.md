@@ -10,6 +10,10 @@ border check failed at 1280 pixels. After the fix, the browser checks PASS
 for the ten captures, including the refreshed invalid-field images at 1280
 and 390 pixels. A live invitation journey is NOT RUN.
 
+After the member detail page was added, this browser check also found that a
+short member name made its link narrower than 44 pixels. The link now has a
+minimum width of 44 pixels, and the same target check passes at both widths.
+
 The invitation panel test held 401 and 403 response bodies open after their
 statuses arrived. Before the fix, both cases failed because the address stayed
 in the open form. After the fix, both cases PASS: the form closes and clears
