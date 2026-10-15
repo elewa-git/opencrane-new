@@ -15,8 +15,7 @@ async function serialPublications() {
   const storage = await databases();
   onTestFinished(storage.close);
   const db = pgDb(storage.queue);
-  const argumentsWithLock = [faulty.store, 'test', db] as const;
-  const handler = prepareGatewayConfigurationHandler(...argumentsWithLock);
+  const handler = prepareGatewayConfigurationHandler(faulty.store, 'test', db);
   function unusedQuery(): Promise<never> {
     return Promise.reject(new Error('Preparation must not write SQL'));
   }

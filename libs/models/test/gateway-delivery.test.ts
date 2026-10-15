@@ -719,12 +719,14 @@ async function reconcilesLatestOnly() {
 it('reconciles only the latest generation, recovers a lost reply and stops on lost leadership',
   reconcilesLatestOnly);
 
-async function refusesPreparationDuringLeadershipCheck() {
+async function refusesPreparationDuringLeadershipCheck(query: number) {
   const setup = await fixture();
   const before = await readFile(setup.options.configFile);
   let changed = false;
+  let queries = 0;
   async function requireLeader() {
-    if (changed) return;
+    queries++;
+    if (queries !== query) return;
     changed = true;
     const { recordDigest: _digest, ...previous } = setup.record;
     const saved = { ...previous, generation: 2, changeRef: 'during-leadership' };
@@ -742,16 +744,19 @@ async function refusesPreparationDuringLeadershipCheck() {
   expect(await memberReceipts(setup)).toHaveLength(0);
   expect(await history(setup.nats.store, 'gateway-config-test', 'test')).toHaveLength(2);
 }
-it('refuses a generation superseded while the final leadership query waits',
+it.each([1, 2])('refuses a generation superseded while leadership query %s waits',
   refusesPreparationDuringLeadershipCheck);
 
-async function losesLeadershipDuringReplacement() {
+async function losesLeadershipDuringReplacement(query: number) {
   const setup = await fixture();
   const before = await readFile(setup.options.configFile);
   const inode = (await stat(setup.options.configFile)).ino;
   const position = await setup.nats.store.head();
   let checked = false;
+  let queries = 0;
   async function requireLeader() {
+    queries++;
+    if (queries !== query) return;
     const files = await readdir(dirname(setup.options.configFile));
     function sibling(file: string) {
       return file.endsWith('.next');
@@ -775,7 +780,7 @@ async function losesLeadershipDuringReplacement() {
   }
   expect(files.some(sibling)).toBe(false);
 }
-it('keeps the old file and saves no receipt when leadership is lost during replacement',
+it.each([1, 2])('keeps the old file and saves no receipt when replacement query %s loses leadership',
   losesLeadershipDuringReplacement);
 
 async function waitsForPreparationLock() {
