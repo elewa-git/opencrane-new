@@ -122,7 +122,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     await saveCapture(policy.sequence);
     // Check after the append too: evidence can expire while the event store replies.
     // Keep dispatch closed until the saved revision has invalidated old approvals.
-    if (!invalidated && !changed && state.expiresAt <= Date.now()) {
+    if (expiryNeedsFailure(state, invalidated, changed)) {
       holdWatch(state);
       await saveFailure(serverId, signal);
       policy = await readToolPolicy(store, silo, serverId, deadline);
@@ -133,7 +133,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     const holdCount = state.holdCount;
     policy = await readToolPolicy(store, silo, serverId, deadline);
     signal.throwIfAborted();
-    const expired = !invalidated && !changed && state.expiresAt <= Date.now();
+    const expired = expiryNeedsFailure(state, invalidated, changed);
     // Keep any hold raised during the read, even when recovery began held.
     // Let the failure path save approval invalidation before a later check can reopen calls.
     if (expired || state.holdCount !== holdCount) {
@@ -188,6 +188,11 @@ function refreshWatchState(state: ReturnType<typeof newWatch>,
   }
   // Keep freshness separate from drift so refreshing a held server preserves its review.
   state.held = false;
+}
+
+function expiryNeedsFailure(state: ReturnType<typeof newWatch>,
+  invalidated: boolean, changed: boolean) {
+  return !invalidated && !changed && state.expiresAt <= Date.now();
 }
 
 function holdWatch(state: ReturnType<typeof newWatch>) {
