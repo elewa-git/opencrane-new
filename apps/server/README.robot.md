@@ -2795,4 +2795,11 @@ reconciliation remain part b; root stops remain with #90.
 Final text publication follows the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
 `test/child-publication.test.ts` covers real NATS, PostgreSQL and OpenFGA,
 retries, access refusals, closure, HTTP/socket display and projection replay.
+Before a new publication's two-second access check, the server reads child events
+after the loaded conversation position with a separate ten-second deadline. It
+then checks the selected result again. Output loss for that turn returns 409
+`review_stale` without changing the parent stream. Unrelated child messages and
+output loss for another turn still allow publication. The tests pause after the
+complete child-history read to save each event before resuming publication.
+Saved publication retries keep their existing receipt and current-access checks.
 Interim publication, files, screens and fresh-install qualification remain NOT RUN.

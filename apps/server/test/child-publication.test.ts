@@ -323,6 +323,14 @@ async function closesDuringHistory() {
 }
 it('refuses a parent close after command history loads', closesDuringHistory, 120_000);
 
+async function parentHistory(context: Fixture) {
+  const rows = [];
+  for await (const row of context.nats.store.readStream('conversation-parent')) {
+    rows.push(row);
+  }
+  return rows;
+}
+
 async function changesAfterChildHistory(change: string) {
   const context = await childFixture();
   const released = Promise.withResolvers<void>();
@@ -332,8 +340,7 @@ async function changesAfterChildHistory(change: string) {
     expect(review.statusCode, review.body).toBe(200);
     const payload = { id: 'result-race', text: 'Reviewed answer',
       review: review.json<{ review: string }>().review };
-    const parentBefore = await Array.fromAsync(
-      context.nats.store.readStream('conversation-parent'));
+    const parentBefore = await parentHistory(context);
     const reached = Promise.withResolvers<void>();
     const read = context.nats.store.readStream.bind(context.nats.store);
     let paused = false;
@@ -366,7 +373,7 @@ async function changesAfterChildHistory(change: string) {
     }
     released.resolve();
     const response = await sending;
-    const parentAfter = await Array.fromAsync(read('conversation-parent'));
+    const parentAfter = await parentHistory(context);
     if (change === 'lost') {
       expect.soft(response.statusCode, response.body).toBe(409);
       expect.soft(response.json()).toEqual({ status: 'review_stale' });

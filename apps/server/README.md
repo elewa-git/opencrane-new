@@ -49,6 +49,8 @@ Reports containing output still need a saved, admitted turn.
 
 Members can review a saved child answer and publish its text to the parent chat.
 The entry credits the person who publishes it. Files and interim updates are unavailable.
+Publication checks for lost output saved after reading the child history and refuses
+that answer. Unrelated child messages still allow publication.
 
 Give Owners and Admins a member directory and current management flags for
 active people. An ordinary Member receives only a small header for one person.

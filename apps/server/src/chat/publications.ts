@@ -149,6 +149,20 @@ function currentResult(loaded: Loaded, binding: Binding, text: string) {
   }
   return selected;
 }
+async function refreshChildHistory(options: ChatOptions, loaded: Loaded) {
+  const subject = `conversation-${loaded.child}`;
+  let position = 0;
+  for (const row of loaded.childRows) {
+    if (row.event.subject === subject) position = row.sequence;
+  }
+  // Include later result changes before starting the short access check.
+  const deadline = performance.now() + 10_000;
+  const laterRows = options.store.readStream(subject, position + 1, deadline);
+  for await (const row of laterRows) {
+    if (row.event.silo !== options.silo) throw new Error('Conversation silo mismatch');
+    loaded.childRows.push(row);
+  }
+}
 async function publish(options: ChatOptions, memberId: string, loaded: Loaded,
   value: unknown, secret: string) {
   const input = publishInput.parse(value);
@@ -161,6 +175,7 @@ async function publish(options: ChatOptions, memberId: string, loaded: Loaded,
   if (previous) {
     return verifySaved(previous, options, binding, input);
   }
+  await refreshChildHistory(options, loaded);
   const selected = currentResult(loaded, binding, input.text);
   const subjects = [`member-${memberId}`, `participation-${loaded.child}`,
     ...inheritedChildSubjects(loaded.access), `participation-${binding.parentConversationId}`];

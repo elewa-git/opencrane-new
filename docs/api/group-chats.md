@@ -99,6 +99,9 @@ return the same 403 `{status: "refused"}`. Outages return 503 `unavailable`.
 Malformed input returns 400. Replies use no-store and writes check the website Origin.
 
 History loads before the short write check watches only member and participation
-streams. Parent messages and sockets show text, `authorId`, `publicationKind` and
+streams. New publications read later child events with a separate ten-second limit
+and recheck the selected result before that write check. Output loss for the selected
+turn refuses publication; unrelated child activity does not invalidate the review.
+Parent messages and sockets show text, `authorId`, `publicationKind` and
 `contentType: "text"` to all current parent readers. They omit the child link, result,
 turn and review digest. Publication starts no computer or model work.
