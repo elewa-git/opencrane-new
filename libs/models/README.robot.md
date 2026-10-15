@@ -2087,6 +2087,13 @@ All-pass admission expires at the earliest check expiry or database age limit.
 Rechecks, evidence storage and readers, scans and deployment remain separate work.
 Fresh-install qualification: NOT RUN.
 
+## Reading a saved turn stop
+
+`turnBudgetStopDetails` reads the existing `turn-budget-stops` summary. It selects
+at the human message position, like renewal, or uses the saved chat stop id.
+It copies only reasons matching the admitted payer and assistant. Unknown saved
+stop ids fail closed. `queuedPayer` is shared with the handler for unstarted work.
+
 ## Per-server gateway receipts (P3-4 PR 3b; Part of #45)
 
 After an exact live observation, `observe` saves `mcp.configuration_observed` on each
@@ -2106,9 +2113,3 @@ wiring, startup route removal, generation admission and fresh-install qualificat
 
 Tests use the pinned gateway, disposable NATS and PostgreSQL. The replay CLI compares
 rebuilt policy with the live projection; it writes no events or gateway configuration.
-## Reading a saved turn stop
-
-`turnBudgetStopDetails` reads the existing `turn-budget-stops` summary. It selects
-at the human message position, like renewal, or uses the saved chat stop id.
-It copies only reasons matching the admitted payer and assistant. Unknown saved
-stop ids fail closed. `queuedPayer` is shared with the handler for unstarted work.
