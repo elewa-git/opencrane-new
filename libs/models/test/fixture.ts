@@ -287,7 +287,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   };
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { dispatchOptions, mcpPrecondition, tokens, keys, stopDispatch, refuseMcpConnection,
+  return { databaseUrl: dbs.queue.options.connectionString,
+    dispatchOptions, mcpPrecondition, tokens, keys, stopDispatch, refuseMcpConnection,
     upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
