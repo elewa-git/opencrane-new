@@ -37,8 +37,8 @@ function reviewedAt(fact: MaintenanceFact, runs: Run[]): string | null {
           reference.position !== fact.position || reference.expiresAt !== fact.expiresAt) {
         continue;
       }
-      if (latest === null || Date.parse(run.selectedAt) > Date.parse(latest)) {
-        latest = run.selectedAt;
+      if (latest === null || Date.parse(run.intendedAt) > Date.parse(latest)) {
+        latest = run.intendedAt;
       }
     }
   }
