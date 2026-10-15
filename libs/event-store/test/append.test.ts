@@ -365,3 +365,36 @@ async function stopsWhenBackoffUsesRemainingPermission() {
 }
 it('does not publish again when backoff uses the last fraction of permission time',
   stopsWhenBackoffUsesRemainingPermission);
+
+async function refusesChangesAfterAccessCheck() {
+  fixture = await natsFixture();
+  async function checkAccess() {
+    const changed = { event: event('access-removed', 'member-bob'), expectedSequence: 0 };
+    expect(await fixture.store.append(changed)).toEqual({ status: 'appended', sequence: 1 });
+  }
+  const command = { event: event('checked-write'), expectedSequence: 0,
+    deadline: performance.now() + 2000, historyChecked: true as const, checkAccess };
+  expect(await fixture.store.append(command)).toEqual({ status: 'conflict' });
+  expect(await fixture.store.head('member-alice')).toBe(0);
+}
+it('refuses an event saved between the append access check and the conditional publish',
+  refusesChangesAfterAccessCheck);
+
+async function refusesExpiryDuringAccessCheck() {
+  fixture = await natsFixture();
+  const started = performance.now();
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
+  async function checkAccess() {
+    clock.mockReturnValue(started + 2001);
+  }
+  const command = { event: event('expired-access-check'), expectedSequence: 0,
+    deadline: started + 2000, historyChecked: true as const, checkAccess };
+  try {
+    expect(await fixture.store.append(command)).toMatchObject({ status: 'unavailable' });
+  } finally {
+    clock.mockRestore();
+  }
+  expect(await fixture.store.head('member-alice')).toBe(0);
+}
+it('refuses an append when its access check exceeds the original deadline',
+  refusesExpiryDuringAccessCheck);

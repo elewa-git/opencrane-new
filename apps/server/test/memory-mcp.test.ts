@@ -1799,6 +1799,45 @@ it.each([false, true])(
   'refuses a write grant changed during the final lineage read (restored=%s)',
   grantChangedDuringLineage);
 
+async function rightsWithdrawnBeforeAppend(kind: string) {
+  const body = await loadedWrite(`append-rights-${kind}`);
+  const scopeSubject = `scope-${scopeId}`;
+  const before = await setup.nats.store.head(scopeSubject);
+  const originalAppend = setup.nats.store.append.bind(setup.nats.store);
+  let changed = false;
+  async function append(command: Parameters<typeof originalAppend>[0]) {
+    if (Reflect.get(command.event as object, 'type') === 'memory.written') {
+      expect(changed).toBe(false);
+      changed = true;
+      if (kind === 'memory_write') {
+        const fields = { resourceType: 'memory_write', resourceId: scopeId,
+          granteeKind: 'assistant', granteeId: 'assistant', revokedBy: 'alice' };
+        const revoked = await setup.append(grantStream('memory_write', scopeId),
+          'grant.revoked', fields);
+        await setup.auth.handler.handle(revoked, setup.db);
+      } else {
+        const settings = { assistantId: 'assistant', changedBy: 'alice',
+          changedFields: ['active'], active: false };
+        await setup.append('assistant-assistant', 'assistant.settings_changed', settings);
+      }
+      // Wait for the saved change before allowing the real store to append the fact.
+      expect(performance.now()).toBeLessThan(command.deadline!);
+    }
+    return originalAppend(command);
+  }
+  const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
+  try {
+    const response = await backendRemember(body);
+    expect(changed).toBe(true);
+    expect.soft(response.statusCode, response.body).toBe(403);
+    expect.soft(await setup.nats.store.head(scopeSubject)).toBe(before);
+  } finally {
+    appends.mockRestore();
+  }
+}
+it.each(['memory_write', 'assistant_access'])(
+  'refuses %s withdrawn immediately before the real store append', rightsWithdrawnBeforeAppend);
+
 async function refusesWithoutFact(body: Awaited<ReturnType<typeof recalledRemember>>) {
   const before = await setup.nats.store.head(`scope-${scopeId}`);
   const response = await backendRemember(body);
