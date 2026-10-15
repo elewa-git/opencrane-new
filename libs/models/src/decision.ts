@@ -188,6 +188,13 @@ async function modelPermission(call: ModelCall, requestId: string,
   return { credential, modelCall: { ...call, requestId } };
 }
 
+function decisionHistoryDeadline(managedRoute: boolean, decisionDeadline: number) {
+  if (managedRoute) {
+    return performance.now() + 10_000;
+  }
+  return decisionDeadline;
+}
+
 function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
   // Refuse before holding money when the gateway or another client has hung up.
   if (req.socket.destroyed || res.destroyed) {
@@ -264,7 +271,7 @@ export async function startDecision(
         checked.sequence, decisionDeadline);
       const managedTurn = requireManagedTurnClaims(checked.turn, managedRoute);
       // Load managed history before starting the short access check.
-      const historyDeadline = managedRoute ? performance.now() + 10_000 : decisionDeadline;
+      const historyDeadline = decisionHistoryDeadline(managedRoute, decisionDeadline);
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);
       requireManagedTurnClaims(checked.turn, activity.managedCallsEnabled);
@@ -281,12 +288,9 @@ export async function startDecision(
       async function confirmAccess() {
         await confirmDecisionAccess(activity, authority, needsApproval);
       }
-      async function confirmDecision() {
-        await confirmAccess();
-      }
       const snapshot = { include: authority.include, head: authority.head,
         deadline: authority.deadline };
-      const fresh = Object.assign(confirmDecision, snapshot);
+      const fresh = Object.assign(confirmAccess, snapshot);
       auditedContext = { requesterId: turnToken.requester, assistantId: computer.assistant };
       correlation = { conversationId: turnToken.conversation, turnId: turnToken.turn };
       contextDigest = digestContext([computer, turnToken]);
