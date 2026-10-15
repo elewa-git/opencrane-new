@@ -11,6 +11,16 @@ failed `computer.turn_closed`. Already admitted work remains for PR 5 cleanup;
 refusing a pass is not evidence that execution stopped. Exact replays and new
 report sequences receive the same refusal. The shared connection stays open.
 
+For a shared child whose admission was refused, `agent.turn_failed` may use the
+saved failed `computer.turn_closed` instead of a start. The server reads that
+close at the position held by the computer summary. It requires a server-written
+close, no saved admission, and matching computer, assistant, conversation, turn,
+requester, thread and shared-only class. Normal report sequence and digest checks
+still apply. The failure records no new lifecycle event and returns no credentials.
+Other output, completion and output-lost reports still require an admitted start.
+The real computer channel tests cover both close streams, failure acknowledgement,
+exact replay and another conversation continuing on the same connection.
+
 `ChatFacts.turnEnded` tracks turn completion and budget stops separately from
 `conversationClosed`. The turn-ended refusal remains `Turn is closed`.
 Credential delivery reads incremental chat facts before context, after context
