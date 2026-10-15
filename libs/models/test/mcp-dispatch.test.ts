@@ -1064,7 +1064,8 @@ async function restorationFixture() {
   onTestFinished(closeSetup);
   const headers = await prepare(setup);
   const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
-  const capture = vi.fn().mockResolvedValue(initial.catalogue);
+  const capture = vi.fn();
+  capture.mockResolvedValue(initial.catalogue);
   const options = { serverIds: ['fixture'], capture,
     requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
   const watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
@@ -1128,7 +1129,9 @@ async function invalidateRestoration(context: RestorationFixture, change: Restor
   const { setup, capture, watch } = context;
   if (change === 'new intent' || change === 'older generation') {
     const newer = await publishRestoration(setup, 'restore-newer');
-    if (change === 'older generation') await delivery.deliver(newer);
+    if (change === 'older generation') {
+      await delivery.deliver(newer);
+    }
     await delivery.deliver(record);
   } else if (change === 'unpublish') {
     await setup.append('mcp-fixture', 'mcp.server_unpublished',
@@ -1158,7 +1161,9 @@ async function observeRestoration(context: RestorationFixture, change: Restorati
   const succeeds = ['exact', 'restart after', 'restart recovery',
     'duplicate after drift'].includes(change);
   if (!succeeds) {
-    if (change !== 'intent only') expect(await delivery.observe()).toBeNull();
+    if (change !== 'intent only') {
+      expect(await delivery.observe()).toBeNull();
+    }
     return;
   }
   await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
@@ -1203,12 +1208,16 @@ async function restoresReviewedDrift(change: RestorationCase) {
   }
   if (change !== 'legacy' && change !== 'review only') {
     const record = await publishRestoration(setup, 'restore');
-    if (change === 'exact') await refuseUnrelatedRestorationReceipts(setup, headers, record);
+    if (change === 'exact') {
+      await refuseUnrelatedRestorationReceipts(setup, headers, record);
+    }
     const delivery = await restorationDelivery(setup);
     await delivery.deliver(record);
     await delivery.waitForWitness(record);
     await invalidateRestoration(context, change, delivery, record);
-    if (change !== 'restart before') await delivery.waitForWitness(record);
+    if (change !== 'restart before') {
+      await delivery.waitForWitness(record);
+    }
     await observeRestoration(context, change, delivery);
   }
   const request = { method: 'POST', headers, body };

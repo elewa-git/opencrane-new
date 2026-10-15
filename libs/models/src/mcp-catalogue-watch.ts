@@ -114,7 +114,9 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       const command = { event, expectedSequence: sequence, deadline, signal };
       const result = await store.append(command);
       if (result.status !== 'appended') throw new Error('Catalogue append unconfirmed');
-      if (changed) state.driftSequence = result.sequence;
+      if (changed) {
+        state.driftSequence = result.sequence;
+      }
       signal.throwIfAborted();
     }
     await saveCapture(policy.sequence);
