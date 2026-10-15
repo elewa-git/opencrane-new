@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { readComputerControl } from '@opencrane/auth';
+import type { bridgeControl } from './bridge-control.ts';
 import type { Logger } from '@opencrane/observability';
 import { history } from '../../../ops/src/lifecycle.ts';
 import { creationEvent } from './private-session.ts';
@@ -14,10 +16,14 @@ type Progress = ConversationProgress & {
   computerEventId: string | undefined;
   kind: string | undefined;
 };
+type ConversationLink = Awaited<ReturnType<Parameters<typeof processConversation>[5]>>;
+type Connection = (computerId: string, assistantId: string) =>
+  Promise<ConversationLink & { control: ReturnType<typeof bridgeControl> }>;
+const computerData = z.object({ computerId: z.string() });
 const assistantKindData = z.object({ kind: z.enum(['personal', 'team']) });
 
 export function assistantProcessor(options: WatchOptions, tokens: Tokens, refused: Set<string>,
-  connection: Parameters<typeof processConversation>[5],
+  connection: Connection,
   connectionId: (assistantId: string) => number | undefined, logger: Logger) {
   const seen = new Map<string, Progress>();
   const kinds = new Map<string, string>();
@@ -107,6 +113,17 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       // Read the chats to find waiting messages, without sending to an unknown computer.
       assistant = assistantSnapshot([], kinds.get(assistantId), options.silo);
     }
+    let controlWaiting = false;
+    if (assistant.controlPending && assistant.current?.type === 'computer.ready') {
+      const computer = computerData.parse(assistant.current.data);
+      const control = await readComputerControl(options.store, options.silo, assistantId);
+      if (control?.phase === 'requested' && !refused.has(computer.computerId)) {
+        const link = await connection(computer.computerId, assistantId);
+        await link.control.send();
+        // Keep checking idle links so a lost connection sends the gate again.
+        controlWaiting = true;
+      }
+    }
     async function checkControl() {
       // Check the position again after slow reads; reuse history until the computer changes.
       const current = await snapshot(assistantId);
@@ -117,7 +134,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
     const processing = sessions.map(processSession);
     const results = await Promise.all(processing);
-    return results.includes(true);
+    return controlWaiting || results.includes(true);
   }
 
   function forgetMissing(sessions: AgentSession[]) {

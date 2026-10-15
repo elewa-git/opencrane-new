@@ -14,7 +14,7 @@ import { listOpenConversations } from '@opencrane/projections';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
-import { resumeComputer } from '../../../ops/src/lifecycle.ts';
+import { bridgeControl, readyBridgePass } from './bridge-control.ts';
 import { turnCommand, requireTurnMember, TurnAdmissionRejected } from './turns.ts';
 import { readChatFacts } from './chat-summary.ts';
 import { privateContext } from './private-context.ts';
@@ -199,7 +199,7 @@ async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: W
 
 function reportReceiver(options: BridgeOptions, input: BridgeInput,
   tokens: Tokens | undefined, socket: WebSocket, refuse: (reason: string) => void,
-  approvals: ReturnType<typeof bridgeApprovals>) {
+  approvals: ReturnType<typeof bridgeApprovals>, control: ReturnType<typeof bridgeControl>) {
   function reportFailure(error: unknown) {
     if (error instanceof ReportRejected) {
       refuse(error.message);
@@ -215,6 +215,7 @@ function reportReceiver(options: BridgeOptions, input: BridgeInput,
     try {
       const bytes = messageBytes(raw);
       const value: unknown = JSON.parse(bytes.toString());
+      if (control.receive(value)) return;
       if (receiptData.safeParse(value).success) return;
       if (approvals.receive(value)) return;
       const report = reportDetails.parse(value);
@@ -278,9 +279,15 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   }
   const sentStops = new Map<string, number>();
   const approvals = bridgeApprovals(options.store, options.silo, input.assistantId, socket, sentStops);
-  const reports = reportReceiver(options, input, tokens, socket, refuse, approvals);
+  const control = bridgeControl(options, input, tokens, socket, refuse);
+  function closed(code: number) {
+    if (code === 1008 && !control.receipt) rejection ??= 'Bridge gate refused';
+  }
+  socket.once('close', closed);
+  const reports = reportReceiver(options, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
   const position = await reportPosition(options.store, options.silo, input.computerId);
+  await control.send();
   const resume = { type: 'resume', since: position, approvalWaiting: true };
   socket.send(JSON.stringify(resume));
   const delivered = new Set<string>();
@@ -301,7 +308,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     return reportsDone;
   }
   return {
-    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting,
+    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control,
     get rejection() { return rejection; },
     settled,
   };
@@ -413,7 +420,7 @@ function isAgentSession(conversation: Conversation): conversation is AgentSessio
 async function openBridge(options: WatchOptions, tokens: Tokens, kube: SandboxClient,
   proxyUrl: string, computer: Pick<BridgeInput, 'computerId' | 'assistantId'>,
   refused: Set<string>, logger: Logger) {
-  const token = await resumeComputer(options.store, tokens, options.silo, computer.assistantId);
+  const token = await readyBridgePass(options, computer, tokens);
   await kube.credentials(computer.computerId, token, tokens.jwks.keys[0], true);
   const proxy = proxyUrl.replace('http:', 'ws:');
   const pod = `${proxy}/api/v1/namespaces/${kube.namespace}/pods/${computer.computerId}:8081`;
@@ -426,6 +433,7 @@ async function openBridge(options: WatchOptions, tokens: Tokens, kube: SandboxCl
     logger.error(details, 'Bridge recovery stopped; report rejected');
   }
   connected.socket.once('close', recordRejection);
+  if (connected.socket.readyState === connected.socket.CLOSED) recordRejection();
   return connected;
 }
 

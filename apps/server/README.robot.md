@@ -2831,3 +2831,29 @@ for the shared per-silo preparation and replacement lock; it must not use the
 connection already holding the budget leadership lock. Restart creates a new process reference and
 requires another delivery and probe. Dispatch and catalogue watch receive empty
 route lists; `MODEL_MCP_ROUTES` is ignored. No call is enabled by this worker.
+
+## Signed bridge gate delivery (P3-17 PR 2d; Part of #58)
+
+`bridge-control.ts` sends one signed `bridge_gate` per connection after saved
+`takeover.requested` intent. `readComputerControl` must return `requested`, never
+`unverified`. The ready computer, generation and Pod UID must match. The sender
+checks the requester's membership again with `requireTurnMember`. Missing signing
+support, changed identity, removed membership or more than 64 affected turns sends
+no gate and logs only `Bridge gate unavailable`. The normal `resume` frame still follows.
+The watcher opens idle ready computers and retries lost connections. It does not
+reconnect refused computers or wake suspended computers for saved control intent.
+
+Every new connection sends the gate before `resume`. Receipt parsing runs before
+report parsing. Only strict `bridge_quiet` and `bridge_unavailable` replies matching
+that connection's takeover id, generation and sorted affected turns are accepted.
+The first accepted epoch cannot change. Quiet requires empty preparation, running,
+loaded-thread and held-approval lists, interrupted turns within the affected list,
+and both executor and browser proofs exactly `unavailable`. A bad reply clears the
+in-memory receipt and closes with 1008 and `Invalid bridge receipt`. A computer's
+1008 close before any receipt prevents reconnecting. No signed gate enters logs,
+events or API replies. Receipts live only on the connection, with no durable write.
+
+Tests use real NATS, signing keys, sockets and the real computer bridge with a saved
+signing identity. Scripted replies cover forged receipts. Fresh-install qualification
+is NOT RUN. Pausing events, supervisor calls, full quiet proof, writer access, leases
+and recovery remain later work. The existing access checks and event schemas are unchanged.
