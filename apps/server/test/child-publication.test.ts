@@ -322,3 +322,66 @@ async function closesDuringHistory() {
   }
 }
 it('refuses a parent close after command history loads', closesDuringHistory, 120_000);
+
+async function changesAfterChildHistory(change: string) {
+  const context = await childFixture();
+  const released = Promise.withResolvers<void>();
+  try {
+    const input = await savedResult(context);
+    const review = await request(context, 'publication-review', input);
+    expect(review.statusCode, review.body).toBe(200);
+    const payload = { id: 'result-race', text: 'Reviewed answer',
+      review: review.json<{ review: string }>().review };
+    const parentBefore = await Array.fromAsync(
+      context.nats.store.readStream('conversation-parent'));
+    const reached = Promise.withResolvers<void>();
+    const read = context.nats.store.readStream.bind(context.nats.store);
+    let paused = false;
+    async function* pauseCompleteChildHistory(...args: Parameters<typeof read>) {
+      let completed = false;
+      for await (const row of read(...args)) {
+        if (row.event.type === 'agent.turn_completed') completed = true;
+        yield row;
+      }
+      // Wait for the full saved result, not an earlier read of child creation.
+      if (!paused && args[0] === 'conversation-child' && completed) {
+        paused = true;
+        reached.resolve();
+        await released.promise;
+      }
+    }
+    context.nats.store.readStream = pauseCompleteChildHistory;
+    const sending = request(context, 'publications', payload).then();
+    await reached.promise;
+    if (change === 'message') {
+      const encrypted = context.keys.encrypt('test', 'child', 'Unrelated message');
+      const data = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
+        contentType: 'text', ...encrypted };
+      await context.append('conversation-child', 'message.posted', data, false);
+    } else {
+      let turnId = 'saved-turn';
+      if (change === 'other-turn') turnId = 'other-turn';
+      const data = { conversationId: 'child', turnId };
+      await context.append('conversation-child', 'agent.output_lost', data, false);
+    }
+    released.resolve();
+    const response = await sending;
+    const parentAfter = await Array.fromAsync(read('conversation-parent'));
+    if (change === 'lost') {
+      expect.soft(response.statusCode, response.body).toBe(409);
+      expect.soft(response.json()).toEqual({ status: 'review_stale' });
+      expect(parentAfter).toEqual(parentBefore);
+    } else {
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({ status: 'appended' });
+      expect(parentAfter).toHaveLength(parentBefore.length + 1);
+      expect(parentAfter.at(-1)?.event.id).toBe('result-race');
+    }
+  } finally {
+    released.resolve();
+    await context.close();
+  }
+}
+it.each(['lost', 'message', 'other-turn'])(
+  'checks result validity after complete child history loads: %s',
+  changesAfterChildHistory, 120_000);
