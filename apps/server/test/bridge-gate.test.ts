@@ -391,3 +391,74 @@ async function gateDuringReplay(savedBefore: boolean) {
 }
 it.each([true, false])('sends the gate before report replay finishes, intent saved before: %s',
   gateDuringReplay);
+
+async function gateAfterTurnCloses() {
+  const test = await setup();
+  await test.save();
+  const sign = test.computer.issuer.takeoverGate;
+  let changed = false;
+  async function closeDuringSigning(...args: Parameters<typeof sign>) {
+    const issued = await sign(...args);
+    if (!changed) {
+      changed = true;
+      await test.append('computer-assistant', 'computer.turn_closed', {
+        computerId: 'computer', assistantId: 'assistant', conversationId: 'chat',
+        turnId: 'first', requesterId: 'alice', task: 'chat_turn', status: 'completed' });
+    }
+    return issued;
+  }
+  vi.spyOn(test.computer.issuer, 'takeoverGate').mockImplementation(closeDuringSigning);
+  await test.connect();
+  function resumed() { return test.frames.some(isResume); }
+  await until(resumed, 2000);
+  expect(changed).toBe(true);
+  expect(test.frames.map(frameType)).toEqual(['bridge_gate', 'resume']);
+  const binding = requireBridgeGateAuthority(test.frames[0]?.['gate'], test.computer.gateIdentity);
+  expect(binding).toEqual({ takeoverId: 'takeover', generation: 1,
+    affectedTurnIds: ['first', 'second'] });
+}
+it('retries unchanged control after a turn closes during signing, before sending resume',
+  gateAfterTurnCloses);
+
+async function gateSigningDuringReplay() {
+  const test = await setup();
+  const replaying = Promise.withResolvers<void>();
+  const replayRelease = Promise.withResolvers<void>();
+  const signing = Promise.withResolvers<void>();
+  const signRelease = Promise.withResolvers<void>();
+  const subscribe = test.store.subscribe.bind(test.store);
+  async function* holdReplay(...args: Parameters<typeof subscribe>) {
+    replaying.resolve();
+    await replayRelease.promise;
+    yield* subscribe(...args);
+  }
+  vi.spyOn(test.store, 'subscribe').mockImplementation(holdReplay);
+  const sign = test.computer.issuer.takeoverGate;
+  async function holdSigning(...args: Parameters<typeof sign>) {
+    signing.resolve();
+    await signRelease.promise;
+    return sign(...args);
+  }
+  const signer = vi.spyOn(test.computer.issuer, 'takeoverGate').mockImplementation(holdSigning);
+  const connecting = test.connect();
+  try {
+    await replaying.promise;
+    await test.save();
+    await signing.promise;
+    replayRelease.resolve();
+    // Let replay and another timer check finish while signing is still held.
+    await delay(350);
+    expect(test.frames).toEqual([]);
+    expect(signer).toHaveBeenCalledTimes(1);
+  } finally {
+    replayRelease.resolve();
+    signRelease.resolve();
+    await connecting;
+  }
+  function resumed() { return test.frames.some(isResume); }
+  await until(resumed, 2000);
+  expect(test.frames.map(frameType)).toEqual(['bridge_gate', 'resume']);
+  requireBridgeGateAuthority(test.frames[0]?.['gate'], test.computer.gateIdentity);
+}
+it('waits for one in-flight gate when intent arrives during report replay',
+  gateSigningDuringReplay);
