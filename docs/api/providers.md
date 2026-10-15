@@ -246,5 +246,9 @@ switch-on id after success return 403. Refusals save nothing. Any event saved be
 the initial history position and the append causes 409; reload before trying a new id.
 
 New turns use their own or the silo default choice. Calls stay refused after switch-on
-until PR 5 supplies managed gateway startup and fallback-key refusal. Switch-off,
+until managed admission is completed and PR 5b supplies gateway startup and fallback-key
+refusal. The optional gateway route has passed its per-call key test, but no process
+starts it and the production decision service refuses its path. The budget actor
+also refuses all new reservations after switch-on; that guard needs a checked managed
+call path before activation. Switch-off,
 retirement and screens remain unavailable. This command never reads a key or calls a provider.

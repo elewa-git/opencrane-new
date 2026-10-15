@@ -77,9 +77,20 @@ export function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
 export function gatewayConfig(
   port: number, readinessPort: number, decisionUrl: string, keyFile: string,
   issuer: string, upstream?: string, mcpRoutes: McpRoute[] = [],
-  egressDecisionUrl?: string,
+  egressDecisionUrl?: string, managedCalls = false,
 ) {
   const decision = new URL(decisionUrl);
+  const modelHeaders = [...MODEL_UPSTREAM_HEADERS];
+  const decisionPath = managedCalls ? '/authorize/models/managed' : '/authorize';
+  const metadata: Record<string, string> = {
+    reservationId: 'response.headers["x-reservation-id"]',
+  };
+  if (managedCalls) {
+    // Read only the decision reply so a caller cannot supply the provider credential.
+    metadata['providerCredential'] = 'response.headers["x-provider-key"]';
+    modelHeaders.push('"authorization":"Bearer " + extauthz.providerCredential');
+  }
+  const backendAuth = managedCalls ? {} : { backendAuth: { key: { file: keyFile } } };
   function configuredMcpRoute(route: McpRoute) {
     return mcpRoute(route, decisionUrl, issuer);
   }
@@ -108,11 +119,12 @@ export function gatewayConfig(
           location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
         extAuthz: { host: decision.host, includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id'],
           includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
-          protocol: { http: { path: '"/authorize"', includeResponseHeaders: ['x-reservation-id', 'x-request-id'],
-            metadata: { reservationId: 'response.headers["x-reservation-id"]' } } }, failureMode: { denyWithStatus: 503 } },
-        transformations: { request: { replace: `{${MODEL_UPSTREAM_HEADERS.join(', ')}}` } },
+          protocol: { http: { path: JSON.stringify(decisionPath),
+            includeResponseHeaders: ['x-reservation-id', 'x-request-id'],
+            metadata } }, failureMode: { denyWithStatus: 503 } },
+        transformations: { request: { replace: `{${modelHeaders.join(', ')}}` } },
       }, backends: [{ ai: { name: 'openai', provider: { openAI: {} }, ...(upstream ? { hostOverride: upstream } : {}) },
-        policies: { backendAuth: { key: { file: keyFile } }, ai: { routes: { '/v1/responses': 'responses' }, overrides: { service_tier: 'default' } } } }],
+        policies: { ...backendAuth, ai: { routes: { '/v1/responses': 'responses' }, overrides: { service_tier: 'default' } } } }],
     }],
   };
 }
@@ -249,13 +261,15 @@ export async function startGateway(options: { binary: string; configFile: string
   port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string;
   mcpRoutes?: McpRoute[];
   egressDecisionUrl?: string;
+  managedCalls?: boolean;
   onChildSpawn?: (child: ChildProcess, stop: (signal?: NodeJS.Signals) => Promise<void>) => void;
 }) {
   const build = process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64';
   const expected = AGENTGATEWAY_SHA256_BY_BUILD[build];
   if (createHash('sha256').update(await readFile(options.binary)).digest('hex') !== expected) throw new Error('Gateway digest mismatch');
   const config = gatewayConfig(options.port, options.readinessPort, options.decisionUrl,
-    options.keyFile, options.issuer, options.upstream, options.mcpRoutes, options.egressDecisionUrl);
+    options.keyFile, options.issuer, options.upstream, options.mcpRoutes,
+    options.egressDecisionUrl, options.managedCalls);
   await writeFile(options.configFile, JSON.stringify(config), { mode: 0o600 });
   const child = spawn(options.binary, ['-f', options.configFile], {
     env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', RUST_LOG: 'info', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'],

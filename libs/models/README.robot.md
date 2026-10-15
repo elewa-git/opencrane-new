@@ -251,8 +251,37 @@ Phase 2 #29 and Phase 3 #54. The decision process verifies the lifecycle compute
 thread-bound turn tokens; agentgateway v1.5.0 enforces its answer and sends
 Responses requests to OpenAI. Reuses S0.2's ext_authz/header allowlist and
 S0.1c's native streamed usage fields and checksum-verified binary fetcher.
-No extra proxy sees the provider key. `backendAuth.key.file` reads
-`.keys/.openai-key` inside agentgateway, never the server or computer.
+Normal startup uses `backendAuth.key.file` to read `.keys/.openai-key` inside
+agentgateway, never the server or computer.
+
+### Managed gateway proof, part of #104
+
+`startGateway({ managedCalls: true, ... })` makes `/v1/responses` ask
+`/authorize/models/managed`. The shared `gatewayConfig` builder supplies this
+route; the default remains `/authorize` with the deployment key file.
+The optional route omits `backendAuth`. It takes `x-provider-key` only from the
+decision reply into private extAuthz metadata and builds upstream `authorization`
+from that value. It also takes `x-reservation-id` for native usage reporting.
+Caller headers cannot supply that metadata. The key is not copied into client
+responses or the usage file. The route needs no static key file.
+
+`test/managed-gateway.test.ts` uses the pinned v1.5.0 AI backend, a recording
+upstream and a scripted decision reply. Its fixture starts real NATS, PostgreSQL
+and OpenFGA. It checks two different keys, token counts, caller header isolation,
+provider errors, decision refusals and absence of key values from gateway logs,
+events and responses. This is a gateway test, not proof of managed admission.
+
+The requested P4-22 PR 5a was split at this proof. An integration attempt reached
+`BudgetActor.requireReservationWrites`: after `provider.managed_calls_enabled`,
+the actor refuses every new `budget.reserved`, including a bound managed call.
+Restart also restores that refusal. The task prohibited changes to `actor.ts`, so
+this part leaves the production managed decision path unimplemented (HTTP 404).
+Completing admission needs an explicit actor change that permits checked managed
+reservations while continuing to refuse legacy calls. No guard is bypassed here.
+Provider summaries, custody isolation, admission races and the switch-on/restart
+settlement proof remain unbuilt in this part. Startup selection, fallback-key
+refusal, static-route removal and dev-stack wiring remain for 5b. No stack or
+paid provider call was used to prove this route.
 
 - `BudgetActor` loads the NATS budget stream and serialises reserve/settle
   commands. Each command does one conditional append. The process entrypoint
