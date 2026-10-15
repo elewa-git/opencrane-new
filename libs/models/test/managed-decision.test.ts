@@ -315,11 +315,15 @@ async function admitsColdProviderHistory() {
       return;
     }
     const started = performance.now();
-    await delay(2100);
     // Control delivery time without warming the decision summary or depending on NATS throughput.
     for (const row of savedRows) {
       coldRows++;
       yield row;
+    }
+    // Keep loading above two seconds even when folding the events is fast.
+    const remainingDelay = 2100 - (performance.now() - started);
+    if (remainingDelay > 0) {
+      await delay(remainingDelay);
     }
     historyDuration = performance.now() - started;
   }
