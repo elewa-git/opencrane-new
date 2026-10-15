@@ -68,3 +68,20 @@ function reviewedRevisions() {
   ]);
 }
 it('keeps omitted and newer revisions dirty after a saved review', reviewedRevisions);
+
+function expiryDuringSelection() {
+  const input = { ...fact('expires-during-selection', 1, 29),
+    expiresAt: '2026-10-12T02:05:00.000Z' };
+  const lateSelection = reviewed(input, '2026-10-12T02:10:00.000Z');
+  const nextNight = selectMaintenanceInputs([input], [lateSelection], 1, 0,
+    '2026-10-13T02:00:00.000Z');
+  expect(nextNight.dirty).toBe(true);
+  expect(nextNight.inputRefs).toEqual([{ memoryId: 'expires-during-selection', revision: 1,
+    expiresAt: '2026-10-12T02:05:00.000Z', position: 1 }]);
+  const expiryReview = reviewed(input, '2026-10-13T02:10:00.000Z');
+  const afterReview = selectMaintenanceInputs([input], [lateSelection, expiryReview], 1, 0,
+    '2026-10-14T02:00:00.000Z');
+  expect(afterReview.dirty).toBe(false);
+  expect(afterReview.inputRefs).toEqual([]);
+}
+it('keeps expiry due when it falls between the intended boundary and selection', expiryDuringSelection);
