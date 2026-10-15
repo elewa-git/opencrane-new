@@ -290,3 +290,104 @@ async function legacyReady() {
   expect(await test.store.head('computer-assistant')).toBe(before);
 }
 it('keeps legacy ready connections working without waking or writing', legacyReady);
+
+async function gateDuringSlowChat(connected: boolean) {
+  const test = await setup();
+  const dbs = await databases();
+  const db = pgDb(dbs.queue);
+  const logger = createLogger('gate-test', { level: 'silent' });
+  const runner = new ProjectionRunner(db, test.store, logger);
+  await test.append('assistant-assistant', 'assistant.created', {
+    assistantId: 'assistant', ownerId: 'alice', kind: 'personal' });
+  await test.append('conversation-chat', 'conversation.created', {
+    conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session' });
+  await runner.initialise(conversations);
+  await runner.run(conversations);
+  const kube = new SandboxClient('http://unused', 'test', 'http://unused', 'http://unused');
+  vi.spyOn(kube, 'credentials').mockResolvedValue(undefined);
+  const stop = new AbortController();
+  const reading = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const readStream = test.store.readStream.bind(test.store);
+  async function* holdChat(...args: Parameters<typeof readStream>) {
+    if (args[0] === 'conversation-chat') {
+      reading.resolve();
+      await release.promise;
+    }
+    yield* readStream(...args);
+  }
+  if (connected) {
+    test.keys.provision('test', 'chat');
+    const encrypted = test.keys.encrypt('test', 'chat', 'Hello');
+    await test.append('conversation-chat', 'message.posted', { conversationId: 'chat',
+      authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted });
+  } else {
+    vi.spyOn(test.store, 'readStream').mockImplementation(holdChat);
+  }
+  const work = watchBridges({ ...test, db }, test.computer.issuer, kube, test.url, stop.signal, logger);
+  let holdUntil = 0;
+  try {
+    if (connected) {
+      function resumed() { return test.frames.some(isResume); }
+      await until(resumed, 2000);
+      vi.spyOn(test.store, 'readStream').mockImplementation(holdChat);
+      await test.append('conversation-chat', 'agent.turn_stop_requested', {
+        conversationId: 'chat', turnId: 'first', requestedBy: 'alice' });
+    }
+    await reading.promise;
+    await test.save({ affectedTurnIds: [] });
+    const start = performance.now();
+    holdUntil = start + 2300;
+    function gated() { return test.frames.some(isGate); }
+    await until(gated, 2000);
+    expect(performance.now() - start).toBeLessThan(2000);
+    const gate = test.frames.find(isGate);
+    const binding = requireBridgeGateAuthority(gate?.['gate'], test.computer.gateIdentity);
+    expect(binding).toEqual({ takeoverId: 'takeover', generation: 1, affectedTurnIds: [] });
+    expect(test.frames.filter(isGate)).toHaveLength(1);
+  } finally {
+    await delay(Math.max(0, holdUntil - performance.now()));
+    release.resolve();
+    stop.abort();
+    await work;
+    await dbs.close();
+  }
+}
+it.each([false, true])(
+  'sends a verified gate within two seconds while chat is held for 2300 ms, connected: %s',
+  gateDuringSlowChat);
+
+function isResume(frame: Record<string, unknown>) { return frame['type'] === 'resume'; }
+
+async function gateDuringReplay(savedBefore: boolean) {
+  const test = await setup();
+  if (savedBefore) await test.save();
+  const reading = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const subscribe = test.store.subscribe.bind(test.store);
+  async function* holdReplay(...args: Parameters<typeof subscribe>) {
+    reading.resolve();
+    await release.promise;
+    yield* subscribe(...args);
+  }
+  vi.spyOn(test.store, 'subscribe').mockImplementation(holdReplay);
+  const connecting = test.connect();
+  try {
+    await reading.promise;
+    if (!savedBefore) await test.save();
+    function gated() { return test.frames.some(isGate); }
+    await until(gated, 500);
+    expect(test.frames.map(frameType)).toEqual(['bridge_gate']);
+    const binding = requireBridgeGateAuthority(test.frames[0]?.['gate'], test.computer.gateIdentity);
+    expect(binding).toEqual({ takeoverId: 'takeover', generation: 1,
+      affectedTurnIds: ['first', 'second'] });
+  } finally {
+    release.resolve();
+    await connecting;
+  }
+  function resumed() { return test.frames.some(isResume); }
+  await until(resumed);
+  expect(test.frames.map(frameType)).toEqual(['bridge_gate', 'resume']);
+}
+it.each([true, false])('sends the gate before report replay finishes, intent saved before: %s',
+  gateDuringReplay);
