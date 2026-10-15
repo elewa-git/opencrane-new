@@ -11,8 +11,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links, later grant changes and access changes through saving, tool reviews, hosted image status and registration, publication requests and status, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
-  server -->|records changes and child answers only while their reviewed results remain valid, reviewed child requests and creation with first inputs, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
+  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links, later grant changes and access changes through saving, tool reviews, hosted image status and registration, reviewed publication requests and status, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -->|records changes and child answers only while their reviewed results remain valid, internal and reviewed child requests and creation with first inputs, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|saved child leave results, spending stop reasons, departure cleanup and gateway configurations| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -64,7 +64,8 @@ work, then reads again immediately before sending a turn. It repeats an unfinish
 Stop after a lost message or reconnection. Work stopped by a spending limit stays
 stopped when that limit rises. Other turns on the same computer can continue.
 
-Let owners and admins request publication of an exact reviewed tool list. Calls remain disabled.
+Let owners and admins request publication of an exact reviewed tool list.
+The request alone does not enable calls.
 
 Tool access explanations show why a person and their assistant have access.
 Members can read their own explanation for servers they can access.
@@ -295,7 +296,9 @@ These checks do not change access to read the chat or view the desktop.
 
 The models process checks each configured tool server at startup and before its saved
 list expires. Calls pause when a check fails or finds a change. A changed server stays
-paused until calls can check the observed configuration; that part is not built yet.
+paused until a new review and publication receive a matching gateway receipt while checks
+are fresh. Publication preparation alone never releases the hold. The worker sends the
+latest current configuration; a Ready read is not built yet.
 
 The person who set up nightly memory upkeep can read its blocked and missed history.
 These reads contain dates and fact references, with no saved memory text or new work.

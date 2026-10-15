@@ -21,7 +21,9 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition, parseEventByType, mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
-import { auditTrail, computers, connectComputers, connectMcpCatalogue, connectMemberFeed, mcpCatalogue, members, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { auditTrail, computers, connectComputers, connectMcpCatalogue, connectMemberFeed,
+  isToolPolicyAvailable, mcpCatalogue, members, pgDb, ProjectionRunner
+} from '@opencrane/projections';
 import {
   computersResponseSchema, effectDetailResponseSchema, effectListResponseSchema,
   integrationsResponseSchema,
@@ -1496,15 +1498,30 @@ async function refusesUnsafeEntry(field: string) {
   expect(publicationEntry(state)).not.toBeNull();
   if (field === 'reviewed') state.tools[0]!.reviewed = false;
   if (field === 'cost') delete state.tools[0]!.costCents;
-  if (field === 'drift') state.driftHeld = true;
   if (field === 'startup') state.startupReviewRequired = true;
   if (field === 'expiry') state.expiresAt = '2020-01-01T00:00:00Z';
   if (field === 'personal') state.accountMode = 'personal';
   if (field === 'company') state.accountMode = 'company';
   expect(publicationEntry(state)).toBeNull();
 }
-it.each(['reviewed', 'cost', 'drift', 'startup', 'expiry', 'personal', 'company'])(
+it.each(['reviewed', 'cost', 'startup', 'expiry', 'personal', 'company'])(
   'publication entry refuses %s as its sole invalid field', refusesUnsafeEntry);
+
+async function preparesHeldEntry() {
+  await publicationRequest();
+  await runner.run(mcpCatalogue);
+  const state = await catalogue.tools('test', 'odoo');
+  const reviewed = publicationEntry(state);
+  expect(reviewed).not.toBeNull();
+  state.driftHeld = true;
+  expect(publicationEntry(state)).toEqual(reviewed);
+  expect(state.driftHeld).toBe(true);
+  const published = { ...state, published: true };
+  expect(isToolPolicyAvailable(published)).toBe(false);
+  state.policyRevision += 1;
+  expect(publicationEntry(state)).toBeNull();
+}
+it('prepares a reviewed replacement without releasing its drift hold', preparesHeldEntry);
 
 async function refusesLegacyGeneration() {
   await publicationRequest();

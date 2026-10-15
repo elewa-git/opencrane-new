@@ -2635,7 +2635,10 @@ on every independently restarted MCP process. No live capability completion is c
 organisation, admin and Origin checks. Input is commandId, expectedSequence and reviewRevision.
 Success returns status and the original saved sequence. Changed retry input conflicts.
 The server computes fragmentDigest, saves one MCP event and writes no grants or approvals.
-Only credential-free, current reviewed catalogues qualify. No preparation worker is connected.
+Only credential-free, current reviewed catalogues qualify. A drift hold does not prevent
+preparing an exact reviewed replacement; it still prevents calls until the matching
+live gateway receipt and a fresh watch capture. An outdated review cannot prepare a
+replacement. No preparation worker is connected.
 
 ## Internal child requests (P4-8 PR 6 and PR 6b)
 
