@@ -23,7 +23,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
   function requireCurrent(serverId: string) {
     const state = servers.get(serverId);
     if (state && state.expiresAt <= Date.now()) {
-      state.held = true;
+      holdWatch(state);
     }
     if (stopped || !state || state.held || state.driftHeld || state.expiresAt <= Date.now()) {
       throw new Error('MCP catalogue watch unavailable');
@@ -38,7 +38,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     const controller = new AbortController();
     state.controller = controller;
     function expire() {
-      state.held = true;
+      holdWatch(state);
       controller.abort(new Error('Catalogue watch timeout'));
     }
     const timer = setTimeout(expire, 30_000);
@@ -49,7 +49,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
         state.failures = 0;
         state.nextCheck = Math.max(Date.now() + 1000, state.expiresAt - 30_000);
       } catch (error) {
-        state.held = true;
+        holdWatch(state);
         state.failures += 1;
         state.nextCheck = Date.now() + 5000;
         // Save a failed check before any later recovery can make old approvals usable.
@@ -73,7 +73,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     const deadline = performance.now() + 30_000;
     await options.requireLeader();
     let policy = await readToolPolicy(store, silo, serverId, deadline);
-    const invalidated = state.held;
+    let invalidated = state.held;
     if (invalidated) {
       signal.throwIfAborted();
       await saveFailure(serverId, signal);
@@ -98,7 +98,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       checkedAt: catalogue.checkedAt, expiresAt: catalogue.expiresAt };
     if (changed) {
       // Close dispatch before trying the append. An unavailable event store must not reopen it.
-      state.held = true;
+      holdWatch(state);
       state.driftHeld = true;
       // Require a confirmed drift append before a later receipt can release this hold.
       state.driftSequence = Infinity;
@@ -123,14 +123,22 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     // Check after the append too: evidence can expire while the event store replies.
     // Keep dispatch closed until the saved revision has invalidated old approvals.
     if (!invalidated && !changed && state.expiresAt <= Date.now()) {
-      state.held = true;
+      holdWatch(state);
       await saveFailure(serverId, signal);
       policy = await readToolPolicy(store, silo, serverId, deadline);
       await options.requireLeader();
       await saveCapture(policy.sequence);
+      invalidated = true;
     }
+    const holdCount = state.holdCount;
     policy = await readToolPolicy(store, silo, serverId, deadline);
     signal.throwIfAborted();
+    const expired = !invalidated && !changed && state.expiresAt <= Date.now();
+    // Keep any hold raised during the read, even when recovery began held.
+    // Let the failure path save approval invalidation before a later check can reopen calls.
+    if (expired || state.holdCount !== holdCount) {
+      throw new Error('Catalogue watch changed during policy read');
+    }
     refreshWatchState(state, policy, catalogue);
   }
 
@@ -161,7 +169,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
   function close() {
     stopped = true;
     for (const state of servers.values()) {
-      state.held = true;
+      holdWatch(state);
       state.controller?.abort();
     }
   }
@@ -182,8 +190,13 @@ function refreshWatchState(state: ReturnType<typeof newWatch>,
   state.held = false;
 }
 
+function holdWatch(state: ReturnType<typeof newWatch>) {
+  state.held = true;
+  state.holdCount += 1;
+}
+
 function newWatch() {
-  return { held: true, driftHeld: false, driftSequence: 0,
+  return { held: true, holdCount: 0, driftHeld: false, driftSequence: 0,
     expiresAt: 0, nextCheck: 0, failures: 0,
     active: undefined as Promise<void> | undefined,
     controller: undefined as AbortController | undefined };

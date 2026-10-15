@@ -2205,6 +2205,11 @@ invalidate a review merely because drift is held. It clears its local drift hold
 after rereading the restored policy, matching the captured digest and finding a receipt
 whose source follows the saved drift. A failed drift append has no such position and
 stays held. Restart always starts closed and records failure before recapture.
+After the final policy read, the watch checks the previous expiry and counts of local
+holds again. Expiry that has not yet invalidated approvals, or any hold raised during
+that read, rejects the refresh. The existing failure path saves a failed check before
+returning; the watch stays held until a later successful check. A hold raised again
+while recovery was already held also rejects the refresh.
 
 `mcp-dispatch.test.ts` uses product review/publication commands, a real gateway witness,
 NATS, PostgreSQL, OpenFGA and a recording upstream. Restoration sends once; pending,

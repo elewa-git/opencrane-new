@@ -14,7 +14,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
-  models -->|checks revision, spending, catalogue holds and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks revision, spending, catalogue expiry and holds, and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
@@ -73,6 +73,8 @@ This internal API has no child-chat caller yet.
   keep that request current unless the reviewed rules or intent change.
   A changed tool list stays held until a new review and publication receive a matching
   receipt while the checks are fresh. The watch then recaptures before reopening calls.
+  If the old check expires during the last policy read, the watch keeps calls held and
+  saves a failure that ends old approvals. A later check can recover safely.
   Old approvals stay cancelled. A restart begins held and cannot use saved receipts alone.
   Background delivery and a Ready read are not built yet.
 - Provide an optional gateway route for testing CONNECT, the HTTP request that
