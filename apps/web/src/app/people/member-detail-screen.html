@@ -28,7 +28,11 @@
       </div>
       @if (state() === 'failed' || accessState() === 'failed') {
         <p class="refresh-notice" role="status">
-          Showing what we loaded at {{ loadedTime() }}</p>
+          Member details loaded at {{ loadedTime(memberLoadedAt()) }}.
+          @if (accessLoadedAt()) {
+            Access details loaded at {{ loadedTime(accessLoadedAt()) }}.
+          }
+        </p>
       }
       <div [class.stale]="state() === 'failed' || accessState() === 'failed'">
         <div class="detail-cards member-summary">
@@ -66,23 +70,39 @@
               @if (inventory.rows.length === 0 && inventory.complete) {
                 <p>No grants recorded</p>
               }
-              <ul class="member-access-list">
-                @for (row of inventory.rows; track row.resourceType + row.resourceId) {
-                  <li class="paper-card">
-                    <h3>{{ row.label || row.resourceId }}</h3>
-                    <p>{{ row.resourceType }} · {{ row.relation }}</p>
-                    @for (source of row.sources; track $index) {
-                      <p>{{ sourceLabel(source) }}</p>
+              @if (inventory.rows.length > 0) {
+                <table class="member-access-table">
+                  <thead><tr><th scope="col">Access</th><th scope="col">Why</th>
+                    <th scope="col">Status</th></tr></thead>
+                  <tbody>
+                    @for (row of inventory.rows; track row.resourceType + row.resourceId) {
+                      <tr>
+                        <th scope="row" data-label="Access">
+                          <strong>{{ row.label || row.resourceId }}</strong>
+                          <small>{{ row.resourceType }} · {{ row.relation }}</small>
+                        </th>
+                        <td data-label="Why">
+                          @for (source of row.sources; track $index) {
+                            <span class="member-access-line">{{ sourceLabel(source) }}</span>
+                          }
+                        </td>
+                        <td data-label="Status">
+                          <span class="member-access-line">Person:
+                            {{ checkLabel(row.eligibility.person) }}</span>
+                          @for (assistant of row.eligibility.assistants;
+                            track assistant.assistantId) {
+                            <span class="member-access-line">
+                              {{ assistantName(assistant.assistantId) }}:
+                              {{ checkLabel(assistant.grant) }}
+                            </span>
+                          }
+                          <span class="member-access-line">Works now: Not available yet</span>
+                        </td>
+                      </tr>
                     }
-                    <p>Person: {{ checkLabel(row.eligibility.person) }}</p>
-                    @for (assistant of row.eligibility.assistants; track assistant.assistantId) {
-                      <p>{{ assistantName(assistant.assistantId) }}:
-                        {{ checkLabel(assistant.grant) }}</p>
-                    }
-                    <p>Works now: Not available yet</p>
-                  </li>
-                }
-              </ul>
+                  </tbody>
+                </table>
+              }
             } @else if (accessState() === 'failed') {
               <p>Access details are unavailable right now.</p>
               <button type="button" class="button secondary" (click)="refresh()">Try again</button>

@@ -54,8 +54,16 @@ p, small { color: var(--oc-ink-admin-muted); }
   color: inherit; }
 .member-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .member-summary h2 { font: var(--oc-type-column); text-transform: uppercase; }
-.member-access-list { list-style: none; display: grid; gap: 12px; padding: 0; }
-.member-access-list h3 { margin: 0; }
+.member-access-table { width: 100%; table-layout: fixed; border-spacing: 0;
+  border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-app);
+  background: white; overflow-wrap: anywhere; }
+.member-access-table th, .member-access-table td { padding: 12px 14px;
+  text-align: left; vertical-align: top; }
+.member-access-table thead { background: var(--oc-surface-table-header);
+  color: var(--oc-ink-admin-muted); font: var(--oc-type-column); text-transform: uppercase; }
+.member-access-table tbody tr + tr > * { border-top: 1px solid var(--oc-border-row); }
+.member-access-table small, .member-access-line { display: block; margin-top: 4px; }
+.member-access-table small { color: var(--oc-ink-admin-muted); }
 .member-boundary { border: 1px dashed var(--oc-accent); padding: 12px; }
 .member-detail-page .stale { opacity: .7; }
 .load-more { margin-top: 14px; min-height: 44px; }
@@ -137,6 +145,17 @@ nav[aria-label=Breadcrumb] a { display: inline-flex; min-height: 44px; align-ite
   .member-header { display: none; }
   .member-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
   .member-summary { grid-template-columns: 1fr; }
+  .member-access-table, .member-access-table tbody, .member-access-table tr,
+  .member-access-table th, .member-access-table td { display: block; }
+  .member-access-table { border: 0; background: none; }
+  .member-access-table thead { display: none; }
+  .member-access-table tbody tr { margin-bottom: 12px; background: white;
+    border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-app); }
+  .member-access-table tbody tr + tr > * { border-top: 0; }
+  .member-access-table th, .member-access-table td { padding: 10px 14px; }
+  .member-access-table th::before, .member-access-table td::before {
+    content: attr(data-label); display: block; color: var(--oc-ink-admin-muted);
+    font: var(--oc-type-column); text-transform: uppercase; margin-bottom: 4px; }
   .member-row .column-label { position: static; width: auto; height: auto; margin: 0;
     overflow: visible; clip: auto; white-space: normal; }
   .load-more { width: 100%; }

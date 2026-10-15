@@ -1,5 +1,5 @@
 # Member detail screen check
 
-PASS: Eight intercepted API captures at 1280px and 390px. Reduced motion, no horizontal overflow or controls under 44px. The 403 capture contains no member name or email.
+PASS: Twelve intercepted API captures at 1280px and 390px. Desktop grants use Access, Why and Status columns. Phone grants use labelled cards. Reduced motion, no horizontal overflow or controls under 44px. The 403 and both 404 captures contain no member name, email, group or grant.
 
-PARTIAL: The page omits Change role and Remove controls, per this part. A personal assistant and current ability to use grants say Not available yet. Tool explanations are left for the next part to keep the change near 600 lines. No live server or fresh-install journey was run.
+PARTIAL: Change role, Remove and tool explanations are planned for later parts. A personal assistant and current ability to use grants say Not available yet. No live server or fresh-install journey was run.
