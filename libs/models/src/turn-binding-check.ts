@@ -37,7 +37,11 @@ export function requireTurnDelegation(turnToken: {
   delegation: string[];
   requester: string;
 }) {
-  if (turnToken.task === 'native_descendant') throw new Error('Native delegation is disabled');
+  const native = turnToken.task === 'native_descendant';
+  if ((native && turnToken.delegation.length < 2) ||
+      (!native && turnToken.delegation.length !== 1)) {
+    throw new Error('Delegation refused');
+  }
   if (turnToken.delegation[0] !== turnToken.requester) throw new Error('Delegation refused');
 }
 

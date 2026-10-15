@@ -78,7 +78,7 @@ function addAdmission(summary: AdmissionSummary, row: StoredEvent) {
 function admissionSize(summary: AdmissionSummary) {
   return summary.computer.turns.size * 4096 + summary.descendants.size * 8192;
 }
-const admissions: SummaryKind<AdmissionSummary> = { name: 'descendant-admission', keep: 64,
+export const admissions: SummaryKind<AdmissionSummary> = { name: 'descendant-admission', keep: 64,
   empty: emptyAdmissions, add: addAdmission,
   budget: { limit: 48 * 1024 * 1024, size: admissionSize } };
 
@@ -176,12 +176,17 @@ export async function admitDescendant(store: EventStore, access: Binding,
   throw new Error('Descendant admission contention or deadline');
 }
 
-async function readDelegationStart(store: EventStore, delegationId: string, deadline: number) {
+async function readDelegationStart(store: EventStore, delegationId: string, deadline: number,
+  requireOpen = false) {
   try {
+    let start: StoredEvent | undefined;
     for await (const row of store.readStream(`delegation-${delegationId}`, 1, deadline)) {
-      return row;
+      if (!requireOpen) return row;
+      // Refuse later records: this stream only starts a delegation and then ends it.
+      if (start) throw new Error('Descendant is closed');
+      start = row;
     }
-    return undefined;
+    return start;
   } catch (error) {
     if (error instanceof Error && error.message === 'Invalid stored event') {
       // eslint-disable-next-line preserve-caught-error -- Keep stored event details out of refusals.
@@ -227,8 +232,7 @@ async function saveDelegationStart(store: EventStore, admission: StoredEvent,
 
 /** Read matching records only. Callers must still check root, access and spending rules. */
 export async function readDescendantAgreement(store: EventStore, silo: string,
-  assistantId: string, delegationId: string) {
-  const deadline = performance.now() + 10_000;
+  assistantId: string, delegationId: string, deadline = performance.now() + 10_000) {
   function take(summary: AdmissionSummary) {
     return structuredClone(summary.descendants.get(delegationId));
   }
@@ -239,12 +243,12 @@ export async function readDescendantAgreement(store: EventStore, silo: string,
   }
   const admission = recorded.start;
   const event = delegationStartEvent(admission);
-  const start = await readDelegationStart(store, delegationId, deadline);
+  const start = await readDelegationStart(store, delegationId, deadline, true);
   requireSavedAdmission(start, event);
   return { admission, start };
 }
 
-function requireSavedAdmission(stored: StoredEvent | undefined,
+export function requireSavedAdmission(stored: StoredEvent | undefined,
   proposed: StoredEvent['event']): asserts stored is StoredEvent {
   if (!stored) {
     throw new Error('Descendant admission unavailable');
@@ -259,7 +263,7 @@ function requireSavedAdmission(stored: StoredEvent | undefined,
   }
 }
 
-function requireRootActivity(activity: Awaited<ReturnType<typeof decisionActivity>>,
+export function requireRootActivity(activity: Awaited<ReturnType<typeof decisionActivity>>,
   binding: Descendant, ready: StoredEvent | undefined) {
   if (activity.computer.firstClose || activity.computer.control ||
       activity.computer.lifecycle?.sequence !== ready?.sequence) {
@@ -309,7 +313,7 @@ function requireComputerGeneration(computer: ComputerSummary, binding: Descendan
 const rootFields = ['assistantId', 'computerId', 'conversationId', 'requesterId',
   'payingGroupId', 'model', 'providerId', 'bindingSequence', 'executionMode',
   'sharingClass'] as const;
-function requireRoot(summary: AdmissionSummary, binding: Descendant) {
+export function requireRoot(summary: AdmissionSummary, binding: Descendant) {
   const claimPosition = requireComputerGeneration(summary.computer, binding);
   const root = summary.computer.turns.get(binding.rootTurnId);
   const recorded = root?.firstStart;
@@ -354,7 +358,7 @@ function requireNarrowScopes(scopes: Descendant['scopes'], maximum: Descendant['
 }
 const parentFields = [...rootFields, 'rootId', 'rootTurnId', 'rootThreadId',
   'generation', 'dataClass'] as const;
-function requireParent(summary: AdmissionSummary, binding: Descendant) {
+export function requireParent(summary: AdmissionSummary, binding: Descendant) {
   if (!binding.parentDelegationId) {
     if (binding.parentTurnId !== binding.rootTurnId ||
         binding.parentThreadId !== binding.rootThreadId) {
