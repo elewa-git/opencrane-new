@@ -3,6 +3,7 @@ import { By } from '@angular/platform-browser';
 import { afterEach, expect, it, vi } from 'vitest';
 import { GroupDetailScreen } from './group-detail-screen';
 import { GroupDetail } from './group-detail';
+import { GroupAddPanel } from './group-add-panel';
 
 const group = {
   groupId: 'sales-team', name: 'Sales team', membershipSource: 'local', position: 0,
@@ -17,6 +18,16 @@ const group = {
 };
 const suppliedGroup = { ...group, groupId: 'identity-provider-group',
   membershipSource: 'identity_provider' };
+const bob = { memberId: 'bob', displayName: 'Bob', email: 'bob@example.test',
+  role: 'member' as const, status: 'joined' as const,
+  joinedAt: '2026-10-01T00:00:00.000Z', groups: [] };
+const directory = { rows: [bob], next: null,
+  counts: { members: { status: 'current', value: 1 },
+    groups: { status: 'current', value: 1 },
+    pendingInvitations: { status: 'current', value: 0 },
+    acceptedInvitations: { status: 'current', value: 0 } },
+  checkedAt: '2026-10-01T00:00:00.000Z', projection: { content: 'current' },
+  permissions: { invite: true } };
 const dialogPrototype = globalThis.HTMLDialogElement.prototype;
 
 function closeDialog(this: HTMLDialogElement): void {
@@ -103,14 +114,6 @@ it('opens member search from the local group header and keeps supplied groups lo
 });
 
 it('adds one person and waits for both records before showing Added', async () => {
-  const directory = { rows: [{ memberId: 'bob', displayName: 'Bob', email: 'bob@example.test',
-    role: 'member', status: 'joined', joinedAt: '2026-10-01T00:00:00.000Z', groups: [] }],
-    next: null, counts: { members: { status: 'current', value: 1 },
-      groups: { status: 'current', value: 1 },
-      pendingInvitations: { status: 'current', value: 0 },
-      acceptedInvitations: { status: 'current', value: 0 } },
-    checkedAt: '2026-10-01T00:00:00.000Z', projection: { content: 'current' },
-    permissions: { invite: true } };
   const replies = [response({ rows: [group] }), response(directory),
     response({ status: 'appended', groupId: group.groupId, sequence: 1, changeId: 'change' }),
     response({ status: 'appended', groupId: group.groupId, sequence: 1, changeId: 'change',
@@ -139,6 +142,94 @@ it('adds one person and waits for both records before showing Added', async () =
   expect(calls.find(isPostRequest)?.body).toMatch(
     /^\{"action":"add","commandId":"[^"]+","memberId":"bob"\}$/u);
   expect(root.textContent).toContain('Already a member');
+});
+
+it('withholds status and another Add while a POST is pending, then resends one command', async () => {
+  const calls: SeenRequest[] = [];
+  let releaseFirstPost: ((reply: Response) => void) | undefined;
+  let releaseResend: ((reply: Response) => void) | undefined;
+  let postCount = 0;
+  function fetcher(input: RequestInfo | URL, options?: RequestInit): Promise<Response> {
+    const url = requestUrl(input);
+    const body = typeof options?.body === 'string' ? options.body : undefined;
+    calls.push({ url, method: options?.method, body, signal: options?.signal });
+    if (options?.method === 'POST') {
+      postCount += 1;
+      if (postCount === 1) return new Promise((resolve) => { releaseFirstPost = resolve; });
+      return new Promise((resolve) => { releaseResend = resolve; });
+    }
+    if (url.includes('/changes/')) return Promise.resolve(response({ status: 'not_found' }, 404));
+    if (url.includes('/api/members?')) return Promise.resolve(response(directory));
+    return Promise.resolve(response({ rows: [group] }));
+  }
+  const fixture = await mountWithFetch(fetcher);
+  const root = rootElement(fixture);
+  await searchAndAddBob(root, fixture);
+  expect(calls.filter(isPostRequest)).toHaveLength(1);
+  expect(hasButton(root, 'Check status')).toBe(false);
+  expect(hasButton(root, 'Send the same request again')).toBe(false);
+  const addPanel = fixture.debugElement.query(By.directive(GroupAddPanel))
+    .injector.get(GroupAddPanel);
+  addPanel.addRequested.emit(bob);
+  fixture.detectChanges();
+  expect(calls.filter(isPostRequest)).toHaveLength(1);
+  expect(calls.filter(isStatusRead)).toHaveLength(0);
+
+  releaseFirstPost?.(response({ status: 'unavailable' }, 503));
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain("Couldn't confirm the addition");
+  });
+  findButton(root, 'Check status').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('No record of this change yet. It may still arrive.');
+  });
+  expect(calls.filter(isStatusRead)).toHaveLength(1);
+  findButton(root, 'Send the same request again').click();
+  fixture.detectChanges();
+  expect(hasButton(root, 'Send the same request again')).toBe(false);
+  expect(hasButton(root, 'Check status')).toBe(false);
+  expect(calls.filter(isPostRequest)).toHaveLength(2);
+  expect(calls.filter(isPostRequest)[1]?.body).toBe(calls.filter(isPostRequest)[0]?.body);
+  addPanel.addRequested.emit(bob);
+  fixture.detectChanges();
+  expect(calls.filter(isPostRequest)).toHaveLength(2);
+  releaseResend?.(response({ status: 'unavailable' }, 503));
+});
+
+it.each([401, 403])('clears the group after an older search returns %i', async (status) => {
+  let releaseOldSearch: ((reply: Response) => void) | undefined;
+  let searchCount = 0;
+  function fetcher(input: RequestInfo | URL): Promise<Response> {
+    const url = requestUrl(input);
+    if (url.includes('/api/members?')) {
+      searchCount += 1;
+      if (searchCount === 1) {
+        return new Promise((resolve) => { releaseOldSearch = resolve; });
+      }
+      return Promise.resolve(response(directory));
+    }
+    return Promise.resolve(response({ rows: [group] }));
+  }
+  const fixture = await mountWithFetch(fetcher);
+  const root = rootElement(fixture);
+  findButton(root, 'Add members').click();
+  fixture.detectChanges();
+  typeSearch(root, 'Alice');
+  await vi.waitFor(() => expect(searchCount).toBe(1));
+  typeSearch(root, 'Bob');
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('bob@example.test');
+  });
+  releaseOldSearch?.(response({ status: 'refused' }, status));
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('Your access changed');
+  });
+  expect(root.textContent).not.toContain('Sales team');
+  expect(root.textContent).not.toContain('Bob');
 });
 
 it('lets admins create a shared assistant for an identity-provider group', async () => {
@@ -519,6 +610,25 @@ it('shows the not-found state after refreshing a removal notice', async () => {
 function isConfirmButton(button: HTMLButtonElement): boolean {
   return button.textContent?.includes('Remove Alex Kim from Sales team') ?? false;
 }
+function typeSearch(root: HTMLElement, value: string): void {
+  const field = root.querySelector<HTMLInputElement>('input[placeholder="Search name or email"]');
+  if (!field) throw new Error('Expected the member search field');
+  field.value = value;
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+}
+async function searchAndAddBob(
+  root: HTMLElement, fixture: ComponentFixture<GroupDetailScreen>,
+): Promise<void> {
+  findButton(root, 'Add members').click();
+  fixture.detectChanges();
+  typeSearch(root, 'Bob');
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('bob@example.test');
+  });
+  findButton(root, 'Add').click();
+  fixture.detectChanges();
+}
 function isPostRequest(request: SeenRequest): boolean { return request.method === 'POST'; }
 function isGetRequest(request: SeenRequest): boolean { return request.method !== 'POST'; }
 async function openAndConfirmRemoval(root: HTMLElement, fixture: ComponentFixture<GroupDetailScreen>): Promise<void> {
@@ -543,4 +653,8 @@ function findButton(root: HTMLElement, label: string): HTMLButtonElement {
     if (button.textContent?.trim() === label) return button;
   }
   throw new Error(`Expected the ${label} button`);
+}
+function hasButton(root: HTMLElement, label: string): boolean {
+  const buttons = [...root.querySelectorAll('button')];
+  return buttons.some((button) => button.textContent?.trim() === label);
 }
