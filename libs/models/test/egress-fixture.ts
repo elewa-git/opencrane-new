@@ -1,8 +1,8 @@
-import { guardRelay } from './egress-guard-relay.ts';
+import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay.ts';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, request, type ServerResponse, IncomingMessage } from 'node:http';
-import { createServer as createTcpServer, Socket } from 'node:net';
+import { connect, createServer as createTcpServer, Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -63,8 +63,19 @@ export async function egressFixture(enabled = true, guarded = false) {
   const relayAddress = relay.address();
   if (!relayAddress || typeof relayAddress === 'string') throw new Error('No relay');
   const relayPort = relayAddress.port;
-  let targetPort = relayPort;
-  if (guarded) targetPort = await guardRelay(relayPort);
+  const closeRecords: EgressCloseRecord[] = [];
+  function recordClose(record: EgressCloseRecord) {
+    closeRecords.push(record);
+  }
+  function resolveDestination() {
+    return Promise.resolve([{ address: '1.1.1.1', family: 4 }]);
+  }
+  function connectDestination(address: string, port: number) {
+    if (address !== '1.1.1.1' || port !== 443) throw new Error('Unapproved destination');
+    return connect(relayPort, '127.0.0.1');
+  }
+  const transport = { resolve: resolveDestination, connect: connectDestination };
+  const registry = new EgressRelayRegistry(recordClose, transport);
 
   async function append(subject: string, type: string, data: unknown) {
     const event = envelope('test', subject, type, data);
@@ -115,7 +126,11 @@ export async function egressFixture(enabled = true, guarded = false) {
     await actor.admitDispatch(dispatch, fresh);
     order.push('dispatch');
     if (scenario !== 'missing-relay') {
-      let target = `127.0.0.1:${targetPort}`;
+      let target = `127.0.0.1:${relayPort}`;
+      if (guarded) {
+        const registration = { ...destination, permitId: permit, expiresAt: Date.now() + 1000 };
+        target = await registry.register(registration);
+      }
       if (scenario === 'foreign-relay') target = 'registry.npmjs.org:443';
       response.setHeader('x-egress-relay', target);
     }
@@ -170,7 +185,8 @@ export async function egressFixture(enabled = true, guarded = false) {
     return jwt.sign(pair.privateKey);
   }
   async function tunnel(bearer = '', authority = 'registry.npmjs.org:443',
-    payload: Buffer = Buffer.from('native-binary-tunnel')) {
+    payload: Buffer = Buffer.from('native-binary-tunnel'),
+    afterEcho?: (socket: Socket) => Promise<void>) {
     const headers = { host: authority, 'proxy-authorization': `Bearer ${bearer}`,
       authorization: 'Bearer secret-canary', 'x-turn-token': 'secret-canary',
       'x-egress-relay': `127.0.0.1:${relayPort}`, 'x-requester-id': 'secret-canary' };
@@ -197,6 +213,7 @@ export async function egressFixture(enabled = true, guarded = false) {
       }
       socket.write(payload);
       await echoed;
+      await afterEcho?.(socket);
     }
     socket.destroy();
     return response.statusCode;
@@ -209,6 +226,7 @@ export async function egressFixture(enabled = true, guarded = false) {
     await closed;
   }
   async function close() {
+    registry.closeAll();
     await gatewayState.gateway?.stop();
     const relayClosed = once(relay, 'close');
     relay.close();
@@ -218,7 +236,11 @@ export async function egressFixture(enabled = true, guarded = false) {
     await nats.close();
     await rm(directory, { recursive: true, force: true });
   }
+  function activeConnections() {
+    return sockets.size;
+  }
   return { token, tunnel, actor, order, port, controlRequests, decisionDown,
+    registry, closeRecords, permit, activeConnections,
     received: () => received, connected: () => connected, authorised: () => authorised,
     scenario(value: EgressScenario) { scenario = value; },
     receipts: () => history(nats.store, `decision-${permit}`, 'test') };

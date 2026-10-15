@@ -5,7 +5,7 @@ For people, read [README.md](README.md) first.
 ## Egress socket checks
 
 P3-20 #61 PR 2b is split again to keep this change near 600 lines.
-`src/egress-guard.ts` provides `connectEgressDestination` for a future relay owner.
+`src/egress-guard.ts` provides `connectEgressDestination` for the relay registry.
 It validates host/port with `egressDestinationSchema`, reads a TLS ClientHello,
 resolves every address, checks all answers, then connects to the first checked IP.
 The caller receives the paused incoming socket's buffered bytes and the connected
@@ -26,8 +26,23 @@ MCP discovery and this guard now use it through the models package.
 The existing gateway assertions remain. Additional cases use these socket checks
 behind real gateway/NATS fixtures and check exact bytes without outer credentials.
 
-NOT BUILT in this split: single-use permit registration, relay expiry, closing by
-permit/destination/all, close records, checked-set fallback, or production wiring.
+`src/egress-relay.ts` owns one loopback listener and both sockets per permit.
+Registration validates the destination and accepts expiry only within the next 60 seconds.
+Each permit is accepted once per registry lifetime, including after expiry. Used permit
+ids remain in memory until the registry is discarded; expired listeners and sockets do not.
+A used or closed listener stays bound until expiry and refuses additional connections.
+Closing by permit, exact normalised host/port or all cancels pending work and open tunnels.
+The injected callback receives one close record even if it throws. It runs synchronously
+and must not block. Counts are bytes written to each socket, including the initial hello;
+they do not prove that the remote application received or processed those bytes.
+`connectedAt` is the time the checked upstream connected, or null if it never did.
+`address` is the checked IP passed to the connector, or null before that step.
+Reasons are finished (socket ended), failed (transport error), refused (guard refusal),
+expired or revoked (explicit closure). The first close determines the record.
+The gateway fixture registers one relay after each allowed guarded CONNECT decision.
+Own checks are in [the relay receipt](../../docs/process/p3-20-pr2c-relays.md).
+
+NOT BUILT: checked-set fallback or production wiring.
 Capabilities, admission rules, durable receipts and watchdogs remain later work.
 CONNECT stays off at startup. Fresh-install egress qualification remains NOT RUN.
 Own checks are recorded in [the receipt](../../docs/process/p3-20-pr2b-guard.md).
@@ -57,14 +72,14 @@ to extAuthz. Production egress admission is not implemented by this part.
 gateway with a recording loopback relay. The control service is a test fixture.
 It also verifies tokens strictly; the gateway JWT check alone permits clock skew.
 The fixture is not a production capability issuer or policy reader. Its optional
-guard listener tests only the socket checks described above.
+relay registry tests the socket checks and closure described above.
 
 Remaining PR 2 work: complete operation-bound capability checks, all three rules,
-single-use relays with the socket checks above, active closure, watchdogs and
-durable outage/open/close receipts. The binary removes raw Host before extAuthz;
+wiring access/turn/budget/outage changes to closure, watchdogs and durable
+outage/open/close receipts. The binary removes raw Host before extAuthz;
 authority/Host disagreement still needs proof or the accepted broker fallback.
 The first routing-only receipt did not cover DNS or TLS checks. Open-tunnel expiry
-and fresh-install journeys remain NOT RUN. No worker or browser uses this route.
+is now tested through the real gateway. Fresh-install journeys remain NOT RUN. No worker or browser uses this route.
 The [receipt](../../docs/process/p3-20-pr2-gateway.md) records this limited proof.
 
 ## Dated MCP catalogue evidence

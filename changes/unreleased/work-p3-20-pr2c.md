@@ -1,0 +1,1 @@
+- Private egress relays now accept one connection per permit, close on expiry or explicit closure, and report byte counts and times once. CONNECT remains off at startup.

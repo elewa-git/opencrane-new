@@ -138,3 +138,26 @@ async function refusesAbsoluteHttp() {
   expect(setup.received()).toHaveLength(0);
 }
 it('sends absolute-form plain HTTP to no upstream', refusesAbsoluteHttp);
+
+async function closesRealTunnel(expire: boolean) {
+  const setup = await egressFixture(true, true);
+  const bearer = await setup.token();
+  async function afterEcho(socket: import('node:net').Socket) {
+    const started = Date.now();
+    const closed = once(socket, 'close');
+    if (!expire) setup.registry.closeDestination({ host: 'registry.npmjs.org', port: 443 });
+    await closed;
+    await expect.poll(setup.activeConnections).toBe(0);
+    expect(Date.now() - started).toBeLessThan(2000);
+  }
+  expect(await setup.tunnel(bearer, 'registry.npmjs.org:443', clientHello(), afterEcho)).toBe(200);
+  expect(setup.closeRecords).toHaveLength(1);
+  expect(setup.closeRecords[0]).toMatchObject({ permitId: setup.permit,
+    host: 'registry.npmjs.org', port: 443, address: '1.1.1.1',
+    reason: expire ? 'expired' : 'revoked', bytesSent: clientHello().length,
+    bytesReceived: clientHello().length });
+  expect(setup.received().includes(bearer)).toBe(false);
+  expect(setup.received().includes('secret-canary')).toBe(false);
+}
+it.each([false, true])('closes the real gateway and upstream within two seconds (expiry: %s)',
+  closesRealTunnel);
