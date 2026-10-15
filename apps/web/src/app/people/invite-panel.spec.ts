@@ -30,6 +30,15 @@ function response(body: unknown, status = 200): Response {
     headers: { 'content-type': 'application/json' } });
 }
 
+function responseWithStalledBody(status: number): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(): void {
+      // Leave the body open to check that denial needs only the response status.
+    },
+  });
+  return new Response(body, { status });
+}
+
 function fetchReply(input: RequestInfo | URL, options?: RequestInit): Promise<Response> {
   const url = requestUrl(input);
   const method = options?.method ?? 'GET';
@@ -256,6 +265,26 @@ it.each([401, 403])('clears private data on %i', async (status) => {
   expect(root.querySelector<HTMLInputElement>('#invite-email')?.value).toBe('');
   expect(fixture.componentInstance.unavailable()).toBe(true);
   expect(root.querySelector<HTMLInputElement>('#invitation-link')).toBeNull();
+});
+
+it.each([401, 403])('clears the open form before a %i body arrives', async (status) => {
+  const { root, fixture } = mount();
+  function heldDenial(input: RequestInfo | URL, options?: RequestInit): Promise<Response> {
+    if (requestUrl(input).endsWith('/identity')) {
+      return Promise.resolve(responseWithStalledBody(status));
+    }
+    return fetchReply(input, options);
+  }
+  vi.stubGlobal('fetch', vi.fn(heldDenial));
+  open(fixture);
+  enterEmail(root, email);
+  expect(root.querySelector<HTMLInputElement>('#invite-email')?.value).toBe(email);
+  button(root, 'Create').click();
+  await settle(fixture);
+  expect(root.querySelector<HTMLInputElement>('#invite-email')?.value).toBe('');
+  expect(root.querySelector('dialog')?.open).toBe(false);
+  expect(fixture.componentInstance.unavailable()).toBe(true);
+  expect(requests.some((request) => request.url === '/api/invitations')).toBe(false);
 });
 
 it('treats a recorded status without result as access loss', async () => {
