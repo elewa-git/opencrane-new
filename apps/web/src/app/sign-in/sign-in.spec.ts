@@ -56,10 +56,85 @@ describe('sign-in handoff', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"authenticated":false}'));
     try {
       const { element } = create();
-      expect(element.querySelector('.eyebrow')?.textContent).toBe('Example Group');
+      expect(element.querySelector('h1')?.textContent).toBe('Sign in to OpenCrane');
+      expect(element.textContent).toContain('Example Group');
       expect(element.textContent).toContain('You were invited by Example Group. Your work here stays private to you.');
-      expect(element.querySelector('footer')?.textContent).toBe('self-hosted · data sovereign');
+      expect(element.querySelector('footer, .brand')).toBeNull();
     } finally { meta.remove(); fetchSpy.mockRestore(); }
+  });
+  it('focuses SSO after a signed-out session read and explains the readonly email field', async () => {
+    globalThis.history.replaceState({}, '', '/');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"authenticated":false}'));
+    try {
+      const { fixture, element } = create();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        const sso = [...element.querySelectorAll('button')]
+          .find((button) => button.textContent?.includes('Continue with single sign-on'));
+        expect(document.activeElement).toBe(sso);
+      });
+      const email = element.querySelector<HTMLInputElement>('input[type=email]');
+      expect(email?.readOnly).toBe(true);
+      expect(email?.getAttribute('aria-disabled')).toBe('true');
+      const descriptionId = email?.getAttribute('aria-describedby');
+      expect(descriptionId).toBeTruthy();
+      expect(element.querySelector(`#${descriptionId}`)?.textContent).toContain('Disabled in this product');
+      expect(element.textContent).toContain('Email sign-in is unavailable');
+      expect(element.textContent).toContain('Use your organisation\'s single sign-on.');
+      expect(element.querySelector('form')).toBeNull();
+      expect(element.textContent).not.toMatch(/Microsoft|Zitadel|Email me a sign-in link/i);
+      expect(fetchSpy).toHaveBeenCalledExactlyOnceWith('/auth/me');
+    } finally { fetchSpy.mockRestore(); }
+  });
+  it('keeps the session-read failure available', async () => {
+    globalThis.history.replaceState({}, '', '/');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+    try {
+      const { fixture, element } = create();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(element.textContent).toContain('We could not check your session.');
+      });
+    } finally { fetchSpy.mockRestore(); }
+  });
+  it.each([
+    ['organisation', 'Your account isn\'t part of Example Group'],
+    ['unavailable', 'We could not reach your identity provider'],
+    ['rejected', 'Your sign-in could not be completed'],
+    ['unknown', 'Your sign-in could not be completed'],
+    ['<script>alert(1)</script>', 'Your sign-in could not be completed'],
+  ])('shows fixed rejection copy for %s without reading a session', (reason, message) => {
+    globalThis.history.replaceState({}, '', `/signin/rejected?reason=${encodeURIComponent(reason)}`);
+    const meta = document.createElement('meta');
+    meta.name = 'opencrane-org';
+    meta.content = 'Example Group';
+    document.head.append(meta);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const { element } = create();
+      const heading = element.querySelector('h1');
+      expect(heading?.textContent).toBe('Sign in to OpenCrane');
+      expect(document.activeElement).toBe(heading);
+      expect(element.textContent).toContain(message);
+      expect(element.textContent).toContain('Nothing was created.');
+      expect(element.textContent).not.toContain(reason);
+      expect(element.querySelectorAll('[role=status]')).toHaveLength(1);
+      expect(element.querySelector('[role=alert]')).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      const retry = [...element.querySelectorAll('button')]
+        .find((button) => button.textContent?.includes('Sign in again'));
+      retry?.click();
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/signin/handoff');
+    } finally { meta.remove(); fetchSpy.mockRestore(); }
+  });
+  it('uses this organisation when no public name is configured', () => {
+    globalThis.history.replaceState({}, '', '/signin/rejected?reason=organisation');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const { element } = create();
+      expect(element.textContent).toContain('Your account isn\'t part of this organisation');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { fetchSpy.mockRestore(); }
   });
   it('uses a native sign-out form without a JavaScript submit handler', async () => {
     globalThis.history.replaceState({}, '', '/');
