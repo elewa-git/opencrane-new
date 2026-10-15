@@ -6,7 +6,12 @@ export const budgetRootAllowanceSetDataSchema = z.object({
   assistantId: id, computerId: id, generation: z.int().nonnegative(), payingGroupId: id,
   allowanceCents: z.int().min(1).max(1000),
 }).strict();
+const sourceStopSchema = z.object({
+  rootId: id, reason: z.enum(['requester_stop', 'turn_ended', 'access_revoked']),
+  sourceSubject: id, sourcePosition: z.int().positive(), sourceEventId: id,
+}).strict();
 export const budgetRootStoppedDataSchema = z.discriminatedUnion('reason', [
+  sourceStopSchema,
   z.object({ rootId: id, reason: z.literal('allowance_exhausted'),
     attemptedBoundCents: z.int().positive(), availableCents: z.int().nonnegative() }).strict(),
   z.object({ rootId: id, reason: z.literal('ceiling_stop'), stopId: id }).strict(),

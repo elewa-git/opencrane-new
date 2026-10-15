@@ -1,0 +1,1 @@
+- Child chat budgets can now save a permanent stop tied to a requester's Stop, the turn ending or the requester losing access. The internal command keeps the first reason, refuses unrelated evidence and still counts late costs. Callers and running-turn interruption are not connected yet.

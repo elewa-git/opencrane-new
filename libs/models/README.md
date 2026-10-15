@@ -20,7 +20,11 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|delivers and probes configuration; checks calls, holds and stops against queued work; tests private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
+<<<<<<< HEAD
   models -->|checks open spending before provider switch-on; saves hosted registration, publication receipts, gateway, root allowance, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
+=======
+  models -->|checks open spending before provider switch-on; saves hosted registration, publication, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
+>>>>>>> 29cca681 (🛑 Tie permanent root stops to their saved source events)
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -51,6 +55,10 @@ The budget actor can save a fixed allowance for one turn, called a root. Calls s
 that allowance through their existing holds. A spending refusal stops further holds
 for that root permanently. A call that costs more than its hold also stops the root,
 while its full cost and an alert are saved. Other roots can still use the payer.
+An internal command also stops a root after its requester stops it, its turn ends,
+or its requester loses access. It checks the saved event and keeps a reference to it.
+The first stop stays permanent, and later usage still counts. No caller uses this
+command yet.
 This internal API has no child-chat caller yet.
 
 - Share public address checks with the server’s remote tool discovery. Test a socket
