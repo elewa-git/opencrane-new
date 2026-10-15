@@ -153,11 +153,13 @@ it.skipIf(!live).each([
       const tokens = await tokenIssuer({ privateKeyPath: join(directory, 'key.pem'), issuer: 'https://repair.test/' });
       const kube = new SandboxClient(join(directory, 'kubeconfig'), namespace, 'computer', '1Gi');
       const assistantId = 'repair-assistant', subject = `computer-${assistantId}`;
-      await lifecycleHandlers(nats.store)[1].handle({
+      const assistant: EventEnvelope = {
         id: randomUUID(), commandId: randomUUID(), type: 'assistant.created', subject: `assistant-${assistantId}`, silo: 'test', source: 'test',
         time: new Date().toISOString(), correlation: {}, principal: { kind: 'system', id: 'test' },
         data: { assistantId, ownerId: 'alice', kind: 'personal' },
-      }, storage.db);
+      };
+      await nats.seed([assistant]);
+      await lifecycleHandlers(nats.store)[1].handle(assistant, storage.db);
       const computerId = field((await history(nats.store, subject)).at(-1)!.event.data, 'computerId');
       const start = () => {
         work = watchComputers(nats.store, kube, tokens, (id, token) => kube.credentials(id, token), 'test', 600_000, stop.signal)

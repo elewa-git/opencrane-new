@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { tokenIssuer } from '@opencrane/auth';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { event, natsFixture } from '@opencrane/event-store/testing';
 import type { EventEnvelope } from '@opencrane/events';
 import { computerCredentials } from '@opencrane/auth';
 import { field, history, lifecycleHandlers, resumeComputer, suspendComputer } from '../src/lifecycle.ts';
@@ -38,6 +38,10 @@ it('agentgateway enforces committed computer and per-turn credentials across rac
     const tokens = await tokenIssuer({ privateKeyPath, issuer: 'https://test.invalid', now: () => now });
     const credentials = computerCredentials(fixture.store, tokens, 'test');
     const assistantId = 'assistant-test';
+    const assistant: EventEnvelope = event('assistant-created', `assistant-${assistantId}`,
+      'assistant.created');
+    assistant.data = { assistantId, ownerId: 'alice', kind: 'personal' };
+    await fixture.seed([assistant]);
     let computerId = 'computer-test';
     const subject = `computer-${assistantId}`;
     const append = async (type: string, extra: Record<string, unknown> = {}) => {

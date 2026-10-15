@@ -41,6 +41,8 @@ value calculated from those definitions. Older records remain readable for repla
 
 ## What it is responsible for
 
+- Define departure completion records with saved change references and no private content.
+
 Root allowance records fix one turn's spending bound. Root stop records prevent
 further holds without refunding earlier calls. They include calls that cost more
 than their hold, and always keep the first stop reason. These records start no work.

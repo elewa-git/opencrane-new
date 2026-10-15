@@ -46,7 +46,10 @@ async function oldLossKeepsLatestLoss() {
     const old: EventEnvelope = event('first-loss', 'computer-assistant', 'computer.lost');
     old.data = { assistantId: 'assistant', computerId: 'computer' };
     const latest = { ...old, id: 'latest-loss', commandId: 'latest-loss' };
-    await nats.seed([old, latest]);
+    const assistant: EventEnvelope = event('created-assistant', 'assistant-assistant',
+      'assistant.created');
+    assistant.data = { assistantId: 'assistant', ownerId: 'team', kind: 'team' };
+    await nats.seed([assistant, old, latest]);
     const handler = lifecycleHandlers(nats.store)[1];
     await handler.handle(old, noSql);
     const unchanged = await history(nats.store, old.subject);

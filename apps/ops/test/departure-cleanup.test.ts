@@ -9,7 +9,7 @@ import { createLogger } from '@opencrane/observability';
 import { members, ProjectionRunner, readEvents } from '@opencrane/projections';
 import type { EventEnvelope } from '@opencrane/events';
 import { database } from '../../../libs/projections/test/database.ts';
-import { history } from '../src/lifecycle.ts';
+import { field, history, lifecycleHandlers } from '../src/lifecycle.ts';
 import { dispatcherHandlerNames } from '../src/dispatcher-handlers.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -45,7 +45,7 @@ async function setup() {
   storage = await database('pg');
   fga = await openfga();
   const binding = await createStore(fga.apiUrl, 'test');
-  auth = memberAuthorisation(binding);
+  auth = memberAuthorisation(binding, nats.store);
   runner = new ProjectionRunner(storage.db, nats.reader, createLogger('departure-test'));
   await runner.initialise(members);
   for (const memberId of ['alice', 'bob']) {
@@ -60,11 +60,12 @@ async function setup() {
     await append(`assistant-${assistantId}`, 'assistant.created', { assistantId, ownerId, kind });
     await grant('assistant', assistantId!);
   }
-  for (const assistantId of ['personal', 'shared']) {
+  for (const assistantId of ['personal', 'shared', 'other']) {
     await append(`computer-${assistantId}`, 'computer.claimed', {
       assistantId, computerId: `desk-${assistantId}`, generation: 1, tokenId: 'token:fixture',
     });
   }
+  await computerEvent('personal', 'computer.ready');
   await append('connection-existing', 'connection.created', {
     userId: 'alice', serverId: 'mcp', profile: 'default', secretRef: 'secret:fixture',
   });
@@ -92,7 +93,7 @@ async function deliver() {
   function clock() {
     return Date.parse('2026-10-13T12:00:00Z');
   }
-  const handler = module.departureCleanupHandler(nats.store, clock);
+  const handler = module.departureCleanupHandler(nats.store, auth, clock);
   await handler.handle(removal, storage.db);
 }
 
@@ -109,7 +110,7 @@ async function currentResources() {
   await grant('team', 'late');
   await grant('member', 'alice', 'later-model');
   await runner.run(members);
-  await deliver();
+  await expect(deliver()).rejects.toThrow('Departure permissions pending');
   const removals = [];
   const revocations = [];
   for await (const row of readEvents(nats.store, 1, await nats.store.head())) {
@@ -130,10 +131,10 @@ async function currentResources() {
     active: false, changedFields: ['active'], changedBy: 'opencrane-worker' });
   expect(await history(nats.store, 'assistant-shared')).toHaveLength(1);
   expect(await history(nats.store, 'assistant-other')).toHaveLength(1);
-  expect(await history(nats.store, 'computer-*')).toHaveLength(2);
+  expect(await history(nats.store, 'computer-*')).toHaveLength(5);
   expect(await history(nats.store, 'connection-*')).toHaveLength(1);
   expect(await history(nats.store, 'memberaudit-*')).toEqual([]);
-  await applyPermissions();
+  await finish();
   expect(await auth.team('alice', 'late')).toMatchObject({ allowed: false });
   expect(await auth.team('bob', 'late')).toMatchObject({ allowed: true });
   expect(await auth.use('assistant', 'personal', 'model', 'test-model'))
@@ -157,7 +158,7 @@ async function retries() {
   await runner.run(members);
   await Promise.allSettled([deliver(), deliver()]);
   await runner.run(members);
-  await deliver();
+  await finish();
   const saved = await nats.store.head();
   await append('assistant-personal', 'assistant.settings_changed', {
     assistantId: 'personal', changedBy: 'owner', changedFields: ['persona'],
@@ -173,8 +174,8 @@ async function retries() {
     expect(row.event.time).toBe('2026-10-13T12:00:00.000Z');
     outcomes.push(row.event);
   }
-  expect(outcomes).toHaveLength(4);
-  expect(new Set(outcomes.map(eventId)).size).toBe(4);
+  expect(outcomes).toHaveLength(5);
+  expect(new Set(outcomes.map(eventId)).size).toBe(5);
 }
 it('keeps one outcome across concurrent delivery, a lost reply and later unrelated settings',
   retries);
@@ -247,3 +248,261 @@ async function replayAndUpgrade() {
 }
 it('rebuilds without effects and previews the added subscription without running cleanup',
   replayAndUpgrade);
+
+async function computerEvent(assistantId: string, type: string) {
+  const data: Record<string, unknown> = { assistantId, computerId: `desk-${assistantId}` };
+  if (type === 'computer.resumed') data['tokenId'] = 'token:fixture';
+  return append(`computer-${assistantId}`, type, data);
+}
+
+async function finish() {
+  await runner.run(members);
+  await applyPermissions();
+  await deliver();
+}
+
+async function completion(memberId = 'alice') {
+  const rows = await history(nats.store, `memberaudit-${memberId}`);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.event.type).toBe('member.departure_cleanup_completed');
+  return rows[0]!.event;
+}
+
+async function busyComputer() {
+  const turn = { assistantId: 'personal', computerId: 'desk-personal',
+    conversationId: 'private', turnId: 'turn', threadId: 'thread',
+    requesterId: 'alice', task: 'chat_turn' };
+  await append('computer-personal', 'computer.turn_started', turn);
+  await expect(deliver()).rejects.toThrow('Departure computer busy');
+  expect(await history(nats.store, 'memberaudit-alice')).toEqual([]);
+  expect(await history(nats.store, 'computer-personal')).toHaveLength(3);
+  await append('computer-personal', 'computer.turn_closed', { ...turn, status: 'completed' });
+  await finish();
+  const computer = await history(nats.store, 'computer-personal');
+  expect(computer).toHaveLength(5);
+  const suspended = computer.at(-1)!.event;
+  expect(suspended.type).toBe('computer.suspended');
+  const saved = await completion();
+  expect(saved.data).toMatchObject({ memberId: 'alice', removalId: removal.id,
+    sections: { computer: [suspended.id] } });
+  await finish();
+  expect(await completion()).toEqual(saved);
+}
+it('waits for an open turn, then suspends once and records earlier cleanup results', busyComputer);
+
+async function computerStates(type: string) {
+  await computerEvent('personal', type);
+  const before = await history(nats.store, 'computer-personal');
+  await expect(deliver()).rejects.toThrow();
+  await runner.run(members);
+  await applyPermissions();
+  if (type === 'computer.resumed') {
+    await expect(deliver()).rejects.toThrow('Departure computer busy');
+    expect(await history(nats.store, 'memberaudit-alice')).toEqual([]);
+  } else {
+    await deliver();
+    await completion();
+  }
+  expect(await history(nats.store, 'computer-personal')).toEqual(before);
+}
+it.each(['computer.suspended', 'computer.retired', 'computer.resumed'])(
+  'does not suspend a computer whose latest state is %s', computerStates);
+
+async function claimedComputer() {
+  await append('assistant-starting', 'assistant.created', {
+    assistantId: 'starting', kind: 'personal', ownerId: 'alice',
+  });
+  await append('computer-starting', 'computer.claimed', {
+    assistantId: 'starting', computerId: 'desk-starting', generation: 1, tokenId: 'token:fixture',
+  });
+  await runner.run(members);
+  await expect(deliver()).rejects.toThrow('Departure computer busy');
+  expect(await history(nats.store, 'computer-starting')).toHaveLength(1);
+  expect(await history(nats.store, 'memberaudit-alice')).toEqual([]);
+}
+it('leaves a newly claimed personal computer unfinished', claimedComputer);
+
+async function lostClaim(assistantId: string) {
+  const lost = await computerEvent(assistantId, 'computer.lost');
+  const before = await history(nats.store, lost.subject);
+  const [, claim] = lifecycleHandlers(nats.store);
+  await claim.handle(lost, storage.db);
+  const after = await history(nats.store, lost.subject);
+  if (assistantId === 'personal') {
+    expect(after).toEqual(before);
+  } else {
+    expect(after).toHaveLength(before.length + 1);
+    expect(after.at(-1)?.event.type).toBe('computer.claimed');
+  }
+}
+it.each(['personal', 'shared', 'other'])(
+  'reclaims lost computers only for teams and current members: %s', lostClaim);
+
+async function reorderedCompletion() {
+  const originalHead = nats.store.head.bind(nats.store);
+  async function movingOtherComputer(subject?: string, deadline?: number) {
+    expect(subject).not.toBe('computer-*');
+    return originalHead(subject, deadline);
+  }
+  vi.spyOn(nats.store, 'head').mockImplementation(movingOtherComputer);
+  await expect(deliver()).rejects.toThrow('Departure permissions pending');
+  await runner.run(members);
+  await expect(deliver()).rejects.toThrow('Departure permissions pending');
+  expect(await history(nats.store, 'memberaudit-alice')).toEqual([]);
+  await append('member-returned', 'member.joined', {
+    memberId: 'returned', role: 'member', email: 'alice@example.test', displayName: 'Alice',
+  });
+  await append('assistant-returned', 'assistant.created', {
+    assistantId: 'returned', kind: 'personal', ownerId: 'returned',
+  });
+  await grant('member', 'returned');
+  await append('computer-returned', 'computer.claimed', {
+    assistantId: 'returned', computerId: 'desk-returned', generation: 1, tokenId: 'token:fixture',
+  });
+  await computerEvent('returned', 'computer.ready');
+  const returnedComputer = await history(nats.store, 'computer-returned');
+  const returned = await history(nats.store, 'assistant-returned');
+  await applyPermissions();
+  await runner.run(members);
+  await Promise.allSettled([deliver(), deliver()]);
+  await finish();
+  const saved = await completion();
+  const sections: Record<string, string[]> = { groups: [], grants: [], assistant: [], computer: [] };
+  const sectionTypes: Record<string, string> = { 'team.member_removed': 'groups',
+    'grant.revoked': 'grants', 'assistant.settings_changed': 'assistant',
+    'computer.suspended': 'computer' };
+  for await (const { event } of readEvents(nats.store, 1, await nats.store.head())) {
+    const section = sectionTypes[event.type];
+    if (section) sections[section]!.push(event.id);
+  }
+  expect(saved.data).toEqual({ memberId: 'alice', removalId: removal.id, sections });
+  expect(await history(nats.store, 'assistant-returned')).toEqual(returned);
+  expect(await history(nats.store, 'computer-returned')).toEqual(returnedComputer);
+  expect(await auth.use('person', 'returned', 'model', 'test-model')).toMatchObject({ allowed: true });
+  expect(await history(nats.store, 'computer-shared')).toHaveLength(1);
+  expect(await history(nats.store, 'computer-other')).toHaveLength(1);
+}
+it('requires IAM receipts and saves one complete record across reordered deliveries and rejoin',
+  reorderedCompletion);
+
+async function existingRevocation(type: string) {
+  if (type === 'group') {
+    await append('team-early', 'team.member_removed', {
+      teamId: 'early', memberId: 'alice', removedBy: 'owner',
+    });
+  } else {
+    await append(grantStream('model', 'test-model'), 'grant.revoked', {
+      resourceType: 'model', resourceId: 'test-model', granteeKind: 'member',
+      granteeId: 'alice', revokedBy: 'owner',
+    });
+  }
+  await runner.run(members);
+  await expect(deliver()).rejects.toThrow('Departure permissions pending');
+  const end = await nats.store.head();
+  for await (const { event } of readEvents(nats.store, 1, end)) {
+    if (event.source !== 'opencrane-worker') continue;
+    if (auth.handler.eventTypes.includes(event.type)) await auth.handler.handle(event, storage.db);
+  }
+  await runner.run(members);
+  await expect(deliver()).rejects.toThrow('Departure permissions pending');
+  expect(await history(nats.store, 'memberaudit-alice')).toEqual([]);
+  await finish();
+  await completion();
+}
+it.each(['group', 'grant'])(
+  'requires the IAM receipt when another command already removed the %s', existingRevocation);
+
+async function completionFailure(mode: string) {
+  await expect(deliver()).rejects.toThrow('Departure permissions pending');
+  await runner.run(members);
+  await applyPermissions();
+  if (mode === 'membership') {
+    const original = nats.store.head.bind(nats.store);
+    async function moved(subject?: string, deadline?: number) {
+      const position = await original(subject, deadline);
+      if (subject === 'member-alice') return position + 1;
+      return position;
+    }
+    vi.spyOn(nats.store, 'head').mockImplementation(moved);
+  } else {
+    const failure = { status: 'unavailable' as const, cause: new Error('Append unavailable') };
+    vi.spyOn(nats.store, 'append').mockResolvedValue(failure);
+  }
+  await expect(deliver()).rejects.toThrow();
+  expect(await history(nats.store, 'memberaudit-alice')).toEqual([]);
+  vi.restoreAllMocks();
+  await finish();
+  await completion();
+}
+it.each(['membership', 'append'])(
+  'does not record completion after a changed member position or failed append: %s', completionFailure);
+
+async function confirmLostComputer() {
+  const lost = await computerEvent('personal', 'computer.lost');
+  const before = await history(nats.store, lost.subject);
+  await expect(deliver()).rejects.toThrow('Departure permissions pending');
+  await finish();
+  const after = await history(nats.store, lost.subject);
+  expect(after).toHaveLength(before.length + 1);
+  expect(after.slice(0, -1)).toEqual(before);
+  const confirmed = after.at(-1)!.event;
+  expect(confirmed.type).toBe('computer.lost');
+  expect(confirmed.data).toEqual(lost.data);
+  expect(confirmed.id).toMatch(/^[a-f0-9]{64}$/u);
+  const saved = await completion();
+  expect(saved.data).toMatchObject({ sections: { computer: [confirmed.id] } });
+  const [, claim] = lifecycleHandlers(nats.store);
+  await claim.handle(lost, storage.db);
+  await claim.handle(confirmed, storage.db);
+  await finish();
+  expect(await history(nats.store, lost.subject)).toEqual(after);
+  expect(await completion()).toEqual(saved);
+}
+it('confirms a lost personal computer once without suspending or reclaiming it',
+  confirmLostComputer);
+
+async function pausedClaimAfterCleanup() {
+  const lost = await computerEvent('other', 'computer.lost');
+  const before = await history(nats.store, lost.subject);
+  const appendCommand = nats.store.append.bind(nats.store);
+  const paused = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function pauseClaim(command: Parameters<typeof appendCommand>[0]) {
+    const type = field(command.event, 'type');
+    const subject = field(command.event, 'subject');
+    if (type === 'computer.claimed' && subject === lost.subject) {
+      paused.resolve();
+      await release.promise;
+    }
+    return appendCommand(command);
+  }
+  const pendingAppend = vi.spyOn(nats.store, 'append').mockImplementation(pauseClaim);
+  const [, claim] = lifecycleHandlers(nats.store);
+  const pendingClaim = claim.handle(lost, storage.db);
+  try {
+    await paused.promise;
+    removal = await append('member-bob', 'member.removed', {
+      memberId: 'bob', removedBy: 'owner', reviewRevision: 'b'.repeat(64),
+    });
+    await runner.run(members);
+    await expect(deliver()).rejects.toThrow('Departure permissions pending');
+    await finish();
+    const saved = await completion('bob');
+    const completedComputer = await history(nats.store, lost.subject);
+    release.resolve();
+    await pendingClaim;
+    const after = await history(nats.store, lost.subject);
+    expect(after).toEqual(completedComputer);
+    expect(after).toHaveLength(before.length + 1);
+    expect(after.at(-1)?.event.type).toBe('computer.lost');
+    await finish();
+    expect(await completion('bob')).toEqual(saved);
+    expect(await history(nats.store, lost.subject)).toEqual(after);
+  } finally {
+    release.resolve();
+    await pendingClaim;
+    pendingAppend.mockRestore();
+  }
+}
+it('refuses a lost-computer claim paused before append until after departure cleanup completes',
+  pausedClaimAfterCleanup);

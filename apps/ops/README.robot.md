@@ -524,7 +524,7 @@ No model, tool, computer or budget port is available to the scan.
 Tests: `apps/ops/test/nightly-memory.test.ts` uses real PostgreSQL and NATS,
 including two child processes. Live fresh-install qualification remains NOT RUN.
 
-## Departure cleanup, first part
+## Departure cleanup
 
 `cleanup-departure` subscribes to `member.removed`. The saved removal must carry
 `reviewRevision`; historical unreviewed removals append nothing. The handler checks
@@ -536,17 +536,36 @@ unfinished. Each command id hashes the silo, removal id, operation, stream and r
 The event time comes from an injectable clock.
 
 Groups lose only the removed member. Direct and personal-assistant grants are revoked;
-personal assistants become inactive. Group grants, shared assistants, computers,
-connections and other members are untouched. Existing OpenFGA handlers apply the saved
-changes. This part writes no completion event and makes no IAM-completion claim.
-Computer suspension, the lost-computer claim guard, receipt-confirmed completion and
-bounded applying/unknown status remain for the next part of #85 row 10.
+personal assistants become inactive. Computers are read only on exact
+`computer-<assistantId>` streams from those personal assistants, never a silo-wide
+computer position. Each computer read is bounded at 10,000 events, as is their total.
+`suspendComputer` checks open turns and conditionally suspends ready computers.
+Claimed/resumed or busy computers fail with a safe error and use existing job retries.
+Suspended, lost and retired computers need no suspension. For a lost computer, cleanup
+conditionally saves another `computer.lost` with a deterministic removal-based id.
+This advances the exact computer stream so a claim paused after reading membership
+cannot append after completion. If the claim appends first, cleanup's append conflicts
+and completion waits for a retry. The completion's computer section includes the saved
+loss confirmation. Retries reuse it. The loss reaction also checks the personal owner's
+removal before claiming. Cleanup makes no Kubernetes call.
+Group grants, shared assistants and computers, connections and other members are untouched.
+Existing OpenFGA handlers apply the saved changes. The worker checks their `applied`
+receipts, including changes saved in earlier attempts, before recording completion.
+`member.departure_cleanup_completed` uses a deterministic silo/removal id and a
+conditional memberaudit append after checking the member position again. Its bounded
+sections contain saved cleanup event ids, with at most 100 per section. A retry returns
+without writing if that completion is already saved. No subscription or retry setting changes.
+Bounded applying/unknown API status remains for the next part of #85 row 10.
 The [handler upgrade procedure](#handler-subscription-upgrade) enables the new pair.
 Read-table rebuild runs no reactions.
 
 `test/departure-cleanup.test.ts` uses real disposable NATS, PostgreSQL and OpenFGA.
-It covers current resources, retries, incomplete inventory, legacy removal, rebuild
-and the upgrade dry-run. Run with `PG_TEST_URL` and `nice -n 10 npx vitest run
+It covers current resources, retries, incomplete inventory, legacy removal, rebuild,
+idle/busy computer states, missing permission receipts, completion and the upgrade dry-run.
+It pauses a real NATS claim before append, completes removal cleanup, then releases the
+claim and checks that no new claim was saved. It also checks loss confirmation retries.
+Rejoin coverage keeps the new assistant, computer and grants unchanged. It does not
+qualify live private-history isolation after return. Run with `PG_TEST_URL` and `nice -n 10 npx vitest run
 apps/ops/test/departure-cleanup.test.ts --maxWorkers=2` from the root.
 Fresh-install departure and return qualification: NOT RUN.
 

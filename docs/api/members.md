@@ -354,9 +354,15 @@ It discovers resources when it runs, including grants added after the review.
 It requires the inventory index to be current, then reads exact resource streams.
 Missing or oversized inventory and failed writes leave the job for retry.
 Old removals without `reviewRevision` cause no cleanup writes.
-Group grants, shared assistants, computers, connections and other members are untouched.
-Computer suspension, a completion event and `cleanup: applying|unknown` status are
-still pending. No successful job in this first part means that departure is complete.
+Personal computers are found through their assistants' exact streams. Idle ready computers
+are suspended; open turns and starting computers leave cleanup unfinished for retry.
+Lost personal computers cannot be reclaimed after their owner leaves.
+Group grants, shared assistants and computers, connections and other members are untouched.
+The worker records `member.departure_cleanup_completed` on `memberaudit-<memberId>`
+after confirming saved changes and the group/grant OpenFGA receipts. Its `sections`
+hold at most 100 saved event ids each for `groups`, `grants`, `assistant` and `computer`.
+Earlier attempts' results are included. `removalId` names the saved removal.
+This record changes no access. API cleanup status remains for the next change.
 
 ## Access and departure inventory
 
