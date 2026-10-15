@@ -187,6 +187,19 @@ describe('WebSocketService', () => {
     expect(sockets).toHaveLength(1);
   });
 
+  it('reconnects after a non-policy server close', () => {
+    vi.useFakeTimers();
+    const service = setup(() => 1);
+    service.connect('/ws');
+    sockets[0]?.triggerOpen();
+
+    sockets[0]?.triggerClose(1011);
+
+    expect(service.state()).toBe('reconnecting');
+    vi.advanceTimersByTime(500);
+    expect(sockets).toHaveLength(2);
+  });
+
   it('resets the backoff once a reconnect succeeds', () => {
     vi.useFakeTimers();
     const service = setup(() => 1);
