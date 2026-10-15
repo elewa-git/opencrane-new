@@ -129,7 +129,7 @@ async function createCaptureWorkspace(
     send: vi.fn(), close: vi.fn(),
   };
   TestBed.configureTestingModule({ providers: [
-    { provide: SOCKET_FACTORY, useValue: () => socket },
+    { provide: SOCKET_FACTORY, useValue: vi.fn(() => socket) },
     { provide: RANDOM_SOURCE, useValue: () => 0 },
   ] });
   const fixture = TestBed.createComponent(Workspace);
@@ -463,6 +463,27 @@ it('clears the preview, screenshot rows and counts when access is denied', async
     .every(count => count.textContent?.trim().startsWith('–'))).toBe(true);
   expect(context.root.textContent).not.toContain('screen.png');
   expect(context.root.querySelector('img[src*="files/view"]')).toBeNull();
+  context.fixture.destroy();
+});
+
+it('clears an open session after a bare policy close without another socket', async () => {
+  const context = await createCaptureWorkspace([screenshotRow(1)]);
+  context.fixture.componentInstance['draft'].set('Private draft');
+  context.fixture.detectChanges();
+  const socketFactory = TestBed.inject(SOCKET_FACTORY) as ReturnType<typeof vi.fn>;
+  const socketCount = socketFactory.mock.calls.length;
+
+  context.socket.onclose?.(new CloseEvent('close', { code: 1008 }));
+  context.fixture.detectChanges();
+  await context.fixture.whenStable();
+  context.fixture.detectChanges();
+
+  expect(context.root.textContent).toContain('You no longer have access');
+  expect(context.root.textContent).not.toContain('screen.png');
+  expect(context.root.textContent).not.toContain('Private draft');
+  expect(context.root.querySelector('oc-chat-composer')).toBeNull();
+  await new Promise<void>(resolve => setTimeout(resolve, 550));
+  expect(socketFactory).toHaveBeenCalledTimes(socketCount);
   context.fixture.destroy();
 });
 

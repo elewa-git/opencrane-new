@@ -37,6 +37,14 @@ function resolveNextMoment(resolve) {
   setTimeout(resolve, 10);
 }
 
+function afterNextFrame() {
+  return new Promise(resolveAfterFrame);
+}
+
+function resolveAfterFrame(resolve) {
+  requestAnimationFrame(resolve);
+}
+
 function isFocused(element) {
   return element === globalThis.document.activeElement;
 }
@@ -45,7 +53,8 @@ function countSmallActions(controls) {
   let small = 0;
   for (const control of controls) {
     const bounds = control.getBoundingClientRect();
-    if (bounds.width < 44 || bounds.height < 44) small += 1;
+    if (bounds.width < 44 || bounds.height < 44
+      || bounds.left < 0 || bounds.right > globalThis.innerWidth) small += 1;
   }
   return small;
 }
@@ -120,9 +129,13 @@ async function capture(browser, frame, width) {
     } else {
       const notice = page.getByText('You no longer have access');
       await notice.waitFor();
+      await page.evaluate(afterNextFrame);
+      await page.evaluate(afterNextFrame);
       const bounds = await notice.boundingBox();
       assert(bounds && bounds.y >= 56 && bounds.y < 400,
         'The access notice stays near the top of the transcript');
+      assert(bounds.y + bounds.height <= 844,
+        'The complete access notice stays inside the viewport');
       const heading = page.getByRole('heading', { name: 'Unavailable' });
       assert.equal(await heading.count(), 1);
       assert(await heading.evaluate(isFocused),
@@ -130,10 +143,17 @@ async function capture(browser, frame, width) {
       assert.equal(await page.locator('oc-chat-composer').count(), 0);
     }
     await page.evaluate(waitForFonts);
+    if (frame === 'workspace-clear') {
+      await page.evaluate(afterNextFrame);
+      const notice = page.getByText('You no longer have access');
+      const finalBounds = await notice.boundingBox();
+      assert(finalBounds && finalBounds.y >= 56 && finalBounds.y + finalBounds.height <= 844,
+        'The access notice remains inside the viewport after rendering');
+    }
     assert(await page.evaluate(pageHasNoOverflow), `No overflow at ${width}px`);
     const small = await page.locator('.archive-button:visible, .participant-open:visible, '
       + '.refresh-button:visible, .navigation-toggle:visible').evaluateAll(countSmallActions);
-    assert.equal(small, 0, `Visible actions meet 44px at ${width}px`);
+    assert.equal(small, 0, `Visible actions fit inside ${width}px and meet 44px`);
     const filename = `${frame}-${width}.png`;
     await page.screenshot({ path: `${output}/${filename}`, fullPage: true });
     return filename;

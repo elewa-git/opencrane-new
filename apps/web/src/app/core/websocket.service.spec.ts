@@ -43,9 +43,9 @@ class FakeSocket implements SocketLike {
     this.onmessage?.(new MessageEvent('message', { data }));
   }
 
-  triggerClose(): void {
+  triggerClose(code = 1000): void {
     this.readyState = 3;
-    this.onclose?.(new CloseEvent('close'));
+    this.onclose?.(new CloseEvent('close', { code }));
   }
 }
 
@@ -167,6 +167,22 @@ describe('WebSocketService', () => {
     service.disconnect();
     expect(service.state()).toBe('closed');
 
+    vi.advanceTimersByTime(60_000);
+    expect(sockets).toHaveLength(1);
+  });
+
+  it('reports a bare policy close and never reconnects', () => {
+    vi.useFakeTimers();
+    const service = setup();
+    const accessLost = vi.fn();
+    service.accessLost.subscribe(accessLost);
+    service.connect('/ws');
+    sockets[0]?.triggerOpen();
+
+    sockets[0]?.triggerClose(1008);
+
+    expect(accessLost).toHaveBeenCalledOnce();
+    expect(service.state()).toBe('closed');
     vi.advanceTimersByTime(60_000);
     expect(sockets).toHaveLength(1);
   });

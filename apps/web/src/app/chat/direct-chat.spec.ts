@@ -1339,6 +1339,37 @@ async function clearsAfterRealRefusal(): Promise<void> {
 
 it('clears protected data and ignores a held refresh after real access loss', clearsAfterRealRefusal);
 
+it.each(['direct', 'group'])(
+  'clears an open %s chat on a bare policy close without reconnecting', async mode => {
+    const api = createFetchFixture();
+    if (mode === 'group') {
+      function groupList(request: RequestRecord): Response | undefined {
+        if (request.url !== '/api/conversations' || request.method !== 'GET') return undefined;
+        return reply({ rows: [{ ...conversation('existing', 'bob'), mode: 'group',
+          participantIds: ['alice', 'bob', 'carol'], title: 'Private planning' }] });
+      }
+      api.override(groupList);
+    }
+    const fixture = await mount(api);
+    await openExisting(fixture);
+    typeDraft(fixture, 'Private draft');
+    const socket = api.sockets.at(-1);
+    const socketCount = api.sockets.length;
+    expect(root(fixture).textContent).toContain('Is the Tuesday slot still open?');
+    socket?.onclose?.(new CloseEvent('close', { code: 1008 }));
+    await settle(fixture);
+
+    expect(root(fixture).textContent).toContain('You no longer have access');
+    expect(root(fixture).textContent).not.toContain('Is the Tuesday slot still open?');
+    expect(root(fixture).textContent).not.toContain('Grace Achieng');
+    expect(root(fixture).textContent).not.toContain('Private draft');
+    expect(root(fixture).querySelector('textarea')).toBeNull();
+    await new Promise<void>(resolve => setTimeout(resolve, 550));
+    expect(api.sockets).toHaveLength(socketCount);
+    fixture.destroy();
+  },
+);
+
 async function purgesSocketHistoryAndIgnoresLatePrivateEvents(): Promise<void> {
   const api = createFetchFixture();
   const fixture = await mount(api);
