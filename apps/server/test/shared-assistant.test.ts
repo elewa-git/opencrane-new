@@ -451,8 +451,8 @@ async function readsAfterPayerRemoval() {
 }
 it('reads own history after payer removal while refusing new spending', readsAfterPayerRemoval);
 
-async function refusesOnlyOneTurn(refusal: string) {
-  const prefix = `admission-${refusal}`;
+async function refusesOnlyOneTurn(refusal: string, sharedChild = false) {
+  const prefix = sharedChild ? `admission-child-${refusal}` : `admission-${refusal}`;
   if (!chat) throw new Error('Missing chat fixture');
   await append(`team-${prefix}-payer`, 'team.created', {
     teamId: `${prefix}-payer`, name: 'Billing', createdBy: 'owner',
@@ -477,6 +477,10 @@ async function refusesOnlyOneTurn(refusal: string) {
     const conversationId = `${prefix}-${member}`;
     const input = { id: `create-${conversationId}`, conversationId,
       assistantId, payingGroupId: `${prefix}-payer` };
+    if (sharedChild && member === 'alice') {
+      await seedClosedChildInput(conversationId, assistantId, `${prefix}-payer`);
+      continue;
+    }
     expect((await request('POST', '/api/conversations', input, member)).statusCode).toBe(200);
     const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
     await auth.handler.handle(rows[0]!.event, pgDb(dbs.queue));
@@ -527,10 +531,21 @@ async function refusesOnlyOneTurn(refusal: string) {
   const connection = { url: `ws://127.0.0.1:${address.port}/bridge`,
     computerId, assistantId, bearer: 'test-computer' };
   const link = await connectBridge(chat, connection, tokens);
+  const sent = vi.spyOn(link.socket, 'send');
+  function acknowledgements() {
+    const frames: Record<string, unknown>[] = [];
+    for (const call of sent.mock.calls) {
+      if (typeof call[0] !== 'string') continue;
+      const frame = z.record(z.string(), z.unknown()).parse(JSON.parse(call[0]));
+      if (frame['type'] === 'ack') frames.push(frame);
+    }
+    return frames;
+  }
   function send(member: string) {
     const input = { type: 'turn', id: `message-${prefix}-${member}`,
       conversationId: `${prefix}-${member}`, requesterId: member, assistantId,
       executionMode: 'restricted',
+      ...(sharedChild && member === 'alice' ? { sharingClass: 'shared_only' } : {}),
       text: 'Start work', token: 'preparing', expiresAt: Date.now() + 60_000 };
     link.socket.send(JSON.stringify(input));
   }
@@ -549,6 +564,25 @@ async function refusesOnlyOneTurn(refusal: string) {
     await until(aliceFailed);
     expect(link.socket.readyState).toBe(WebSocket.OPEN);
     expect(link.rejection).toBeUndefined();
+    if (sharedChild) {
+      function failureAcknowledged() {
+        return acknowledgements().length === 2;
+      }
+      await until(failureAcknowledged);
+      expect(acknowledgements()).toEqual([
+        { type: 'ack', sequence: 1, refused: 'Conversation is closed' },
+        { type: 'ack', sequence: 2 },
+      ]);
+      const beforeReplay = await nats.store.head();
+      link.socket.send(JSON.stringify({ type: 'resume', since: 1 }));
+      function replayAcknowledged() {
+        return acknowledgements().length === 3;
+      }
+      await until(replayAcknowledged);
+      expect(acknowledgements()[2]).toEqual({ type: 'ack', sequence: 2 });
+      expect(await nats.store.head()).toBe(beforeReplay);
+      expect(link.socket.readyState).toBe(WebSocket.OPEN);
+    }
     if (refusal === 'payer') {
       const stopped = await request('POST', `/api/conversations/${prefix}-alice/messages`,
         { id: 'stop-unpaid', stopTurnId: `message-${prefix}-alice` }, 'alice');
@@ -565,13 +599,48 @@ async function refusesOnlyOneTurn(refusal: string) {
       return data.turnId === `message-${prefix}-alice` && data.status === 'failed';
     }
     expect(lifecycle.some(failedAlice)).toBe(true);
+    if (sharedChild) {
+      const failures = lifecycle.filter(failedAlice);
+      expect(failures).toHaveLength(1);
+      function startedAlice(row: typeof lifecycle[number]) {
+        const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+        return row.event.type === 'computer.turn_started'
+          && data['turnId'] === `message-${prefix}-alice`;
+      }
+      expect(lifecycle.some(startedAlice)).toBe(false);
+    }
   } finally {
+    sent.mockRestore();
     link.socket.terminate();
     await link.settled();
     await channel.close();
     server.close();
   }
 }
+async function seedClosedChildInput(conversationId: string, assistantId: string,
+  payingGroupId: string) {
+  chat!.keys.provision('test', conversationId);
+  const created = { conversationId, assistantId, payingGroupId, createdBy: 'alice',
+    mode: 'agent_session', contextKind: 'shared_child',
+    initialJoins: [{ participantId: 'alice', parentJoinEventId: 'join', parentJoinPosition: 1 }],
+    origin: { parentConversationId: 'parent', sourceMessageId: 'source', sourcePosition: 2,
+      intentEventId: 'intent', intentPosition: 3, requestId: conversationId,
+      firstInputId: `message-${conversationId}` } };
+  await append(`conversation-${conversationId}`, 'conversation.created', created, false);
+  const message = { conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text',
+    ...chat!.keys.encrypt('test', conversationId, 'Start work') };
+  const row = envelope('test', `conversation-${conversationId}`, 'message.posted',
+    message, `message-${conversationId}`);
+  await nats.seed([row]);
+}
+
+async function refusesSharedChildWithoutDisconnecting(closeStream: string) {
+  await refusesOnlyOneTurn(closeStream, true);
+}
+it.each(['conversation', 'participation'])(
+  'accepts a refused shared child failure and replay after %s closure on the real channel',
+  refusesSharedChildWithoutDisconnecting);
+
 async function refusesUnpaidTurn() {
   await refusesOnlyOneTurn('payer');
 }
@@ -628,8 +697,12 @@ async function listsSixtyTeamSessions() {
 it('lists 60 private team sessions without repeating each assistant access check',
   listsSixtyTeamSessions, 120_000);
 
+async function refusesClosedPrivateTurn(closeStream: string) {
+  await refusesOnlyOneTurn(closeStream);
+}
 it.each(['conversation', 'participation'])(
-  'refuses one member after %s changes and admits another on the same bridge', refusesOnlyOneTurn);
+  'refuses one member after %s changes and admits another on the same bridge',
+  refusesClosedPrivateTurn);
 
 async function refusesRevokedOwnerGroupBeforeIamCatchesUp() {
   await append('team-support', 'team.member_added', {
@@ -1378,3 +1451,35 @@ async function refusesMismatchedSharedHistory(sharedCreation: boolean) {
 }
 it.each([true, false])('fails a saved class mismatch without a private fallback, child=%s',
   refusesMismatchedSharedHistory);
+
+const refusedChildReports = [
+  { type: 'agent.message_delta', extra: { messageId: 'reply', text: 'Must not be saved' } },
+  { type: 'agent.message_completed', extra: { messageId: 'reply', text: 'Must not be saved' } },
+  { type: 'agent.output_lost', extra: {} },
+  { type: 'agent.turn_completed', extra: {} },
+  { type: 'agent.turn_failed', extra: { previousSequence: 0 } },
+];
+async function rejectsOutputForRefusedChild(testCase: typeof refusedChildReports[number]) {
+  const name = `refused-child-${testCase.type.replaceAll('.', '-')}`;
+  const test = await childHistoryFixture(name);
+  const turnId = `${name}-input`;
+  try {
+    await test.message(turnId, 'alice', 'Question');
+    await append(`conversation-${test.conversationId}`, 'conversation.closed', {
+      conversationId: test.conversationId, closedBy: 'alice' });
+    const refused = await test.childReport('alice', turnId, 'agent.turn_started');
+    expect(refused).toEqual({ type: 'ack', sequence: 1, refused: 'Conversation is closed' });
+    const beforeReport = await nats.store.head();
+    const closed = once(test.link.socket, 'close');
+    const extra = { conversationId: test.conversationId, threadId: `${turnId}-thread`,
+      executionMode: 'restricted', ...testCase.extra };
+    expect(await test.report('alice', turnId, testCase.type, extra)).toBeUndefined();
+    expect((await closed)[0]).toBe(1008);
+    expect(await nats.store.head()).toBe(beforeReport);
+  } finally {
+    await test.close();
+  }
+}
+it.each(refusedChildReports)(
+  'rejects $type with invalid output or sequence after a shared child refusal',
+  rejectsOutputForRefusedChild);
