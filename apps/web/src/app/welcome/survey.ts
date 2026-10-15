@@ -23,7 +23,7 @@ const progressSchema = z.object({
 });
 type Progress = z.infer<typeof progressSchema>;
 type ScreenState = 'loading' | 'ready' | 'read_failed' | 'saving' | 'failed' | 'unknown'
-  | 'unavailable' | 'access_applying' | 'conflict' | 'signed_out' | 'refused';
+  | 'unavailable' | 'access_applying' | 'conflict' | 'recovered' | 'signed_out' | 'refused';
 
 function hasForbiddenControl(value: string): boolean {
   for (const character of value) {
@@ -73,21 +73,40 @@ export class SurveyScreen implements OnDestroy {
     await this.readProgress(false);
     if (this.state() !== 'ready' || this.identityLoaded) return;
     this.identityLoaded = true;
-    if (this.progress()?.survey.steps.length || this.nameEdited) return;
+    await this.readIdentity();
+  }
+
+  private async readIdentity(): Promise<void> {
+    const request = this.request;
     try {
       const response = await fetch('/auth/me', {
-        cache: 'no-store', signal: this.request.signal,
+        cache: 'no-store', signal: request.signal,
       });
+      if (request.signal.aborted || request !== this.request) return;
+      if (response.status === 401 || response.status === 403) {
+        this.refuseRead(response.status);
+        return;
+      }
       if (!response.ok) return;
-      const identity = z.object({
-        authenticated: z.boolean(),
-        user: z.object({ name: z.string().optional() }).nullable(),
-      }).parse(await response.json());
-      if (this.request.signal.aborted || this.nameEdited || !identity.authenticated) return;
-      this.name.set(identity.user?.name?.trim() ?? '');
+      await this.applyIdentity(response, request);
     } catch {
       // A missing identity name leaves the form empty; the progress read still decides saving.
     }
+  }
+
+  private async applyIdentity(response: Response, request: AbortController): Promise<void> {
+    const identity = z.object({
+      authenticated: z.boolean(),
+      user: z.object({ name: z.string().optional() }).nullable(),
+    }).parse(await response.json());
+    if (request.signal.aborted || request !== this.request) return;
+    if (!identity.authenticated) {
+      this.clearAccess();
+      this.state.set('signed_out');
+      return;
+    }
+    if (this.progress()?.survey.steps.length || this.nameEdited) return;
+    this.name.set(identity.user?.name?.trim() ?? '');
   }
 
   private async readProgress(keepDraft: boolean): Promise<void> {
@@ -225,6 +244,11 @@ export class SurveyScreen implements OnDestroy {
     if (!this.progress() || this.draftWithoutProgress) {
       await this.readProgress(true);
       if (this.state() !== 'ready') return;
+      if (this.progress()?.survey.steps.length) {
+        this.state.set('recovered');
+        this.announcement.set('Saved survey progress was found. Choose how to continue.');
+        return;
+      }
     }
     const saved = savedName.safeParse(this.progress()?.survey.steps[0]?.answers);
     if (saved.success && saved.data.preferredName === answers.preferredName &&
@@ -336,6 +360,34 @@ export class SurveyScreen implements OnDestroy {
 
   protected startAgain(): void {
     this.draftWithoutProgress = true;
+    this.state.set('ready');
+    this.openStep(1);
+  }
+
+  protected tryLoadingAgain(): void {
+    void this.load();
+  }
+
+  protected recoveredName(): string {
+    const saved = savedName.safeParse(this.progress()?.survey.steps[0]?.answers);
+    if (!saved.success) return '';
+    return saved.data.preferredName;
+  }
+
+  protected keepSavedProgress(): void {
+    const progress = this.progress();
+    if (this.state() !== 'recovered' || !progress) return;
+    const saved = savedName.safeParse(progress.survey.steps[0]?.answers);
+    if (saved.success) {
+      this.name.set(saved.data.preferredName);
+      this.pronouns.set(saved.data.pronouns ?? '');
+    }
+    this.openStep(progress.survey.nextStep ?? 4);
+    this.state.set('ready');
+  }
+
+  protected editRecoveredStep(): void {
+    if (this.state() !== 'recovered') return;
     this.state.set('ready');
     this.openStep(1);
   }

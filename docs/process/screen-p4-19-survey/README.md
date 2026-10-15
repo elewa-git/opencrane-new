@@ -12,7 +12,7 @@ and the page has no horizontal overflow.
 | ONB-12 | PARTIAL | The saved first step leads to the work step, which is unavailable in this part. |
 | ONB-15 | PASS | Saving, known failure and unknown save outcome. |
 | ONB-16 | PARTIAL | The real saved time appears; the work step is unavailable. |
-| ONB-17 | PASS | Loading and failed progress read. |
+| ONB-17 | PASS | Loading, failed read with retry, and a choice when saved steps return. |
 
 The captures check layout and displayed states. Live API access and a fresh-install
 journey are NOT RUN. The work step, style and tasks are for a later part.

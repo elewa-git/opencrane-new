@@ -30,6 +30,7 @@
         <oc-shared-state kind="failed" message="Your progress could not be loaded"
           detail="Your answers may already be saved. Check again before continuing."
           [showAction]="false" />
+        <button type="button" (click)="tryLoadingAgain()">Try loading again</button>
         <button type="button" (click)="startAgain()">Start again</button>
       } @else if (state() === 'signed_out') {
         <oc-shared-state kind="access_changed" message="Your session has expired" [showAction]="false" />
@@ -46,49 +47,68 @@
           </div>
         }
         @if (currentStep() === 1) {
-          <h2 #stepHeading tabindex="-1">What should I call you?</h2>
-          <p class="hint">This answer shapes your welcome. You can set a separate account name later.</p>
-          <form (submit)="continue($event)" novalidate>
-            <label for="survey-name">Name <small>Required</small></label>
-            <input id="survey-name" type="text" autocomplete="nickname" [value]="name()"
-              [disabled]="state() !== 'ready'"
-              [attr.aria-invalid]="nameError() ? 'true' : null"
-              [attr.aria-describedby]="nameError() ? 'name-error' : null"
-              (input)="changeName($event)" />
-            @if (nameError()) { <p class="field-error" id="name-error">{{ nameError() }}</p> }
-            <label for="survey-pronouns">Pronouns <small>Optional</small></label>
-            <input id="survey-pronouns" type="text" [value]="pronouns()"
-              [disabled]="state() !== 'ready'"
-              [attr.aria-invalid]="pronounsError() ? 'true' : null"
-              [attr.aria-describedby]="pronounsError() ? 'pronouns-error' : null"
-              (input)="changePronouns($event)" />
-            @if (pronounsError()) {
-              <p class="field-error" id="pronouns-error">{{ pronounsError() }}</p>
-            }
-            @if (state() === 'saving') {
-              <oc-shared-state kind="checking" message="Saving your answer" [showAction]="false" />
-            } @else if (state() === 'unknown') {
-              <oc-shared-state kind="unknown" message="Save status unknown"
-                detail="The answer may have been saved. Check before doing anything else."
-                (action)="checkStatus()" />
-            } @else if (state() === 'failed' || state() === 'unavailable') {
-              <oc-shared-state kind="failed" message="Nothing was saved"
-                [safeToRetry]="true" (action)="retry()" />
-            } @else if (state() === 'access_applying') {
-              <oc-shared-state kind="waiting" message="Access is still being set up"
-                detail="Nothing was saved. Please try again shortly." [showAction]="false" />
-              <button type="button" (click)="retry()">Try again</button>
-            } @else if (state() === 'conflict') {
-              <oc-shared-state kind="failed" message="Progress changed on another device"
-                detail="Review your answer against the latest progress before saving."
-                [showAction]="false" />
-              <button type="button" (click)="review()">Review answer</button>
-            }
-            @if (state() === 'ready') {
-              <button class="primary" type="submit">Continue</button>
-              <button class="text-button" type="button" (click)="skipPronouns()">Skip pronouns</button>
-            }
-          </form>
+          @if (state() === 'recovered') {
+            <h2 #stepHeading tabindex="-1">We found your saved progress</h2>
+            <p>Your saved answers are still here:</p>
+            <ol class="recovered-steps">
+              @for (savedStep of progress()?.survey?.steps; track $index) {
+                <li>Step {{ savedStep.answers.step }} saved
+                  @if (savedStep.answers.step === 1) { · Name: {{ recoveredName() }} }
+                </li>
+              }
+            </ol>
+            <p>Editing step 1 means later steps need review.</p>
+            <button class="primary" type="button" (click)="keepSavedProgress()">
+              Keep saved progress
+            </button>
+            <button type="button" (click)="editRecoveredStep()">
+              Edit step 1 and review later steps
+            </button>
+          } @else {
+            <h2 #stepHeading tabindex="-1">What should I call you?</h2>
+            <p class="hint">This answer shapes your welcome. You can set a separate account name later.</p>
+            <form (submit)="continue($event)" novalidate>
+              <label for="survey-name">Name <small>Required</small></label>
+              <input id="survey-name" type="text" autocomplete="nickname" [value]="name()"
+                [disabled]="state() !== 'ready'"
+                [attr.aria-invalid]="nameError() ? 'true' : null"
+                [attr.aria-describedby]="nameError() ? 'name-error' : null"
+                (input)="changeName($event)" />
+              @if (nameError()) { <p class="field-error" id="name-error">{{ nameError() }}</p> }
+              <label for="survey-pronouns">Pronouns <small>Optional</small></label>
+              <input id="survey-pronouns" type="text" [value]="pronouns()"
+                [disabled]="state() !== 'ready'"
+                [attr.aria-invalid]="pronounsError() ? 'true' : null"
+                [attr.aria-describedby]="pronounsError() ? 'pronouns-error' : null"
+                (input)="changePronouns($event)" />
+              @if (pronounsError()) {
+                <p class="field-error" id="pronouns-error">{{ pronounsError() }}</p>
+              }
+              @if (state() === 'saving') {
+                <oc-shared-state kind="checking" message="Saving your answer" [showAction]="false" />
+              } @else if (state() === 'unknown') {
+                <oc-shared-state kind="unknown" message="Save status unknown"
+                  detail="The answer may have been saved. Check before doing anything else."
+                  (action)="checkStatus()" />
+              } @else if (state() === 'failed' || state() === 'unavailable') {
+                <oc-shared-state kind="failed" message="Nothing was saved"
+                  [safeToRetry]="true" (action)="retry()" />
+              } @else if (state() === 'access_applying') {
+                <oc-shared-state kind="waiting" message="Access is still being set up"
+                  detail="Nothing was saved. Please try again shortly." [showAction]="false" />
+                <button type="button" (click)="retry()">Try again</button>
+              } @else if (state() === 'conflict') {
+                <oc-shared-state kind="failed" message="Progress changed on another device"
+                  detail="Review your answer against the latest progress before saving."
+                  [showAction]="false" />
+                <button type="button" (click)="review()">Review answer</button>
+              }
+              @if (state() === 'ready') {
+                <button class="primary" type="submit">Continue</button>
+                <button class="text-button" type="button" (click)="skipPronouns()">Skip pronouns</button>
+              }
+            </form>
+          }
         } @else {
           <h2 #stepHeading tabindex="-1">{{ stepHeadingText() }}</h2>
           <oc-shared-state kind="not_configured" message="Not available yet"

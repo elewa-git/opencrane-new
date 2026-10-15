@@ -22,6 +22,18 @@ const savedProgress = {
   state: 'survey', allowedActions: ['save_step', 'restart'], recentReceipts: [savedStep],
   survey: { generation: 1, position: 1, nextStep: 2, steps: [savedStep] },
 };
+const recoveredProgress = {
+  state: 'survey',
+  survey: { generation: 1, position: 3, nextStep: 4, steps: [
+    savedStep,
+    { time: '2026-10-14T09:31:00.000Z', answers: { step: 2 } },
+    { time: '2026-10-14T09:32:00.000Z', answers: { step: 3 } },
+  ] },
+};
+
+function serveRecovered(route) {
+  return route.fulfill({ json: recoveredProgress });
+}
 
 async function serve(state, route) {
   const url = new URL(route.request().url());
@@ -34,7 +46,7 @@ async function serve(state, route) {
       await new Promise(() => {});
       return;
     }
-    if (state === 'ONB-17-unavailable') {
+    if (state === 'ONB-17-unavailable' || state === 'ONB-17-recovered') {
       await route.fulfill({ status: 503, json: { status: 'unavailable' } });
       return;
     }
@@ -62,6 +74,15 @@ async function prepare(page, state) {
   }
   if (state === 'ONB-17-unavailable') {
     await page.getByText('Your progress could not be loaded').waitFor();
+    return;
+  }
+  if (state === 'ONB-17-recovered') {
+    await page.getByText('Your progress could not be loaded').waitFor();
+    await page.route('**/api/onboarding', serveRecovered);
+    await page.getByRole('button', { name: 'Start again' }).click();
+    await page.getByLabel('Name Required').fill('Taylor');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByText('We found your saved progress').waitFor();
     return;
   }
   if (state === 'ONB-12' || state === 'ONB-16') {
@@ -114,7 +135,8 @@ await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
   const states = ['ONB-10', 'ONB-11', 'ONB-12', 'ONB-15-saving', 'ONB-15-failed',
-    'ONB-15-unknown', 'ONB-16', 'ONB-17-loading', 'ONB-17-unavailable'];
+    'ONB-15-unknown', 'ONB-16', 'ONB-17-loading', 'ONB-17-unavailable',
+    'ONB-17-recovered'];
   const filenames = [];
   for (const width of [1280, 390]) {
     for (const state of states) filenames.push(await capture(browser, width, state));

@@ -8,7 +8,12 @@ This Angular app provides the organisation settings shell, MCP register and Memo
 form sends one checked `save_step` command. A confirmed save reads progress again.
 An unknown save uses only `GET /api/personal/changes/:commandId`. A 409 rereads
 progress while keeping typed answers in memory; 403 clears them. A failed initial
-read permits an in-memory draft but requires another progress read before saving.
+read offers another try or an in-memory draft. Before saving that draft, the page
+reads progress again. If it finds saved steps, it shows them and requires the person
+to keep them or choose to edit step 1 and review later steps. The page checks
+`/auth/me` even when progress has saved answers. A 200 reply with
+`authenticated: false`, or a 401 or 403, clears those answers and any form values.
+Late replies from that load cannot restore them.
 The remaining survey steps show an unavailable message. `/account` reads only
 the onboarding `state` and links to the survey for `not_started` or `survey`.
 No survey answer is stored in the address, console or browser storage.

@@ -30,6 +30,13 @@ function json(value: unknown, status = 200): Promise<Response> {
   return Promise.resolve(response);
 }
 
+function buttonNamed(element: HTMLElement, label: string): HTMLButtonElement {
+  const buttons = Array.from(element.querySelectorAll('button'));
+  const button = buttons.find(candidate => candidate.textContent?.includes(label));
+  if (!button) throw new Error(`Missing button: ${label}`);
+  return button;
+}
+
 describe('welcome survey', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -261,52 +268,68 @@ describe('welcome survey', () => {
       expect(element.textContent).toContain('Start again');
     });
     expect(element.textContent).toContain('Try loading again');
-    element.querySelector<HTMLButtonElement>('button')?.click();
+    buttonNamed(element, 'Try loading again').click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding')).toHaveLength(2);
+      expect(element.textContent).toContain('Start again');
+    });
+    buttonNamed(element, 'Start again').click();
     fixture.detectChanges();
     expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey')).toHaveLength(0);
   });
 
-  it('shows recovered saved steps and asks before replacing the first answer', async () => {
-    let progressReads = 0;
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
-      if (url === '/api/onboarding') {
-        progressReads += 1;
-        if (progressReads === 1) return json({ status: 'unavailable' }, 503);
-        return json(threeSavedSteps);
+  for (const choice of ['Keep saved progress', 'Edit step 1 and review later steps']) {
+    it(`shows recovered saved steps before ${choice}`, async () => {
+      let progressReads = 0;
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+        if (url === '/api/onboarding') {
+          progressReads += 1;
+          if (progressReads === 1) return json({ status: 'unavailable' }, 503);
+          return json(threeSavedSteps);
+        }
+        if (url === '/auth/me') return json({ authenticated: true, user: { name: 'Alex' } });
+        return json({ status: 'unexpected' }, 503);
+      });
+      TestBed.configureTestingModule({ imports: [SurveyScreen] });
+      const fixture = TestBed.createComponent(SurveyScreen);
+      fixture.detectChanges();
+      const element: unknown = fixture.nativeElement;
+      if (!(element instanceof HTMLElement)) throw new Error('Missing survey root');
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(element.textContent).toContain('Start again');
+      });
+      buttonNamed(element, 'Start again').click();
+      fixture.detectChanges();
+      const name = element.querySelector<HTMLInputElement>('#survey-name')!;
+      name.value = 'Taylor';
+      name.dispatchEvent(new Event('input'));
+      element.querySelector<HTMLButtonElement>('button[type=submit]')!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(element.textContent).toContain('Keep saved progress');
+      });
+      expect(element.textContent).toContain('Alex');
+      expect(element.textContent).toContain('Step 2');
+      expect(element.textContent).toContain('Step 3');
+      expect(element.textContent).toContain('later steps need review');
+      expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey')).toHaveLength(0);
+      buttonNamed(element, choice).click();
+      fixture.detectChanges();
+      if (choice === 'Keep saved progress') {
+        expect(element.textContent).toContain('Step 4 of 4');
+        expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey')).toHaveLength(0);
+      } else {
+        expect(element.querySelector<HTMLInputElement>('#survey-name')?.value).toBe('Taylor');
+        element.querySelector<HTMLButtonElement>('button[type=submit]')!.click();
+        await vi.waitFor(() => {
+          expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey'))
+            .toHaveLength(1);
+        });
       }
-      if (url === '/auth/me') return json({ authenticated: true, user: { name: 'Alex' } });
-      return json({ status: 'unexpected' }, 503);
     });
-    TestBed.configureTestingModule({ imports: [SurveyScreen] });
-    const fixture = TestBed.createComponent(SurveyScreen);
-    fixture.detectChanges();
-    const element = fixture.nativeElement as HTMLElement;
-    await vi.waitFor(() => {
-      fixture.detectChanges();
-      expect(element.textContent).toContain('Start again');
-    });
-    element.querySelector<HTMLButtonElement>('button')!.click();
-    fixture.detectChanges();
-    const name = element.querySelector<HTMLInputElement>('#survey-name')!;
-    name.value = 'Taylor';
-    name.dispatchEvent(new Event('input'));
-    element.querySelector<HTMLButtonElement>('button[type=submit]')!.click();
-    await vi.waitFor(() => {
-      fixture.detectChanges();
-      expect(element.textContent).toContain('Keep saved progress');
-    });
-    expect(element.textContent).toContain('Alex');
-    expect(element.textContent).toContain('Step 2');
-    expect(element.textContent).toContain('Step 3');
-    expect(element.textContent).toContain('later steps need review');
-    expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey')).toHaveLength(0);
-    const keep = Array.from(element.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('Keep saved progress'));
-    keep!.click();
-    fixture.detectChanges();
-    expect(element.textContent).toContain('Step 4 of 4');
-    expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey')).toHaveLength(0);
-  });
+  }
 
   for (const [identityStatus, identityBody, expectedMessage] of [
     [200, { authenticated: false, user: null }, 'Your session has expired'],
@@ -329,7 +352,8 @@ describe('welcome survey', () => {
       TestBed.configureTestingModule({ imports: [SurveyScreen] });
       const fixture = TestBed.createComponent(SurveyScreen);
       fixture.detectChanges();
-      const element = fixture.nativeElement as HTMLElement;
+      const element: unknown = fixture.nativeElement;
+      if (!(element instanceof HTMLElement)) throw new Error('Missing survey root');
       await vi.waitFor(() => {
         fixture.detectChanges();
         expect(element.textContent).toContain('Step 2 of 4');
