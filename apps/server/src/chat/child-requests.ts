@@ -7,11 +7,11 @@ import { chatIdSchema, childRequestedDataSchema, childRequestedEventSchema,
   conversationCreatedDataSchema, messagePostedDataSchema, type ChildRequest }
   from '@opencrane/events';
 import { chatHistory, ChatConflict } from './commands.ts';
-import { chatAccess, type ChatOptions } from './access.ts';
+import { chatAccess, conversationParticipation, type ChatOptions } from './access.ts';
 import { creationEvent, sharedAssistantAuthority, sharedAssistantRead } from './private-session.ts';
 import { participationClosed } from './participation.ts';
 
-type Options = Pick<ChatOptions, 'store' | 'silo' | 'binding' | 'db'>;
+type Options = Pick<ChatOptions, 'store' | 'silo' | 'binding' | 'db' | 'keys'>;
 const inputSchema = z.strictObject({
   conversationId: chatIdSchema, sourceMessageId: chatIdSchema, requestId: chatIdSchema,
   assistantId: chatIdSchema, payingGroupId: chatIdSchema,
@@ -134,7 +134,8 @@ function savedIntent(options: Options, memberId: string, loaded: Loaded) {
 }
 async function save(options: Options, memberId: string, id: string, subject: string,
   type: string, data: unknown, sequence: number,
-  fresh: Awaited<ReturnType<typeof authorityFence>> | undefined) {
+  fresh: Awaited<ReturnType<typeof authorityFence>> | undefined,
+  verify: typeof verifySaved = verifySaved) {
   if (!fresh) throw new Error('Child write check unavailable');
   const event = { id, commandId: id, subject, type, data, silo: options.silo,
     source: 'opencrane-server', time: new Date().toISOString(),
@@ -146,7 +147,7 @@ async function save(options: Options, memberId: string, id: string, subject: str
   if (result.status !== 'appended') throw new ChatConflict('Child request changed');
   const row = await readEventAt(options.store, subject, result.sequence, performance.now() + 10_000);
   if (!row) throw new Error('Child request outcome unavailable');
-  verifySaved(row, event);
+  verify(row, event);
   return row;
 }
 function verifySaved(row: StoredEvent, expected: StoredEvent['event']) {
@@ -174,23 +175,92 @@ export async function createRequestedChild(options: Options, memberId: string, v
   const intent = savedIntent(options, memberId, loaded);
   const data = intent.data;
   const childRows = await chatHistory(options.store, options.silo, data.childConversationId);
+  const created = childCreation(intent);
+  const id = stageId(options, loaded.input, 'child-created');
+  const subject = `conversation-${data.childConversationId}`;
+  const checked = await check(options, memberId, loaded, [memberId]);
+  const previous = childRows[0];
+  if (previous) {
+    verifyCreation(options, memberId, loaded, intent, previous);
+    return previous;
+  }
+  return save(options, memberId, id, subject, 'conversation.created', created, 0, checked.fresh);
+}
+
+function childCreation(intent: ReturnType<typeof savedIntent>) {
+  const data = intent.data;
   const candidate = { conversationId: data.childConversationId,
     mode: 'agent_session', contextKind: 'shared_child', createdBy: data.createdBy,
     assistantId: data.assistantId, payingGroupId: data.payingGroupId, initialJoins: data.initialJoins,
     origin: { parentConversationId: data.conversationId, sourceMessageId: data.sourceMessageId,
       sourcePosition: data.sourcePosition, intentEventId: intent.row.event.id,
       intentPosition: intent.row.sequence, requestId: data.requestId, firstInputId: data.firstInputId } };
-  const created = conversationCreatedDataSchema.parse(candidate);
+  return conversationCreatedDataSchema.parse(candidate);
+}
+function verifyCreation(options: Options, memberId: string, loaded: Loaded,
+  intent: ReturnType<typeof savedIntent>, previous: StoredEvent) {
   const id = stageId(options, loaded.input, 'child-created');
-  const subject = `conversation-${data.childConversationId}`;
+  const expected = { ...previous.event, id, commandId: id, silo: options.silo,
+    subject: `conversation-${intent.data.childConversationId}`, type: 'conversation.created',
+    source: 'opencrane-server', data: childCreation(intent),
+    principal: { kind: 'human' as const, id: memberId } };
+  verifySaved(previous, expected);
+}
+function inputText(options: Options, conversationId: string, data: unknown) {
+  try {
+    return options.keys.decrypt(options.silo, conversationId, data);
+  } catch {
+    throw new ChatConflict('Child input changed');
+  }
+}
+export async function addChildFirstInput(options: Options, memberId: string, value: unknown) {
+  const loaded = await load(options, memberId, value);
+  const intent = savedIntent(options, memberId, loaded);
+  const { childConversationId, firstInputId } = intent.data;
+  const rows = await chatHistory(options.store, options.silo, childConversationId);
+  const creation = rows[0];
+  if (!creation) refused();
+  verifyCreation(options, memberId, loaded, intent, creation);
+  for (const row of rows) {
+    if (row.event.type === 'conversation.closed') refused();
+  }
   const checked = await check(options, memberId, loaded, [memberId]);
-  const previous = childRows[0];
+  const fresh = checked.fresh;
+  if (!fresh) throw new Error('Child write check unavailable');
+  fresh.include(`participation-${childConversationId}`);
+  await conversationParticipation(options, memberId, childConversationId, fresh.deadline, 'post');
+  if (await participationClosed(options.store, options.silo, childConversationId,
+    fresh.deadline)) refused();
+  const source = messagePostedDataSchema.parse(loaded.source.event.data);
+  const text = inputText(options, loaded.input.conversationId, source);
+  options.keys.provision(options.silo, childConversationId);
+  const encrypted = options.keys.encrypt(options.silo, childConversationId, text);
+  const data = { conversationId: childConversationId, authorId: memberId,
+    authorKind: 'human', contentType: source.contentType, ...encrypted };
+  function verifyInput(row: StoredEvent, expected: StoredEvent['event']) {
+    const parsed = messagePostedDataSchema.safeParse(row.event.data);
+    if (!parsed.success || inputText(options, childConversationId, parsed.data) !== text ||
+        !isDeepStrictEqual(row.event.correlation, {})) {
+      throw new ChatConflict('Child input changed');
+    }
+    // Compare the text separately because encryption creates a new ciphertext each time.
+    const comparedData = { ...parsed.data, ciphertext: encrypted.ciphertext };
+    const compared = { ...row, event: { ...row.event, data: comparedData } };
+    verifySaved(compared, expected);
+  }
+  function isFirstInput(row: StoredEvent) {
+    return row.event.id === firstInputId;
+  }
+  const previous = rows.find(isFirstInput);
+  const subject = `conversation-${childConversationId}`;
   if (previous) {
-    const expected = { ...previous.event, id, commandId: id, subject, silo: options.silo,
-      type: 'conversation.created', source: 'opencrane-server', data: created,
+    const expected = { ...previous.event, id: firstInputId, commandId: firstInputId,
+      subject, silo: options.silo, type: 'message.posted', source: 'opencrane-server', data,
       principal: { kind: 'human' as const, id: memberId } };
-    verifySaved(previous, expected);
+    verifyInput(previous, expected);
+    await fresh();
     return previous;
   }
-  return save(options, memberId, id, subject, 'conversation.created', created, 0, checked.fresh);
+  return save(options, memberId, firstInputId, subject, 'message.posted', data,
+    creation.sequence, fresh, verifyInput);
 }
