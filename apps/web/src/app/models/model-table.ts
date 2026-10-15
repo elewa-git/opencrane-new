@@ -98,6 +98,7 @@ export class ModelTable implements OnDestroy {
   protected audienceSummary(model: string): string {
     const access = this.details().access.get(model);
     if (!access) return 'Access not checked';
+    if (access.projection.content !== 'current') return 'Still updating';
     if (access.grants.length !== access.grantTotal) {
       return `Showing ${access.grants.length} of ${access.grantTotal}`;
     }
@@ -108,25 +109,12 @@ export class ModelTable implements OnDestroy {
     const details = this.details();
     const access = details.access.get(model);
     if (!access || !details.bindings || !details.assistants
-      || access.grants.length !== access.grantTotal) return undefined;
-    const granted = new Set<string>();
-    for (const row of access.grants) {
-      if (row.granteeKind === 'assistant' && row.state === 'granted') {
-        granted.add(row.granteeId);
-      }
+      || access.projection.content !== 'current'
+      || access.grants.length !== access.grantTotal
+      || !allRelevantAssistantsChecked(model, details.bindings, details.assistants)) {
+      return undefined;
     }
-    const defaults = details.bindings.filter(isActiveDefaultFor(model));
-    const ownBindings = details.bindings.filter(isOwnBinding);
-    const missingNames: string[] = [];
-    for (const assistant of details.assistants) {
-      const own = ownBindings.find(isForAssistant(assistant.assistantId));
-      const usesModel = own ? own.state === 'active' && own.model === model
-        : defaults.length > 0;
-      if (!usesModel || granted.has(assistant.assistantId)) continue;
-      if (!assistant.name) return undefined;
-      missingNames.push(assistant.name);
-    }
-    return missingNames.length ? missingNames.join(', ') : null;
+    return missingAssistantNames(model, access.grants, details.bindings, details.assistants);
   }
 
   protected openAccess(model: string, opener: HTMLElement): void {
@@ -215,6 +203,28 @@ export class ModelTable implements OnDestroy {
   }
 }
 
+function missingAssistantNames(model: string, grants: ModelAccessResponse['grants'],
+  bindings: Binding[], assistants: Assistant[]): string | undefined | null {
+  const granted = new Set<string>();
+  for (const row of grants) {
+    if (row.granteeKind === 'assistant' && row.state === 'granted') {
+      granted.add(row.granteeId);
+    }
+  }
+  const defaults = bindings.filter(isActiveDefaultFor(model));
+  const ownBindings = bindings.filter(isOwnBinding);
+  const missingNames: string[] = [];
+  for (const assistant of assistants) {
+    const own = ownBindings.find(isForAssistant(assistant.assistantId));
+    const usesModel = own ? own.state === 'active' && own.model === model
+      : defaults.length > 0;
+    if (!usesModel || granted.has(assistant.assistantId)) continue;
+    if (!assistant.name) return undefined;
+    missingNames.push(assistant.name);
+  }
+  return missingNames.length ? missingNames.join(', ') : null;
+}
+
 function enabledSources(providers: ProviderRow[], registry: string[]) {
   const enabled = new Set<string>();
   const bindingProviders: ProviderRow[] = [];
@@ -265,4 +275,30 @@ function isForAssistant(assistantId: string): (binding: Binding) => boolean {
     return binding.dependantId === assistantId;
   }
   return matches;
+}
+
+function hasOwnBinding(assistantId: string, task: string, bindings: Binding[]): boolean {
+  for (const binding of bindings) {
+    if (binding.kind === 'assistant' && binding.dependantId === assistantId
+      && binding.task === task) return true;
+  }
+  return false;
+}
+
+function allRelevantAssistantsChecked(model: string, bindings: Binding[],
+  assistants: Assistant[]): boolean {
+  for (const binding of bindings) {
+    if (binding.state !== 'active' || binding.model !== model) continue;
+    let checkedCount = 0;
+    for (const assistant of assistants) {
+      if (binding.kind === 'assistant') {
+        if (assistant.assistantId === binding.dependantId) checkedCount++;
+      } else if (!hasOwnBinding(assistant.assistantId, binding.task, bindings)) {
+        checkedCount++;
+      }
+    }
+    // The server counts personal assistants too, but the names read only lists shared ones.
+    if (checkedCount !== binding.assistantCount) return false;
+  }
+  return true;
 }

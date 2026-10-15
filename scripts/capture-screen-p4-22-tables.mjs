@@ -52,9 +52,21 @@ async function serve(route, state) {
   } else if (path === '/api/assistants') {
     reply = json({ rows: [{ assistantId: 'helper', name: 'Helper' }] });
   } else if (path.endsWith('/bindings')) {
-    reply = json({ rows: [binding] });
+    const selected = state.missingAssistant
+      ? { ...binding, kind: 'silo_default', dependantId: 'silo', assistantCount: 2 }
+      : binding;
+    reply = json({ rows: [selected] });
   } else if (path.endsWith('/access')) {
-    reply = json(access);
+    if (state.updating) {
+      reply = json({ ...access, grants: [], grantTotal: 0,
+        projection: { content: 'applying', sequence: 4 } });
+    } else if (state.missingAssistant) {
+      const assistantGrant = { ...grant, granteeKind: 'assistant', granteeId: 'helper',
+        displayName: 'Helper', source: 'assistant' };
+      reply = json({ ...access, grants: [assistantGrant] });
+    } else {
+      reply = json(access);
+    }
   } else {
     throw new Error(`Unexpected request: ${path}`);
   }
@@ -108,6 +120,19 @@ async function cases(browser, width) {
   await capture(page, 'MOD-03', width);
   await page.close();
 
+  state = { requests: [], updating: true };
+  page = await open(browser, width, state);
+  await page.getByText('Still updating').waitFor();
+  await page.getByText('Assistant access not checked').waitFor();
+  await capture(page, 'MOD-02-UPDATING', width);
+  await page.close();
+
+  state = { requests: [], missingAssistant: true };
+  page = await open(browser, width, state);
+  await page.getByText('Assistant access not checked').waitFor();
+  await capture(page, 'MOD-02-UNCHECKED', width);
+  await page.close();
+
   state = { requests: [], forbidden: true };
   page = await open(browser, width, state);
   await page.getByText('Owner or Admin role required').waitFor();
@@ -135,13 +160,15 @@ try {
 }
 const receipt = `# Models table screen captures
 
-PASS: Intercepted GET replies produced all six states at 1280px and 390px.
+PASS: Intercepted GET replies produced all eight states at 1280px and 390px.
 PASS: No captured page has horizontal overflow. Visible buttons measure at least 44px.
 
 | Frame | Difference from the supplied design |
 | --- | --- |
 | MOD-01 | The provider and model empty messages are separate. The page does not say that nobody has a grant. |
 | MOD-02 | Names, grants and counts come from fixture replies. The model says Enabled; the provider keeps its separate saved and verification facts. |
+| MOD-02-UPDATING | An applying grant reply says Still updating and leaves assistant access unchecked. It makes no missing-grant claim. |
+| MOD-02-UNCHECKED | A default binding counts two assistants, but the names reply lists one. The table leaves assistant access unchecked. |
 | MOD-02-RM | The data matches MOD-02. The browser uses reduced motion. |
 | MOD-03 | The dated rows remain after a failed refresh. Provider actions are disabled. |
 | MOD-04 | The current server role refusal replaces the proposed read-only view. |

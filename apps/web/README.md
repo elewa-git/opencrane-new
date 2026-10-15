@@ -28,7 +28,8 @@ loads more people, groups or assistants when requested.
 
 The Models table shows models enabled on a connection, their task routes and granted
 audiences. It names a shared assistant whose selected model lacks its own grant.
-If a read fails, it leaves the assistant check open rather than guessing an answer.
+While grants are updating, or when some assistants cannot be checked, it leaves the
+assistant check open rather than guessing an answer.
 
 - Shows sign-in and the first-owner claim page.
 - Lets a person enter their name, optional pronouns and work description for the
