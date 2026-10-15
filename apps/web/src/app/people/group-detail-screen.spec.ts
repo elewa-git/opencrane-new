@@ -186,8 +186,10 @@ it('withholds status and another Add while a POST is pending, then resends one c
     expect(root.textContent).toContain('No record of this change yet. It may still arrive.');
   });
   expect(calls.filter(isStatusRead)).toHaveLength(1);
-  findButton(root, 'Send the same request again').click();
+  const resendButton = findButton(root, 'Send the same request again');
+  resendButton.click();
   fixture.detectChanges();
+  resendButton.click();
   expect(hasButton(root, 'Send the same request again')).toBe(false);
   expect(hasButton(root, 'Check status')).toBe(false);
   expect(calls.filter(isPostRequest)).toHaveLength(2);

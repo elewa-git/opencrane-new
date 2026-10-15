@@ -80,6 +80,7 @@ assistant check open rather than guessing an answer.
 - Lists current members with search and more pages. A refused member read clears both
   member and group details. A temporary read failure keeps loaded rows visible.
 - Lets Owners and Admins add an active organisation member to a local group from its page.
+  It waits for the add request before offering a status check or the same request again.
   It checks that the group and access records are current before showing the addition as done.
 - Shows each member's recorded groups and grants in a table that becomes labelled cards
   on phones. A missing member or lost access clears the page. A failed refresh keeps

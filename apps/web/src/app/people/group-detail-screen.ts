@@ -48,6 +48,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
   private readonly request = new AbortController();
   private readInFlight = false;
   protected readonly pollInFlight = signal(false);
+  protected readonly postInFlight = signal(false);
   private focusTimer: number | undefined;
   protected reviewOpener: HTMLButtonElement | undefined;
   private draftCommand: { commandId: string; memberId: string } | undefined;
@@ -153,7 +154,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
 
   protected async checkStatus(): Promise<void> {
     const pendingChange = this.pendingChange();
-    if (!pendingChange || this.pollInFlight()) return;
+    if (!pendingChange || this.pollInFlight() || this.postInFlight()) return;
     this.actionState.set(this.receiptSeen ? 'applying' : 'unknown');
     this.statusKind.set(this.receiptSeen ? 'applying' : 'unknown');
     const groupName = this.group()?.name ?? 'the group';
@@ -167,7 +168,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
 
   protected async resendRemoval(): Promise<void> {
     const pendingChange = this.pendingChange();
-    if (!pendingChange || this.pollInFlight()) return;
+    if (!pendingChange || this.pollInFlight() || this.postInFlight()) return;
     this.actionState.set('applying');
     this.statusKind.set('applying');
     if (pendingChange.action === 'remove') {
@@ -193,12 +194,15 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
 
   private async sendChange(): Promise<void> {
     const pendingChange = this.pendingChange();
-    if (!pendingChange || this.request.signal.aborted) return;
+    if (!pendingChange || this.request.signal.aborted || this.postInFlight()
+        || this.pollInFlight()) return;
+    this.postInFlight.set(true);
     const body = { action: pendingChange.action, commandId: pendingChange.commandId,
       memberId: pendingChange.memberId };
     const result = pendingChange.action === 'add'
       ? await sendAddMember(this.groupId(), body, this.request.signal)
       : await sendRemoveMember(this.groupId(), body, this.request.signal);
+    this.postInFlight.set(false);
     if (this.request.signal.aborted) return;
     if (result.kind === 'ok') {
       this.receiptSeen = true;

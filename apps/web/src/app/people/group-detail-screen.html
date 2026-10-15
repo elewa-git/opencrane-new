@@ -49,11 +49,11 @@
   } @else if (actionState() === 'applying' || actionState() === 'unknown') {
     <oc-shared-state [kind]="statusKind()" [message]="statusMessage()" [detail]="detail()"
       [changeReference]="changeReference()" [showAction]="false" />
-    @if (!pollInFlight()) {
+    @if (!pollInFlight() && !postInFlight()) {
       <button type="button" class="button secondary" (click)="checkStatus()">
         Check status</button>
     }
-    @if (retryAfterNotFound()) {
+    @if (retryAfterNotFound() && !pollInFlight() && !postInFlight()) {
       <button type="button" class="button secondary" (click)="resendRemoval()">
         Send the same request again</button>
     }
