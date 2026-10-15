@@ -1,6 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { afterEach, beforeEach, expect, it } from 'vitest';
+import { parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -127,6 +128,70 @@ async function rejectsBudgetStop() {
   await refuses(legacyClose, closed.position);
 }
 it('refuses budget Stop and closure outside the participation stream', rejectsBudgetStop);
+
+async function rejectsRemovalBeforeNewRoot() {
+  const removal: Evidence = { ...evidence[4]!, data: { ...evidence[4]!.data,
+    contextKind: 'shared_child', reviewPosition: 1 } };
+  const removed = await save(removal);
+  const oldStop = await stop(removal, removed.position);
+  const invitation: Evidence = { reason: 'access_revoked', type: 'participant.added',
+    subject: removal.subject, data: { conversationId: 'conversation', participantId: 'alice',
+      addedBy: 'owner', contextKind: 'shared_child', joinKind: 'explicit_child',
+      reviewPosition: removed.position } };
+  await save(invitation);
+  const nextBinding = { ...binding, turnId: 'next-turn', threadId: 'next-thread' };
+  const nextCall = { ...call, turnId: 'next-turn', threadId: 'next-thread' };
+  const nextRoot = await actor.setRootAllowance(nextBinding, 1);
+  expect(removed.position).toBeLessThan(nextRoot.position);
+  await refuses(removal, removed.position, nextRoot.rootId);
+  await actor.reserve(nextCall, 1, undefined, undefined, nextRoot.rootId);
+  expect(rootTotals(actor.state, nextRoot.rootId)).toEqual({
+    settledCents: 0, heldCents: 1, availableCents: 999 });
+  expect(await stop(removal, removed.position)).toEqual(oldStop);
+  await expect(reserve()).rejects.toMatchObject({ reason: 'access_revoked' });
+
+  const removedAgain = await save(removal);
+  expect(removedAgain.position).toBeGreaterThan(nextRoot.position);
+  const nextStop = await stop(removal, removedAgain.position, nextRoot.rootId);
+  expect(nextStop).toEqual({ rootId: nextRoot.rootId, reason: 'access_revoked',
+    sourceSubject: removal.subject, sourcePosition: removedAgain.position,
+    sourceEventId: removedAgain.event.id });
+  await expect(actor.reserve(nextCall, 1, undefined, undefined, nextRoot.rootId))
+    .rejects.toMatchObject({ reason: 'access_revoked' });
+  expect(await stop(removal, removed.position)).toEqual(oldStop);
+}
+it('refuses an old child removal after re-invitation but accepts removal after the new root',
+  rejectsRemovalBeforeNewRoot);
+
+async function rejectsParticipantAddition() {
+  const source: Evidence = { reason: 'access_revoked', type: 'participant.added',
+    subject: 'participation-conversation', data: { conversationId: 'conversation',
+      participantId: 'alice', addedBy: 'owner', contextKind: 'shared_child',
+      joinKind: 'explicit_child', reviewPosition: 1 } };
+  const saved = await save(source);
+  await refuses(source, saved.position);
+  await reserve();
+}
+it('refuses a harmless participant addition as access-loss evidence', rejectsParticipantAddition);
+
+async function rejectsNativeDescendantClose() {
+  const source = evidence[1]!;
+  const event = envelope('test', source.subject, source.type, source.data);
+  event.source = 'opencrane-server';
+  event.principal = { kind: 'system', id: 'opencrane-server' };
+  event.data = { ...source.data, task: 'native_descendant', threadId: 'thread', generation: 1,
+    payingGroupId: 'group', delegationId: 'delegation', rootId,
+    rootTurnId: 'parent-turn', rootThreadId: 'parent-thread', parentTurnId: 'parent-turn',
+    parentThreadId: 'parent-thread', spawnItemId: 'spawn', dataClass: 'shared',
+    scopes: { models: [], tools: [], resources: [], operations: [], destinations: [],
+      connectionIds: [], profileIds: [] } };
+  expect(parseEventByType(event).success).toBe(true);
+  const saved = await nats.store.append({ event, expectedSequence: 0 });
+  if (saved.status !== 'appended') throw new Error('Evidence fixture append failed');
+  await refuses(source, saved.sequence);
+  await reserve();
+}
+it('refuses a native-descendant close as chat-turn end evidence', rejectsNativeDescendantClose);
 
 async function retriesFailedRead() {
   const source = evidence[0]!;
