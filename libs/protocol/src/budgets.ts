@@ -15,3 +15,25 @@ export const budgetSummarySchema = z.object({
   ceilings: z.array(z.object({ scope: z.enum(['paying_group', 'assistant']), scopeId: id, ...totals })),
 });
 export type BudgetSummary = z.infer<typeof budgetSummarySchema>;
+
+const stopReason = z.object({
+  scope: z.enum(['global', 'paying_group', 'assistant']),
+  period: z.enum(['daily', 'monthly']),
+  cause: z.enum(['bound_refused', 'zero_ceiling', 'ceiling_lowered', 'legacy_exhaustion']),
+  resetAt: z.iso.datetime({ offset: true }),
+  remedy: z.enum(['ask_admin', 'ask_admin_or_wait']),
+  limitCents: cents.optional(),
+}).strict();
+const stoppedWork = z.object({
+  turnId: id, execution: z.enum(['not_started', 'stopping', 'ended']),
+}).strict();
+const position = z.int().nonnegative();
+export const budgetStopStatusSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('not_stopped') }).strict(),
+  z.object({ status: z.literal('stopped'), stopId: id,
+    reasons: z.array(stopReason).min(1), work: z.array(stoppedWork),
+    positions: z.object({ stop: position, turn: position.nullable(), conversation: position,
+      computer: position, budget: position }).strict(),
+  }).strict(),
+]);
+export type BudgetStopStatus = z.infer<typeof budgetStopStatusSchema>;

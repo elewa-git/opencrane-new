@@ -2106,3 +2106,9 @@ wiring, startup route removal, generation admission and fresh-install qualificat
 
 Tests use the pinned gateway, disposable NATS and PostgreSQL. The replay CLI compares
 rebuilt policy with the live projection; it writes no events or gateway configuration.
+## Reading a saved turn stop
+
+`turnBudgetStopDetails` reads the existing `turn-budget-stops` summary. It selects
+at the human message position, like renewal, or uses the saved chat stop id.
+It copies only reasons matching the admitted payer and assistant. Unknown saved
+stop ids fail closed. `queuedPayer` is shared with the handler for unstarted work.

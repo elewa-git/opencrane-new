@@ -232,7 +232,7 @@ export function budgetSummary(state: BudgetState, now = new Date()) {
     periodStart: state.periodStart ?? null, ceilings };
 }
 type StopReason = z.infer<typeof budgetStopReasonSchema>;
-function matchesScope(reason: StopReason, call: Pick<ModelCall, 'payingGroupId' | 'assistantId'>) {
+export function matchesScope(reason: StopReason, call: Pick<ModelCall, 'payingGroupId' | 'assistantId'>) {
   if (reason.scope === 'global') {
     return true;
   }

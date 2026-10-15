@@ -32,8 +32,8 @@ async function requireIndex(db: Query, position: number) {
   }
 }
 
-async function queuedPayer(store: EventStore, silo: string, session: Session,
-  position: number, deadline: number) {
+export async function queuedPayer(store: EventStore, silo: string,
+  session: Pick<Session, 'assistantId' | 'payingGroupId'>, position: number, deadline: number) {
   const rows = await history(store, `assistant-${session.assistantId}`, silo, deadline);
   for (const row of rows) {
     if (row.event.type !== 'assistant.created') continue;

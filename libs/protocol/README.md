@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
-  server["apps/server<br/>back end"] -.->|image admission, member flags, access replies, child invitations, publication facts, gateway receipts and saved chat choices| protocol
+  server["apps/server<br/>back end"] -.->|image admission, member flags, access replies, child invitations, publication facts, gateway receipts, saved chat choices and spending stop replies| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list shapes"]
@@ -53,6 +53,9 @@ A saved receipt alone cannot prove that a gateway is still running.
 - Carry a tool server's saved hold after its catalogue changes.
 
 ## Processes it handles
+
+Spending stop replies carry saved reasons and execution status. The server
+decides who may read them and whether to include a limit.
 
 1. **A browser sends a live message.** The server checks the message against the shared schema before handling it. The browser checks server replies before showing them.
 2. **A person opens a conversation or settings page.** The server returns data in a shared shape, and the browser checks that shape before drawing the page.
