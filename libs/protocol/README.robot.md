@@ -221,3 +221,10 @@ admitted or expired. Each check reuses the strict event receipt shape.
 ToolPolicy optionally carries `configurationObservation`, using the strict event schema.
 Older policy replies still parse. The field contains safe configuration references and
 the observation date. It is a saved fact, not a live Ready status or call permission.
+
+## Saved budget stop replies
+
+`budgetStopStatusSchema` strictly checks `not_stopped` or the saved stop id,
+matching reasons, work execution and observed positions. Reasons allow optional
+`limitCents`, which the server includes only for the human message's author.
+No names, scope ids, configuration references or spending totals are accepted.

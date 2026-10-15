@@ -2771,3 +2771,21 @@ including queuedAt and per-check reasonCodes. Unknown or foreign-silo servers re
 404. POST has no route. No HTTP route writes check results. All-pass admission still
 starts no discovery and leaves the hosted dispatch refusal in place.
 Rechecks and evidence storage belong to part c. Fresh-install qualification: NOT RUN.
+
+## Saved chat budget stops (P3-14 PR 7a; Part of #55)
+
+`GET /api/conversations/:conversationId/budget-stops?turnId=…` reads saved history
+within ten seconds, then calls `requireMember` once with `write: false`.
+The turn must be a visible human message. Roles grant no extra chat access.
+The strict protocol reply gives matching scope, period, cause, reset and remedy;
+only the message author receives `limitCents`. Work includes this chat's visible
+recorded turns only. A terminal report, computer close or loss proves execution ended.
+`positions.stop` is the budget stop position; `turn` is its chat stop record position
+or null. The other positions are the last conversation, computer and budget rows read.
+Loading failures still pass through that read-access check before any reply.
+Callers without access receive the same 403 refusal as for an unknown turn.
+Authorised readers receive 503 for missing stop details, unfinished handler work,
+and failed or timed-out reads.
+Tests use real dependencies and a fresh store connection. No read appends or sends work.
+Live qualification is NOT RUN. WebSocket status, call status and restart/leader
+reconciliation remain part b; root stops remain with #90.

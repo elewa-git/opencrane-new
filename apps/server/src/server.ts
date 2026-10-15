@@ -12,6 +12,7 @@ import { registerScreenshots } from './computers/screenshots.ts';
 import { registerEffectRoutes } from './effects/routes.ts';
 import { registerGroupRoutes, type GroupOptions } from './members/group-routes.ts';
 import { registerBootstrapRoutes } from './members/bootstrap.ts';
+import { registerBudgetStopRoutes } from './chat/budget-stops.ts';
 import { registerApprovalRoutes } from './chat/approvals.ts';
 import { registerLiveView, type LiveViewOptions } from './computers/view.ts';
 import { registerFileRoutes, type FileOptions } from './files/routes.ts';
@@ -112,6 +113,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerLiveView(app, authConfig, options.liveView);
 
   registerApprovalRoutes(app, authConfig, options.chat);
+  registerBudgetStopRoutes(app, authConfig, options.chat);
   registerFileRoutes(app, authConfig, options.files);
   registerScreenshots(app, authConfig, options.files, options.liveView);
 

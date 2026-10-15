@@ -13,7 +13,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stop reasons| models["libs/models<br/>AI rules, control, provider choice and spending"]
   models -->|checks revision, spending, the catalogue and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
@@ -214,6 +214,9 @@ Older holds keep their money because their senders used older rules.
 Later confirmed usage can still settle their cost.
 
 ## Processes it handles
+
+Saved spending stops explain the limits that applied to one turn. The server
+uses the same payer choice as admission and the stop handler.
 
 A saved spending stop makes the dispatcher record Stop for each affected unfinished
 turn and queued message. It checks the conversation index has caught up first.
