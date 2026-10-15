@@ -81,6 +81,12 @@ assistant check open rather than guessing an answer.
   field types and limits, titles and other details. A failed policy read is visible;
   earlier rows keep their last successful check time. The page opens tool review
   once a policy has been read.
+  - Accepts an exact package image digest and shows dated admission checks. Continue
+    stays disabled while tool discovery is unavailable. Saving gives nobody access.
+  modes for each tool, as well as models, spending and change history. The add page
+  accepts an exact package image digest and shows dated admission checks. It keeps
+  Continue disabled while tool discovery is unavailable. Saving a package gives nobody
+  access to it.
 - Lists current members with search and more pages. A refused member read clears both
   member and group details. A temporary read failure keeps loaded rows visible.
 - Lets Owners and Admins add an active organisation member to a local group from its page.

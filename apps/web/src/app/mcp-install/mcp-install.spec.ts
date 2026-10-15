@@ -55,7 +55,7 @@ afterEach(() => {
   history.replaceState({}, '', '/');
 });
 
-it('offers only the remote URL source and names the unavailable choices', () => {
+it('offers remote and package sources while the catalogue stays unavailable', () => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(404));
   const fixture = TestBed.createComponent(McpInstall);
   fixture.detectChanges();
@@ -64,8 +64,8 @@ it('offers only the remote URL source and names the unavailable choices', () => 
   expect(radios).toHaveLength(3);
   expect(radios[0]?.disabled).toBe(true);
   expect(radios[1]?.checked).toBe(true);
-  expect(radios[2]?.disabled).toBe(true);
-  expect(root.textContent).toContain('Not available yet. Hosted packages need admission checks first.');
+  expect(radios[2]?.disabled).toBe(false);
+  expect(root.textContent).toContain('An exact image checked before it can run.');
   expect(root.querySelector('ol[aria-label="Add an integration steps"]')).not.toBeNull();
   expect(root.querySelector('nav[aria-label="Add an integration progress"]')).toBeNull();
   expect(root.querySelector('button[aria-label="Continue and discover tools"]')).not.toBeNull();
