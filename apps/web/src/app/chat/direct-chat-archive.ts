@@ -168,12 +168,22 @@ export class DirectChatArchive {
     }
     await this.reloadCurrent(pending, revision);
     if (!this.isCurrent(pending, revision)) return;
-    if (this.row()?.archived !== pending.body.archived) {
+    this.finishCurrentStatus(pending, result.value.sequence);
+  }
+
+  private finishCurrentStatus(pending: PendingArchive, eventPosition: number): void {
+    const latestRow = this.row();
+    if (latestRow?.archivePosition === undefined
+      || latestRow.archivePosition < eventPosition) {
       pending.state = 'applying';
       this.notice.set('Saved. Your list is still updating.');
       return;
     }
     this.pending = undefined;
+    if (latestRow.archived !== pending.body.archived) {
+      this.notice.set('Another device changed this conversation after your choice. Your list is up to date.');
+      return;
+    }
     if (pending.body.archived) {
       // Show the archived line in the transcript only once.
       this.notice.set('');

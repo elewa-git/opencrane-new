@@ -23,6 +23,7 @@ import {
   appendDirectMessage, directColleagueById, directConversationById, directConversationTitle,
   directConversations, directInitials,
   directConversationHeaderTitle, directConversationMode, directDraftKey, directMessageText,
+  directPendingNavigationTitle,
   formatDirectTime,
   exceedsDirectRecipientLimit, focusDirectComposer, hasDirectMessage,
   directConversationsAfterParticipantEvent, isDirectTranscriptNearNewest,
@@ -54,6 +55,7 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly directAvatar = directInitials;
   protected readonly conversationTitle = directConversationTitle;
   protected readonly headerTitle = directConversationHeaderTitle;
+  protected readonly pendingNavigationTitle = directPendingNavigationTitle;
   protected readonly groupAuthor = groupAuthorName;
   protected readonly ownMessage = directIsOwnMessage;
   protected readonly messageAuthor = directAuthorName;
@@ -266,7 +268,7 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly trapParticipantFocus = trapDirectDialogFocus;
 
   protected selectColleague(value: Colleague): void {
-    if (this.composerBusy() || this.participantChangeUnsettled()) return;
+    if (this.pendingNavigationBlocked()) return;
     this.rememberDraft();
     this.clearConversationView();
     this.colleague.set(value);
@@ -281,7 +283,7 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   protected clearColleague(): void {
-    if (this.composerBusy() || this.participantChangeUnsettled()) return;
+    if (this.pendingNavigationBlocked()) return;
     this.rememberDraft();
     this.clearConversationView();
     this.colleague.set(undefined);
@@ -294,7 +296,7 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   protected async selectConversation(conversationId: string): Promise<void> {
-    if (this.composerBusy() || this.participantChangeUnsettled()) return;
+    if (this.pendingNavigationBlocked()) return;
     const conversation = directConversationById(this.conversations(), conversationId);
     if (!conversation || (conversation.mode !== 'direct' && conversation.mode !== 'group')) return;
     let selectedColleague: Colleague | undefined;
@@ -364,11 +366,12 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   protected protectPendingNavigation(event: MouseEvent): void {
-    if (this.composerBusy() || this.participantChangeUnsettled()) event.preventDefault();
+    if (this.pendingNavigationBlocked()) event.preventDefault();
   }
 
-  protected participantChangeUnsettled(): boolean {
-    return Boolean(this.participantManager.commandId());
+  protected pendingNavigationBlocked(): boolean {
+    return this.composerBusy() || Boolean(this.participantManager.commandId())
+      || Boolean(this.archive.commandId());
   }
 
   private async loadColleagues(query: string): Promise<void> {

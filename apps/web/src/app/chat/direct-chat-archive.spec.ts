@@ -161,5 +161,5 @@ it('releases a current command when a later archive choice is already in the ser
   expect(test.archive.row()?.archivePosition).toBe(13);
   expect(test.archive.commandId()).toBe('');
   expect(test.archive.canChange()).toBe(true);
-  expect(test.archive.notice()).toContain('another device');
+  expect(test.archive.notice()).toContain('Another device');
 });

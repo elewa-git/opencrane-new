@@ -63,6 +63,10 @@ async function capture(browser, width, frame) {
     } else {
       await page.goto(`${origin}/workspace/direct?conversation=group-chat`);
       await page.getByRole('button', { name: 'Unarchive' }).waitFor();
+      const heading = page.locator('h1');
+      const headingText = await heading.textContent();
+      assert.equal(headingText?.trim(), title);
+      assert.equal(await heading.getAttribute('title'), title);
       if (frame === 'unknown') {
         await page.getByRole('button', { name: 'Unarchive' }).click();
         await page.getByRole('button', { name: 'Check status' }).click();

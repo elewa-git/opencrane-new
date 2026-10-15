@@ -55,7 +55,8 @@ check with the original request id.
   list changes during that search, the website starts it again once.
 - Lets people archive or unarchive a direct or group chat from its header. The server
   saves the choice for their own list. An archived chat stays readable and can still
-  receive messages. An uncertain save can be checked without making a second choice.
+  receive messages. An uncertain save keeps the person in that chat until they check
+  its status. Group chat headers show the full saved title.
 - Gives admins pages for People & groups at `/org/people`,
   `/org/people/groups/<id>` and `/org/people/owners`, an integration register and detail at
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting
