@@ -451,21 +451,21 @@ async function readsAfterPayerRemoval() {
 }
 it('reads own history after payer removal while refusing new spending', readsAfterPayerRemoval);
 
-// Reuse the payer-removal probe with the real computer channel and a second member.
-async function refusesOnlyTheUnpaidTurn() {
+async function refusesOnlyOneTurn(refusal: string) {
+  const prefix = `admission-${refusal}`;
   if (!chat) throw new Error('Missing chat fixture');
-  await append('team-admission-payer', 'team.created', {
-    teamId: 'admission-payer', name: 'Billing', createdBy: 'owner',
+  await append(`team-${prefix}-payer`, 'team.created', {
+    teamId: `${prefix}-payer`, name: 'Billing', createdBy: 'owner',
   });
   for (const member of ['alice', 'bob']) {
-    await append('team-admission-payer', 'team.member_added', {
-      teamId: 'admission-payer', memberId: member, addedBy: 'owner',
+    await append(`team-${prefix}-payer`, 'team.member_added', {
+      teamId: `${prefix}-payer`, memberId: member, addedBy: 'owner',
     });
   }
-  const assistantId = 'team-admission';
-  const computerId = 'admission-computer';
+  const assistantId = `team-${prefix}`;
+  const computerId = `${prefix}-computer`;
   await append(`assistant-${assistantId}`, 'assistant.created', {
-    assistantId, ownerId: 'sales', kind: 'team', payingGroupId: 'admission-payer',
+    assistantId, ownerId: 'sales', kind: 'team', payingGroupId: `${prefix}-payer`,
   });
   await append(`computer-${assistantId}`, 'computer.claimed', {
     assistantId, computerId, generation: 1, tokenId: 'token:test',
@@ -474,9 +474,9 @@ async function refusesOnlyTheUnpaidTurn() {
     assistantId, computerId, generation: 1, podUid: 'pod',
   });
   for (const member of ['alice', 'bob']) {
-    const conversationId = `admission-${member}`;
+    const conversationId = `${prefix}-${member}`;
     const input = { id: `create-${conversationId}`, conversationId,
-      assistantId, payingGroupId: 'admission-payer' };
+      assistantId, payingGroupId: `${prefix}-payer` };
     expect((await request('POST', '/api/conversations', input, member)).statusCode).toBe(200);
     const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
     await auth.handler.handle(rows[0]!.event, pgDb(dbs.queue));
@@ -484,16 +484,22 @@ async function refusesOnlyTheUnpaidTurn() {
     expect((await request('POST', `/api/conversations/${conversationId}/messages`,
       message, member)).statusCode).toBe(200);
   }
-  await append('team-admission-payer', 'team.member_removed', {
-    teamId: 'admission-payer', memberId: 'alice', removedBy: 'owner',
-  });
+  if (refusal === 'payer') {
+    await append(`team-${prefix}-payer`, 'team.member_removed', {
+      teamId: `${prefix}-payer`, memberId: 'alice', removedBy: 'owner',
+    });
+  } else {
+    await append(`${refusal}-${prefix}-alice`, 'conversation.closed', {
+      conversationId: `${prefix}-alice`, closedBy: 'alice',
+    });
+  }
   const server = createServer();
   const executedThreads: unknown[] = [];
   let threadCount = 0;
   function rpc(method: string, params: Record<string, unknown>) {
     if (method === 'thread/start') {
       threadCount++;
-      return Promise.resolve({ thread: { id: `admission-thread-${threadCount}`,
+      return Promise.resolve({ thread: { id: `${prefix}-thread-${threadCount}`,
         ephemeral: true, path: null, environments: [] } });
     }
     if (method === 'turn/start') executedThreads.push(params['threadId']);
@@ -506,7 +512,7 @@ async function refusesOnlyTheUnpaidTurn() {
   function privateSession() {
     return Promise.resolve({ rpc, close() {}, closed: new Promise<void>(function pending() {}) });
   }
-  const driver = { rpc, privateSession, grant, credential, journal: `${directory}/admission-reports` };
+  const driver = { rpc, privateSession, grant, credential, journal: `${directory}/${prefix}-reports` };
   const channel = bridgeChannel(server, driver);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -515,21 +521,21 @@ async function refusesOnlyTheUnpaidTurn() {
   const key = generateKeyPairSync('ec', { namedCurve: 'P-256',
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
     publicKeyEncoding: { type: 'spki', format: 'pem' } });
-  const keyPath = `${directory}/admission-key.pem`;
+  const keyPath = `${directory}/${prefix}-key.pem`;
   await writeFile(keyPath, key.privateKey, { mode: 0o600 });
   const tokens = await tokenIssuer({ privateKeyPath: keyPath, issuer: 'https://bridge.test/' });
   const connection = { url: `ws://127.0.0.1:${address.port}/bridge`,
     computerId, assistantId, bearer: 'test-computer' };
   const link = await connectBridge(chat, connection, tokens);
   function send(member: string) {
-    const input = { type: 'turn', id: `message-admission-${member}`,
-      conversationId: `admission-${member}`, requesterId: member, assistantId,
+    const input = { type: 'turn', id: `message-${prefix}-${member}`,
+      conversationId: `${prefix}-${member}`, requesterId: member, assistantId,
       executionMode: 'restricted',
       text: 'Start work', token: 'preparing', expiresAt: Date.now() + 60_000 };
     link.socket.send(JSON.stringify(input));
   }
   async function aliceFailed() {
-    const rows = await history(nats.store, 'conversation-admission-alice', 'test');
+    const rows = await history(nats.store, `conversation-${prefix}-alice`, 'test');
     function isFailed(row: typeof rows[number]) {
       return row.event.type === 'agent.turn_failed';
     }
@@ -543,18 +549,20 @@ async function refusesOnlyTheUnpaidTurn() {
     await until(aliceFailed);
     expect(link.socket.readyState).toBe(WebSocket.OPEN);
     expect(link.rejection).toBeUndefined();
-    const stopped = await request('POST', '/api/conversations/admission-alice/messages',
-      { id: 'stop-unpaid', stopTurnId: 'message-admission-alice' }, 'alice');
-    expect(stopped.statusCode, stopped.body).toBe(200);
+    if (refusal === 'payer') {
+      const stopped = await request('POST', `/api/conversations/${prefix}-alice/messages`,
+      { id: 'stop-unpaid', stopTurnId: `message-${prefix}-alice` }, 'alice');
+      expect(stopped.statusCode, stopped.body).toBe(200);
+    }
     send('bob');
     await until(bobExecuted);
     expect(link.socket.readyState).toBe(WebSocket.OPEN);
-    expect(executedThreads).toEqual(['admission-thread-2']);
+    expect(executedThreads).toEqual([`${prefix}-thread-2`]);
     const lifecycle = await history(nats.store, `computer-${assistantId}`, 'test');
     function failedAlice(row: typeof lifecycle[number]) {
       const data = z.object({ turnId: z.string().optional(), status: z.string().optional() })
         .parse(row.event.data);
-      return data.turnId === 'message-admission-alice' && data.status === 'failed';
+      return data.turnId === `message-${prefix}-alice` && data.status === 'failed';
     }
     expect(lifecycle.some(failedAlice)).toBe(true);
   } finally {
@@ -564,8 +572,8 @@ async function refusesOnlyTheUnpaidTurn() {
     server.close();
   }
 }
-it('refuses an unpaid turn, accepts Stop and admits another member on the same bridge',
-  refusesOnlyTheUnpaidTurn);
+it.each(['payer', 'conversation', 'participation'])(
+  'refuses one member after %s changes and admits another on the same bridge', refusesOnlyOneTurn);
 
 // Reuse the list probe to bound the work for many sessions on one assistant.
 async function listsSixtyTeamSessions() {

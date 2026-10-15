@@ -1,6 +1,6 @@
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { z } from 'zod';
-import { generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BudgetActor, envelope } from '@opencrane/models';
 import { tokenIssuer, turnTokenAudience } from '@opencrane/auth';
@@ -1614,17 +1614,27 @@ async function closeSafeAcknowledgements(test: { subject: string; timing: CloseT
       await fixture.seed([envelope('test', test.subject, 'conversation.closed', data)]);
     }
     if (test.timing === 'saved' || test.timing === 'context' || test.timing === 'token') {
-      const saved = { ...fixture.context, conversationId: 'alice', turnId: 'current-alice',
+      const saved = { assistantId: 'assistant', computerId: 'computer',
+        conversationId: 'alice', turnId: 'current-alice',
         threadId: 'thread-alice', requesterId: 'alice', task: 'chat_turn',
         executionMode: 'restricted', payingGroupId: 'personal-default' };
-      await fixture.seed([envelope('test', 'computer-assistant', 'computer.turn_started', saved)]);
+      const hash = createHash('sha256');
+      hash.update('computer:current-alice:computer.turn_started');
+      const id = hash.digest('hex');
+      const event = envelope('test', 'computer-assistant', 'computer.turn_started', saved, id);
+      event.principal = { kind: 'system', id: 'turn-lifecycle' };
+      await fixture.seed([event]);
     }
     if (test.timing === 'before' || test.timing === 'saved') await closeConversation();
     const append = fixture.store.append.bind(fixture.store);
     async function closeAfterAppend(command: Parameters<typeof append>[0]) {
       const result = await append(command);
-      if (command.event.type === 'computer.turn_started' &&
-        command.event.data['turnId'] === 'current-alice') await closeConversation();
+      const event = z.object({ type: z.string(), data: z.object({
+        turnId: z.string().optional(),
+      }) }).parse(command.event);
+      if (event.type === 'computer.turn_started' && event.data.turnId === 'current-alice') {
+        await closeConversation();
+      }
       return result;
     }
     if (test.timing === 'append') {
@@ -1650,7 +1660,9 @@ async function closeSafeAcknowledgements(test: { subject: string; timing: CloseT
     const issuance = vi.spyOn(tokens, 'turn');
     if (test.timing === 'token') issuance.mockImplementationOnce(closeDuringToken);
     link = await fixture.connect(tokens);
-    function resumed() { return fixture.messages.length > 0; }
+    function resumed() {
+      return fixture.messages.length > 0;
+    }
     await until(resumed);
     async function exchange(value: typeof start) {
       const count = fixture.messages.length;
@@ -1689,11 +1701,11 @@ async function closeSafeAcknowledgements(test: { subject: string; timing: CloseT
     const bob = { ...start, sequence: 3, conversationId: 'bob',
       turnId: 'message-bob', threadId: 'thread-bob' };
     const ack = await exchange(bob);
-    expect(ack).toMatchObject({ type: 'ack', sequence: 3, token: expect.any(String),
-      model: expect.any(String) });
+    const admitted = z.object({ type: z.literal('ack'), sequence: z.literal(3),
+      token: z.string().min(1), model: z.string().min(1) });
+    expect(admitted.safeParse(ack).success).toBe(true);
     expect(ack).not.toHaveProperty('refused');
-    expect(await exchange(bob)).toMatchObject({ type: 'ack', sequence: 3,
-      token: expect.any(String) });
+    expect(admitted.safeParse(await exchange(bob)).success).toBe(true);
   } finally {
     link?.socket.terminate();
     await link?.settled();
@@ -1712,7 +1724,9 @@ async function keepsLateReports(subject: string) {
       conversationId: 'alice', closedBy: 'alice',
     })]);
     link = await fixture.connect();
-    function resumed() { return fixture.messages.length > 0; }
+    function resumed() {
+      return fixture.messages.length > 0;
+    }
     await until(resumed);
     const reports = [];
     const types = ['agent.message_delta', 'agent.turn_completed', 'agent.output_lost'];
@@ -1738,13 +1752,15 @@ async function keepsLateReports(subject: string) {
     }
     expect(await reportPosition(fixture.store, 'test', 'computer')).toBe(4);
     const saved = await chatHistory(fixture.store, 'test', 'alice');
-    function hasReport(row: typeof saved[number]) { return row.event.report !== undefined; }
+    function hasReport(row: typeof saved[number]) {
+      return row.event.report !== undefined;
+    }
     expect(saved.filter(hasReport)).toHaveLength(3);
     const closed = once(link.peer, 'close');
     link.peer.send(JSON.stringify({ ...reports[0], text: 'Changed digest' }));
-    const [code, reason] = await closed;
-    expect(code).toBe(1008);
-    expect(String(reason)).toBe('Report sequence reused');
+    const outcome: unknown[] = await closed;
+    expect(outcome[0]).toBe(1008);
+    expect(String(outcome[1])).toBe('Report sequence reused');
   } finally {
     link?.socket.terminate();
     await link?.settled();
