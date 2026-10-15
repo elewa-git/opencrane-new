@@ -15,6 +15,8 @@ import { bindingReceipt } from './maintenance.ts';
 import { MemoryConflict, memorySnapshot } from './reads.ts';
 import { checkSources } from './sources.ts';
 import { commandJournal } from './journal.ts';
+import { commandReference, commandHistory } from './command-history.ts';
+import { forgottenReceipt } from './forget.ts';
 import { acquireMemoryWrite } from './admission.ts';
 
 const fields = memoryWrittenDataSchema.pick({ kind: true, pinned: true, expiresAt: true,
@@ -28,29 +30,6 @@ type PrincipalKind = 'human' | 'agent';
 type AgentWrite = { deadline: number; conversation: string; turn: string; requestId: string;
   confirm: () => Promise<unknown>; checkAccess: () => Promise<unknown> };
 
-function commandReference(silo: string, scopeId: string, requester: string, commandId: string,
-  principalKind: PrincipalKind = 'human') {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, principalKind, requester, scopeId, commandId]));
-  return hash.digest('hex');
-}
-async function commandHistory(options: MemoryOptions, scopeId: string,
-  requester: string, commandId: string, deadline = performance.now() + 10_000,
-  knownRows: StoredEvent[] = [], principalKind: PrincipalKind = 'human') {
-  const rows = [...knownRows];
-  const fromSequence = (rows.at(-1)?.sequence ?? 0) + 1;
-  for await (const row of options.store.readStream(`scope-${scopeId}`, fromSequence, deadline)) {
-    if (row.event.silo !== options.silo) {
-      throw new Error('Wrong silo');
-    }
-    rows.push(row);
-  }
-  function matches(row: StoredEvent) {
-    return row.event.commandId === commandId && row.event.principal?.kind === principalKind &&
-      row.event.principal.id === requester;
-  }
-  return { rows, original: rows.find(matches) };
-}
 function savedReceipt(row: StoredEvent, audience: { kind: string; ownerId: string }) {
   const saved = memoryWrittenEventSchema.parse(row.event);
   if (!('schemaVersion' in saved.data)) {
@@ -302,31 +281,45 @@ async function appendPrepared(options: MemoryOptions, input: Input,
     throw error;
   }
 }
+function pendingForgetReceipt(stage: string) {
+  if (stage === 'failed') {
+    return { outcome: 'conflict' };
+  }
+  return { outcome: 'unknown' };
+}
+
 export async function readCommand(options: MemoryOptions, requester: string, scope: Scope,
   commandId: string, audience: { kind: string; ownerId: string }) {
-  await memorySnapshot(options, scope);
   const state = await commandHistory(options, scope.scopeId, requester, commandId);
+  if (state.original?.event.type === 'memory.forgotten') {
+    return forgottenReceipt(state.original, state.rows, audience);
+  }
+  await memorySnapshot(options, scope);
   if (state.original?.event.type === 'memory.maintenance_bound') {
     return bindingReceipt(state.original);
   }
   if (!options.keyDirectory) {
     throw new Error('Memory custody unavailable');
   }
-  const keys = memoryKeys(options.keyDirectory);
   const memoryId = commandReference(options.silo, scope.scopeId, requester, commandId);
   const identity = { silo: options.silo, ...scope, memoryId, revision: 1 };
   const journal = commandJournal(options.keyDirectory, memoryId);
   if (!state.original) {
     const entry = journal.read();
+    if (entry?.operation === 'forget') {
+      return pendingForgetReceipt(entry.stage);
+    }
     if (entry && (entry.stage !== 'unknown' || Date.now() > entry.appendUntil) && options.db.lock) {
       await reconcileCommand(options, memoryId);
     }
+    const keys = memoryKeys(options.keyDirectory);
     if (keys.status(identity) === 'destroyed') {
       return { outcome: 'failed', memoryId };
     }
     return { outcome: 'unknown' };
   }
   journal.remove();
+  const keys = memoryKeys(options.keyDirectory);
   const receipt = savedReceipt(state.original, audience);
   const references = memoryReferences(state.rows, options.silo, scope.scopeId, keys);
   const contentStatus = references.current(receipt);
@@ -364,7 +357,7 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
     await options.db.lock!(`memory-command:${reference}`, removeOrphan, { timeoutMs: 100 });
     return;
   }
-  if (entry.identity.silo !== options.silo) {
+  if (entry.operation === 'forget' || entry.identity.silo !== options.silo) {
     return;
   }
   const expected = commandReference(options.silo, entry.identity.scopeId,

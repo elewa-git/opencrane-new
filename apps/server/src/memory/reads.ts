@@ -190,15 +190,19 @@ export async function detailFact(options: MemoryOptions, requester: string, scop
     throw new MemoryRefused();
   }
   const saved = detailMetadataSchema.parse(row);
-  if (saved.expires_at !== null && Date.parse(saved.expires_at) <= Date.now()) {
+  if (saved.content_status !== 'erased' && saved.expires_at !== null &&
+    Date.parse(saved.expires_at) <= Date.now()) {
     throw new MemoryRefused();
   }
-  const unavailableStatuses = ['destroyed', 'unavailable', 'quarantined'];
+  const unavailableStatuses = ['destroyed', 'unavailable', 'quarantined', 'erased'];
   if (unavailableStatuses.includes(saved.content_status)) {
     // Treat the read table's unavailable value as a deleted key, not a service outage.
     let reason = 'destroyed';
     if (saved.content_status === 'quarantined') {
       reason = 'quarantined';
+    }
+    if (saved.content_status === 'erased') {
+      reason = 'forgotten';
     }
     // Return an unavailable result so callers do not keep retrying a service failure.
     return { status: 'unavailable' as const, scopeId: scope.scopeId,

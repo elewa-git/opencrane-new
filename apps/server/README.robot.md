@@ -2693,3 +2693,21 @@ and grants no conversation access. HTTP tests also check refusal of another call
 messages, participants, files, approvals and a new socket subscription after recovery.
 The guard tests cover direct/private routes, a non-creator with OpenFGA management
 permission, absent removal targets, and changed saved subjects and principals.
+
+## Personal memory forget HTTP
+
+`POST /api/memory/:scopeId/facts/:memoryId/forget` accepts only `commandId` and
+`expectedRevision`. The active person can forget only their own person-scope fact.
+The server checks saved metadata, including historical dependencies, without opening keys.
+It reads history before the two-second `authorityFence`, which watches only their member stream.
+The command uses remember's command reference and lock, then makes one conditional append.
+Its durable attempt record prevents a second append after a lost reply, including after restart.
+Unknown attempts stay unknown; startup must never use them to recover or destroy a key.
+
+An accepted receipt contains operation, outcome, changeId, memoryId, revision, scopeId,
+audience, acceptedAt, hidden and cleanupStatus. The changes GET reads tombstones and matching
+cleanup events directly, without custody or projection catch-up. Completion is final and adds
+forgottenAt; unavailable cleanup keeps hidden true. No receipt includes fact text or key references.
+Scopes and detail advertise canForget only for the requester's person scope. Forgotten detail
+returns HTTP 200 with status unavailable and reason forgotten. The memory MCP has no forget.
+Fresh-install qualification remains NOT RUN; no screens, model calls or dev stack are included.
