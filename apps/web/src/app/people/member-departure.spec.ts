@@ -137,6 +137,49 @@ it.each(['absent_on_version', 'unsupported_history', 'unavailable'] as const)(
   expect(page(fixture).textContent).toContain('private chats stay private');
   });
 
+it('names organisation and group membership even when no resources are listed', async () => {
+  const group = { groupId: 'design', name: 'Design', membershipSource: 'local' };
+  function fetcher(input: RequestInfo | URL): Promise<Response> {
+    const path = url(input);
+    if (path.endsWith('/departure')) return Promise.resolve(response(departure));
+    if (path.endsWith('/access')) return Promise.resolve(response(access));
+    return Promise.resolve(response({ ...member, groups: [group] }));
+  }
+  const fixture = mount(fetcher);
+  await open(fixture);
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('No shared work'));
+  const drawer = page(fixture).querySelector('dialog');
+  expect(drawer?.textContent).toContain('Organisation membership ends');
+  expect(drawer?.textContent).toContain('Design');
+  expect(drawer?.textContent).toContain('No tools or shared assistants to hand over');
+  expect(drawer?.textContent).not.toContain('No recorded access to lose');
+});
+
+it('shows a recorded personal computer before removal and its unreported clean-up after',
+  async () => {
+    const computer = { assistantId: 'assistant-a', computerId: 'computer-a',
+      status: 'running' };
+    const review = { ...departure, personalComputer: [computer] };
+    function fetcher(input: RequestInfo | URL): Promise<Response> {
+      const path = url(input);
+      if (path.endsWith('/departure')) return Promise.resolve(response(review));
+      if (path.endsWith('/remove')) return Promise.resolve(response(receipt));
+      return baseFetch(input);
+    }
+    const fixture = mount(fetcher);
+    await open(fixture);
+    await vi.waitFor(() => expect(page(fixture).textContent).toContain('No shared work'));
+    const drawer = page(fixture).querySelector('dialog');
+    expect(drawer?.textContent).toContain('computer-a');
+    expect(drawer?.textContent).toContain('running');
+    button(page(fixture), 'Remove Alex').click();
+    await vi.waitFor(() => expect(page(fixture).textContent).toContain('Removed ·'));
+    const outcome = page(fixture).querySelector('.member-detail-page');
+    expect(outcome?.textContent).toContain('computer-a');
+    expect(outcome?.textContent).toContain('Clean-up status not yet reported');
+    expect(outcome?.textContent).not.toContain('suspended');
+  });
+
 it('sends one reviewed removal and shows saved access with separate progress', async () => {
   const posts: Array<{ body: unknown }> = [];
   function fetcher(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -163,7 +206,13 @@ it('sends one reviewed removal and shows saved access with separate progress', a
     reviewRevision: departure.reviewRevision });
   expect(page(fixture).textContent).toContain('IAM is still applying');
   expect(page(fixture).textContent).toContain('Content is current');
-  expect(page(fixture).textContent).toContain("Clean-up status isn't available yet");
+  const screen = page(fixture).querySelector('.member-detail-page');
+  expect(screen?.textContent).toContain('Removed ·');
+  expect(screen?.textContent).toContain('Clean-up status not yet reported');
+  expect(screen?.querySelector('h2')).toBeNull();
+  expect(screen?.textContent).not.toContain('Groups');
+  expect(screen?.textContent).not.toContain('Remove from');
+  expect(page(fixture).querySelector('dialog[open]')).toBeNull();
 });
 
 it('checks an uncertain removal using the original id and never posts twice', async () => {
