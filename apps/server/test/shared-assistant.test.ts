@@ -637,9 +637,6 @@ async function seedClosedChildInput(conversationId: string, assistantId: string,
 async function refusesSharedChildWithoutDisconnecting(closeStream: string) {
   await refusesOnlyOneTurn(closeStream, true);
 }
-it.each(['conversation', 'participation'])(
-  'accepts a refused shared child failure and replay after %s closure on the real channel',
-  refusesSharedChildWithoutDisconnecting);
 
 async function refusesUnpaidTurn() {
   await refusesOnlyOneTurn('payer');
@@ -1483,3 +1480,7 @@ async function rejectsOutputForRefusedChild(testCase: typeof refusedChildReports
 it.each(refusedChildReports)(
   'rejects $type with invalid output or sequence after a shared child refusal',
   rejectsOutputForRefusedChild);
+
+it.each(['conversation', 'participation'])(
+  'accepts a refused shared child failure and replay after %s closure on the real channel',
+  refusesSharedChildWithoutDisconnecting);
