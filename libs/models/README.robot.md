@@ -2071,6 +2071,13 @@ journey: NOT RUN. Fixtures use the pinned gateway and disposable NATS, with no p
 ## Hosted image admission receipts
 
 `writeHostedAdmission` records one `mcp.image_checked` per installation attempt.
+It is private to the models package and absent from the public exports. Server code
+and server tests do not import it. Package exports refuse private subpaths; the
+existing dependency check refuses relative imports into private model files.
+`hosted-admission-boundary.test.ts` checks public and private package imports.
+Append validation refuses any principal other than system/models. The fold keeps
+its existing source and principal checks. These are application checks, not separate
+NATS credentials; per-process NATS identities remain issue #432.
 It binds silo, server, attempt, digest and platform. The event id hashes JSON
 [silo, subject, event type, attemptId]. Identical retries recover the original result;
 changed retries conflict. Only the models source and system principal count.
