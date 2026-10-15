@@ -35,7 +35,9 @@
           </button>
         </article>
       }
-      @if (choices.next) { <p>Showing the first 50 candidates. More are not available here yet.</p> }
+      @if (choices.next) {
+        <button type="button" [disabled]="picking() || locked()" (click)="loadMore()">Load more</button>
+      }
     }
     <p class="routing">Both the requester and the assistant need access.
       There is no automatic failover.</p>
