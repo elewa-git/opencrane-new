@@ -66,7 +66,18 @@ export async function reviewJourneyTools(ownerPage: Page, store: EventStore, sil
   const request = { headers: { origin }, data: command };
   const saved = await ownerPage.request.post(`${url}/review`, request);
   assert.equal(saved.status(), 200, 'Owner saves the exact tool review');
-  assert.deepEqual(await saved.json(), { status: 'appended' });
+  const savedReply = await saved.json() as {
+    status?: unknown;
+    sequence?: unknown;
+    policy?: { tools?: Array<{ name?: unknown; mode?: unknown }> };
+  };
+  assert.equal(savedReply.status, 'appended');
+  assert(Number.isInteger(savedReply.sequence) && Number(savedReply.sequence) > 0,
+    'The saved review has a positive sequence');
+  if (savedReply.policy) {
+    assert.deepEqual(savedReply.policy.tools?.map((tool) => ({ name: tool.name, mode: tool.mode })),
+      choices.map((choice) => ({ name: choice.name, mode: choice.mode })));
+  }
   const publication = { serverId, publishedBy: 'zitadel-owner' };
   await append('mcp.server_published', `mcp-${serverId}`, publication);
 }
