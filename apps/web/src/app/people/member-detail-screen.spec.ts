@@ -1,0 +1,91 @@
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { afterEach, expect, it, vi } from 'vitest';
+import { MemberDetailScreen } from './member-detail-screen';
+
+const member = { memberId: 'alex-kim', displayName: 'Alex Kim', role: 'member',
+  permissions: { changeRole: false, remove: false, manageOwnership: false },
+  email: 'alex@example.test', status: 'joined', joinedAt: '2026-03-12T10:00:00Z',
+  groups: [{ groupId: 'sales', name: 'Sales team', membershipSource: 'local' }],
+  memberSequence: 2, ownershipSequence: 1,
+  personalAssistant: { status: 'unavailable' }, rejoinedAt: { status: 'unavailable' } };
+const access = { checkedAt: '2026-10-15T10:00:00Z', complete: true,
+  unavailableSections: [], rows: [{ resourceType: 'model', resourceId: 'model-a',
+    label: 'Model A', relation: 'use', sources: [{ kind: 'direct', eventId: 'grant-a',
+      sequence: 1 }], eligibility: { person: 'allowed', assistants: [],
+      availability: 'unavailable' } }] };
+
+function reply(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status });
+}
+
+async function mount(fetcher: typeof fetch): Promise<ComponentFixture<MemberDetailScreen>> {
+  vi.stubGlobal('fetch', fetcher);
+  TestBed.configureTestingModule({ imports: [MemberDetailScreen] });
+  const fixture = TestBed.createComponent(MemberDetailScreen);
+  fixture.componentRef.setInput('memberId', 'alex-kim');
+  fixture.detectChanges();
+  return fixture;
+}
+
+function page(fixture: ComponentFixture<MemberDetailScreen>): HTMLElement {
+  fixture.detectChanges();
+  return fixture.nativeElement as HTMLElement;
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+it('shows the full header while its separate access read waits', async () => {
+  const urls: string[] = [];
+  function fetcher(input: RequestInfo | URL): Promise<Response> {
+    urls.push(String(input));
+    if (urls.length === 1) return Promise.resolve(reply(member));
+    return new Promise<Response>(() => undefined);
+  }
+  const fixture = await mount(fetcher);
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('Alex Kim'));
+  expect(page(fixture).textContent).toContain('Working out what Alex Kim can use…');
+  expect(page(fixture).textContent).toContain('Sales team');
+  expect(urls).toEqual(['/api/members/alex-kim', '/api/members/alex-kim/access']);
+});
+
+it('keeps a minimal header private and makes no access read', async () => {
+  const urls: string[] = [];
+  function fetcher(input: RequestInfo | URL): Promise<Response> {
+    urls.push(String(input));
+    return Promise.resolve(reply({ memberId: 'alex-kim', displayName: 'Alex Kim',
+      role: 'member', permissions: member.permissions }));
+  }
+  const fixture = await mount(fetcher);
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('Alex Kim'));
+  expect(page(fixture).textContent).not.toContain('alex@example.test');
+  expect(urls).toHaveLength(1);
+});
+
+it('shows checked grants without claiming a tool works now', async () => {
+  function fetcher(input: RequestInfo | URL): Promise<Response> {
+    return Promise.resolve(reply(String(input).endsWith('/access') ? access : member));
+  }
+  const fixture = await mount(fetcher);
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('Direct grant'));
+  expect(page(fixture).textContent).toContain('Allowed');
+  expect(page(fixture).textContent).toContain('Works now: Not available yet');
+  expect(page(fixture).textContent).not.toContain('Can use');
+});
+
+it('clears an older denied reply and ignores later successful data', async () => {
+  let finishAccess!: (value: Response) => void;
+  function fetcher(input: RequestInfo | URL): Promise<Response> {
+    if (String(input).endsWith('/access')) {
+      return new Promise<Response>((resolve) => { finishAccess = resolve; });
+    }
+    return Promise.resolve(reply(member));
+  }
+  const fixture = await mount(fetcher);
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('Alex Kim'));
+  finishAccess(new Response(null, { status: 403 }));
+  await vi.waitFor(() => expect(page(fixture).textContent)
+    .toContain("You no longer have access to this person's details"));
+  expect(page(fixture).textContent).not.toContain('Alex Kim');
+  expect(page(fixture).textContent).not.toContain('alex@example.test');
+  expect(page(fixture).querySelector('a[href="/org"]')).not.toBeNull();
+});
