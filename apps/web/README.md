@@ -59,6 +59,7 @@ check with the original request id.
   modes for each tool, as well as models, spending and change history.
 - Lists current members with search and more pages. A refused member read clears both
   member and group details. A temporary read failure keeps loaded rows visible.
+- Shows each member's recorded groups and grants. Losing access clears the page.
 - Lets organisation admins create a shared assistant for a group with selected grants
   and a fixed paying group, including groups managed by an identity provider. Group
   membership does not grant desktop access.

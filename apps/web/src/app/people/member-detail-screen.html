@@ -1,0 +1,103 @@
+<section class="member-detail-page">
+  @if (state() === 'access') {
+    <h1 #accessHeading tabindex="-1">You no longer have access to this person's details</h1>
+    <div class="paper-card access-state" role="alert">
+      <p>Names, groups and access were cleared.</p>
+      @if (denialStatus() === 401) { <p>Sign in again to check your access.</p> }
+      <a class="button primary" href="/org">Go to organisation</a>
+    </div>
+  } @else if (state() === 'missing') {
+    <h1>Member not found</h1>
+    <p>This person could not be found.</p>
+    <a class="button secondary" href="/org/people">Back to Members</a>
+  } @else {
+    @if (member(); as person) {
+      <nav class="member-crumb" aria-label="Breadcrumb">
+        <a href="/org/people">People &amp; groups</a> ›
+        <a href="/org/people">Members</a> › {{ name() }}
+      </nav>
+      <div class="page-heading">
+        <div>
+          <h1>{{ name() }}</h1>
+          @if (detail(); as full) {
+            <p>{{ full.email }} · Member since {{ joinedDate() }}</p>
+          }
+        </div>
+        <button type="button" class="button secondary" (click)="refresh()"
+          [disabled]="state() === 'loading'">Refresh</button>
+      </div>
+      @if (state() === 'failed' || accessState() === 'failed') {
+        <p class="refresh-notice" role="status">
+          Showing what we loaded at {{ loadedTime() }}</p>
+      }
+      <div [class.stale]="state() === 'failed' || accessState() === 'failed'">
+        <div class="detail-cards member-summary">
+          <section class="paper-card"><h2>Role</h2><p>{{ person.role }}</p></section>
+          @if (detail(); as full) {
+            <section class="paper-card"><h2>Groups</h2>
+              @for (group of full.groups; track group.groupId) {
+                <p>{{ group.name }} · {{ groupSource(group) }}</p>
+              } @empty { <p>No groups recorded</p> }
+            </section>
+            <section class="paper-card"><h2>Personal assistant</h2>
+              <p>Not available yet</p></section>
+          }
+        </div>
+        @if (detail()) {
+          <section class="member-access">
+            <h2>What {{ name() }} can use — and why</h2>
+            @if (accessState() === 'loading') {
+              <div class="register" role="status">
+                <p>Working out what {{ name() }} can use…</p>
+                @for (width of ['75%', '62%', '68%']; track width) {
+                  <div class="skeleton-row" aria-hidden="true">
+                    <oc-grain-loader width="100%" height="42px" />
+                  </div>
+                }
+              </div>
+            } @else if (access(); as inventory) {
+              @if (!inventory.complete) {
+                <div class="refresh-notice" role="status"><strong>Not complete</strong>
+                  @for (section of inventory.unavailableSections; track $index) {
+                    <p>{{ sectionLabel(section) }}</p>
+                  }
+                </div>
+              }
+              @if (inventory.rows.length === 0 && inventory.complete) {
+                <p>No grants recorded</p>
+              }
+              <ul class="member-access-list">
+                @for (row of inventory.rows; track row.resourceType + row.resourceId) {
+                  <li class="paper-card">
+                    <h3>{{ row.label || row.resourceId }}</h3>
+                    <p>{{ row.resourceType }} · {{ row.relation }}</p>
+                    @for (source of row.sources; track $index) {
+                      <p>{{ sourceLabel(source) }}</p>
+                    }
+                    <p>Person: {{ checkLabel(row.eligibility.person) }}</p>
+                    @for (assistant of row.eligibility.assistants; track assistant.assistantId) {
+                      <p>{{ assistantName(assistant.assistantId) }}:
+                        {{ checkLabel(assistant.grant) }}</p>
+                    }
+                    <p>Works now: Not available yet</p>
+                  </li>
+                }
+              </ul>
+            } @else if (accessState() === 'failed') {
+              <p>Access details are unavailable right now.</p>
+              <button type="button" class="button secondary" (click)="refresh()">Try again</button>
+            }
+          </section>
+          <p class="member-boundary">Admins see grants and their sources, not
+            {{ name() }}'s private conversations, memory or desktop.</p>
+        }
+      </div>
+    } @else if (state() === 'failed') {
+      <h1>Member details are unavailable right now</h1>
+      <button type="button" class="button primary" (click)="refresh()">Try again</button>
+    } @else {
+      <h1>Member detail</h1>
+      <p role="status">Loading member…</p>
+    }
+  }
+</section>

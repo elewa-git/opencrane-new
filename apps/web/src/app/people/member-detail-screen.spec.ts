@@ -18,7 +18,7 @@ function reply(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
 }
 
-async function mount(fetcher: typeof fetch): Promise<ComponentFixture<MemberDetailScreen>> {
+function mount(fetcher: typeof fetch): ComponentFixture<MemberDetailScreen> {
   vi.stubGlobal('fetch', fetcher);
   TestBed.configureTestingModule({ imports: [MemberDetailScreen] });
   const fixture = TestBed.createComponent(MemberDetailScreen);
@@ -29,7 +29,15 @@ async function mount(fetcher: typeof fetch): Promise<ComponentFixture<MemberDeta
 
 function page(fixture: ComponentFixture<MemberDetailScreen>): HTMLElement {
   fixture.detectChanges();
-  return fixture.nativeElement as HTMLElement;
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Expected a member detail page');
+  return element;
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  if (input instanceof Request) return input.url;
+  if (input instanceof URL) return input.href;
+  return input;
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -37,11 +45,11 @@ afterEach(() => vi.unstubAllGlobals());
 it('shows the full header while its separate access read waits', async () => {
   const urls: string[] = [];
   function fetcher(input: RequestInfo | URL): Promise<Response> {
-    urls.push(String(input));
+    urls.push(requestUrl(input));
     if (urls.length === 1) return Promise.resolve(reply(member));
     return new Promise<Response>(() => undefined);
   }
-  const fixture = await mount(fetcher);
+  const fixture = mount(fetcher);
   await vi.waitFor(() => expect(page(fixture).textContent).toContain('Alex Kim'));
   expect(page(fixture).textContent).toContain('Working out what Alex Kim can use…');
   expect(page(fixture).textContent).toContain('Sales team');
@@ -51,11 +59,11 @@ it('shows the full header while its separate access read waits', async () => {
 it('keeps a minimal header private and makes no access read', async () => {
   const urls: string[] = [];
   function fetcher(input: RequestInfo | URL): Promise<Response> {
-    urls.push(String(input));
+    urls.push(requestUrl(input));
     return Promise.resolve(reply({ memberId: 'alex-kim', displayName: 'Alex Kim',
       role: 'member', permissions: member.permissions }));
   }
-  const fixture = await mount(fetcher);
+  const fixture = mount(fetcher);
   await vi.waitFor(() => expect(page(fixture).textContent).toContain('Alex Kim'));
   expect(page(fixture).textContent).not.toContain('alex@example.test');
   expect(urls).toHaveLength(1);
@@ -63,9 +71,9 @@ it('keeps a minimal header private and makes no access read', async () => {
 
 it('shows checked grants without claiming a tool works now', async () => {
   function fetcher(input: RequestInfo | URL): Promise<Response> {
-    return Promise.resolve(reply(String(input).endsWith('/access') ? access : member));
+    return Promise.resolve(reply(requestUrl(input).endsWith('/access') ? access : member));
   }
-  const fixture = await mount(fetcher);
+  const fixture = mount(fetcher);
   await vi.waitFor(() => expect(page(fixture).textContent).toContain('Direct grant'));
   expect(page(fixture).textContent).toContain('Allowed');
   expect(page(fixture).textContent).toContain('Works now: Not available yet');
@@ -73,19 +81,30 @@ it('shows checked grants without claiming a tool works now', async () => {
 });
 
 it('clears an older denied reply and ignores later successful data', async () => {
-  let finishAccess!: (value: Response) => void;
+  let denyOld!: (value: Response) => void;
+  let finishNew!: (value: Response) => void;
+  let accessReads = 0;
   function fetcher(input: RequestInfo | URL): Promise<Response> {
-    if (String(input).endsWith('/access')) {
-      return new Promise<Response>((resolve) => { finishAccess = resolve; });
+    if (requestUrl(input).endsWith('/access')) {
+      accessReads += 1;
+      if (accessReads === 1) return new Promise<Response>((resolve) => { denyOld = resolve; });
+      return new Promise<Response>((resolve) => { finishNew = resolve; });
     }
     return Promise.resolve(reply(member));
   }
-  const fixture = await mount(fetcher);
+  const fixture = mount(fetcher);
   await vi.waitFor(() => expect(page(fixture).textContent).toContain('Alex Kim'));
-  finishAccess(new Response(null, { status: 403 }));
+  page(fixture).querySelector('button')?.click();
+  await vi.waitFor(() => expect(accessReads).toBe(2));
+  denyOld(new Response(null, { status: 403 }));
   await vi.waitFor(() => expect(page(fixture).textContent)
     .toContain("You no longer have access to this person's details"));
+  await vi.waitFor(() => expect(document.activeElement)
+    .toBe(page(fixture).querySelector('h1')));
+  finishNew(reply(access));
+  await fixture.whenStable();
   expect(page(fixture).textContent).not.toContain('Alex Kim');
   expect(page(fixture).textContent).not.toContain('alex@example.test');
+  expect(page(fixture).textContent).not.toContain('Direct grant');
   expect(page(fixture).querySelector('a[href="/org"]')).not.toBeNull();
 });
