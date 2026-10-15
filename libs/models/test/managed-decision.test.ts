@@ -295,6 +295,7 @@ async function managedDecision(setup: Awaited<ReturnType<typeof managedFixture>>
 
 async function admitsColdProviderHistory() {
   const setup = await managedFixture();
+  await setup.stopDispatch();
   const rows = await history(setup.nats.store, 'provider-primary', 'test');
   const events = [];
   for (let index = rows.length; index < 5000; index++) {
@@ -303,6 +304,8 @@ async function admitsColdProviderHistory() {
     events.push(envelope('test', 'provider-primary', 'provider.verification_recorded', payload));
   }
   await setup.nats.seed(events);
+  const savedRows = await history(setup.nats.store, 'provider-primary', 'test', Infinity);
+  expect(savedRows).toHaveLength(5000);
   const read = setup.nats.store.readStream.bind(setup.nats.store);
   let coldRows = 0;
   let historyDuration = 0;
@@ -313,7 +316,8 @@ async function admitsColdProviderHistory() {
     }
     const started = performance.now();
     await delay(2100);
-    for await (const row of read(...args)) {
+    // Control delivery time without warming the decision summary or depending on NATS throughput.
+    for (const row of savedRows) {
       coldRows++;
       yield row;
     }
@@ -323,7 +327,9 @@ async function admitsColdProviderHistory() {
   reads.mockImplementation(slowColdHistory);
   onTestFinished(reads.mockRestore.bind(reads));
   const response = await managedDecision(setup);
-  expect(response.status, await response.text()).toBe(200);
+  const responseText = await response.text();
+  const evidence = { responseText, coldRows, historyDuration };
+  expect(response.status, JSON.stringify(evidence)).toBe(200);
   expect(coldRows).toBe(5000);
   expect(historyDuration).toBeGreaterThan(2000);
   expect(historyDuration).toBeLessThan(10_000);
