@@ -50,6 +50,7 @@ describe('welcome survey', () => {
         if (progress === null) return json({ status: 'unavailable' }, 503);
         return json(progress);
       }
+      if (url === '/api/chat/groups?limit=16') return json({ rows: [], next: null });
       return json({ status: 'unknown' }, 503);
     });
     TestBed.configureTestingModule({ imports: [SurveyScreen] });
@@ -142,7 +143,7 @@ describe('welcome survey', () => {
   it('does not send a saved answer again when moving forward', async () => {
     const { fixture, element, fetchSpy } = open(savedProgress);
     await ready(fixture, element);
-    element.querySelector<HTMLButtonElement>('button')!.click();
+    buttonNamed(element, 'Back').click();
     fixture.detectChanges();
     element.querySelector<HTMLButtonElement>('button[type=submit]')!.click();
     fixture.detectChanges();
@@ -341,6 +342,7 @@ describe('welcome survey', () => {
       let finishSave: ((response: Response) => void) | undefined;
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
         if (url === '/api/onboarding') return json(savedProgress);
+        if (url === '/api/chat/groups?limit=16') return json({ rows: [], next: null });
         if (url === '/auth/me') {
           return new Promise<Response>((resolve) => { finishIdentity = resolve; });
         }
@@ -359,7 +361,7 @@ describe('welcome survey', () => {
         expect(element.textContent).toContain('Step 2 of 4');
         expect(element.textContent).toContain('Step 1 saved');
       });
-      element.querySelector<HTMLButtonElement>('button')!.click();
+      buttonNamed(element, 'Back').click();
       fixture.detectChanges();
       const name = element.querySelector<HTMLInputElement>('#survey-name')!;
       expect(name.value).toBe('Alex');

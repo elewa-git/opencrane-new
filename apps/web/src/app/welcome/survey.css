@@ -36,9 +36,15 @@ label { margin: 18px 0 8px; font-weight: 600; }
 label small { margin-left: 8px; color: #596467; font-weight: 400; }
 input { width: 100%; min-height: 52px; padding: 12px; border: 1px solid #bfc9ca;
   border-radius: 10px; color: inherit; font: inherit; }
+textarea { width: 100%; min-height: 72px; padding: 12px; border: 1px solid #bfc9ca;
+  border-radius: 10px; color: inherit; font: inherit; resize: vertical; }
 input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid #0a8497;
   outline-offset: 2px; }
-input[aria-invalid=true] { border-color: #ad3434; }
+input[aria-invalid=true], textarea[aria-invalid=true] { border-color: #ad3434; }
+.group-list { margin: 0; padding: 0; list-style: none; }
+.group-list li { padding: 12px; border: 1px solid #d8dddd; border-radius: 9px;
+  background: #f1f4f4; }
+h3 { margin: 22px 0 8px; font-size: 16px; }
 .field-error { margin: 5px 0 0; color: #9c2828; font-size: 13px; }
 button, .button-link { display: inline-flex; align-items: center; justify-content: center;
   min-height: 48px; margin-top: 12px; padding: 10px 16px; border: 1px solid #c5cecf;

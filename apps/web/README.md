@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>chat, saved archive choices, survey recovery and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>chat, saved archive choices, welcome survey and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys, grants and reads facts| providers["Provider pages<br/>keys, checks, model choices and access"]
@@ -27,7 +27,8 @@ check with the original request id, including after a page reload. The candidate
 loads more people, groups or assistants when requested.
 
 - Shows sign-in and the first-owner claim page.
-- Lets a person enter their name and optional pronouns for the welcome survey.
+- Lets a person enter their name, optional pronouns and work description for the
+  welcome survey. It shows their current groups without offering to change membership.
   It shows saved progress, checks an uncertain save, and asks before changing
   an answer recovered after a failed read. Lost access clears the answers.
 - Lets people start conversations, send messages and stop a reply.

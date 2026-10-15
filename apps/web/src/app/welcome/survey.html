@@ -42,7 +42,8 @@
       } @else {
         @if (savedTime(); as time) {
           <div class="saved"><span aria-hidden="true">✓</span>
-            <div><strong>Step {{ progress()?.survey?.steps?.length }} saved</strong>
+            <div><strong>{{ progress()?.survey?.steps?.length === 2 ? 'Steps 1–2 saved' :
+              'Step ' + progress()?.survey?.steps?.length + ' saved' }}</strong>
               <p>Saved <time [attr.datetime]="time">{{ formattedTime() }}</time></p></div>
           </div>
         }
@@ -67,6 +68,9 @@
           } @else {
             <h2 #stepHeading tabindex="-1">What should I call you?</h2>
             <p class="hint">This answer shapes your welcome. You can set a separate account name later.</p>
+            @if ((progress()?.survey?.steps?.length ?? 0) > 1) {
+              <p class="hint">Changing step 1 clears later saved answers. You can review them again.</p>
+            }
             <form (submit)="continue($event)" novalidate>
               <label for="survey-name">Name <small>Required</small></label>
               <input id="survey-name" type="text" autocomplete="nickname" [value]="name()"
@@ -109,8 +113,66 @@
               }
             </form>
           }
+        } @else if (currentStep() === 2) {
+          <h2 #stepHeading tabindex="-1">What do you do here?</h2>
+          <p class="hint">Describe your work in your own words.</p>
+          <form (submit)="continue($event)" novalidate>
+            <label for="survey-work">Your work <small>Required</small></label>
+            <textarea id="survey-work" rows="5" [value]="workDescription()"
+              [disabled]="state() !== 'ready' || groupsState() !== 'ready'"
+              [attr.aria-invalid]="workError() ? 'true' : null"
+              [attr.aria-describedby]="workError() ? 'work-error' : null"
+              (input)="changeWork($event)"></textarea>
+            @if (workError()) { <p class="field-error" id="work-error">{{ workError() }}</p> }
+            <h3>Current group context</h3>
+            @if (groupsState() === 'loading') {
+              <oc-shared-state kind="checking" message="Checking your current groups"
+                [showAction]="false" />
+            } @else if (groupsState() === 'failed') {
+              <oc-shared-state kind="failed" message="Your groups could not be loaded"
+                detail="Check your current groups before continuing." [showAction]="false" />
+              <button type="button" (click)="tryGroupsAgain()">Try again</button>
+            } @else if (groups().length === 0 && !hasMoreGroups()) {
+              <p>You are not in any groups.</p>
+            } @else if (groups().length > 0) {
+              <ul class="group-list">
+                @for (group of groups(); track group.groupId) {
+                  <li><span aria-hidden="true">🔒</span> {{ group.name }}</li>
+                }
+              </ul>
+            }
+            @if (groupsState() === 'ready' && hasMoreGroups()) {
+              <p class="hint">Only the first 16 groups are used.</p>
+            }
+            <p class="hint">🔒 Read from your membership — not an editable department or grant.</p>
+            @if (state() === 'saving') {
+              <oc-shared-state kind="checking" message="Saving your answer" [showAction]="false" />
+            } @else if (state() === 'unknown') {
+              <oc-shared-state kind="unknown" message="Save status unknown"
+                detail="The answer may have been saved. Check before doing anything else."
+                (action)="checkStatus()" />
+            } @else if (state() === 'failed' || state() === 'unavailable') {
+              <oc-shared-state kind="failed" message="Nothing was saved"
+                [safeToRetry]="true" (action)="retry()" />
+            } @else if (state() === 'access_applying') {
+              <oc-shared-state kind="waiting" message="Access is still being set up"
+                [showAction]="false" />
+              <button type="button" (click)="retry()">Try again</button>
+            } @else if (state() === 'conflict') {
+              <oc-shared-state kind="failed" message="Progress changed on another device"
+                detail="Review your answer against the latest progress before saving."
+                [showAction]="false" />
+              <button type="button" (click)="review()">Review answer</button>
+            }
+            @if (state() === 'ready' && groupsState() === 'ready') {
+              <button class="primary" type="submit">Continue</button>
+            }
+            @if (state() !== 'saving' && state() !== 'unknown') {
+              <button type="button" (click)="back()">Back</button>
+            }
+          </form>
         } @else {
-          <h2 #stepHeading tabindex="-1">{{ stepHeadingText() }}</h2>
+          <h2 #stepHeading tabindex="-1">Continue your welcome</h2>
           <oc-shared-state kind="not_configured" message="Not available yet"
             detail="The remaining survey steps are coming soon. Your saved answers are here when you return."
             [showAction]="false" />

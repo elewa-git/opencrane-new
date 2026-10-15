@@ -6,6 +6,11 @@ This Angular app provides the organisation settings shell, MCP register and Memo
 `/welcome/survey` is a separate page without a chat composer. It reads
 `/api/onboarding` and opens the first unsaved step. The name and optional pronouns
 form sends one checked `save_step` command. A confirmed save reads progress again.
+Step 2 reads `GET /api/chat/groups?limit=16` every time it opens. It uses the
+returned group ids as read-only context and never follows `next`. A failed group
+read blocks Continue; Try again only repeats that GET. Work text is trimmed and
+checked against the event store's 1–4,096 UTF-8 byte and character rules.
+Back opens the previous step. Editing an earlier step clears later current answers.
 An unknown save uses only `GET /api/personal/changes/:commandId`. A 409 rereads
 progress while keeping typed answers in memory; 403 clears them. A failed initial
 read offers another try or an in-memory draft. Before saving that draft, the page
@@ -14,10 +19,11 @@ to keep them or choose to edit step 1 and review later steps. The page checks
 `/auth/me` even when progress has saved answers. A 200 reply with
 `authenticated: false`, or a 401 or 403, clears those answers and any form values.
 Late replies from that load cannot restore them.
-The remaining survey steps show an unavailable message. `/account` reads only
+Steps 3 and 4 show an unavailable message. `/account` reads only
 the onboarding `state` and links to the survey for `not_started` or `survey`.
 No survey answer is stored in the address, console or browser storage.
 `npm run visual:screen-p4-19-survey` uses intercepted replies to capture both widths.
+`npm run visual:screen-p4-19-survey2` captures the work step and its save states.
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
