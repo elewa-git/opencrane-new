@@ -166,10 +166,11 @@ Retries read saved records before appending and work beyond the NATS duplicate w
 A competing append must match the original record. Missing or unavailable status never
 allows an unchecked append or grants permission. Legacy starts and changed fields conflict.
 
-`readDescendantAgreement(store, silo, assistantId, delegationId)` reads the computer
+`readDescendantAgreement(store, silo, assistantId, delegationId, deadline?)` reads the computer
 history and the original delegation start within ten seconds. It returns the same pair
 only if their full delegation binding and admission reference agree and the computer
-admission is open. It performs no append or effect. Read errors contain no binding values.
+admission is open and the delegation has no later record. The optional deadline replaces
+the ten-second default. It performs no append or effect. Read errors contain no binding values.
 The future minting caller must also check current root, access and spending rules.
 
 History and grant summaries load before the two-second access check. That check watches
@@ -185,7 +186,26 @@ create no budget event, hold, token or upstream call. Live native qualification:
 
 ## Budget writes
 
-Native descendant model admission is explicitly disabled in `requireTurnDelegation`.
+Native calls pass through `native-call-check.ts` before conversation activity for an
+ordinary turn, request body reads, policy, approval, budget checks, holds or dispatch.
+Private native chains have the requester followed by one or two saved delegation ids.
+Every signed turn claim and the authenticated computer identity must match the saved
+admission. The selected model must also belong to its recorded scope. Both records
+and parent records load within the decision's original two-second deadline, before
+any authority check. The shared admission helpers check root and parent bindings.
+Root Stop, completion, closure and computer changes refuse; unrelated activity does not.
+A matching private call ends with `NativeDelegationDisabled`; `decisionError` exposes
+only its fixed message. Earlier errors remain generic. No new watched stream is added.
+
+P4-11 PR 2d is the first part of the native decision checks. Current access, inherited
+revocation, shared participation and payer membership checks remain for part e.
+Shared calls still refuse generically. The fixed disabled refusal proves saved-record
+and root checks passed; it does not claim current access was granted. The payer stays
+in the saved record and no call reaches a spending operation. Root allowance integration,
+minting, bridge work and Stop execution remain outside this change.
+`test/native-call-check.test.ts` uses admissions made by `admitDescendant`, real fixtures,
+individual changed claims, unavailable reads and exact final refusals on model, MCP
+and memory decision routes. Native credentials remain disabled. Live qualification: NOT RUN.
 No root allowance or child reservation path is introduced by the delegation contracts.
 `test/delegation.test.ts` checks legacy and native refusals through the real gateway,
 with zero upstream calls and zero reservations.
@@ -352,8 +372,9 @@ paid provider call was used to prove this route.
   refuses a different request model before reserving or reaching the provider.
   Both use `libs/auth` and the configured `TOKEN_ISSUER`; the gateway verifies
   the same public keys. Computer tokens include the claim generation, and
-  only a matching Ready event permits model admission. Delegation
-  currently contains only the requester; multi-hop delegation is deferred.
+  only a matching Ready event permits model admission. Ordinary turns carry only the
+  requester in their delegation chain. Native calls can carry two descendant ids,
+  but still refuse after the saved-record checks described above.
 - Only reservation ids, token counts and a fixed error outcome survive the gateway log filter.
   Observations are appended as `effect.observed`; the existing handler runtime
   delivers `settle-budget` to the decision process. Its settlement endpoint

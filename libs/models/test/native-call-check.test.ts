@@ -1,12 +1,18 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import { setTimeout as delay } from 'node:timers/promises';
+import { checkNativeCall } from '../src/native-call-check.ts';
+import { parseTurnToken } from '../src/decision-turn-token.ts';
 import { tokenVerifier } from '@opencrane/auth';
-import type { EventStore } from '@opencrane/event-store';
+import { createEventStore, type EventStore } from '@opencrane/event-store';
 import { admitDescendant, descendantId, history } from '../src/index.ts';
 import { fixture } from './fixture.ts';
 
 type Context = Awaited<ReturnType<typeof fixture>>;
 const disabled = 'Native delegation is disabled';
 const refused = 'Request refused or decision service unavailable';
+const responseSchema = z.object({ error: z.string(), requestId: z.string() });
+const storedFields = z.record(z.string(), z.unknown());
 const scopes = { models: ['gpt-6.1-sol'], tools: [], resources: [], operations: [],
   destinations: [], connectionIds: [], profileIds: [] };
 const root = { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
@@ -49,7 +55,7 @@ async function request(context: Context, fields: Record<string, unknown>, path =
   const options = { method: 'POST', headers, body: 'not json' };
   const response = await fetch(`${context.options.decisionUrl}${path}`, options);
   expect(response.status).toBe(403);
-  const result = await response.json() as { error: string; requestId: string };
+  const result = responseSchema.parse(await response.json());
   const rows = await history(context.nats.store, `decision-${result.requestId}`, 'test');
   expect(rows).toHaveLength(1);
   expect(rows[0]?.event.data).toMatchObject({ outcome: 'deny' });
@@ -115,7 +121,14 @@ const changedClaims = [
 ] as const;
 async function refusesClaim(field: string, value: unknown) {
   const fields = { ...claims(context, first), [field]: value };
+  // Keep the chain valid so this case reaches the saved requester comparison.
+  if (field === 'requester') fields.delegation = [String(value), first.delegationId];
   expect(await request(context, fields)).toBe(refused);
+  if (field === 'delegation' || field === 'task') {
+    await expect(directCheck(fields)).rejects.not.toThrow(disabled);
+    return;
+  }
+  await expect(directCheck(fields)).rejects.toThrow('Descendant claim refused');
 }
 it.each(changedClaims)('refuses a changed %s claim (%j)', refusesClaim);
 
@@ -130,13 +143,15 @@ async function refusesRead(change: string) {
     expect(args[2]).toBeLessThanOrEqual(performance.now() + 2000);
     if (change === 'unavailable') throw new Error('private values');
     if (change === 'missing') return;
+    if (change === 'late') await delay(2050);
     for await (const row of original(...args)) {
-      const data = row.event.data as Record<string, unknown>;
-      let changed = { ...data, requesterId: 'bob' };
+      const data = storedFields.parse(row.event.data);
+      let changed: Record<string, unknown> = { ...data, requesterId: 'bob' };
       if (change === 'legacy') {
         changed = { delegationId: second.delegationId, parentComputerId: 'computer',
-          childComputerId: 'other', rootBudgetId: 'root' } as typeof changed;
+          childComputerId: 'other', rootBudgetId: 'root' };
       }
+      if (change === 'late') changed = data;
       yield { ...row, event: { ...row.event, data: changed } };
     }
   }
@@ -148,7 +163,7 @@ async function refusesRead(change: string) {
   }
   expect(await request(context, claims(context, second))).toBe(disabled);
 }
-it.each(['missing', 'legacy', 'mismatched', 'unavailable'])(
+it.each(['missing', 'legacy', 'mismatched', 'unavailable', 'late'])(
   'refuses a %s delegation read within the decision deadline', refusesRead);
 
 async function refusesActivity(change: string) {
@@ -174,6 +189,11 @@ async function refusesActivity(change: string) {
       if (change === 'root closed') binding = root;
       data = { ...binding, status: 'completed' };
     }
+    if (change === 'delegation.completed') {
+      subject = `delegation-${second.delegationId}`;
+      data = { version: 1, delegationId: second.delegationId, outcome: 'completed',
+        terminalEvidence: { eventId: 'terminal', position: 1 } };
+    }
     if (change === 'computer.ready') {
       subject = 'computer-assistant';
       data = { assistantId: 'assistant', computerId: 'computer', generation: 2, podUid: 'new' };
@@ -189,7 +209,7 @@ async function refusesActivity(change: string) {
   }
 }
 it.each(['agent.turn_stop_requested', 'agent.turn_completed', 'conversation.closed',
-  'parent closed', 'child closed', 'root closed', 'computer.ready'])(
+  'parent closed', 'child closed', 'root closed', 'computer.ready', 'delegation.completed'])(
   'refuses recorded root activity: %s', refusesActivity);
 
 async function acceptsUnrelatedActivity() {
@@ -198,3 +218,69 @@ async function acceptsUnrelatedActivity() {
   expect(await request(context, claims(context, second))).toBe(disabled);
 }
 it('ignores completion of an unrelated turn', acceptsUnrelatedActivity);
+
+async function directCheck(fields: Record<string, unknown>, patch = {},
+  store = context.nats.store) {
+  const turn = parseTurnToken({ iat: 1, exp: 121, ...fields });
+  const computer = { assistant: 'assistant', computer: 'computer', generation: 1, ...patch };
+  const checked = await context.credentials.check(context.headers);
+  return checkNativeCall(store, 'test', computer, turn, checked.sequence,
+    performance.now() + 2000);
+}
+async function refusesComputer(field: string, value: unknown) {
+  const patch = { [field]: value };
+  await expect(directCheck(claims(context, first), patch)).rejects.toThrow(
+    'Descendant claim refused');
+  await expect(directCheck(claims(context, first))).rejects.toThrow(disabled);
+}
+it.each([['computer', 'other'], ['generation', 2]])(
+  'compares the authenticated computer %s with the saved child', refusesComputer);
+
+async function refusesEmptyModelScope() {
+  const narrow = { ...child('narrow'), scopes: { ...scopes, models: [] } };
+  await admit(context, narrow);
+  expect(await request(context, claims(context, narrow))).toBe(refused);
+  await expect(directCheck(claims(context, narrow))).rejects.toThrow(
+    'Descendant model scope refused');
+}
+it('requires the selected model in the recorded model scope', refusesEmptyModelScope);
+
+async function refusesRecordedParent(change: string) {
+  const store = await createEventStore(await context.nats.client('command'));
+  const original = store.readStream.bind(store);
+  async function* readStream(...args: Parameters<EventStore['readStream']>) {
+    for await (const row of original(...args)) {
+      if (row.event.id !== first.delegationId) {
+        yield row;
+        continue;
+      }
+      if (change === 'missing') continue;
+      const data = storedFields.parse(row.event.data);
+      const changed = { ...data, threadId: 'wrong-parent-thread' };
+      yield { ...row, event: { ...row.event, data: changed } };
+    }
+  }
+  store.readStream = readStream;
+  await expect(directCheck(claims(context, second), {}, store)).rejects.toThrow('Parent refused');
+  await expect(directCheck(claims(context, second))).rejects.toThrow(disabled);
+}
+it.each(['missing', 'wrong'])('refuses a %s recorded parent', refusesRecordedParent);
+
+async function refusesUnavailableComputerRead() {
+  const store = await createEventStore(await context.nats.client('command'));
+  function readStream(): ReturnType<EventStore['readStream']> {
+    throw new Error('private binding values');
+  }
+  store.readStream = readStream;
+  await expect(directCheck(claims(context, second), {}, store)).rejects.toThrow(
+    /^Delegation agreement unavailable$/u);
+}
+it('refuses an unavailable computer read without exposing stored values',
+  refusesUnavailableComputerRead);
+
+async function refusesMissingComputerRecord() {
+  const fields = { ...claims(context, first), delegation: ['alice', 'missing'] };
+  expect(await request(context, fields)).toBe(refused);
+  await expect(directCheck(fields)).rejects.toThrow('Descendant admission missing or closed');
+}
+it('requires a saved computer admission for the last delegation id', refusesMissingComputerRecord);

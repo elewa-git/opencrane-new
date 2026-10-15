@@ -1,0 +1,1 @@
+- Check private native child calls against their saved admissions, parent chain and root activity, then refuse them before reading the request body or holding money. Native execution remains disabled; current access and shared call checks are still planned.

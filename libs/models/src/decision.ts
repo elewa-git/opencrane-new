@@ -1,3 +1,4 @@
+import { checkNativeCall, NativeDelegationDisabled } from './native-call-check.ts';
 import { mcpDispatch, type McpDispatchOptions } from './mcp-dispatch.ts';
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
   type ProviderVerificationOptions } from './provider-verification.ts';
@@ -9,8 +10,8 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
-import { requireCurrentComputer, requireRecordedActiveTurn, requireSharedTurnTools,
-  requireTurnDelegation } from './turn-binding-check.ts';
+import { requireCurrentComputer, requireRecordedActiveTurn, requireSharedTurnTools }
+  from './turn-binding-check.ts';
 import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims }
   from './decision-turn-token.ts';
 import { mcpPolicy, parseMcpCall, requireMcpThread } from './mcp.ts';
@@ -29,7 +30,7 @@ import { requestReservationCents, ModelRequestRefused as RequestRefused, data, m
 function decisionError(error: unknown) {
   if (error instanceof BudgetRefused || error instanceof RequestRefused ||
       error instanceof MemoryPersonScopeOnly || error instanceof PayingGroupRefused ||
-      error instanceof AuthorityApplying) {
+      error instanceof AuthorityApplying || error instanceof NativeDelegationDisabled) {
     return error.message;
   }
   return 'Request refused or decision service unavailable';
@@ -140,7 +141,6 @@ function activeTurn(turnToken: z.infer<typeof legacyTurnSchema>,
   facts: Awaited<ReturnType<typeof decisionActivity>>['computer'],
   computerSequence: number) {
   if (facts.control) throw new Error('Computer control is pending');
-  requireTurnDelegation(turnToken);
   requireCurrentComputer(facts.lifecycle, computerSequence);
   return requireRecordedActiveTurn(turnToken, facts.firstStart, facts.firstClose);
 }
@@ -236,6 +236,8 @@ export async function startDecision(
       const checked = await credentials.check(req.headers, undefined, decisionDeadline);
       const computer = computerSchema.parse(checked.computer);
       const turnToken = parseTurnToken(checked.turn);
+      await checkNativeCall(actor.store, actor.silo, computer, turnToken,
+        checked.sequence, decisionDeadline);
       // Share two seconds between history and access because the gateway waits only that long.
       // Read new activity before watching the small streams that decide access.
       const activity = await decisionActivity(actor.store, actor.silo,
