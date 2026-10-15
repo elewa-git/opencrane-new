@@ -100,7 +100,9 @@ function result(loaded: Loaded, resultEventId: string) {
   for (const row of loaded.childRows) {
     const data = z.record(z.string(), z.unknown()).parse(row.event.data);
     if (data['turnId'] !== fields.turnId) continue;
-    if (row.event.type === 'agent.output_lost') throw new PublicationConflict('review_stale');
+    if (row.event.type === 'agent.output_lost' || row.event.type === 'agent.turn_failed') {
+      throw new PublicationConflict('review_stale');
+    }
     if (row.event.type === 'agent.turn_completed') completed = true;
     if (row.event.type === 'agent.turn_started') {
       shared = data['sharingClass'] === 'shared_only' && data['executionMode'] === 'restricted';
@@ -149,18 +151,20 @@ function currentResult(loaded: Loaded, binding: Binding, text: string) {
   }
   return selected;
 }
-async function refreshChildHistory(options: ChatOptions, loaded: Loaded) {
-  const subject = `conversation-${loaded.child}`;
+function streamPosition(rows: StoredEvent[], subject: string) {
   let position = 0;
-  for (const row of loaded.childRows) {
+  for (const row of rows) {
     if (row.event.subject === subject) position = row.sequence;
   }
-  // Include later result changes before starting the short access check.
-  const deadline = performance.now() + 10_000;
+  return position;
+}
+async function refreshHistory(options: ChatOptions, rows: StoredEvent[], subject: string,
+  deadline: number) {
+  const position = streamPosition(rows, subject);
   const laterRows = options.store.readStream(subject, position + 1, deadline);
   for await (const row of laterRows) {
     if (row.event.silo !== options.silo) throw new Error('Conversation silo mismatch');
-    loaded.childRows.push(row);
+    rows.push(row);
   }
 }
 async function publish(options: ChatOptions, memberId: string, loaded: Loaded,
@@ -175,7 +179,25 @@ async function publish(options: ChatOptions, memberId: string, loaded: Loaded,
   if (previous) {
     return verifySaved(previous, options, binding, input);
   }
-  await refreshChildHistory(options, loaded);
+  const deadline = performance.now() + 10_000;
+  while (performance.now() < deadline) {
+    // Bind the following reads to the NATS append, including changes after the last read.
+    const expectedGlobalSequence = await options.store.head(undefined, deadline);
+    await refreshHistory(options, loaded.childRows, `conversation-${loaded.child}`, deadline);
+    await refreshHistory(options, loaded.parentRows,
+      `conversation-${binding.parentConversationId}`, deadline);
+    const saved = find(loaded.parentRows, input.id);
+    if (saved) return verifySaved(saved, options, binding, input);
+    const response = await appendPublication(options, memberId, loaded, binding, input,
+      expectedGlobalSequence, deadline);
+    if (response) return response;
+    // Retry only a definite conflict. Read new rows and check access again on the next attempt.
+  }
+  throw new Error('Publication unavailable');
+}
+async function appendPublication(options: ChatOptions, memberId: string, loaded: Loaded,
+  binding: Binding, input: z.infer<typeof publishInput>, expectedGlobalSequence: number,
+  deadline: number) {
   const selected = currentResult(loaded, binding, input.text);
   const subjects = [`member-${memberId}`, `participation-${loaded.child}`,
     ...inheritedChildSubjects(loaded.access), `participation-${binding.parentConversationId}`];
@@ -189,17 +211,16 @@ async function publish(options: ChatOptions, memberId: string, loaded: Loaded,
     resultEventId: binding.resultEventId, ...selected, reviewDigest: digest(input.review),
     ...encrypted, contentType: 'text' });
   const subject = `conversation-${binding.parentConversationId}`;
-  let expectedSequence = 0;
-  for (const row of loaded.parentRows) {
-    if (row.event.subject === subject) expectedSequence = row.sequence;
-  }
+  const expectedSequence = streamPosition(loaded.parentRows, subject);
   const event = { id: input.id, commandId: input.id, type: 'conversation.child_result_published',
     subject, silo: options.silo, source: 'opencrane-server', time: new Date().toISOString(),
     principal: { kind: 'human' as const, id: memberId }, data };
   await fresh();
   if (binding.expiresAt <= Date.now()) throw new PublicationConflict('review_stale');
-  const command = { event, expectedSequence, historyChecked: true as const, deadline: fresh.deadline };
+  const command = { event, expectedSequence, expectedGlobalSequence,
+    historyChecked: true as const, deadline: Math.min(fresh.deadline, deadline) };
   const saved = await options.store.append(command);
+  if (saved.status === 'conflict') return undefined;
   if (saved.status === 'rejected') throw new PublicationConflict('review_stale');
   if (saved.status !== 'appended') throw new Error('Publication unavailable');
   const row = await readEventAt(options.store, subject, saved.sequence, performance.now() + 10_000);

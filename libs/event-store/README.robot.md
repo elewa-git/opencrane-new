@@ -266,7 +266,7 @@ Preference parsing binds the human principal to that member id. Access checks re
 
 `expectedGlobalSequence` is allowed only for `ownership.seeded`,
 `provider.managed_calls_drain_set`, `provider.managed_calls_enabled` and
-`mcp.configuration_observed`. A drain command captures the global position
+`mcp.configuration_observed` and `conversation.child_result_published`. A drain command captures the global position
 before loading provider configuration and spending mode. Its one append checks
 both that position and the provider-category position. This refuses switch-on on
 the budget stream between the command's last check and its append. Any other new
@@ -320,3 +320,10 @@ checking the current gateway preparation. Their append checks both the server an
 global positions. A newer preparation on the gateway stream therefore refuses the
 receipt atomically. Other concurrent writes can also refuse it; observation retries
 from current records. This check does not change read access or call admission.
+
+Child publication samples the global position before reading later result events.
+Its parent append checks that position together with the parent stream position.
+The server retries definite conflicts after reading new rows and checking result
+validity and access again. The adapter performs no result or access decision itself.
+The NATS publish regression inserts a loss immediately before sending the write and
+requires a conflict with no parent entry. Read access checks stay unchanged.

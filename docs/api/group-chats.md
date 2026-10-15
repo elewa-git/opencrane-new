@@ -77,7 +77,8 @@ contain 1–32,000 characters. Any file list, including an empty list, returns
 409 `files_unavailable` without file details. Interim publication is not available yet.
 
 The result must be a visible saved `agent.message_completed` from a restricted
-shared-only turn with `agent.turn_completed` and no `agent.output_lost`. The publisher
+shared-only turn with `agent.turn_completed` and no `agent.output_lost` or
+`agent.turn_failed`. The publisher
 must read the child, post to its open immediate parent and see its original source
 message there. A closed child can still publish. Review returns `status: reviewed`,
 `text`, `publicationKind`, `parentConversationId`, `audience` (member ids),
@@ -92,16 +93,19 @@ The existing parent `changes/:id` GET confirms the save after projection.
 
 An identical retry returns the saved sequence even after expiry or an audience change,
 while requiring current child and parent read access. Changed input under that id,
-edited text, expired review, moved/lost result or changed audience returns 409
+edited text, expired review, moved, lost or failed result or changed audience returns 409
 `review_stale`. Unrelated messages do not invalidate review. Parent closure returns
 409 `parent_closed`. Unknown, foreign, non-child, denied or substituted ids and reviews
 return the same 403 `{status: "refused"}`. Outages return 503 `unavailable`.
 Malformed input returns 400. Replies use no-store and writes check the website Origin.
 
 History loads before the short write check watches only member and participation
-streams. New publications read later child events with a separate ten-second limit
-and recheck the selected result before that write check. Output loss for the selected
+streams. New publications sample the global log position and read later child and
+parent events before that write check. The parent append atomically requires the
+sampled global position and parent position. A definite conflict repeats these reads
+and checks within a ten-second limit. Output loss or terminal failure for the selected
 turn refuses publication; unrelated child activity does not invalidate the review.
+Sustained concurrent writes can exhaust this limit and return 503 `unavailable`.
 Parent messages and sockets show text, `authorId`, `publicationKind` and
 `contentType: "text"` to all current parent readers. They omit the child link, result,
 turn and review digest. Publication starts no computer or model work.

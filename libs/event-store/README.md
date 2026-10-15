@@ -21,7 +21,7 @@ with `libs/events`.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -->|saves changes with principal, access, retry and cancellation checks| store["libs/event-store<br/>checked event writes and stream ownership"]
+  server["apps/server<br/>back end"] -->|saves changes with principal, access, retry and cancellation checks, and checks child publication positions| store["libs/event-store<br/>checked event writes and stream ownership"]
   models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes, provider switch-on positions, publication receipts and hosted image checks| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams, counts names and finds numbered events| nats["NATS JetStream<br/>event service"]
@@ -34,8 +34,8 @@ flowchart LR
   caller last read it. Otherwise report a conflict, so the caller can reload and
   try again.
   Check the whole log position for ownership migration, provider drain changes, provider
-  switch-on and tool publication receipts. This can refuse a receipt when a newer
-  gateway configuration arrives before it is saved.
+  switch-on, tool publication receipts and child answers. This can refuse a receipt
+  or answer when a relevant change arrives before it is saved.
 - Require the current memory event version for new writes, while still reading old events.
   Check that its scope id matches its recorded owner, kind and silo before saving it.
   Refuse repeated dependencies and a key reference that belongs to another memory revision.

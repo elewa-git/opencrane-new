@@ -2795,11 +2795,23 @@ reconciliation remain part b; root stops remain with #90.
 Final text publication follows the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
 `test/child-publication.test.ts` covers real NATS, PostgreSQL and OpenFGA,
 retries, access refusals, closure, HTTP/socket display and projection replay.
-Before a new publication's two-second access check, the server reads child events
-after the loaded conversation position with a separate ten-second deadline. It
-then checks the selected result again. Output loss for that turn returns 409
-`review_stale` without changing the parent stream. Unrelated child messages and
-output loss for another turn still allow publication. The tests pause after the
-complete child-history read to save each event before resuming publication.
+Turn lifecycle events share the conversation stream; there is no separate result stream.
+Publication samples the global log position before reading new child and parent events.
+The parent append requires both that global position and the loaded parent position.
+NATS checks these together when it saves the entry. Loss or terminal failure for the
+selected turn therefore returns 409 `review_stale`, including after the last read or
+immediately before append, with the parent stream unchanged.
+
+A definite conflict restarts the incremental reads and validates the selected result
+and current access again. Harmless child messages and another turn's loss or failure
+still allow publication. Retries share a ten-second limit; sustained log traffic can
+return 503 `unavailable`. An uncertain append is never retried by this loop. This uses
+the existing atomic log check without moving old turn events or adding a second write.
+A separate per-turn stream would reduce contention if publication traffic needs it.
+
+All history reads precede each two-second access check. Only member and participation
+streams enter `authorityFence`; neither conversation does. The tests save loss and
+failure after complete history, after the incremental read and immediately before
+append. The event-store test also saves a change inside the NATS publish call.
 Saved publication retries keep their existing receipt and current-access checks.
 Interim publication, files, screens and fresh-install qualification remain NOT RUN.

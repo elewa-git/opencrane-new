@@ -190,7 +190,8 @@ function validGlobalPosition(command: AppendCommand, event: EventEnvelope) {
   if (sequence === undefined) {
     return true;
   }
-  const supported = event.type === 'mcp.configuration_observed' ||
+  const supported = event.type === 'conversation.child_result_published' ||
+    event.type === 'mcp.configuration_observed' ||
     event.type === 'ownership.seeded' ||
     event.type === 'provider.managed_calls_drain_set' ||
     event.type === 'provider.managed_calls_enabled';
