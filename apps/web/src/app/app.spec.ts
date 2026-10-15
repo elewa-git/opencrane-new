@@ -526,7 +526,6 @@ describe('tool access explanation route', () => {
     expect(root(fixture).querySelector('.dimmed')).toBeTruthy();
   });
 });
-});
 
 describe('personal settings shell', () => {
   beforeEach(() => globalThis.history.replaceState({}, '', '/account'));
