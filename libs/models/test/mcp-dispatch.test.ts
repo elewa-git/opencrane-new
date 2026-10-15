@@ -1203,7 +1203,7 @@ async function restorationFixture(expireApproval = false) {
 async function restorationDelivery(setup: Fixture) {
   const settings = { ...setup.options,
     memoryRoute: { serverId: 'memory', connectionId: 'internal', upstream: 'unused' } };
-  const options = { mode: 'live' as const, store: setup.nats.store, silo: 'test',
+  const options = { db: setup.db, mode: 'live' as const, store: setup.nats.store, silo: 'test',
     child: setup.gatewayChild()!, configFile: setup.options.configFile,
     controlPort: await freePort(), settings };
   const delivery = gatewayDelivery(options);
