@@ -45,9 +45,9 @@ admins read and change grants for people, groups and assistants.
 
 The bridge sends a saved spending Stop before files, new work or approval replies
 for that turn. It checks for new Stops after waiting for a connection or preparing
-work. It repeats an unfinished Stop after a lost message or reconnection. Work
-stopped by a spending limit stays stopped when that limit rises. Other turns on
-the same computer can continue.
+work, then reads again immediately before sending a turn. It repeats an unfinished
+Stop after a lost message or reconnection. Work stopped by a spending limit stays
+stopped when that limit rises. Other turns on the same computer can continue.
 
 Let owners and admins request publication of an exact reviewed tool list. Calls remain disabled.
 

@@ -1,2 +1,3 @@
 - Send saved spending Stops before files and turns in the same chat. Retry unfinished Stops after loss or reconnect, and never resend stopped work after a limit increase. Other turns on the computer can continue.
 - Recheck spending Stops saved while a connection or delivery is waiting. Send a turn’s saved Stop before waking its waiting approval, even when computer history is slow.
+- Prevent reconnect from sending a stopped turn when the final conversation position reply is delayed. Read new records again before sending the turn.

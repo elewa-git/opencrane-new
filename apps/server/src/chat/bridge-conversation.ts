@@ -163,8 +163,8 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   refused: Set<string>, connection: Connection,
   computerHistoryUnavailable = false, checkControl?: ControlCheck): Promise<ConversationProgress> {
   const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
-  async function refreshStops() {
-    await readNewConversationRows(options, conversation.conversationId, rows);
+  async function refreshStops(beforeTurn = false) {
+    await readNewConversationRows(options, conversation.conversationId, rows, beforeTurn);
     sendBudgetStops(link, pendingBudgetStops(rows, assistant.closed));
   }
   async function controlPending() {
@@ -219,7 +219,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   await deliverUploads(options, link, uploads, controlPending);
   if (message) {
     await sendWaitingTurn(options, link, conversation, rows, allUploads, message,
-      assistant.kind, assistant.started, controlPending);
+      assistant.kind, assistant.started, controlPending, refreshStops);
     sendStop(link.socket, rows, message, conversation.conversationId);
   }
   const remainingStops = pendingBudgetStops(rows, assistant.closed);
@@ -228,15 +228,17 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
 }
 
 async function readNewConversationRows(options: WatchOptions, conversationId: string,
-  rows: ChatRows) {
+  rows: ChatRows, beforeTurn = false) {
   const subject = `conversation-${conversationId}`;
   let position = 0;
   for (const row of rows) {
     if (row.event.subject === subject) position = Math.max(position, row.sequence);
   }
   const deadline = performance.now() + 10_000;
-  const latest = await options.store.head(subject, deadline);
-  if (latest <= position) return;
+  if (!beforeTurn) {
+    const latest = await options.store.head(subject, deadline);
+    if (latest <= position) return;
+  }
   for await (const row of options.store.readStream(subject, position + 1, deadline)) {
     if (row.event.silo !== options.silo) throw new Error('Conversation silo mismatch');
     rows.push(row);
@@ -251,7 +253,8 @@ function needsDeliveryRetry(message: ChatRows[number] | undefined,
 
 async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   conversation: AgentSession, rows: ChatRows, uploads: Upload[],
-  message: ChatRows[number], kind: string, started: Set<string>, controlPending: ControlCheck) {
+  message: ChatRows[number], kind: string, started: Set<string>, controlPending: ControlCheck,
+  refreshStops: (beforeTurn: boolean) => Promise<void>) {
   const requested = z.object({ executionMode: z.literal('memory_free').optional() })
     .parse(message.event.data);
   const mode = requiredExecutionMode(kind, requested.executionMode);
@@ -278,6 +281,9 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   const active = await chatMembership(options.store, options.silo, turn.requesterId);
   if (!active) throw new TurnAdmissionRejected('Active silo membership required');
   const control = await controlPending();
+  // Read from the last stored row even if a position reply said nothing had changed.
+  // Catch Stops saved while that reply was waiting, then send without another wait.
+  await refreshStops(true);
   if (control || pendingMessage(rows)?.event.id !== message.event.id) return;
   link.socket.send(JSON.stringify(turn));
 }

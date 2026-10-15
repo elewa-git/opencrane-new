@@ -2631,6 +2631,11 @@ chat history read as an unaccepted turn; they add no budget read or access check
 After connection opening and each delivery preparation wait, the bridge checks the
 conversation position and reads only new rows. It sends newly saved Stops before
 releasing files or turns, and drops a selected turn if a new Stop ended it.
+Immediately before a turn frame, it reads new rows directly from the last saved
+position even if the earlier position reply reported no change. This catches a
+Stop saved while that reply was waiting. The socket regression pauses the final
+position reply on reconnect, saves a Stop, and requires Stop without a turn frame
+in that same pass.
 These reads have their own ten-second deadline and do not use an authority fence.
 
 Approval polling remains independent of conversation processing. After checking the
