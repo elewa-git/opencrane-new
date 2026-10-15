@@ -1,4 +1,4 @@
-import { isDetail, type Detail, type Scope } from './memory-panel-data';
+import { isDetail, type Detail, type Scope, type Source } from './memory-panel-data';
 
 export type DetailRead = { kind: 'ok'; detail: Exclude<Detail, { status: 'unavailable' }> } |
   { kind: 'access' } | { kind: 'missing' } | { kind: 'unavailable' };
@@ -55,4 +55,66 @@ export function isCurrentScopeRead(controller: AbortController, startedRequestId
 
 export function scopeHasId(scopeId: string, scope: Scope): boolean {
   return scope.scopeId === scopeId;
+}
+
+export function waitForRetry(seconds: number, resolve: () => void): void {
+  window.setTimeout(resolve, seconds * 1000);
+}
+
+export function firstTrustedSource(sources: Source[]): Source['reference'] | undefined {
+  for (const source of sources) {
+    if (source.status === 'available' && source.reference) return source.reference;
+  }
+  return undefined;
+}
+
+export function sourceMatchesReference(reference: NonNullable<Source['reference']>, source: Source) {
+  return source.status === 'available' &&
+    source.reference?.conversationId === reference.conversationId &&
+    source.reference.messageId === reference.messageId;
+}
+
+export function scopeUrl(groupId: string | undefined, assistantId: string | undefined): string {
+  const params = new URLSearchParams();
+  if (groupId) params.set('groupId', groupId);
+  if (assistantId) params.set('assistantId', assistantId);
+  const query = params.toString();
+  if (!query) return '/api/memory/scopes';
+  return `/api/memory/scopes?${query}`;
+}
+
+export function scopeName(scope: Scope): string {
+  if (scope.scopeKind === 'person') return 'Your memory';
+  if (scope.scopeKind === 'group') return 'Group memory';
+  return 'Assistant notes';
+}
+
+export function scopeAudience(scope: Scope): string {
+  if (scope.audience.kind === 'person') return 'Only you';
+  return `Shared with ${scope.audience.kind} ${scope.audience.ownerId}`;
+}
+
+export function savedDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date unavailable';
+  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'UTC' }).format(date);
+}
+
+export function sourceLink(conversationId: string): string {
+  return `/workspace?conversation=${encodeURIComponent(conversationId)}`;
+}
+
+export function scopeKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.scopes button'));
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) return;
+  const currentIndex = buttons.indexOf(target);
+  if (currentIndex < 0 || buttons.length === 0) return;
+  event.preventDefault();
+  const direction = event.key === 'ArrowRight' ? 1 : -1;
+  const nextIndex = (currentIndex + direction + buttons.length) % buttons.length;
+  const nextButton = buttons[nextIndex];
+  nextButton?.focus();
+  nextButton?.click();
 }

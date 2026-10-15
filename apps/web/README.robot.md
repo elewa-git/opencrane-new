@@ -472,6 +472,19 @@ kind, revision, saved date and pin state. A rejected search is reported beside t
 field. A stale page cursor is discarded and the first page is read again. A requester
 change clears all store form state as well as read state before new scopes load.
 
+The detail shows Forget only when its current reply has `canForget: true` and the selected
+scope is the person's own scope. The review uses `oc-modal-sheet` and contains no fact text.
+It sends one `POST /api/memory/:scopeId/facts/:memoryId/forget` with a fresh `mem_` command id
+and the current detail revision. An accepted receipt removes the list row and detail text
+immediately. `cleanupStatus` controls the pending, forgotten and unavailable labels. Pending
+and unknown outcomes use `GET /api/memory/:scopeId/changes/:commandId`; they never POST again.
+Conflict offers one fresh detail read. A 401, 403 or 404 clears protected state, and late
+replies after a scope or requester change are ignored. The command remains in component memory
+only. Group and assistant-notes forget, edit, unpin and store Undo have no controls here.
+`memory-panel-forget.spec.ts` covers the review, one POST, safe outcome and refusals.
+`npm run visual:screen-p4-13-forget` captures both widths with intercepted replies;
+see [the receipt](../../docs/process/screen-p4-13-forget/receipt.md).
+
 Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
 `/ws/conversations/:id/view`, through the existing frontend `/ws` proxy.
 

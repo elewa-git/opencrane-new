@@ -1,5 +1,5 @@
 <section class="memory" aria-labelledby="memory-title">
-  <h2 id="memory-title" class="sr-only">Saved facts</h2>
+  <h2 id="memory-title" class="sr-only" tabindex="-1">Saved facts</h2>
   @if (state() === 'loading') {
     <p role="status">Loading memory…</p>
   } @else if (state() === 'access') {
@@ -94,8 +94,16 @@
           }
           @if (!sources().length) { <p>No source was recorded.</p> }
           <button class="store-open" type="button" (click)="openStore($event)">Remember a fact</button>
+          @if (detailCanForget()) {
+            <button class="forget-open" type="button" (click)="openForget($event)">Forget</button>
+          }
         }
       </dialog>
+    }
+    @if (forgetTarget(); as target) {
+      <oc-memory-forget [target]="target" (accepted)="forgetAccepted($event)"
+        (reviewLatest)="reviewLatest($event)" (closed)="closeForget($event)"
+        (accessLost)="forgetAccessLost($event)" />
     }
     @if (storeOpen()) {
       <dialog class="store" [ocOverlay]="storeOpen()" #storeOverlay="ocOverlay"

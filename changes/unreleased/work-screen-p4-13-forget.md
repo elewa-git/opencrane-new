@@ -1,0 +1,1 @@
+- People can forget their own saved facts from the Memory panel and see whether cleanup is pending, complete or unavailable.
