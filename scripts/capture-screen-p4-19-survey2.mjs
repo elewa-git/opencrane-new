@@ -24,6 +24,13 @@ const resumedProgress = {
   state: 'survey',
   survey: { generation: 1, position: 2, nextStep: 3, steps: [savedStep, secondStep] },
 };
+const laterProgress = {
+  state: 'survey', survey: { generation: 1, position: 4, nextStep: null,
+    steps: [savedStep, secondStep,
+      { time: '2026-10-14T09:32:00.000Z', answers: { step: 3, style: 'Brief' } },
+      { time: '2026-10-14T09:33:00.000Z', answers: { step: 4, tasks: 'Planning' } }],
+  },
+};
 
 async function serve(state, route) {
   const url = new URL(route.request().url());
@@ -32,7 +39,12 @@ async function serve(state, route) {
     return;
   }
   if (url.pathname === '/api/onboarding') {
-    await route.fulfill({ json: state === 'ONB-16' ? resumedProgress : savedProgress });
+    let progress = savedProgress;
+    if (state === 'ONB-16' || state === 'ONB-12-groups-changed') {
+      progress = resumedProgress;
+    }
+    if (state === 'ONB-12-later-steps') progress = laterProgress;
+    await route.fulfill({ json: progress });
     return;
   }
   if (url.pathname === '/api/chat/groups') {
@@ -40,7 +52,9 @@ async function serve(state, route) {
       await route.fulfill({ status: 503, json: { status: 'unavailable' } });
       return;
     }
-    await route.fulfill({ json: { rows: [{ groupId: 'group-a', name: 'Teachers' }],
+    const changed = state === 'ONB-12-groups-changed';
+    await route.fulfill({ json: { rows: [{ groupId: changed ? 'group-b' : 'group-a',
+      name: changed ? 'Editors' : 'Teachers' }],
       next: null } });
     return;
   }
@@ -58,6 +72,24 @@ async function serve(state, route) {
 }
 
 async function prepare(page, state) {
+  if (state === 'ONB-12-later-steps') {
+    await page.getByText('Step 4 of 4').waitFor();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.getByText('Teachers').waitFor();
+    await page.getByLabel('Your work Required').fill('I mentor new colleagues.');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByRole('button', { name: 'Save and review later steps' }).waitFor();
+    return;
+  }
+  if (state === 'ONB-12-groups-changed') {
+    await page.getByText('Step 3 of 4').waitFor();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.getByText('Editors').waitFor();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByRole('button', { name: 'Replace saved groups' }).waitFor();
+    return;
+  }
   if (state === 'ONB-16') {
     await page.getByText('Steps 1–2 saved').waitFor();
     return;
@@ -118,6 +150,7 @@ await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
   const states = ['ONB-12', 'ONB-12-byte-error', 'ONB-12-groups-failed',
+    'ONB-12-later-steps', 'ONB-12-groups-changed',
     'ONB-15-saving', 'ONB-15-failed', 'ONB-15-unknown', 'ONB-16'];
   const filenames = [];
   for (const width of [1280, 390]) {

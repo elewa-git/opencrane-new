@@ -244,6 +244,8 @@ describe('survey work step', () => {
     await Promise.resolve();
     fixture.detectChanges();
     expect(element.textContent).not.toContain('Private group');
+    expect(element.querySelector<HTMLInputElement>('#survey-name')?.value).toBe('Alex');
+    expect(element.textContent).toContain('Step 1 of 4');
   });
 
   for (const status of [401, 403]) {
@@ -359,7 +361,7 @@ describe('survey work step', () => {
       expect(element.textContent).toContain('Editors');
     });
     expect(element.textContent).toContain('Your current groups differ from your saved groups');
-    enter(element, 'Teaching');
+    element.querySelector<HTMLButtonElement>('button[type=submit]')?.click();
     fixture.detectChanges();
     expect(element.textContent).toContain('Replace saved groups');
     expect(requestsFor(fetchSpy, '/api/onboarding/survey')).toHaveLength(0);

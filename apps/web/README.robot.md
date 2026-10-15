@@ -10,6 +10,12 @@ Step 2 reads `GET /api/chat/groups?limit=16` every time it opens. It uses the
 returned group ids as read-only context and never follows `next`. A failed group
 read blocks Continue; Try again only repeats that GET. Work text is trimmed and
 checked against the event store's 1–4,096 UTF-8 byte and character rules.
+Any outstanding group read that returns 401 or 403 clears the survey, including
+after Back or a newer group read. Older successful replies cannot replace current
+groups. If saving step 2 would clear saved steps 3 or 4, the screen warns and asks
+for confirmation. If only the current group list differs from the saved list, it
+explains the difference and asks before replacing the saved step. A confirmed save
+reads progress again before showing what remains saved.
 Back opens the previous step. Editing an earlier step clears later current answers.
 An unknown save uses only `GET /api/personal/changes/:commandId`. A 409 rereads
 progress while keeping typed answers in memory; 403 clears them. A failed initial

@@ -4,7 +4,8 @@ import {
 } from '@angular/core';
 import { z } from 'zod';
 import { SharedState } from '../shared-state/shared-state';
-import { checkedWorkDescription, groupIdFromRow, readCurrentGroups, sameWorkAnswers, savedWork,
+import { checkedWorkDescription, groupIdFromRow, readCurrentGroups, sameGroupIds,
+  sameWorkAnswers, savedWork,
   type GroupRow, type WorkAnswers } from './survey-work';
 
 const savedStep = z.object({
@@ -53,6 +54,7 @@ export class SurveyScreen implements OnDestroy {
   protected readonly pronounsError = signal('');
   protected readonly workDescription = signal('');
   protected readonly workError = signal('');
+  protected readonly workConfirmation = signal(false);
   protected readonly groups = signal<GroupRow[]>([]);
   protected readonly groupsState = signal<'loading' | 'ready' | 'failed'>('loading');
   protected readonly hasMoreGroups = signal(false);
@@ -187,6 +189,7 @@ export class SurveyScreen implements OnDestroy {
 
   private openStep(step: number): void {
     this.currentStep.set(step);
+    this.workConfirmation.set(false);
     this.nameError.set('');
     this.pronounsError.set('');
     this.workError.set('');
@@ -202,13 +205,15 @@ export class SurveyScreen implements OnDestroy {
     this.groupsState.set('loading');
     this.groups.set([]);
     this.hasMoreGroups.set(false);
+    this.workConfirmation.set(false);
     const result = await readCurrentGroups(request);
-    if (request.signal.aborted || request !== this.request || read !== this.groupRead ||
-        this.currentStep() !== 2) return;
+    if (request.signal.aborted || request !== this.request) return;
+    // A refused protected read clears answers even after the person leaves this step.
     if (result.kind === 'refused') {
       this.refuseRead(result.status);
       return;
     }
+    if (read !== this.groupRead || this.currentStep() !== 2) return;
     if (result.kind === 'failed') {
       this.groupsState.set('failed');
       return;
@@ -268,6 +273,15 @@ export class SurveyScreen implements OnDestroy {
     if (!(field instanceof HTMLTextAreaElement)) return;
     this.workDescription.set(field.value);
     this.workError.set('');
+    this.workConfirmation.set(false);
+  }
+
+  protected currentGroupsChanged(): boolean {
+    if (this.groupsState() !== 'ready') return false;
+    const saved = savedWork.safeParse(this.progress()?.survey.steps[1]?.answers);
+    if (!saved.success) return false;
+    const currentIds = this.groups().map(groupIdFromRow);
+    return !sameGroupIds(saved.data.groupIds, currentIds);
   }
 
   protected skipPronouns(): void {
@@ -335,6 +349,13 @@ export class SurveyScreen implements OnDestroy {
       this.openStep(3);
       return;
     }
+    const laterStepsSaved = (this.progress()?.survey.steps.length ?? 0) > 2;
+    const groupsChanged = saved.success && !sameGroupIds(saved.data.groupIds, answers.groupIds);
+    if (saved.success && (laterStepsSaved || groupsChanged) && !this.workConfirmation()) {
+      this.workConfirmation.set(true);
+      return;
+    }
+    this.workConfirmation.set(false);
     this.commandId = crypto.randomUUID();
     this.sentAnswers = answers;
     await this.postStep();

@@ -45,9 +45,13 @@ export function checkedWorkDescription(value: string): string | null {
 
 export function sameWorkAnswers(saved: WorkAnswers, current: WorkAnswers): boolean {
   if (saved.workDescription !== current.workDescription) return false;
-  if (saved.groupIds.length !== current.groupIds.length) return false;
-  const oldIds = new Set(saved.groupIds);
-  for (const groupId of current.groupIds) {
+  return sameGroupIds(saved.groupIds, current.groupIds);
+}
+
+export function sameGroupIds(savedIds: string[], currentIds: string[]): boolean {
+  if (savedIds.length !== currentIds.length) return false;
+  const oldIds = new Set(savedIds);
+  for (const groupId of currentIds) {
     if (!oldIds.has(groupId)) return false;
   }
   return true;

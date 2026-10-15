@@ -116,6 +116,9 @@
         } @else if (currentStep() === 2) {
           <h2 #stepHeading tabindex="-1">What do you do here?</h2>
           <p class="hint">Describe your work in your own words.</p>
+          @if ((progress()?.survey?.steps?.length ?? 0) > 2) {
+            <p class="hint">Changing step 2 clears later saved answers. You can review them again.</p>
+          }
           <form (submit)="continue($event)" novalidate>
             <label for="survey-work">Your work <small>Required</small></label>
             <textarea id="survey-work" rows="5" [value]="workDescription()"
@@ -145,6 +148,13 @@
               <p class="hint">Only the first 16 groups are used.</p>
             }
             <p class="hint">🔒 Read from your membership — not an editable department or grant.</p>
+            @if (currentGroupsChanged()) {
+              <p class="hint">Your current groups differ from your saved groups. Continuing will
+                replace the saved group list.</p>
+            }
+            @if (workConfirmation()) {
+              <p role="alert">Please confirm this change before saving it.</p>
+            }
             @if (state() === 'saving') {
               <oc-shared-state kind="checking" message="Saving your answer" [showAction]="false" />
             } @else if (state() === 'unknown') {
@@ -165,7 +175,15 @@
               <button type="button" (click)="review()">Review answer</button>
             }
             @if (state() === 'ready' && groupsState() === 'ready') {
-              <button class="primary" type="submit">Continue</button>
+              <button class="primary" type="submit">
+                @if (workConfirmation() && (progress()?.survey?.steps?.length ?? 0) > 2) {
+                  Save and review later steps
+                } @else if (workConfirmation()) {
+                  Replace saved groups
+                } @else {
+                  Continue
+                }
+              </button>
             }
             @if (state() !== 'saving' && state() !== 'unknown') {
               <button type="button" (click)="back()">Back</button>

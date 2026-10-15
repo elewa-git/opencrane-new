@@ -30,7 +30,9 @@ loads more people, groups or assistants when requested.
 - Lets a person enter their name, optional pronouns and work description for the
   welcome survey. It shows their current groups without offering to change membership.
   It shows saved progress, checks an uncertain save, and asks before changing
-  an answer recovered after a failed read. Lost access clears the answers.
+  an answer recovered after a failed read. Changing saved work asks before clearing
+  later answers or replacing saved groups. Lost access clears the answers, even when
+  a group read finishes after the person leaves that step.
 - Lets people start conversations, send messages and stop a reply.
 - Lets Owners and Admins create an email invitation and copy its link. If the reply is
   lost, the People page checks that request's status before showing a link.

@@ -9,8 +9,17 @@ overflow, visible 44px controls and a Back link that stays in the viewport.
 | ONB-12 | PASS | Work text and one current group, read only. |
 | ONB-12 byte error | PASS | A linked UTF-8 byte error. |
 | ONB-12 groups failed | PASS | Continue is blocked until Try again reads groups. |
+| ONB-12 later steps | PASS | Changing saved work warns that later answers will be cleared and asks for confirmation. |
+| ONB-12 groups changed | PASS | Changed current groups are named before the saved group list can be replaced. |
 | ONB-15 on step 2 | PASS | Saving, known failure and unknown outcome. |
 | ONB-16 | PASS | Resume at step 3 with two saved steps and the real saved time. |
 
 The screenshots show layout and intercepted browser states. A fresh-install
 journey is NOT RUN. Style and task steps remain unavailable.
+
+The focused survey tests passed 35 cases after the fix. They include late 401 and
+403 group reads after Back, an older refused read after a newer successful read,
+and a late successful read that leaves the previous step unchanged. They also
+check that a step 2 change sends nothing before confirmation, then rereads
+progress after saving. These tests use fixture replies and do not prove live
+membership changes.
