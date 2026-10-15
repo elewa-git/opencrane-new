@@ -4,8 +4,9 @@ import { dirname } from 'node:path';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
+import { until } from '@opencrane/authz/testing';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from '@opencrane/models/testing';
-import { parseMemoryRequest, readToolPolicy } from '@opencrane/models';
+import { history, ingestUsage, parseMemoryRequest, readToolPolicy } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
@@ -547,7 +548,7 @@ async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]
     await setup.append('participation-conversation', 'conversation.closed', data);
     closed = true;
     stages.push('closed');
-    expect(await savedContext()).toMatchObject({ closed: true, conversationClosed: true });
+    expect(await savedContext()).toMatchObject({ turnEnded: false, conversationClosed: true });
   }
   async function raceClose(command: Parameters<typeof append>[0]) {
     const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
@@ -586,7 +587,7 @@ async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]
       expectedStages = ['prepared', 'closed', 'loaded'];
     }
     expect(stages).toEqual(expectedStages);
-    const expected = { closed: true, conversationClosed: true, memoryContext: {
+    const expected = { turnEnded: false, conversationClosed: true, memoryContext: {
       status: 'ended', reason: 'ended', references, recallCalls, executionAvailable: false } };
     // Use the writer's cached summary and a separate store identity for cold replay.
     const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
@@ -601,3 +602,48 @@ async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]
 }
 it.each(closeOrders)('retains ended recall accounting when closure lands %s',
   replaysRecallClosedDuringAppend);
+
+async function refusesCallsAfterClose(subject: string) {
+  const permit = await memoryPass(call, 'recall');
+  expect((await setup.call()).status).toBe(200);
+  expect(setup.received()).toBe(1);
+  const reservations = setup.actor.state.reservations.length;
+  const dispatches = setup.actor.state.dispatches.length;
+  const received = backendRequests;
+  await setup.append(subject, 'conversation.closed', {
+    conversationId: 'conversation', closedBy: 'alice',
+  });
+  const model = await setup.call();
+  expect(model.status, model.text).toBe(403);
+  const memory = await setup.call(headers, call, route);
+  expect(memory.status, memory.text).toBe(403);
+  const dispatched = await dispatchMemory(permit, call);
+  expect(dispatched.status, await dispatched.text()).toBe(403);
+  expect(backendRequests).toBe(received);
+  expect(setup.received()).toBe(1);
+  expect(setup.actor.state.reservations).toHaveLength(reservations);
+  expect(setup.actor.state.dispatches).toHaveLength(dispatches);
+  const reservationId = setup.actor.state.reservations[0]!.id;
+  async function settleUsage() {
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    const effects = await history(setup.nats.store, `effect-${reservationId}`, 'test');
+    for (const row of effects) {
+      if (row.event.type === 'effect.observed') {
+        await setup.actor.settleRecorded(reservationId, row.event.id);
+      }
+    }
+    return setup.actor.state.reservations[0]?.settledCents !== undefined;
+  }
+  // Run the normal settlement command while this fixture's background worker is paused.
+  await until(settleUsage);
+  await settleUsage();
+  expect(setup.actor.state.reservations[0]?.settledCents).toBeGreaterThan(0);
+  const settlements = [];
+  for await (const row of setup.nats.store.readStream('budget-test')) {
+    if (row.event.type === 'budget.settled') settlements.push(row);
+  }
+  expect(settlements).toHaveLength(1);
+}
+it.each(['conversation-conversation', 'participation-conversation'])(
+  'refuses new model and memory calls after %s closes and settles dispatched usage once',
+  refusesCallsAfterClose);

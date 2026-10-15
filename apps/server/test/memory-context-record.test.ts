@@ -206,7 +206,7 @@ async function turnClosed() {
   const closed = event('closed', { conversationId: 'chat', turnId: 'turn' },
     { type: 'agent.turn_completed' });
   const events = [event('prepared', prepared), event('loaded', loaded), closed];
-  expect(await fixture(events).read()).toMatchObject({ closed: true, memoryContext: {
+  expect(await fixture(events).read()).toMatchObject({ turnEnded: true, memoryContext: {
     status: 'ended', references: [personal], executionAvailable: false } });
   events.push(event('late', { ...loaded, callDigest: 'e'.repeat(64) }));
   await expect(fixture(events).read()).rejects.toThrow();
@@ -237,7 +237,7 @@ async function participationClose(lateDelivery: 'initial' | 'recall') {
     const coldStore = { readStream: nats.store.readStream.bind(nats.store) };
     for (const store of [nats.store, coldStore]) {
       const facts = await readChatFacts(store, 'test', 'chat', 'turn');
-      expect.soft(facts).toMatchObject({ closed: true, conversationClosed: true,
+      expect.soft(facts).toMatchObject({ turnEnded: false, conversationClosed: true,
         memoryContext: { status: 'ended', references, executionAvailable: false } });
     }
 
@@ -250,7 +250,7 @@ async function participationClose(lateDelivery: 'initial' | 'recall') {
       if (lateDelivery === 'initial') {
         await expect(reading).rejects.toThrow('Memory evidence arrived after the turn closed');
       } else {
-        await expect(reading).resolves.toMatchObject({ closed: true, conversationClosed: true,
+        await expect(reading).resolves.toMatchObject({ turnEnded: false, conversationClosed: true,
           memoryContext: { status: 'ended', reason: 'ended', references: [personal],
             recallCalls: 2, recallBytes: 200, executionAvailable: false } });
       }

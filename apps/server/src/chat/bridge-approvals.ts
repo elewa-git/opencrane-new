@@ -14,6 +14,7 @@ const waitingSchema = z.object({
 type Waiting = z.infer<typeof waitingSchema> & {
   approvalHead?: number;
   conversationHead?: number;
+  participationHead?: number;
   policyHead?: number;
   serverId?: string;
   overallHead?: number;
@@ -58,12 +59,14 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
     const subject = `approval-${entry.approvalId}`;
     const approvalHead = await store.head(subject, deadline);
     const conversationHead = await store.head(`conversation-${entry.conversationId}`, deadline);
+    const participationHead = await store.head(`participation-${entry.conversationId}`, deadline);
     let policyHead: number | undefined;
     if (entry.serverId !== undefined) {
       policyHead = await store.head(`mcp-${entry.serverId}`, deadline);
     }
     const expired = entry.expiresAt !== undefined && Date.now() >= entry.expiresAt;
     if (entry.approvalHead === approvalHead && entry.conversationHead === conversationHead
+      && entry.participationHead === participationHead
       && entry.policyHead === policyHead && !expired) return;
     const rows = await history(store, subject, silo, deadline);
     if (rows.length === 0) {
@@ -90,6 +93,7 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
     // Keep the positions from before the read, so a concurrent change gets another look.
     entry.approvalHead = approvalHead;
     entry.conversationHead = conversationHead;
+    entry.participationHead = participationHead;
     entry.policyHead = checkedPolicyHead;
     entry.expiresAt = Date.parse(request.expiresAt);
   }

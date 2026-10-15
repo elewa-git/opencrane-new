@@ -165,3 +165,42 @@ async function boundsSharedExchanges() {
   expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(24 * 1024);
 }
 it('keeps newest whole shared exchanges within 24 KiB and counts omissions', boundsSharedExchanges);
+
+const refusalBindingCases = [
+  { name: 'no saved refusal', saved: false, patch: {} },
+  { name: 'another computer', saved: true, patch: { computerId: 'other' } },
+  { name: 'another conversation', saved: true, patch: { conversationId: 'other' } },
+  { name: 'another turn', saved: true, patch: { turnId: 'other' } },
+  { name: 'another requester', saved: true, patch: { requesterId: 'bob' } },
+  { name: 'another thread', saved: true, patch: { threadId: 'other' } },
+  { name: 'a private refusal', saved: true, patch: { sharingClass: undefined } },
+  { name: 'a completed turn', saved: true, patch: { status: 'completed' } },
+];
+async function rejectsUnboundFailure(testCase: typeof refusalBindingCases[number]) {
+  const keys = await setup(undefined);
+  if (testCase.saved) {
+    const close = { ...event('refused', 'computer-assistant', 'computer.turn_closed'),
+      source: 'opencrane-server', data: { ...admitted, status: 'failed', ...testCase.patch } };
+    await nats.seed([close]);
+  }
+  const failure = { assistantId: 'assistant', conversationId: 'child', turnId: 'input',
+    requesterId: 'alice', threadId: 'shared-thread', executionMode: 'restricted',
+    type: 'agent.turn_failed', sequence: 1, previousSequence: 0 };
+  await expect(recordReport(nats.store, keys, context, failure)).rejects.toThrow();
+  expect(await chatHistory(nats.store, 'test', 'child')).toHaveLength(2);
+}
+it.each(refusalBindingCases)('rejects a shared terminal failure with $name', rejectsUnboundFailure);
+
+async function rejectsUntrustedRefusal() {
+  const keys = await setup(undefined);
+  const close = { ...event('refused', 'computer-assistant', 'computer.turn_closed'),
+    source: 'computer-bridge', data: { ...admitted, status: 'failed' } };
+  await nats.seed([close]);
+  const failure = { assistantId: 'assistant', conversationId: 'child', turnId: 'input',
+    requesterId: 'alice', threadId: 'shared-thread', executionMode: 'restricted',
+    type: 'agent.turn_failed', sequence: 1, previousSequence: 0 };
+  await expect(recordReport(nats.store, keys, context, failure)).rejects.toThrow();
+  expect(await chatHistory(nats.store, 'test', 'child')).toHaveLength(2);
+}
+it('rejects a shared terminal failure when the refusal was not saved by the server',
+  rejectsUntrustedRefusal);

@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand, requireTurnMember, TurnAdmissionRejected } from './turns.ts';
+import { readChatFacts } from './chat-summary.ts';
 import { privateContext } from './private-context.ts';
 import { sharedContext } from './shared-context.ts';
 import { creationEvent } from './private-session.ts';
@@ -89,13 +90,16 @@ async function releaseTurnCredentials(options: BridgeOptions,
     refused?: string; context?: unknown }) {
   try {
     const history = await turnContextFor(options, report, binding);
+    await requireOpenConversation(options, report);
     if (!tokens) throw new Error('Turn issuer unavailable');
-    const fresh = await requireTurnMember(options.store, options.silo, binding.requesterId);
+    await requireTurnMember(options.store, options.silo, binding.requesterId);
     const credentials = computerCredentials(options.store, tokens, options.silo);
     const turn = { ...binding, assistantId: context.assistantId,
       model: binding.model ?? modelForTask(binding.task) };
     const grant = await credentials.turn(turn);
-    await fresh();
+    // Read chat facts before the final short membership check, even if its cache was lost.
+    await requireOpenConversation(options, report);
+    await requireTurnMember(options.store, options.silo, binding.requesterId);
     acknowledgement.model = turn.model;
     acknowledgement.token = grant.value;
     acknowledgement.expiresAt = grant.expiresAt;
@@ -111,6 +115,13 @@ async function releaseTurnCredentials(options: BridgeOptions,
   }
 }
 
+async function requireOpenConversation(options: BridgeOptions,
+  report: z.infer<typeof reportDetails>) {
+  const facts = await readChatFacts(options.store, options.silo,
+    report.conversationId, report.turnId);
+  if (facts.conversationClosed) throw new TurnAdmissionRejected('Conversation is closed');
+}
+
 class TurnContextUnavailable extends Error {}
 
 async function turnContextFor(options: BridgeOptions,
@@ -123,6 +134,7 @@ async function turnContextFor(options: BridgeOptions,
     return options.keys.decrypt(options.silo, report.conversationId, data);
   }
   try {
+    await requireOpenConversation(options, report);
     // Check the saved creation before choosing either reader, including on retries.
     const event = await creationEvent(options.store, options.silo,
       `conversation-${report.conversationId}`, 'conversation.created');
@@ -140,7 +152,7 @@ async function turnContextFor(options: BridgeOptions,
     if (shared) return sharedContext(rows, message, decrypt);
     return privateContext(rows, message, binding.requesterId, decrypt);
   } catch (error) {
-    if (error instanceof TurnContextUnavailable) throw error;
+    if (error instanceof TurnContextUnavailable || error instanceof TurnAdmissionRejected) throw error;
     const reason = binding.sharingClass === 'shared_only'
       ? 'Shared context unavailable' : 'Private context unavailable';
     throw new TurnContextUnavailable(reason, { cause: error });

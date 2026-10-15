@@ -16,8 +16,8 @@ flowchart LR
   nats -->|saved child leave results| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools and nightly memory status| postgres
-  server -->|delivers turns, shared history, files, passes and public keys; sends individual stops; checks reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|reads members, invitations, visible chats, own archive and read choices, facts, models, tools, nightly memory status and history| postgres
+  server -->|delivers turns, shared history, files, passes and public keys; sends individual stops; acknowledges and checks reports, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies| computer
 ```
@@ -42,6 +42,10 @@ restoring a grant during the write still refuses it.
 
 Personal memory writes refuse access withdrawn before the fact is saved, including a
 removed write grant or a disabled assistant. They keep the original access time limit.
+
+When a closed shared chat refuses a delayed turn, the server accepts the computer's
+matching failure report. The turn stays closed and other chats keep their connection.
+Reports containing output still need a saved, admitted turn.
 
 Give Owners and Admins a member directory and current management flags for
 active people. An ordinary Member receives only a small header for one person.
@@ -226,6 +230,11 @@ and reports whether cleanup is pending, unavailable or finished. A lost reply ca
 checked after restart without submitting another change.
 
 ## Processes it handles
+
+When a saved event closes a chat, the server refuses new turn passes and rebuilt
+context. It still acknowledges delayed reports, so another person's chat can keep
+using the same computer connection. An admitted turn stays recorded until cleanup
+can confirm it ended. Public closing and freezing displayed output are not built yet.
 
 A shared child chat's creator can invite someone after acknowledging that all shared
 history will be visible. The invite gives access only to that child. The creator can

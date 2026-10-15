@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
   type StoredEvent } from '@opencrane/event-store';
-import { chatMembership, participationClosed } from './participation.ts';
+import { chatMembership } from './participation.ts';
 import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
 import { agentSessionData, ReportRejected } from './reports.ts';
@@ -59,10 +59,6 @@ type WriteAuthority = () => Promise<void>;
 /** Append one lifecycle event. Reports cannot reopen a closed turn. */
 export async function turnCommand(store: EventStore, context: TurnContext, input: TurnInput) {
   const conversation = await readChatFacts(store, context.silo, input.conversationId, input.turnId);
-  if (input.status === 'started') {
-    const closed = await participationClosed(store, context.silo, input.conversationId);
-    conversation.closed ||= closed;
-  }
   const requested = requestedTurn(conversation, context.assistantId);
   const subject = `computer-${context.assistantId}`;
   const facts = await computerFacts(store, context.silo, context.assistantId, input);
@@ -78,6 +74,9 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   // Check current membership on repeats before returning the saved turn.
   if (input.status === 'started') {
     try {
+      if (conversation.conversationClosed) {
+        throw new TurnAdmissionRejected('Conversation is closed');
+      }
       executionMode = startExecutionMode(facts, input);
       const admission = await startAuthority(store, context, conversation, facts, data,
         requested.executionMode, executionMode);
@@ -226,16 +225,25 @@ function checkStart(facts: ComputerFacts, conversation: ChatFacts, computerId: s
       computer.parse(current.event.data).computerId !== computerId) {
     throw new Error('Computer is not ready');
   }
-  if (conversation.closed) throw new ReportRejected('Turn is closed');
+  if (conversation.turnEnded) throw new ReportRejected('Turn is closed');
 }
 function isRefusedAdmission(turn: TurnSummary | undefined,
   conversation: ChatFacts, input: TurnInput) {
   return turn?.firstClose?.status === 'failed' && !turn.hasStart &&
-    input.status === 'started' && !conversation.closed;
+    input.status === 'started' && !conversation.turnEnded;
 }
 
 function requireNoControl(facts: ComputerFacts) {
   if (facts.control) throw new TurnAdmissionRejected('Computer control is pending');
+}
+
+function refuseClosedConversation(turn: TurnSummary | undefined,
+  conversation: ChatFacts, input: TurnInput) {
+  if (input.status !== 'started' || !conversation.conversationClosed) return;
+  // Keep admitted work until termination is confirmed; refusing a pass is not termination.
+  if (turn?.firstStart || turn?.firstClose || conversation.turnEnded) {
+    throw new TurnAdmissionRejected('Conversation is closed');
+  }
 }
 
 function decideTurn(facts: ComputerFacts, conversation: ChatFacts, input: TurnInput,
@@ -243,11 +251,12 @@ function decideTurn(facts: ComputerFacts, conversation: ChatFacts, input: TurnIn
   const turn = facts.turn;
   const closed = turn?.firstClose;
   const started = turn?.firstStart;
+  refuseClosedConversation(turn, conversation, input);
   if (isRefusedAdmission(turn, conversation, input)) {
     throw new TurnAdmissionRejected('Turn admission was refused');
   }
   const recoveringClosed = input.replay && input.status === 'started' &&
-    conversation.closed;
+    conversation.turnEnded;
   // Accept a verified duplicate without admitting a new turn after its final report.
   if (closed || recoveringClosed) {
     if (input.status === 'started' && !input.replay) throw new ReportRejected('Turn is closed');

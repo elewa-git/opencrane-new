@@ -7,6 +7,7 @@ import { memoryContextRecordedEventSchema } from '@opencrane/events';
 type Message = { authorId: unknown; executionMode: unknown; position: number };
 type ComputerReports = { lastSequence: number; positions: Map<number, number> };
 type ChatSummary = {
+  contentSequence: number;
   latestHuman?: { id: string; authorId: unknown } | undefined;
   created: Record<string, unknown> | undefined;
   conversationClosed: boolean;
@@ -21,7 +22,7 @@ export type ChatFacts = {
   latestHuman?: { id: string; authorId: unknown } | undefined;
   created: Record<string, unknown> | undefined;
   message: Message | undefined;
-  closed: boolean;
+  turnEnded: boolean;
   lastReportSequence: number;
   reportPosition: number | undefined;
   sequence: number;
@@ -30,8 +31,8 @@ export type ChatFacts = {
 const closedTurn = z.object({ turnId: z.string() });
 
 function emptyChat(): ChatSummary {
-  return { created: undefined, conversationClosed: false, messages: new Map(), closedTurnIds: new Set(),
-    reports: new Map(), reportCount: 0, memoryContexts: new Map() };
+  return { contentSequence: 0, created: undefined, conversationClosed: false,
+    messages: new Map(), closedTurnIds: new Set(), reports: new Map(), reportCount: 0, memoryContexts: new Map() };
 }
 function addChat(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
@@ -56,7 +57,7 @@ function addChat(summary: ChatSummary, row: StoredEvent) {
       position: row.sequence };
     summary.messages.set(event.id, message);
   }
-  addRequester(summary, row, data);
+  addConversationFacts(summary, row, data);
   if (closedTurnId !== undefined) summary.closedTurnIds.add(closedTurnId);
   closeMemoryContexts(summary, closedTurnId);
   if (event.report) addReport(summary, event.report, row.sequence);
@@ -92,8 +93,10 @@ function memoryContextFacts(summary: ChatSummary, turnId: string) {
   }
   return context;
 }
-function addRequester(summary: ChatSummary, row: StoredEvent,
+function addConversationFacts(summary: ChatSummary, row: StoredEvent,
   data: Record<string, unknown> | undefined) {
+  // Keep the append position on the content stream, even when a legacy close is newer.
+  if (row.event.subject.startsWith('conversation-')) summary.contentSequence = row.sequence;
   if (row.event.type === 'message.posted' && data?.['authorKind'] === 'human') {
     summary.latestHuman = { id: row.event.id, authorId: data['authorId'] };
   }
@@ -135,7 +138,7 @@ function memorySize(summary: ChatSummary) {
 
 export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo: string,
   conversationId: string, turnId: string, computerId?: string, reportSequence?: number) {
-  function take(summary: ChatSummary, sequence: number): ChatFacts {
+  function take(summary: ChatSummary): ChatFacts {
     const message = summary.messages.get(turnId);
     const reports = computerId === undefined ? undefined : summary.reports.get(computerId);
     let reportPosition: number | undefined;
@@ -143,11 +146,11 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
     return {
       created: summary.created === undefined ? undefined : { ...summary.created },
       message: message === undefined ? undefined : { ...message },
-      closed: summary.conversationClosed || summary.closedTurnIds.has(turnId),
+      turnEnded: summary.closedTurnIds.has(turnId),
       latestHuman: summary.latestHuman,
       conversationClosed: summary.conversationClosed,
       lastReportSequence: reports?.lastSequence ?? 0,
-      reportPosition, sequence,
+      reportPosition, sequence: summary.contentSequence,
       memoryContext: memoryContextFacts(summary, turnId),
     };
   }

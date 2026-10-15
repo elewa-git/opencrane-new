@@ -1,6 +1,6 @@
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { z } from 'zod';
-import { generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BudgetActor, envelope } from '@opencrane/models';
 import { tokenIssuer, turnTokenAudience } from '@opencrane/auth';
@@ -13,7 +13,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { WebSocketServer } from 'ws';
 import { expect, it, vi } from 'vitest';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { countReads, expectNoWholeReads, natsFixture } from '@opencrane/event-store/testing';
 import { databases, until } from '@opencrane/authz/testing';
 import { connectBridge, watchBridges } from '../src/chat/bridge.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
@@ -22,6 +22,7 @@ import { recordReport } from '../src/chat/reports.ts';
 import { bridgeChannel } from '../../computer/src/channel.ts';
 import { reportPosition } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
+import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { history, suspendComputer } from '../../ops/src/lifecycle.ts';
 
 async function bridgeTokens(fixture: { directory: string }) {
@@ -1577,3 +1578,214 @@ async function deliversSavedModelToComputer(mode: 'memory_free' | 'restricted') 
 it.each(['memory_free', 'restricted'] as const)(
   'delivers the saved model to a %s computer and keeps it when renewing after a pause',
   deliversSavedModelToComputer);
+
+
+type CloseTiming = 'before' | 'saved' | 'append' | 'context' | 'token';
+const closeCases = [];
+for (const subject of ['conversation-alice', 'participation-alice']) {
+  for (const timing of ['before', 'saved', 'append', 'context', 'token'] as const) {
+    closeCases.push({ subject, timing });
+  }
+}
+
+type ReplayFixture = Awaited<ReturnType<typeof replayFixture>>;
+type CloseCase = { subject: string; timing: CloseTiming };
+
+async function prepareCloseRace(fixture: ReplayFixture, test: CloseCase) {
+  const computer = { assistantId: 'assistant', computerId: 'computer', generation: 1 };
+  await fixture.seed([
+    envelope('test', 'computer-assistant', 'computer.claimed', {
+      ...computer, tokenId: 'token:test',
+    }),
+    envelope('test', 'computer-assistant', 'computer.ready', computer),
+  ]);
+  await fixture.seed([envelope('test', 'conversation-alice', 'agent.turn_completed', {
+    conversationId: 'alice', turnId: 'message-alice',
+  })]);
+  const member = { silo: 'test', memberId: 'alice' };
+  const message = { id: 'current-alice', conversationId: 'alice', text: 'Continue' };
+  await chatCommand(fixture.store, fixture.keys, member, message);
+  const start = { sequence: 1, previousSequence: 0, conversationId: 'alice',
+    turnId: 'current-alice', assistantId: 'assistant', type: 'agent.turn_started',
+    threadId: 'thread-alice' };
+  async function closeConversation() {
+    const data = { conversationId: 'alice', closedBy: 'alice' };
+    await fixture.seed([envelope('test', test.subject, 'conversation.closed', data)]);
+  }
+  if (test.timing === 'saved' || test.timing === 'context' || test.timing === 'token') {
+    const saved = { assistantId: 'assistant', computerId: 'computer',
+      conversationId: 'alice', turnId: 'current-alice',
+      threadId: 'thread-alice', requesterId: 'alice', task: 'chat_turn',
+      executionMode: 'restricted', payingGroupId: 'personal-default' };
+    const hash = createHash('sha256');
+    hash.update('computer:current-alice:computer.turn_started');
+    const id = hash.digest('hex');
+    const event = envelope('test', 'computer-assistant', 'computer.turn_started', saved, id);
+    event.principal = { kind: 'system', id: 'turn-lifecycle' };
+    await fixture.seed([event]);
+  }
+  if (test.timing === 'before' || test.timing === 'saved') await closeConversation();
+  return { start, closeConversation };
+}
+
+async function injectCloseRace(fixture: ReplayFixture, test: CloseCase,
+  tokens: Awaited<ReturnType<typeof bridgeTokens>>,
+  prepared: Awaited<ReturnType<typeof prepareCloseRace>>) {
+  const { start, closeConversation } = prepared;
+  const append = fixture.store.append.bind(fixture.store);
+  async function closeAfterAppend(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    const event = z.object({ type: z.string(), data: z.object({
+      turnId: z.string().optional(),
+    }) }).parse(command.event);
+    if (event.type === 'computer.turn_started' && event.data.turnId === 'current-alice') {
+      await closeConversation();
+    }
+    return result;
+  }
+  if (test.timing === 'append') {
+    const appends = vi.spyOn(fixture.store, 'append');
+    appends.mockImplementation(closeAfterAppend);
+  }
+  const read = fixture.store.readStream.bind(fixture.store);
+  async function* closeDuringHistory(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === 'conversation-alice' && args[1] === 1) {
+      await closeConversation();
+    }
+  }
+  if (test.timing === 'context') {
+    await readChatFacts(fixture.store, 'test', 'alice', start.turnId);
+    const reads = vi.spyOn(fixture.store, 'readStream');
+    reads.mockImplementation(closeDuringHistory);
+  }
+  const issue = tokens.turn.bind(tokens);
+  async function closeDuringToken(input: Parameters<typeof issue>[0]) {
+    const grant = await issue(input);
+    await closeConversation();
+    return grant;
+  }
+  const issuance = vi.spyOn(tokens, 'turn');
+  if (test.timing === 'token') issuance.mockImplementationOnce(closeDuringToken);
+  return issuance;
+}
+
+async function closeSafeAcknowledgements(test: CloseCase) {
+  const fixture = await replayFixture();
+  let link: Awaited<ReturnType<typeof fixture.connect>> | undefined;
+  try {
+    const tokens = await bridgeTokens(fixture);
+    const prepared = await prepareCloseRace(fixture, test);
+    const start = prepared.start;
+    const issuance = await injectCloseRace(fixture, test, tokens, prepared);
+    link = await fixture.connect(tokens);
+    function resumed() {
+      return fixture.messages.length > 0;
+    }
+    await until(resumed);
+    async function exchange(value: typeof start) {
+      const count = fixture.messages.length;
+      link!.peer.send(JSON.stringify(value));
+      function replied() {
+        return fixture.messages.length > count || link!.socket.readyState === 3;
+      }
+      await until(replied, 2000);
+      expect(link!.socket.readyState).toBe(link!.socket.OPEN);
+      return fixture.messages.at(-1);
+    }
+    const refusal = { type: 'ack', sequence: 1, refused: 'Conversation is closed' };
+    expect(await exchange(start)).toEqual(refusal);
+    if (test.timing !== 'token') expect(issuance).not.toHaveBeenCalled();
+    issuance.mockClear();
+    const reads = countReads(fixture.store);
+    expect(await exchange(start)).toEqual(refusal);
+    const renewed = { ...start, sequence: 2, previousSequence: 1 };
+    expect(await exchange(renewed)).toEqual({ ...refusal, sequence: 2 });
+    expect(issuance).not.toHaveBeenCalled();
+    expectNoWholeReads(reads.calls);
+    const rows = await history(fixture.store, 'computer-assistant');
+    function isTurn(row: typeof rows[number]) {
+      return row.event.type.startsWith('computer.turn_');
+    }
+    const turns = rows.filter(isTurn);
+    if (test.timing === 'before') {
+      expect(turns).toHaveLength(1);
+      expect(turns[0]?.event).toMatchObject({ type: 'computer.turn_closed',
+        data: { status: 'failed', turnId: 'current-alice' } });
+    } else {
+      // Keep admitted work for cleanup until its computer confirms termination.
+      expect(turns).toHaveLength(1);
+      expect(turns[0]?.event.type).toBe('computer.turn_started');
+    }
+    const bob = { ...start, sequence: 3, conversationId: 'bob',
+      turnId: 'message-bob', threadId: 'thread-bob' };
+    const ack = await exchange(bob);
+    const admitted = z.object({ type: z.literal('ack'), sequence: z.literal(3),
+      token: z.string().min(1), model: z.string().min(1) });
+    expect(admitted.safeParse(ack).success).toBe(true);
+    expect(ack).not.toHaveProperty('refused');
+    const replayed = await exchange(bob);
+    expect(admitted.safeParse(replayed).success).toBe(true);
+  } finally {
+    link?.socket.terminate();
+    await link?.settled();
+    vi.restoreAllMocks();
+    await fixture.close();
+  }
+}
+it.each(closeCases)('refuses starts and renewals with close on $subject at $timing',
+  closeSafeAcknowledgements);
+
+async function keepsLateReports(subject: string) {
+  const fixture = await replayFixture();
+  let link: Awaited<ReturnType<typeof fixture.connect>> | undefined;
+  try {
+    await fixture.seed([envelope('test', subject, 'conversation.closed', {
+      conversationId: 'alice', closedBy: 'alice',
+    })]);
+    link = await fixture.connect();
+    function resumed() {
+      return fixture.messages.length > 0;
+    }
+    await until(resumed);
+    const reports = [];
+    const types = ['agent.message_delta', 'agent.turn_completed', 'agent.output_lost'];
+    for (const [index, type] of types.entries()) {
+      const report = { sequence: index + 1, previousSequence: index,
+        conversationId: 'alice', turnId: 'message-alice', assistantId: 'assistant',
+        type, messageId: 'reply', text: 'Late text' };
+      reports.push(report);
+    }
+    reports.push({ ...reports[0]!, sequence: 4, previousSequence: 0,
+      conversationId: 'bob', turnId: 'message-bob' });
+    for (const report of reports) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const count = fixture.messages.length;
+        link.peer.send(JSON.stringify(report));
+        function acknowledged() {
+          return fixture.messages.length > count || link!.socket.readyState === 3;
+        }
+        await until(acknowledged, 2000);
+        expect(link.socket.readyState, link.rejection).toBe(link.socket.OPEN);
+        expect(fixture.messages.at(-1)).toEqual({ type: 'ack', sequence: report.sequence });
+      }
+    }
+    expect(await reportPosition(fixture.store, 'test', 'computer')).toBe(4);
+    const saved = await chatHistory(fixture.store, 'test', 'alice');
+    function hasReport(row: typeof saved[number]) {
+      return row.event.report !== undefined;
+    }
+    expect(saved.filter(hasReport)).toHaveLength(3);
+    const closed = once(link.peer, 'close');
+    link.peer.send(JSON.stringify({ ...reports[0], text: 'Changed digest' }));
+    const outcome: unknown[] = await closed;
+    expect(outcome[0]).toBe(1008);
+    expect(String(outcome[1])).toBe('Report sequence reused');
+  } finally {
+    link?.socket.terminate();
+    await link?.settled();
+    await fixture.close();
+  }
+}
+it.each(['conversation-alice', 'participation-alice'])(
+  'saves late reports after close on %s and keeps duplicate and digest checks', keepsLateReports);
