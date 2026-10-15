@@ -61,6 +61,20 @@ the original cause. The `unavailable.cause` is internal diagnostic data;
 HTTP callers must expose only the status. An unavailable result can be
 ambiguous: retry with the same command key.
 
+An optional `checkAccess` runs the caller's existing access check inside each append
+attempt. The store samples the global log position before this check and uses the
+existing conditional publish headers to require that position and the expected subject
+position together. A supplied `expectedGlobalSequence` stays stricter and is not replaced.
+An event saved between this check and publication produces a conflict. The caller must
+reload and revalidate; this conflict is not retried internally. A failed access check
+returns `unavailable` with its cause. It cannot prove whether an earlier publish with a
+lost reply was saved, so callers must retain their recovery records. An expired deadline
+also keeps the existing unavailable result.
+The original deadline is checked again after the callback. Callers supply only the small
+access-stream check, with history already read. No callback or access data enters the event.
+`test/append.test.ts` covers a change between checking and publication and expiry during
+checking. The production memory route covers revoked grants and disabled assistants.
+
 Reads retry only transient unavailable errors with jittered exponential backoff
 capped at 500 ms, for at most one second per NATS read. Each request keeps its
 250 ms timeout.

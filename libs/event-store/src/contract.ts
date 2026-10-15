@@ -21,6 +21,8 @@ export interface AppendCommand {
   expectedSequence: number;
   /** Stop retries when the caller's access check expires. Use performance.now(). */
   deadline?: number;
+  /** Recheck the caller's original access snapshot inside the conditional append. */
+  checkAccess?: () => Promise<unknown>;
   /** Stop further publishes when the caller withdraws permission. */
   signal?: AbortSignal;
   /** Check this subject through expectedSequence and find no earlier matching command. */
@@ -230,4 +232,11 @@ function validMcpSnapshot(event: EventEnvelope): boolean {
   } catch {
     return false;
   }
+}
+
+export function matchesConversationRead(event: EventEnvelope, subject: string): boolean {
+  if (event.subject === subject) return true;
+  const conversationId = subject.slice('conversation-'.length);
+  return event.subject === `participation-${conversationId}` &&
+    event.type === 'conversation.closed';
 }

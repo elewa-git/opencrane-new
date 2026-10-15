@@ -3,7 +3,7 @@ import { opendir } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { authorityFence, MemoryPersonScopeOnly, memoryReferences,
+import { authorityFence, isAuthorityChanged, MemoryPersonScopeOnly, memoryReferences,
   readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryIdentity } from '@opencrane/projections';
 import { memoryTextSchema, memoryWrittenDataSchema, memoryWrittenEventSchema,
@@ -26,7 +26,7 @@ export const changeParams = z.strictObject({ scopeId: z.string().regex(/^[a-f0-9
 type Input = z.infer<typeof commandInput>;
 type PrincipalKind = 'human' | 'agent';
 type AgentWrite = { deadline: number; conversation: string; turn: string; requestId: string;
-  confirm: () => Promise<unknown> };
+  confirm: () => Promise<unknown>; checkAccess: () => Promise<unknown> };
 
 function commandReference(silo: string, scopeId: string, requester: string, commandId: string,
   principalKind: PrincipalKind = 'human') {
@@ -256,13 +256,14 @@ async function appendPrepared(options: MemoryOptions, input: Input,
     keys.provision(identity);
     const encrypted = keys.encrypt(identity, input.text);
     event.data = { ...data, ...encrypted };
-    checkDependencies(rows, scope, input, keys, options.silo);
     await fresh();
     // Recheck the original deadline, live turn and watched grants just before saving.
     if (agent) await agent.confirm();
+    checkDependencies(rows, scope, input, keys, options.silo);
     journal.save({ ...entry, stage: 'unknown' });
     const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0,
-      historyChecked: true as const, deadline: fresh.deadline };
+      historyChecked: true as const, deadline: fresh.deadline,
+      ...(agent ? { checkAccess: agent.checkAccess } : {}) };
     let result;
     try {
       result = await options.store.append(command);
@@ -270,6 +271,9 @@ async function appendPrepared(options: MemoryOptions, input: Input,
       return { outcome: 'unknown', memoryId: reference };
     }
     if (result.status === 'unavailable') {
+      if (isAuthorityChanged(result.cause)) {
+        throw new MemoryRefused();
+      }
       return { outcome: 'unknown', memoryId: reference };
     }
     if (result.status === 'appended') {
@@ -286,6 +290,9 @@ async function appendPrepared(options: MemoryOptions, input: Input,
     }
     keys.delete(identity);
     journal.remove();
+    if (agent) {
+      throw new MemoryRefused();
+    }
     return { outcome: 'conflict', memoryId: reference };
   } catch (error) {
     if (journal.read()?.stage === 'prepared') {
