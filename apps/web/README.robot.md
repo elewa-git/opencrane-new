@@ -82,7 +82,8 @@ one invitation command and reads `/api/invitations/:memberId/command-changes/:co
 for the link and exact expiry. A lost create reply keeps both random ids in memory and
 offers GET-only Check status on the Invitations tab. The tab's list remains unavailable.
 No email is sent. The link's join page is separate work. Closing the drawer discards
-its draft; access refusal clears it and ignores late replies.
+its draft; access refusal clears it before reading the response body. Late replies
+cannot restore it.
 `?tab=groups` opens the existing Groups tab, including from group detail pages.
 Group details link to a shared assistant draft at
 `/org/people/groups/<id>/assistants/new`. The draft reads the owner group, listed groups,

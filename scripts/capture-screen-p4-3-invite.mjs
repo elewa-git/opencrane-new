@@ -81,6 +81,13 @@ async function checkLayout(page) {
   assert.deepEqual(layout.small, []);
 }
 
+function invalidFieldHasErrorBorder() {
+  const field = globalThis.document.querySelector('#invite-email');
+  const error = globalThis.document.querySelector('#invite-email-error');
+  return globalThis.getComputedStyle(field).borderTopColor
+    === globalThis.getComputedStyle(error).color;
+}
+
 async function capture(browser, width, frame) {
   const context = await browser.newContext({ viewport: { width, height: 900 },
     reducedMotion: 'reduce', permissions: ['clipboard-read', 'clipboard-write'] });
@@ -97,8 +104,11 @@ async function capture(browser, width, frame) {
   if (frame !== 'PPL-40') {
     await page.getByRole('button', { name: 'Create', exact: true }).click();
   }
-  if (frame === 'PPL-41') await page.locator('#invite-email-error').getByText(/valid email/u)
-    .waitFor();
+  if (frame === 'PPL-41') {
+    await page.locator('#invite-email-error').getByText(/valid email/u).waitFor();
+    const borderMatchesError = await page.evaluate(invalidFieldHasErrorBorder);
+    assert.equal(borderMatchesError, true);
+  }
   if (frame === 'PPL-42' || frame === 'PPL-43') {
     await page.locator('#invitation-link').waitFor();
   }

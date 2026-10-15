@@ -283,6 +283,10 @@ export class InvitePanel implements OnDestroy {
         options.body = JSON.stringify(body);
       }
       const response = await fetch(url, options);
+      if (response.status === 401 || response.status === 403) {
+        // Return the refusal before a stalled body can leave private details visible.
+        return { ok: false, status: response.status, body: undefined };
+      }
       let result: unknown;
       try {
         result = await response.json();
