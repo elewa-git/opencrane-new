@@ -97,7 +97,8 @@ export { memoryContextRecordedDataSchema, memoryContextRecordedEventSchema,
   type MemoryContextRecord } from './memory-context.ts';
 
 export { mcpPublicationIntentDataSchema } from './data.ts';
-export { gatewayEntrySchema, gatewayConfigurationSchema, gatewayObservationSchema } from './gateway-configuration.ts';
+export { gatewayEntrySchema, gatewayConfigurationSchema, gatewayObservationSchema,
+  mcpConfigurationObservationSchema } from './gateway-configuration.ts';
 export { budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema } from './budget-root.ts';
 export { hostedImageInstallationSchema } from './hosted-image.ts';
 export { departureCleanupCompletedSchema } from './identity-events.ts';

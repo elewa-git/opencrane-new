@@ -648,6 +648,15 @@ The tool-policy fold saves reviewRevision and publication intent. New publicatio
 leave published false and policyRevision unchanged. Old boolean events cannot supply a
 generation entry. Rebuilding the catalogue repeats the same fold and starts no preparation.
 
+## Gateway receipts in tool policy
+
+`configurationObservation` holds the first matching per-operation gateway receipt.
+The fold checks its publication change, fragment digest, review and source position.
+Receipt events advance sequence only. Changed policy or publication clears the field;
+unchanged checks and dispatch admission keep it. The catalogue stores it in the existing
+policy JSON, without new columns. Rebuild repeats this fold without probing or writing
+configuration, and cannot establish live readiness.
+
 ## Hidden child requests
 
 `conversation.child_requested` is skipped before the conversation feed is written,

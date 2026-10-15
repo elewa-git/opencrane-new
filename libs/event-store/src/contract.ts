@@ -29,7 +29,7 @@ export interface AppendCommand {
   historyChecked?: true;
   /** Check the whole category, such as member-*, instead of one entity. */
   expectedSubject?: string;
-  /** Check the whole log position for ownership migration or provider migration. */
+  /** Check the whole log position for selected changes that read several streams. */
   expectedGlobalSequence?: number;
 }
 export type AppendResult =
@@ -72,7 +72,7 @@ export function validateCommand(
   if (!validEventWrite(event)) {
     return undefined;
   }
-  if (!validMigrationFence(command, event)) {
+  if (!validGlobalPosition(command, event)) {
     return undefined;
   }
   if (!validExpectedSubject(command, event)) {
@@ -181,15 +181,16 @@ function validHistoryCheck(command: AppendCommand): boolean {
   return Number.isFinite(deadline) && deadline >= 0;
 }
 
-function validMigrationFence(command: AppendCommand, event: EventEnvelope) {
+function validGlobalPosition(command: AppendCommand, event: EventEnvelope) {
   const sequence = command.expectedGlobalSequence;
   if (sequence === undefined) {
     return true;
   }
-  const migration = event.type === 'ownership.seeded' ||
+  const supported = event.type === 'mcp.configuration_observed' ||
+    event.type === 'ownership.seeded' ||
     event.type === 'provider.managed_calls_drain_set' ||
     event.type === 'provider.managed_calls_enabled';
-  return migration && Number.isSafeInteger(sequence) && sequence >= 0;
+  return supported && Number.isSafeInteger(sequence) && sequence >= 0;
 }
 
 export function sameCommand(a: EventEnvelope, b: EventEnvelope): boolean {

@@ -31,3 +31,19 @@ export const gatewayObservationEvent = event(
     processRef: '00000000-0000-4000-8000-000000000001', outcome: 'loaded',
     observedAt: '2026-10-14T00:00:00.000Z' },
 );
+
+export const mcpConfigurationObservationSchema = z.strictObject({
+  serverId: z.string().min(1), changeRef: z.string().min(1),
+  reviewRevision: z.int().positive(), fragmentDigest: digest,
+  sourceSequence: z.int().positive(), generation: z.int().positive(),
+  recordDigest: digest, configDigest: digest, processRef: z.uuid(), observedAt: z.iso.datetime(),
+});
+export const mcpConfigurationObservationEvent = event(
+  'mcp.configuration_observed', 'mcp',
+  'The running gateway confirmed the configuration for this publication request.',
+  mcpConfigurationObservationSchema,
+  { serverId: 'alpha', changeRef: 'publication-1', reviewRevision: 3,
+    fragmentDigest: 'a'.repeat(64), sourceSequence: 4, generation: 1,
+    recordDigest: 'b'.repeat(64), configDigest: 'c'.repeat(64),
+    processRef: '00000000-0000-4000-8000-000000000001', observedAt: '2026-10-14T00:00:00.000Z' },
+);

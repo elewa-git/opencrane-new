@@ -262,7 +262,8 @@ configuration and a fresh silo installation remain unqualified.
 Preference parsing binds the human principal to that member id. Access checks remain the caller's job.
 
 `expectedGlobalSequence` is allowed only for `ownership.seeded`,
-`provider.managed_calls_drain_set` and `provider.managed_calls_enabled`. A drain command captures the global position
+`provider.managed_calls_drain_set`, `provider.managed_calls_enabled` and
+`mcp.configuration_observed`. A drain command captures the global position
 before loading provider configuration and spending mode. Its one append checks
 both that position and the provider-category position. This refuses switch-on on
 the budget stream between the command's last check and its append. Any other new
@@ -310,3 +311,9 @@ Switch-on captures that same global position before its incremental history read
 It appends to `budget-<silo>` with `historyChecked`, checking both the budget
 position and global position. A concurrent reservation, turn start, binding change,
 drain cancellation or second switch-on therefore causes a conflict.
+
+Tool publication receipts capture the global position before reading the server and
+checking the current gateway preparation. Their append checks both the server and
+global positions. A newer preparation on the gateway stream therefore refuses the
+receipt atomically. Other concurrent writes can also refuse it; observation retries
+from current records. This check does not change read access or call admission.

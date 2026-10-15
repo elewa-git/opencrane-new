@@ -39,14 +39,34 @@ async function currentMember(store: ConfigurationStore, silo: string, serverId: 
   return { entry, changeRef, sourceSequence: state.sequence, fragmentDigest: intent.fragmentDigest };
 }
 
+export function gatewayMemberCurrent(rows: StoredEvent[], member: Configuration['members'][number]) {
+  function atSource(row: StoredEvent) {
+    return row.sequence <= member.sourceSequence;
+  }
+  const sourceRows = rows.filter(atSource);
+  if (sourceRows.at(-1)?.sequence !== member.sourceSequence) {
+    return false;
+  }
+  const source = toolPolicyFromRows(sourceRows);
+  const current = toolPolicyFromRows(rows);
+  const entry = publicationEntry(current);
+  return entry !== null && current.serverId === member.entry.serverId &&
+    source.policyRevision === current.policyRevision &&
+    source.publication?.commandId === member.changeRef &&
+    current.publication?.commandId === member.changeRef &&
+    current.publication.fragmentDigest === member.fragmentDigest &&
+    publicationDigest(entry) === member.fragmentDigest &&
+    publicationDigest(member.entry) === member.fragmentDigest;
+}
+
 export async function gatewayConfigurationCurrent(store: ConfigurationStore, silo: string,
   record: Configuration) {
   const configurationSubject = `gateway-config-${silo}`;
   wireSubject(configurationSubject);
   for (const member of record.members) {
     const subject = exactMcpSubject(member.entry.serverId);
-    const position = await store.head(subject);
-    if (position !== member.sourceSequence) {
+    const rows = await history(store, subject, silo, performance.now() + 10_000);
+    if (!gatewayMemberCurrent(rows, member)) {
       return false;
     }
   }

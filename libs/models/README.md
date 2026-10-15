@@ -20,10 +20,10 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|delivers and probes configuration; checks calls, holds and stops against queued work; tests private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks open spending before provider switch-on; saves hosted registration, publication, gateway, root allowance, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
+  models -->|checks open spending before provider switch-on; saves hosted registration, publication receipts, gateway, root allowance, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
 ```
 
-apps/ops confirms owner appointments for this package. Its nightly memory scan also uses this library to check saved dependencies at the intended nightly time. Its nightly memory scan also
+apps/ops confirms owner appointments for this package. Its nightly memory scan also
 uses this library to check saved dependencies at the intended nightly time.
 
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
@@ -62,6 +62,8 @@ This internal API has no child-chat caller yet.
   model and memory routes, and add rules for the reviewed tools. An explicit internal
   caller can replace the file and record its exact reply from the running gateway.
   It checks again before returning that reply, so a withdrawal or replacement makes it invalid.
+  Each server gets one saved receipt for its publication request. Receipts and calls
+  keep that request current unless the reviewed rules or intent change.
   Background delivery and a Ready read are not built yet.
 - Provide an optional gateway route for testing CONNECT, the HTTP request that
   opens a byte tunnel. It uses only the private relay address returned by the

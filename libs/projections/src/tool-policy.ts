@@ -1,6 +1,6 @@
 import { validateMcpCatalogue, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { getEventDefinition, hostedCredentialContractSchema, mcpServerDiscoveredDataSchema,
-  mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema,
+  mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, mcpConfigurationObservationSchema,
   type EventEnvelope } from '@opencrane/events';
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
@@ -24,11 +24,15 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   if (event.type === 'mcp.dispatch_admitted') {
     return { ...state, sequence };
   }
+  if (event.type === 'mcp.configuration_observed') {
+    return applyConfigurationObservation(state, event, sequence);
+  }
   if (event.type === 'mcp.catalogue_checked') {
     return applyCheck(state, data, sequence);
   }
   // Keep approval bindings stable when only the check date changes.
-  let next: ToolPolicy = { ...state, ...identity, sequence, policyRevision: sequence };
+  let next: ToolPolicy = { ...state, ...identity, sequence, policyRevision: sequence,
+    configurationObservation: undefined };
   if (event.type === 'mcp.server_registered') {
     const startupReviewRequired = requiresStartupReview(data);
     next = { ...emptyToolPolicy(), ...identity, sequence, policyRevision: sequence,
@@ -45,12 +49,7 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     next = applyReview(next, state, event);
   }
   if (event.type === 'mcp.server_published') {
-    const intent = mcpPublicationIntentDataSchema.safeParse(data);
-    if (intent.success) {
-      return { ...state, sequence, published: false, publication: intent.data };
-    }
-    // Keep drift held until the publication path can confirm the exact applied revision.
-    next.published = state.startupReviewRequired !== true && state.driftHeld !== true;
+    return applyPublication(state, next, data);
   }
   if (event.type === 'mcp.server_rejected') {
     next = applyRejection(next, data);
@@ -67,6 +66,33 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     next.published = keepsPublication(state, next.tools);
   }
   return toolPolicySchema.parse(next);
+}
+
+function applyPublication(state: ToolPolicy, next: ToolPolicy, data: Record<string, unknown>) {
+  const intent = mcpPublicationIntentDataSchema.safeParse(data);
+  if (intent.success) {
+    return { ...state, sequence: next.sequence, published: false, publication: intent.data,
+      configurationObservation: undefined };
+  }
+  // Keep drift held until publication can confirm the exact applied revision.
+  next.published = state.startupReviewRequired !== true && state.driftHeld !== true;
+  return toolPolicySchema.parse(next);
+}
+
+function applyConfigurationObservation(state: ToolPolicy, event: EventEnvelope,
+  sequence: number): ToolPolicy {
+  const receipt = mcpConfigurationObservationSchema.parse(event.data);
+  const intent = state.publication;
+  const next = { ...state, sequence };
+  // Keep only the first receipt for the unchanged publication request.
+  if (state.configurationObservation || !intent || receipt.changeRef !== intent.commandId ||
+      receipt.fragmentDigest !== intent.fragmentDigest ||
+      receipt.reviewRevision !== state.reviewRevision ||
+      receipt.reviewRevision !== state.policyRevision ||
+      receipt.sourceSequence <= intent.expectedSequence || receipt.sourceSequence > state.sequence) {
+    return next;
+  }
+  return { ...next, configurationObservation: receipt };
 }
 
 function applyRejection(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy {
@@ -163,7 +189,8 @@ function applyMode(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy
 function applyCheck(state: ToolPolicy, data: Record<string, unknown>, sequence: number) {
   if (data['outcome'] === 'failed') {
     // End old approvals even if a successful check arrives before anyone reads them.
-    return { ...state, sequence, policyRevision: sequence, expiresAt: null };
+    return { ...state, sequence, policyRevision: sequence, expiresAt: null,
+      configurationObservation: undefined };
   }
   if (!state.catalogue || data['schemaDigest'] !== state.catalogue.schemaDigest) {
     throw new Error('Catalogue check does not match the saved snapshot');
