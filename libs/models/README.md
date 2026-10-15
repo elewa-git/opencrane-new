@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|delivers and probes configuration; checks calls, holds and stops against queued work; tests private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|delivers configuration; checks calls and spending; tests per-call model keys, CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on; saves hosted registration, publication receipts, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
 ```
@@ -74,6 +74,10 @@ This internal API has no child-chat caller yet.
   opens a byte tunnel. It uses only the private relay address returned by the
   decision service. Normal startup keeps this route off. Computers cannot use it
   until destination checks and guarded sockets are ready.
+- Provide an optional AI gateway route that uses the key in each decision reply.
+  It keeps the provider's token counts and excludes caller credentials from the
+  upstream request. Normal startup does not select it. The decision service still
+  refuses these calls, so managed chat is not available yet.
 - Read private tool-instance status and original changes for their current member owner.
   Save an owner stop request with one event. Wake stays refused until hosted admission
   and personal profiles are available. No instance starts or credentials are released.
