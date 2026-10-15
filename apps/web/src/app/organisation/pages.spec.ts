@@ -44,7 +44,7 @@ it('routes only safe integration explanation ids', () => {
   expect(toolExplanationServerId('/org/integrations/odoo/access/explanation')).toBe('odoo');
   expect(organisationPage('/org/integrations/odoo/access/explanation')).toBe('integrations');
   expect(toolExplanationServerId('/org/integrations/' + 'x'.repeat(201) +
-    '/access/explanation')).toBeUndefined();
+    '/access/explanation')).toBe('x'.repeat(201));
 });
 
 function checkNonNavigationPages(): void {

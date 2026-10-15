@@ -1,0 +1,49 @@
+:host { display: grid; align-content: start; gap: 18px; min-width: 0; }
+h1, h2, p { margin: 0; }
+h1 { font: var(--oc-type-page); overflow-wrap: anywhere; }
+h2 { font-size: 16px; overflow-wrap: anywhere; }
+header { display: grid; justify-items: start; gap: 8px; }
+header p, small, .future { color: var(--oc-ink-admin-muted); }
+button, .breadcrumb a { min-height: 44px; }
+button { padding: 9px 16px; border: 1px solid var(--oc-border-input);
+  border-radius: 8px; background: white; cursor: pointer; }
+.breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
+  font-size: 13px; overflow-wrap: anywhere; }
+.breadcrumb a { display: inline-flex; align-items: center; min-width: 44px;
+  color: var(--oc-accent-dark); }
+table { width: 100%; border-collapse: collapse; border: 1px solid var(--oc-border-default);
+  border-radius: 12px; background: white; table-layout: fixed; }
+thead { background: #f1f4f4; text-align: left; text-transform: uppercase;
+  font-size: 11px; letter-spacing: .06em; }
+th, td { padding: 16px; border-bottom: 1px solid var(--oc-border-default);
+  vertical-align: top; overflow-wrap: anywhere; }
+tbody th { text-align: left; font-weight: 600; }
+small { display: block; margin-top: 4px; font-size: 13px; font-weight: 400; }
+.granted { color: #2a7d4f; }
+.missing { color: #c1392b; }
+.unknown { color: #695c36; }
+.note { padding: 16px; border: 1px solid #bde6ed; border-radius: 12px;
+  background: #f0fbfd; }
+.note p { margin: 8px 0 0 24px; }
+.refresh-note { padding: 12px; border-radius: 8px; background: #fff6df; }
+.dimmed { opacity: .62; }
+.cards { display: none; }
+.reasons { overflow-wrap: anywhere; }
+.reasons ul { margin: 8px 0 0; padding-left: 22px; }
+:host :is(a, button):focus-visible, #tool-access-refusal:focus-visible {
+  outline: 2px solid #0a8497; outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  table { display: none; }
+  .cards { display: grid; border: 1px solid var(--oc-border-default);
+    border-radius: 12px; background: white; }
+  .cards article { padding: 18px; border-bottom: 1px solid var(--oc-border-default);
+    min-width: 0; overflow-wrap: anywhere; }
+  .cards article:last-child { border-bottom: 0; }
+  .cards article > p { color: var(--oc-ink-admin-muted); font-size: 13px; }
+  dl { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 12px 8px;
+    margin: 18px 0 0; }
+  dt { color: var(--oc-ink-admin-muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  button { width: 100%; }
+}

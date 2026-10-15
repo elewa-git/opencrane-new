@@ -6,6 +6,7 @@ import { ModelsScreen } from './models/model-registry';
 import { SpendingScreen } from './spending/spending';
 import { IntegrationRegister } from './integrations/integration-register';
 import { IntegrationDetail } from './integrations/integration-detail';
+import { ToolAccessExplanation } from './integrations/tool-access-explanation';
 import { ToolPolicyScreen } from './tool-policy/tool-policy';
 import { Workspace } from './chat/workspace';
 import { DirectChat } from './chat/direct-chat';
@@ -15,7 +16,7 @@ import { SharedState } from './shared-state/shared-state';
 import { StateSpecimen } from './shared-state/state-specimen';
 import { OrganisationShell } from './organisation/organisation-shell';
 import { assistantCreateGroupId, normalisePathname, organisationPage,
-  organisationPageLabel, peopleGroupId, peopleMemberId }
+  organisationPageLabel, peopleGroupId, peopleMemberId, toolExplanationServerId }
   from './organisation/pages';
 import { AccountScreen } from './settings/account-screen';
 import { PersonalSettingsShell } from './settings/personal-settings-shell';
@@ -32,7 +33,7 @@ import { SurveyScreen } from './welcome/survey';
   selector: 'app-root',
   imports: [
     Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, DirectChat, Conversations,
-    ToolPolicyScreen,
+    ToolPolicyScreen, ToolAccessExplanation,
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, IntegrationDetail,
     OrganisationShell,
     AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen, MemberDetailScreen,
@@ -65,6 +66,7 @@ export class App {
   protected readonly assistantCreateGroupId = assistantCreateGroupId(this.pathname);
   protected readonly installPage = this.pathname === '/org/integrations/new';
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(this.pathname)?.[1];
+  protected readonly explanationServer = toolExplanationServerId(this.pathname);
   protected readonly detailServer = this.installPage
     ? undefined
     : /^\/org\/integrations\/([\w-]+)$/u.exec(this.pathname)?.[1];

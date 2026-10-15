@@ -1,0 +1,109 @@
+@if (state() === 'refused' || state() === 'sign-in') {
+  <h1 id="tool-access-refusal" tabindex="-1">
+    {{ state() === 'sign-in' ? 'Sign in again' : 'Access refused' }}
+  </h1>
+  <p>{{ state() === 'sign-in' ? 'Please sign in again to check access.' :
+    'You no longer have access to this explanation.' }}</p>
+} @else {
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/org/integrations">Integrations</a><span aria-hidden="true">›</span>
+    <a [href]="'/org/integrations/' + serverId()">{{ serverId() }}</a>
+    <span aria-hidden="true">›</span><span aria-current="page">Access</span>
+  </nav>
+  @if (state() === 'incomplete') {
+    <h1>Tool access</h1>
+    <p>The link is incomplete. Open an explanation from a person’s access page.</p>
+  } @else if (state() === 'loading') {
+    <h1>Tool access</h1>
+    <p role="status">Checking access…</p>
+  } @else if (state() === 'failed') {
+    <h1>Tool access</h1>
+    <p role="alert">We couldn't check access just now. This doesn't mean access is missing.</p>
+    <button type="button" (click)="retry()">Try again</button>
+  } @else if (explanation(); as reply) {
+    <header>
+      <h1>Who can use {{ toolName() }} — and why</h1>
+      <p>Checked {{ checkedTime() }}</p>
+      <button type="button" (click)="retry()" [disabled]="refreshing()">
+        {{ refreshing() ? 'Refreshing…' : 'Refresh' }}
+      </button>
+    </header>
+    @if (failedRefresh()) {
+      <p class="refresh-note" role="status">
+        We couldn't check access just now. This doesn't mean access is missing.
+        Showing what we checked at {{ checkedClock() }}
+      </p>
+    }
+    <section [class.dimmed]="failedRefresh()" [attr.aria-busy]="refreshing()">
+      <table>
+        <thead><tr><th scope="col">Needs</th><th scope="col">Source</th>
+          <th scope="col">Status</th></tr></thead>
+        <tbody>
+          <tr>
+            <th scope="row">{{ requesterName() }} can ask<small>Requester grant</small></th>
+            <td>{{ requesterSource() }}</td>
+            <td><strong [class]="grantClass(reply.person)">{{ grantStatus(reply.person) }}</strong>
+              @if (reply.person === 'denied') {
+                <small>Give this person access to this integration</small>
+              }
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">{{ assistantName() }} can call it<small>Assistant grant</small></th>
+            <td>{{ assistantSource() }}</td>
+            <td><strong [class]="grantClass(reply.assistant)">{{ grantStatus(reply.assistant) }}</strong>
+              @if (reply.assistant === 'denied') {
+                <small>Give this assistant access to this integration</small>
+              }
+              <small>Acts for this person: {{ grantStatus(reply.actsFor) }}</small>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">{{ requesterName() }} · account<small>Personal account</small></th>
+            <td>{{ accountSource() }}</td>
+            <td><strong>{{ accountStatus() }}</strong><small>{{ accountHint() }}</small></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="cards">
+        <article>
+          <h2>{{ requesterName() }} can ask</h2><p>Requester grant</p>
+          <dl><dt>Source</dt><dd>{{ requesterSource() }}</dd>
+            <dt>Status</dt><dd [class]="grantClass(reply.person)">{{ grantStatus(reply.person) }}
+              @if (reply.person === 'denied') {
+                <small>Give this person access to this integration</small>
+              }
+            </dd></dl>
+        </article>
+        <article>
+          <h2>{{ assistantName() }} can call it</h2><p>Assistant grant</p>
+          <dl><dt>Source</dt><dd>{{ assistantSource() }}</dd>
+            <dt>Status</dt><dd [class]="grantClass(reply.assistant)">{{ grantStatus(reply.assistant) }}
+              @if (reply.assistant === 'denied') {
+                <small>Give this assistant access to this integration</small>
+              }
+              <small>Acts for this person: {{ grantStatus(reply.actsFor) }}</small>
+            </dd></dl>
+        </article>
+        <article>
+          <h2>{{ requesterName() }} · account</h2><p>Personal account</p>
+          <dl><dt>Source</dt><dd>{{ accountSource() }}</dd>
+            <dt>Status</dt><dd>{{ accountStatus() }}<small>{{ accountHint() }}</small></dd></dl>
+        </article>
+      </div>
+    </section>
+    <aside class="note">
+      <strong>All three are needed for each call</strong>
+      <p>A company connection is not used in place of a missing personal account.</p>
+    </aside>
+    @if (hasDetail()) {
+      <p class="future">Publishing: Not available yet · Works now: Not available yet</p>
+    }
+    @if (reasons().length) {
+      <section class="reasons" aria-label="Other checks">
+        <h2>Other checks</h2>
+        <ul>@for (reason of reasons(); track $index) { <li>{{ reason }}</li> }</ul>
+      </section>
+    }
+  }
+}

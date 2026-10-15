@@ -433,10 +433,9 @@ describe('tool access explanation route', () => {
     };
     const fixture = await create(response(missing));
     await vi.waitFor(() => expect(root(fixture).textContent).toContain('Missing'));
-    const firstUrl = String(fetchSpy.mock.calls[0]?.[0]);
-    expect(firstUrl).toContain('requesterId=alex');
-    expect(firstUrl).toContain('assistantId=helper');
-    expect(firstUrl).toContain('toolName=orders.read');
+    const firstUrl = fetchSpy.mock.calls[0]?.[0];
+    expect(firstUrl).toBe('/api/org/integrations/odoo/access/explanation?' +
+      'requesterId=alex&assistantId=helper&toolName=orders.read');
     expect(root(fixture).textContent).toContain('Checked 4 Oct 2026, 08:40 UTC');
     expect(root(fixture).textContent).not.toContain('missing_assistant_grant');
     expect(root(fixture).textContent).not.toContain('Publishing');
@@ -448,6 +447,83 @@ describe('tool access explanation route', () => {
     const fixture = await create();
     expect(root(fixture).textContent).toContain('The link is incomplete');
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('shows an incomplete link for an oversized server id', async () => {
+    globalThis.history.replaceState({}, '', '/org/integrations/' + 'x'.repeat(201) +
+      '/access/explanation?requester=alex&assistant=helper&tool=orders.read');
+    const fixture = await create();
+    expect(root(fixture).textContent).toContain('The link is incomplete');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('shows grant sources and plain reasons without promising a call', async () => {
+    const detailed = {
+      serverId: 'odoo', requesterId: 'alex', assistantId: 'helper',
+      toolName: 'orders.read', checkedAt: '2026-10-04T08:40:00.000Z',
+      person: 'allowed', assistant: 'allowed', actsFor: 'allowed',
+      profile: 'absent_on_version', mode: 'ask', review: 'current',
+      publication: 'unavailable', freshness: 'current', policySequence: 1,
+      policyRevision: 1, catalogueCheckedAt: null, catalogueExpiresAt: null,
+      availability: 'unavailable', complete: false, unavailableSections: [],
+      reviewRevision: 'rev', reasons: ['unrecognised_check'],
+      sources: [
+        { kind: 'group', groupName: 'Sales', eventId: 'one', sequence: 1 },
+        { kind: 'assistant', eventId: 'two', sequence: 2 },
+      ],
+    };
+    const fixture = await create(response(detailed));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Via Sales'));
+    expect(root(fixture).textContent).toContain('Direct grant');
+    expect(root(fixture).textContent).toContain('Not connected');
+    expect(root(fixture).textContent).toContain('Only this person can connect it');
+    expect(root(fixture).textContent).toContain("Another check didn't pass");
+    expect(root(fixture).textContent).not.toContain('unrecognised_check');
+    expect(root(fixture).textContent).toContain('Works now: Not available yet');
+  });
+
+  it('treats malformed success and a server outage as unknown', async () => {
+    const fixture = await create(response({ checkedAt: 'invalid' }));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain("We couldn't check access"));
+    expect(root(fixture).textContent).not.toContain('Missing');
+    fetchSpy.mockResolvedValueOnce(response({ status: 'unavailable' }, 503));
+    button(root(fixture), 'Try again').click();
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    expect(root(fixture).textContent).toContain("This doesn't mean access is missing");
+  });
+
+  it('clears the tool and rows as soon as a refresh is refused', async () => {
+    const missing = {
+      serverId: 'odoo', requesterId: 'alex', assistantId: 'helper',
+      toolName: 'orders.read', checkedAt: '2026-10-04T08:40:00.000Z',
+      person: 'allowed', assistant: 'denied', actsFor: 'allowed',
+      reasons: ['missing_assistant_grant'], complete: false, availability: 'unavailable',
+    };
+    const fixture = await create(response(missing));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('orders.read'));
+    fetchSpy.mockResolvedValueOnce(response({ status: 'refused' }, 403));
+    button(root(fixture), 'Refresh').click();
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Access refused'));
+    expect(root(fixture).textContent).not.toContain('orders.read');
+    expect(root(fixture).textContent).not.toContain('Missing');
+    expect(root(fixture).textContent).not.toContain('This person');
+    expect(root(fixture).querySelector('#tool-access-refusal')).toBeTruthy();
+  });
+
+  it('keeps dated rows dimmed after a failed refresh', async () => {
+    const missing = {
+      serverId: 'odoo', requesterId: 'alex', assistantId: 'helper',
+      toolName: 'orders.read', checkedAt: '2026-10-04T08:40:00.000Z',
+      person: 'denied', assistant: 'denied', actsFor: 'allowed',
+      reasons: ['missing_requester_grant'], complete: false, availability: 'unavailable',
+    };
+    const fixture = await create(response(missing));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Missing'));
+    fetchSpy.mockResolvedValueOnce(response({ status: 'unavailable' }, 503));
+    button(root(fixture), 'Refresh').click();
+    await vi.waitFor(() => expect(root(fixture).textContent)
+      .toContain('Showing what we checked at 08:40 UTC'));
+    expect(root(fixture).querySelector('.dimmed')).toBeTruthy();
   });
 });
 });
