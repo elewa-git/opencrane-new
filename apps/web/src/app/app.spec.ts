@@ -406,6 +406,19 @@ describe('MCP register', () => {
   });
 });
 
+it('opens the member detail page inside the organisation shell', async () => {
+  globalThis.history.replaceState({}, '', '/org/people/members/alex-kim');
+  const fixture = await create(new Response(null, { status: 404 }));
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Member not found');
+  });
+  expect(root(fixture).textContent).not.toContain('Search members');
+  fixture.destroy();
+  fetchSpy.mockRestore();
+  globalThis.history.replaceState({}, '', '/');
+});
+
 describe('personal settings shell', () => {
   beforeEach(() => globalThis.history.replaceState({}, '', '/account'));
   afterEach(() => {

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { assistantCreateGroupId, normalisePathname, organisationPage,
-  organisationPageLabel } from './pages';
+  organisationPageLabel, peopleMemberId } from './pages';
 
 function checkTrailingSlash(pathname: string): void {
   expect(organisationPage(`${pathname}/`)).toBe(organisationPage(pathname));
@@ -32,6 +32,12 @@ it('keeps the shared assistant create page inside People & groups', () => {
 
 it('opens the owner screen inside People & groups', () => {
   expect(organisationPage('/org/people/owners')).toBe('people');
+});
+
+it('routes a safe member id inside People & groups', () => {
+  expect(peopleMemberId('/org/people/members/alex-kim')).toBe('alex-kim');
+  expect(organisationPage('/org/people/members/alex-kim')).toBe('people');
+  expect(peopleMemberId('/org/people/members/alex%40example.test')).toBeUndefined();
 });
 
 function checkNonNavigationPages(): void {

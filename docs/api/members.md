@@ -17,7 +17,10 @@ Commands still check authority and reviewed positions when sent.
 The access and departure reads are described below.
 The Members tab uses the directory read for search and bounded pages. It shows
 only current counts. It keeps loaded rows after an unavailable read and clears
-them after a 401 or 403. Member detail remains a separate screen change.
+them after a 401 or 403. Each member name opens the detail page. That page reads
+the member first and reads access separately only for a full admin detail. A
+minimal header shows name and role alone. A 401 or 403 on either read clears all
+detail, while a temporary failure keeps the last loaded facts for GET-only retry.
 
 Paging follows colleagues: default 20, maximum 50, query ≤100 characters, ids ≤200 safe characters.
 Event checks exclude departed candidates. Pages can be short/empty; follow `next`.

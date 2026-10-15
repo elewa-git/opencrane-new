@@ -48,6 +48,14 @@ page, and `next` loads more rows. A request generation drops older successful an
 ordinary failed search replies. Any live 401 or 403 clears member and group rows,
 closes the tabs and stops later replies from showing names. Member rows are read-only
 in this part.
+Each member name links to `/org/people/members/<id>`. That page reads the member
+first, then `/api/members/<id>/access` only for a full admin detail. A minimal
+header never triggers the access read. A refused read clears all detail, including
+late replies. A 404 from either read also clears the whole page. Temporary failure keeps
+loaded data and offers GET-only retry. Member and access load times stay separate when
+only one read succeeds. Grants use three columns on desktop and labelled cards on phones.
+Tool explanations are not shown in this part. Screen captures use intercepted reads;
+see [the receipt](../../docs/process/screen-p4-3-detail/receipt.md).
 `?tab=groups` opens the existing Groups tab, including from group detail pages.
 Group details link to a shared assistant draft at
 `/org/people/groups/<id>/assistants/new`. The draft reads the owner group, listed groups,

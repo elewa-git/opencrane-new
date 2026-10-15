@@ -10,6 +10,11 @@ export const organisationPages = [
 
 export type OrganisationPage = typeof organisationPages[number]['id'];
 const peopleGroupPath = /^\/org\/people\/groups\/([\w-]{1,200})$/u;
+const peopleMemberPath = /^\/org\/people\/members\/([\w-]{1,200})$/u;
+
+export function peopleMemberId(pathname: string): string | undefined {
+  return peopleMemberPath.exec(normalisePathname(pathname))?.[1];
+}
 
 export function peopleGroupId(pathname: string): string | undefined {
   return peopleGroupPath.exec(normalisePathname(pathname))?.[1];
@@ -33,7 +38,7 @@ export function organisationPage(pathname: string): OrganisationPage | undefined
     }
   }
   if (pathname === '/org/people' || pathname === '/org/people/owners' ||
-      peopleGroupId(pathname) !== undefined ||
+      peopleGroupId(pathname) !== undefined || peopleMemberId(pathname) !== undefined ||
       assistantCreateGroupId(pathname) !== undefined) {
     return 'people';
   }

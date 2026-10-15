@@ -51,7 +51,9 @@
         <ul class="member-list" aria-label="Members">
           @for (member of rows(); track member.memberId) {
             <li data-member-row class="member-row">
-              <span><strong>{{ memberName(member) }}</strong><small>{{ member.email }}</small></span>
+              <span><strong><a class="member-name-link"
+                [href]="'/org/people/members/' + member.memberId">{{ memberName(member) }}</a></strong>
+                <small>{{ member.email }}</small></span>
               <span><b class="column-label">Role: </b>{{ member.role }}</span>
               <span><b class="column-label">Groups: </b>{{ groupNames(member) }}</span>
               <span><b class="column-label">Status: </b>Active</span>
