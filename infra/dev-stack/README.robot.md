@@ -396,7 +396,7 @@ npx tsc -p infra/dev-stack/tsconfig.json
 shellcheck infra/dev-stack/*.sh
 infra/dev-stack/up.sh --fresh
 infra/dev-stack/up.sh --fresh
-npm run visual:signin
+npm run visual:screen-p4-19-signin
 ss -ltnp
 ```
 

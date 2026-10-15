@@ -318,7 +318,7 @@ async function refusalChecks(browser: Browser, config: AuthConfig, origin: strin
       await login(page, origin, user);
       if (check === 'organisation') {
         assert.equal(new URL(page.url()).searchParams.get('reason'), 'organisation');
-        await page.getByText('Those details did not sign you in', { exact: true }).waitFor();
+        await page.getByText(/^Your account isn't part of/).waitFor();
         assert(!(await context.cookies(origin)).some((item) => item.name === config.cookieName));
         console.log('PASS wrong organisation: real Zitadel token refused by a different server org pin; no session');
       } else {
