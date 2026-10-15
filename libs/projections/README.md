@@ -25,7 +25,7 @@ flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review and publication receipts, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
   projections -->|omits child requests; saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
-  store["libs/event-store<br/>saved events"] -->|ordered events, nightly records, tool holds and private instance stops and reports| projections
+  store["libs/event-store<br/>saved events"] -->|ordered events, image results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
@@ -229,3 +229,6 @@ await eventStore.close();
 
 Tool admission records advance the catalogue's write position. They leave tool rules,
 approval revisions and check dates unchanged. Rebuilding the tables never sends calls.
+
+Hosted image admission reports dated check results. All four checks must pass before
+an image is admitted. Admission grants no tool access and starts no process.

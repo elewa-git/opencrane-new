@@ -556,8 +556,8 @@ Hosted registration may carry a complete `installation`: attemptId 1, platform
 credentialContract. Older hosted records still parse. The existing parser binds
 serverId to the MCP stream subject. No new event types are added in this split.
 
-Remaining: dated receipts, admission GET and recheck commands. Evidence storage is
-P3-6 PR 4b. Image fetch, scans, deployment and evidence bytes are outside this part.
+Dated receipts and the admission GET are implemented below. Recheck commands and
+evidence storage remain for part c. Image fetch, scans, deployment and evidence bytes are outside this part.
 Fresh-install qualification: NOT RUN.
 
 ## Safe budget turn stop records
@@ -584,7 +584,15 @@ references and closed operations; it performs no custody, provider or release wo
 `gateway.configuration_observed` records generation, recordDigest, configDigest,
 processRef, outcome (`loaded`) and observedAt on `gateway-config-<silo>`.
 It is evidence from an exact live control response, not readiness or a file write.
-It grants no permission. Per-server receipts are described below; the Ready read remains unbuilt.
+It grants no permission. The Ready read remains unbuilt.
+
+## Hosted image admission receipts
+
+Defines strict signature, licence, vulnerability and malware receipts in
+`mcp.image_checked`. Pass and fail require reportDigest; fail also requires short
+reasonCodes. Dated verdicts carry checkedAt, expiresAt and engineVersion; scanner
+verdicts also name their database digest and update date. A not_run verdict is
+allowed only alongside a failed check. No report bytes or credentials are saved.
 
 ## Per-server gateway receipts
 

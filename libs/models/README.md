@@ -13,14 +13,14 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server and apps/ops<br/>back end and workers"] -.->|checks public tool addresses, reads, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
   models -->|checks revision, spending, the catalogue and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|delivers configuration; checks calls and spending; tests per-call model keys, CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks open spending before provider switch-on; saves hosted registration, publication receipts, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
+  models -->|checks open spending before provider switch-on; saves hosted image results and registration, publication receipts, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -296,3 +296,8 @@ const model = modelForTask('chat_turn');
 - [README.robot.md](README.robot.md): exact prices, limits, settings, event rules and test detail.
 - [The server](../../apps/server/README.md) holds the start file for the models process.
 - [The glossary](../../GLOSSARY.md#models-process) explains the running process and AI gateway.
+
+Hosted image admission reports dated check results. All four checks must pass before
+an image is admitted. Admission grants no tool access and starts no process.
+The result writer stays inside this package. Server callers can read admission status,
+but the public package exports do not expose the writer.

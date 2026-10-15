@@ -210,6 +210,12 @@ addition. The server requires it for shared children and rejects it for ordinary
 groups. Remove and leave shapes are unchanged. See the
 [child invitation contract](../../docs/api/group-chats.md#child-only-invitations).
 
+## Hosted image admission receipts
+
+`hostedAdmissionSchema` carries serverId, attemptId, imageDigest, platform,
+queuedAt, status and optional checks. Status is checking, rejected, unavailable,
+admitted or expired. Each check reuses the strict event receipt shape.
+
 ## Saved gateway receipt
 
 ToolPolicy optionally carries `configurationObservation`, using the strict event schema.

@@ -5,6 +5,8 @@ import { getEventDefinition, hostedCredentialContractSchema, mcpServerDiscovered
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
 
+const sequenceOnlyEvents = new Set(['mcp.dispatch_admitted', 'mcp.image_checked']);
+
 type Catalogue = ReturnType<typeof mcpServerDiscoveredDataSchema.parse>;
 
 export function emptyToolPolicy(): ToolPolicy {
@@ -21,7 +23,7 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   checkPolicyIdentity(state, event, data);
   const identity = { silo: event.silo, serverId: String(data['serverId']) };
   // Advance the write position without changing approvals or catalogue evidence.
-  if (event.type === 'mcp.dispatch_admitted') {
+  if (sequenceOnlyEvents.has(event.type)) {
     return { ...state, sequence };
   }
   if (event.type === 'mcp.configuration_observed') {

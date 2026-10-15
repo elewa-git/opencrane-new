@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
-  server["apps/server<br/>back end"] -.->|member flags, access replies, child invitations, publication facts, gateway receipts and saved chat choices| protocol
+  server["apps/server<br/>back end"] -.->|image admission, member flags, access replies, child invitations, publication facts, gateway receipts and saved chat choices| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list shapes"]
@@ -89,3 +89,6 @@ const message = clientMessageSchema.parse({ type: 'hello', text: 'Hello' });
 - [README.robot.md](README.robot.md): message contracts and test detail.
 - [The browser app](../../apps/web/README.md) and [the back end](../../apps/server/README.md) share these shapes.
 - [The glossary](../../GLOSSARY.md) explains shared system terms.
+
+Hosted image admission reports dated check results. All four checks must pass before
+an image is admitted. Admission grants no tool access and starts no process.

@@ -2663,8 +2663,8 @@ New credential-free installation requests remain checking; the worker saves no
 rejection and performs no discovery or network request. Older hosted records and
 built-in memory retain their existing rules.
 
-Remaining: dated receipts, admission GET and recheck commands. Evidence storage is
-P3-6 PR 4b. Image fetch, scans, deployment and evidence bytes are outside this part.
+Dated receipts and the admission GET are implemented below. Recheck commands and
+evidence storage remain for part c. Image fetch, scans, deployment and evidence bytes are outside this part.
 Fresh-install qualification: NOT RUN.
 
 Own checks, 14 October 2026: PASS — 39 selected tests twice across
@@ -2762,3 +2762,12 @@ forgottenAt; unavailable cleanup keeps hidden true. No receipt includes fact tex
 Scopes and detail advertise canForget only for the requester's person scope. Forgotten detail
 returns HTTP 200 with status unavailable and reason forgotten. The memory MCP has no forget.
 Fresh-install qualification remains NOT RUN; no screens, model calls or dev stack are included.
+
+## Hosted image admission receipts
+
+`GET /api/org/integrations/:serverId/admission` requires a current admin and uses
+readActiveMember, with no two-second write deadline. It returns the models fold,
+including queuedAt and per-check reasonCodes. Unknown or foreign-silo servers return
+404. POST has no route. No HTTP route writes check results. All-pass admission still
+starts no discovery and leaves the hosted dispatch refusal in place.
+Rechecks and evidence storage belong to part c. Fresh-install qualification: NOT RUN.

@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links, later grant changes and access changes through saving, tool reviews, hosted registration, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links, later grant changes and access changes through saving, tool reviews, hosted image status and registration, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes, internal child requests and creation with first inputs, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|saved child leave results| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
@@ -242,7 +242,7 @@ remove others, and others can leave. Saved removals stop reads and live connecti
 before the permissions service catches up.
 
 An owner or admin can register a hosted image and read the result using the original
-command id. The image stays Checking while image admission is unfinished.
+command id. The image stays Checking until a valid image check result is recorded.
 Registration does not fetch an image, discover tools or start a process.
 
 Internal child-chat commands review a person’s own group message, save their chosen
@@ -378,3 +378,6 @@ infra/dev-stack/up.sh (see [infra/dev-stack](../../infra/dev-stack/README.md)).
 - [apps/ops](../ops/README.md) reads events and updates the tables this service reads.
 - [Why NATS holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
 - [The shared words used in these guides](../../GLOSSARY.md).
+
+Hosted image admission reports dated check results. All four checks must pass before
+an image is admitted. Admission grants no tool access and starts no process.

@@ -21,8 +21,8 @@ with `libs/events`.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -->|saves changes within the access, retry and cancellation limits| store["libs/event-store<br/>checked event writes and stream ownership"]
-  models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes, provider switch-on positions and publication receipts| store
+  server["apps/server<br/>back end"] -->|saves changes with principal, access, retry and cancellation checks| store["libs/event-store<br/>checked event writes and stream ownership"]
+  models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes, provider switch-on positions, publication receipts and hosted image checks| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams, counts names and finds numbered events| nats["NATS JetStream<br/>event service"]
   store -.->|checks private chat choices| events["libs/events<br/>event definitions"]
@@ -39,6 +39,7 @@ flowchart LR
 - Require the current memory event version for new writes, while still reading old events.
   Check that its scope id matches its recorded owner, kind and silo before saving it.
   Refuse repeated dependencies and a key reference that belongs to another memory revision.
+- Refuse hosted image check results unless they name the models system principal.
 - Stop retries when the caller's access time limit expires or permission is withdrawn.
   Do not retry when the required wait uses all remaining permission time.
 - Recheck a caller's access before saving when requested. Refuse if a saved event

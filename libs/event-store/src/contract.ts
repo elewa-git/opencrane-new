@@ -94,6 +94,10 @@ export function validateCommand(
 }
 
 function validEventWrite(event: EventEnvelope): boolean {
+  if (event.type === 'mcp.image_checked' &&
+      (event.principal?.kind !== 'system' || event.principal.id !== 'models')) {
+    return false;
+  }
   if (!validConversationWrite(event)) {
     return false;
   }
