@@ -474,9 +474,15 @@ export const budgets = budgetProjection('model-budgets', 'model_budgets');
 export const replayBudgets = budgetProjection('model-budgets-replay', 'model_budgets_replay');
 
 
+export type ModelUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens?: number | undefined;
+  cacheWriteTokens?: number | undefined;
+};
+
 export function observedPayload(reservation: BudgetState['reservations'][number],
-  usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined;
-    cacheWriteTokens?: number | undefined } | undefined, outcome: 'success' | 'error') {
+  usage: ModelUsage | undefined, outcome: 'success' | 'error') {
   function matchesTariff(model: typeof models[number]) {
     return model.id === reservation.call.model && model.priceTableId === reservation.call.priceTableId;
   }

@@ -139,7 +139,7 @@ async function retriesFailedRead() {
     expect(deadline - performance.now()).toBeGreaterThan(0);
     expect(deadline - performance.now()).toBeLessThanOrEqual(10_000);
     yield* [];
-    throw new Error(`Unavailable ${saved.event.id}`);
+    await Promise.reject(new Error(`Unavailable ${saved.event.id}`));
   }
   nats.store.readStream = unavailable;
   await refuses(source, saved.position);
