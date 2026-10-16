@@ -149,7 +149,20 @@ it('reconnects after credential expiry and delivers the pending message once', a
     if (result.status !== 'appended') throw new Error('Computer fixture failed'); sequence = result.sequence;
   }
   const credentials: { value: string; expiresAt: number }[] = [], connections: unknown[] = [], delivered: unknown[] = [];
-  const expired = new Promise<void>(resolve => server.once('connection', socket => socket.once('close', () => resolve())));
+  const deliveryCredentials: unknown[] = [];
+  type ExpiryClose = { closedAt: number };
+  let resolveExpiryClose!: (close: ExpiryClose) => void;
+  function captureExpiryResolver(resolve: (close: ExpiryClose) => void) {
+    resolveExpiryClose = resolve;
+  }
+  const expired = new Promise<ExpiryClose>(captureExpiryResolver);
+  function recordExpiryClose() {
+    resolveExpiryClose({ closedAt: Date.now() });
+  }
+  function listenForExpiryClose(socket: import('ws').WebSocket) {
+    socket.once('close', recordExpiryClose);
+  }
+  server.once('connection', listenForExpiryClose);
   // Stand in for the Kubernetes proxy path; the real channel handles authentication and expiry.
   server.on('upgrade', request => { connections.push(request.headers['x-bridge-token']); request.url = '/bridge'; });
   const channel = bridgeChannel(server, {
@@ -157,7 +170,10 @@ it('reconnects after credential expiry and delivers the pending message once', a
     grant: () => Promise.resolve(),
     async rpc(method, input) {
       if (method === 'thread/start') await expired; // Keep the message pending across expiry.
-      if (method === 'turn/start') delivered.push(input['input']);
+      if (method === 'turn/start') {
+        delivered.push(input['input']);
+        deliveryCredentials.push(connections.at(-1));
+      }
       return { thread: { id: 'thread' } };
     },
   });
@@ -170,9 +186,13 @@ it('reconnects after credential expiry and delivers the pending message once', a
   });
   const work = watchBridges({ silo: 'test', store: fixture.store, keys: fixture.keys, db }, tokens, kube, `http://127.0.0.1:${address.port}`, stop.signal, logger);
   try {
-    await expired;
+    const expiryClose = await expired;
     expect(delivered).toEqual([]);
-    expect(credentials[0]!.expiresAt).toBeLessThanOrEqual(Date.now());
+    expect(connections).toEqual([credentials[0]!.value]);
+    const credentialExpiryTimerToleranceMs = 5;
+    // Allow timer clock rounding: Node's timer can run before Date.now() advances by 1 ms.
+    expect(credentials[0]!.expiresAt - expiryClose.closedAt)
+      .toBeLessThanOrEqual(credentialExpiryTimerToleranceMs);
     await vi.waitFor(() => expect(connections).toHaveLength(2), { timeout: 2000 });
     expect(credentials).toHaveLength(2);
     expect(connections).toEqual(credentials.map(credential => credential.value));
@@ -181,6 +201,7 @@ it('reconnects after credential expiry and delivers the pending message once', a
     await until(() => delivered.length > 0, 2000);
     await delay(800); // Repeated watcher polls must not execute the pending turn again.
     expect(delivered).toEqual([[{ type: 'text', text: 'Hello', text_elements: [] }]]);
+    expect(deliveryCredentials).toEqual([credentials[1]!.value]);
     channel.notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { status: 'completed' } } });
     await until(async () => await reportPosition(fixture.store, 'test', 'computer') === 2, 2000);
     expect((await chatHistory(fixture.store, 'test', 'alice')).filter(row => row.event.report).map(row => row.event.type))
