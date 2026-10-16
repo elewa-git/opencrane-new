@@ -137,13 +137,6 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
     }
     return false;
   }
-  async function sendUntilChecked() {
-    // Read the request and check membership again if signing raced a computer change.
-    // Keep resume waiting until that request is sent or no longer qualifies for a gate.
-    while (await sendOnce()) {
-      await delay(250);
-    }
-  }
   function finishedSending() {
     sending = undefined;
   }
@@ -152,23 +145,20 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
     if (pausing || !receipt || !options.stopExecution || rejected) return;
     function stillAccepted() { return !rejected && socket.readyState === socket.OPEN; }
     const progress = advance(options, computer, receipt, sentPodUid, stillAccepted);
-    pausing = progress.catch(unavailable).finally(finishPausing);
+    const handled = progress.catch(unavailable);
+    pausing = handled.finally(finishPausing);
   }
   function send() {
     reconcile();
     // Share the current attempt so timer and connection checks never sign in parallel.
-    if (!sending) sending = sendUntilChecked().finally(finishedSending);
+    if (!sending) sending = sendUntilChecked(sendOnce).finally(finishedSending);
     return sending;
   }
   function settled() {
     return Promise.all([sending, pausing]);
   }
   function receive(value: unknown) {
-    if (typeof value !== 'object' || value === null) return false;
-    const type: unknown = Reflect.get(value, 'type');
-    if (type !== 'bridge_gated' && type !== 'bridge_quiet' && type !== 'bridge_unavailable') {
-      return false;
-    }
+    if (!isGateReceipt(value)) return false;
     const parsed = receiptData.safeParse(value);
     if (!parsed.success || !sent || rejected || socket.readyState !== socket.OPEN
       || !matchesReceipt(parsed.data, sent, receipt)) {
@@ -190,10 +180,26 @@ async function advance(options: Options, computer: Computer,
   if (!options.stopExecution) return;
   const position = await options.store.head(`computer-${computer.assistantId}`);
   const control = await readComputerControl(options.store, options.silo, computer.assistantId);
-  if (!control || control.phase === 'unverified' || control.podUid !== podUid) return;
+  if (!control || control.phase !== 'requested' || control.podUid !== podUid) return;
   const saved = await facts(options, computer);
   const binding = requireReadyControl(control, saved, computer);
   if (!matchesReceipt(accepted, binding, undefined)) return;
-  await savePausing(options.store, options.silo, control, position,
-    accepted.epoch, options.stopExecution, stillAccepted);
+  const input = { computerId: computer.computerId, podUid: control.podUid, ...binding };
+  const report = await options.stopExecution(input);
+  if (!stillAccepted()) return;
+  await savePausing(options.store, options.silo, control, position, accepted.epoch, report);
+}
+
+async function sendUntilChecked(sendOnce: () => Promise<boolean>) {
+  // Read the request and check membership again if signing raced a computer change.
+  // Keep resume waiting until that request is sent or no longer qualifies for a gate.
+  while (await sendOnce()) {
+    await delay(250);
+  }
+}
+
+function isGateReceipt(value: unknown) {
+  if (typeof value !== 'object' || value === null) return false;
+  const type: unknown = Reflect.get(value, 'type');
+  return type === 'bridge_gated' || type === 'bridge_quiet' || type === 'bridge_unavailable';
 }

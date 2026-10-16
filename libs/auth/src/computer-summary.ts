@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { takeoverRequestedDataSchema, takeoverPausingDataSchema, computerTurnStartedDataSchema as startDetails,
+import { takeoverRequestedDataSchema, takeoverPausingDataSchema,
+  computerTurnStartedDataSchema as startDetails,
   computerTurnClosedDataSchema as closeDetails } from '@opencrane/events';
 import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
   from '@opencrane/event-store';

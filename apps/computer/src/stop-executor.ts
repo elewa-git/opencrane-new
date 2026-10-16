@@ -54,4 +54,6 @@ function unavailable() {
 function timedOut() { process.exit(1); }
 const timer = setTimeout(timedOut, 12_000);
 function finished() { clearTimeout(timer); }
-void stop().catch(unavailable).finally(finished);
+const stopping = stop();
+const handled = stopping.catch(unavailable);
+void handled.finally(finished);

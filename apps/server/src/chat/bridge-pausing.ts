@@ -17,18 +17,16 @@ export type StopExecution = (input: StopInput) => Promise<unknown>;
 
 export async function savePausing(store: EventStore, silo: string,
   control: Exclude<ComputerControl, { phase: 'unverified' }>, position: number,
-  bridgeEpoch: string, stop: StopExecution, stillAccepted: () => boolean) {
+  bridgeEpoch: string, report: unknown) {
   if (control.phase === 'pausing') return;
   const affectedTurnIds = [...control.affectedTurnIds];
   affectedTurnIds.sort();
   const binding = { generation: control.generation, podUid: control.podUid,
     takeoverId: control.takeoverId, affectedTurnIds };
-  const input = { computerId: control.computerId, ...binding };
-  const receipt = stopReceipt.parse(await stop(input));
+  const receipt = stopReceipt.parse(report);
   for (const key of ['generation', 'podUid', 'takeoverId', 'affectedTurnIds'] as const) {
     if (!isDeepStrictEqual(receipt[key], binding[key])) throw new Error('Stop unavailable');
   }
-  if (!stillAccepted()) throw new Error('Stop unavailable');
   const data = { assistantId: control.assistantId, computerId: control.computerId,
     ...binding, bridgeEpoch, supervisorEpoch: receipt.epoch,
     executionProof: 'exited', quietProof: 'unavailable' };

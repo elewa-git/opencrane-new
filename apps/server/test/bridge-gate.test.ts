@@ -497,9 +497,8 @@ async function savesPausing() {
   expect(types).toEqual(['computer.claimed', 'computer.ready',
     'takeover.requested', 'takeover.pausing']);
   expect(stops).toHaveLength(1);
-  expect(test.frames.some(isTurn)).toBe(false);
+  await refusesLateWork(test.computer, link.socket);
 }
-function isTurn(frame: Record<string, unknown>) { return frame['type'] === 'turn'; }
 it('saves pausing after a verified bridge gate and bound root stop, and replays without effects',
   savesPausing);
 
@@ -589,7 +588,18 @@ async function recoversTransition(fault: string) {
     if (row.event.type.startsWith('takeover.')) transitions.push(row.event.type);
   }
   expect(transitions).toEqual(['takeover.requested', 'takeover.pausing']);
-  expect(test.computer.calls).not.toContain('turn/start:thread-1');
+  await refusesLateWork(test.computer, reconnected.socket);
 }
 it.each(['before', 'after', 'changed', 'stop'])(
   'recovers one pausing transition after %s interruption without admitting work', recoversTransition);
+
+async function refusesLateWork(computer: Awaited<ReturnType<typeof computerFixture>>,
+  socket: WebSocket) {
+  const turn = { type: 'turn', id: 'late', conversationId: 'late', assistantId: 'assistant',
+    executionMode: 'memory_free', text: 'Hello', token: 'initial', expiresAt: Date.now() + 60_000 };
+  socket.send(JSON.stringify(turn));
+  await computer.flush(socket);
+  expect(computer.calls.some(isThreadStart)).toBe(false);
+  expect(computer.grants.size).toBe(0);
+}
+function isThreadStart(method: string) { return method.startsWith('thread/start:'); }

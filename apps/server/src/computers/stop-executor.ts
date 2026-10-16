@@ -29,8 +29,11 @@ export function executorStop(kubeconfig: string, namespace: string): StopExecuti
       }
       function finished(code: number | null) {
         if (code !== 0) return failed();
-        try { resolve(JSON.parse(output) as unknown); }
-        catch { failed(); }
+        try {
+          resolve(JSON.parse(output) as unknown);
+        } catch {
+          failed();
+        }
       }
       child.stdout.on('data', collect);
       child.stdout.on('error', failed);
