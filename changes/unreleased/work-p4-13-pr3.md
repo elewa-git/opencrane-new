@@ -1,0 +1,1 @@
+- Group members and assistant owners can forget permitted shared facts and notes through HTTP with both current read and write grants. Lost replies recover the original receipt, and facts stay hidden while cleanup is unavailable.

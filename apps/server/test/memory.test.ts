@@ -125,6 +125,56 @@ async function cleanup() {
 beforeAll(setup, 120_000);
 afterAll(cleanup);
 
+// Check replay before the other cases build large unrelated histories.
+it('loads shared forget history before the write deadline and keeps replay hidden',
+  async function sharedHistory() {
+    const target = await sharedForgetTarget('team', 'history');
+    const original = nats.store.readStream.bind(nats.store);
+    let delayed = false;
+    async function* slow(subject: string, from?: number, deadline?: number) {
+      if (subject === `scope-${target.scopeId}` && !delayed) {
+        delayed = true;
+        await new Promise(function pause(resolve) { setTimeout(resolve, 2100); });
+      }
+      yield* original(subject, from, deadline);
+    }
+    const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
+    let response;
+    try {
+      response = await sharedForget(target);
+      expect(response.statusCode).toBe(200);
+    } finally { spy.mockRestore(); }
+    const receipt = response.json<{ changeId: string }>();
+    const cleanupId = `shared-cleanup-${++count}`;
+    const data = { schemaVersion: 1, scopeId: target.scopeId, scopeKind: target.scopeKind,
+      ownerId: target.ownerId, changeId: receipt.changeId, outcome: 'unavailable',
+      failureCode: 'retry_exhausted' };
+    const record = { ...event(cleanupId, `scope-${target.scopeId}`, 'memory.cleanup_recorded'),
+      silo: 'acme', source: 'opencrane-worker', commandId: cleanupId,
+      principal: { kind: 'system' as const, id: 'opencrane-worker' }, data };
+    await nats.store.append({ event: record, expectedSequence: await nats.store.head(record.subject) });
+    const position = await nats.store.head();
+    function checkedDecrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
+      expect(identity.scopeId).not.toBe(target.scopeId);
+      return decrypt(identity, encrypted);
+    }
+    const rebuild = memoryProjection({ decrypt: checkedDecrypt });
+    const appendSpy = vi.spyOn(nats.store, 'append');
+    try {
+      await runner.rebuild(rebuild);
+      expect(appendSpy).not.toHaveBeenCalled();
+      expect(await nats.store.head()).toBe(position);
+      const identity = { silo: 'acme', scopeId: target.scopeId, scopeKind: target.scopeKind,
+        ownerId: target.ownerId, memoryId: 'target', revision: 1 };
+      expect(keys.status(identity)).toBe('available');
+      const detail = await get(`${target.url}/facts/target`);
+      expect(detail.json()).toMatchObject({ reason: 'forgotten', canForget: true });
+      const status = await get(`${target.url}/changes/forget`);
+      expect(status.json()).toMatchObject({ hidden: true, cleanupStatus: 'unavailable' });
+      expect((await get(`${target.url}/facts`)).json()).toMatchObject({ facts: [] });
+    } finally { appendSpy.mockRestore(); }
+  });
+
 const previewUrl = '/api/memory/turns/preview-chat/preview-turn';
 const previewScopes = [scopeForPreview('person', 'preview'),
   scopeForPreview('group', 'preview-team'), scopeForPreview('assistant_notes', 'preview-assistant')];
@@ -2476,7 +2526,7 @@ async function forgetRights() {
   const detail = await get(`${path('bob')}/facts/own`);
   expect(detail.json()).toHaveProperty('canForget', true);
 }
-it('exposes forget rights only for personal memory', forgetRights);
+it('exposes forget rights only for permitted scopes', forgetRights);
 async function forgetBoundary() {
   const memoryId = await forgetTarget('forget-validation');
   expect((await forget(memoryId, 'invalid-forget', 1, 'bob', 'bob', { text: 'private' })).statusCode)
@@ -2590,10 +2640,10 @@ type SharedForgetKind = 'group' | 'personal' | 'team';
 async function sharedForgetTarget(kind: SharedForgetKind, label: string, rights = 'both') {
   const ownerId = `forget-${kind}-${label}`;
   const teamId = `${ownerId}-team`;
-  const scopeKind = kind === 'group' ? 'group' : 'assistant_notes';
+  const scopeKind: MemoryIdentity['scopeKind'] = kind === 'group' ? 'group' : 'assistant_notes';
   const scopeId = memoryScopeId('acme', scopeKind, ownerId);
   const groupId = kind === 'group' ? ownerId : teamId;
-  if (kind !== 'personal') {
+  if (kind !== 'personal' || rights === 'team-grants') {
     await append(`team-${groupId}`, 'team.created',
       { teamId: groupId, name: 'Forget tests', createdBy: 'owner' });
     await append(`team-${groupId}`, 'team.member_added',
@@ -2605,10 +2655,13 @@ async function sharedForgetTarget(kind: SharedForgetKind, label: string, rights 
       { assistantId: ownerId, kind, ownerId: assistantOwner });
   }
   for (const operation of ['read', 'write']) {
-    if (rights !== 'both' && rights !== operation) continue;
+    if (rights !== 'both' && rights !== 'team-grants' && rights !== operation) continue;
+    const granteeKind = rights === 'team-grants' ? 'team' : 'member';
+    let granteeId = 'bob';
+    if (granteeKind === 'team') granteeId = groupId;
     await append(grantStream(`memory_${operation}`, scopeId), 'grant.given', {
-      resourceType: `memory_${operation}`, resourceId: scopeId, granteeKind: 'member',
-      granteeId: 'bob', grantedBy: 'owner' });
+      resourceType: `memory_${operation}`, resourceId: scopeId, granteeKind,
+      granteeId, grantedBy: 'owner' });
   }
   await write(ownerId, scopeKind, 'target', 'Shared private memory');
   for (const target of [groups, computers, projection]) await runner.run(target);
@@ -2635,13 +2688,15 @@ async function revokeShared(target: SharedForgetTarget, operation = 'write', app
     revokedBy: 'owner' }, apply);
 }
 for (const kind of ['group', 'personal', 'team'] as const) {
-  it.each(['both', 'read', 'write', 'neither', 'admin', 'removed', 'revoked-read',
+  it.each(['both', 'team-grants', 'read', 'write', 'neither', 'admin', 'removed', 'revoked-read',
     'revoked-write', 'unapplied-read', 'unapplied-write', 'iam', 'fga-denied',
+    'fga-read', 'fga-write',
     'pending-read', 'pending-write', 'inaccessible-source', 'foreign', 'unknown'])(`checks shared forget ${kind} rights: %s`,
     async function sharedRights(condition) {
-      const rights = ['read', 'write', 'neither'].includes(condition) ? condition : 'both';
+      const rights = ['read', 'write', 'neither', 'team-grants'].includes(condition)
+        ? condition : 'both';
       const target = await sharedForgetTarget(kind, condition, rights);
-      let expected = condition === 'both' ? 200 : 404;
+      let expected = ['both', 'team-grants'].includes(condition) ? 200 : 404;
       let permissionSpy;
       if (condition.startsWith('revoked-') || condition.startsWith('unapplied-')) {
         const operation = condition.endsWith('read') ? 'read' : 'write';
@@ -2663,6 +2718,17 @@ for (const kind of ['group', 'personal', 'team'] as const) {
           error: new Error('Private IAM failure') };
         permissionSpy = vi.spyOn(auth, 'use').mockResolvedValue(unavailable);
         expected = 503;
+      }
+      if (condition === 'fga-read' || condition === 'fga-write') {
+        const originalUse = auth.use.bind(auth);
+        const deniedOperation = condition === 'fga-read' ? 'memory_read' : 'memory_write';
+        function use(...args: Parameters<typeof auth.use>) {
+          if (args[2] === deniedOperation) {
+            return Promise.resolve({ status: 'ok' as const, allowed: false });
+          }
+          return originalUse(...args);
+        }
+        permissionSpy = vi.spyOn(auth, 'use').mockImplementation(use);
       }
       if (condition === 'fga-denied') {
         const denied = { status: 'ok' as const, allowed: false };
@@ -2706,26 +2772,39 @@ for (const kind of ['group', 'personal', 'team'] as const) {
       }
     });
 
-  it.each(['history', 'final'])(`refuses shared forget ${kind} rights lost during %s`,
-    async function sharedRace(stage) {
-      const target = await sharedForgetTarget(kind, `race-${stage}`);
+  it.each([['history', 'grant'], ['final', 'grant'],
+    ['history', 'audience'], ['final', 'audience']])(`refuses shared forget ${kind} rights lost during %s %s`,
+    async function sharedRace(stage, change) {
+      const target = await sharedForgetTarget(kind, `race-${stage}-${change}`);
       const subject = `scope-${target.scopeId}`;
       const position = await nats.store.head(subject);
       const originalRead = nats.store.readStream.bind(nats.store);
       const originalHead = nats.store.head.bind(nats.store);
       let changed = false;
+      async function removeAccess() {
+        if (change === 'grant') {
+          await revokeShared(target);
+        } else if (kind === 'personal') {
+          await append(`assistant-${target.ownerId}`, 'assistant.settings_changed', {
+            assistantId: target.ownerId, active: false, changedBy: 'owner',
+            changedFields: ['active'] }, false);
+        } else {
+          await append(`team-${target.groupId}`, 'team.member_removed', {
+            teamId: target.groupId, memberId: 'bob', removedBy: 'owner' }, false);
+        }
+      }
       async function* read(stream: string, from?: number, deadline?: number) {
         yield* originalRead(stream, from, deadline);
         if (stage === 'history' && stream === subject && !changed) {
           changed = true;
-          await revokeShared(target);
+          await removeAccess();
         }
       }
       async function head(stream?: string, deadline?: number) {
         const result = await originalHead(stream, deadline);
         if (stage === 'final' && stream === subject && !changed) {
           changed = true;
-          await revokeShared(target);
+          await removeAccess();
         }
         return result;
       }
@@ -2748,7 +2827,7 @@ for (const kind of ['group', 'personal', 'team'] as const) {
     await write(target.ownerId, target.scopeKind, 'other');
     await runner.run(projection);
     const original = nats.store.append.bind(nats.store);
-    async function lostReply(command: Parameters<typeof original>[0]) {
+    async function lostReply(command: Parameters<typeof original>[0]): Promise<never> {
       await original(command);
       throw new Error('Lost private reply');
     }
@@ -2784,52 +2863,6 @@ it.each(['personal', 'team'] as const)('refuses shared forget for inactive %s no
     const position = await nats.store.head(`scope-${target.scopeId}`);
     expect((await sharedForget(target)).statusCode).toBe(404);
     expect(await nats.store.head(`scope-${target.scopeId}`)).toBe(position);
-  });
-
-it('loads shared forget history before the write deadline and keeps replay hidden',
-  async function sharedHistory() {
-    const target = await sharedForgetTarget('team', 'history');
-    const original = nats.store.readStream.bind(nats.store);
-    let delayed = false;
-    async function* slow(subject: string, from?: number, deadline?: number) {
-      if (subject === `scope-${target.scopeId}` && !delayed) {
-        delayed = true;
-        await new Promise(function pause(resolve) { setTimeout(resolve, 2100); });
-      }
-      yield* original(subject, from, deadline);
-    }
-    const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
-    let response;
-    try {
-      response = await sharedForget(target);
-      expect(response.statusCode).toBe(200);
-    } finally { spy.mockRestore(); }
-    const receipt = response.json<{ changeId: string }>();
-    const cleanupId = `shared-cleanup-${++count}`;
-    const data = { schemaVersion: 1, scopeId: target.scopeId, scopeKind: target.scopeKind,
-      ownerId: target.ownerId, changeId: receipt.changeId, outcome: 'unavailable',
-      failureCode: 'retry_exhausted' };
-    const record = { ...event(cleanupId, `scope-${target.scopeId}`, 'memory.cleanup_recorded'),
-      silo: 'acme', source: 'opencrane-worker', commandId: cleanupId,
-      principal: { kind: 'system' as const, id: 'opencrane-worker' }, data };
-    await nats.store.append({ event: record, expectedSequence: await nats.store.head(record.subject) });
-    const position = await nats.store.head();
-    function checkedDecrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
-      expect(identity.scopeId).not.toBe(target.scopeId);
-      return decrypt(identity, encrypted);
-    }
-    const rebuild = memoryProjection({ decrypt: checkedDecrypt });
-    const appendSpy = vi.spyOn(nats.store, 'append');
-    try {
-      await runner.rebuild(rebuild);
-      expect(appendSpy).not.toHaveBeenCalled();
-      expect(await nats.store.head()).toBe(position);
-      const detail = await get(`${target.url}/facts/target`);
-      expect(detail.json()).toMatchObject({ reason: 'forgotten', canForget: true });
-      const status = await get(`${target.url}/changes/forget`);
-      expect(status.json()).toMatchObject({ hidden: true, cleanupStatus: 'unavailable' });
-      expect((await get(`${target.url}/facts`)).json()).toMatchObject({ facts: [] });
-    } finally { appendSpy.mockRestore(); }
   });
 
 // Keep these history checks on shared services before fairness tests replace them.
