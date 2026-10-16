@@ -392,6 +392,15 @@ realtime consumes every validated envelope, including several deltas in one zone
 render. Access refusal clears protected content. The computer state announces wake
 progress.
 
+A budget stop row marks only its own turn. A turn that never started ends as stopped.
+The notice reads saved stop details once when it appears, when the socket reconnects,
+and when the first turn end report arrives. A queued stop has its own time, so an end
+report still refreshes a failed or earlier read. Check again is a GET. A failed read
+keeps the stop visible;
+lost access clears reasons and amounts. A `not_stopped` reply keeps the older generic
+notice because the saved row gives no scope or reset. A reset adds a dated line but
+never restarts the old turn. `npm run visual:screen-p3-14-stop` captures both widths.
+
 Keyboard paths: Enter sends, Shift+Enter adds a line, Ctrl/Cmd+N opens a draft,
 Ctrl/Cmd+Shift+A asks the personal Agent, Ctrl/Cmd+K finds a session. Native panel
 and preview dialogs use Escape and focus restoration. Phones use a top-bar menu,
@@ -460,12 +469,15 @@ references and the open drawer. The browser check captures 1280px and 390px scre
 checks layout at 320px.
 
 The chat restores approval cards from the authenticated approval endpoint above
-the composer. Every participant sees the reviewed fields and consequence. Only
-the requester sees Approve and Deny. Other participants see that the requester
-must decide. Folded cards show only what the server proves. A used approval says
-that its result is unknown. A lost decision reply leads to one status read. The
-browser never repeats the POST by itself. A 503 can also mean the server refused
-before recording the choice. If a
+the composer. Cards with a turn id lose both decision actions when that turn has a
+budget stop. A card cancelled by that stop still shows its review and why it cannot
+continue. A separately recorded approval outcome stays visible as its own result.
+Enter cannot send a decision. Every participant sees the reviewed fields and
+consequence. Only the requester sees Approve and Deny. Other participants see
+that the requester must decide. Folded cards show only what the server proves.
+A used approval says that its result is unknown. A lost decision reply leads to
+one status read. The browser never repeats the POST by itself. A 503 can also
+mean the server refused before recording the choice. If a
 409 is followed by a still-open approval, the card says the choice was not recorded
 and lets the requester choose again. A 200 keeps the card locked with a recorded
 message until a later read shows its latest state, even if the first read fails.

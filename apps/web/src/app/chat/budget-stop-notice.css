@@ -6,3 +6,8 @@
   background: var(--oc-warning-notice);
   color: var(--oc-ink-strong);
 }
+.budget-work { margin-top: 12px; }
+.budget-reason + .budget-reason { margin-top: 12px; }
+.budget-stop p { margin-bottom: 0; }
+.budget-stop button { min-height: 44px; margin-top: 8px; }
+.budget-stop button:focus-visible { outline: 2px solid var(--oc-focus-ring); outline-offset: 2px; }

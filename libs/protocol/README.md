@@ -63,6 +63,8 @@ the requester’s saved request and child id, without the source message text.
 
 Spending stop replies carry saved reasons and execution status. The server
 decides who may read them and whether to include a limit.
+Approval cards may name their saved turn. The browser then shows a stopped card
+without decision controls.
 
 1. **A browser sends a live message.** The server checks the message against the shared schema before handling it. The browser checks server replies before showing them.
 2. **A person opens a conversation or settings page.** The server returns data in a shared shape, and the browser checks that shape before drawing the page.

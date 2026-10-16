@@ -22,6 +22,8 @@
           aria-live="polite">
           @if (approvalWaiting() && chat.selected() && !chat.denied()) {
             <span aria-hidden="true"><span class="approval-dot"></span> Waiting on you</span>
+          } @else if (chat.active()?.state === 'stopping') {
+            <oc-icon name="agent" /> Agent stopping
           } @else if (chat.active()) { <oc-icon name="agent" /> Agent working }
         </span>
       </div>
@@ -112,7 +114,7 @@
               @if (turn.author === 'agent' && chat.stopNotConfirmedFor(turn.id)) {
                 <p class="turn-status failed" role="status">Stop not confirmed. The agent may still be working.</p>
               }
-              @if (turn.author === 'agent' && turn.state === 'working' && !turn.text) { <div class="folding" role="status"><oc-fold-loader /> Folding…</div> }
+              @if (turn.author === 'agent' && turn.state === 'working' && !turn.text && !turn.budgetStop) { <div class="folding" role="status"><oc-fold-loader /> Folding…</div> }
               @for (file of turn.files; track file) {
                 <oc-conversation-file-card [conversationId]="chat.selected()" [path]="file"
                   [createdAt]="turn.time" [createdBy]="fileCreator(turn.author)"
@@ -126,7 +128,11 @@
                   detail="The security scan refused this image. Nothing was saved."
                   [timestamp]="turn.time" [showAction]="false" />
               }
-              @if (turn.budgetStop) { <oc-budget-stop-notice /> }
+              @if (turn.budgetStop) {
+                <oc-budget-stop-notice [conversationId]="chat.selected()" [turnId]="turn.id"
+                  [reconnectedAt]="chat.reconnectedAt()" [endedAt]="turn.endReportedAt ?? ''"
+                  [denied]="chat.denied()" />
+              }
               @if (turn.author === 'agent' && turn.state !== 'working') {
                 <p class="turn-status" [class.stopped]="turn.state === 'stopped'"
                   [class.failed]="turn.state === 'failed' || turn.state === 'lost'"
@@ -168,6 +174,7 @@
         }
         @if (chat.selected() && !chat.denied()) {
           <oc-approval-cards [conversationId]="chat.selected()" [viewerId]="chat.memberId()"
+            [stoppedTurnIds]="stoppedTurnIds()"
             (waitingOnViewer)="approvalWaiting.set($event)" />
         }
       </div>

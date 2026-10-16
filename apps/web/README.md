@@ -47,6 +47,8 @@ assistant check open rather than guessing an answer.
   tasks. These wishes give no access to groups or tools. A completed survey links to
   the Assistant page, which shows when persona review becomes available.
 - Lets people start conversations, send messages and stop a reply.
+- Shows why a spending limit stopped work, including its reset time when available.
+  A stopped approval, including one now cancelled, keeps its review visible without decisions.
 - Lets Owners and Admins create an email invitation and copy its link. If the reply is
   lost, the People page checks that request's status before showing a link.
 - Lets organisation admins create shared assistants for groups and members start private

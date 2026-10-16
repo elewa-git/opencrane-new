@@ -73,6 +73,51 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it('keeps a requested card readable but removes decisions for a stopped turn', async () => {
+  const stoppedCard = { ...card(), turnId: 'message' };
+  const fetchImplementation = vi.fn(() => Promise.resolve(response([stoppedCard])));
+  const fixture = await mount(fetchImplementation);
+  fixture.componentRef.setInput('stoppedTurnIds', ['message']);
+  fixture.detectChanges();
+  const root = rootOf(fixture);
+  expect(root.textContent).toContain("Can't continue");
+  expect(root.textContent).toContain("This work stopped at the limit. Approving now wouldn't restart it.");
+  expect(root.querySelector('oc-approval-ledger')).not.toBeNull();
+  expect(root.querySelector('button.approve')).toBeNull();
+  expect(root.querySelector('button[aria-label^="Deny:"]')).toBeNull();
+  root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect(fetchImplementation).toHaveBeenCalledTimes(1);
+});
+
+it('shows a cancelled approval stopped by its turn with its ledger and no decisions', async () => {
+  const stoppedCard = { ...card('cancelled', false), turnId: 'message' };
+  const fetchImplementation = vi.fn(() => Promise.resolve(response([stoppedCard])));
+  const fixture = await mount(fetchImplementation);
+  fixture.componentRef.setInput('stoppedTurnIds', ['message']);
+  fixture.detectChanges();
+  const root = rootOf(fixture);
+  expect(root.textContent).toContain("Can't continue");
+  expect(root.textContent).toContain("This work stopped at the limit. Approving now wouldn't restart it.");
+  expect(root.querySelector('.approval-ledger')?.textContent).toContain('Draft order SO-1042');
+  expect(root.querySelector('[aria-label^="Approve:"]')).toBeNull();
+  expect(root.querySelector('[aria-label^="Deny:"]')).toBeNull();
+  expect(root.querySelector('.approval-terminal')).toBeNull();
+  expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  fixture.destroy();
+});
+
+it('keeps a separately recorded approval outcome when its turn has a budget stop', async () => {
+  const approvedCard = { ...card('approved', false), turnId: 'message' };
+  const fixture = await mount(() => Promise.resolve(response([approvedCard])));
+  fixture.componentRef.setInput('stoppedTurnIds', ['message']);
+  fixture.detectChanges();
+  const root = rootOf(fixture);
+  expect(root.querySelector('.approval-terminal')?.textContent).toContain('Approved by the requester');
+  expect(root.querySelector('.approval-ledger')).toBeNull();
+  expect(root.querySelector('[aria-label^="Approve:"]')).toBeNull();
+  fixture.destroy();
+});
+
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
   configurable: true,
   writable: true,

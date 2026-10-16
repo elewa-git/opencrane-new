@@ -36,6 +36,7 @@ const responseSchema = z.object({ cards: approvalCardsSchema, csrf: z.string() }
 export class ApprovalCards implements OnDestroy {
   readonly conversationId = input.required<string>();
   readonly viewerId = input.required<string>();
+  readonly stoppedTurnIds = input<string[]>([]);
   readonly waitingOnViewer = output<boolean>();
   protected readonly cards = signal<ApprovalCard[]>([]);
   protected readonly loading = signal(true);
@@ -118,7 +119,8 @@ export class ApprovalCards implements OnDestroy {
 
   protected isBlocked(card: ApprovalCard): boolean {
     const state = this.localState(card);
-    return this.readFailed() || this.checkingAccess() || state?.kind === 'submitting'
+    return this.isStopped(card) || this.readFailed() || this.checkingAccess()
+      || state?.kind === 'submitting'
       || state?.kind === 'recorded' || state?.kind === 'unknown'
       || state?.kind === 'conflict';
   }
@@ -146,7 +148,7 @@ export class ApprovalCards implements OnDestroy {
 
   private canStartDecision(card: ApprovalCard, decision: Decision): boolean {
     const state = this.localState(card);
-    if (this.isBlocked(card)) return false;
+    if (this.isBlocked(card) || card.state !== 'requested') return false;
     if (!state) return true;
     if (state.kind === 'step_up') return decision === 'rejected';
     return state.kind === 'not_recorded' || state.kind === 'conflict'
@@ -475,10 +477,14 @@ export class ApprovalCards implements OnDestroy {
   }
 
   private shouldShowWaitingOnViewer(card: ApprovalCard): boolean {
-    if (card.state !== 'requested' || !card.canDecide) return false;
+    if (card.state !== 'requested' || !card.canDecide || this.isStopped(card)) return false;
     const state = this.localState(card);
     return state?.kind !== 'submitting' && state?.kind !== 'recorded'
       && state?.kind !== 'unknown' && state?.kind !== 'conflict';
+  }
+
+  protected isStopped(card: ApprovalCard): boolean {
+    return Boolean(card.turnId && this.stoppedTurnIds().includes(card.turnId));
   }
 
   private clearWaitingOnViewer(): void {

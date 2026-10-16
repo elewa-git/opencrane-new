@@ -1,5 +1,6 @@
 import type { ChatRow } from '@opencrane/protocol';
-import { rejectedScreenshotIds, toolKind, transcript, uploadedFile } from './chat-state';
+import { isBudgetStop, rejectedScreenshotIds, toolKind, transcript, turnOutcome,
+  uploadedFile } from './chat-state';
 
 it('keeps created and modified workspace files but omits deleted files', () => {
   const rows = [
@@ -257,6 +258,55 @@ it('does not restore a saved Stop request as Stopping after reload', () => {
 
   expect(reloadedTurn?.state).toBe('working');
   expect(reloadedTurn?.stopRequested).toBe(true);
+});
+
+it('marks only the matching budget stop and ends work that never started', () => {
+  const rows: ChatRow[] = [
+    { id: 'first', position: 1, type: 'message.posted', time: '2026-10-09T10:00:00Z',
+      data: { authorId: 'me', text: 'First' } },
+    { id: 'manual', position: 2, type: 'agent.turn_stop_requested',
+      time: '2026-10-09T10:00:01Z', data: { turnId: 'first', reason: 'requester_stop' } },
+    { id: 'second', position: 3, type: 'message.posted', time: '2026-10-09T10:00:02Z',
+      data: { authorId: 'me', text: 'Second' } },
+    { id: 'budget', position: 4, type: 'agent.turn_stop_requested',
+      time: '2026-10-09T10:00:03Z', data: { turnId: 'second', reason: 'budget' } },
+  ];
+  const turns = transcript(rows, 'me').filter(isAgentTurn);
+  expect(isBudgetStop(rows[1]!)).toBe(false);
+  expect(isBudgetStop(rows[3]!)).toBe(true);
+  expect(turns[0]?.budgetStop).toBeUndefined();
+  expect(turns[1]?.budgetStop).toBe('budget_exhausted');
+  expect(turns[1]?.state).toBe('stopped');
+  expect(turns[1]?.endedAt).toBe('2026-10-09T10:00:03Z');
+  expect(turns[1]).not.toHaveProperty('endReportedAt');
+  expect(turnOutcome(turns[1]!)).toBe('Stopped · nothing was repeated');
+  rows.push({ id: 'ended', position: 5, type: 'agent.turn_failed',
+    time: '2026-10-09T10:00:04Z', data: { turnId: 'second' } });
+  expect(transcript(rows, 'me').filter(isAgentTurn)[1]?.endedAt)
+    .toBe('2026-10-09T10:00:03Z');
+  expect(transcript(rows, 'me').filter(isAgentTurn)[1])
+    .toHaveProperty('endReportedAt', '2026-10-09T10:00:04Z');
+  rows.push({ id: 'later-end', position: 6, type: 'agent.turn_completed',
+    time: '2026-10-09T10:00:05Z', data: { turnId: 'second' } });
+  expect(transcript(rows, 'me').filter(isAgentTurn)[1])
+    .toHaveProperty('endReportedAt', '2026-10-09T10:00:04Z');
+});
+
+it('shows started budget work as stopping until its ending report arrives', () => {
+  const rows: ChatRow[] = [
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-09T10:00:00Z', data: { authorId: 'me', text: 'Work' } },
+    { id: 'started', position: 2, type: 'agent.turn_started',
+      time: '2026-10-09T10:00:01Z', data: { turnId: 'message' } },
+    { id: 'stop', position: 3, type: 'agent.turn_stop_requested',
+      time: '2026-10-09T10:00:02Z', data: { turnId: 'message', reason: 'budget' } },
+  ];
+  expect(transcript(rows, 'me').find(isAgentTurn)?.state).toBe('stopping');
+  rows.push({ id: 'ended', position: 4, type: 'agent.turn_failed',
+    time: '2026-10-09T10:00:03Z', data: { turnId: 'message' } });
+  const stoppedTurn = transcript(rows, 'me').find(isAgentTurn);
+  expect(stoppedTurn?.state).toBe('stopped');
+  expect(stoppedTurn?.tools).toEqual([]);
 });
 
 it('keeps a completed turn completed when a late Stop request is replayed', () => {

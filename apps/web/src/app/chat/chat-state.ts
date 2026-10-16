@@ -3,6 +3,7 @@ import type { ChatConversation, ChatRow } from '@opencrane/protocol';
 
 export interface Turn {
   id: string; author: 'you' | 'person' | 'agent'; text: string; time: string; endedAt?: string;
+  endReportedAt?: string;
   state: 'working' | 'stopping' | 'done' | 'failed' | 'stopped' | 'lost';
   tools: ToolActivityRecord[];
   files: string[]; budgetStop?: 'budget_exhausted'; screenshotRejected?: true;
@@ -17,6 +18,9 @@ export function turnContent(turn: Turn): string {
 export function turnOutcome(turn: Turn): string {
   if (turn.state === 'stopping') return 'Stopping…';
   if (turn.state === 'done') return 'Done';
+  if (turn.state === 'stopped' && turn.budgetStop && !turn.text) {
+    return 'Stopped · nothing was repeated';
+  }
   if (!turn.text) return "Didn't complete · nothing was repeated";
   if (turn.state === 'stopped') return 'Stopped · partial reply kept';
   return 'Reply did not complete · partial reply kept';
@@ -34,6 +38,24 @@ export function conversationStatus(state: Turn['state'] | undefined): ChatConver
 
 export function isActiveTurn(turn: Turn): boolean {
   return turn.author === 'agent' && (turn.state === 'working' || turn.state === 'stopping');
+}
+
+export function budgetStoppedTurnIds(turns: Turn[]): string[] {
+  const stopped: string[] = [];
+  for (const turn of turns) {
+    if (turn.budgetStop) stopped.push(turn.id);
+  }
+  return stopped;
+}
+
+export function shouldAnnounceBudgetStop(row: ChatRow, readTurns: () => Turn[]): boolean {
+  if (!isBudgetStop(row)) return false;
+  const turnId = row.data.turnId ?? '';
+  // Check before adding a row so the same stop gets one spoken notice.
+  for (const turn of readTurns()) {
+    if (turn.id === turnId && turn.budgetStop) return false;
+  }
+  return true;
 }
 
 export function recoveredLostTurn(recovered: boolean, lostAt: string, turns: Turn[]): boolean {
@@ -56,7 +78,8 @@ export function lastConfirmedTurnAt(turns: Turn[]): string {
 }
 
 export function isBudgetStop(row: ChatRow): boolean {
-  return row.type === 'decision.recorded' && row.data['reason'] === 'budget_exhausted';
+  if (row.type === 'decision.recorded') return row.data['reason'] === 'budget_exhausted';
+  return row.type === 'agent.turn_stop_requested' && row.data['reason'] === 'budget';
 }
 
 export interface ChatAttachment {
@@ -134,13 +157,15 @@ export function transcript(
       continue;
     }
     const turn = agents.get(data.turnId ?? '');
-    if (!turn || turn.state === 'stopped') continue;
+    if (!turn) continue;
+    if (skipStoppedTurnRow(turn, row)) continue;
     if (row.type === 'agent.turn_stop_requested') {
-      recordStopRequest(turn);
+      recordStopRequest(turn, row);
       continue;
     }
     if (row.type === 'decision.recorded' && data.reason === 'budget_exhausted') {
       turn.budgetStop = 'budget_exhausted';
+      if (!turn.executionMode) setBudgetStopState(turn, row.time);
     }
     updateTurn(turn, row, messages.get(turn.id)!, lostOutput);
   }
@@ -148,8 +173,38 @@ export function transcript(
   return turns;
 }
 
-function recordStopRequest(turn: Turn): void {
+function skipStoppedTurnRow(turn: Turn, row: ChatRow): boolean {
+  if (turn.state !== 'stopped') return false;
+  if (turn.budgetStop && !turn.stopRequested && row.type === 'agent.turn_stop_requested'
+    && row.data.reason === 'budget') {
+    turn.stopRequested = true;
+    turn.endedAt = row.time;
+  }
+  // Keep the first end report apart from the time queued work was stopped.
+  if (turn.budgetStop && !turn.endReportedAt && (row.type === 'agent.turn_failed'
+    || row.type === 'agent.turn_completed')) {
+    turn.endReportedAt = row.time;
+    if (!turn.stopRequested) turn.endedAt = row.time;
+  }
+  return true;
+}
+
+function recordStopRequest(turn: Turn, row: ChatRow): void {
   turn.stopRequested = true;
+  if (row.data.reason !== 'budget') return;
+  turn.budgetStop = 'budget_exhausted';
+  setBudgetStopState(turn, row.time);
+}
+
+function setBudgetStopState(turn: Turn, time: string): void {
+  if (turn.state !== 'working') return;
+  if (turn.executionMode) {
+    turn.state = 'stopping';
+    return;
+  }
+  // End queued work as soon as its saved budget stop arrives.
+  turn.state = 'stopped';
+  turn.endedAt = time;
 }
 
 function addStandaloneTurn(row: ChatRow, memberId: string, turns: Turn[]): boolean {
@@ -198,6 +253,7 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
   if (row.type === 'agent.turn_failed') {
     turn.state = turn.stopRequested || turn.state === 'stopping' ? 'stopped' : 'failed';
     turn.endedAt = row.time;
+    turn.endReportedAt = row.time;
     markRunningCallsUnconfirmed(turn);
     if (row.data.reason) turn.reason = row.data.reason;
     return;
@@ -205,6 +261,7 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
   if (row.type === 'agent.turn_completed') {
     turn.state = lostOutput.has(turn.id) ? 'lost' : 'done';
     turn.endedAt = row.time;
+    turn.endReportedAt = row.time;
     markRunningCallsUnconfirmed(turn);
   }
 }
@@ -227,6 +284,7 @@ function updateTurnTools(turn: Turn, row: ChatRow): void {
   if ((row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished')
     && turn.state !== 'working' && turn.state !== 'stopping') return;
   if (row.type === 'agent.turn_failed') {
+    if (turn.budgetStop) return;
     turn.tools.push({ id: row.id, label: 'Reply failed',
       detail: failureDetail(row.data.reason), failed: true, time: row.time });
     return;

@@ -557,6 +557,9 @@ it('renders streamed replies and shows a stopped partial when the server ends th
     { id: 'message', position: 2, type: 'message.posted', time: '2026-10-02T10:00:00Z', data: { text: 'Hi', authorId: 'me' } }];
   vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
     const path = input instanceof Request ? input.url : String(input);
+    if (path.includes('/budget-stops?')) {
+      return Promise.resolve(new Response('{"status":"not_stopped"}'));
+    }
     const body = path === '/auth/me' ? { authenticated: true, user: { name: 'Alex Morgan' } } : path === '/api/chat' ? { memberId: 'me', assistantId: 'assistant' } : path.endsWith('/approvals') ? { cards: [], csrf: 'fixture' } : path === '/api/conversations' ? { rows: [{ ...creation,
       createdAt: '2026-10-02T10:00:00Z', mode: 'agent_session' }] }
       : { rows, position: 2, generation: 1, computerState: 'starting' };
@@ -570,22 +573,34 @@ it('renders streamed replies and shows a stopped partial when the server ends th
   const root = value;
   await vi.waitFor(() => expect(root.textContent).toContain('Starting your computer'));
   socket.onopen?.(new Event('open')); await fixture.whenStable();
-  const message = (type: string, position: number, data: object) => socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'event', version: 1, topic: 'conversation', conversationId: 'chat', generation: 1, position,
-    row: { id: `r${position}`, type, position, time: '2026-10-02T10:00:00Z', data } }) }));
+  const message = (type: string, position: number, data: object,
+    time = '2026-10-02T10:00:00Z') => socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'event', version: 1, topic: 'conversation', conversationId: 'chat', generation: 1, position,
+    row: { id: `r${position}`, type, position, time, data } }) }));
   message('agent.message_delta', 3, { turnId: 'message', messageId: 'reply', text: 'Hello ' });
   message('agent.message_delta', 4, { turnId: 'message', messageId: 'reply', text: 'there' });
   await fixture.whenStable(); expect(root.textContent).toContain('Hello there');
   message('decision.recorded', 5, { turnId: 'message', reason: 'budget_exhausted' });
   await fixture.whenStable();
+  function expectGenericBudgetNotice() {
+    fixture.detectChanges();
+    expect(root.querySelector('oc-budget-stop-notice')?.textContent)
+      .toContain('Spending limit reached');
+  }
+  await vi.waitFor(expectGenericBudgetNotice);
   const budgetNotice = root.querySelector('oc-budget-stop-notice');
   expect(budgetNotice?.textContent).toContain('Spending limit reached');
   expect(politeStatusText(root)).toContain('Spending limit reached');
   expect(budgetNotice?.querySelector('[role="alert"]')).toBeNull();
   expect(budgetNotice?.textContent).toContain('An Owner or Admin can review the limit');
   expect(budgetNotice?.textContent).toContain('next monthly budget period (UTC)');
-  message('agent.turn_stop_requested', 6, { turnId: 'message' });
+  const firstNotice = fixture.componentInstance['chat'].announcement();
+  message('agent.turn_stop_requested', 6, { turnId: 'message', reason: 'budget' },
+    '2026-10-02T10:01:00Z');
   await fixture.whenStable();
   expect(root.textContent).not.toContain('Stopping…');
+  expect(fixture.componentInstance['chat'].turns()[1]?.endedAt)
+    .toBe('2026-10-02T10:01:00Z');
+  expect(fixture.componentInstance['chat'].announcement()).toBe(firstNotice);
   message('agent.turn_failed', 7, { turnId: 'message' });
   await fixture.whenStable(); expect(root.textContent).toContain('Stopped');
   expect(root.querySelector('[aria-live="polite"]')).not.toBeNull();
@@ -812,6 +827,47 @@ it('shows an unconfirmed tool when its turn ends without a finish report', async
   const toolLine = capture.root.querySelector('.tool-line');
   expect(toolLine?.textContent).toContain('read_order · Unconfirmed');
   expect(toolLine?.textContent).not.toContain('Running');
+  capture.fixture.destroy();
+});
+
+it('refreshes unavailable stop details once when queued work gets its end report', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+  ]);
+  const initialFetch = globalThis.fetch;
+  let budgetReads = 0;
+  function budgetStopFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    if (!path.includes('/budget-stops?')) return initialFetch(input, init);
+    budgetReads += 1;
+    if (budgetReads === 1) return Promise.resolve(new Response('{}', { status: 503 }));
+    const details = {
+      status: 'stopped', stopId: 'fixture-stop',
+      reasons: [{ scope: 'paying_group', period: 'monthly', cause: 'bound_refused',
+        resetAt: '2026-11-01T00:00:00Z', remedy: 'ask_admin_or_wait' }],
+      work: [{ turnId: 'message', execution: 'ended' }],
+      positions: { stop: 2, turn: 3, conversation: 4, computer: 5, budget: 6 },
+    };
+    return Promise.resolve(new Response(JSON.stringify(details)));
+  }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(budgetStopFetch);
+
+  const stopRequested = { id: 'stop-requested', position: 2,
+    type: 'agent.turn_stop_requested', time: '2026-10-04T10:00:02Z',
+    data: { turnId: 'message', reason: 'budget' } };
+  sendConversationRow(capture.socket, stopRequested);
+  await vi.waitFor(() => expect(capture.root.textContent).toContain('Stop details unavailable'));
+  expect(budgetReads).toBe(1);
+
+  const ended = { id: 'turn-ended', position: 3, type: 'agent.turn_failed',
+    time: '2026-10-04T10:00:03Z', data: { turnId: 'message' } };
+  sendConversationRow(capture.socket, ended);
+  await vi.waitFor(() => expect(budgetReads).toBe(2));
+  await vi.waitFor(() => expect(capture.root.textContent).toContain('Group monthly limit reached'));
+  expect(capture.root.textContent).not.toContain('Stop details unavailable');
+  expect(capture.fixture.componentInstance['chat'].turns().at(-1)?.endedAt)
+    .toBe('2026-10-04T10:00:02Z');
   capture.fixture.destroy();
 });
 

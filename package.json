@@ -68,7 +68,8 @@
     "visual:screen-p4-19-survey2": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-19-survey2.mjs",
     "visual:screen-p3-7-drift": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-7-drift.mjs",
     "visual:screen-p4-19-survey3": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-19-survey3.mjs",
-    "visual:screen-p4-6-read": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-6-read.mjs"
+    "visual:screen-p4-6-read": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-6-read.mjs",
+    "visual:screen-p3-14-stop": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-14-stop.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

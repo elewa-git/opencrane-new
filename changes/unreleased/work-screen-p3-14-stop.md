@@ -1,0 +1,1 @@
+- Show saved spending stop reasons, reset times and work status in chat. Keep stopped approvals readable without decision actions.

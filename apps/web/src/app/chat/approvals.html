@@ -10,16 +10,19 @@
         [actionBusy]="checkingReadFailure()" (action)="checkReadFailure()" />
     }
     @for (card of orderedCards(); track card.approvalId) {
-      @if (card.state === 'requested') {
+      @if (card.state === 'requested' || (card.state === 'cancelled' && isStopped(card))) {
         <article class="approval pending" role="region" [attr.data-approval]="card.approvalId"
-          aria-label="Approval needed">
+          [attr.aria-label]="isStopped(card) ? 'Cannot continue' : 'Approval needed'">
           <header>
             <span class="approval-dot" aria-hidden="true"></span>
-            <strong>{{ presentation.headerMessage(card) }}</strong>
+            <strong>{{ isStopped(card) ? "Can't continue" : presentation.headerMessage(card) }}</strong>
           </header>
           <h2>{{ card.review.action }}</h2>
           <oc-approval-ledger [card]="card" [viewerId]="viewerId()" />
           <p class="consequence"><strong>What happens</strong> · {{ card.review.consequence }}</p>
+          @if (isStopped(card)) {
+            <p class="only-requester">This work stopped at the limit. Approving now wouldn't restart it.</p>
+          } @else {
           @if (card.canDecide) {
             @if (card.stepUp) {
               <p class="step-up">This action needs a recent sign-in. If yours is too old, you’ll be asked to sign in again.</p>
@@ -55,6 +58,7 @@
             <p class="only-requester"><strong>Waiting for the requester</strong><br>
               Only the requester can decide.</p>
           }
+          }
         </article>
       } @else {
         <div class="terminal-wrap" [attr.data-approval]="card.approvalId">
@@ -86,6 +90,11 @@
       <oc-approval-ledger [card]="card" [viewerId]="viewerId()" />
       @if (card.state === 'requested') {
         <p class="consequence"><strong>What happens</strong> · {{ card.review.consequence }}</p>
+      }
+      @if (isStopped(card)) {
+        <p class="only-requester">This work stopped at the limit. Approving now wouldn't restart it.</p>
+      } @else {
+      @if (card.state === 'requested') {
         @if (card.canDecide) {
           <oc-approval-decision-status
             [message]="presentation.statusMessage(card)"
@@ -117,6 +126,7 @@
             [attr.aria-label]="'Deny: ' + card.review.action"
             (click)="decideFromDrawer(card, 'rejected')">Deny</button>
         </div>
+      }
       }
     </oc-hinge-drawer>
   }
