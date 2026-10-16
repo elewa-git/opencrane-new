@@ -270,7 +270,7 @@ async function keepsConfigureRepeatFromWritingAgain() {
   await actor.start();
   await reserve();
   const before = await nats.store.head();
-  expect(await actor.configure(payload, 'configure-once')).toEqual({ status: 'appended' });
+  expect(await actor.configure(payload, 'configure-once')).toMatchObject({ status: 'appended' });
   expect(await nats.store.head()).toBe(before);
   const changed = { ...payload, ceilingCents: 300 };
   expect(await actor.configure(changed, 'configure-once')).toEqual({ status: 'conflict' });
@@ -388,7 +388,7 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   expect(returned.sequence).toBe(expectedSequence);
   expect(projected.sequence).toBe(returned.sequence);
   const retry = await actor.configure(payload, 'configure-switch', projected.sequence, checkAccess);
-  expect(retry).toEqual({ status: 'appended' });
+  expect(retry).toMatchObject({ status: 'appended' });
   expect(checks).toBe(3);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
   expect(actor.state.sequence).toBe(before + 1);
@@ -397,7 +397,7 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   expect(after).toEqual(budgetSummary(actor.state, clock));
   const stale = await actor.configure(payload, 'configure-stale', expectedSequence, checkAccess);
   expect(stale).toEqual({ status: 'conflict' });
-  expect(checks).toBe(3);
+  expect(checks).toBe(4);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
   let reservedCents = 0;
   if (withHold) {
@@ -422,7 +422,7 @@ async function configuresAfterRefusingReservationPastSwitchOn() {
     scope: 'global', dailyCeilingCents: 200, ceilingCents: 200, setBy: 'alice',
   };
   const result = await actor.configure(payload, 'configure-after-refusal', projected.sequence);
-  expect(result).toEqual({ status: 'appended' });
+  expect(result).toMatchObject({ status: 'appended' });
   expect(await nats.store.head('budget-test')).toBe(before + 1);
   expect(actor.state.sequence).toBe(before + 1);
   const after = await projectedBudgetSummary();

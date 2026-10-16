@@ -1,7 +1,8 @@
+import { prepareCeilingChange, ceilingReceipt } from './ceiling-command.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { EventStore } from '@opencrane/event-store';
-import { budgetCeilingSetDataSchema, budgetCallDispatchAdmittedDataSchema,
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { budgetCallDispatchAdmittedDataSchema,
   effectResolvedDataSchema, effectUncertainDataSchema,
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
@@ -42,6 +43,7 @@ export async function migrateBudgetDefault(store: EventStore, silo: string, defa
 export class BudgetActor {
   readonly state = emptyBudget();
   private sequence = 0;
+  private lastCeiling: StoredEvent | undefined;
   private queue = Promise.resolve();
   private failed = false;
   private reservationsStopped = false;
@@ -115,25 +117,24 @@ export class BudgetActor {
     return true;
   }
   private apply(event: EventEnvelope) {
+    if (event.type === 'budget.ceiling_set') {
+      this.lastCeiling = { event, sequence: this.sequence };
+    }
     if (event.type === 'provider.managed_calls_enabled') {
       this.reservationsStopped = true;
     }
     applyBudget(this.state, event, this.sequence);
   }
 
-  configure(raw: unknown, commandId: string = randomUUID(), expectedSequence?: number, fresh?: () => Promise<void>) {
-    return this.serial(async () => {
-      const payload = budgetCeilingSetDataSchema.parse(raw);
-      const prior = (await history(this.store, `budget-${this.silo}`, this.silo)).find(r => r.event.commandId === commandId);
-      if (prior) return { status: JSON.stringify(prior.event.data) === JSON.stringify(payload) ? 'appended' : 'conflict' };
-      // Compare the client's revision with budget events; switch-on only moves the writer.
-      if (expectedSequence !== undefined && expectedSequence !== this.state.sequence) {
-        return { status: 'conflict' };
-      }
-      await fresh?.();
-      await this.append('budget.ceiling_set', payload, commandId, fresh);
-      return { status: 'appended' };
-    });
+  configure(raw: unknown, commandId: string = randomUUID(), expectedSequence?: number,
+    fresh?: () => Promise<void>) {
+    const save = async () => {
+      const prepared = await prepareCeilingChange(this, raw, commandId, expectedSequence, fresh);
+      if (prepared.status !== 'ready') return prepared;
+      await this.append('budget.ceiling_set', prepared.payload, commandId, fresh);
+      return ceilingReceipt(this.lastCeiling!, this.state);
+    };
+    return this.serial(save);
   }
   setRootAllowance(raw: unknown, firstCallBoundCents: number) {
     const save = () => setRootAllowance(this.state, this.silo, this.now(), raw,

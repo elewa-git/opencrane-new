@@ -1,0 +1,1 @@
+- Recover an original spending-limit change after a lost reply, even after later edits or reservations. Owners and admins see its saved details; an active original caller who lost that role sees only a minimal confirmation. Slow history loads finish before the save checks current access.

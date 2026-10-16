@@ -1,3 +1,4 @@
+export { budgetChange } from './budget-change.ts';
 export { budgetStopHandler, queuedPayer } from './budget-stop-handler.ts';
 export { turnBudgetStop, turnBudgetStopDetails } from './budget-turn.ts';
 export { settlementHandler } from './settlement-handler.ts';

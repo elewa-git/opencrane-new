@@ -486,8 +486,8 @@ Amounts are non-negative safe integer EUR cents. Zero is a hard stop; scoped
 ceilings are optional until configured. Conflicts return 409; refresh before
 editing again. Origin is checked on writes. The server signs a 30-second command
 capability bound to the exact JSON; `/budgets` verifies it and rechecks live
-Owner/Admin and current membership inside a two-second authority fence before
-queuing the append. Never send a bare asserted member id to the decision process.
+Owner/Admin and current membership after history and queue waiting, inside a
+two-second authority fence immediately before the append. Never send a bare asserted member id to the decision process.
 The screen at `/org/models` shows spent/reserved amounts and configures ceilings
 at desktop and 390px. Phase 4 group administration remains separate.
 
@@ -2298,6 +2298,22 @@ Scope is PARTIAL: hosted per-start capture, zero-TTL per-call capture and creden
 discovery are not implemented here. Fresh-install qualification is NOT RUN. The access-check code
 and its two named regression files are unchanged.
 
+## Original ceiling lookup (P4-26 PR 1; Part of #108)
+
+`budgetChange` replays the existing budget stream with a ten-second history deadline.
+It selects the exact `budget.ceiling_set` command and derives its saved stop from the
+shared budget fold. There is no SQL command ledger. Current access controls the
+receipt fields; only the active original `setBy` caller can use the minimal receipt.
+
+`BudgetActor.configure` loads previous-command history before `configureBudget`
+starts its write check. Membership history has its own ten-second deadline too.
+A saved retry compares event type, stream, silo and the complete ceiling payload,
+including `setBy`, before returning the original receipt. The expected revision is
+not part of the saved payload. Budget reservation churn still conflicts; the existing
+managed switch-on revision rule is unchanged. Each new change appends once.
+`test/actor.test.ts` covers original receipts after restart and NATS duplicate expiry,
+changed callers/payloads and unchanged event positions on retries.
+
 ## Loaded memory before dispatch (P4-15 PR 2d; Part of #97)
 
 `prepareLoadedMemory` uses the shared `memory-context-fold` on the turn's saved evidence.
@@ -2468,3 +2484,4 @@ while earlier pages are deleted, response limits and replay without external wor
 Automatic reactions and active credential injection coordination are deferred to the
 next part. Credentialed routes remain closed. Live Kubernetes/provider and fresh-install
 qualification: NOT RUN. No dependency, event field or API field was added.
+

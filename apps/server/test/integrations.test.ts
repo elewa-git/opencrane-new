@@ -627,24 +627,39 @@ it('lets Owner and Admin configure the one budget actor, refuses others and repl
 });
 
 
-it.each(['computer', 'membership', 'expired'] as const)('keeps budget edit authority scoped and fresh during %s changes', async change => {
-  const configure = actor.configure.bind(actor);
-  const intercepted = vi.spyOn(actor, 'configure').mockImplementation(async (...args) => {
-    if (change === 'computer') await append(fixture('computer.turn_closed', 'computer-personal-alice', { assistantId: 'personal-alice', computerId: 'computer-alice' }));
-    if (change === 'membership') await append(fixture('member.role_changed', 'member-alice', { memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'amina' }));
-    if (change === 'expired') await delay(2100);
-    return configure(...args);
-  });
+async function checksAccessAfterBudgetHistory(change: string) {
+  const read = nats.store.readStream.bind(nats.store);
+  let delayed = false;
+  async function* slowHistory(...args: Parameters<typeof read>) {
+    if (args[0] === 'budget-test' && !delayed) {
+      delayed = true;
+      await delay(2100);
+      if (change === 'membership') {
+        await append(fixture('member.role_changed', 'member-amina', {
+          memberId: 'amina', previousRole: 'admin', newRole: 'member', changedBy: 'alice',
+        }));
+      }
+      if (change === 'chat') {
+        await append(fixture('message.posted', 'conversation-unrelated', {
+          conversationId: 'unrelated', ciphertext: Buffer.from('private-canary').toString('base64'),
+        }));
+      }
+    }
+    yield* read(...args);
+  }
+  nats.store.readStream = slowHistory;
+  const before = await nats.store.head('budget-test');
   try {
-    const budgetHead = await nats.store.head('budget-test');
-    const reply = await app.inject({ method: 'POST', url: '/api/org/models',
-      headers: { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin },
-      payload: { commandId: `budget-during-${change}`, expectedSequence: actor.state.sequence, scope: 'global', ceilingCents: 30000 } });
-    expect(reply.statusCode).toBe(change === 'computer' ? 200 : 503);
-    expect(actor.state.ceilingCents).toBe(change === 'computer' ? 30000 : 20000);
-    if (change !== 'computer') expect(await nats.store.head('budget-test')).toBe(budgetHead);
-  } finally { intercepted.mockRestore(); }
-});
+    const reply = await saveCeiling(`slow-${change}`, 30000);
+    expect(reply.statusCode).toBe(change === 'membership' ? 403 : 200);
+    if (change === 'membership') expect(await nats.store.head('budget-test')).toBe(before);
+  } finally {
+    nats.store.readStream = read;
+  }
+}
+it.each(['membership', 'chat', 'none'])(
+  'loads slow budget history before the write access check with %s changes',
+  checksAccessAfterBudgetHistory);
 
 
 it('serves safe admin changes and requester actions while refusing foreign users, silos and stale authority', async () => {
@@ -1698,27 +1713,42 @@ function ceilingChange(commandId: string, sub = 'oidc-amina', org = 'org-acme') 
   return app.inject({ url, headers: headers(sub, org) });
 }
 async function recoversOriginalCeiling() {
-  const saved = await saveCeiling('first-ceiling', 30000);
-  expect(saved.statusCode).toBe(200);
+  const fetchResponse = globalThis.fetch;
+  async function loseResponse(...args: Parameters<typeof fetchResponse>) {
+    const response = await fetchResponse(...args);
+    if (typeof args[0] === 'string' && args[0].endsWith('/budgets')) {
+      throw new Error('Reply lost');
+    }
+    return response;
+  }
+  const intercepted = vi.spyOn(globalThis, 'fetch').mockImplementation(loseResponse);
+  try {
+    expect((await saveCeiling('first-ceiling', 30000)).statusCode).toBe(503);
+  } finally {
+    intercepted.mockRestore();
+  }
   const originalPosition = await nats.store.head('budget-test');
+  const originalRows = await history(nats.store, 'budget-test', 'test');
+  const recordedTime = originalRows.at(-1)!.event.time;
   const call = { model: 'gpt-6-luna', priceTableId, computerId: 'computer',
     assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private',
     turnId: 'turn', threadId: 'thread', payingGroupId: 'personal-default',
     contextDigest: '0'.repeat(64) };
   await actor.reserve(call, 1);
-  expect((await saveCeiling('second-ceiling', 25000)).statusCode).toBe(200);
+  expect((await saveCeiling('second-ceiling', 0)).statusCode).toBe(200);
   const before = await nats.store.head();
   const recovered = await ceilingChange('first-ceiling');
   expect(recovered.statusCode).toBe(200);
   expect(recovered.headers['cache-control']).toBe('no-store');
   expect(recovered.json()).toEqual({ status: 'appended', receipt: {
     commandId: 'first-ceiling', eventId: 'first-ceiling', sequence: originalPosition,
-    time: expect.any(String), scope: 'global', ceilingCents: 30000, setBy: 'amina',
-    stop: { status: 'not_required' },
+    time: recordedTime, scope: 'global', ceilingCents: 30000, setBy: 'amina',
+    stop: { status: 'not_recorded' },
   } });
-  expect(saved.json()).toMatchObject(recovered.json());
+  const retry = await saveCeiling('first-ceiling', 30000, 'oidc-amina', 0);
+  expect(retry.json()).toMatchObject(recovered.json());
   const stopped = await ceilingChange('second-ceiling');
-  expect(stopped.json()).toMatchObject({ receipt: { ceilingCents: 25000,
+  expect(stopped.json()).toMatchObject({ receipt: { ceilingCents: 0,
     stop: { status: 'stopping', stopId: 'second-ceiling' } } });
   await runner.rebuild(budgets);
   expect((await ceilingChange('first-ceiling')).json()).toEqual(recovered.json());
@@ -1751,3 +1781,70 @@ async function restrictsCeilingReceipt() {
 }
 it('shows only the active original caller a minimal receipt after demotion',
   restrictsCeilingReceipt);
+
+async function readsCeilingAfterHistory(change: string) {
+  await saveCeiling('read-ceiling', 30000);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* changedHistory(...args: Parameters<typeof read>) {
+    if (args[0] === 'budget-test') {
+      expect(args[2]).toBeGreaterThan(performance.now() + 2000);
+      if (change === 'unavailable') throw new Error('private-error-canary');
+      if (change === 'lagging') return;
+      await delay(2100);
+      if (change === 'removed') {
+        await append(fixture('member.removed', 'member-amina', {
+          memberId: 'amina', removedBy: 'alice',
+        }));
+      }
+      if (change === 'chat') {
+        await append(fixture('message.posted', 'conversation-unrelated', {
+          conversationId: 'unrelated', ciphertext: Buffer.from('private-canary').toString('base64'),
+        }));
+      }
+    }
+    yield* read(...args);
+  }
+  nats.store.readStream = changedHistory;
+  const before = await nats.store.head('budget-test');
+  try {
+    const response = await ceilingChange('read-ceiling');
+    expect(response.statusCode).toBe(change === 'removed' ? 403 : 200);
+    if (change === 'unavailable' || change === 'lagging') {
+      expect(response.json()).toEqual({ status: 'unknown' });
+    }
+    if (change === 'chat') {
+      expect(response.json()).toMatchObject({ receipt: { ceilingCents: 30000 } });
+    }
+    expect(response.body).not.toContain('private-');
+    expect(await nats.store.head('budget-test')).toBe(before);
+  } finally {
+    nats.store.readStream = read;
+  }
+}
+it.each(['removed', 'chat', 'unavailable', 'lagging'])(
+  'checks ceiling receipt access after history with %s history', readsCeilingAfterHistory);
+
+async function conflictsOnBudgetChurn() {
+  const expectedSequence = actor.state.sequence;
+  const first = saveCeiling('concurrent-first', 30000, 'oidc-amina', expectedSequence);
+  const second = saveCeiling('concurrent-second', 40000, 'oidc-alice', expectedSequence);
+  const replies = await Promise.all([first, second]);
+  function status(response: (typeof replies)[number]) { return response.statusCode; }
+  const statuses = replies.map(status);
+  statuses.sort();
+  expect(statuses).toEqual([200, 409]);
+  const rows = await history(nats.store, 'budget-test', 'test');
+  expect(rows).toHaveLength(3);
+  const call = { model: 'gpt-6-luna', priceTableId, computerId: 'computer',
+    assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private',
+    turnId: 'turn', threadId: 'thread', payingGroupId: 'personal-default',
+    contextDigest: '0'.repeat(64) };
+  const beforeReservation = actor.state.sequence;
+  await actor.reserve(call, 1);
+  const conflict = await saveCeiling('after-reservation', 40000, 'oidc-amina', beforeReservation);
+  expect(conflict.statusCode).toBe(409);
+  expect(conflict.json()).toMatchObject({ status: 'conflict' });
+  expect((await ceilingChange('after-reservation')).json()).toEqual({ status: 'unknown' });
+}
+it('keeps one conditional append for competing edits and conflicts on reservation churn',
+  conflictsOnBudgetChurn);

@@ -38,6 +38,7 @@ export async function readActiveMember(store: EventStore, binding: Binding, memb
   const membership = await currentMembership(store, binding.silo, memberId,
     undefined, performance.now() + 10_000);
   await requireMember(binding, memberId, requiredRole === 'admin', membership, applied);
+  return membership.role;
 }
 
 async function requireMember(

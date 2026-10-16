@@ -13,7 +13,7 @@ flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks gateway settings, public tool addresses, startup, member and child invitations, indexed departures, final tool and memory sends, spending stops for queued messages, renewals and switch-on retries, memory setup and loaded fact links, shared reference folds, later access changes through saving, tool reviews, hosted images, publication requests and status, turn previews, saved references and closes| libs["libs/*<br/>shared code"]
   server -->|records reviewed child requests, final answers and interim updates, child creation and first inputs, authenticated instance observations and stops, owner and admin stops, control intent, personal and shared memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops, refused turn decisions and managed call modes| nats["NATS<br/>event log"]
-  nats -->|saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
+  nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and history| postgres
@@ -266,6 +266,11 @@ the fact immediately and reports whether cleanup is pending, unavailable or fini
 A lost reply can be checked after restart with current rights, without another change.
 
 ## Processes it handles
+
+A lost spending-limit reply can be checked by its original command id. Owners and
+admins see the saved amount and stop status. The original caller can still see a
+minimal confirmation after losing that role, while they remain a member.
+The check saves nothing and makes no AI call.
 
 A member can review a child chat from their own group message, then save its first input.
 Retrying a request completes missing saves after a restart. These children stay queued;

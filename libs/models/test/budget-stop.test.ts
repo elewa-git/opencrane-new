@@ -305,12 +305,13 @@ async function serialisesConfigurationAndReservation(configurationFirst: boolean
     }
     release.resolve();
     await expect(reservation).resolves.toBeTypeOf('string');
-    expect(await configuration).toEqual({ status: configurationFirst ? 'appended' : 'conflict' });
+    const configured = await configuration;
+    expect(configured.status).toBe(configurationFirst ? 'appended' : 'conflict');
     if (!configurationFirst) {
       expect(actor.state.ceilings).toEqual([]);
       expect(await nats.store.head('budget-test')).toBe(before + 1);
-      expect(await actor.configure(payload, 'retried-configuration', actor.state.sequence))
-        .toEqual({ status: 'appended' });
+      const retry = await actor.configure(payload, 'retried-configuration', actor.state.sequence);
+      expect(retry.status).toBe('appended');
       await expect(actor.reserve(call('racing'), 1)).rejects.toThrow('spending cap');
     }
     expect(await nats.store.head('budget-test')).toBe(before + 2);

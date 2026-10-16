@@ -5,6 +5,7 @@ import type { Binding } from '@opencrane/authz';
 import { tokenVerifier } from '@opencrane/auth';
 import type { JSONWebKeySet } from 'jose';
 import { BudgetActor } from './actor.ts';
+import { currentMembership } from './ownership.ts';
 import { authorityFence } from './authority.ts';
 import { budgetSummary } from './state.ts';
 import { budgetCommandSchema } from '@opencrane/protocol';
@@ -15,24 +16,32 @@ const claims = z.object({ typ: z.enum(['budget-admin', 'provider-verification'])
 /** The server signs the exact command after session and Origin checks. */
 export async function configureBudget(actor: BudgetActor, binding: Binding,
   identity: { jwks: JSONWebKeySet; issuer: string }, raw: unknown, authorization?: string) {
-  const started = performance.now();
   const checked = await verifyCommand(identity, raw, actor.silo, authorization);
-  const fresh = await authorityFence(actor.store, started, [`member-${checked.memberId}`]);
   if (binding.silo !== actor.silo) {
     throw new BudgetAccessRefused('Access changed');
   }
-  const authority = { requiredRole: 'admin' as const, fresh };
-  try {
-    await activeMember(actor.store, binding, checked.memberId, authority);
-  } catch (error) {
-    if (error instanceof MemberAccessRefused) {
-      throw new BudgetAccessRefused(error.message);
+  let fresh: Awaited<ReturnType<typeof authorityFence>> | undefined;
+  async function confirmAccess() {
+    if (!fresh) {
+      const membership = await currentMembership(actor.store, actor.silo, checked.memberId,
+        undefined, performance.now() + 10_000);
+      const subjects = [...membership.positions.keys()];
+      fresh = await authorityFence(actor.store, performance.now(), subjects);
+      const authority = { requiredRole: 'admin' as const, fresh, membership };
+      try {
+        await activeMember(actor.store, binding, checked.memberId, authority);
+      } catch (error) {
+        if (error instanceof MemberAccessRefused) {
+          throw new BudgetAccessRefused(error.message);
+        }
+        throw error;
+      }
     }
-    throw error;
+    await fresh();
   }
   const { commandId, expectedSequence, ...payload } = budgetCommandSchema.parse(raw);
   const configuration = { ...payload, setBy: checked.memberId };
-  const result = await actor.configure(configuration, commandId, expectedSequence, fresh);
+  const result = await actor.configure(configuration, commandId, expectedSequence, confirmAccess);
   return { ...result, budget: budgetSummary(actor.state, actor.now()) };
 }
 

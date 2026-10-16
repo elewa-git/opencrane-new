@@ -3039,6 +3039,25 @@ startup at signing-file loading, after budget replay. It uses no timed sleep.
 Dev stacks still set `MODEL_KEY_FILE`, so switch-on stops their models process
 until custody wiring is supplied. Fresh-install qualification: NOT RUN.
 
+## Original budget change receipts (P4-26 PR 1; Part of #108)
+
+`GET /api/org/models/changes/:commandId` reads the existing silo budget stream.
+It returns `status: appended` with `receipt` containing the original command/event
+ids, sequence, time, complete ceiling payload and recorded stop status. Full receipts
+require current Owner/Admin access. An active original caller who lost that role gets
+only `{status: appended, commandId}`. Other members, removed callers and foreign
+sessions are refused. History loads before the final read access check, without a
+write fence. All replies use no-store. Missing or unavailable history stays unknown.
+The route appends nothing and makes no model or provider call.
+
+The stop status is `stopping` with `stopId`, or `not_recorded`. It never reports
+termination completion. Existing stop policy remains unchanged; current main does
+not record reductions above spent-plus-held money as stops.
+
+`test/integrations.test.ts` covers lost HTTP replies, later edits/reservations,
+concurrent edits, replay, restricted receipts, slow history, role loss, unrelated
+chat activity and unavailable or lagging history. Fresh-install qualification: NOT RUN.
+
 ## Shared memory reference fold
 
 Chat summaries and recall delivery import `foldMemoryContext` from `@opencrane/models`.
