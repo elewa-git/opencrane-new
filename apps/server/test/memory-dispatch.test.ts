@@ -669,3 +669,17 @@ async function refusesStoppedRootMemory() {
   expect(backendRequests).toBe(beforeRequests);
 }
 it('refuses an old memory permit and a new grant after its root stops', refusesStoppedRootMemory);
+
+async function refusesForgottenLoadedFact() {
+  await seedRecallFact();
+  const recalled = await directRecall('loaded-before-model');
+  expect(recalled.statusCode, recalled.body).toBe(200);
+  const forgotten = { scopeId, memoryId: 'private-fact' };
+  await setup.append(`scope-${scopeId}`, 'memory.forgotten', forgotten);
+  const response = await setup.call();
+  expect(response.status, response.text).toBe(403);
+  expect(setup.received()).toBe(0);
+  expect(setup.actor.state.reservations).toHaveLength(0);
+  expect(setup.actor.state.dispatches).toHaveLength(1);
+}
+it('refuses a model call after a loaded fact is forgotten', refusesForgottenLoadedFact);
