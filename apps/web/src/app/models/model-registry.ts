@@ -319,7 +319,8 @@ export class ModelsScreen extends ProviderKeyChanges {
       || this.pendingAccessModels().includes(model);
   }
   protected isModelSelected(model: string): boolean {
-    return this.selectedModels().includes(model);
+    return this.selectedModels().includes(model)
+      || this.activeProvider()?.enabledModels.includes(model) === true;
   }
   protected canRunModelTest(): boolean {
     const consent = this.modelTestConsent();
