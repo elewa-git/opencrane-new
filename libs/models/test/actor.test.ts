@@ -1,3 +1,5 @@
+import { jetstreamManager } from '@nats-io/jetstream';
+import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { countReads, expectNoWholeReads, lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
@@ -549,3 +551,28 @@ async function admitsOnlyCheckedManagedHolds(restart: boolean) {
 }
 it.each([false, true])('admits only validated, checked managed holds after switch-on (restart: %s)',
   admitsOnlyCheckedManagedHolds);
+
+async function recoversCeilingAfterRestart() {
+  const manager = await jetstreamManager(nats.connection);
+  await manager.streams.update('EVENTS', { duplicate_window: 1_000_000_000 });
+  const payload = { scope: 'global', ceilingCents: 300, setBy: 'alice' };
+  const revision = actor.state.sequence;
+  const saved = await actor.configure(payload, 'original-ceiling', revision);
+  expect(saved).toMatchObject({ status: 'appended', receipt: {
+    commandId: 'original-ceiling', ceilingCents: 300, setBy: 'alice',
+  } });
+  await reserve();
+  await actor.configure({ ...payload, ceilingCents: 250 }, 'later-ceiling');
+  await delay(1100);
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
+  const before = await nats.store.head();
+  expect(await actor.configure(payload, 'original-ceiling', revision)).toEqual(saved);
+  expect(await actor.configure({ ...payload, setBy: 'bob' }, 'original-ceiling'))
+    .toEqual({ status: 'conflict' });
+  expect(await actor.configure({ ...payload, ceilingCents: 301 }, 'original-ceiling'))
+    .toEqual({ status: 'conflict' });
+  expect(await nats.store.head()).toBe(before);
+}
+it('returns the original ceiling receipt after restart and duplicate expiry',
+  recoversCeilingAfterRestart);

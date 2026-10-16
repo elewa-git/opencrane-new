@@ -1686,3 +1686,68 @@ async function returnsFixedUnknownWhenBothStatusReadsFail() {
 }
 it('returns a fixed Unknown result when hosted and publication reads fail',
   returnsFixedUnknownWhenBothStatusReadsFail);
+
+function saveCeiling(commandId: string, ceilingCents: number, sub = 'oidc-amina',
+  expectedSequence = actor.state.sequence) {
+  const payload = { commandId, expectedSequence, scope: 'global', ceilingCents };
+  const requestHeaders = { ...headers(sub), origin: new URL(config.redirectUri).origin };
+  return app.inject({ method: 'POST', url: '/api/org/models', headers: requestHeaders, payload });
+}
+function ceilingChange(commandId: string, sub = 'oidc-amina', org = 'org-acme') {
+  const url = `/api/org/models/changes/${commandId}`;
+  return app.inject({ url, headers: headers(sub, org) });
+}
+async function recoversOriginalCeiling() {
+  const saved = await saveCeiling('first-ceiling', 30000);
+  expect(saved.statusCode).toBe(200);
+  const originalPosition = await nats.store.head('budget-test');
+  const call = { model: 'gpt-6-luna', priceTableId, computerId: 'computer',
+    assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private',
+    turnId: 'turn', threadId: 'thread', payingGroupId: 'personal-default',
+    contextDigest: '0'.repeat(64) };
+  await actor.reserve(call, 1);
+  expect((await saveCeiling('second-ceiling', 25000)).statusCode).toBe(200);
+  const before = await nats.store.head();
+  const recovered = await ceilingChange('first-ceiling');
+  expect(recovered.statusCode).toBe(200);
+  expect(recovered.headers['cache-control']).toBe('no-store');
+  expect(recovered.json()).toEqual({ status: 'appended', receipt: {
+    commandId: 'first-ceiling', eventId: 'first-ceiling', sequence: originalPosition,
+    time: expect.any(String), scope: 'global', ceilingCents: 30000, setBy: 'amina',
+    stop: { status: 'not_required' },
+  } });
+  expect(saved.json()).toMatchObject(recovered.json());
+  const stopped = await ceilingChange('second-ceiling');
+  expect(stopped.json()).toMatchObject({ receipt: { ceilingCents: 25000,
+    stop: { status: 'stopping', stopId: 'second-ceiling' } } });
+  await runner.rebuild(budgets);
+  expect((await ceilingChange('first-ceiling')).json()).toEqual(recovered.json());
+  expect((await ceilingChange('missing')).json()).toEqual({ status: 'unknown' });
+  expect(await nats.store.head()).toBe(before);
+}
+it('recovers the original ceiling reply after a reservation, another edit and replay',
+  recoversOriginalCeiling);
+
+async function restrictsCeilingReceipt() {
+  expect((await saveCeiling('private-ceiling', 31415)).statusCode).toBe(200);
+  const changed = fixture('member.role_changed', 'member-amina', {
+    memberId: 'amina', previousRole: 'admin', newRole: 'member', changedBy: 'alice',
+  });
+  await append(changed);
+  await authorisation.handler.handle(changed, pgDb(dbs.queue));
+  expect((await ceilingChange('private-ceiling')).json()).toEqual({
+    status: 'appended', commandId: 'private-ceiling',
+  });
+  for (const sub of ['oidc-bob', 'oidc-mallory']) {
+    const refused = await ceilingChange('private-ceiling', sub);
+    expect(refused.statusCode).toBe(403);
+    expect(refused.body).not.toContain('31415');
+  }
+  expect((await ceilingChange('private-ceiling', 'oidc-amina', 'other')).statusCode).toBe(403);
+  await append(fixture('member.removed', 'member-amina', {
+    memberId: 'amina', removedBy: 'alice',
+  }));
+  expect((await ceilingChange('private-ceiling')).statusCode).toBe(403);
+}
+it('shows only the active original caller a minimal receipt after demotion',
+  restrictsCeilingReceipt);
