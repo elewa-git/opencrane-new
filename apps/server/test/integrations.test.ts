@@ -1619,3 +1619,50 @@ async function keepsHostedChangeSeparate() {
   expect(response.body).not.toContain('generation');
 }
 it('resolves a hosted original id as registration rather than publication', keepsHostedChangeSeparate);
+
+function hostedHistorySubject(commandId: string) {
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(['test', commandId]));
+  return `mcp-${hash.digest('hex')}`;
+}
+
+async function failsHostedHistoryRead() {
+  const appendIntent = await publicationRequest();
+  expect((await app.inject(appendIntent)).statusCode).toBe(200);
+  await runner.run(mcpCatalogue);
+
+  const readStream = nats.store.readStream.bind(nats.store);
+  async function* failHostedHistory(subject: string, ...args: Parameters<typeof readStream>) {
+    if (subject === hostedHistorySubject('publish-odoo')) {
+      throw new Error('hosted history unavailable');
+    }
+    yield* readStream(subject, ...args);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(failHostedHistory);
+
+  const response = await app.inject({ url: '/api/org/integrations/changes/publish-odoo',
+    headers: headers('oidc-amina') });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'applying', changeRef: 'publish-odoo' });
+}
+it('reads a saved publication status when hosted history is unavailable', failsHostedHistoryRead);
+
+async function returnsFixedUnknownWhenBothStatusReadsFail() {
+  const readStream = nats.store.readStream.bind(nats.store);
+  async function* failHostedHistory(subject: string, ...args: Parameters<typeof readStream>) {
+    if (subject === hostedHistorySubject('both-reads-fail')) {
+      throw new Error('hosted history secret');
+    }
+    yield* readStream(subject, ...args);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(failHostedHistory);
+  vi.spyOn(dbs.queue, 'query').mockRejectedValue(new Error('publication query secret'));
+
+  const response = await app.inject({ url: '/api/org/integrations/changes/both-reads-fail',
+    headers: headers('oidc-amina') });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual({ status: 'unknown', stage: 'read', reason: 'unavailable' });
+  expect(response.body).not.toContain('secret');
+}
+it('returns a fixed Unknown result when hosted and publication reads fail',
+  returnsFixedUnknownWhenBothStatusReadsFail);
