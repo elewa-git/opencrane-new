@@ -51,6 +51,15 @@ async function readChanges(store: EventStore, scope: Scope, deadline: number) {
   return true;
 }
 
+async function readScopeChanges(store: EventStore, scopes: Iterable<Scope>, deadline: number) {
+  let changed = false;
+  for (const scope of scopes) {
+    const updated = await readChanges(store, scope, deadline);
+    changed ||= updated;
+  }
+  return changed;
+}
+
 /** Read scope history before starting the short access check. */
 export async function prepareLoadedMemory(store: EventStore, binding: Binding,
   claims: Identity, conversation: StoredEvent[], deadline: number) {
@@ -82,16 +91,15 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding,
           // Keep these grants on the original authority check for every later confirmation.
           rightsChecked = true;
         }
+        await readScopeChanges(store, scopes.values(), fresh.deadline);
         let changed: boolean;
         do {
-          changed = false;
-          for (const scope of scopes.values()) {
-            const updated = await readChanges(store, scope, fresh.deadline);
-            changed ||= updated;
-          }
-          // Recheck grants after scope reads so a revocation during those reads refuses use.
           await fresh();
+          // Catch memory changes saved while access was being checked. Recheck access
+          // after new scope rows, keeping the original deadline for every attempt.
+          changed = await readScopeChanges(store, scopes.values(), fresh.deadline);
         } while (changed);
+        if (performance.now() >= fresh.deadline) throw new LoadedMemoryRefused();
         confirmReferences(scopes.values(), references, claims.silo);
       } catch {
         throw new LoadedMemoryRefused();
