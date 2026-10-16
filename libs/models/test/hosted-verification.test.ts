@@ -232,6 +232,34 @@ async function unavailableVerifier() {
 }
 it('reports a missing verifier before reading candidate bytes', unavailableVerifier);
 
+async function unavailableScratchFile(filename: string) {
+  const directory = await mkdtemp(join(tmpdir(), 'hosted-file-error-test-'));
+  try {
+    const wrapperPath = join(directory, 'cosign');
+    const statusPath = join(directory, 'exit-code');
+    const errorPath = join(directory, 'stderr');
+    // Replace only this invocation's scratch file before the real verifier opens it.
+    const script = '#!/bin/sh\nset -eu\n' +
+      'rm "$HOME/"' + shellQuote(filename) + '\n' +
+      'mkdir "$HOME/"' + shellQuote(filename) + '\n' +
+      'status=0\n' + shellQuote(cosign) + ' "$@" 2>' + shellQuote(errorPath) +
+      ' || status=$?\ncat ' + shellQuote(errorPath) + ' >&2\n' +
+      'printf "%s" "$status" >' + shellQuote(statusPath) + '\nexit "$status"\n';
+    const executable = { mode: 0o700 };
+    await writeFile(wrapperPath, script, executable);
+    const image = fixture();
+    const result = await image.verify(wrapperPath);
+    expect(await readFile(statusPath, 'utf8')).toBe('1');
+    expect(await readFile(errorPath, 'utf8')).toContain('is a directory');
+    expect(result).toEqual({ verdict: 'unavailable', reasonCode: 'verifier_unavailable' });
+    expect(image.reads).toEqual(['signature']);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+it.each(['publisher.pem', 'payload', 'signature'])(
+  'reports an unreadable %s as unavailable when Cosign exits 1', unavailableScratchFile);
+
 async function refusesChangedTrustDuringRead() {
   const image = fixture();
   function read(_scope: string, resource: string) {
