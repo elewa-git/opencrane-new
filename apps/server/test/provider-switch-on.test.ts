@@ -5,7 +5,7 @@ import { encodeSession } from '@opencrane/auth';
 import { parseEventByType } from '@opencrane/events';
 import { event } from '@opencrane/event-store/testing';
 import { BudgetActor, budgets, history, ingestUsage, managedProviderCallsEnabled,
-  priceTableId, providerCommand, providerSecretRef, readBudget, totals } from '@opencrane/models';
+  priceTableId, providerCommand, providerSecretRef, readBudget, readEffect, resolveEffect, totals } from '@opencrane/models';
 import { fixture } from '../../../libs/models/test/fixture.ts';
 import { buildServer } from '../src/server.ts';
 import { turnCommand } from '../src/chat/turns.ts';
@@ -681,6 +681,24 @@ async function lostReplyWithCompletion(kind: 'settlement' | 'release' | 'unknown
     expect(retry.statusCode).toBe(403);
     expect(retry.json()).toEqual({ status: 'refused' });
     await refused(403);
+    const resolutionId = await resolveUnsentHold(reservationId);
+    await setup.actor.settleRecorded(reservationId, resolutionId);
+    expect(setup.actor.state.reservations).toMatchObject([
+      { id: reservationId, settledCents: 0, outcomeUnknown: false },
+    ]);
+    expect(totals(setup.actor.state, setup.actor.now())).toMatchObject(
+      { reservedCents: 0, monthCents: 0 });
+    const before = await setup.nats.store.head();
+    await setup.actor.settleRecorded(reservationId, resolutionId);
+    expect(await setup.nats.store.head()).toBe(before);
+    const saved = await request(command);
+    expect(saved.statusCode).toBe(200);
+    expect(status.json()).toMatchObject(saved.json());
+    const settlements = await spendingRecords();
+    expect(settlements).toHaveLength(5);
+    expect(settlements.at(-1)?.event.data).toEqual({ reservationId,
+      permitId: reservationId, settledCents: 0, outcome: 'not_dispatched' });
+    await replaySwitch(command, saved.json(), reservationId, 0, resolutionId);
   } else {
     expect(retry.statusCode).toBe(200);
     expect(status.json()).toMatchObject(retry.json());
@@ -767,3 +785,63 @@ async function retryReopenedDuringHistory() {
 }
 it('conflicts when a lost-reply retry reads spending before a hold reopens', retryReopenedDuringHistory);
 
+
+async function resolveUnsentHold(reservationId: string) {
+  const status = await readEffect(setup.nats.store, 'test', reservationId);
+  expect(status?.state).toBe('outcome_unknown');
+  const resolution = {
+    commandId: 'resolve-unsent', expectedSequence: status!.sequence,
+    outcome: 'released', settledCents: 0,
+    evidence: [{ kind: 'dispatch_record', reference: 'unsent-receipt',
+      digest: 'a'.repeat(64), notDispatched: true }],
+  };
+  const result = await resolveEffect(setup.nats.store, 'test', reservationId, 'alice', resolution);
+  expect(result.status).toBe('appended');
+  return resolution.commandId;
+}
+
+async function conflictingUsageAfterResolution() {
+  const reservationId = await heldCall(true, false);
+  await setup.actor.releaseUndispatched(reservationId);
+  const command = await input();
+  expect((await request(command)).statusCode).toBe(200);
+  await setup.actor.uncertain(reservationId, 'transport_failure');
+  const resolutionId = await resolveUnsentHold(reservationId);
+  // Save conflicting usage before the accepted resolution reaches settlement.
+  await recordUsage(reservationId);
+  await recordUsage(reservationId, 200_000);
+  const before = await setup.nats.store.head();
+  await setup.actor.settleRecorded(reservationId, resolutionId);
+  await setup.actor.settleRecorded(reservationId, resolutionId);
+  expect(await setup.nats.store.head()).toBe(before);
+  expect(setup.actor.state.reservations).toMatchObject([
+    { id: reservationId, settledCents: 2, outcomeUnknown: true },
+  ]);
+  expect(totals(setup.actor.state, setup.actor.now())).toMatchObject(
+    { reservedCents: 12, monthCents: 2 });
+  expect((await request(command)).statusCode).toBe(403);
+  await refused(403);
+  await setup.runner.run(budgets);
+  const projected = await readBudget(setup.db, 'test');
+  const records = await spendingRecords();
+  await app.close();
+  await setup.decisionDown();
+  setup.nats.store = await createEventStore(setup.nats.connection);
+  const recovered = new BudgetActor(setup.nats.store, 'test', setup.actor.now);
+  await recovered.start();
+  buildApp();
+  await recovered.settleRecorded(reservationId, resolutionId);
+  await setup.runner.rebuild(budgets);
+  const replayed = await readBudget(setup.db, 'test');
+  expect(replayed.reservations).toEqual(projected.reservations);
+  expect(recovered.state.reservations).toEqual(projected.reservations);
+  expect(totals(replayed, recovered.now())).toMatchObject(
+    { reservedCents: 12, monthCents: 2 });
+  expect((await request(command)).statusCode).toBe(403);
+  await refused(403);
+  expect(await spendingRecords()).toEqual(records);
+  expect(secrets.read).not.toHaveBeenCalled();
+  expect(setup.received()).toBe(0);
+}
+it('keeps conflicting usage blocked after an accepted release, redelivery and restart',
+  conflictingUsageAfterResolution);
