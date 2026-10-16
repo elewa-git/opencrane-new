@@ -606,8 +606,8 @@ async function refusesSignedChanges(change: string) {
     const review = await request(context, 'publication-review', input);
     expect(review.statusCode, review.body).toBe(200);
     const signed = review.json<{ review: string }>().review;
-    const binding = JSON.parse(Buffer.from(signed.split('.')[0]!, 'base64url').toString()) as
-      Record<string, unknown>;
+    const decoded = Buffer.from(signed.split('.')[0]!, 'base64url').toString();
+    const binding = z.record(z.string(), z.unknown()).parse(JSON.parse(decoded));
     if (change === 'turn') binding['turnId'] = 'other-turn';
     if (change === 'ancestor') binding['parentConversationId'] = 'ancestor';
     if (change === 'silo') binding['silo'] = 'foreign';
