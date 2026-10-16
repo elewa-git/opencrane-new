@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { toolApprovalRequestedDataSchema, toolDispatchRecordedDataSchema,
   approvalDecidedDataSchema, type EventEnvelope } from '@opencrane/events';
 import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
-import { readEvents } from '@opencrane/projections';
+import { isToolPolicyAvailable, readEvents } from '@opencrane/projections';
 import { approvalReviewSchema, type ApprovalCard } from '@opencrane/protocol';
 import { envelope, history } from './actor.ts';
 import { readToolPolicy } from './tool-policy.ts';
@@ -218,7 +218,12 @@ async function invalidated(store: EventStore, silo: string, request: Request, de
 async function approvalPolicyChanged(store: EventStore, silo: string, request: Request,
   deadline: number) {
   const policy = await readToolPolicy(store, silo, request.serverId, deadline);
-  return !policy.published || policy.policyRevision !== request.policySequence ||
+  let published = policy.published;
+  if (policy.publication) published = policy.configurationObservation !== undefined;
+  // Keep consent tied to the reviewed publication, without requiring a running gateway.
+  const currentPublication = { ...policy, published };
+  const available = isToolPolicyAvailable(currentPublication);
+  return !available || policy.policyRevision !== request.policySequence ||
     policy.connectionId !== request.connectionId;
 }
 

@@ -11,8 +11,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops, memory setup, loaded memory fact links, later grant and access changes through saving, tool reviews, hosted image checks, publication requests and status, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
-  server -->|records reviewed child requests and answers, child creation, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and personal or shared forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops, refused turn decisions and managed call modes| nats["NATS<br/>event log"]
+  server -.->|checks acknowledged gateway configurations, public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, loaded memory fact links, later grant and access changes through saving, tool reviews, hosted image checks and registration, reviewed publication requests and status, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -->|records reviewed child requests and answers, child creation with first inputs, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and personal or shared forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops and refused turn decisions| nats["NATS<br/>event log"]
   nats -->|saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -27,6 +27,9 @@ Tool discovery records the exact definitions and how long the check remains vali
 Descriptions are untrusted text. They never become instructions for the server.
 The models process checks each configured tool call again before sending it. Its backend
 must compare the approved tool list and running instance before executing the call.
+The models process also supplies the running gateway's confirmed configuration for each
+published call check. Saved configuration alone cannot enable a call after restart.
+Production tool calls remain unavailable until the guarded destination is connected.
 Memory discovery, recall and remember use this same check. The memory backend also
 checks each signed context once and keeps the existing scope and write-proof rules.
 Turn summaries can also rebuild saved memory reference records without loading fact text.

@@ -337,7 +337,8 @@ export async function startDecision(
         if (!match) throw new Error('Unknown MCP route');
         fresh.include(`mcp-${match[1]!}`);
         const reviewedPolicy = await mcpPolicy(
-          actor.store, actor.silo, match[1]!, match[2]!, parsed, req.headers, fresh.deadline);
+          actor.store, actor.silo, match[1]!, match[2]!, parsed, req.headers, fresh.deadline,
+          mcpSender.acknowledged);
         const policy = mcpSender.bindPolicy(reviewedPolicy);
         const logicalRequestId = digestContext([actor.silo, turnToken.conversation,
           turnToken.turn, turnToken.thread, callId, match[1], match[2],

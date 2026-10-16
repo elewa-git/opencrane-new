@@ -188,6 +188,7 @@ async function recordsOnlyLiveAcknowledgement() {
   const setup = await fixture();
   const subject = 'gateway-config-test';
   expect(await history(setup.nats.store, subject, 'test')).toHaveLength(1);
+  expect(setup.delivery.acknowledged()).toBeNull();
   setup.faulty.loseNextReply();
   await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
   const rows = await history(setup.nats.store, subject, 'test');
@@ -196,17 +197,22 @@ async function recordsOnlyLiveAcknowledgement() {
   expect(rows[1]!.event.data).toMatchObject({ generation: 1,
     recordDigest: setup.record.recordDigest, outcome: 'loaded' });
   expect(await setup.delivery.observe()).toEqual(rows[1]);
+  const observation = { generation: 1, recordDigest: setup.record.recordDigest,
+    members: setup.record.members, position: rows[1]!.sequence };
+  expect(setup.delivery.acknowledged()).toEqual(observation);
   expect(await gatewayConfigurationCurrent(setup.nats.store, 'test', setup.record)).toBe(true);
   expect(await prepareGatewayConfiguration(setup.nats.store, 'test', 'alpha', 'publish-alpha'))
     .toEqual(setup.record);
   const replay = gatewayDelivery({ ...setup.options, mode: 'replay' });
   expect(await replay.observe()).toBeNull();
+  expect(replay.acknowledged()).toBeNull();
   const bytes = await readFile(setup.options.configFile);
   await replay.deliver(setup.record);
   expect(await replay.observe()).toBeNull();
   expect(await readFile(setup.options.configFile)).toEqual(bytes);
   expect(await history(setup.nats.store, subject, 'test')).toHaveLength(2);
   await setup.gateway.stop('SIGKILL');
+  expect(setup.delivery.acknowledged()).toBeNull();
   expect(await setup.delivery.observe()).toBeNull();
   let child: ChildProcess | undefined;
   function spawned(value: ChildProcess) {
@@ -219,6 +225,7 @@ async function recordsOnlyLiveAcknowledgement() {
   onTestFinished(stop);
   const replacement = gatewayDelivery({ ...setup.options, child: child! });
   expect(await replacement.observe()).toBeNull();
+  expect(replacement.acknowledged()).toBeNull();
   await replacement.deliver(setup.record);
   async function reobserved() {
     expect(await replacement.observe()).not.toBeNull();
@@ -806,6 +813,7 @@ async function reconcilesLatestOnly() {
   }
   const options = { ...setup.options, requireLeader };
   const worker = gatewayConfigurationWorker(options);
+  expect(worker.acknowledged()).toBeNull();
   onTestFinished(worker.close);
   async function observed() {
     await worker.check();
@@ -818,6 +826,8 @@ async function reconcilesLatestOnly() {
   const oldWitness = await fetch(`http://127.0.0.1:${options.controlPort}${oldPath}`,
     { signal: AbortSignal.timeout(1000) });
   expect(oldWitness.status).toBe(404);
+  const expectedObservation = { generation: 2, recordDigest: next.recordDigest };
+  expect(worker.acknowledged()).toMatchObject(expectedObservation);
   const file = await stat(setup.options.configFile);
   await worker.check();
   expect((await stat(setup.options.configFile)).ino).toBe(file.ino);
@@ -828,6 +838,9 @@ async function reconcilesLatestOnly() {
   const replay = gatewayConfigurationWorker({ ...options, mode: 'replay' });
   const position = await setup.nats.store.head();
   await replay.check();
+  expect(replay.acknowledged()).toBeNull();
+  await worker.close();
+  expect(worker.acknowledged()).toBeNull();
   expect(await setup.nats.store.head()).toBe(position);
 }
 it('reconciles only the latest generation, recovers a lost reply and stops on lost leadership',

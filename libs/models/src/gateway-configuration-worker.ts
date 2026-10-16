@@ -46,7 +46,8 @@ export function gatewayConfigurationWorker(options: Options) {
   }
   async function close() {
     stopped = true;
+    delivery.close();
     await active?.catch(finished);
   }
-  return { check, tick, close };
+  return { check, tick, close, acknowledged: delivery.acknowledged };
 }

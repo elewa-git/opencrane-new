@@ -1,3 +1,6 @@
+import { isToolPolicyAvailable } from '@opencrane/projections';
+import { gatewayAdmission } from './gateway-admission.ts';
+import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { z } from 'zod';
 import type { IncomingHttpHeaders } from 'node:http';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -45,7 +48,8 @@ const callSchema = z.object({
 }).strict();
 export async function mcpPolicy(store: EventStore, silo: string, server: string,
   connection: string, parsed: ReturnType<typeof parseMcpCall>,
-  headers: IncomingHttpHeaders, deadline = Infinity) {
+  headers: IncomingHttpHeaders, deadline = Infinity,
+  acknowledged?: () => GatewayAcknowledgement | null) {
   const { call, args } = parsed;
   if (headers['mcp-protocol-version'] !== version ||
       headers['mcp-method'] !== call.method || headers['mcp-name'] !== call.params.name) {
@@ -54,8 +58,12 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
   // Use the same saved events for policy and review details. A second read spends
   // the short access deadline again and can describe a different registration.
   const rows = await history(store, `mcp-${server}`, silo, deadline);
-  const policy = toolPolicyFromRows(rows);
-  if (!policy.published || policy.connectionId !== connection || policy.accountMode !== 'none') {
+  const savedPolicy = toolPolicyFromRows(rows);
+  const gatewayBinding = await gatewayAdmission(store, silo, server, connection, rows,
+    savedPolicy, headers, deadline, acknowledged);
+  const policy = { ...savedPolicy, published: savedPolicy.published || gatewayBinding !== undefined };
+  if (!isToolPolicyAvailable(policy) || policy.connectionId !== connection ||
+      policy.accountMode !== 'none') {
     throw new Error('MCP context unavailable');
   }
   function hasRequestedName(tool: (typeof policy.tools)[number]) {
@@ -71,7 +79,8 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
   }
   const review = reviewMetadata(rows, call.params.name, policy.catalogue);
   const expectedApproval = expectedApprovalId(headers);
-  return { ...decision, waitLimited: offeredMode === 'ask', expectedApproval,
+  return { ...decision, ...(gatewayBinding ? { gatewayBinding } : {}),
+    waitLimited: offeredMode === 'ask', expectedApproval,
     policy, revision: tool?.revision, name: call.params.name, args, ...review };
 }
 export function toolDecision(
