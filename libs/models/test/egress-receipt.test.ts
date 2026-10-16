@@ -12,7 +12,7 @@ import { egressFixture } from './egress-fixture.ts';
 import { clientHello } from './egress-hello-fixture.ts';
 
 async function normalClose() {
-  const setup = await egressFixture(true, true);
+  const setup = await egressFixture(true, true, { captureReceipts: true });
   const observationId = setup.receipt.observationId;
   await setup.tunnel(await setup.token(), 'registry.npmjs.org:443', clientHello());
   function closed() { return setup.closeRecords.length; }
@@ -30,7 +30,7 @@ async function normalClose() {
 it('saves one durable close receipt from the pinned gateway', normalClose);
 
 async function competingClosers(expire: boolean) {
-  const setup = await egressFixture(true, true);
+  const setup = await egressFixture(true, true, { captureReceipts: true });
   async function closeTogether(socket: import('node:net').Socket) {
     const closed = once(socket, 'close');
     if (expire) await closed;
@@ -56,7 +56,7 @@ it.each([false, true])('deduplicates competing closures and redelivery (expiry: 
   competingClosers);
 
 async function unavailableAppend(accepted: boolean) {
-  const setup = await egressFixture(true, true);
+  const setup = await egressFixture(true, true, { captureReceipts: true });
   const manager = await jetstreamManager(setup.connection);
   await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
   const append = setup.store.append.bind(setup.store);
@@ -116,7 +116,7 @@ it.each([false, true])('retains outage evidence and recovers after restart (appe
   unavailableAppend);
 
 async function refusesForeignEvidence() {
-  const setup = await egressFixture(true, true);
+  const setup = await egressFixture(true, true, { captureReceipts: true });
   await setup.tunnel(await setup.token(), 'registry.npmjs.org:443', clientHello());
   function closed() { return setup.closeRecords.length; }
   await expect.poll(closed).toBe(1);
@@ -148,7 +148,7 @@ async function refusesForeignEvidence() {
 it('refuses changed callbacks and forged or foreign saved evidence', refusesForeignEvidence);
 
 async function rebuildsWithoutConnecting() {
-  const setup = await egressFixture(true, true);
+  const setup = await egressFixture(true, true, { captureReceipts: true });
   const database = await databases();
   onTestFinished(database.close.bind(database));
   const db = pgDb(database.queue);
@@ -176,7 +176,7 @@ it('rebuilds the receipt in PostgreSQL without appending or opening relays',
   rebuildsWithoutConnecting);
 
 async function failedEvidenceWrite() {
-  const setup = await egressFixture(true, true);
+  const setup = await egressFixture(true, true, { captureReceipts: true });
   const file = `${setup.directory}/${setup.receipt.observationId}.jsonl`;
   await mkdir(file);
   await setup.tunnel(await setup.token(), 'registry.npmjs.org:443', clientHello());

@@ -40,6 +40,8 @@ they do not prove that the remote application received or processed those bytes.
 Reasons are finished (socket ended), failed (transport error), refused (guard refusal),
 expired, revoked (explicit closure) or unavailable (explicit outage closure). The first close determines the record.
 The gateway fixture registers one relay after each allowed guarded CONNECT decision.
+Only the receipt tests enable receipt capture. Gateway routing tests keep their relay
+checks without adding receipt file and event writes.
 Own checks are in [the relay receipt](../../docs/process/p3-20-pr2c-relays.md).
 
 NOT BUILT: checked-set fallback or production wiring.

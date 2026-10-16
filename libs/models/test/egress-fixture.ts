@@ -25,7 +25,8 @@ const call = {
 export type EgressScenario = 'allow' | 'deny' | 'stop' | 'revoke' | 'audit-outage' |
   'gate-outage' | 'missing-relay' | 'foreign-relay';
 
-export async function egressFixture(enabled = true, guarded = false) {
+export async function egressFixture(enabled = true, guarded = false,
+  receiptOptions: { captureReceipts?: boolean } = {}) {
   const directory = await mkdtemp(`${tmpdir()}/egress-gateway-`);
   const nats = await natsFixture();
   const actor = new BudgetActor(nats.store, 'test');
@@ -70,7 +71,7 @@ export async function egressFixture(enabled = true, guarded = false) {
   const receipt = await createEgressReceipt(nats.store, 'test', binding, directory);
   function recordClose(record: EgressCloseRecord) {
     closeRecords.push(record);
-    receipt.capture(record);
+    if (receiptOptions.captureReceipts) receipt.capture(record);
   }
   async function restartStore() {
     await nats.stop();
@@ -245,7 +246,7 @@ export async function egressFixture(enabled = true, guarded = false) {
     for (const socket of sockets) socket.destroy();
     await relayClosed;
     await decisionDown();
-    await receipt.retry();
+    if (receiptOptions.captureReceipts) await receipt.retry();
     await nats.close();
     await rm(directory, { recursive: true, force: true });
   }
