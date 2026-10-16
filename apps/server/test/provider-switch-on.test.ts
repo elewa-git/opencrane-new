@@ -753,7 +753,7 @@ async function retryReopenedDuringHistory() {
   await setup.actor.releaseUndispatched(reservationId);
   const command = await input();
   const originalAppend = setup.nats.store.append.bind(setup.nats.store);
-  async function loseReply(change: Parameters<typeof originalAppend>[0]) {
+  async function loseReply(change: Parameters<typeof originalAppend>[0]): Promise<never> {
     await originalAppend(change);
     throw new Error('Lost reply');
   }
