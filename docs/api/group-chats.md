@@ -67,8 +67,6 @@ receipt; removals end HTTP and socket access within two seconds, before IAM catc
 Joining the parent later cannot restore a removed child join. A new explicit
 invitation is required. An explicit child join survives parent or creator departure.
 
-Child creation, origin and summary routes are not provided by this change.
-
 ## Reviewed child publication
 
 `POST /api/conversations/:child/publication-review` accepts strict
