@@ -136,13 +136,19 @@ async function integrationStatus(path: string, request: FastifyRequest, reply: F
   if (!options.store) return reply.code(503).send({ status: 'unavailable' });
   if (path.endsWith('/:commandId')) {
     const params = z.object({ commandId: z.string() }).parse(request.params);
-    const registration = await hostedRegistrationChange(options.store, options.silo, params.commandId);
-    if (registration.status === 'applied') return reply.send(registration);
+    let registration: Awaited<ReturnType<typeof hostedRegistrationChange>> | undefined;
+    try {
+      registration = await hostedRegistrationChange(options.store, options.silo, params.commandId);
+    } catch {
+      // A failed history read cannot confirm a registration, so check the saved publication too.
+    }
+    if (registration?.status === 'applied') return reply.send(registration);
     if (options.modelDb) {
       const status = await publicationChange(options.modelDb, options.silo, params.commandId);
       if (status) return reply.send(status);
     }
-    return reply.send(registration);
+    if (registration) return reply.send(registration);
+    return reply.send({ status: 'unknown', stage: 'read', reason: 'unavailable' });
   }
   const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
   const { serverId } = params.parse(request.params);

@@ -1632,11 +1632,12 @@ async function failsHostedHistoryRead() {
   await runner.run(mcpCatalogue);
 
   const readStream = nats.store.readStream.bind(nats.store);
-  async function* failHostedHistory(subject: string, ...args: Parameters<typeof readStream>) {
+  async function* failHostedHistory(subject: string, fromSequence?: number,
+    deadline?: number, includeConversationCloses?: boolean) {
     if (subject === hostedHistorySubject('publish-odoo')) {
       throw new Error('hosted history unavailable');
     }
-    yield* readStream(subject, ...args);
+    yield* readStream(subject, fromSequence, deadline, includeConversationCloses);
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(failHostedHistory);
 
@@ -1649,11 +1650,12 @@ it('reads a saved publication status when hosted history is unavailable', failsH
 
 async function returnsFixedUnknownWhenBothStatusReadsFail() {
   const readStream = nats.store.readStream.bind(nats.store);
-  async function* failHostedHistory(subject: string, ...args: Parameters<typeof readStream>) {
+  async function* failHostedHistory(subject: string, fromSequence?: number,
+    deadline?: number, includeConversationCloses?: boolean) {
     if (subject === hostedHistorySubject('both-reads-fail')) {
       throw new Error('hosted history secret');
     }
-    yield* readStream(subject, ...args);
+    yield* readStream(subject, fromSequence, deadline, includeConversationCloses);
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(failHostedHistory);
   vi.spyOn(dbs.queue, 'query').mockRejectedValue(new Error('publication query secret'));

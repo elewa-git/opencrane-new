@@ -164,9 +164,9 @@ it('refuses an otherwise fresh published policy with a drift hold', refusesPubli
 async function storesOnlySafeRegistrationFields() {
   let savedData: unknown;
   const db = {
-    async query(_sql: string, values: unknown[]) {
+    query(_sql: string, values: unknown[]) {
       savedData = JSON.parse(String(values[6]));
-      return { rows: [] };
+      return Promise.resolve({ rows: [] });
     },
   };
   const registration = record('mcp.server_registered', {
