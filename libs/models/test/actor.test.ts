@@ -576,3 +576,18 @@ async function recoversCeilingAfterRestart() {
 }
 it('returns the original ceiling receipt after restart and duplicate expiry',
   recoversCeilingAfterRestart);
+
+async function recoversReplacementReceipt() {
+  const replacement = new BudgetActor(nats.store, 'test', now);
+  await replacement.start();
+  const payload = { scope: 'global', ceilingCents: 0, setBy: 'alice' };
+  const saved = await replacement.configure(payload, 'replacement-ceiling');
+  expect(saved).toMatchObject({ receipt: {
+    stop: { status: 'stopping', stopId: 'replacement-ceiling' },
+  } });
+  const before = await nats.store.head();
+  expect(await actor.configure(payload, 'replacement-ceiling')).toEqual(saved);
+  expect(await nats.store.head()).toBe(before);
+}
+it('recovers the exact stop receipt saved by a replacement budget actor',
+  recoversReplacementReceipt);
