@@ -351,7 +351,8 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
    The watcher reuses computer history while it is unchanged. It checks for changes
    again before sending a turn or file, so new control intent holds waiting work.
    While a computer has not acknowledged a file, the watcher still sends spending
-   Stops and checks approvals. It sends each file once per connection and waits for
+   Stops and checks approvals. A slow chat history read delays only that chat’s Stop
+   check. Shutdown waits for unfinished checks. It sends each file once per connection and waits for
    the receipt before sending that chat’s turn.
    Open chat pages repeat permission checks when silo or team membership changes.
    Removing someone from a team closes their private chat with that team's assistant

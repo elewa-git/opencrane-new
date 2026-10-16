@@ -2781,17 +2781,24 @@ channel for different saved payers on one team computer.
 
 P3-14 PR 4c keeps one conversation delivery pass running while the main watcher
 continues polling every 250 ms. During an unfinished pass it reads saved Stops
-separately, using the same per-socket retry timestamps. Approval checks continue too.
+separately, using the same per-socket retry timestamps. Each chat has at most one
+unfinished Stop check. Polling starts checks without waiting for other chats, and a
+failed check retries on a later poll. Approval checks continue too.
 It reuses the chat list until events or projection catch-up change it, and leaves
 unchanged finished chats unread.
 The existing transfer queue still sends one file at a time and records its receipt
-before delivering that chat's turn. Shutdown closes sockets before awaiting the pass.
+before delivering that chat's turn. Shutdown closes sockets before awaiting the pass
+and every unfinished Stop check.
 The signed bridge gate still precedes resume on every connection.
 
 `test/bridge-budget-watcher.test.ts` uses real NATS, PostgreSQL and OpenFGA with a
 personal assistant and a scripted socket. It holds file receipts and checks Stop
 arrival within two seconds in another chat, in the same chat and after reconnect.
 Four more global polls must leave the file sent once and turns waiting for the receipt.
+Holding that chat's next history read still lets another chat's Stop arrive within two
+seconds and lets approval polling reply. A failed chat read alongside another held
+read must leave just one unfinished read after repeated polls. Shutdown waits until
+that read finishes and closes the socket without a test-supplied receipt.
 It also checks recovery of Stop-only work after computer or assistant history fails,
 without saving a new event. Temporarily narrowing each guard to waiting messages makes
 its test fail. Fresh-install qualification is NOT RUN. Computer grant removal,

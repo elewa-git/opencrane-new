@@ -30,6 +30,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
   connection: Connection,
   connectionId: (assistantId: string) => number | undefined, logger: Logger) {
   const seen = new Map<string, Progress>();
+  const checkingStops = new Map<string, Promise<void>>();
   let watchedAssistants = new Set<string>();
   const readingSnapshots = new Map<string, Promise<Snapshot>>();
   const kinds = new Map<string, string>();
@@ -156,33 +157,46 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
   }
 
-  async function pollStops(sessions: AgentSession[]) {
+  async function checkStops(conversation: AgentSession) {
     try {
-      const assistantId = sessions[0]!.assistantId;
+      const assistantId = conversation.assistantId;
       const assistant = await snapshot(assistantId);
       if (!assistant.kind || assistant.current?.type !== 'computer.ready') return;
       const computer = computerData.parse(assistant.current.data);
       if (refused.has(computer.computerId)) return;
-      async function sendStops(conversation: AgentSession) {
-        const head = await options.store.head(`conversation-${conversation.conversationId}`);
-        const previous = seen.get(conversation.conversationId);
-        if (previous?.head === head && !previous.retry) return;
-        const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
-        agentSession(rows);
-        function isClosed(row: typeof rows[number]) {
-          return row.event.type === 'conversation.closed';
-        }
-        if (rows.some(isClosed)) return;
-        const stops = pendingBudgetStops(rows, assistant.closed);
-        if (!stops.length) return;
-        const link = await connection(computer.computerId, assistantId);
-        sendBudgetStops(link, stops);
+      const head = await options.store.head(`conversation-${conversation.conversationId}`);
+      const previous = seen.get(conversation.conversationId);
+      if (previous?.head === head && !previous.retry) return;
+      const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
+      agentSession(rows);
+      function isClosed(row: typeof rows[number]) {
+        return row.event.type === 'conversation.closed';
       }
-      const sending = sessions.map(sendStops);
-      await Promise.all(sending);
+      if (rows.some(isClosed)) return;
+      const stops = pendingBudgetStops(rows, assistant.closed);
+      if (!stops.length) return;
+      const link = await connection(computer.computerId, assistantId);
+      sendBudgetStops(link, stops);
     } catch {
-      // Leave saved Stops for the next poll when history or the connection is unavailable.
+      // Retry this chat on a later poll without delaying checks for other chats.
     }
+  }
+
+  function pollStops(sessions: AgentSession[]) {
+    for (const conversation of sessions) {
+      const conversationId = conversation.conversationId;
+      if (checkingStops.has(conversationId)) continue;
+      function finished() {
+        checkingStops.delete(conversationId);
+      }
+      // Keep one unfinished check per chat, even when another chat's check fails.
+      const checked = checkStops(conversation).finally(finished);
+      checkingStops.set(conversationId, checked);
+    }
+  }
+
+  async function settledStops() {
+    await Promise.all(checkingStops.values());
   }
 
   async function watchControls(signal: AbortSignal) {
@@ -226,5 +240,5 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
   }
 
-  return { processAssistant, pollStops, watchControls, forgetMissing };
+  return { processAssistant, pollStops, settledStops, watchControls, forgetMissing };
 }

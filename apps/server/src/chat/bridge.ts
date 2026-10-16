@@ -445,8 +445,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
         await refreshConversations(head);
         if (processing) {
           // Keep Stops and approval checks moving while a file waits for its receipt.
-          const sending = groups.map(processor.pollStops);
-          await Promise.all(sending);
+          for (const sessions of groups) processor.pollStops(sessions);
         } else {
           async function processConversations() {
             try {
@@ -480,6 +479,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     const active = [...links.values()];
     for (const link of active) link.socket.terminate();
     await processing;
+    await processor.settledStops();
     const pending = active.map(settledBridge);
     pending.push(...settlingReports);
     await Promise.all(pending);
