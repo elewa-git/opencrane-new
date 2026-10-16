@@ -353,7 +353,8 @@ async function checkOriginalGrant(commandId: string): Promise<void> {
   expect(editor.textContent).not.toContain('Save access');
   const setup = fixture.debugElement.query(By.directive(ProviderSetupAccess));
   const editors = setup.queryAll(By.directive(ModelAccessEditor));
-  const instance = editors[1]?.componentInstance as ModelAccessEditor;
+  const instance: unknown = editors[1]?.componentInstance;
+  if (!(instance instanceof ModelAccessEditor)) throw new Error('Expected model access editor');
   await instance['save']();
   expect(requests.filter(isAccessPost)).toHaveLength(1);
   failure = { code: 404, status: 'unknown' };

@@ -1,6 +1,6 @@
 # Provider setup access
 
-Date: 16 October 2026. Source: `45aca878f64a751bb6f2f17017883547d969a168`.
+Date: 16 October 2026. Source: `24dfbc49e88af8c289045b379a8b5d46c07ebfa4`.
 The branch was rebased once onto `6c59db541f1129216b3e110a2ab70401de2f8d1c`.
 The browser checks use intercepted replies at 1280 and 390 pixels, with reduced
 motion. This is a local browser fixture, not a fresh installation. No dev stack,
@@ -26,15 +26,21 @@ The existing selection test now supplies the receipt revision returned by the re
 API. The pending-command tests assert that Save is absent and also invoke its
 handler to verify that no second POST is sent.
 
+A further failing-first test in `f54f530d` found that a model added by another
+admin could appear unticked after a fresh provider read. That run had 1 failure
+and 19 passes. PASS after `24dfbc49`: the checkbox reads the saved list too, stays
+checked and disabled, and Next sends no replacement selection.
+
 ## Local checks
 
-PASS: 125 tests across the four Models test files, twice, using:
+PASS: 126 tests across the four Models test files, twice, using:
 
 ```sh
 PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npm test -w apps/web -- --watch=false --include='src/app/models/*.spec.ts'
 ```
 
-PASS: the web build, `check:events` (142 matching types) and `lint:changelog`.
+PASS: workspace typechecks, the web build, `check:events` (142 matching types)
+and `lint:changelog`.
 No full root test suite was run. These browser component tests do not use PostgreSQL.
 
 ## Browser captures
