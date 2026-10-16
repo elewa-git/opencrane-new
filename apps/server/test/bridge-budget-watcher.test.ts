@@ -431,3 +431,65 @@ async function unfinishedStopReadIsTracked(check: string) {
 it.each(['polling', 'shutdown'])(
   'tracks an unfinished Stop read during %s when another chat read fails',
   unfinishedStopReadIsTracked);
+
+async function receiptLeavesUnfinishedStopReadAlone() {
+  const { test, peer, stopped } = await startHeldUpload();
+  const release = Promise.withResolvers<void>();
+  const reading = Promise.withResolvers<void>();
+  const read = test.store.readStream.bind(test.store);
+  let started = 0;
+  let active = 0;
+  async function* holdSecondHistory(...args: Parameters<typeof read>) {
+    if (args[0] !== 'conversation-second') {
+      yield* read(...args);
+      return;
+    }
+    started++;
+    active++;
+    reading.resolve();
+    try {
+      await release.promise;
+      yield* read(...args);
+    } finally {
+      active--;
+    }
+  }
+  vi.spyOn(test.store, 'readStream').mockImplementation(holdSecondHistory);
+  try {
+    await test.stop(stopped);
+    await reading.promise;
+    await test.morePolls();
+    expect({ started, active }).toEqual({ started: 1, active: 1 });
+    peer.release();
+    function firstTurnArrived() {
+      return peer.matching('turn', 'first').length === 1;
+    }
+    await until(firstTurnArrived);
+    await test.morePolls();
+    expect({ started, active }).toEqual({ started: 1, active: 1 });
+
+    await test.chat('third');
+    const waiting = await test.message('third');
+    await test.project();
+    function thirdTurnArrived() {
+      return peer.matching('turn', 'third').length === 1;
+    }
+    await until(thirdTurnArrived, 2000);
+    expect(peer.matching('turn', 'third')[0]!.value['id']).toBe(waiting.turnId);
+    expect({ started, active }).toEqual({ started: 1, active: 1 });
+    expect(peer.matching('stop', 'second')).toEqual([]);
+    const releasedAt = performance.now();
+    release.resolve();
+    await expectStop(peer, stopped, releasedAt);
+    expect(active).toBe(0);
+    expect(await savedEvents(test, 'first', 'file.delivered')).toHaveLength(1);
+    expect(peer.matching('file_begin')).toHaveLength(1);
+  } finally {
+    release.resolve();
+    peer.release();
+    await test.stopWatching();
+    expect(active).toBe(0);
+  }
+}
+it('keeps one unfinished Stop read after another chat releases its file receipt',
+  receiptLeavesUnfinishedStopReadAlone);
