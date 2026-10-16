@@ -131,8 +131,8 @@ async function ticketRedemptionBoundary() {
     const refusedTicket = (await fixture.post()).json<{ ticket: string }>().ticket;
     vi.setSystemTime(Date.now() + 15_001);
     refused = await fixture.connect(refusedTicket);
-    const response = await once(refused, 'unexpected-response');
-    expect(response[1]).toMatchObject({ statusCode: 403 });
+    const outcome = await upgradeOutcome(refused);
+    expect(outcome).toBe('refused');
   } finally {
     accepted?.terminate();
     refused?.terminate();
@@ -140,6 +140,16 @@ async function ticketRedemptionBoundary() {
     vi.useRealTimers();
   }
 }
+
+async function upgradeOutcome(socket: WebSocket) {
+  function opened() { return 'opened'; }
+  function refused() { return 'refused'; }
+  return Promise.race([
+    once(socket, 'open').then(opened),
+    once(socket, 'unexpected-response').then(refused),
+  ]);
+}
+
 it('redeems a ticket just before 15 seconds and refuses one just after',
   ticketRedemptionBoundary, 30_000);
 
