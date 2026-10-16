@@ -1,0 +1,1 @@
+- Resume saved child creation and first input after a server restart, using the original request and current permissions. Children stay queued without starting assistant work. Durable job integration, saved failure records, public retry and activation remain later work.

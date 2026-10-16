@@ -63,3 +63,5 @@ export { conversationListRevision, conversationListCandidates } from './conversa
 export { shouldReplaceMemoryRevision } from './memory-revision.ts';
 
 export { readPublication, publicationChange } from './publication-status.ts';
+
+export { childRequests } from './child-requests.ts';

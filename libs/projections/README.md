@@ -24,9 +24,9 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
-  projections -->|omits child requests; saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
+  projections -->|indexes unfinished child requests outside feeds; saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image results, nightly records, tool holds and private instance stops and reports| projections
-  server -.->|selects nightly memory inputs| projections
+  server -.->|selects nightly memory inputs and indexes unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
 ```
@@ -148,6 +148,9 @@ Closing a chat keeps that message position. Later reports and repeated closes ca
 these details. The reports remain in the feed so their saved evidence is available.
 
 ## Processes it handles
+
+The server builds an index of unfinished child requests from saved events. It keeps only
+event references and ids. Rebuilding this index creates no child and copies no message.
 
 Internal child-chat requests stay in the event log. They do not appear in parent
 history or change its visible activity, including when the tables are rebuilt.

@@ -1,3 +1,5 @@
+import { createLogger } from '@opencrane/observability';
+import { watchChildRequests } from '../src/chat/child-recovery.ts';
 import * as authz from '@opencrane/authz';
 import { eventEnvelopeSchema } from '@opencrane/events';
 import { z } from 'zod';
@@ -147,7 +149,20 @@ async function holdsWork() {
   const saved = await context.intent(input.conversationId);
   const rows = await chatHistory(context.nats.store, 'test', saved.childConversationId);
   await context.auth.handler.handle(rows[0]!.event, context.db);
-  expect((await context.request(input.conversationId, 'children', start)).statusCode).toBe(202);
+  await context.restart();
+  const stop = new AbortController();
+  const options = { ...context.options, db: context.db };
+  const recovering = watchChildRequests(options, createLogger('recovery-hold'), stop.signal);
+  async function inputSaved() {
+    const savedRows = await chatHistory(context.nats.store, 'test', saved.childConversationId);
+    return savedRows.length === 2;
+  }
+  try {
+    await until(inputSaved);
+  } finally {
+    stop.abort();
+    await recovering;
+  }
   await context.runner.run(conversations);
   const listed = await listConversations(context.db, 'test', 'alice');
   function matches(row: typeof listed[number]) {

@@ -9,6 +9,7 @@ import type { FileOptions } from './files/routes.ts';
 //   node --experimental-strip-types src/main.ts
 import { requireLegacyClosesProjected } from './chat/participation.ts';
 import { conversationKeys } from './chat/keys.ts';
+import { watchChildRequests } from './chat/child-recovery.ts';
 import { startBridges } from './chat/start.ts';
 import type { ChatOptions } from './chat/routes.ts';
 import { loadAuthConfig } from '@opencrane/auth';
@@ -16,7 +17,7 @@ import { connectEventStore } from '@opencrane/event-store';
 import { connectComputers, connectMcpCatalogue, connectMemberFeed, connectProjectionDb } from '@opencrane/projections';
 import { installShutdown } from './shutdown.ts';
 import type { RealtimeOptions } from './realtime.ts';
-import { startTelemetry } from '@opencrane/observability';
+import { createLogger, startTelemetry } from '@opencrane/observability';
 import { buildServer } from './server.ts';
 import { attachWebSocketServer, WEBSOCKET_PATH } from './websocket.ts';
 
@@ -142,9 +143,23 @@ if (events && silo) {
     app.log.error({ err: error, operation: 'ownership.seed' }, 'Ownership seed unavailable');
   }
 }
+const childRecoveryStop = new AbortController();
+let childRecovery = Promise.resolve();
+if (chat && modelDb) {
+  const recoveryOptions = { ...chat, db: modelDb.db };
+  const recoveryLogger = createLogger('child-recovery');
+  childRecovery = watchChildRequests(recoveryOptions, recoveryLogger, childRecoveryStop.signal);
+}
+function childRecoveryFailed() {
+  app.log.fatal('Child recovery stopped; restarting the server');
+  process.exit(1);
+}
+void childRecovery.catch(childRecoveryFailed);
 const address = await app.listen({ port, host });
 const sockets = attachWebSocketServer(app.server, app.log, authConfig, realtime);
 installShutdown(app, sockets, graceMs, async () => {
+  childRecoveryStop.abort();
+  await childRecovery;
   await closeBridges?.();
   const results = await Promise.allSettled([
     events?.close().then(() => app.log.info('event store connection closed')),

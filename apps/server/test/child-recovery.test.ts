@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as authz from '@opencrane/authz';
-import { eventSchema, conversationCreatedDataSchema } from '@opencrane/events';
+import { eventEnvelopeSchema, conversationCreatedDataSchema } from '@opencrane/events';
 import { childRequests } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { chatHistory } from '../src/chat/commands.ts';
@@ -9,12 +10,24 @@ import { recoverChildRequest, watchChildRequests } from '../src/chat/child-recov
 import { summonFixture } from './support/child-summon.ts';
 
 let context: Awaited<ReturnType<typeof summonFixture>>;
+const eventSchema = eventEnvelopeSchema(z.unknown());
 const logger = createLogger('child-recovery-test');
-async function setup() { context = await summonFixture(); }
-async function cleanup() { await context.close(); }
+async function setup() {
+  context = await summonFixture();
+}
+async function cleanup() {
+  await context.close();
+}
 beforeAll(setup, 60_000);
 afterAll(cleanup);
-afterEach(vi.restoreAllMocks);
+async function resetAccess() {
+  vi.restoreAllMocks();
+  for (const teamId of ['owners', 'payer']) {
+    await context.append(`team-${teamId}`, 'team.member_added',
+      { teamId, memberId: 'alice', addedBy: 'alice' });
+  }
+}
+afterEach(resetAccess);
 
 async function savedRequest(stage: string) {
   const input = await context.parent();
@@ -27,8 +40,12 @@ async function savedRequest(stage: string) {
   async function crash(command: Parameters<typeof original>[0]) {
     const result = await original(command);
     const event = eventSchema.parse(command.event);
-    if (event.type === 'conversation.created') await context.auth.handler.handle(event, context.db);
-    if (event.type === stage) throw new Error('Crash after save');
+    if (event.type === 'conversation.created') {
+      await context.auth.handler.handle(event, context.db);
+    }
+    if (event.type === stage) {
+      throw new Error('Crash after save');
+    }
     return result;
   }
   const fault = vi.spyOn(context.nats.store, 'append').mockImplementation(crash);
@@ -44,7 +61,9 @@ function applyCreationPermissions() {
   async function append(command: Parameters<typeof original>[0]) {
     const result = await original(command);
     const event = eventSchema.parse(command.event);
-    if (event.type === 'conversation.created') await context.auth.handler.handle(event, context.db);
+    if (event.type === 'conversation.created') {
+      await context.auth.handler.handle(event, context.db);
+    }
     return result;
   }
   vi.spyOn(context.nats.store, 'append').mockImplementation(append);
@@ -62,7 +81,9 @@ function worker() {
 async function waitForInput(child: string) {
   for (let attempt = 0; attempt < 100; attempt++) {
     const rows = await chatHistory(context.nats.store, 'test', child);
-    if (rows.length === 2) return rows;
+    if (rows.length === 2) {
+      return rows;
+    }
     await delay(100);
   }
   throw new Error('Recovery did not save the first input');
@@ -81,7 +102,9 @@ async function recoversWithoutPost(stage: string) {
     const status = await context.request(input.conversationId, `children/${input.requestId}`);
     expect(status.json()).toMatchObject({ state: 'queued' });
     expect(status.body).not.toContain('canary');
-  } finally { await stop(); }
+  } finally {
+    await stop();
+  }
 }
 it.each(['conversation.child_requested', 'conversation.created', 'message.posted'])(
   'recovers after %s without another POST', recoversWithoutPost);
@@ -94,7 +117,10 @@ async function racesWithPost() {
   try {
     await context.request(input.conversationId, 'children', start);
     await waitForInput(intent.childConversationId);
-  } finally { await first(); await second(); }
+  } finally {
+    await first();
+    await second();
+  }
   expect(await chatHistory(context.nats.store, 'test', intent.childConversationId)).toHaveLength(2);
   const rows = await chatHistory(context.nats.store, 'test', input.conversationId);
   function isIntent(row: typeof rows[number]) {
@@ -116,7 +142,8 @@ async function refusesChangedReferences() {
   const row = await reference(input.conversationId);
   const before = await context.nats.store.head();
   const changes = [{ silo: 'foreign' }, { parent_id: 'foreign' }, { intent_id: 'foreign' },
-    { intent_position: Number(row['intent_position']) - 1 }, { text: 'private canary' }];
+    { intent_position: Number(row['intent_position']) - 1 }, { child_id: 'foreign' },
+    { first_input_id: 'foreign' }, { text: 'private canary' }];
   for (const patch of changes) {
     await expect(recoverChildRequest(context.options, { ...row, ...patch })).rejects.toThrow();
   }
@@ -174,3 +201,16 @@ for (const stage of ['conversation.child_requested', 'conversation.created']) {
   }
 }
 it.each(refusedCases)('holds after %s when %s changes', refusesAfterAccessChanges);
+
+async function keepsOriginalJoins() {
+  const { input, intent } = await savedRequest('conversation.child_requested');
+  const row = await reference(input.conversationId);
+  await context.append(`participation-${input.conversationId}`, 'participant.removed',
+    { conversationId: input.conversationId, participantId: 'bob', removedBy: 'alice' });
+  applyCreationPermissions();
+  await recoverChildRequest(context.options, row);
+  const rows = await chatHistory(context.nats.store, 'test', intent.childConversationId);
+  expect(rows).toHaveLength(2);
+  expect(rows[0]!.event.data).toMatchObject({ initialJoins: intent.initialJoins });
+}
+it('keeps the original joins when another participant has left', keepsOriginalJoins);

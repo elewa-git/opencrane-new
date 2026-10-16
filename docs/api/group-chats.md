@@ -131,7 +131,9 @@ Changed access during a write returns 409 `review_stale`. Refused reviews return
 closed parents return 403 on review and 409 on start. Malformed input returns 400.
 An unapplied access receipt returns 425 `access_applying`; an outage returns 503
 `unavailable`. These replies may follow a saved intent or creation. Retrying the same
-POST completes them. Background recovery and saved failure outcomes are not built yet.
+POST can complete them. The server also resumes missing creation and first input from
+saved intents after restart, with the original choices and current access checks.
+Denied or unavailable requests stay queued. Saved failure outcomes are not built yet.
 
 `GET /api/conversations/:parent/children/:requestId` checks current parent read access
 once after loading history. It returns `{state: 'unknown'}` for missing ids and another
