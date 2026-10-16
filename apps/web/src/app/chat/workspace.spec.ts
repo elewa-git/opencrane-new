@@ -830,6 +830,46 @@ it('shows an unconfirmed tool when its turn ends without a finish report', async
   capture.fixture.destroy();
 });
 
+it('refreshes unavailable stop details once when queued work gets its end report', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+  ]);
+  const initialFetch = globalThis.fetch;
+  let budgetReads = 0;
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    const path = input instanceof Request ? input.url : String(input);
+    if (!path.includes('/budget-stops?')) return initialFetch(input, init);
+    budgetReads += 1;
+    if (budgetReads === 1) return Promise.resolve(new Response('{}', { status: 503 }));
+    const details = {
+      status: 'stopped', stopId: 'fixture-stop',
+      reasons: [{ scope: 'paying_group', period: 'monthly', cause: 'bound_refused',
+        resetAt: '2026-11-01T00:00:00Z', remedy: 'ask_admin_or_wait' }],
+      work: [{ turnId: 'message', execution: 'ended' }],
+      positions: { stop: 2, turn: 3, conversation: 4, computer: 5, budget: 6 },
+    };
+    return Promise.resolve(new Response(JSON.stringify(details)));
+  });
+
+  const stopRequested = { id: 'stop-requested', position: 2,
+    type: 'agent.turn_stop_requested', time: '2026-10-04T10:00:02Z',
+    data: { turnId: 'message', reason: 'budget' } };
+  sendConversationRow(capture.socket, stopRequested);
+  await vi.waitFor(() => expect(capture.root.textContent).toContain('Stop details unavailable'));
+  expect(budgetReads).toBe(1);
+
+  const ended = { id: 'turn-ended', position: 3, type: 'agent.turn_failed',
+    time: '2026-10-04T10:00:03Z', data: { turnId: 'message' } };
+  sendConversationRow(capture.socket, ended);
+  await vi.waitFor(() => expect(budgetReads).toBe(2));
+  await vi.waitFor(() => expect(capture.root.textContent).toContain('Group monthly limit reached'));
+  expect(capture.root.textContent).not.toContain('Stop details unavailable');
+  expect(capture.fixture.componentInstance['chat'].turns().at(-1)?.endedAt)
+    .toBe('2026-10-04T10:00:02Z');
+  capture.fixture.destroy();
+});
+
 it('shows stopping until the server ends the turn and keeps later tool reports', async () => {
   const capture = await createCaptureWorkspace([
     { id: 'message', position: 1, type: 'message.posted',

@@ -39,7 +39,9 @@ function statusFor(frame) {
 
 function optionsFor(frame) {
   const options = { budgetStatus: statusFor(frame) };
-  if (frame.approval) options.approvalCards = [{ ...approvalCard(0), turnId: 'event-2' }];
+  if (frame.approval) {
+    options.approvalCards = [{ ...approvalCard(0, 'cancelled', false), turnId: 'event-2' }];
+  }
   return options;
 }
 
@@ -99,6 +101,10 @@ async function capture(browser, frame, width) {
     }
     if (frame.approval) {
       await page.getByText("Can't continue", { exact: true }).waitFor();
+      assert.equal(await page.locator('.approval-ledger').count(), 1);
+      assert((await page.locator('.approval-ledger').innerText()).includes('Draft order SO-1042'));
+      assert((await page.locator('oc-approval-cards').innerText()).includes(
+        "This work stopped at the limit. Approving now wouldn't restart it."));
       assert.equal(await page.getByRole('button', { name: /^Approve/ }).count(), 0);
       assert.equal(await page.getByRole('button', { name: /^Deny/ }).count(), 0);
     }

@@ -278,11 +278,18 @@ it('marks only the matching budget stop and ends work that never started', () =>
   expect(turns[1]?.budgetStop).toBe('budget_exhausted');
   expect(turns[1]?.state).toBe('stopped');
   expect(turns[1]?.endedAt).toBe('2026-10-09T10:00:03Z');
+  expect(turns[1]).not.toHaveProperty('endReportedAt');
   expect(turnOutcome(turns[1]!)).toBe('Stopped · nothing was repeated');
   rows.push({ id: 'ended', position: 5, type: 'agent.turn_failed',
     time: '2026-10-09T10:00:04Z', data: { turnId: 'second' } });
   expect(transcript(rows, 'me').filter(isAgentTurn)[1]?.endedAt)
     .toBe('2026-10-09T10:00:03Z');
+  expect(transcript(rows, 'me').filter(isAgentTurn)[1])
+    .toHaveProperty('endReportedAt', '2026-10-09T10:00:04Z');
+  rows.push({ id: 'later-end', position: 6, type: 'agent.turn_completed',
+    time: '2026-10-09T10:00:05Z', data: { turnId: 'second' } });
+  expect(transcript(rows, 'me').filter(isAgentTurn)[1])
+    .toHaveProperty('endReportedAt', '2026-10-09T10:00:04Z');
 });
 
 it('shows started budget work as stopping until its ending report arrives', () => {
