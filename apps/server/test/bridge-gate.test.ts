@@ -26,9 +26,15 @@ afterEach(async function closeFixture() {
 
 type StopInput = { computerId: string; generation: number; podUid: string;
   takeoverId: string; affectedTurnIds: string[] };
-async function setup(real = false, stopExecution?: (input: StopInput) => Promise<unknown>) {
+async function setup(real = false, stopExecution?: (input: StopInput) => Promise<unknown>,
+  active = false) {
   const nats = await natsFixture();
   const computer = await computerFixture();
+  if (active) {
+    computer.start('first');
+    function running() { return computer.calls.includes('turn/start:thread-1'); }
+    await until(running);
+  }
   computer.socket.terminate();
   const server = createServer();
   const sockets = new WebSocketServer({ server });
@@ -75,6 +81,7 @@ async function setup(real = false, stopExecution?: (input: StopInput) => Promise
     return link;
   }
   async function close() {
+    computer.finish('thread-1');
     for (const link of links) {
       link.socket.terminate();
       await link.settled();
@@ -603,3 +610,98 @@ async function refusesLateWork(computer: Awaited<ReturnType<typeof computerFixtu
   expect(computer.grants.size).toBe(0);
 }
 function isThreadStart(method: string) { return method.startsWith('thread/start:'); }
+
+async function stopsBeforeResume() {
+  const stops: StopInput[] = [];
+  const releaseStop = Promise.withResolvers<void>();
+  const replayRelease = Promise.withResolvers<void>();
+  let replayHeld = false;
+  async function stop(input: StopInput) {
+    stops.push(input);
+    await releaseStop.promise;
+    test.computer.finish('thread-1');
+    return stopped(input);
+  }
+  const test = await setup(true, stop, true);
+  await test.save();
+  const head = test.store.head.bind(test.store);
+  async function holdReportPosition(...args: Parameters<typeof head>) {
+    if (args.length === 0 && !replayHeld) {
+      replayHeld = true;
+      await replayRelease.promise;
+    }
+    return head(...args);
+  }
+  vi.spyOn(test.store, 'head').mockImplementation(holdReportPosition);
+  const start = performance.now();
+  const connecting = test.connect();
+  try {
+    function stopping() { return stops.length > 0; }
+    await until(stopping, 2000);
+    expect(performance.now() - start).toBeLessThan(2000);
+    expect(replayHeld).toBe(true);
+    expect(test.computer.calls).toContain('turn/interrupt:thread-1');
+    expect(await readComputerControl(test.store, test.silo, 'assistant'))
+      .toMatchObject({ phase: 'requested' });
+    // Keep the root stop pending across timer retries to check that they share one call.
+    await delay(550);
+    expect(stops).toHaveLength(1);
+    releaseStop.resolve();
+    async function pausing() {
+      const control = await readComputerControl(test.store, test.silo, 'assistant');
+      return control?.phase === 'pausing';
+    }
+    await until(pausing, 2000);
+    expect(stops).toEqual([{ computerId: 'computer', podUid: 'pod', generation: 1,
+      takeoverId: 'takeover', affectedTurnIds: ['first', 'second'] }]);
+  } finally {
+    releaseStop.resolve();
+    replayRelease.resolve();
+    const link = await connecting;
+    link.socket.terminate();
+    await link.settled();
+  }
+  const reconnected = await test.connect();
+  function accepted() { return reconnected.control.receipt !== undefined; }
+  await until(accepted);
+  await reconnected.control.settled();
+  expect(stops).toHaveLength(1);
+  expect(await readComputerControl(test.store, test.silo, 'assistant'))
+    .toMatchObject({ phase: 'pausing' });
+}
+it('calls root stop within two seconds while reconnect resume waits for active work',
+  stopsBeforeResume);
+
+const badAcceptances = [
+  { takeoverId: 'old-takeover' }, { generation: 2 }, { affectedTurnIds: ['first'] },
+  { affectedTurnIds: ['second', 'first'] }, { epoch: '' }, { extra: true },
+];
+async function refusesAcceptance(changes: Record<string, unknown>, saved = true) {
+  const stops: StopInput[] = [];
+  function stop(input: StopInput) {
+    stops.push(input);
+    return Promise.resolve(stopped(input));
+  }
+  const test = await setup(false, stop);
+  if (saved) await test.save();
+  const before = await test.store.head('computer-assistant');
+  const link = await test.connect();
+  const peer = test.peers[0]!;
+  const closed = once(peer, 'close');
+  const receipt = { type: 'bridge_gated', takeoverId: 'takeover', generation: 1,
+    affectedTurnIds: ['first', 'second'], epoch: 'old-epoch', ...changes };
+  peer.send(JSON.stringify(receipt));
+  const [code, reason] = await closed;
+  expect(code).toBe(1008);
+  expect(String(reason)).toBe('Invalid bridge receipt');
+  await link.control.settled();
+  expect(stops).toEqual([]);
+  expect(await test.store.head('computer-assistant')).toBe(before);
+}
+async function forgedAcceptance(changes: Record<string, unknown>) {
+  await refusesAcceptance(changes);
+}
+it.each(badAcceptances)('refuses a forged or old acceptance %j before root stop',
+  forgedAcceptance);
+it('refuses a replayed acceptance on a connection without saved intent',
+  async function replayedAcceptance() { await refusesAcceptance({}, false); });

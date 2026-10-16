@@ -15,7 +15,7 @@ function collect(chunk) { input += chunk; }
 function finish() {
   process.stderr.write('protected-process');
   if (mode === 'timeout') { setInterval(() => {}, 1000); return; }
-  if (mode === 'large') { process.stdout.write('x'.repeat(16385)); return; }
+  if (mode === 'large') { process.stdout.write(JSON.stringify('x'.repeat(16385))); return; }
   if (mode === 'failed') { process.exit(1); }
   const request = JSON.parse(input);
   process.stdout.write(JSON.stringify({ request, args: process.argv.slice(2) }));
