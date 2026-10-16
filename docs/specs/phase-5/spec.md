@@ -51,6 +51,11 @@ checks. Local packaging can progress while those journeys remain NOT RUN.
   listed prerequisites. Reserve a secondary through `infra/dev-stack/claim.sh`;
   preserve the owner stack and the owner-plus-two limit. Queue when resources are
   unavailable. Do not change Docker daemons, host routes, bridges or firewall rules.
+- **Keep access private.** Local and managed installs allow user access only through
+  the tailnet; local automated browser checks may use loopback-only forwarding.
+  Service endpoints stay private. Reject public ingress, LoadBalancer exposure and
+  Tailscale Funnel. Inspect rendered and live resources/listeners, and require a
+  probe from outside the tailnet to fail before accepting either install.
 - **Prove actual placement.** A three-process NATS setting is insufficient. Record
   three JetStream peers on distinct Kubernetes nodes, their volumes and stream
   replica count, plus TLS-authenticated routes. k3d nodes still share one physical
@@ -80,17 +85,94 @@ checks. Local packaging can progress while those journeys remain NOT RUN.
   forgotten memory. Managed encryption and key recovery need their own evidence.
 - **Share our scanner.** Follow the [10 October owner decision](https://github.com/elewa-git/opencrane-new/issues/15#issuecomment-6095325501):
   one separate service shared by silos inside our infrastructure, with no external
-  scanning API and no ClamAV per silo. Reuse clamd INSTREAM and existing trusted,
-  digest-bound admission evidence. This spec does not invent a scanner protocol or
-  signing scheme. Missing, stale, forged or wrong-object/silo receipts never admit
-  bytes. Unavailable scanning keeps uploads at typed 503. Malware, image signature,
-  vulnerability and licence checks remain distinct; clean malware evidence grants
-  neither publication nor tool access.
+  scanning API and no ClamAV per silo. The current upload adapter has only raw TCP
+  INSTREAM and clean/infected results; it has no authenticated upload proof.
+  P5-6a/P5-6b add the [shared scanner contract](#shared-scanner-contract) and its
+  callers. Image admission evidence remains a separate contract. Missing, stale,
+  forged or wrong-byte/silo results never admit bytes; unavailable scanning keeps
+  uploads at typed 503. A clean scan grants neither publication nor tool access.
 - **Keep local storage claims narrow.** Reuse the pinned local S3-compatible
   fixture for CNPG and coordinated drills. It proves local restore behaviour only.
   It is not durable off-machine storage, production HA, real-zone failover or
   managed-cluster acceptance. Record unsupported CSI snapshot/encryption conditions
   explicitly; a local file copy does not establish those guarantees.
+
+## Shared scanner contract
+
+This is planned adapter work, not a claim about today's scanner. The
+[upload adapter](../../../apps/server/src/files/scanner.ts) sends unauthenticated
+clamd INSTREAM and returns only `clean` or `infected`;
+[routes.ts](../../../apps/server/src/files/routes.ts) trusts that result before
+storing the same buffer. The dated, digest-bound
+[hosted admission checks](../../../libs/models/src/hosted-admission.ts) cover
+`mcp.image_checked` only. No upload receipt can be reused from them.
+
+- **Transport and identity.** Put a small HTTPS wrapper in front of our shared
+  clamd. Callers use Node's HTTPS transport with the configured private service
+  address, trusted CA and hostname verification; reject redirects and untrusted
+  certificates. Keep clamd INSTREAM on service-local loopback, unreachable by
+  silos. Extend the existing ES256 issuer/verifier in
+  `libs/auth/src/tokens.ts` with a dedicated scanner audience and at most two-minute
+  tokens. The existing trusted issuer issues them only to authorised server/image
+  workers, binding the service identity, silo, purpose and request id from trusted
+  deployment identity, never browser input. Keep issuance inside the existing
+  trusted issuer process; expose no unauthenticated token-minting endpoint. Add
+  that issuance path explicitly;
+  current computer/turn tokens do not authorise scanning. The scanner checks issuer,
+  configured JWKS, audience, expiry, token type and those bindings. Each allowed
+  issuer/service maps to its permitted silo; a token naming another silo fails.
+  Use existing secret-store custody for signing keys and TLS material, public-key
+  distribution for verifiers and short-lived tokens for callers. Rotate through
+  those paths; put only references in events/settings and no values in logs.
+- **Exact upload bytes.** The server sends the bounded bytes, silo, file id, fresh
+  request id, SHA-256 and byte count. The wrapper hashes/counts the bytes it actually
+  feeds to INSTREAM and rejects any mismatch. Its typed HTTPS response contains
+  `purpose=upload`, those bindings, verdict, engine/image digest, database manifest
+  digest, database version/build time, `databaseUpdatedAt`, `checkedAt` and `expiresAt`. The caller
+  validates the response on that authenticated connection against its pending
+  request and unchanged buffer before storing bytes or emitting `file.uploaded`.
+  The request id cannot be reused across attempts. This response is not a portable
+  signed receipt: copied JSON or a browser-supplied result has no authority. A
+  restart or lost response requires a new scan. No new signing scheme or scan store.
+- **Database freshness.** Extend `infra/clamav/refresh.sh`'s candidate SHA-256
+  manifest with each upstream-verified database's version/build time and the time
+  FreshClam successfully checked the complete set against upstream updates. Retain
+  safe updater evidence; a copy, mtime change or daemon restart is not an update
+  check. The trusted packaging job binds this manifest to the reviewed scanner
+  image digest in its release record. At service startup verify actual database
+  bytes against that approved manifest, then start clamd with the immutable set
+  and no reload. Report only that loaded set. Refuse unknown, altered or future
+  metadata. `databaseUpdatedAt` means the last verified upstream update check for
+  the whole set, not each signature file's build time (unchanged files may be old).
+  Both service and caller require that check to be within 24 hours at admission.
+  `checkedAt` cannot be in the future; `expiresAt` is at most two minutes after it
+  and no later than database expiry. Expired proof requires a fresh scan. An old
+  pinned release stays unavailable until a reviewed fresh manifest/set is deployed;
+  the existing offline database alone is not freshness proof.
+- **Separate image proof.** Upload responses never satisfy `mcp.image_checked`.
+  The image worker binds its malware scan to silo, server id, installation attempt,
+  platform and immutable image digest. It verifies the resolved image/layer bytes
+  belong to that digest, scans all required contents, and fails if coverage is
+  incomplete. Its result has `purpose=image`; an upload result cannot substitute.
+  Only the trusted models worker writes the existing image event after checking
+  this result. Keep image signature, vulnerability and licence checks independent,
+  with the existing image date rules and `databaseUpdatedAt` for the verified set.
+  A malware-only result never marks an image admitted.
+- **Bound the adapter.** Reuse the pinned ClamAV image with non-OSI RAR plug-ins
+  removed, INSTREAM framing, byte/time limits and strict clean verdict. Deny
+  caller-supplied fetch URLs. Isolate request buffers and cleanup by silo/request;
+  retain no customer bytes or reusable results. Unknown/malformed responses, bad
+  authentication, stale signatures and outage fail closed as typed upload 503;
+  a verified infected result keeps the existing rejection. Preserve upload size
+  limits, the 60-second scan deadline and 4 KiB response bound. Adapt `scanner.ts`,
+  `main.ts` wiring and `routes.ts`'s scan input/result check; changing only the host
+  and port is insufficient. Keep existing event-only business writes. Any needed
+  event-schema change updates both registry and catalogue in the implementation.
+
+P5-6a delivers the wrapper, identity issuance, database manifest and real service
+checks (450–600 lines). P5-6b delivers consumer wiring and separate upload/image
+proof with two-silo, freshness and outage checks (450–600 lines). Together they
+replace the former 500–600-line estimate. Neither row builds a scanner platform.
 
 ## Backup, restore and upgrade contract
 
@@ -100,7 +182,8 @@ checkpoints alone cannot make separate backups consistent. Use a bounded operato
 maintenance window through existing admission and worker controls:
 
 1. Stop new work and effect-bearing reactions, pause computers and quiesce volume
-   writes. Account for already-dispatched effects; unresolved ones remain held.
+   writes (stop them and wait for pending writes to finish). Account for effects
+   already dispatched; unresolved ones remain held.
    If writers cannot be stopped, fail the set rather than label it complete.
 2. Drain projections to a recorded event position. Record JetStream stream identity,
    retained sequence range, last sequence and per-subject expected positions used
@@ -148,7 +231,13 @@ are incorporated in full, including every refusal row in their respective specs.
 Each runs twice on independently fresh packaged state, with separate install ids,
 empty event/database/object/volume state and fresh bootstrap. The second run cannot
 reuse the first run's silo data. Existing external identity accounts and reviewed
-images may be reused and must be named. Capture Linux browser comparisons at
+images may be reused and must be named. Every fresh and restored test environment
+must include `jente@elewa.ke` as a verified owner test user. Assert the trusted
+issuer/subject and verified email, the event-backed owner role, and real browser
+sign-in to that silo at 1280/390. Absence, an unverified identity, a non-owner role
+or failed sign-in blocks acceptance. Use the existing identity/bootstrap path;
+never grant production access by matching an email address. Capture Linux browser
+comparisons at
 **1280 and 390 pixels**, including dialogs, refusals, recovery and accessibility.
 A restore target is a separate drill, never a fresh-install journey receipt.
 
@@ -168,7 +257,7 @@ receipt uses PASS/FAIL/PARTIAL/NOT RUN separately for each environment and condi
 | CNPG backup and restore | NOT RUN — P5-3, real CNPG to local S3 fixture | NOT RUN — P5-16, durable storage and recovery | NOT RUN — database restore alone proves no product journey |
 | NATS R3, TLS and node loss | NOT RUN — P5-4/P5-5, three local nodes on one host | NOT RUN — P5-17, actual approved failure domains | NOT RUN — repeat access and event-position assertions during failures |
 | Coordinated recovery and upgrade | NOT RUN — P5-7–P5-9/P5-12, matched events, databases, objects and volumes | NOT RUN — P5-16, off-machine restore and upgrade | NOT RUN — restored-state checks kept separate from empty installs |
-| Scanner and replica security | NOT RUN — P5-6/P5-10, real refusals and two silos | NOT RUN — P5-17, hosted isolation and failure | NOT RUN — uploads, screenshots, gateway and live-view checks |
+| Scanner and replica security | NOT RUN — P5-6a/P5-6b/P5-10, real refusals and two silos | NOT RUN — P5-17, hosted isolation and failure | NOT RUN — uploads, screenshots, gateway and live-view checks |
 | Governed work | NOT RUN — P5-11; P3-22 owns dev/product completion | NOT RUN — P5-18 reruns full P3-22 | NOT RUN — twice fresh, real Odoo and browser, 1280/390 |
 | Company product and memory | NOT RUN — P5-13; P4-28 owns dev/product completion | NOT RUN — P5-18 reruns full P4-28 | NOT RUN — twice fresh, native no-disk proof, replay, 1280/390 |
 | Operator release evidence | NOT RUN — P5-14, local limits explicit | NOT RUN — P5-18, all hosted gates and no open Critical/High | NOT RUN — complete linked receipts, no inherited PASS |
@@ -199,7 +288,7 @@ question or permission to weaken the source acceptance criteria.
 ## Out of scope
 
 This change adds only documentation. Implementation rows add no new event store,
-secret platform, operator, scanner wire protocol, product journey or paid service
+secret platform, operator, custom scanner cryptography, product journey or paid service
 without its existing gate. Feature gaps stay with Phase 3 or Phase 4. No production
 HA, off-machine disaster recovery, paid provider use or managed acceptance follows
 from k3d evidence. New dashboards, general backup frameworks and automatic external

@@ -15,7 +15,7 @@ No stack, product code, dependency, test or paid service is added by this draft.
 | D02 · Adopted · all | Event-only truth; one conditional append to one stream; PostgreSQL/OpenFGA rebuild; replay causes no external effects | [Plan](../../../plan.md#event-driven-core) and both accepted feature specs. No new store, SQL authority or workflow engine. |
 | D03 · Adopted · P5-1–P5-5 | Helm umbrella, CNPG backups, NATS R3 with TLS routes and failover; existing Agent Sandbox/gVisor | #15 and the plan's [reuse list](../../../plan.md#copy-from-opencrane-1-source-commit-10abd0ef6). Reuse existing assets before adding packaging. |
 | D04 · Adopted · all runtime rows | Digest/version pins and reviewed shipped inventory; OSI application contents and accepted bundled notices; Debian main OS boundary | [AGENTS.md licences](../../../AGENTS.md#licences). No unknown runtime licence or build-only exception hidden in a layer. |
-| D05 · Adopted · P5-6 | Our separate scanner service shared across silos; no external API or per-silo ClamAV; typed upload 503 on outage | [10 October owner comment](https://github.com/elewa-git/opencrane-new/issues/15#issuecomment-6095325501). Keep existing scan/admission contracts and fail closed on missing, stale or forged evidence. |
+| D05 · Adopted · P5-6a/P5-6b | Our separate scanner service shared across silos; no external API or per-silo ClamAV; typed upload 503 on outage | [10 October owner comment](https://github.com/elewa-git/opencrane-new/issues/15#issuecomment-6095325501). Add the [authenticated scanner adapter](spec.md#shared-scanner-contract); preserve separate image admission and fail closed on missing, stale or forged evidence. |
 | D06 · Qualification default · P5-3/P5-7–P5-9 | Local S3 fixture proves local restore only; quiesced matched backup set includes events, all databases, objects and volumes | #15 requires them together. Independent snapshots without recorded positions cannot prove consistency. No new backup operator. |
 | D07 · Adopted · all | Existing secret custody, ids only in events/manifests; no values in events/logs/errors/receipts | [Phase 3 D14–D17](../phase-3/decisions.md#owner-decisions). No new secret store or invented scanner signing scheme. |
 | D08 · Adopted · P5-11/P5-13/P5-18 | P3-22/P4-28 retain their complete product acceptance; rerun twice fresh on packaged installs at 1280/390 | [Phase 3 tickets](../phase-3/tickets.md) and [Phase 4 tickets](../phase-4/tickets.md). A source PASS does not complete either feature phase. |
@@ -56,7 +56,7 @@ prerequisite, not an owner request to replace a real dependency with a mock.
 | [Dev-stack contract](../../../infra/dev-stack/README.robot.md), [claims](../../../infra/dev-stack/claim.sh), [compose](../../../infra/dev-stack/compose.yaml) | Existing identity setup, pinned PostgreSQL/NATS/OpenFGA/MinIO, bounded claims, cleanup and journeys. Compose freshness alone is not a packaged install. |
 | [Dev-box prerequisites](../../../infra/devbox/README.robot.md) | Existing k3d/gVisor and pinned tooling. The current cluster is one node, so R3 placement needs a separate claimed local qualification target within caps. No silent change to owner `ocn`. |
 | [NATS configuration](../../../infra/nats/nats.conf), [event-store decision](../../adr/0001-event-store-nats-jetstream.md) | TLS/client permissions, conditional append, replay and spike evidence. Historical spike success is not packaged R3/route/failure proof. |
-| [Scanner contract](../../../infra/clamav/README.robot.md), [licences](../../../infra/clamav/LICENCES.md), [upload adapter](../../../apps/server/src/files/scanner.ts), [admission checks](../../../libs/models/src/hosted-admission.ts) | Pinned engine/signatures, non-OSI plug-in removal, clamd INSTREAM, strict clean verdict and bound/datable image checks. Packaging must preserve them; this draft defines no new wire receipt. |
+| [Scanner contract](../../../infra/clamav/README.robot.md), [licences](../../../infra/clamav/LICENCES.md), [upload adapter](../../../apps/server/src/files/scanner.ts), [admission checks](../../../libs/models/src/hosted-admission.ts) | Reuse pinned engine/signatures, non-OSI plug-in removal and INSTREAM. Uploads currently have raw TCP verdicts only; dated image checks are separate. P5-6a/P5-6b add authenticated transport, byte/silo bindings and verified database freshness; no portable signed receipt. |
 | [CI](../../../.github/workflows/ci.yml), [package scripts](../../../package.json), [changelog check](../../../scripts/changelog-gather.mjs) | Existing Markdown/local-link/changelog gates. CI also runs source/web/test jobs; `ci-ok` aggregates their real results, not live qualification. |
 
 The plan names OC1 prerequisite scripts, `apps/postgres`, Agent Sandbox hardening
@@ -83,9 +83,9 @@ umbrella chart in this checkout and makes no claim that one is already installed
 Documentation checks on 16 October 2026, all under `nice -n 10`:
 
 - **PASS** — `npm run lint:docs`: 247 maintained Markdown files, zero issues.
-- **PASS** — `npm run lint:links`: 1,482 local targets, zero errors; 291 external targets excluded.
+- **PASS** — `npm run lint:links`: 1,488 local targets, zero errors; 291 external targets excluded.
 - **PASS** — `npm run lint:changelog`; the release note is a plain fragment and `CHANGELOG.md` is unchanged.
-- **PASS** — row/graph check: 18 sequential rows, budgets at most 600 lines, 22 internal edges matching the table, no cycles.
+- **PASS** — row/graph check: 19 rows including P5-6a/P5-6b, budgets at most 600 lines, 23 internal edges matching the table, no cycles.
 - **PASS** — `git diff --check`; only the three spec files, plan links/scheduling text and release fragment change.
 
 The existing Markdown gate required `npm ci` because this worktree had no installed
