@@ -229,6 +229,7 @@ the observation date. It is a saved fact, not a live Ready status or call permis
 matching reasons, work execution and observed positions. Reasons allow optional
 `limitCents`, which the server includes only for the human message's author.
 No names, scope ids, configuration references or spending totals are accepted.
+Approval cards accept an optional `turnId`; older replies still parse.
 
 ## Reviewed child answers
 

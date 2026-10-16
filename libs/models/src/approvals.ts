@@ -353,6 +353,7 @@ function approvalCard(request: Request, state: ApprovalCard['state'], memberId: 
   const review = approvalReviewSchema.parse(JSON.parse(text));
   const card = { canApprove, canDeny, canRetry: canRetry && memberId === request.requesterId,
     missingFields, approvalId: request.approvalId, conversationId: request.conversationId,
+    turnId: request.turnId,
     requesterId: request.requesterId,
     expiresAt: request.expiresAt, state, stepUp: request.stepUp, canDecide: canApprove, review };
   return card;

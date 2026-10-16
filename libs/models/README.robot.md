@@ -677,6 +677,8 @@ and complete list of safe scalar fields; missing, extra or nested fields refuse.
 Reviews use the conversation's encrypted-content/key-reference convention. Neither
 the model nor browser supplies approval authority or replacement review text.
 
+`approvalCards` includes the saved `turnId` in each card. The browser uses it to
+check whether that turn stopped.
 `approvalCards`, `readApproval` and `decideApproval` replay approval streams; reads
 record expiry/cancellation through conditional appends. Shared child callers set
 `requesterOnly: true` on `approvalCards`. It excludes other requesters before

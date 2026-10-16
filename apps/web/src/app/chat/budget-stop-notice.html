@@ -1,6 +1,25 @@
+@if (execution()) { <p class="budget-work">{{ execution() }} — spending limit</p> }
 <section class="budget-stop" aria-label="Spending limit stop">
-  <oc-shared-state kind="blocked" message="Spending limit reached"
-    detail="An Owner or Admin can review the limit, or wait for the next monthly budget period (UTC)."
-    [showAction]="false" />
-  <!-- The saved decision does not include the affected scope, amount or reset date. -->
+  @if (accessChanged()) {
+    <strong>Access changed</strong>
+    <p>Stop details are no longer available.</p>
+  } @else if (unavailable()) {
+    <strong>Stop details unavailable</strong>
+    <p>This work is still stopped.</p>
+    <button type="button" [disabled]="loading()" (click)="checkAgain()">Check again</button>
+  } @else if (details(); as stop) {
+    @for (reason of stop.reasons; track $index) {
+      <div class="budget-reason">
+        <strong>{{ heading(reason) }}</strong>
+        <p>{{ remedy(reason) }}</p>
+      </div>
+    }
+    @if (newPeriod()) { <p class="budget-new-period">{{ newPeriod() }}</p> }
+  } @else if (notStopped()) {
+    <strong>Spending limit reached</strong>
+    <p>An Owner or Admin can review the limit, or wait for the next monthly budget period (UTC).</p>
+  } @else {
+    <strong>Checking stop details</strong>
+    <p>This work is still stopped.</p>
+  }
 </section>

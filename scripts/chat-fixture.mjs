@@ -1,5 +1,5 @@
 // Protocol fixtures for visual qualification only; never imported into the product.
-export async function chatFixture(page, scenario = 'live') {
+export async function chatFixture(page, scenario = 'live', options = {}) {
   let stopConflict = false;
   let socketReady = false;
   let rows = [], socket, offline = ['queued', 'rail-offline'].includes(scenario);
@@ -40,9 +40,15 @@ export async function chatFixture(page, scenario = 'live') {
   } else if (!['draft', 'empty-selected', 'attach', 'no-agent', 'queued', 'private-team-draft'].includes(scenario)) {
     const humanText = messageTextForScenario(scenario);
     const human = add('message.posted', { text: humanText,
-      authorId: scenario === 'approval-context' ? 'another-member' : 'me' });
-    add('agent.turn_started', { turnId: human.id });
-    if (scenario === 'stop-not-confirmed') {
+      authorId: ['approval-context', 'budget-participant'].includes(scenario)
+        ? 'another-member' : 'me' });
+    if (scenario !== 'budget-group') add('agent.turn_started', { turnId: human.id });
+    if (scenario.startsWith('budget-')) {
+      add('agent.turn_stop_requested', { turnId: human.id, reason: 'budget' });
+      if (scenario !== 'budget-group' && scenario !== 'budget-global') {
+        add('agent.turn_failed', { turnId: human.id, reason: 'budget' });
+      }
+    } else if (scenario === 'stop-not-confirmed') {
       add('agent.message_delta', { turnId: human.id, messageId: 'reply', text: 'Still working.' });
     } else if (scenario === 'approval-context') {
       addApprovalContextRows(add, human.id);
@@ -98,7 +104,12 @@ export async function chatFixture(page, scenario = 'live') {
       if (recorded) return fulfil({ status: 'appended', commandId });
       return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
     }
-    if (url.pathname.endsWith('/approvals')) return fulfil({ cards: [], csrf: 'fixture' });
+    if (url.pathname.endsWith('/budget-stops')) {
+      return fulfil(options.budgetStatus ?? { status: 'not_stopped' });
+    }
+    if (url.pathname.endsWith('/approvals')) {
+      return fulfil({ cards: options.approvalCards ?? [], csrf: 'fixture' });
+    }
     if (url.pathname === '/api/chat' && offline && scenario === 'rail-offline') return route.abort('connectionfailed');
     if (url.pathname === '/api/chat' && scenario === 'rail-loading') return;
     if (url.pathname === '/api/chat') return fulfil({

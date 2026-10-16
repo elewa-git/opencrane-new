@@ -27,7 +27,7 @@ import { workspaceTitle } from './conversations-data';
 import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
-  rejectedScreenshotIds, toolActivityResult, toolActivityResultLabel,
+  budgetStoppedTurnIds, rejectedScreenshotIds, toolActivityResult, toolActivityResultLabel,
   toolKind as getToolKind, turnContent, turnOutcome, turnStatusIcon,
   type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
@@ -137,6 +137,7 @@ export class Workspace implements OnInit {
   protected readonly panelTabKeydown = movePanelTab;
   protected readonly turnOutcome = turnOutcome;
   protected readonly turnStatusIcon = turnStatusIcon;
+  protected readonly stoppedTurnIds = computed(() => budgetStoppedTurnIds(this.chat.turns()));
   protected memoryAdmissionDetail(): string {
     const failing = this.chat.memoryAdmission().failing;
     return failing.join(' ');

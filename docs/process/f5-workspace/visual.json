@@ -54,7 +54,7 @@
   "checks": [
     "Sanitised tool line opens by keyboard and keeps a 2px focus ring",
     "Failed commands and turns show failure without offering a retry",
-    "Budget stop tells the reader who can help and when it resets",
+    "Budget stop shows the group limit, reset and stopped work",
     "Open conversations offer Download for your own uploads and screenshots",
     "Assistant file badges keep their colour, spacing and mono font",
     "Failed and refused reads never look like empty conversations",

@@ -5,8 +5,8 @@ import { z } from 'zod';
 import { sessionSlug, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import type { ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
-import { conversationStatus, isActiveTurn, isBudgetStop, lastConfirmedTurnAt,
-  recoveredLostTurn, transcript, uploadedFile } from './chat-state';
+import { conversationStatus, isActiveTurn, lastConfirmedTurnAt,
+  recoveredLostTurn, shouldAnnounceBudgetStop, transcript, uploadedFile } from './chat-state';
 import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
 import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
@@ -422,12 +422,12 @@ export class ChatSession implements OnDestroy {
       this.socket.disconnect();
       return;
     }
+    const announceBudgetStop = shouldAnnounceBudgetStop(parsed.data, this.turns);
     const added = this.apply(parsed.data);
     const toolAnnouncement = toolTransitionAnnouncement(
       added, this.conversationReady, parsed.data, this.turns());
     if (toolAnnouncement) this.announcement.set(toolAnnouncement);
-    // Do not announce old notices when the workspace reloads.
-    if (added && isBudgetStop(parsed.data)) {
+    if (added && announceBudgetStop) {
       this.announcement.set(`Spending limit reached · ${shortTime(parsed.data.time)}`);
     }
   }

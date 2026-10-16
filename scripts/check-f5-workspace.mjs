@@ -10,6 +10,13 @@ const output = resolve('docs/process/f5-workspace');
 const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://f5.opencrane.test';
 const captures = [];
+const budgetStatus = {
+  status: 'stopped', stopId: 'fixture-stop',
+  reasons: [{ scope: 'paying_group', period: 'monthly', cause: 'bound_refused',
+    resetAt: '2026-11-01T00:00:00Z', remedy: 'ask_admin_or_wait', limitCents: 20000 }],
+  work: [{ turnId: 'event-2', execution: 'ended' }],
+  positions: { stop: 3, turn: 4, conversation: 5, computer: 6, budget: 7 },
+};
 async function serveAssets(route) {
   await serveWebBuild(route, build);
 }
@@ -107,12 +114,12 @@ async function checkToolAndBudget(page) {
 
   const budgetNotice = page.locator('oc-budget-stop-notice');
   await budgetNotice.waitFor();
+  await budgetNotice.getByText('Group monthly limit reached: €200.00.').waitFor();
   const budgetCopy = await budgetNotice.textContent();
-  assert(budgetCopy?.includes('An Owner or Admin can review the limit'));
-  assert(budgetCopy?.includes('next monthly budget period (UTC)'));
+  assert(budgetCopy?.includes('Stopped — spending limit'));
+  assert((await budgetNotice.textContent())?.includes('Resets 1 Nov 2026, 00:00 UTC.'));
   assert.equal(await budgetNotice.getByRole('alert').count(), 0);
-  const budgetState = budgetNotice.locator('oc-shared-state .state');
-  assert.equal(await budgetState.getAttribute('data-state'), 'blocked');
+  assert.equal(await budgetNotice.getByRole('button', { name: 'Check again' }).count(), 0);
 }
 
 async function checkFileCard(page, width) {
@@ -167,7 +174,11 @@ async function checkReadFailures(browser) {
     await page.route(`${origin}/**`, serveAssets);
     await chatFixture(page, `read-${status}`);
     await page.goto(`${origin}/workspace?conversation=chat`);
-    await page.getByRole('alert').waitFor();
+    if (status === 403) {
+      await page.getByText('You no longer have access').waitFor();
+    } else {
+      await page.getByRole('alert').waitFor();
+    }
     assert.equal(await page.getByText('No messages yet', { exact: true }).count(), 0);
     assert.equal(await page.getByText('No screenshots yet', { exact: true }).count(), 0);
     await page.close();
@@ -241,7 +252,7 @@ try {
         reducedMotion: motion,
       });
       await evidencePage.route(`${origin}/**`, serveAssets);
-      await chatFixture(evidencePage, 'workspace-evidence');
+      await chatFixture(evidencePage, 'workspace-evidence', { budgetStatus });
       await evidencePage.route('**/files/view?*', serveScreenshotThumbnail);
       await evidencePage.goto(`${origin}/workspace?conversation=chat`);
       await evidencePage.locator('oc-tool-activity-line').first().waitFor();
@@ -276,7 +287,7 @@ try {
     checks: [
       'Sanitised tool line opens by keyboard and keeps a 2px focus ring',
       'Failed commands and turns show failure without offering a retry',
-      'Budget stop tells the reader who can help and when it resets',
+      'Budget stop shows the group limit, reset and stopped work',
       'Open conversations offer Download for your own uploads and screenshots',
       'Assistant file badges keep their colour, spacing and mono font',
       'Failed and refused reads never look like empty conversations',

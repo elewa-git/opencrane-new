@@ -29,6 +29,8 @@ flowchart LR
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
 uses this library to check saved dependencies at the intended nightly time.
 
+Approval cards include the turn they belong to. The chat hides decisions after that turn stops.
+
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
 A change to the tools or their rules ends that approval.
 Memory writes keep their original access check. Removing and restoring a grant while

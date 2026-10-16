@@ -2,7 +2,8 @@ import { z } from 'zod';
 const text = z.string().min(1).max(8000);
 export const approvalReviewSchema = z.object({ action: text, tool: text, target: z.string().max(8000), data: text, destination: text, account: text, consequence: text }).strict();
 const approvalCardSchema = z.object({
-  approvalId: z.string(), conversationId: z.string(), requesterId: z.string(), expiresAt: z.string(),
+  approvalId: z.string(), conversationId: z.string(), turnId: z.string().optional(),
+  requesterId: z.string(), expiresAt: z.string(),
   state: z.enum(['requested', 'approved', 'denied', 'expired', 'cancelled', 'outcome_unknown']),
   missingFields: z.array(text).optional(),
   canRetry: z.boolean().optional(), canApprove: z.boolean().optional(), canDeny: z.boolean().optional(),

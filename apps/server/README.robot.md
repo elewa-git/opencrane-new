@@ -1869,6 +1869,8 @@ Fresh-install qualification remains NOT RUN.
 ## Recorded tool failures and approval actions
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
+The approvals GET includes the saved `turnId` on each card. The browser uses it to
+hide decisions for budget-stopped work, even if a delayed card still says requested.
 
 The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
 records saved invitation results and safe refusal history.
