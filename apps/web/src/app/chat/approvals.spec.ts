@@ -172,6 +172,50 @@ it('shows the WRK-12 waiting card without decision buttons', async () => {
   fixture.destroy();
 });
 
+it('names missing review fields and permits only the requester to deny', async () => {
+  const incomplete = {
+    ...card(), missingFields: ['orderId'], canApprove: false, canDeny: true,
+  };
+  const fetchImplementation = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST') return Promise.resolve(response([], 200));
+    return Promise.resolve(response([incomplete]));
+  });
+  const fixture = await mount(fetchImplementation);
+  const root = rootOf(fixture);
+  expect(root.textContent).toContain('orderId');
+  expect(root.textContent).toContain('Approve is unavailable');
+  const approve = requiredElement<HTMLButtonElement>(root, '.approval.pending .approve');
+  expect(approve.disabled).toBe(true);
+  approve.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect(fetchImplementation.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+  const deny = requiredElement<HTMLButtonElement>(root, '.approval.pending [aria-label^="Deny:"]');
+  expect(deny.disabled).toBe(false);
+  deny.click();
+  await vi.waitFor(() => expect(fetchImplementation.mock.calls.filter(([, init]) =>
+    init?.method === 'POST')).toHaveLength(1));
+  fixture.destroy();
+});
+
+it('keeps complete requester controls and hides participant decisions for incomplete reviews', async () => {
+  const complete = { ...card(), missingFields: [], canApprove: true, canDeny: true };
+  const participant = {
+    ...card('requested', false), missingFields: ['orderId'],
+    canApprove: false, canDeny: false,
+  };
+  const completeFixture = await mount(() => Promise.resolve(response([complete])));
+  const completeRoot = rootOf(completeFixture);
+  expect(requiredElement<HTMLButtonElement>(completeRoot, '.approve').disabled).toBe(false);
+  expect(requiredElement<HTMLButtonElement>(completeRoot, '[aria-label^="Deny:"]').disabled)
+    .toBe(false);
+  completeFixture.destroy();
+  const participantFixture = await mount(() => Promise.resolve(response([participant])));
+  const participantRoot = rootOf(participantFixture);
+  expect(participantRoot.textContent).toContain('orderId');
+  expect(participantRoot.querySelector('[aria-label^="Approve:"]')).toBeNull();
+  expect(participantRoot.querySelector('[aria-label^="Deny:"]')).toBeNull();
+  participantFixture.destroy();
+});
+
 it('keeps one pending decision with its own approval when another card is chosen', async () => {
   const secondApprovalId = 'b'.repeat(64);
   let currentCards = [card(), card('requested', true, secondApprovalId)];
