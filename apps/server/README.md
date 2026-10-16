@@ -19,7 +19,7 @@ flowchart LR
   server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates without waiting for chats; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
-  server -.->|sends spending Stops before files, turns and approval replies, even while a file waits for its receipt| computer
+  server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
   server -->|records refused turn decisions| nats
 ```
 
@@ -73,6 +73,8 @@ for that turn. It checks for new Stops after waiting for a connection or prepari
 work, then reads again immediately before sending a turn. It repeats an unfinished
 Stop after a lost message or reconnection. Work stopped by a spending limit stays
 stopped when that limit rises. Other turns on the same computer can continue.
+While a chat's Stop check is unfinished, delivery waits for that chat and keeps
+other chats moving. Receiving a file receipt does not start the same check again.
 
 Let owners and admins request publication of an exact reviewed tool list.
 The request alone does not enable calls.

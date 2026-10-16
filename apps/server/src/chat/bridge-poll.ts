@@ -97,6 +97,10 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     computerHistoryUnavailable = false, checkControl?: () => Promise<boolean>) {
     try {
       const conversationId = conversation.conversationId;
+      // Retry this chat next poll so delivery cannot overlap its unfinished Stop read.
+      if (checkingStops.has(conversationId)) {
+        return true;
+      }
       const head = await options.store.head(`conversation-${conversationId}`);
       const previous = seen.get(conversationId);
       const linkClosed = previous?.connectionId !== undefined &&

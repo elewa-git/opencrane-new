@@ -3,3 +3,5 @@
 - A slow chat history read leaves spending Stops and approval checks in other chats
   free to continue. Repeated polls share each unfinished Stop check, and shutdown
   waits for those checks to finish.
+- Completing a file upload keeps another chat's unfinished spending Stop check
+  from being read twice. Other chats can still receive work while that check waits.

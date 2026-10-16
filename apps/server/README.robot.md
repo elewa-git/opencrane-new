@@ -2784,6 +2784,8 @@ continues polling every 250 ms. During an unfinished pass it reads saved Stops
 separately, using the same per-socket retry timestamps. Each chat has at most one
 unfinished Stop check. Polling starts checks without waiting for other chats, and a
 failed check retries on a later poll. Approval checks continue too.
+An ordinary delivery pass skips a chat while its Stop check is unfinished and
+retries it on a later poll. Other chats continue even after a file receipt arrives.
 It reuses the chat list until events or projection catch-up change it, and leaves
 unchanged finished chats unread.
 The existing transfer queue still sends one file at a time and records its receipt
@@ -2799,6 +2801,9 @@ Holding that chat's next history read still lets another chat's Stop arrive with
 seconds and lets approval polling reply. A failed chat read alongside another held
 read must leave just one unfinished read after repeated polls. Shutdown waits until
 that read finishes and closes the socket without a test-supplied receipt.
+Releasing a file receipt during another chat's held Stop read leaves exactly one
+active read. A third chat can receive a new turn before that read is released,
+and the saved Stop arrives after release.
 It also checks recovery of Stop-only work after computer or assistant history fails,
 without saving a new event. Temporarily narrowing each guard to waiting messages makes
 its test fail. Fresh-install qualification is NOT RUN. Computer grant removal,
