@@ -75,10 +75,13 @@ export function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
     }, backends: [{ host: new URL(decisionUrl).host }] };
 }
 export function gatewayConfig(
-  port: number, readinessPort: number, decisionUrl: string, keyFile: string,
+  port: number, readinessPort: number, decisionUrl: string, keyFile: string | undefined,
   issuer: string, upstream?: string, mcpRoutes: McpRoute[] = [],
   egressDecisionUrl?: string, managedCalls = false,
 ) {
+  if (!managedCalls && keyFile === undefined) {
+    throw new Error('A legacy gateway requires a provider key file');
+  }
   const decision = new URL(decisionUrl);
   const modelHeaders = [...MODEL_UPSTREAM_HEADERS];
   const decisionPath = managedCalls ? '/authorize/models/managed' : '/authorize';
@@ -257,11 +260,15 @@ function nativeUsage(line: string, id: string) {
   return parsed.data;
 }
 
-export async function startGateway(options: { binary: string; configFile: string; usageFile: string; keyFile: string;
+export type GatewayModelRoute =
+  | { managedCalls: true; keyFile?: string }
+  | { managedCalls?: false; keyFile: string };
+
+export async function startGateway(options: GatewayModelRoute & {
+  binary: string; configFile: string; usageFile: string;
   port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string;
   mcpRoutes?: McpRoute[];
   egressDecisionUrl?: string;
-  managedCalls?: boolean;
   onChildSpawn?: (child: ChildProcess, stop: (signal?: NodeJS.Signals) => Promise<void>) => void;
 }) {
   const build = process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64';

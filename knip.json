@@ -23,7 +23,8 @@
       ],
       "ignoreBinaries": [
         "kubectl",
-        "openssl"
+        "openssl",
+        "mkfifo"
       ]
     },
     "apps/ops": {

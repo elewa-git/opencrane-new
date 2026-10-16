@@ -1,21 +1,20 @@
 import { createHash } from 'node:crypto';
 import { gatewayConfigurationSchema } from '@opencrane/events';
-import { gatewayConfig, mcpRoute } from './gateway.ts';
+import { gatewayConfig, mcpRoute, type GatewayModelRoute } from './gateway.ts';
 import { publicationDigest } from './publication.ts';
 
 type Configuration = ReturnType<typeof gatewayConfigurationSchema.parse>;
 type Entry = Configuration['members'][number]['entry'];
 
-export interface GatewayRenderSettings {
+export type GatewayRenderSettings = GatewayModelRoute & {
   port: number;
   readinessPort: number;
   decisionUrl: string;
   issuer: string;
-  keyFile: string;
   upstream?: string;
   egressDecisionUrl?: string;
   memoryRoute?: Parameters<typeof mcpRoute>[0];
-}
+};
 
 const DECISION_HEADERS = {
   generation: 'x-opencrane-gateway-generation',
@@ -142,7 +141,8 @@ export function renderGatewayConfiguration(input: unknown, settings: GatewayRend
     memoryRoutes.push(settings.memoryRoute);
   }
   const config = gatewayConfig(settings.port, settings.readinessPort, settings.decisionUrl,
-    settings.keyFile, settings.issuer, settings.upstream, memoryRoutes, settings.egressDecisionUrl);
+    settings.keyFile, settings.issuer, settings.upstream, memoryRoutes, settings.egressDecisionUrl,
+    settings.managedCalls);
   config.routes.push(...routes);
   const configBytes = Buffer.from(JSON.stringify(config), 'utf8');
   const hash = createHash('sha256');

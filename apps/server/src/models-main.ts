@@ -9,7 +9,8 @@ import { resolve } from 'node:path';
 import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { connectProjectionDb } from '@opencrane/projections';
 import { providerSecrets, BudgetActor, startDecision, startGateway,
-  ingestUsage, mcpDispatchRouteSchema, mcpCatalogueWatch, gatewayConfigurationWorker
+  ingestUsage, managedProviderCallsEnabled, mcpDispatchRouteSchema, mcpCatalogueWatch,
+  gatewayConfigurationWorker
 } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
@@ -63,7 +64,35 @@ try {
     if (conversationKeyDirectory) {
       keys = conversationKeys(conversationKeyDirectory);
     }
+    async function readManagedMode(timeoutMs: number) {
+      try {
+        return await managedProviderCallsEnabled(events.store, silo, performance.now() + timeoutMs);
+      } catch {
+        throw new Error('Recorded provider mode is unavailable');
+      }
+    }
+    const managedCalls = await readManagedMode(10_000);
     const providerSecretDirectory = process.env['PROVIDER_SECRETS_DIR'];
+    function modelGatewayRoute(): { managedCalls: true } | { keyFile: string } {
+      if (managedCalls) {
+        if (process.env['MODEL_KEY_FILE'] !== undefined) {
+          throw new Error('A fallback key file is still configured after switch-on');
+        }
+        if (!providerSecretDirectory) {
+          throw new Error('Provider custody is required after switch-on');
+        }
+        return { managedCalls: true };
+      }
+      const keyFile = process.env['MODEL_KEY_FILE'] ??
+        resolve(import.meta.dirname, '../../../.keys/.openai-key');
+      return { keyFile };
+    }
+    async function requireCurrentMode() {
+      if (!managedCalls && await readManagedMode(2000)) {
+        throw new Error('Managed provider calls were switched on; restart required');
+      }
+    }
+    const modelRoute = modelGatewayRoute();
     let verification: Parameters<typeof startDecision>[5];
     if (providerSecretDirectory) {
       verification = {
@@ -116,7 +145,7 @@ try {
     const gatewayOptions = {
       binary: gatewayBinary, configFile: `${directory}/gateway.json`,
       usageFile: `${directory}/usage.jsonl`,
-      keyFile: process.env['MODEL_KEY_FILE'] ?? resolve(import.meta.dirname, '../../../.keys/.openai-key'),
+      ...modelRoute,
       port: Number(required('MODEL_GATEWAY_PORT')),
       readinessPort: Number(required('MODEL_READINESS_PORT')),
       decisionUrl: decision.url, issuer: required('TOKEN_ISSUER'),
@@ -137,6 +166,7 @@ try {
         try {
           // Check NATS availability even when no new usage needs recording.
           await events.store.head();
+          await requireCurrentMode();
           await ingestUsage(actor, `${directory}/usage.jsonl`, usageCursor);
           await actor.period();
           await actor.expire();
