@@ -156,6 +156,7 @@ it('opens one encrypted Ask card and forwards approved lossless bytes once acros
     expect((await f.call()).text).toContain('approvalId');
     expect((await f.call()).status).toBe(403);
     const { cards } = await f.read();
+    expect(cards[0]?.turnId).toBe('turn');
     expect(cards).toHaveLength(1);
     expect(cards[0]).toMatchObject({ state: 'requested', canDecide: true, review: { target: '9007199254740993',
       data: '{"amount":1.00e2,"note":"hello","order":9007199254740993}', destination: 'https://fixture.example.test' } });

@@ -73,6 +73,22 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it('keeps a requested card readable but removes decisions for a stopped turn', async () => {
+  const stoppedCard = { ...card(), turnId: 'message' };
+  const fetchImplementation = vi.fn(() => Promise.resolve(response([stoppedCard])));
+  const fixture = await mount(fetchImplementation);
+  fixture.componentRef.setInput('stoppedTurnIds', ['message']);
+  fixture.detectChanges();
+  const root = rootOf(fixture);
+  expect(root.textContent).toContain("Can't continue");
+  expect(root.textContent).toContain("This work stopped at the limit. Approving now wouldn't restart it.");
+  expect(root.querySelector('oc-approval-ledger')).not.toBeNull();
+  expect(root.querySelector('button.approve')).toBeNull();
+  expect(root.querySelector('button[aria-label^="Deny:"]')).toBeNull();
+  root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect(fetchImplementation).toHaveBeenCalledTimes(1);
+});
+
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
   configurable: true,
   writable: true,
