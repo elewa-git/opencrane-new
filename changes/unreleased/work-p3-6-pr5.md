@@ -1,0 +1,1 @@
+- Add a private hosted-image verifier for operator-trusted publisher signatures and exact image hashes. Licence scanning, admission and deployment remain unavailable.

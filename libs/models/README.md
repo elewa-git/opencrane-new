@@ -16,7 +16,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stop reasons| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stop reasons| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
   models -->|checks revision, spending, catalogue expiry, holds, root stops and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
@@ -46,7 +46,9 @@ pass, running backend and reviewed tool list. Saving recall references does not
 interrupt the current call. Ending or invalidating that turn’s memory context does. The memory backend checks access again
 and refuses a context it has already received. It repeats the final access check when
 other calls arrive, so a saved revocation still stops the write within the same deadline.
-Other hosted images still need image admission.
+Other hosted images still need image admission. A private verifier checks a publisher's
+signature and each image file's hash against operator trust. It does not scan licences,
+admit images or start them yet.
 
 ## What it is responsible for
 

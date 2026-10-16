@@ -2246,6 +2246,48 @@ retention, hosted per-start capture, zero-TTL per-call capture and credentialed 
 are not implemented here. Fresh-install qualification is NOT RUN. The access-check code
 and its two named regression files are unchanged.
 
+## Hosted publisher verification — P3-6 PR 5, first part
+
+`hosted-verification.ts` is private and has no production caller or event writer.
+It accepts an operator trust snapshot separately from the image request. Trust names
+one exact repository, a positive version, a PEM public key and a revocation flag.
+The signature reader supplies a detached Cosign simple-signing payload and signature.
+Cosign verifies that payload with the operator key; the verifier then checks its exact
+subject digest, repository and signature type before reading the manifest.
+Only a single OCI manifest for linux/amd64 or linux/arm64 is supported. OCI indexes,
+foreign layers and other formats fail. Configuration and every layer must match their
+size and SHA-256 digest. Candidate bytes are never executed or extracted.
+
+The reader receives repository, resource and AbortSignal. It must limit bytes while
+receiving them; this module also checks returned sizes, copies bytes and imposes a
+one-second read deadline even if cancellation is ignored. There is no network reader
+in this part. Reviewed HTTPS destinations, address pinning, credentials and bounded
+streaming remain prerequisites for connecting a real registry.
+Limits are deliberately smaller than the design's eventual scan job: 64 KiB signature,
+1 MiB manifest/configuration, 32 MiB per layer, 64 layers and 128 MiB total.
+The subprocess has a ten-second deadline and 64 KiB output limit. Its temporary files
+are private, its environment excludes inherited credentials, and its output is discarded.
+
+Evidence contains only image/platform, trust version, public-key fingerprint and trust
+hash. `currentHostedVerification` must receive current operator trust before evidence
+is used; replacement, revocation, changed scope or a changed image invalidates it.
+The verifier also repeats that check after reading bytes. Neither result is admission.
+No event/API fields changed. Signature and licence passes with pending vulnerability
+and malware checks still fail the existing result schema; Continue remains disabled.
+
+Tests fetch checksum-pinned Cosign 2.6.1 into `.tools` using `scripts/fetch-cosign.sh`.
+[Cosign's licence](https://github.com/sigstore/cosign/blob/v2.6.1/LICENSE) is Apache-2.0.
+This is test tooling only: no binary, dependency or bundled component is added to any
+runtime image. The exact runtime binary and its bundled notices still need review
+before deployment. Fixtures sign in memory with ephemeral keys; no private key is saved.
+The fake registry tests real Cosign verification, both architectures, refusals, byte
+limits, outages, trust replacement and pending admission. They make no model calls.
+
+Remaining row 5 work: Syft 1.54.0, image-specific reviewed notices and licence rules,
+complete SBOM coverage, private evidence storage and worker wiring. Malware,
+vulnerability checks and deployment remain later rows. Fresh-install qualification:
+NOT RUN. No computer-image licence exceptions were copied.
+
 ## Acknowledged generation admission (P3-4 PR 4a; Part of #45)
 
 `gatewayDelivery.acknowledged()` synchronously returns the generation, recordDigest,
