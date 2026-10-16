@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { getEventDefinition, toolApprovalRequestedDataSchema } from '@opencrane/events';
 // Regression probes for turn activity during reads and long agent sessions.
@@ -882,9 +883,9 @@ async function readDuringActivity(event: AccessEvent) {
 }
 
 const changedAccessEvents = [
-  { subject: 'conversation-agent', type: 'participant.added',
+  { subject: 'participation-agent', type: 'participant.added',
     data: { conversationId: 'agent', participantId: 'bob', addedBy: 'alice' } },
-  { subject: 'conversation-agent', type: 'participant.removed',
+  { subject: 'participation-agent', type: 'participant.removed',
     data: { conversationId: 'agent', participantId: 'alice', removedBy: 'bob' } },
   { subject: 'member-alice', type: 'member.removed',
     data: { memberId: 'alice', removedBy: 'bob' } },
@@ -2478,23 +2479,32 @@ async function frozenChildOutput(memberId: string) {
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
     const creation = await childSession(context);
+    const humanText = context.keys.encrypt('test', 'child', 'Earlier human post');
+    for (let index = 0; index < 101; index++) {
+      const data = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
+        contentType: 'text', ...humanText };
+      await context.append('conversation-child', 'message.posted', data, false);
+    }
     const before = await appendCloseOutput(context, 'agent.message_delta', 'Partial answer');
     await context.runner.run(conversations);
     client = await openChatSocket(context, 'child', true, memberId);
     const initial = await readClosedHistory(context, memberId);
-    const closed = await context.append('conversation-child', 'conversation.closed',
+    let closeSubject = 'conversation-child';
+    if (memberId === 'bob') closeSubject = 'participation-child';
+    const closed = await context.append(closeSubject, 'conversation.closed',
       { conversationId: 'child', closedBy: 'alice' }, false);
-    const closePosition = await context.nats.store.head('conversation-child');
+    const closePosition = await context.nats.store.head(closeSubject);
     for (let index = 0; index < 105; index++) {
       await appendCloseOutput(context, 'agent.message_delta');
     }
     const late = await appendCloseOutput(context, 'agent.message_completed');
+    const latePosition = await context.nats.store.head('conversation-child');
     for (const type of ['agent.turn_failed', 'agent.output_lost', 'agent.turn_completed']) {
-      const example = getEventDefinition(type)!.example;
+      const example = z.record(z.string(), z.unknown()).parse(getEventDefinition(type)!.example);
       const data = { ...example, conversationId: 'child', turnId: 'close-turn' };
       await context.append('conversation-child', type, data, false);
     }
-    // Retain human posts already admitted on another stream before close was observed.
+    // Retain saved human posts that raced close admission.
     const encrypted = context.keys.encrypt('test', 'child', 'Retained human post');
     const humanData = { conversationId: 'child', authorId: 'bob', authorKind: 'human',
       contentType: 'text', ...encrypted };
@@ -2511,10 +2521,20 @@ async function frozenChildOutput(memberId: string) {
     }
     await until(receivedHuman);
     const expected = [...initial.map(chatRowId), closed.id, human.id];
+    const query = vi.spyOn(context.db, 'query');
     const rows = await readClosedHistory(context, memberId);
+    const scans = [];
+    for (const [sql, parameters] of query.mock.calls) {
+      if (sql.startsWith('SELECT * FROM conversation_feed')) scans.push(parameters?.[2]);
+    }
+    query.mockRestore();
+    expect(scans.length).toBeGreaterThan(2);
+    expect(new Set(scans).size).toBe(scans.length);
     expect(rows.map(chatRowId)).toEqual(expected);
     expect(rows.find(isBefore)?.data.text).toBe('Partial answer');
-    function isBefore(row: typeof rows[number]) { return row.id === before.id; }
+    function isBefore(row: typeof rows[number]) {
+      return row.id === before.id;
+    }
     const delivered = [];
     for (const message of client.received) {
       if (message.row) delivered.push(message.row.id);
@@ -2539,6 +2559,12 @@ async function frozenChildOutput(memberId: string) {
     const acknowledgement = await context.app.inject({ method: 'POST',
       url: '/api/conversations/child/state', headers: context.headers(memberId), payload: read });
     expect(acknowledgement.statusCode).toBe(200);
+    const hiddenRead = { ...read, id: `hidden-read-${memberId}`,
+      throughPosition: latePosition, throughEventId: late.id };
+    const hiddenAcknowledgement = await context.app.inject({ method: 'POST',
+      url: '/api/conversations/child/state', headers: context.headers(memberId),
+      payload: hiddenRead });
+    expect(hiddenAcknowledgement.statusCode).toBe(409);
     await context.runner.run(conversations);
     await client.close();
     client = undefined;
