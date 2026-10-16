@@ -4,6 +4,9 @@ import {
 } from '@angular/core';
 import { z } from 'zod';
 import { SharedState } from '../shared-state/shared-state';
+import { checkedWorkDescription, groupIdFromRow, readCurrentGroups, sameGroupIds,
+  sameWorkAnswers, savedWork,
+  type GroupRow, type WorkAnswers } from './survey-work';
 
 const savedStep = z.object({
   time: z.iso.datetime(),
@@ -49,13 +52,21 @@ export class SurveyScreen implements OnDestroy {
   protected readonly pronouns = signal('');
   protected readonly nameError = signal('');
   protected readonly pronounsError = signal('');
+  protected readonly workDescription = signal('');
+  protected readonly workError = signal('');
+  protected readonly workConfirmation = signal(false);
+  protected readonly groups = signal<GroupRow[]>([]);
+  protected readonly groupsState = signal<'loading' | 'ready' | 'failed'>('loading');
+  protected readonly hasMoreGroups = signal(false);
   protected readonly announcement = signal('');
   private commandId: string | null = null;
-  private sentAnswers: { step: 1; preferredName: string; pronouns: string | null } | null = null;
+  private sentAnswers: { step: 1; preferredName: string; pronouns: string | null }
+    | WorkAnswers | null = null;
   private request = new AbortController();
   private identityLoaded = false;
   private nameEdited = false;
   private draftWithoutProgress = false;
+  private groupRead = 0;
 
   constructor() {
     afterNextRender(this.startLoad.bind(this));
@@ -131,6 +142,7 @@ export class SurveyScreen implements OnDestroy {
           this.name.set(firstStep.data.preferredName);
           this.pronouns.set(firstStep.data.pronouns ?? '');
         }
+        this.restoreSavedWork(parsed);
         this.openStep(parsed.survey.nextStep ?? 4);
       }
       this.state.set('ready');
@@ -151,12 +163,24 @@ export class SurveyScreen implements OnDestroy {
     else this.state.set('read_failed');
   }
 
+  private restoreSavedWork(progress: Progress): void {
+    const secondStep = savedWork.safeParse(progress.survey.steps[1]?.answers);
+    if (!secondStep.success) {
+      this.workDescription.set('');
+      return;
+    }
+    this.workDescription.set(secondStep.data.workDescription);
+  }
+
   private clearAccess(): void {
     this.request.abort();
     this.request = new AbortController();
     this.progress.set(null);
     this.name.set('');
     this.pronouns.set('');
+    this.workDescription.set('');
+    this.groups.set([]);
+    this.groupRead += 1;
     this.sentAnswers = null;
     this.commandId = null;
     this.state.set('refused');
@@ -165,9 +189,42 @@ export class SurveyScreen implements OnDestroy {
 
   private openStep(step: number): void {
     this.currentStep.set(step);
+    this.workConfirmation.set(false);
     this.nameError.set('');
     this.pronounsError.set('');
+    this.workError.set('');
+    if (step === 2) void this.loadGroups();
+    else this.groupRead += 1;
     setTimeout(this.focusHeading.bind(this), 0);
+  }
+
+  private async loadGroups(): Promise<void> {
+    this.groupRead += 1;
+    const read = this.groupRead;
+    const request = this.request;
+    this.groupsState.set('loading');
+    this.groups.set([]);
+    this.hasMoreGroups.set(false);
+    this.workConfirmation.set(false);
+    const result = await readCurrentGroups(request);
+    if (request.signal.aborted || request !== this.request) return;
+    // A refused protected read clears answers even after the person leaves this step.
+    if (result.kind === 'refused') {
+      this.refuseRead(result.status);
+      return;
+    }
+    if (read !== this.groupRead || this.currentStep() !== 2) return;
+    if (result.kind === 'failed') {
+      this.groupsState.set('failed');
+      return;
+    }
+    this.groups.set(result.rows);
+    this.hasMoreGroups.set(result.hasMore);
+    this.groupsState.set('ready');
+  }
+
+  protected tryGroupsAgain(): void {
+    void this.loadGroups();
   }
 
   private focusHeading(): void {
@@ -185,11 +242,6 @@ export class SurveyScreen implements OnDestroy {
     if (step === 2) return 'Your work';
     if (step === 3) return 'Style';
     return 'Tasks';
-  }
-
-  protected stepHeadingText(): string {
-    if (this.currentStep() === 2) return 'Tell us about your work';
-    return 'Continue your welcome';
   }
 
   protected formattedTime(): string {
@@ -216,6 +268,22 @@ export class SurveyScreen implements OnDestroy {
     this.pronounsError.set('');
   }
 
+  protected changeWork(event: Event): void {
+    const field = event.target;
+    if (!(field instanceof HTMLTextAreaElement)) return;
+    this.workDescription.set(field.value);
+    this.workError.set('');
+    this.workConfirmation.set(false);
+  }
+
+  protected currentGroupsChanged(): boolean {
+    if (this.groupsState() !== 'ready') return false;
+    const saved = savedWork.safeParse(this.progress()?.survey.steps[1]?.answers);
+    if (!saved.success) return false;
+    const currentIds = this.groups().map(groupIdFromRow);
+    return !sameGroupIds(saved.data.groupIds, currentIds);
+  }
+
   protected skipPronouns(): void {
     this.pronouns.set('');
     this.pronounsError.set('');
@@ -238,7 +306,12 @@ export class SurveyScreen implements OnDestroy {
 
   protected async continue(event: Event): Promise<void> {
     event.preventDefault();
-    if (this.state() !== 'ready' || this.currentStep() !== 1) return;
+    if (this.state() !== 'ready') return;
+    if (this.currentStep() === 2) {
+      await this.continueWork();
+      return;
+    }
+    if (this.currentStep() !== 1) return;
     const answers = this.checkedAnswers();
     if (!answers) return;
     if (!this.progress() || this.draftWithoutProgress) {
@@ -256,6 +329,33 @@ export class SurveyScreen implements OnDestroy {
       this.openStep(2);
       return;
     }
+    this.commandId = crypto.randomUUID();
+    this.sentAnswers = answers;
+    await this.postStep();
+  }
+
+  private async continueWork(): Promise<void> {
+    if (this.groupsState() !== 'ready') return;
+    const description = checkedWorkDescription(this.workDescription());
+    if (description === null) {
+      this.workError.set('Enter 1–4,096 UTF-8 bytes of text. Emoji and some letters count '
+        + 'as more than one byte. Tabs and new lines are allowed; other control characters are not.');
+      return;
+    }
+    const answers: WorkAnswers = { step: 2, workDescription: description,
+      groupIds: this.groups().map(groupIdFromRow) };
+    const saved = savedWork.safeParse(this.progress()?.survey.steps[1]?.answers);
+    if (saved.success && sameWorkAnswers(saved.data, answers)) {
+      this.openStep(3);
+      return;
+    }
+    const laterStepsSaved = (this.progress()?.survey.steps.length ?? 0) > 2;
+    const groupsChanged = saved.success && !sameGroupIds(saved.data.groupIds, answers.groupIds);
+    if (saved.success && (laterStepsSaved || groupsChanged) && !this.workConfirmation()) {
+      this.workConfirmation.set(true);
+      return;
+    }
+    this.workConfirmation.set(false);
     this.commandId = crypto.randomUUID();
     this.sentAnswers = answers;
     await this.postStep();
@@ -316,7 +416,11 @@ export class SurveyScreen implements OnDestroy {
 
   private async reviewConflict(): Promise<void> {
     await this.readProgress(true);
-    if (this.state() === 'ready') this.state.set('conflict');
+    if (this.state() !== 'ready') return;
+    if (this.progress()?.survey.nextStep === 1) {
+      this.openStep(1);
+    }
+    this.state.set('conflict');
   }
 
   protected async checkStatus(): Promise<void> {
@@ -355,7 +459,7 @@ export class SurveyScreen implements OnDestroy {
     this.commandId = null;
     this.sentAnswers = null;
     this.state.set('ready');
-    this.openStep(1);
+    this.openStep(this.currentStep());
   }
 
   protected startAgain(): void {
@@ -393,6 +497,6 @@ export class SurveyScreen implements OnDestroy {
   }
 
   protected back(): void {
-    this.openStep(1);
+    if (this.currentStep() > 1) this.openStep(this.currentStep() - 1);
   }
 }
