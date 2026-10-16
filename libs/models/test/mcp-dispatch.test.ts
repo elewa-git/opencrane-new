@@ -16,7 +16,7 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { mcpCatalogueWatch } from '../src/mcp-catalogue-watch.ts';
-import { conversations } from '@opencrane/projections';
+import { auditTrail, conversations } from '@opencrane/projections';
 import { budgetStopHandler } from '../src/index.ts';
 import { grantStream } from '@opencrane/authz';
 import { decideApproval, history, ingestUsage, priceTableId, readApproval, readToolPolicy,
@@ -1131,12 +1131,12 @@ async function budgetHandlerEndsApproval() {
 }
 it('ends a waiting approval through the saved budget turn stop', budgetHandlerEndsApproval);
 
-async function reviewRestoration(setup: Fixture, commandId: string) {
+async function reviewRestoration(setup: Fixture, commandId: string, mode = 'allow') {
   const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
   const catalogue = policy.catalogue!;
   function choice(declaration: NonNullable<typeof catalogue.tools>[number]) {
     return { name: declaration.name, revision: declaration.revision,
-      reviewDigest: toolReviewDigest(declaration), mode: 'allow' };
+      reviewDigest: toolReviewDigest(declaration), mode };
   }
   const command = { commandId, expectedSequence: policy.sequence,
     policyRevision: policy.policyRevision, catalogueDigest: catalogue.schemaDigest,
@@ -1223,7 +1223,7 @@ async function restorationDelivery(setup: Fixture) {
     }
     await expect.poll(servesWitness, { timeout: 5000 }).toBeUndefined();
   }
-  return { ...delivery, waitForWitness };
+  return { ...delivery, waitForWitness, options };
 }
 
 async function restartRestoration(context: RestorationFixture) {
@@ -1425,6 +1425,13 @@ async function verifyRestorationReplay(setup: Fixture) {
   expect(result.stdout).toContain('rebuilt state matched the live projection');
   const after = await setup.db.query('SELECT policy FROM mcp_catalogue');
   expect(after.rows).toEqual(before.rows);
+  for (const [name, projection] of [['conversations', conversations], ['audit', auditTrail]] as const) {
+    await setup.runner.initialise(projection);
+    await setup.runner.run(projection);
+    const result = await execute('npm', ['run', 'replay', '--', name, '--verify'],
+      { env, timeout: 10_000 });
+    expect(result.stdout).toContain('rebuilt state matched the live projection');
+  }
   expect(await setup.nats.store.head()).toBe(position);
   expect(setup.received()).toBe(1);
 }
@@ -1527,11 +1534,11 @@ function generationHeaders(record: { generation: number; recordDigest: string;
     'x-opencrane-review-revision': String(entry.reviewRevision) };
 }
 
-async function publishedFixture() {
+async function publishedFixture(mode = 'allow') {
   const setup = await fixture();
   onTestFinished(setup.close);
   const headers = await prepare(setup);
-  await reviewRestoration(setup, 'review-generation');
+  await reviewRestoration(setup, 'review-generation', mode);
   const record = await publishRestoration(setup, 'publish-generation');
   const delivery = await restorationDelivery(setup);
   await delivery.deliver(record);
@@ -1566,7 +1573,10 @@ async function acceptsCurrentAndCarriedGeneration() {
   expect(setup.received()).toBe(1);
   const next = await nextCarriedGeneration(context);
   expect(await gatewayCall(context)).toBe(403);
-  await delivery.deliver(next);
+  const writing = delivery.deliver(next);
+  expect(delivery.acknowledged()).toBeNull();
+  await writing;
+  expect(delivery.acknowledged()).toBeNull();
   await delivery.waitForWitness(next);
   expect(await gatewayCall(context)).toBe(403);
   expect(await delivery.observe()).not.toBeNull();
@@ -1670,15 +1680,79 @@ async function consumesPublishedPermitOnce(concurrent: boolean) {
     replies = [await send(setup, value), await send(setup, value)];
   }
   function status(reply: Response) { return reply.status; }
-  expect(replies.map(status)).toEqual([200, 403]);
+  const statuses = replies.map(status);
+  expect(statuses.sort()).toEqual([200, 403]);
   expect(setup.received()).toBe(1);
+  const unused = await permit(setup, { ...context.headers, ...context.constants });
   const restarted = await startDecision(setup.actor, setup.identity, setup.binding,
     0, setup.keys, undefined, setup.dispatchOptions);
   onTestFinished(restarted.close);
-  const request = { method: 'POST', headers: { 'x-opencrane-mcp-permit': value }, body };
+  const request = { method: 'POST', headers: { 'x-opencrane-mcp-permit': unused }, body };
   const response = await fetch(`${restarted.url}/dispatch/mcp/fixture/installed`, request);
   expect(response.status).toBe(403);
   expect(setup.received()).toBe(1);
 }
 it.each([false, true])('consumes a published permit once, concurrent: %s',
   consumesPublishedPermitOnce);
+
+async function refusesRejectedGeneration() {
+  const context = await publishedFixture();
+  const next = await nextCarriedGeneration(context);
+  const { setup, delivery } = context;
+  const logs: string[] = [];
+  function record(chunk: Buffer) { logs.push(chunk.toString()); }
+  setup.gatewayChild()!.stdout?.on('data', record);
+  setup.gatewayChild()!.stderr?.on('data', record);
+  const settings = { ...delivery.options.settings, keyFile: `${setup.options.configFile}.missing` };
+  const rejected = gatewayDelivery({ ...delivery.options, settings });
+  await rejected.deliver(next);
+  function reloadRejected() { return logs.join('').includes('Failed to reload config'); }
+  await expect.poll(reloadRejected, { timeout: 5000 }).toBe(true);
+  expect(await rejected.observe()).toBeNull();
+  expect(rejected.acknowledged()).toBeNull();
+  expect(await gatewayCall(context)).toBe(403);
+  expect(setup.received()).toBe(0);
+}
+it('refuses an old gateway route after its replacement configuration is rejected',
+  refusesRejectedGeneration);
+
+async function refusesWithdrawnPublishedPermit() {
+  const context = await publishedFixture();
+  const { setup } = context;
+  const value = await permit(setup, { ...context.headers, ...context.constants });
+  await setup.append('mcp-fixture', 'mcp.server_unpublished',
+    { serverId: 'fixture', unpublishedBy: 'alice' });
+  expect((await send(setup, value)).status).toBe(403);
+  expect(await gatewayCall(context)).toBe(403);
+  expect(setup.received()).toBe(0);
+}
+it('refuses withdrawal before admitting a published permit', refusesWithdrawnPublishedPermit);
+
+async function keepsApprovalAcrossCarriedGeneration() {
+  const context = await publishedFixture('ask');
+  const { setup, delivery } = context;
+  const headers = { ...context.headers, ...context.constants };
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    request);
+  const data: unknown = await response.json();
+  const { approvalId } = z.object({ approvalId: z.string() }).parse(data);
+  const before = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(before.state).toBe('requested');
+  const next = await nextCarriedGeneration(context);
+  await delivery.deliver(next);
+  await delivery.waitForWitness(next);
+  expect(await delivery.observe()).not.toBeNull();
+  const after = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(after.request).toEqual(before.request);
+  expect(after.state).toBe('requested');
+  async function fresh() {}
+  const result = await decideApproval(setup.nats.store, 'test', approvalId,
+    'alice', 'approved', true, fresh);
+  expect(result.status).toBe('appended');
+  const value = await permit(setup, { ...context.headers, ...generationHeaders(next) });
+  expect((await send(setup, value)).status).toBe(200);
+  expect(setup.received()).toBe(1);
+}
+it('keeps a waiting approval bound to its review across a carried generation',
+  keepsApprovalAcrossCarriedGeneration);
