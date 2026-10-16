@@ -211,6 +211,9 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
     time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
     principal: { kind: 'human', id: memberId },
   };
+  if (await store.head(undefined, fresh.deadline) !== globalSequence) {
+    throw new ProviderConflict();
+  }
   if (spending.duplicate) {
     if (!spending.marker || current.drainSequence !== input.expectedDrainSequence) {
       throw new ProviderConflict();
@@ -220,9 +223,6 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
     requireSettledSpending(spending.openSpending);
     await fresh();
     return providerReceipt(spending.marker);
-  }
-  if (await store.head(undefined, fresh.deadline) !== globalSequence) {
-    throw new ProviderConflict();
   }
   if (providerCommandExists) {
     throw new ProviderConflict();
