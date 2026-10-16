@@ -52,38 +52,57 @@ async function appendFileEvent(
 
 async function savedFileProjection() {
   const nats = await natsFixture();
-  const storage = await database('pg');
-  const subject = 'conversation-chat';
-  await appendFileEvent(nats.store, subject, 'file.uploaded', uploadedPdf);
-  await appendFileEvent(nats.store, subject, 'file.delivered', {
-    conversationId: 'chat',
-    fileId: 'pdf',
-    computerId: 'computer',
-    sha256: uploadedPdf.sha256,
-    outcome: 'kept_existing',
-  });
-  await appendFileEvent(nats.store, subject, 'file.uploaded', uploadedText);
+  let closeStorage: (() => Promise<void>) | undefined;
 
-  const runner = new ProjectionRunner(
-    storage.db,
-    nats.reader,
-    createLogger('files', { level: 'silent' }),
-  );
-  await runner.initialise(files);
-  await runner.run(files);
-  const projected = await listFiles(storage.db, 'test', 'chat');
-  await runner.rebuild(files);
-  const replayed = await listFiles(storage.db, 'test', 'chat');
+  try {
+    const storage = await database('pg');
+    closeStorage = async function closeStorageResource() {
+      await storage.close();
+    };
+    const subject = 'conversation-chat';
+    await appendFileEvent(nats.store, subject, 'file.uploaded', uploadedPdf);
+    await appendFileEvent(nats.store, subject, 'file.delivered', {
+      conversationId: 'chat',
+      fileId: 'pdf',
+      computerId: 'computer',
+      sha256: uploadedPdf.sha256,
+      outcome: 'kept_existing',
+    });
+    await appendFileEvent(nats.store, subject, 'file.uploaded', uploadedText);
 
-  return {
-    projected,
-    replayed,
-    db: storage.db,
-    async close() {
-    await storage.close();
-    await nats.close();
-    },
-  };
+    const runner = new ProjectionRunner(
+      storage.db,
+      nats.reader,
+      createLogger('files', { level: 'silent' }),
+    );
+    await runner.initialise(files);
+    await runner.run(files);
+    const projected = await listFiles(storage.db, 'test', 'chat');
+    await runner.rebuild(files);
+    const replayed = await listFiles(storage.db, 'test', 'chat');
+
+    return {
+      projected,
+      replayed,
+      db: storage.db,
+      async close() {
+        try {
+          await storage.close();
+        } finally {
+          await nats.close();
+        }
+      },
+    };
+  } catch (error) {
+    const cleanupTasks: Promise<void>[] = [];
+    if (closeStorage) {
+      cleanupTasks.push(closeStorage());
+    }
+    cleanupTasks.push(nats.close());
+    // Keep the setup error, but still try to close both resources.
+    await Promise.allSettled(cleanupTasks);
+    throw error;
+  }
 }
 
 it('returns ordered file views without storage keys and rebuilds the same views', async () => {

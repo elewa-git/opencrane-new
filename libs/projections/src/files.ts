@@ -39,16 +39,24 @@ export const files: Projection = {
 };
 function toFileView(row: FileRow): FileView {
   const { objectKey: _objectKey, ...data } = fileUploadedDataSchema.parse(row.data);
-  // Keep the storage key out of every file view, even when saved data includes it.
-  return {
+  // Keep the storage key private because a client could use it to reach stored bytes directly.
+  const view: FileView = {
     ...data,
     status: row.status,
-    ...(row.delivery_outcome ? { deliveryOutcome: row.delivery_outcome } : {}),
     path: `uploads/${data.conversationId}/${data.fileId}/${data.name}`,
-    ...(data.mime === 'application/pdf'
-      ? { textPath: `uploads/${data.conversationId}/${data.fileId}/${data.name}.md` }
-      : {}),
   };
+
+  if (row.delivery_outcome) {
+    const deliveryOutcome = row.delivery_outcome;
+    view.deliveryOutcome = deliveryOutcome;
+  }
+
+  if (data.mime === 'application/pdf') {
+    const textPath = `uploads/${data.conversationId}/${data.fileId}/${data.name}.md`;
+    view.textPath = textPath;
+  }
+
+  return view;
 }
 
 export async function listFiles(
