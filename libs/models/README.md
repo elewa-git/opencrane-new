@@ -21,7 +21,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers and probes only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks access and saved work; records admissions and spending| store["libs/event-store<br/>event log"]
 ```
@@ -83,7 +83,9 @@ Retrying a model request does not yet recover an earlier hold.
   If the old check expires during the last policy read, the watch keeps calls held and
   saves a failure that ends old approvals. A later check can recover safely.
   Old approvals stay cancelled. A restart begins held and cannot use saved receipts alone.
-  Background delivery and a Ready read are not built yet.
+  Published routes need the exact configuration confirmed by the running gateway.
+  Each short-lived call pass binds that configuration and is checked again before sending.
+  Production calls remain unavailable until the guarded destination is connected.
 - Provide an optional gateway route for testing CONNECT, the HTTP request that
   opens a byte tunnel. It uses only the private relay address returned by the
   decision service. Normal startup keeps this route off. Computers cannot use it

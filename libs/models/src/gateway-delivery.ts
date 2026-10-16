@@ -13,6 +13,8 @@ import { gatewayConfigurationCurrent, gatewayMemberCurrent } from './gateway-gen
 import { renderGatewayConfiguration, type GatewayRenderSettings } from './gateway-renderer.ts';
 
 type Configuration = ReturnType<typeof gatewayConfigurationSchema.parse>;
+export type GatewayAcknowledgement = Pick<Configuration, 'generation' | 'recordDigest' | 'members'> &
+  { position: number };
 const configuration = z.looseObject({
   gateways: z.record(z.string(), z.unknown()), routes: z.array(z.unknown()),
 });
@@ -38,13 +40,15 @@ export function gatewayDelivery(options: {
   const subject = `gateway-config-${options.silo}`;
   let active: { record: Configuration; configDigest: string; response: string; path: string } | null = null;
   let writing = false;
+  let closed = false;
+  let observation: GatewayAcknowledgement | null = null;
 
   async function requireLeader() {
     await options.requireLeader?.();
   }
 
   function alive() {
-    return options.child.pid !== undefined && options.child.exitCode === null &&
+    return !closed && options.child.pid !== undefined && options.child.exitCode === null &&
       options.child.signalCode === null && !options.child.killed;
   }
 
@@ -52,6 +56,7 @@ export function gatewayDelivery(options: {
     if (options.mode === 'replay') return;
     if (writing || !alive()) throw new Error('Gateway delivery unavailable');
     writing = true;
+    observation = null;
     active = null;
     try {
       const record = gatewayConfigurationSchema.parse(input);
@@ -116,6 +121,9 @@ export function gatewayDelivery(options: {
     const stillCurrent = await gatewayConfigurationCurrent(options.store, options.silo,
       delivered.record);
     if (!stillCurrent || !usable(delivered)) return null;
+    observation = { generation: delivered.record.generation,
+      recordDigest: delivered.record.recordDigest, members: delivered.record.members,
+      position: row.sequence };
     return row;
   }
 
@@ -149,7 +157,7 @@ export function gatewayDelivery(options: {
     return result.status === 'appended';
   }
 
-  async function observe() {
+  async function probe() {
     const delivered = active;
     if (!delivered || !usable(delivered)) return null;
     try {
@@ -182,5 +190,18 @@ export function gatewayDelivery(options: {
       return null;
     }
   }
-  return { deliver, observe };
+  async function observe() {
+    const row = await probe();
+    if (!row) observation = null;
+    return row;
+  }
+  function acknowledged() {
+    if (!usable(active)) return null;
+    return observation;
+  }
+  function close() {
+    closed = true;
+    observation = null;
+  }
+  return { deliver, observe, acknowledged, close };
 }

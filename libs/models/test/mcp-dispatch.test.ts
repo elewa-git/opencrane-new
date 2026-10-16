@@ -1,3 +1,4 @@
+import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -1413,6 +1414,9 @@ it.each(restorationCases)('restores drift only through exact live publication: %
   restoresReviewedDrift, 60_000);
 
 async function verifyRestorationReplay(setup: Fixture) {
+  await setup.stopDispatch();
+  await setup.runtime.stop();
+  await setup.decisionDown();
   await setup.runner.initialise(mcpCatalogue);
   await setup.runner.run(mcpCatalogue);
   const before = await setup.db.query('SELECT policy FROM mcp_catalogue');
@@ -1425,13 +1429,19 @@ async function verifyRestorationReplay(setup: Fixture) {
   expect(result.stdout).toContain('rebuilt state matched the live projection');
   const after = await setup.db.query('SELECT policy FROM mcp_catalogue');
   expect(after.rows).toEqual(before.rows);
-  for (const [name, projection] of [['conversations', conversations], ['audit', auditTrail]] as const) {
-    await setup.runner.initialise(projection);
-    await setup.runner.run(projection);
-    const result = await execute('npm', ['run', 'replay', '--', name, '--verify'],
-      { env, timeout: 10_000 });
-    expect(result.stdout).toContain('rebuilt state matched the live projection');
-  }
+  await setup.runner.initialise(conversations);
+  await setup.runner.run(conversations);
+  const unsupported = execute('npm', ['run', 'replay', '--', 'conversations', '--verify'],
+    { env, timeout: 10_000 });
+  await expect(unsupported).rejects.toMatchObject({ code: 1 });
+  const rebuilt = await execute('npm', ['run', 'replay', '--', 'conversations',
+    '--confirm-conversations-stopped'], { env, timeout: 10_000 });
+  expect(rebuilt.stdout).toContain('PASS: conversations rebuilt');
+  await setup.runner.initialise(auditTrail);
+  await setup.runner.run(auditTrail);
+  const audit = await execute('npm', ['run', 'replay', '--', 'audit', '--verify'],
+    { env, timeout: 10_000 });
+  expect(audit.stdout).toContain('rebuilt state matched the live projection');
   expect(await setup.nats.store.head()).toBe(position);
   expect(setup.received()).toBe(1);
 }
@@ -1536,7 +1546,7 @@ function generationHeaders(record: { generation: number; recordDigest: string;
 
 async function publishedFixture(mode = 'allow') {
   const setup = await fixture();
-  onTestFinished(setup.close);
+  onTestFinished(setup.close.bind(setup));
   const headers = await prepare(setup);
   await reviewRestoration(setup, 'review-generation', mode);
   const record = await publishRestoration(setup, 'publish-generation');
@@ -1556,14 +1566,25 @@ async function nextCarriedGeneration(context: Awaited<ReturnType<typeof publishe
   return record;
 }
 
-async function gatewayCall(context: Awaited<ReturnType<typeof publishedFixture>>,
-  extra: Record<string, string> = {}) {
+function gatewayCall(context: Awaited<ReturnType<typeof publishedFixture>>,
+  extra: Record<string, string | string[]> = {}) {
   const headers = { ...context.headers, ...extra };
-  const request = { method: 'POST', headers, body };
-  const response = await fetch(`http://127.0.0.1:${context.setup.options.port}/mcp/fixture/installed`,
-    request);
-  await response.text();
-  return response.status;
+  const options = { method: 'POST', headers };
+  const url = `http://127.0.0.1:${context.setup.options.port}/mcp/fixture/installed`;
+  function sendRequest(resolve: (status: number) => void, reject: (error: Error) => void) {
+    function receive(response: IncomingMessage) {
+      function finished() {
+        resolve(response.statusCode!);
+      }
+      response.on('end', finished);
+      response.on('error', reject);
+      response.resume();
+    }
+    const request = httpRequest(url, options, receive);
+    request.on('error', reject);
+    request.end(body);
+  }
+  return new Promise<number>(sendRequest);
 }
 
 async function acceptsCurrentAndCarriedGeneration() {
@@ -1620,8 +1641,8 @@ it.each(constantChanges)('refuses publication constants: %s', refusesInvalidCons
 async function refusesSpoofedNewGeneration(copies: number) {
   const context = await publishedFixture();
   const next = await nextCarriedGeneration(context);
-  const constants = generationHeaders(next);
-  if (copies === 2) constants['x-opencrane-gateway-generation'] = '2, 2';
+  const constants: Record<string, string | string[]> = generationHeaders(next);
+  constants['x-opencrane-gateway-generation'] = Array<string>(copies).fill('2');
   expect(await gatewayCall(context, constants)).toBe(403);
   expect(context.setup.received()).toBe(0);
 }
@@ -1630,10 +1651,10 @@ it.each([1, 2])('refuses spoofed unacknowledged constants with %s copies',
 
 async function refusesConstantsOnLegacy() {
   const setup = await fixture();
-  onTestFinished(setup.close);
+  onTestFinished(setup.close.bind(setup));
   const headers = await prepare(setup);
-  headers['x-opencrane-gateway-generation'] = '1';
-  const request = { method: 'POST', headers, body };
+  const constants = { ...headers, 'x-opencrane-gateway-generation': '1' };
+  const request = { method: 'POST', headers: constants, body };
   const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
     request);
   expect(response.status).toBe(403);
@@ -1679,7 +1700,9 @@ async function consumesPublishedPermitOnce(concurrent: boolean) {
   } else {
     replies = [await send(setup, value), await send(setup, value)];
   }
-  function status(reply: Response) { return reply.status; }
+  function status(reply: Response) {
+    return reply.status;
+  }
   const statuses = replies.map(status);
   expect(statuses.sort()).toEqual([200, 403]);
   expect(setup.received()).toBe(1);
@@ -1700,13 +1723,17 @@ async function refusesRejectedGeneration() {
   const next = await nextCarriedGeneration(context);
   const { setup, delivery } = context;
   const logs: string[] = [];
-  function record(chunk: Buffer) { logs.push(chunk.toString()); }
+  function record(chunk: Buffer) {
+    logs.push(chunk.toString());
+  }
   setup.gatewayChild()!.stdout?.on('data', record);
   setup.gatewayChild()!.stderr?.on('data', record);
   const settings = { ...delivery.options.settings, keyFile: `${setup.options.configFile}.missing` };
   const rejected = gatewayDelivery({ ...delivery.options, settings });
   await rejected.deliver(next);
-  function reloadRejected() { return logs.join('').includes('Failed to reload config'); }
+  function reloadRejected() {
+    return logs.join('').includes('Failed to reload config');
+  }
   await expect.poll(reloadRejected, { timeout: 5000 }).toBe(true);
   expect(await rejected.observe()).toBeNull();
   expect(rejected.acknowledged()).toBeNull();
@@ -1748,7 +1775,7 @@ async function keepsApprovalAcrossCarriedGeneration() {
   expect(after.state).toBe('requested');
   async function fresh() {}
   const result = await decideApproval(setup.nats.store, 'test', approvalId,
-    'alice', 'approved', true, fresh);
+    'alice', 'approved', true, fresh, after, setup.actor.now());
   expect(result.status).toBe('appended');
   const value = await permit(setup, { ...context.headers, ...generationHeaders(next) });
   expect((await send(setup, value)).status).toBe(200);

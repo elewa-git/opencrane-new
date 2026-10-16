@@ -124,13 +124,16 @@ try {
     function watchFailed() {
       logger.error('MCP catalogue watch unavailable; calls remain held');
     }
-    const dispatchOptions = { routes: mcpRoutes, requireLeader: requireDispatchLeader,
+    let configurationWorker: ReturnType<typeof gatewayConfigurationWorker> | undefined;
+    function acknowledged() {
+      return configurationWorker?.acknowledged() ?? null;
+    }
+    const dispatchOptions = { acknowledged, routes: mcpRoutes, requireLeader: requireDispatchLeader,
       requireCatalogue: watch.requireCurrent };
     const decisionPort = Number(required('MODEL_DECISION_PORT'));
     const decision = await startDecision(actor, identity, binding, decisionPort,
       keys, verification, dispatchOptions);
     let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
-    let configurationWorker: ReturnType<typeof gatewayConfigurationWorker> | undefined;
     function configurationFailed(error: unknown) {
       const errorName = error instanceof Error ? error.name : typeof error;
       logger.error({ operation: 'models.gateway_configuration', errorName });

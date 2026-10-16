@@ -2245,3 +2245,31 @@ Scope is PARTIAL: configuration reload cancellation, unchanged-other-server appr
 retention, hosted per-start capture, zero-TTL per-call capture and credentialed discovery
 are not implemented here. Fresh-install qualification is NOT RUN. The access-check code
 and its two named regression files are unchanged.
+
+## Acknowledged generation admission (P3-4 PR 4a; Part of #45)
+
+`gatewayDelivery.acknowledged()` synchronously returns the generation, recordDigest,
+members and gateway stream position last confirmed by `observe()`. It returns null
+during replacement, before observation, after child exit or close, and during replay.
+The configuration worker exposes the same read. A newer saved request invalidates
+admission through one exact `gateway-config-<silo>` position read, without history reads.
+
+For an intent-backed publication, `mcpPolicy` checks all five generated constants,
+URL ids, current member, intent and folded receipt using the existing MCP history.
+An unchanged carried member retains its original receipt. Legacy publication still
+requires its published flag and refuses any generated constant. Approval bindings
+keep their reviewed revision; the gateway generation belongs only to the dispatch permit.
+The permit rechecks the acknowledgement and exact position at admission and before send.
+Backend `route.generation` and `revisionHeader` retain their separate instance contract.
+
+Tests use real NATS, PostgreSQL and the pinned gateway with the recording fixture upstream.
+They cover carried generations, stale/spoofed/missing/repeated constants, rejected reloads,
+withdrawal, changes during admission, consumed permits and a restarted decision service.
+Restoration checks refuse the unsupported conversations `--verify` command, then run
+its supported offline rebuild and audit verification without new events or upstream calls.
+Conversations verification remains unsupported by the existing CLI. Existing authority tests remain unchanged.
+
+PARTIAL: this is steps 1–3 of row 4. Part b adds `tool.dispatch_started`, its conditional
+append and uncertain-reply tests, and the final access and MCP position checks after saving.
+No event contract changes belong to this first part. Row 5 still supplies the guarded
+destination; production routes remain empty. Fresh-install journey: SKIP.

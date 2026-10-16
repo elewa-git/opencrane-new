@@ -2920,6 +2920,10 @@ for the shared per-silo preparation and replacement lock; it must not use the
 connection already holding the budget leadership lock. Restart creates a new process reference and
 requires another delivery and probe. Dispatch and catalogue watch receive empty
 route lists; `MODEL_MCP_ROUTES` is ignored. No call is enabled by this worker.
+The worker's synchronous `acknowledged()` read is passed into dispatch options.
+It is empty before live confirmation and after the child exits or the worker closes.
+Authorisation and dispatch compare its generation and exact gateway stream position.
+Production dispatch routes remain empty until the guarded destination is connected.
 
 ## Signed bridge gate delivery (P3-17 PR 2d; Part of #58)
 

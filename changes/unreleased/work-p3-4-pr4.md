@@ -1,0 +1,1 @@
+Published tool calls now require the exact configuration acknowledged by the running gateway, and their one-use passes reject a changed generation before sending. Production calls remain unavailable until the guarded destination is connected.

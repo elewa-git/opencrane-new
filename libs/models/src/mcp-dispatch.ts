@@ -1,3 +1,5 @@
+import type { GatewayAcknowledgement } from './gateway-delivery.ts';
+import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
@@ -17,6 +19,7 @@ export const mcpDispatchRouteSchema = z.strictObject({
 type Route = z.infer<typeof mcpDispatchRouteSchema>;
 export interface McpDispatchOptions {
   routes: Route[];
+  acknowledged?: () => GatewayAcknowledgement | null;
   requireLeader: () => Promise<void>;
   requireCatalogue?: (serverId: string) => void;
 }
@@ -32,6 +35,7 @@ interface BudgetBinding {
   admittedAt: number;
 }
 interface Permit {
+  gatewayBinding?: NonNullable<Policy['gatewayBinding']>;
   budget: BudgetBinding;
   memory?: MemorySend;
   memoryBinding: MemoryDispatch;
@@ -92,6 +96,9 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     confirmAccess: () => Promise<void>, accessDeadline: number, budget: BudgetBinding,
     memory?: MemorySend) {
     const route = requireContract(policy);
+    if (policy.gatewayBinding) {
+      requireGatewayAcknowledgement(policy.gatewayBinding, options?.acknowledged);
+    }
     if (policy.dispatchBinding !== digest(JSON.stringify(route))) {
       throw new Error('MCP backend changed during the decision');
     }
@@ -103,6 +110,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       throw new Error('MCP dispatch unavailable');
     }
     const binding = { requestId, silo, route: { ...route },
+      ...(policy.gatewayBinding ? { gatewayBinding: policy.gatewayBinding } : {}),
       policyRevision: policy.policy.policyRevision, catalogueSequence: policy.policy.sequence,
       schemaDigest: policy.schemaDigest,
       toolRevision: policy.revision, toolName: policy.name, bodyDigest: digest(body), expiresAt };
@@ -150,6 +158,8 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const route = requireCurrentRoute(permit);
     const remaining = Math.max(0, permit.expiresAt - Date.now());
     const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
+    await requireGatewayPosition(store, silo, permit.gatewayBinding,
+      options?.acknowledged, deadline);
     const position = await store.head(`mcp-${route.serverId}`, deadline);
     await requireOnlyAdmissions(store, silo, `mcp-${route.serverId}`,
       permit.catalogueSequence, position, deadline);
@@ -163,17 +173,24 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       ...(permit.budget.rootId === undefined ? {} : { rootId: permit.budget.rootId }) };
     async function confirmSend() {
       await permit.confirmAccess();
+      await requireGatewayPosition(store, silo, permit.gatewayBinding,
+        options?.acknowledged, deadline);
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     }
     await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
     await admit(req, res, permit, route, position, deadline);
+    await requireGatewayPosition(store, silo, permit.gatewayBinding,
+      options?.acknowledged, deadline);
     requireCurrentRoute(permit);
     requireFreshDispatch(req, res, permit);
     forward(route, permit, body, res, memoryContext);
   }
 
   function requireCurrentRoute(permit: Permit) {
+    if (permit.gatewayBinding) {
+      requireGatewayAcknowledgement(permit.gatewayBinding, options?.acknowledged);
+    }
     const currentRoute = routeFor(permit.route.serverId, permit.route.connectionId);
     if (JSON.stringify(currentRoute) !== JSON.stringify(permit.route)) {
       throw new Error('MCP backend changed');
@@ -192,6 +209,8 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     let expectedSequence = position;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await permit.confirmAccess();
+      await requireGatewayPosition(store, silo, permit.gatewayBinding,
+        options?.acknowledged, deadline);
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
       // Order sends with Block and quarantine writes on the same server stream.
