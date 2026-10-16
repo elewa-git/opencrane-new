@@ -311,7 +311,8 @@ class TurnRunner {
   stopBridge(value: Record<string, unknown>) {
     const credential = this.driver.credential();
     const identity = credential.expiresAt > Date.now() ? credential.gateIdentity : undefined;
-    this.gate.close(value, identity);
+    const accepted = this.gate.close(value, identity);
+    this.signal(accepted);
     this.approvals?.stop?.();
     void this.gate.track(this.loads.stop());
     for (const input of this.state.preparing.values()) this.state.cancelled.add(input.id);

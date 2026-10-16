@@ -16,4 +16,16 @@ const example = {
 const requested = event('takeover.requested', 'computer',
   'The requester recorded computer-wide control intent. New work is refused.',
   takeoverRequestedDataSchema, example);
-export const takeoverEvents = [requested];
+export const takeoverPausingDataSchema = takeoverRequestedDataSchema.pick({
+  assistantId: true, computerId: true, generation: true, podUid: true,
+  takeoverId: true, affectedTurnIds: true,
+}).extend({ affectedTurnIds: z.array(id).max(64), bridgeEpoch: id, supervisorEpoch: id,
+  executionProof: z.literal('exited'), quietProof: z.literal('unavailable') }).strict();
+const pausingExample = { assistantId: 'asst_1', computerId: 'computer_1', generation: 1,
+  podUid: 'pod_1', takeoverId: 'control_1', affectedTurnIds: ['turn_1'],
+  bridgeEpoch: 'bridge_1', supervisorEpoch: 'supervisor_1',
+  executionProof: 'exited' as const, quietProof: 'unavailable' as const };
+const pausing = event('takeover.pausing', 'computer',
+  'The bridge denied work and the root supervisor confirmed executor exit. Control stays closed.',
+  takeoverPausingDataSchema, pausingExample);
+export const takeoverEvents = [requested, pausing];

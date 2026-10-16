@@ -14,6 +14,9 @@ async function stopsEveryConversation() {
     test.send(gate);
     function interrupted() { return test.calls.includes('turn/interrupt:thread-2'); }
     await until(interrupted, 2000);
+    const accepted = test.frames.find(isAccepted);
+    expect(accepted).toMatchObject({ type: 'bridge_gated', takeoverId: 'takeover',
+      generation: 1, affectedTurnIds: ['first', 'second'] });
     expect(test.calls).toContain('turn/interrupt:thread-1');
     expect(test.grants.size).toBe(0);
     expect(test.catalogues.size).toBe(0);
@@ -189,3 +192,5 @@ async function doesNotInferQuiet(cause: string) {
 it.each(['thread/closed', 'eof', 'socket'])(
   'returns unavailable at thirty seconds after %s without terminal proof',
   doesNotInferQuiet);
+
+function isAccepted(frame: Record<string, unknown>) { return frame['type'] === 'bridge_gated'; }

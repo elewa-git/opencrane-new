@@ -17,7 +17,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and history| postgres
-  server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates without waiting for chats; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
+  server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates and root stops without waiting for chats; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
   server -->|records refused turn decisions| nats
@@ -49,6 +49,9 @@ before the notice was saved.
 The models process follows the recorded switch-on when choosing how to call a provider.
 After switch-on it uses the checked call's saved provider key. A leftover fallback key
 setting stops startup. Configuration reloads keep the same mode.
+
+It asks the root supervisor to stop executors after the computer accepts a signed
+work gate. It saves pausing only after checking both receipts. This grants no control.
 
 Personal memory writes refuse access withdrawn before the fact is saved, including a
 removed write grant or a disabled assistant. They keep the original access time limit.

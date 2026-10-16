@@ -14,11 +14,14 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.->|signs memory passes| auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
-  auth -->|reads readiness, control and saved budget refusals| events["Event log<br/>saved events"]
+  auth -->|rebuilds readiness, control, budget refusals and pausing from events| events["Event log<br/>saved events"]
   auth -.->|checks chat turns and refuses native task passes| catalogue["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for
+
+It rebuilds requested and pausing computer control from saved events. Both states
+refuse new work. Rebuilding these facts contacts no computer or supervisor.
 
 - Keep control intent separate from computer readiness. Refuse work passes while control is pending.
 
@@ -32,7 +35,7 @@ flowchart LR
   exact sign-in identities from another organisation.
 - Keep return links on the same website and end the Zitadel browser session at sign-out.
 - Sign stop requests that expire after thirty seconds and cannot be used for AI calls.
-  Sending these requests to computers is not built yet.
+  The server sends them before reconnecting computer work.
 - Sign and check short-lived passes for computers and individual chat turns.
   Keep a saved provider choice and the server-recorded shared context class in a
   turn pass and each renewed pass, then refuse a different choice.

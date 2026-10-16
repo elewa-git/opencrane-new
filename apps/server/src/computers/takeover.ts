@@ -113,7 +113,7 @@ async function confirmRequest(store: EventStore, silo: string, conversationId: s
 
 function repeatedRequest(previous: NonNullable<ComputerSummary['control']>,
   memberId: string, input: ControlRequest) {
-  if (previous.phase === 'requested' && previous.commandId === input.commandId &&
+  if (previous.phase !== 'unverified' && previous.commandId === input.commandId &&
       previous.requesterId === memberId && previous.conversationId === input.conversationId &&
       previous.requesterEventId === input.requesterEventId && previous.generation === input.generation) {
     return previous;

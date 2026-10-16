@@ -616,6 +616,15 @@ a SHA-256 review digest and parent-key ciphertext. It accepts no file or plainte
 `prepare-gateway-configuration` subscribes only to `mcp.server_published`.
 No event type or field was added. Withdrawal-only preparation remains deferred.
 
+## Saved computer pausing
+
+`takeover.pausing` names the computer, generation, Pod, takeover and affected turns.
+It records bridge and supervisor epochs, `executionProof: exited` and
+`quietProof: unavailable`. It grants no writer or work admission. The server saves
+it only after matching receipts, with one conditional computer-stream append.
+Replay rebuilds the phase without calling the computer. Paused/failure records and
+full quiet proof remain later work.
+
 ## Budget admission refusal records
 
 Chat `computer.turn_closed` records accept optional `budgetStopId`. Older closes

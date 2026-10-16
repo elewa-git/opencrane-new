@@ -300,7 +300,7 @@ while (true) {
     expect(before).toContain('setInterval');
     expect(before).toContain('app-server');
     if (failure) await computer.exec('rm', '/usr/bin/python3');
-    let result = await control(computer);
+    let result = await boundControl(computer);
     if (failure) {
       expect(result).toContain('400\n');
       expect(result).toContain('"controlEnabled":false');
@@ -312,6 +312,10 @@ while (true) {
     expect(result).toContain('"controlEnabled":false');
     expect(result).toContain('"quietProof":"unavailable"');
     expect(await inventory(computer)).toBe('[]');
+    const repeated = await control(computer);
+    expect(repeated).toContain('"executionQuiet":true');
+    await computer.restart();
+    await expectAdmissionClosed(computer);
     // Keep the desktop running because executor exit cannot prove browser input has drained.
     expect(await computer.exec('pgrep', '-x', 'Xvnc')).toMatch(/^\d+$/u);
   } finally {
@@ -329,11 +333,15 @@ async function refusesForgeryAndRecovers() {
     for (const uid of [1000, 1001, 1002, 1003]) {
       await expect(control(computer, attempt, uid)).rejects.toThrow('EACCES');
     }
+    for (const change of [{ podUid: 'other' }, { generation: 2 }, { computerId: 'other' }]) {
+      expect(await boundControl(computer, change)).toContain('400\n');
+    }
     const wrongPod = { ...attempt, podUid: 'another-pod' };
     expect(await control(computer, wrongPod)).toContain('400\n');
     const first = await control(computer);
     expect(first).toContain('"takeoverId":"stop-test"');
     expect(first).toContain('"affectedTurnIds":["blocked-turn"]');
+    expect(await boundControl(computer, { takeoverId: 'other' })).toContain('400\n');
     const conflict = { ...attempt, takeoverId: 'another-attempt' };
     expect(await control(computer, conflict)).toContain('400\n');
     await computer.restart();
@@ -382,3 +390,16 @@ socket.on('error', error => { throw error; });
 }
 it('keeps executor admission closed when a crash leaves an unreadable gate',
   damagedGateStaysClosed, 60_000);
+
+async function boundControl(computer: Computer, changes = {}) {
+  const helper = `
+import { spawnSync } from 'node:child_process';
+const result = spawnSync('node', ['--experimental-strip-types', '/app/src/stop-executor.ts'], {
+  input: process.argv[1], encoding: 'utf8',
+});
+if (result.status !== 0) process.stdout.write('400\\n{"controlEnabled":false}');
+else process.stdout.write('200\\n' + result.stdout);
+`;
+  const request = { computerId: 'computer', ...attempt, ...changes };
+  return computer.exec('node', '--input-type=module', '-e', helper, JSON.stringify(request));
+}

@@ -23,7 +23,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes and public keys| computer
-  server["apps/server<br/>the back end"] <-->|turns, files, shared history, individual stops, signed work gates and reports| computer
+  server["apps/server<br/>the back end"] <-->|turns, files, shared history, individual stops, signed work gates, root stop receipts and reports| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer --> supervisor["Root supervisor<br/>protected launch, admission and exit checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
@@ -41,6 +41,8 @@ flowchart LR
   identity. Codex can read the key, but cannot use it to sign requests or change it.
   Older deliveries without a key still work; computer-wide stop requests need a key.
 - Runs the bridge that receives chat turns and sends progress reports to the server.
+- Returns a checked root supervisor receipt after stopping local executors. Saved stop
+  gates keep executor admission closed after a restart. Desktop control stays unavailable.
 - Checks signed computer-wide stop requests against its saved identity and generation
   before stopping any work.
 - Disables Node debugging in trusted processes so local programs cannot use a debugger

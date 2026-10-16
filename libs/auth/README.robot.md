@@ -227,6 +227,9 @@ missing input check.
 computer/generation/Pod, lease reference, affected turns and requested time.
 `readComputerControl` returns a copy after catching up with saved events. It is
 an internal reader; callers must check access before exposing any private fields.
+`takeover.pausing` advances a matching request and preserves its requester and
+command identity. A mismatched record becomes unverified and still refuses work.
+Replay runs no stop or other outside action.
 Generation replacement preserves control until a later checked recovery contract.
 Old `takeover.started` and `takeover.ended` shapes become unverified control and
 refuse work passes. Neither shape restores work or grants a writer.
@@ -238,7 +241,7 @@ refuse work passes. Neither shape restores work or grants a writer.
 Its input names `silo`, `computer`, `assistant`, `generation`, `podUid`,
 `takeoverId` and `affectedTurnIds`. The gateway and decision-service audiences
 refuse it. Only trusted server code may call this signer after saving intent;
-there is no server caller or delivery path yet. Token values must never enter
+the bridge connection delivers it before resume. Token values must never enter
 logs, errors, events, receipts or API responses. `test/tokens.test.ts` checks
 the signature, claims, expiry and audience separation with a real issuer key.
 

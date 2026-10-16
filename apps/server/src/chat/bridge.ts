@@ -1,3 +1,4 @@
+import { executorStop } from '../computers/stop-executor.ts';
 import { childRequestHeld } from './child-hold.ts';
 import { createHash } from 'node:crypto';
 import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
@@ -30,7 +31,8 @@ import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
 
 type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
-  Partial<Pick<ChatOptions, 'binding'>>;
+  Partial<Pick<ChatOptions, 'binding'>> &
+  Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type BridgeInput = { url: string; computerId: string; assistantId: string; bearer: string };
 type ReportQueue = { pending: Promise<void>; count: number; bytes: number };
 const receiptData = z.object({ type: z.literal('file_received') });
@@ -475,7 +477,9 @@ async function openBridge(options: WatchOptions, tokens: Tokens, kube: SandboxCl
   const proxy = proxyUrl.replace('http:', 'ws:');
   const pod = `${proxy}/api/v1/namespaces/${kube.namespace}/pods/${computer.computerId}:8081`;
   const input = { ...computer, bearer: token.value, url: `${pod}/proxy/bridge` };
-  const connected = await connectBridge(options, input, tokens);
+  const stopExecution = executorStop(kube.kubeconfig, kube.namespace);
+  const bridgeOptions = { ...options, stopExecution };
+  const connected = await connectBridge(bridgeOptions, input, tokens);
   function recordRejection() {
     if (!connected.rejection) return;
     refused.add(computer.computerId);

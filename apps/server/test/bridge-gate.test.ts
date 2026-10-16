@@ -105,7 +105,7 @@ async function realReceipt() {
   const before = await test.store.head('computer-assistant');
   const start = performance.now();
   await link.control.send();
-  function received() { return link.control.receipt !== undefined; }
+  function received() { return link.control.receipt?.type === 'bridge_quiet'; }
   await until(received, 2000);
   expect(performance.now() - start).toBeLessThan(2000);
   expect(link.control.receipt).toMatchObject({ type: 'bridge_quiet',
@@ -468,12 +468,13 @@ it('waits for one in-flight gate when intent arrives during report replay',
 
 async function savesPausing() {
   const stops: StopInput[] = [];
-  async function stopExecution(input: StopInput) {
+  function stopExecution(input: StopInput) {
     stops.push(input);
     const { computerId: _computer, ...binding } = input;
-    return { kind: 'executor_stop', ...binding, epoch: 'supervisor-epoch',
+    const receipt = { kind: 'executor_stop', ...binding, epoch: 'supervisor-epoch',
       executionQuiet: true, executionInventory: [], quietProof: 'unavailable',
       controlEnabled: false };
+    return Promise.resolve(receipt);
   }
   const test = await setup(true, stopExecution);
   await test.save();
@@ -501,3 +502,94 @@ async function savesPausing() {
 function isTurn(frame: Record<string, unknown>) { return frame['type'] === 'turn'; }
 it('saves pausing after a verified bridge gate and bound root stop, and replays without effects',
   savesPausing);
+
+const badStops = [
+  {}, { podUid: 'other' }, { generation: 2 }, { takeoverId: 'other' },
+  { affectedTurnIds: [] }, { epoch: '' }, { executionQuiet: false },
+  { executionInventory: ['process'] }, { quietProof: 'complete' },
+  { controlEnabled: true }, { rawOutput: 'protected-process' },
+];
+function stopped(input: StopInput, changes = {}) {
+  const { computerId: _computer, ...binding } = input;
+  return { kind: 'executor_stop', ...binding, epoch: 'supervisor-epoch',
+    executionQuiet: true, executionInventory: [], quietProof: 'unavailable',
+    controlEnabled: false, ...changes };
+}
+async function refusesStop(changes: Record<string, unknown>) {
+  const completed = Promise.withResolvers<void>();
+  function stop(input: StopInput) {
+    completed.resolve();
+    if (Object.keys(changes).length === 0) return Promise.resolve({});
+    return Promise.resolve(stopped(input, changes));
+  }
+  const test = await setup(true, stop);
+  await test.save();
+  const before = await test.store.head('computer-assistant');
+  const link = await test.connect();
+  await completed.promise;
+  await link.control.settled();
+  expect(await test.store.head('computer-assistant')).toBe(before);
+  expect(await readComputerControl(test.store, test.silo, 'assistant'))
+    .toMatchObject({ phase: 'requested' });
+}
+it.each(badStops)('keeps requested after an empty or forged supervisor result %j', refusesStop);
+
+async function recoversTransition(fault: string) {
+  const stopping = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let first = true;
+  async function stop(input: StopInput) {
+    stopping.resolve();
+    await release.promise;
+    if (first && fault === 'stop') {
+      first = false;
+      throw new Error('protected-process');
+    }
+    return stopped(input);
+  }
+  const test = await setup(true, stop);
+  await test.save();
+  const before = await test.store.head('computer-assistant');
+  const append = test.store.append.bind(test.store);
+  const eventType = z.object({ type: z.string() });
+  async function interruptedAppend(...args: Parameters<typeof append>) {
+    const event = eventType.parse(args[0].event);
+    if (first && event.type === 'takeover.pausing') {
+      first = false;
+      if (fault === 'after') await append(...args);
+      throw new Error('Lost append reply');
+    }
+    return append(...args);
+  }
+  if (fault === 'before' || fault === 'after') {
+    vi.spyOn(test.store, 'append').mockImplementation(interruptedAppend);
+  }
+  const link = await test.connect();
+  await stopping.promise;
+  if (fault === 'changed') {
+    await test.append('computer-assistant', 'computer.turn_closed', {
+      computerId: 'computer', assistantId: 'assistant', conversationId: 'chat',
+      turnId: 'first', requesterId: 'alice', task: 'chat_turn', status: 'completed' });
+  }
+  release.resolve();
+  await link.control.settled();
+  const expected = before + Number(fault === 'changed' || fault === 'after');
+  expect(await test.store.head('computer-assistant')).toBe(expected);
+  link.socket.terminate();
+  await link.settled();
+  const reconnected = await test.connect();
+  async function pausing() {
+    const control = await readComputerControl(test.store, test.silo, 'assistant');
+    return control?.phase === 'pausing';
+  }
+  await until(pausing);
+  await reconnected.control.settled();
+  const transitions = [];
+  for await (const row of test.store.readStream('computer-assistant')) {
+    if (row.event.type.startsWith('takeover.')) transitions.push(row.event.type);
+  }
+  expect(transitions).toEqual(['takeover.requested', 'takeover.pausing']);
+  expect(test.computer.calls).not.toContain('turn/start:thread-1');
+}
+it.each(['before', 'after', 'changed', 'stop'])(
+  'recovers one pausing transition after %s interruption without admitting work', recoversTransition);

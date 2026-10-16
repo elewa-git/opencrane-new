@@ -1,0 +1,1 @@
+- Computer control requests now stop local executors through the root supervisor and save pausing after checked receipts. Work stays blocked after a restart; desktop control remains unavailable.

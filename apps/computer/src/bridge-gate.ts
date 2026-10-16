@@ -23,6 +23,7 @@ export class BridgeGate {
       throw new Error('Different bridge gate');
     }
     this.binding = next;
+    return { type: 'bridge_gated', ...next, epoch: this.epoch };
   }
 
   async track(work: Promise<void>) {

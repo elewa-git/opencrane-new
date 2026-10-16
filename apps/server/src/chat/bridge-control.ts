@@ -1,3 +1,4 @@
+import { savePausing, type StopExecution } from './bridge-pausing.ts';
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { WebSocket } from 'ws';
@@ -11,17 +12,18 @@ const identifier = z.string().regex(/^[\w-]{1,200}$/u);
 const bindingData = z.object({ takeoverId: identifier, generation: z.int().positive(),
   affectedTurnIds: z.array(identifier).max(64) });
 const receiptFields = bindingData.extend({ epoch: identifier });
+const gatedData = receiptFields.extend({ type: z.literal('bridge_gated') }).strict();
 const unavailableData = receiptFields.extend({ type: z.literal('bridge_unavailable') }).strict();
 const quietData = receiptFields.extend({ type: z.literal('bridge_quiet'),
   interruptedTurnIds: z.array(identifier).max(64), preparingTurnIds: z.array(identifier).max(0),
   runningTurnIds: z.array(identifier).max(0), loadedThreadIds: z.array(identifier).max(0),
   heldApprovalIds: z.array(identifier).max(0), executorProof: z.literal('unavailable'),
   browserProof: z.literal('unavailable') }).strict();
-const receiptData = z.discriminatedUnion('type', [unavailableData, quietData]);
+const receiptData = z.discriminatedUnion('type', [gatedData, unavailableData, quietData]);
 const readyData = z.object({ computerId: z.string(), assistantId: z.string(),
   generation: z.int().positive(), podUid: z.string() });
 type Tokens = Awaited<ReturnType<typeof tokenIssuer>>;
-type Options = { store: EventStore; silo: string };
+type Options = { store: EventStore; silo: string; stopExecution?: StopExecution | undefined };
 type Computer = { computerId: string; assistantId: string };
 const logger = createLogger('bridge');
 
@@ -59,7 +61,7 @@ export async function readyBridgePass(options: Options, computer: Computer, toke
   return tokens.computer(details);
 }
 
-function requireReadyControl(control: Extract<ComputerControl, { phase: 'requested' }>,
+function requireReadyControl(control: Exclude<ComputerControl, { phase: 'unverified' }>,
   saved: Awaited<ReturnType<typeof facts>>, computer: Computer) {
   const ready = readyData.parse(saved.lifecycle?.event.data);
   if (saved.lifecycle?.event.type !== 'computer.ready'
@@ -94,10 +96,12 @@ function matchesReceipt(next: z.infer<typeof receiptData>, sent: z.infer<typeof 
 export function bridgeControl(options: Options, computer: Computer, tokens: Tokens | undefined,
   socket: WebSocket, refuse: (reason: string) => void) {
   let sent: z.infer<typeof bindingData> | undefined;
+  let sentPodUid: string | undefined;
   let receipt: z.infer<typeof receiptData> | undefined;
   let logged = false;
   let rejected = false;
   let sending: Promise<void> | undefined;
+  let pausing: Promise<void> | undefined;
 
   function unavailable() {
     if (logged) return;
@@ -110,7 +114,7 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
       const subject = `computer-${computer.assistantId}`;
       const position = await options.store.head(subject);
       const control = await readComputerControl(options.store, options.silo, computer.assistantId);
-      if (control?.phase !== 'requested') return false;
+      if (!control || control.phase === 'unverified') return false;
       const saved = await facts(options, computer);
       if (!tokens) throw new Error('Bridge issuer unavailable');
       const binding = requireReadyControl(control, saved, computer);
@@ -124,6 +128,7 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
       await fresh();
       if (sent || rejected || socket.readyState !== socket.OPEN) return false;
       sent = binding;
+      sentPodUid = control.podUid;
       const frame = { type: 'bridge_gate', gate: issued.value };
       socket.send(JSON.stringify(frame));
     } catch {
@@ -142,18 +147,28 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
   function finishedSending() {
     sending = undefined;
   }
+  function finishPausing() { pausing = undefined; }
+  function reconcile() {
+    if (pausing || !receipt || !options.stopExecution || rejected) return;
+    function stillAccepted() { return !rejected && socket.readyState === socket.OPEN; }
+    const progress = advance(options, computer, receipt, sentPodUid, stillAccepted);
+    pausing = progress.catch(unavailable).finally(finishPausing);
+  }
   function send() {
+    reconcile();
     // Share the current attempt so timer and connection checks never sign in parallel.
     if (!sending) sending = sendUntilChecked().finally(finishedSending);
     return sending;
   }
   function settled() {
-    return sending;
+    return Promise.all([sending, pausing]);
   }
   function receive(value: unknown) {
     if (typeof value !== 'object' || value === null) return false;
     const type: unknown = Reflect.get(value, 'type');
-    if (type !== 'bridge_quiet' && type !== 'bridge_unavailable') return false;
+    if (type !== 'bridge_gated' && type !== 'bridge_quiet' && type !== 'bridge_unavailable') {
+      return false;
+    }
     const parsed = receiptData.safeParse(value);
     if (!parsed.success || !sent || rejected || socket.readyState !== socket.OPEN
       || !matchesReceipt(parsed.data, sent, receipt)) {
@@ -162,8 +177,23 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
       refuse('Invalid bridge receipt');
     } else {
       receipt = parsed.data;
+      reconcile();
     }
     return true;
   }
   return { send, receive, settled, get receipt() { return receipt; } };
+}
+
+async function advance(options: Options, computer: Computer,
+  accepted: z.infer<typeof receiptData>, podUid: string | undefined,
+  stillAccepted: () => boolean) {
+  if (!options.stopExecution) return;
+  const position = await options.store.head(`computer-${computer.assistantId}`);
+  const control = await readComputerControl(options.store, options.silo, computer.assistantId);
+  if (!control || control.phase === 'unverified' || control.podUid !== podUid) return;
+  const saved = await facts(options, computer);
+  const binding = requireReadyControl(control, saved, computer);
+  if (!matchesReceipt(accepted, binding, undefined)) return;
+  await savePausing(options.store, options.silo, control, position,
+    accepted.epoch, options.stopExecution, stillAccepted);
 }

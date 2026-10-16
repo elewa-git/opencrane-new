@@ -845,6 +845,9 @@ turn; interrupt replies, thread closure, EOF and socket loss do not prove comple
 The receipt also waits for pending preparation, renewal, cleanup and approval sends,
 and checks unloaded threads. A failed cleanup leaves proof unavailable.
 
+`bridge_gated` immediately confirms the checked request and process-local epoch.
+It proves admission is closed, without waiting for interruption or claiming quiet.
+
 `bridge_quiet` binds the request, epoch and `interruptedTurnIds`. Its
 `preparingTurnIds`, `runningTurnIds`, `loadedThreadIds` and `heldApprovalIds` are empty.
 `executorProof` and `browserProof` are always `unavailable`. No content or passes
@@ -854,11 +857,17 @@ fails or takes 30 seconds. Neither receipt grants desktop control.
 The server now delivers this gate after saved intent, including to idle computers,
 and before `resume` on every reconnect. It checks the receipt's binding, first epoch,
 empty inventory and unavailable executor/browser proofs before retaining it in memory
-on that link. Invalid receipts close with 1008. No receipt is saved in the event log.
-Pausing/paused events, supervisor calls, hold cancellation, budget release, automation
-proof and crash recovery remain later work.
-Writer access and fresh-install qualification are also absent. The local tests use
-real authenticated sockets and stub Codex replies; they do not qualify a live computer.
+on that link. Invalid receipts close with 1008.
+
+After acceptance, authenticated root Pod exec runs `stop-executor.ts`. It checks the
+saved computer, generation and local Pod UID, then calls only the fixed supervisor
+socket's `/stop`. Input and output are capped at 16 KiB; the helper has a twelve-second
+limit. Errors contain only a fixed refusal. The server checks the returned identity,
+empty execution inventory and denial flags before saving `takeover.pausing`.
+The supervisor's disk gate survives restart. Its `quietProof: unavailable` is never
+complete quiet proof. Paused/failure events, browser and queued input proof, saved
+hold cancellation and writer access remain later work. Fresh-install qualification
+is NOT RUN. Local process tests use Docker and a fixture provider.
 The stop and refusal tests use real issuer keys and bridge sockets. Invalid gates
 are sent first before and after resume while memory-free and restricted turns run.
 They must leave work unchanged and return no gate receipt.
