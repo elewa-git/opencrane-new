@@ -97,10 +97,6 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     computerHistoryUnavailable = false, checkControl?: () => Promise<boolean>) {
     try {
       const conversationId = conversation.conversationId;
-      // Retry this chat next poll so delivery cannot overlap its unfinished Stop read.
-      if (checkingStops.has(conversationId)) {
-        return true;
-      }
       const head = await options.store.head(`conversation-${conversationId}`);
       const previous = seen.get(conversationId);
       const linkClosed = previous?.connectionId !== undefined &&
@@ -141,7 +137,11 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       const current = await snapshot(assistantId);
       return current.controlPending;
     }
-    function processSession(conversation: AgentSession) {
+    async function processSession(conversation: AgentSession) {
+      // Retry this chat next poll so delivery cannot overlap its unfinished Stop read.
+      if (checkingStops.has(conversation.conversationId)) {
+        return true;
+      }
       return process(conversation, assistant, computerHistoryUnavailable, checkControl);
     }
     const processing = sessions.map(processSession);
