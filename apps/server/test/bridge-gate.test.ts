@@ -691,7 +691,8 @@ async function refusesAcceptance(changes: Record<string, unknown>, saved = true)
   const receipt = { type: 'bridge_gated', takeoverId: 'takeover', generation: 1,
     affectedTurnIds: ['first', 'second'], epoch: 'old-epoch', ...changes };
   peer.send(JSON.stringify(receipt));
-  const [code, reason] = await closed;
+  const closedValues: unknown = await closed;
+  const [code, reason] = z.tuple([z.number(), z.instanceof(Buffer)]).parse(closedValues);
   expect(code).toBe(1008);
   expect(String(reason)).toBe('Invalid bridge receipt');
   await link.control.settled();

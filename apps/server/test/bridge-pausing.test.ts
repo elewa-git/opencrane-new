@@ -12,7 +12,7 @@ afterEach(async function closeFixture() {
 
 async function setup() {
   const test = await natsFixture();
-  cleanup = test.close;
+  cleanup = test.close.bind(test);
   const binding = { generation: 1, podUid: 'pod', takeoverId: 'takeover',
     affectedTurnIds: ['first', 'second'] };
   const intent = { ...binding, computerId: 'computer', assistantId: 'assistant',
