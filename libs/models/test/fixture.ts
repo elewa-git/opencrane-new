@@ -205,12 +205,18 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     requireCatalogue: function requireCatalogue(_serverId: string) {} };
   const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
     binding, 0, keys, undefined, dispatchOptions);
+  let gatewayChild: ChildProcess | undefined;
+  function rememberGatewayChild(child: ChildProcess,
+    stop: (signal?: NodeJS.Signals) => Promise<void>) {
+    gatewayChild = child;
+    registerGatewayCleanup(child, stop);
+  }
   let options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`, keyFile,
     port: await freePort(), readinessPort: await freePort(), decisionUrl: decision.url, issuer,
     mcpRoutes,
     ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }),
-    onChildSpawn: registerGatewayCleanup };
+    onChildSpawn: rememberGatewayChild };
   let gateway: Awaited<ReturnType<typeof startGateway>>;
   let refusalListener: ReturnType<typeof createServer> | undefined;
   let refusalClosed: Promise<unknown> = Promise.resolve();
@@ -287,7 +293,9 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   };
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { dispatchOptions, mcpPrecondition, tokens, keys, stopDispatch, refuseMcpConnection,
+  return { databaseUrl: dbs.queue.options.connectionString,
+    gatewayChild: () => gatewayChild,
+    dispatchOptions, mcpPrecondition, tokens, keys, stopDispatch, refuseMcpConnection,
     upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,

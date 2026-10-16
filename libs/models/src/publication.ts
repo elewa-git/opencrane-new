@@ -7,7 +7,8 @@ import type { ToolPolicy } from '@opencrane/protocol';
 export function publicationEntry(state: ToolPolicy) {
   const reviewed = state.reviewRevision !== undefined &&
     state.reviewRevision === state.policyRevision;
-  const candidate = { ...state, published: true };
+  // Prepare the reviewed replacement while calls remain held until its receipt arrives.
+  const candidate = { ...state, published: true, driftHeld: false };
   const available = isToolPolicyAvailable(candidate);
   if (!reviewed || !available || state.accountMode !== 'none') {
     return null;
