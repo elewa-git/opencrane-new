@@ -2935,9 +2935,10 @@ reads with that poll. Each assistant has one check in progress. This watcher doe
 not wait for conversation reads or uploads. It does not reconnect refused computers or wake
 suspended computers for saved control intent.
 
-During connection setup, each link checks for a gate every 250 ms while the server
-reads saved reports. Timer and connection checks share one signing attempt. A computer
-stream change during signing causes a fresh request, identity and membership check
+During connection setup, `bridge-resume.ts` checks each link for a gate every 250 ms
+while the server reads saved reports. The timer and direct checks share one signing
+attempt. A computer stream change during signing causes a fresh request, identity
+and membership check
 before another signing attempt. Connection setup waits for this retry before sending
 `resume`, and checks again after report replay in case intent arrived during replay.
 Finishing setup or closing the socket stops that link's timer. The independent

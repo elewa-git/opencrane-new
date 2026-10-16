@@ -18,14 +18,15 @@ import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { bridgeControl, readyBridgePass } from './bridge-control.ts';
 import { turnCommand, requireTurnMember, TurnAdmissionRejected,
   BudgetAdmissionRejected } from './turns.ts';
-import { recordBudgetRefusal, recoverBudgetRefusals } from './budget-refusal.ts';
+import { recordBudgetRefusal } from './budget-refusal.ts';
 import { readChatFacts } from './chat-summary.ts';
 import { privateContext } from './private-context.ts';
 import { sharedContext } from './shared-context.ts';
 import { creationEvent } from './private-session.ts';
 import { chatHistory } from './commands.ts';
-import { recordReport, reportPosition, ReportRejected, agentSessionData } from './reports.ts';
+import { recordReport, ReportRejected, agentSessionData } from './reports.ts';
 import { bridgeApprovals } from './bridge-approvals.ts';
+import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
 
 type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
@@ -269,30 +270,6 @@ function reportReceiver(options: BridgeOptions, input: BridgeInput,
     return Promise.all(pending);
   }
   return { receiveReport, settled };
-}
-
-async function resumeBridgeReports(options: BridgeOptions, input: BridgeInput,
-  socket: WebSocket, control: ReturnType<typeof bridgeControl>) {
-  function pollControl() {
-    void control.send();
-  }
-  // Check this socket while setup is still reading reports. The watcher takes over afterwards.
-  const timer = setInterval(pollControl, 250);
-  function stopPolling() {
-    clearInterval(timer);
-  }
-  socket.once('close', stopPolling);
-  try {
-    await control.send();
-    await recoverBudgetRefusals(options.store, options.silo, input.assistantId);
-    const position = await reportPosition(options.store, options.silo, input.computerId);
-    await control.send();
-    const resume = { type: 'resume', since: position, approvalWaiting: true };
-    socket.send(JSON.stringify(resume));
-  } finally {
-    stopPolling();
-    socket.off('close', stopPolling);
-  }
 }
 
 export async function connectBridge(options: BridgeOptions, input: BridgeInput, tokens?: Tokens) {
