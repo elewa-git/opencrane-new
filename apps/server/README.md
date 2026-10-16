@@ -20,6 +20,7 @@ flowchart LR
   server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates without waiting for chats; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies| computer
+  server -->|records refused turn decisions| nats
 ```
 
 Tool discovery records the exact definitions and how long the check remains valid.
