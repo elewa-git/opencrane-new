@@ -27,6 +27,13 @@ function requestsFor(spy: ReturnType<typeof open>['fetchSpy'], path: string) {
   return spy.mock.calls.filter(([url]) => url === path);
 }
 
+function clickBack(element: HTMLElement): void {
+  const buttons = Array.from(element.querySelectorAll('button'));
+  const found = buttons.find(button => button.textContent?.trim() === 'Back');
+  if (!found) throw new Error('Missing Back button');
+  found.click();
+}
+
 const postBodySchema = z.object({
   commandId: z.string(),
   answers: z.object({ step: z.literal(2), workDescription: z.string(),
@@ -87,7 +94,7 @@ describe('survey work step', () => {
     expect(element.querySelector('time')?.dateTime).toBe(secondStep.time);
     expect(element.textContent).toContain('Step 3 of 4');
     expect(requestsFor(fetchSpy, '/api/chat/groups?limit=16')).toHaveLength(0);
-    element.querySelector<HTMLButtonElement>('button')?.click();
+    clickBack(element);
     await ready(fixture, element);
     expect(element.querySelector<HTMLTextAreaElement>('#survey-work')?.value).toBe('Teaching');
     expect(element.textContent).toContain('Only the first 16 groups are used.');
@@ -115,7 +122,7 @@ describe('survey work step', () => {
     const body = postedBody(fetchSpy);
     expect(body).toMatchObject({ generation: 2, expectedPosition: 7,
       answers: { step: 2, workDescription: 'Teaching', groupIds: ['group-a'] } });
-    element.querySelector<HTMLButtonElement>('button')?.click();
+    clickBack(element);
     await ready(fixture, element);
     enter(element, 'Teaching');
     fixture.detectChanges();
@@ -233,7 +240,7 @@ describe('survey work step', () => {
       }
       return reply(twoSteps);
     });
-    element.querySelector<HTMLButtonElement>('button')?.click();
+    clickBack(element);
     fixture.detectChanges();
     expect(element.textContent).toContain('Checking your current groups');
     const back = Array.from(element.querySelectorAll('button'))
@@ -262,7 +269,7 @@ describe('survey work step', () => {
         }
         return reply(twoSteps);
       });
-      element.querySelector<HTMLButtonElement>('button')?.click();
+      clickBack(element);
       fixture.detectChanges();
       const back = Array.from(element.querySelectorAll('button'))
         .find(button => button.textContent?.trim() === 'Back');
@@ -298,7 +305,7 @@ describe('survey work step', () => {
       }
       return reply(twoSteps);
     });
-    element.querySelector<HTMLButtonElement>('button')?.click();
+    clickBack(element);
     fixture.detectChanges();
     const back = Array.from(element.querySelectorAll('button'))
       .find(button => button.textContent?.trim() === 'Back');
@@ -321,12 +328,12 @@ describe('survey work step', () => {
       fixture.detectChanges();
       expect(element.textContent).toContain('Step 4 of 4');
     });
-    element.querySelector<HTMLButtonElement>('button')?.click();
+    clickBack(element);
     await vi.waitFor(() => {
       fixture.detectChanges();
       expect(element.textContent).toContain('Step 3 of 4');
     });
-    element.querySelector<HTMLButtonElement>('button')?.click();
+    clickBack(element);
     await ready(fixture, element);
     expect(element.textContent).toContain('Changing step 2 clears later saved answers');
     enter(element, 'Mentoring');
@@ -355,7 +362,7 @@ describe('survey work step', () => {
       fixture.detectChanges();
       expect(element.textContent).toContain('Step 3 of 4');
     });
-    element.querySelector<HTMLButtonElement>('button')?.click();
+    clickBack(element);
     await vi.waitFor(() => {
       fixture.detectChanges();
       expect(element.textContent).toContain('Editors');
@@ -381,7 +388,7 @@ describe('survey work step', () => {
         if (url === '/api/chat/groups?limit=16') return reply({}, status);
         return reply(twoSteps);
       });
-      element.querySelector<HTMLButtonElement>('button')?.click();
+      clickBack(element);
       await vi.waitFor(() => {
         fixture.detectChanges();
         expect(element.textContent).toContain(status === 401
@@ -399,7 +406,7 @@ describe('survey work step', () => {
       fixture.detectChanges();
       expect(element.textContent).toContain('Step 3 of 4');
     });
-    element.querySelector<HTMLButtonElement>('button')?.click();
+    clickBack(element);
     await ready(fixture, element);
     const back = Array.from(element.querySelectorAll('button'))
       .find(button => button.textContent?.trim() === 'Back');

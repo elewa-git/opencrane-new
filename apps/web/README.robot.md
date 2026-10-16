@@ -25,11 +25,18 @@ to keep them or choose to edit step 1 and review later steps. The page checks
 `/auth/me` even when progress has saved answers. A 200 reply with
 `authenticated: false`, or a 401 or 403, clears those answers and any form values.
 Late replies from that load cannot restore them.
-Steps 3 and 4 show an unavailable message. `/account` reads only
+Step 3 saves direct, warm or formal tone, brief or detailed length, and a
+citations choice. The grouped controls use arrow keys to move and Space to select.
+Step 4 saves distinct choices from the three offered tasks and an optional own task
+of at most 4,096 UTF-8 bytes. These are wishes only; they grant or install nothing.
+Back sends no write. Changing style warns before clearing a later task answer.
+After all four steps, the page links to `/account/assistant`, which currently shows
+that persona review is unavailable. `/account` reads only
 the onboarding `state` and links to the survey for `not_started` or `survey`.
 No survey answer is stored in the address, console or browser storage.
 `npm run visual:screen-p4-19-survey` uses intercepted replies to capture both widths.
 `npm run visual:screen-p4-19-survey2` captures the work step and its save states.
+`npm run visual:screen-p4-19-survey3` captures style, tasks, save states and completion.
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
