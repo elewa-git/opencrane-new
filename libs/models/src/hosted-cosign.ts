@@ -18,11 +18,12 @@ export async function verifyPublisherSignature(binary: string, publicKey: string
     await writeFile(keyPath, publicKey, privateFile);
     await writeFile(payloadPath, payload, privateFile);
     await writeFile(signaturePath, signature, privateFile);
-    // Use operator trust without a public transparency service. Still verify the signature.
+    // Supply local key material to stop Cosign 2.6.1 starting its TUF client.
+    // Skip transparency logs, but still verify the signature with the operator key.
     const argumentsList = ['verify-blob', '--key', keyPath, '--signature', signaturePath,
       '--offline', '--insecure-ignore-tlog', payloadPath];
     const options = { timeout: 10_000, maxBuffer: 64 * 1024,
-      env: { HOME: directory, PATH: '/usr/bin:/bin' } };
+      env: { HOME: directory, PATH: '/usr/bin:/bin', SIGSTORE_REKOR_PUBLIC_KEY: keyPath } };
     await execute(binary, argumentsList, options);
     return 'pass';
   } catch (error) {
