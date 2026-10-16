@@ -6,7 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { afterEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { computerTokenAudience } from '@opencrane/auth';
+import { computerTokenAudience, readComputerControl, computerSummary } from '@opencrane/auth';
 import { databases, until } from '@opencrane/authz/testing';
 import { envelope } from '@opencrane/models';
 import { conversations, pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -24,7 +24,9 @@ afterEach(async function closeFixture() {
   vi.restoreAllMocks();
 });
 
-async function setup(real = false) {
+type StopInput = { computerId: string; generation: number; podUid: string;
+  takeoverId: string; affectedTurnIds: string[] };
+async function setup(real = false, stopExecution?: (input: StopInput) => Promise<unknown>) {
   const nats = await natsFixture();
   const computer = await computerFixture();
   computer.socket.terminate();
@@ -46,7 +48,8 @@ async function setup(real = false) {
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing port');
   const url = real ? computer.socket.url : `ws://127.0.0.1:${address.port}`;
-  const options = { store: nats.store, silo: 'test', keys: conversationKeys(dirname(computer.keyPath)) };
+  const options = { store: nats.store, silo: 'test', keys: conversationKeys(dirname(computer.keyPath)),
+    stopExecution };
   const input = { url, computerId: 'computer', assistantId: 'assistant', bearer: 'test' };
   const links: Awaited<ReturnType<typeof connectBridge>>[] = [];
   async function append(subject: string, type: string, data: unknown) {
@@ -462,3 +465,39 @@ async function gateSigningDuringReplay() {
 }
 it('waits for one in-flight gate when intent arrives during report replay',
   gateSigningDuringReplay);
+
+async function savesPausing() {
+  const stops: StopInput[] = [];
+  async function stopExecution(input: StopInput) {
+    stops.push(input);
+    const { computerId: _computer, ...binding } = input;
+    return { kind: 'executor_stop', ...binding, epoch: 'supervisor-epoch',
+      executionQuiet: true, executionInventory: [], quietProof: 'unavailable',
+      controlEnabled: false };
+  }
+  const test = await setup(true, stopExecution);
+  await test.save();
+  const link = await test.connect();
+  async function pausing() {
+    const control = await readComputerControl(test.store, test.silo, 'assistant');
+    return control?.phase === 'pausing';
+  }
+  await until(pausing, 2000);
+  expect(stops).toEqual([{ computerId: 'computer', podUid: 'pod', generation: 1,
+    takeoverId: 'takeover', affectedTurnIds: ['first', 'second'] }]);
+  await link.control.send();
+  const rebuilt = computerSummary.empty();
+  const types = [];
+  for await (const row of test.store.readStream('computer-assistant')) {
+    computerSummary.add(rebuilt, row);
+    types.push(row.event.type);
+  }
+  expect(rebuilt.control?.phase).toBe('pausing');
+  expect(types).toEqual(['computer.claimed', 'computer.ready',
+    'takeover.requested', 'takeover.pausing']);
+  expect(stops).toHaveLength(1);
+  expect(test.frames.some(isTurn)).toBe(false);
+}
+function isTurn(frame: Record<string, unknown>) { return frame['type'] === 'turn'; }
+it('saves pausing after a verified bridge gate and bound root stop, and replays without effects',
+  savesPausing);
