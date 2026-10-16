@@ -38,14 +38,46 @@ they do not prove that the remote application received or processed those bytes.
 `connectedAt` is the time the checked upstream connected, or null if it never did.
 `address` is the checked IP passed to the connector, or null before that step.
 Reasons are finished (socket ended), failed (transport error), refused (guard refusal),
-expired or revoked (explicit closure). The first close determines the record.
+expired, revoked (explicit closure) or unavailable (explicit outage closure). The first close determines the record.
 The gateway fixture registers one relay after each allowed guarded CONNECT decision.
 Own checks are in [the relay receipt](../../docs/process/p3-20-pr2c-relays.md).
 
 NOT BUILT: checked-set fallback or production wiring.
-Capabilities, admission rules, durable receipts and watchdogs remain later work.
+Capabilities, admission rules and watchdogs remain later work.
+Durable closure receipts are described below.
 CONNECT stays off at startup. Fresh-install egress qualification remains NOT RUN.
 Own checks are recorded in [the receipt](../../docs/process/p3-20-pr2b-guard.md).
+
+## Durable relay closure receipts (P3-20 PR 2d; Part of #61)
+
+`createEgressReceipt` is private to this package. Create it before registering a relay,
+with its trusted silo, request, permit, channel and exact destination. Its stable id
+hashes JSON `[silo, permitId, "tunnel-close"]`; the stream is `egress-<requestId>`. Pass `capture` to the existing close
+callback. The callback copies validated fields into one pending record and starts
+one asynchronous save; both sockets have already been destroyed. It rejects changed
+records. The private caller owns the directory and one receipt object per relay.
+
+The writer retains one JSONL file of at most 4 KiB with mode 0600. It syncs a temporary
+file, links it without replacing existing evidence, then syncs the directory before
+appending. Disk failures retain the record in memory. Store failures retain it on disk.
+`retry` joins an in-flight save, otherwise attempts one append with a one-second
+store deadline. Each read also has a one-second deadline. No retry timer is installed.
+The saved event must match the original before status advances to saved. The evidence
+file stays available for explicit restart recovery; this function scans no directory.
+It returns pending on unavailable storage and never repeats network work.
+
+`egress.observed` stores the callback fields and destination digest. Finished, expired,
+revoked and unavailable closures have unknown outcome; failed and refused have error.
+No closure proves successful processing. Invalid or foreign files are refused before
+append. The event parser requires the silo-derived id, stream and system/models source.
+This is application validation; separate process NATS credentials remain #432.
+
+Tests use the pinned gateway, recording upstream, real NATS and PostgreSQL audit replay.
+Automatic outage detection, admission, capability binding, revocation wiring, restart
+scanning and native enablement remain later parts. The authorised original-receipt API
+is deferred to keep this part below about 600 changed lines. The existing audit table
+rebuilds receipt ids and outcomes; richer safe connection detail reads are still deferred.
+Production CONNECT and command networking stay off. Fresh-install qualification: NOT RUN.
 
 ## Native egress route qualification
 

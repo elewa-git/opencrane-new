@@ -30,7 +30,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication subscriptions, nightly memory reviews and records, and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks publication receipts and gateway records, tool admission, personal connection references and blocks, expired saves, control intent and pausing, private and shared turns, root allowances, root dispatch checks, source-linked root stops, overruns, spending and safe spending stop references| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission, personal connection references and blocks, expired saves, control intent and pausing, private and shared turns, root allowances, root dispatch checks, source-linked root stops, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
@@ -40,6 +40,10 @@ The back end checks tool hashes against their saved definitions. A hash is a fix
 value calculated from those definitions. Older records remain readable for replay.
 
 ## What it is responsible for
+
+Check relay closure receipts for safe fields, a stable identity and the models writer.
+Older destination observations remain readable. New socket receipts never claim that
+an operation succeeded.
 
 Keep the spending stop reference on a refused chat start, so reconnecting can
 finish recording the same budget refusal.

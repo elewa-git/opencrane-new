@@ -5,7 +5,7 @@ import { connectEgressDestination, systemTransport, type EgressTransport } from 
 
 type Destination = { host: string; port: number };
 type Registration = Destination & { permitId: string; expiresAt: number };
-type CloseReason = 'finished' | 'failed' | 'refused' | 'expired' | 'revoked';
+type CloseReason = 'finished' | 'failed' | 'refused' | 'expired' | 'revoked' | 'unavailable';
 export type EgressCloseRecord = Destination & {
   permitId: string;
   address: string | null;
@@ -182,9 +182,9 @@ export class EgressRelayRegistry {
     }
   }
 
-  closeAll() {
+  closeAll(reason: 'revoked' | 'unavailable' = 'revoked') {
     for (const relay of this.relays.values()) {
-      relay.close('revoked');
+      relay.close(reason);
     }
   }
 }

@@ -114,7 +114,7 @@ no access and start no model work. Replay copies ciphertext without touching key
 | `credential.released` | credential broker (P3-8; fixture contract) | audit lease metadata only | none; never release on replay |
 | `egress.destination_allowed` | Owner/Admin destination command | egress-policy, audit | none; networking stays off |
 | `egress.destination_revoked` | Owner/Admin destination command | egress-policy, audit | none; networking stays off |
-| `egress.observed` | egress observer (networking disabled; existing records remain readable) | audit | none; never dispatch on replay |
+| `egress.observed` | relay close reaction (networking disabled; older observations remain readable) | audit | none; never dispatch on replay |
 | `gateway.observation_recorded` | safe gateway log ingest | audit, including unverified JWT failures | none; no asserted requester identity |
 | `decision.recorded` | ext_authz; server bridge for budget admission refusals | audit; MCP decisions feed conversations with turn id, outcome, reason, request id and optional call id and approval id; model budget refusals keep only turn id and reason | none; admission is not an observed effect |
 
@@ -796,7 +796,18 @@ positions show append order, without claiming causal order between streams.
 
 Confirmed `egress.observed` success or error determines the permitted egress
 summary, just as `effect.observed` does for a model call. Missing observations
-remain unknown.
+remain unknown. New relay close receipts always use unknown or error, never success:
+a socket byte count cannot prove remote processing. The optional modern shape has
+`observationId` and `relay`: exact host/port, checked address or null, permit id,
+reason, byte counts and registered/connected/closed times in integer milliseconds.
+Reasons are finished, failed, refused, expired, revoked and unavailable.
+The id is SHA-256 of JSON `[silo, permitId, "tunnel-close"]`, chosen before registration.
+The event and command ids match it on `egress-<requestId>`, from system/models.
+The reaction retains at most 4 KiB of safe JSONL per relay before its conditional
+append. Files contain no tunnel data or credentials. Identical retries read the
+original event; conflicting records are refused. The audit projection rebuilds the
+receipt id and outcome without running the reaction or opening a relay. Rich receipt
+reads, automatic retry scheduling and startup reconciliation remain later work.
 
 The budget reaction raises one `security.alert_raised` for an unmatched model
 observation, including a reservation without an allowing decision. Missing usage

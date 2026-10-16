@@ -633,3 +633,13 @@ Chat `computer.turn_closed` records accept optional `budgetStopId`. Older closes
 remain valid. The server keeps this reference when a spending limit refuses a
 start, so a retry can record the same decision after the ceiling rises.
 `decision.recorded` also covers these pre-call model denials from the server bridge.
+
+## Relay closure observation
+
+`egress.observed` accepts the existing strict shape or a modern strict shape with
+`observationId` and `relay`. The modern record carries the close callback's safe
+host, port, address, permit, byte counts, integer times and fixed reason. It permits
+only unknown/error outcomes. Parse checks bind its id and commandId to the SHA-256
+of JSON `[silo, permitId, "tunnel-close"]`, its exact egress stream and system/models.
+New fields pass the unchanged risky-name check. Existing legacy observations remain
+readable. No new event type or handler subscription is added.

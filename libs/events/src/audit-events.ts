@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { egressObservationSchema, legacyEgressObservationSchema } from './egress-observation.ts';
 import { event } from './definition.ts';
 
 const id = z.string().regex(/^[\w:.-]{1,300}$/u);
@@ -9,9 +10,8 @@ export const auditEvents = [
   event('credential.released', 'credential', 'A request-bound credential lease was recorded before forwarding.',
     z.object({ ...call, connectionId: id, profileId: id, leaseId: id, generation: z.int().nonnegative() }).strict(),
     { requestId: 'request', permitId: 'permit', connectionId: 'connection', profileId: 'default', leaseId: 'lease', generation: 1 }),
-  event('egress.observed', 'egress', 'The gateway observed a permitted command or desktop destination call.',
-    z.object({ ...call, channel: z.enum(['command', 'desktop']), destinationDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-      outcome: z.enum(['success', 'error', 'unknown']) }).strict(),
+  event('egress.observed', 'egress', 'A relay reported closure; earlier destination observations remain readable.',
+    z.union([legacyEgressObservationSchema, egressObservationSchema]),
     { requestId: 'request', permitId: 'permit', channel: 'command', destinationDigest: '0'.repeat(64), outcome: 'success' }),
   event('gateway.observation_recorded', 'gateway', 'Safe gateway evidence retained even when JWT or persistence refused dispatch.',
     z.object({ requestId: z.uuid(), outcome: z.enum(['error', 'unknown']),

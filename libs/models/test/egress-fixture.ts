@@ -72,6 +72,10 @@ export async function egressFixture(enabled = true, guarded = false) {
     closeRecords.push(record);
     receipt.capture(record);
   }
+  async function restartStore() {
+    await nats.stop();
+    await nats.restart();
+  }
   function restartReceipt() {
     return createEgressReceipt(nats.store, 'test', binding, directory);
   }
@@ -241,6 +245,7 @@ export async function egressFixture(enabled = true, guarded = false) {
     for (const socket of sockets) socket.destroy();
     await relayClosed;
     await decisionDown();
+    await receipt.retry();
     await nats.close();
     await rm(directory, { recursive: true, force: true });
   }
@@ -249,7 +254,7 @@ export async function egressFixture(enabled = true, guarded = false) {
   }
   return { token, tunnel, actor, order, port, controlRequests, decisionDown,
     registry, closeRecords, permit, activeConnections, receipt, restartReceipt,
-    store: nats.store,
+    store: nats.store, directory, connection: nats.connection, restartStore,
     received: () => received, connected: () => connected, authorised: () => authorised,
     scenario(value: EgressScenario) { scenario = value; },
     receipts: () => history(nats.store, `decision-${permit}`, 'test') };

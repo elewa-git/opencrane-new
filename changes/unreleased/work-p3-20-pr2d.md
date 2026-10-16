@@ -1,0 +1,1 @@
+Relay closures can retain safe connection receipts through storage outages and recover the same observation after a lost reply or restart. Duplicate callbacks and retries save one event. Command networking stays off; automatic outage handling and authorised receipt detail reads remain planned.
