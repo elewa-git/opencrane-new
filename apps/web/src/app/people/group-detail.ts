@@ -18,6 +18,8 @@ export class GroupDetail {
   readonly canManage = input(false);
   protected readonly grantResourceLabel = grantResourceLabel;
   readonly pendingMemberId = input<string | undefined>(undefined);
+  readonly pendingAction = input<'add' | 'remove' | undefined>(undefined);
+  readonly changesBlocked = input(false);
   readonly membersUnavailable = input(false);
   readonly removeRequested = output<RemoveRequested>();
   readonly refreshRequested = output<void>();

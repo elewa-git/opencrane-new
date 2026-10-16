@@ -52,7 +52,7 @@ A saved receipt alone cannot prove that a gateway is still running.
 - Check own-group picker pages, reviewed member snapshots and human group chat rows.
 - Check group and child chat participant edits and the current people list.
 - Check archive and read requests, and each person's saved choice in chat lists.
-- Check flat group rows and create or remove commands for the People & groups screen.
+- Check flat group rows and create, add or remove commands for the People & groups screen.
 - Carry a tool server's saved hold after its catalogue changes.
 
 ## Processes it handles

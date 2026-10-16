@@ -75,7 +75,8 @@ browser rendering. See the [HTTP contract](../../apps/server/README.robot.md#per
 The People & groups screen uses `groupRowSchema`, `groupsResponseSchema`,
 `groupReceiptSchema`, `groupChangeSchema` and `createGroupCommandSchema` for its
 flat group reads and create command. `removeMemberCommandSchema` checks the
-strict member-removal request.
+strict member-removal request. `addMemberCommandSchema` checks an addition with
+the same three fields.
 Spending reads use `effectListResponseSchema` and
 `effectDetailResponseSchema`. Price table names can include version punctuation.
 The browser sends one checked evidence entry when it settles or releases a hold;
