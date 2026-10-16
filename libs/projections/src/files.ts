@@ -1,6 +1,21 @@
 import { fileUploadedDataSchema, fileDeliveredDataSchema } from '@opencrane/events';
+import type { z } from 'zod';
 import type { Projection } from './runner.ts';
 import type { Query } from './db.ts';
+
+type FileRow = {
+  data: unknown;
+  status: string;
+  delivery_outcome: string | null;
+};
+
+type FileView = Omit<z.infer<typeof fileUploadedDataSchema>, 'objectKey'> & {
+  status: string;
+  deliveryOutcome?: string;
+  path: string;
+  textPath?: string;
+};
+
 export const files: Projection = {
   name: 'files',
   async create(db) { await db.query(`CREATE TABLE IF NOT EXISTS conversation_files (
@@ -22,10 +37,35 @@ export const files: Projection = {
     }
   },
 };
-export async function listFiles(db: Query, silo: string, conversationId: string, joinPosition = 0) {
-  const result = await db.query<{ data: unknown; status: string; delivery_outcome: string | null }>(
+function toFileView(row: FileRow): FileView {
+  const { objectKey: _objectKey, ...data } = fileUploadedDataSchema.parse(row.data);
+  // Keep the storage key private because a client could use it to reach stored bytes directly.
+  const view: FileView = {
+    ...data,
+    status: row.status,
+    path: `uploads/${data.conversationId}/${data.fileId}/${data.name}`,
+  };
+
+  if (row.delivery_outcome) {
+    const deliveryOutcome = row.delivery_outcome;
+    view.deliveryOutcome = deliveryOutcome;
+  }
+
+  if (data.mime === 'application/pdf') {
+    const textPath = `uploads/${data.conversationId}/${data.fileId}/${data.name}.md`;
+    view.textPath = textPath;
+  }
+
+  return view;
+}
+
+export async function listFiles(
+  db: Query,
+  silo: string,
+  conversationId: string,
+  joinPosition = 0,
+): Promise<FileView[]> {
+  const result = await db.query<FileRow>(
     'SELECT data, status, delivery_outcome FROM conversation_files WHERE silo = $1 AND conversation_id = $2 AND position >= $3 ORDER BY position', [silo, conversationId, joinPosition]);
-  // Storage object keys are internal and must never be exposed in the file view.
-  return result.rows.map(row => { const { objectKey: _objectKey, ...data } = fileUploadedDataSchema.parse(row.data);
-    return { ...data, status: row.status, ...(row.delivery_outcome ? { deliveryOutcome: row.delivery_outcome } : {}), path: `uploads/${data.conversationId}/${data.fileId}/${data.name}`, ...(data.mime === 'application/pdf' ? { textPath: `uploads/${data.conversationId}/${data.fileId}/${data.name}.md` } : {}) }; });
+  return result.rows.map(toFileView);
 }
