@@ -2777,10 +2777,37 @@ waiting for the existing retry. The real watcher tests cover computer-history an
 approval-history delays of zero and 300 ms in all four combinations.
 
 P3-14 PR 4b tests use real NATS, PostgreSQL and OpenFGA, plus the real computer
-channel for different saved payers on one team computer. PR 4c still needs to
-keep the watcher reading Stops while another chat's file transfer is held open
-and prove delivery within two seconds. Fresh-install qualification is NOT RUN.
-Computer grant removal, status APIs and screens remain outside this part.
+channel for different saved payers on one team computer.
+
+P3-14 PR 4c keeps one conversation delivery pass running while the main watcher
+continues polling every 250 ms. During an unfinished pass it reads saved Stops
+separately, using the same per-socket retry timestamps. Each chat has at most one
+unfinished Stop check. Polling starts checks without waiting for other chats, and a
+failed check retries on a later poll. Approval checks continue too.
+An ordinary delivery pass skips a chat while its Stop check is unfinished and
+retries it on a later poll. Other chats continue even after a file receipt arrives.
+It reuses the chat list until events or projection catch-up change it, and leaves
+unchanged finished chats unread.
+The existing transfer queue still sends one file at a time and records its receipt
+before delivering that chat's turn. Shutdown closes sockets before awaiting the pass
+and every unfinished Stop check.
+The signed bridge gate still precedes resume on every connection.
+
+`test/bridge-budget-watcher.test.ts` uses real NATS, PostgreSQL and OpenFGA with a
+personal assistant and a scripted socket. It holds file receipts and checks Stop
+arrival within two seconds in another chat, in the same chat and after reconnect.
+Four more global polls must leave the file sent once and turns waiting for the receipt.
+Holding that chat's next history read still lets another chat's Stop arrive within two
+seconds and lets approval polling reply. A failed chat read alongside another held
+read must leave just one unfinished read after repeated polls. Shutdown waits until
+that read finishes and closes the socket without a test-supplied receipt.
+Releasing a file receipt during another chat's held Stop read leaves exactly one
+active read. A third chat can receive a new turn before that read is released,
+and the saved Stop arrives after release.
+It also checks recovery of Stop-only work after computer or assistant history fails,
+without saving a new event. Temporarily narrowing each guard to waiting messages makes
+its test fail. Fresh-install qualification is NOT RUN. Computer grant removal,
+status APIs, screens and member Stop changes remain outside this part.
 
 ## Reviewed child participant commands (#91, first part)
 
@@ -2908,9 +2935,10 @@ reads with that poll. Each assistant has one check in progress. This watcher doe
 not wait for conversation reads or uploads. It does not reconnect refused computers or wake
 suspended computers for saved control intent.
 
-During connection setup, each link checks for a gate every 250 ms while the server
-reads saved reports. Timer and connection checks share one signing attempt. A computer
-stream change during signing causes a fresh request, identity and membership check
+During connection setup, `bridge-resume.ts` checks each link for a gate every 250 ms
+while the server reads saved reports. The timer and direct checks share one signing
+attempt. A computer stream change during signing causes a fresh request, identity
+and membership check
 before another signing attempt. Connection setup waits for this retry before sending
 `resume`, and checks again after report replay in case intent arrived during replay.
 Finishing setup or closing the socket stops that link's timer. The independent

@@ -5,6 +5,9 @@ import type { bridgeControl } from './bridge-control.ts';
 import type { Logger } from '@opencrane/observability';
 import { history } from '../../../ops/src/lifecycle.ts';
 import { creationEvent } from './private-session.ts';
+import { chatHistory } from './commands.ts';
+import { agentSession } from './reports.ts';
+import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import {
   assistantSnapshot, processConversation, type ConversationProgress,
   type WatchOptions, type AgentSession,
@@ -27,6 +30,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
   connection: Connection,
   connectionId: (assistantId: string) => number | undefined, logger: Logger) {
   const seen = new Map<string, Progress>();
+  const checkingStops = new Map<string, Promise<void>>();
   let watchedAssistants = new Set<string>();
   const readingSnapshots = new Map<string, Promise<Snapshot>>();
   const kinds = new Map<string, string>();
@@ -133,7 +137,11 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       const current = await snapshot(assistantId);
       return current.controlPending;
     }
-    function processSession(conversation: AgentSession) {
+    async function processSession(conversation: AgentSession) {
+      // Retry this chat next poll so delivery cannot overlap its unfinished Stop read.
+      if (checkingStops.has(conversation.conversationId)) {
+        return true;
+      }
       return process(conversation, assistant, computerHistoryUnavailable, checkControl);
     }
     const processing = sessions.map(processSession);
@@ -151,6 +159,48 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
         await link.control.send();
       }
     }
+  }
+
+  async function checkStops(conversation: AgentSession) {
+    try {
+      const assistantId = conversation.assistantId;
+      const assistant = await snapshot(assistantId);
+      if (!assistant.kind || assistant.current?.type !== 'computer.ready') return;
+      const computer = computerData.parse(assistant.current.data);
+      if (refused.has(computer.computerId)) return;
+      const head = await options.store.head(`conversation-${conversation.conversationId}`);
+      const previous = seen.get(conversation.conversationId);
+      if (previous?.head === head && !previous.retry) return;
+      const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
+      agentSession(rows);
+      function isClosed(row: typeof rows[number]) {
+        return row.event.type === 'conversation.closed';
+      }
+      if (rows.some(isClosed)) return;
+      const stops = pendingBudgetStops(rows, assistant.closed);
+      if (!stops.length) return;
+      const link = await connection(computer.computerId, assistantId);
+      sendBudgetStops(link, stops);
+    } catch {
+      // Retry this chat on a later poll without delaying checks for other chats.
+    }
+  }
+
+  function pollStops(sessions: AgentSession[]) {
+    for (const conversation of sessions) {
+      const conversationId = conversation.conversationId;
+      if (checkingStops.has(conversationId)) continue;
+      function finished() {
+        checkingStops.delete(conversationId);
+      }
+      // Keep one unfinished check per chat, even when another chat's check fails.
+      const checked = checkStops(conversation).finally(finished);
+      checkingStops.set(conversationId, checked);
+    }
+  }
+
+  async function settledStops() {
+    await Promise.all(checkingStops.values());
   }
 
   async function watchControls(signal: AbortSignal) {
@@ -194,5 +244,5 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
   }
 
-  return { processAssistant, watchControls, forgetMissing };
+  return { processAssistant, pollStops, settledStops, watchControls, forgetMissing };
 }
