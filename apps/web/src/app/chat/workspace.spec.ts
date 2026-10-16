@@ -837,7 +837,7 @@ it('refreshes unavailable stop details once when queued work gets its end report
   ]);
   const initialFetch = globalThis.fetch;
   let budgetReads = 0;
-  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+  function budgetStopFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const path = input instanceof Request ? input.url : String(input);
     if (!path.includes('/budget-stops?')) return initialFetch(input, init);
     budgetReads += 1;
@@ -850,7 +850,8 @@ it('refreshes unavailable stop details once when queued work gets its end report
       positions: { stop: 2, turn: 3, conversation: 4, computer: 5, budget: 6 },
     };
     return Promise.resolve(new Response(JSON.stringify(details)));
-  });
+  }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(budgetStopFetch);
 
   const stopRequested = { id: 'stop-requested', position: 2,
     type: 'agent.turn_stop_requested', time: '2026-10-04T10:00:02Z',

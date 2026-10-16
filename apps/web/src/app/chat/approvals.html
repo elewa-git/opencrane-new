@@ -10,7 +10,7 @@
         [actionBusy]="checkingReadFailure()" (action)="checkReadFailure()" />
     }
     @for (card of orderedCards(); track card.approvalId) {
-      @if (card.state === 'requested') {
+      @if (card.state === 'requested' || (card.state === 'cancelled' && isStopped(card))) {
         <article class="approval pending" role="region" [attr.data-approval]="card.approvalId"
           [attr.aria-label]="isStopped(card) ? 'Cannot continue' : 'Approval needed'">
           <header>

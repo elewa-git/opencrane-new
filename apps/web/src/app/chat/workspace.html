@@ -130,7 +130,7 @@
               }
               @if (turn.budgetStop) {
                 <oc-budget-stop-notice [conversationId]="chat.selected()" [turnId]="turn.id"
-                  [reconnectedAt]="chat.reconnectedAt()" [endedAt]="turn.endedAt ?? ''"
+                  [reconnectedAt]="chat.reconnectedAt()" [endedAt]="turn.endReportedAt ?? ''"
                   [denied]="chat.denied()" />
               }
               @if (turn.author === 'agent' && turn.state !== 'working') {

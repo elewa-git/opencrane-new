@@ -135,7 +135,7 @@ try {
     + 'Each screen made one GET for its stop details and no write. '
     + 'No screen has horizontal overflow. Checked controls meet 44px, '
     + 'and the unavailable action has a 2px focus ring. '
-    + 'The stopped approval has no decision action.\n\n'
+    + 'The cancelled approval keeps its ledger and stop explanation without a decision action.\n\n'
     + `Captures: ${filenames.join(', ')}.\n`;
   await writeFile(`${output}/receipt.md`, receipt);
   console.log(`Captured ${filenames.length} spending stop screens`);

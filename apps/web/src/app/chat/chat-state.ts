@@ -3,6 +3,7 @@ import type { ChatConversation, ChatRow } from '@opencrane/protocol';
 
 export interface Turn {
   id: string; author: 'you' | 'person' | 'agent'; text: string; time: string; endedAt?: string;
+  endReportedAt?: string;
   state: 'working' | 'stopping' | 'done' | 'failed' | 'stopped' | 'lost';
   tools: ToolActivityRecord[];
   files: string[]; budgetStop?: 'budget_exhausted'; screenshotRejected?: true;
@@ -179,9 +180,12 @@ function skipStoppedTurnRow(turn: Turn, row: ChatRow): boolean {
     turn.stopRequested = true;
     turn.endedAt = row.time;
   }
-  // Use the first saved ending report when no stop request ended queued work.
-  if (turn.budgetStop && !turn.stopRequested && (row.type === 'agent.turn_failed'
-    || row.type === 'agent.turn_completed')) turn.endedAt = row.time;
+  // Keep the first end report apart from the time queued work was stopped.
+  if (turn.budgetStop && !turn.endReportedAt && (row.type === 'agent.turn_failed'
+    || row.type === 'agent.turn_completed')) {
+    turn.endReportedAt = row.time;
+    if (!turn.stopRequested) turn.endedAt = row.time;
+  }
   return true;
 }
 
@@ -249,6 +253,7 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
   if (row.type === 'agent.turn_failed') {
     turn.state = turn.stopRequested || turn.state === 'stopping' ? 'stopped' : 'failed';
     turn.endedAt = row.time;
+    turn.endReportedAt = row.time;
     markRunningCallsUnconfirmed(turn);
     if (row.data.reason) turn.reason = row.data.reason;
     return;
@@ -256,6 +261,7 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
   if (row.type === 'agent.turn_completed') {
     turn.state = lostOutput.has(turn.id) ? 'lost' : 'done';
     turn.endedAt = row.time;
+    turn.endReportedAt = row.time;
     markRunningCallsUnconfirmed(turn);
   }
 }
