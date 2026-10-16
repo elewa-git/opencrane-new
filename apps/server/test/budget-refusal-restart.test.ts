@@ -132,8 +132,9 @@ async function recoversNoticeAfterComputerRestart() {
     expect(await reportPosition(view.nats.store, 'test', 'computer')).toBe(1);
     expect(await history(view.nats.store, 'decision-*')).toEqual([]);
     const lifecycle = await history(view.nats.store, 'computer-shared');
+    const savedStopId: unknown = expect.any(String);
     expect(lifecycle.at(-1)?.event).toMatchObject({ type: 'computer.turn_closed', data: {
-      turnId: message.id, status: 'failed', budgetStopId: expect.any(String),
+      turnId: message.id, status: 'failed', budgetStopId: savedStopId,
     } });
 
     await channel.close();
