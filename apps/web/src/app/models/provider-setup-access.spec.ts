@@ -426,3 +426,16 @@ it('counts the server models rather than the selection draft after the receipt',
   serverModelCount.bind(null, false));
 it('does not confirm a model count using a receipt for an older revision',
   serverModelCount.bind(null, true));
+
+async function newlySavedModelStaysSelected(): Promise<void> {
+  await mount(undefined, [], 503, ['model-a', 'model-b', 'not-selected']);
+  await click('Back');
+  const choice = root().querySelectorAll<HTMLInputElement>('.model-choice input')[2];
+  expect(choice?.checked).toBe(true);
+  expect(choice?.disabled).toBe(true);
+  await click('Next');
+  const posts = requests.filter(isModelsPost);
+  expect(posts).toHaveLength(1);
+}
+it('shows a model added by a newer provider read as saved and selected',
+  newlySavedModelStaysSelected);
