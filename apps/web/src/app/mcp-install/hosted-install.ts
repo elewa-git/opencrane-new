@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, output, signal, type OnDestroy } from '@angular/core';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
+import { decode, encode } from 'punycode';
 import { z } from 'zod';
 
 type Admission = z.infer<typeof hostedAdmissionSchema>;
@@ -23,6 +24,18 @@ function normaliseHost(host: string): string {
   }
 }
 
+function validPunycodeLabel(label: string): boolean {
+  try {
+    const encoded = label.slice(4);
+    const decoded = decode(encoded);
+    if (!/[^\p{ASCII}]/u.test(decoded)) return false;
+    if (/[^\p{L}\p{M}\p{Nd}-]/u.test(decoded)) return false;
+    return encode(decoded) === encoded;
+  } catch {
+    return false;
+  }
+}
+
 function publicHost(value: string): boolean {
   if (value.length > 253 || !/^[a-z0-9.-]+$/u.test(value)) return false;
   if (normaliseHost(value) !== value) return false;
@@ -34,6 +47,8 @@ function publicHost(value: string): boolean {
   }
   for (const label of labels) {
     if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(label)) return false;
+    // Check these labels ourselves because Chromium accepts some that Node rejects.
+    if (label.startsWith('xn--') && !validPunycodeLabel(label)) return false;
   }
   return true;
 }

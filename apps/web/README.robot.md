@@ -101,7 +101,12 @@ there is no check-start API or restore action here. Run
 
 The add page accepts a remote HTTPS address and follows discovery status. It also accepts
 a hosted package only as a sha256 digest locator, one supported Linux platform and a
-public upstream host and port. It posts one command id. An uncertain POST keeps that id
+public upstream host and port. It posts one command id.
+The browser checks each encoded `xn--` host label by decoding and re-encoding it.
+The decoded label must contain a non-ASCII letter, mark or digit and no other
+characters except letters, marks, digits and hyphens. This catches a Chromium URL
+case that the server rejects before the browser sends a command.
+An uncertain POST keeps the command id
 and reads `/api/org/integrations/changes/:commandId` without posting again. Once the
 server id is known, Check status reads `/api/org/integrations/:serverId/admission`.
 The page shows the returned queue time and each check's verdict and date. It updates

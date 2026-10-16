@@ -82,7 +82,8 @@ assistant check open rather than guessing an answer.
   earlier rows keep their last successful check time. The page opens tool review
   once a policy has been read.
 - Accepts an exact package image digest and shows dated admission checks. Continue
-  stays disabled while tool discovery is unavailable. Saving gives nobody access.
+  stays disabled while tool discovery is unavailable. The form checks encoded host
+  names before sending a package. Saving gives nobody access.
 - Lists current members with search and more pages. A refused member read clears both
   member and group details. A temporary read failure keeps loaded rows visible.
 - Lets Owners and Admins add an active organisation member to a local group from its page.

@@ -145,7 +145,7 @@ try {
   }
   const receipt = '# Package admission screen checks\n\n' +
     'PASS: Chromium rejected xn--a.com, showed the public host error and sent no POST. ' +
-    'PASS: Captured source, queued checks and four passed checks at 1280 and 390 pixels. ' +
+    'Captured source, queued checks and four passed checks at 1280 and 390 pixels. ' +
     'The browser used intercepted API replies, a fixed 15 October 2026 10:02 UTC clock, ' +
     'reduced motion and no development stack. The four passed rows were checked before capture. ' +
     'Package form, source choices and action targets measured at least 44 pixels, ' +
