@@ -83,7 +83,8 @@ async function budgetWatcher() {
   const peers: ReturnType<typeof heldComputer>[] = [];
   const bytes = Buffer.from('file contents');
   const hash = createHash('sha256');
-  const sha256 = hash.update(bytes).digest('hex');
+  hash.update(bytes);
+  const sha256 = hash.digest('hex');
   function connected(socket: WebSocket) {
     peers.push(heldComputer(socket, sha256));
   }
@@ -92,6 +93,7 @@ async function budgetWatcher() {
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing bridge port');
+  const proxyUrl = `http://127.0.0.1:${address.port}`;
   const objectOptions = { endPoint: '127.0.0.1', useSSL: false };
   const objects = new Client(objectOptions);
   function readObject() {
@@ -159,9 +161,9 @@ async function budgetWatcher() {
   let work: Promise<void> | undefined;
   async function watch() {
     await project();
-    const options = { silo: 'test', store, keys: view.keys, db: view.db, objects };
-    work = watchBridges(options, tokens, kube, `http://127.0.0.1:${address.port}`,
-      abort.signal, logger);
+    const options = { silo: 'test', store, keys: view.keys, db: view.db,
+      binding: view.binding, objects };
+    work = watchBridges(options, tokens, kube, proxyUrl, abort.signal, logger);
   }
   async function close() {
     abort.abort();
@@ -192,8 +194,8 @@ async function expectStop(peer: ReturnType<typeof heldComputer>, turn: Turn, sin
   await until(arrived, Math.max(1, 2000 - (performance.now() - since)));
   const frame = peer.matching('stop', turn.conversationId)[0]!;
   expect(frame.at - since).toBeLessThanOrEqual(2000);
-  expect(frame.value).toEqual({ type: 'stop', ...turn,
-    reason: 'budget', stopId: 'saved-budget-stop' });
+  const expected = { type: 'stop', ...turn, reason: 'budget', stopId: 'saved-budget-stop' };
+  expect(frame.value).toEqual(expected);
 }
 
 async function stopsDuringUpload(reconnect: boolean, sameChat = false) {
@@ -241,7 +243,8 @@ async function stopsDuringUpload(reconnect: boolean, sameChat = false) {
   expect(peer.matching('turn', 'first')[0]!.value['id']).toBe(waiting.turnId);
   const deliveries = await savedEvents(test, 'first', 'file.delivered');
   expect(deliveries).toHaveLength(1);
-  expect(deliveries[0]!.event.data).toMatchObject({ fileId: 'upload', computerId: 'desktop' });
+  const expectedDelivery = { fileId: 'upload', computerId: 'desktop' };
+  expect(deliveries[0]!.event.data).toMatchObject(expectedDelivery);
   await test.morePolls();
   expect(peer.matching('file_begin')).toHaveLength(1);
   function isStoppedTurn(frame: typeof peer.frames[number]) {

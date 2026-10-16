@@ -5,6 +5,9 @@ import type { bridgeControl } from './bridge-control.ts';
 import type { Logger } from '@opencrane/observability';
 import { history } from '../../../ops/src/lifecycle.ts';
 import { creationEvent } from './private-session.ts';
+import { chatHistory } from './commands.ts';
+import { agentSession } from './reports.ts';
+import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import {
   assistantSnapshot, processConversation, type ConversationProgress,
   type WatchOptions, type AgentSession,
@@ -153,6 +156,35 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
   }
 
+  async function pollStops(sessions: AgentSession[]) {
+    try {
+      const assistantId = sessions[0]!.assistantId;
+      const assistant = await snapshot(assistantId);
+      if (!assistant.kind || assistant.current?.type !== 'computer.ready') return;
+      const computer = computerData.parse(assistant.current.data);
+      if (refused.has(computer.computerId)) return;
+      async function sendStops(conversation: AgentSession) {
+        const head = await options.store.head(`conversation-${conversation.conversationId}`);
+        const previous = seen.get(conversation.conversationId);
+        if (previous?.head === head && !previous.retry) return;
+        const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
+        agentSession(rows);
+        function isClosed(row: typeof rows[number]) {
+          return row.event.type === 'conversation.closed';
+        }
+        if (rows.some(isClosed)) return;
+        const stops = pendingBudgetStops(rows, assistant.closed);
+        if (!stops.length) return;
+        const link = await connection(computer.computerId, assistantId);
+        sendBudgetStops(link, stops);
+      }
+      const sending = sessions.map(sendStops);
+      await Promise.all(sending);
+    } catch {
+      // Leave saved Stops for the next poll when history or the connection is unavailable.
+    }
+  }
+
   async function watchControls(signal: AbortSignal) {
     const checking = new Map<string, Promise<void>>();
     function failed() {
@@ -194,5 +226,5 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
   }
 
-  return { processAssistant, watchControls, forgetMissing };
+  return { processAssistant, pollStops, watchControls, forgetMissing };
 }

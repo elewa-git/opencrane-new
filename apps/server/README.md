@@ -19,7 +19,7 @@ flowchart LR
   server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates without waiting for chats; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
-  server -.->|sends spending Stops before files, turns and approval replies| computer
+  server -.->|sends spending Stops before files, turns and approval replies, even while a file waits for its receipt| computer
   server -->|records refused turn decisions| nats
 ```
 
@@ -350,6 +350,9 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
    Private team turns stay restricted and do not receive tools.
    The watcher reuses computer history while it is unchanged. It checks for changes
    again before sending a turn or file, so new control intent holds waiting work.
+   While a computer has not acknowledged a file, the watcher still sends spending
+   Stops and checks approvals. It sends each file once per connection and waits for
+   the receipt before sending that chat’s turn.
    Open chat pages repeat permission checks when silo or team membership changes.
    Removing someone from a team closes their private chat with that team's assistant
    within two seconds. If OpenFGA takes too long to apply another change, the page

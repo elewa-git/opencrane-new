@@ -2777,10 +2777,25 @@ waiting for the existing retry. The real watcher tests cover computer-history an
 approval-history delays of zero and 300 ms in all four combinations.
 
 P3-14 PR 4b tests use real NATS, PostgreSQL and OpenFGA, plus the real computer
-channel for different saved payers on one team computer. PR 4c still needs to
-keep the watcher reading Stops while another chat's file transfer is held open
-and prove delivery within two seconds. Fresh-install qualification is NOT RUN.
-Computer grant removal, status APIs and screens remain outside this part.
+channel for different saved payers on one team computer.
+
+P3-14 PR 4c keeps one conversation delivery pass running while the main watcher
+continues polling every 250 ms. During an unfinished pass it reads saved Stops
+separately, using the same per-socket retry timestamps. Approval checks continue too.
+It reuses the chat list until events or projection catch-up change it, and leaves
+unchanged finished chats unread.
+The existing transfer queue still sends one file at a time and records its receipt
+before delivering that chat's turn. Shutdown closes sockets before awaiting the pass.
+The signed bridge gate still precedes resume on every connection.
+
+`test/bridge-budget-watcher.test.ts` uses real NATS, PostgreSQL and OpenFGA with a
+personal assistant and a scripted socket. It holds file receipts and checks Stop
+arrival within two seconds in another chat, in the same chat and after reconnect.
+Four more global polls must leave the file sent once and turns waiting for the receipt.
+It also checks recovery of Stop-only work after computer or assistant history fails,
+without saving a new event. Temporarily narrowing each guard to waiting messages makes
+its test fail. Fresh-install qualification is NOT RUN. Computer grant removal,
+status APIs, screens and member Stop changes remain outside this part.
 
 ## Reviewed child participant commands (#91, first part)
 

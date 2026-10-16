@@ -360,6 +360,10 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   logger: Logger = createLogger('bridge')) {
   let previousHead: number | undefined;
   let pending = true;
+  let processing: Promise<void> | undefined;
+  let listedHead: number | undefined;
+  let tableBehind = true;
+  let groups: AgentSession[][] = [];
   const refused = new Set<string>();
   type Link = Awaited<ReturnType<typeof connectBridge>> & { connectionId: number };
   const links = new Map<string, Link>();
@@ -368,6 +372,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   let lastConnectionId = 0;
   const opening = new Map<string, Promise<Awaited<ReturnType<typeof connectBridge>>>>();
   async function connection(computerId: string, assistantId: string) {
+    if (signal.aborted) throw new Error('Bridge watcher stopped');
     let link = links.get(computerId);
     if (!link || link.socket.readyState !== link.socket.OPEN) {
       let connecting = opening.get(computerId);
@@ -381,6 +386,11 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
         opening.set(computerId, connecting);
       }
       const connected = await connecting;
+      if (signal.aborted) {
+        connected.socket.terminate();
+        await connected.settled();
+        throw new Error('Bridge watcher stopped');
+      }
       const existing = links.get(computerId);
       if (existing?.socket === connected.socket) return existing;
       lastConnectionId++;
@@ -412,27 +422,47 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   }
   const processor = assistantProcessor(options, tokens, refused, connection, connectionId, logger);
   const controls = processor.watchControls(signal);
+  async function refreshConversations(head: number) {
+    // Reuse the chat list during delivery until events or projection catch-up change it.
+    if (processing && head === listedHead && !tableBehind) return;
+    tableBehind = await conversationTableBehind(options.db, head);
+    const conversations = await listOpenConversations(options.db, options.silo);
+    const sessions = conversations.filter(isAgentSession);
+    processor.forgetMissing(sessions);
+    forgetMissingTurns(links, sessions);
+    groups = groupSessions(sessions);
+    listedHead = head;
+  }
   try {
     while (!signal.aborted) {
       try {
         const head = await options.store.head();
         for (const link of links.values()) link.approvals.poll(head);
-        if (head === previousHead && !pending) {
+        if (head === previousHead && !pending && !processing) {
           await delay(250, undefined, { signal });
           continue;
         }
-        const tableBehind = await conversationTableBehind(options.db, head);
-        const conversations = await listOpenConversations(options.db, options.silo);
-        const sessions = conversations.filter(isAgentSession);
-        const active = sessions;
-        processor.forgetMissing(active);
-        forgetMissingTurns(links, active);
-        const groups = groupSessions(active);
-        const processing = groups.map(processor.processAssistant);
-        const pendingResults = await Promise.all(processing);
-        pending = tableBehind || pendingResults.includes(true);
-        // Keep the position from before the pass so events arriving during it are read next time.
-        previousHead = head;
+        await refreshConversations(head);
+        if (processing) {
+          // Keep Stops and approval checks moving while a file waits for its receipt.
+          const sending = groups.map(processor.pollStops);
+          await Promise.all(sending);
+        } else {
+          async function processConversations() {
+            try {
+              const passes = groups.map(processor.processAssistant);
+              const results = await Promise.all(passes);
+              pending = tableBehind || results.includes(true);
+              // Keep the earlier position so events saved during delivery get another pass.
+              previousHead = head;
+            } catch {
+              pending = true;
+            } finally {
+              processing = undefined;
+            }
+          }
+          processing = processConversations();
+        }
       } catch (error) {
         if (signal.aborted) break;
         const details = { err: error };
@@ -449,6 +479,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     await controls;
     const active = [...links.values()];
     for (const link of active) link.socket.terminate();
+    await processing;
     const pending = active.map(settledBridge);
     pending.push(...settlingReports);
     await Promise.all(pending);
