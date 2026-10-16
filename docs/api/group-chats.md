@@ -109,3 +109,33 @@ Sustained concurrent writes can exhaust this limit and return 503 `unavailable`.
 Parent messages and sockets show text, `authorId`, `publicationKind` and
 `contentType: "text"` to all current parent readers. They omit the child link, result,
 turn and review digest. Publication starts no computer or model work.
+
+## Reviewed child requests
+
+`POST /api/conversations/:parent/child-review` accepts `requestId`, `sourceMessageId`,
+`assistantId`, `participantIds` and optional `allowanceBoundCents` (1–1,000; default 1,000).
+The source must be the caller's own visible human message in an open group. The audience
+includes the caller and only current participants who could read that message.
+The assistant supplies its recorded payer. The reply includes the reviewed fields,
+`payingGroupId`, `review` and `expiresAt` (Unix milliseconds). The signed review lasts ten
+minutes and binds the caller, silo, parent, source, assistant, payer, allowance and joins.
+Review and cancelling in the browser append nothing. Literal `@Assistant` remains text.
+
+`POST /api/conversations/:parent/children` accepts `requestId`, `sourceMessageId` and
+`review`. It saves intent, creation and first input separately, then returns
+202 `{requestId, state: 'queued'}`. An identical retry checks current requester rights
+and resumes missing saves, even after review expiry. Another request id for the same
+source returns the original receipt. Changed choices or reused ids return 409 `conflict`.
+Changed access during a write returns 409 `review_stale`. Refused reviews return 403;
+closed parents return 403 on review and 409 on start. Malformed input returns 400.
+An unapplied access receipt returns 425 `access_applying`; an outage returns 503
+`unavailable`. These replies may follow a saved intent or creation. Retrying the same
+POST completes them. Background recovery and saved failure outcomes are not built yet.
+
+`GET /api/conversations/:parent/children/:requestId` checks current parent read access
+once after loading history. It returns `{state: 'unknown'}` for missing ids and another
+person's ids alike. The requester receives `{requestId, state: 'queued'}` and
+`childConversationId` once creation exists. No source text or audience is returned.
+All replies disable caching. New children stay held before delivery, computer resume,
+start admission and token issue. They reserve and spend zero cents. Activation and
+turn admission are not available through these routes yet.

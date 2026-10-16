@@ -98,3 +98,5 @@ export { memberAccessSchema, memberDepartureSchema, type MemberAccessRow } from 
 export { toolAccessExplanationSchema, type ToolExplanation } from './member-inventory.ts';
 
 export { hostedAdmissionSchema } from './integrations.ts';
+export { childReviewInputSchema, childStartInputSchema, childRequestStatusSchema }
+  from './child-requests.ts';

@@ -11,6 +11,10 @@ import { chatAccess, conversationParticipation, type ChatOptions } from './acces
 import { creationEvent, sharedAssistantAuthority, sharedAssistantRead } from './private-session.ts';
 import { participationClosed } from './participation.ts';
 
+export class ChildRequestRefused extends ChatConflict {}
+export class ChildRequestClosed extends ChatConflict {}
+export class ChildRequestChanged extends ChatConflict {}
+
 type Options = Pick<ChatOptions, 'store' | 'silo' | 'binding' | 'db' | 'keys'>;
 const inputSchema = z.strictObject({
   conversationId: chatIdSchema, sourceMessageId: chatIdSchema, requestId: chatIdSchema,
@@ -27,7 +31,7 @@ function stageId(options: Options, input: Input, stage: string) {
   return `${stage}-${hash.digest('hex')}`;
 }
 function refused(): never {
-  throw new ChatConflict('Child request unavailable');
+  throw new ChildRequestRefused('Child request unavailable');
 }
 async function load(options: Options, memberId: string, value: unknown) {
   const parsed = inputSchema.safeParse(value);
@@ -39,10 +43,16 @@ async function load(options: Options, memberId: string, value: unknown) {
   let intent: StoredEvent | undefined;
   let sequence = 0;
   for (const row of rows) {
-    if (row.event.type === 'conversation.closed') refused();
+    if (row.event.type === 'conversation.closed') throw new ChildRequestClosed('Conversation closed');
     if (row.event.subject === `conversation-${input.conversationId}`) sequence = row.sequence;
     if (row.event.id === input.sourceMessageId) source = row;
     if (row.event.id === intentId) intent = row;
+    if (row.event.type === 'conversation.child_requested') {
+      const previous = childRequestedDataSchema.parse(row.event.data);
+      if (previous.requestId === input.requestId && previous.sourceMessageId !== input.sourceMessageId) {
+        throw new ChildRequestChanged('Child request changed');
+      }
+    }
   }
   requireOwnSource(source, input, memberId);
   return { input, source, intent, sequence };
@@ -89,7 +99,7 @@ async function check(options: Options, memberId: string, loaded: Loaded,
       parentJoinPosition: access.joinPosition });
   }
   if (await participationClosed(options.store, options.silo, input.conversationId,
-    deadline)) refused();
+    deadline)) throw new ChildRequestClosed('Conversation closed');
   await fresh?.();
   return { initialJoins, fresh };
 }
@@ -129,7 +139,7 @@ function savedIntent(options: Options, memberId: string, loaded: Loaded) {
       data.allowanceBoundCents !== input.allowanceBoundCents ||
       data.childConversationId !== stageId(options, input, 'child') ||
       data.firstInputId !== stageId(options, input, 'child-input') ||
-      !isDeepStrictEqual(people, audience)) throw new ChatConflict('Child request changed');
+      !isDeepStrictEqual(people, audience)) throw new ChildRequestChanged('Child request changed');
   return { row: loaded.intent, data };
 }
 async function save(options: Options, memberId: string, id: string, subject: string,
@@ -144,7 +154,7 @@ async function save(options: Options, memberId: string, id: string, subject: str
   const command = { event, expectedSequence: sequence, historyChecked: true as const,
     deadline: fresh.deadline };
   const result = await options.store.append(command);
-  if (result.status !== 'appended') throw new ChatConflict('Child request changed');
+  if (result.status !== 'appended') throw new ChildRequestChanged('Child request changed');
   const row = await readEventAt(options.store, subject, result.sequence, performance.now() + 10_000);
   if (!row) throw new Error('Child request outcome unavailable');
   verify(row, event);
@@ -156,9 +166,10 @@ function verifySaved(row: StoredEvent, expected: StoredEvent['event']) {
       saved.silo !== expected.silo || saved.subject !== expected.subject ||
       saved.type !== expected.type || saved.source !== expected.source || saved.report ||
       !isDeepStrictEqual(saved.principal, expected.principal) ||
-      !isDeepStrictEqual(saved.data, expected.data)) throw new ChatConflict('Child request changed');
+      !isDeepStrictEqual(saved.data, expected.data)) throw new ChildRequestChanged('Child request changed');
 }
-export async function requestChild(options: Options, memberId: string, value: unknown) {
+export async function requestChild(options: Options, memberId: string, value: unknown,
+  expected?: ChildRequest) {
   const loaded = await load(options, memberId, value);
   if (loaded.intent) {
     const saved = savedIntent(options, memberId, loaded);
@@ -166,6 +177,9 @@ export async function requestChild(options: Options, memberId: string, value: un
     return saved.row;
   }
   const reviewed = await review(options, memberId, loaded);
+  if (expected && !isDeepStrictEqual(reviewed.data, expected)) {
+    throw new ChildRequestChanged('Child review changed');
+  }
   return save(options, memberId, stageId(options, loaded.input, 'child-intent'),
     `conversation-${loaded.input.conversationId}`, 'conversation.child_requested',
     reviewed.data, loaded.sequence, reviewed.fresh);
@@ -210,7 +224,7 @@ function inputText(options: Options, conversationId: string, data: unknown) {
   try {
     return options.keys.decrypt(options.silo, conversationId, data);
   } catch {
-    throw new ChatConflict('Child input changed');
+    throw new ChildRequestChanged('Child input changed');
   }
 }
 export async function addChildFirstInput(options: Options, memberId: string, value: unknown) {
@@ -222,7 +236,7 @@ export async function addChildFirstInput(options: Options, memberId: string, val
   if (!creation) refused();
   verifyCreation(options, memberId, loaded, intent, creation);
   for (const row of rows) {
-    if (row.event.type === 'conversation.closed') refused();
+    if (row.event.type === 'conversation.closed') throw new ChildRequestClosed('Conversation closed');
   }
   const checked = await check(options, memberId, loaded, [memberId]);
   const fresh = checked.fresh;
@@ -230,7 +244,7 @@ export async function addChildFirstInput(options: Options, memberId: string, val
   fresh.include(`participation-${childConversationId}`);
   await conversationParticipation(options, memberId, childConversationId, fresh.deadline, 'post');
   if (await participationClosed(options.store, options.silo, childConversationId,
-    fresh.deadline)) refused();
+    fresh.deadline)) throw new ChildRequestClosed('Conversation closed');
   const source = messagePostedDataSchema.parse(loaded.source.event.data);
   const text = inputText(options, loaded.input.conversationId, source);
   options.keys.provision(options.silo, childConversationId);
@@ -241,7 +255,7 @@ export async function addChildFirstInput(options: Options, memberId: string, val
     const parsed = messagePostedDataSchema.safeParse(row.event.data);
     if (!parsed.success || inputText(options, childConversationId, parsed.data) !== text ||
         !isDeepStrictEqual(row.event.correlation, {})) {
-      throw new ChatConflict('Child input changed');
+      throw new ChildRequestChanged('Child input changed');
     }
     // Compare the text separately because encryption creates a new ciphertext each time.
     const comparedData = { ...parsed.data, ciphertext: encrypted.ciphertext };

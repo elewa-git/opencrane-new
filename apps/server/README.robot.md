@@ -2652,7 +2652,7 @@ decrypted text and the other command fields, returning the original row and ciph
 A different saved record throws `ChatConflict`, including after NATS deduplication expires.
 `test/child-first-input.test.ts` uses real NATS, PostgreSQL and OpenFGA to check these rules,
 concurrent calls, neighbouring parent messages staying private and rebuilds saving no events.
-No route, job, activation, token or spending action calls these functions.
+The reviewed child start route now calls these functions. It starts no turn or spending.
 Live qualification: NOT RUN.
 
 ## Hosted registration — first part of P3-6 PR 4
@@ -2873,3 +2873,13 @@ signing across replay completion. Each requires the gate before resume. Scripted
 replies cover forged receipts. Fresh-install qualification
 is NOT RUN. Pausing events, supervisor calls, full quiet proof, writer access, leases
 and recovery remain later work. The existing access checks and event schemas are unchanged.
+
+## Reviewed child starts (P4-8 PR 7a, first part)
+
+The [child request API](../../docs/api/group-chats.md#reviewed-child-requests) signs
+reviewed choices and completes intent, creation and first input through separate commands.
+Retried POSTs recover after a restart; background reconciliation and saved failure events
+remain unbuilt. The bridge point-reads the parent intent before delivery or admission.
+A saved intent holds all child work; an unavailable read also releases no work.
+`test/child-summon.test.ts` checks real NATS/PostgreSQL/OpenFGA recovery, expiry,
+refused reviews, private status, replay and the delivery/admission hold. Live qualification: NOT RUN.

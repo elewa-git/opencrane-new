@@ -1,0 +1,1 @@
+Members can review a child chat from their own group message and save its first input. Retrying completes missing saves after a restart and keeps the original child. Status is private to the requester. New children stay queued without assistant work or spending; automatic recovery and activation remain unbuilt.
