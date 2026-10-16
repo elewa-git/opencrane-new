@@ -1797,3 +1797,63 @@ async function keepsLateReports(subject: string) {
 }
 it.each(['conversation-alice', 'participation-alice'])(
   'saves late reports after close on %s and keeps duplicate and digest checks', keepsLateReports);
+
+async function recordsBudgetAdmissionRefusal() {
+  const fixture = await replayFixture(['alice']);
+  let link: Awaited<ReturnType<typeof fixture.connect>> | undefined;
+  try {
+    const actor = new BudgetActor(fixture.store, 'test');
+    await actor.start(2000, 20000, 'personal-default');
+    const ceiling = { scope: 'paying_group' as const, scopeId: 'personal-default',
+      ceilingCents: 0, setBy: 'alice' };
+    await actor.configure(ceiling);
+    const computer = { assistantId: 'assistant', computerId: 'computer', generation: 1 };
+    await fixture.seed([envelope('test', 'computer-assistant', 'computer.ready', computer)]);
+    const member = { silo: 'test', memberId: 'alice' };
+    const message = { id: 'over-budget', conversationId: 'alice', text: 'Continue' };
+    await chatCommand(fixture.store, fixture.keys, member, message);
+    const start = { sequence: 1, previousSequence: 0, conversationId: 'alice',
+      turnId: 'over-budget', assistantId: 'assistant', type: 'agent.turn_started',
+      threadId: 'thread-alice' };
+    link = await fixture.connect();
+    link.peer.send(JSON.stringify(start));
+    function acknowledged() {
+      return fixture.messages.length >= 2;
+    }
+    await until(acknowledged, 2000);
+    expect(fixture.messages.at(-1)).toEqual({ type: 'ack', sequence: 1,
+      refused: 'Turn stopped by a spending cap' });
+    const decisions = await history(fixture.store, 'decision-*');
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]!.event.data).toMatchObject({
+      conversationId: 'alice', turnId: 'over-budget', requesterId: 'alice',
+      assistantId: 'assistant', route: 'model', outcome: 'deny', reason: 'budget_exhausted',
+    });
+    await actor.configure({ ...ceiling, ceilingCents: 20000 });
+    link.socket.terminate();
+    await link.settled();
+    link = await fixture.connect();
+    fixture.messages.length = 0;
+    link.peer.send(JSON.stringify(start));
+    function refusedAgain() {
+      function isAcknowledgement(value: unknown) {
+        return z.object({ type: z.string() }).parse(value).type === 'ack';
+      }
+      return fixture.messages.some(isAcknowledgement);
+    }
+    await until(refusedAgain, 2000);
+    expect(fixture.messages.at(-1)).not.toHaveProperty('token');
+    expect(await history(fixture.store, 'decision-*')).toEqual(decisions);
+    const budgets = await history(fixture.store, 'budget-test');
+    function isReservation(row: typeof budgets[number]) {
+      return row.event.type === 'budget.reserved';
+    }
+    expect(budgets.filter(isReservation)).toEqual([]);
+  } finally {
+    link?.socket.terminate();
+    await link?.settled();
+    await fixture.close();
+  }
+}
+it('records one budget refusal before acknowledging a stopped turn, including after recovery',
+  recordsBudgetAdmissionRefusal);
