@@ -4,6 +4,8 @@ import { promisify } from 'node:util';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { applyToolPolicy, mcpCatalogue } from '@opencrane/projections';
 import { mcpConfigurationObservationSchema } from '@opencrane/events';
+import { publicationDigest } from '../src/publication.ts';
+import { startDecision } from '../src/decision.ts';
 import { envelope } from '../src/actor.ts';
 import { reviewToolPolicy, publishToolPolicy } from '../src/tool-policy.ts';
 import { prepareGatewayConfiguration } from '../src/gateway-generation.ts';
@@ -1207,6 +1209,7 @@ async function restorationDelivery(setup: Fixture) {
     child: setup.gatewayChild()!, configFile: setup.options.configFile,
     controlPort: await freePort(), settings };
   const delivery = gatewayDelivery(options);
+  setup.dispatchOptions.acknowledged = delivery.acknowledged;
   async function waitForWitness(record: Awaited<ReturnType<typeof publishRestoration>>) {
     const bytes = await readFile(options.configFile, 'utf8');
     const path = /\/configuration\/\d+\/[a-f0-9-]+/u.exec(bytes)![0];
@@ -1386,6 +1389,8 @@ async function restoresReviewedDrift(change: RestorationCase) {
     }
     await observeRestoration(context, change, delivery);
   }
+  const observation = setup.dispatchOptions.acknowledged?.();
+  if (observation) Object.assign(headers, generationHeaders(observation));
   const request = { method: 'POST', headers, body };
   const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
     request);
@@ -1512,3 +1517,168 @@ async function stopsRootPermit(reason: 'requester_stop' | 'allowance_exhausted')
 }
 it.each(['requester_stop', 'allowance_exhausted'] as const)(
   'refuses an old MCP permit and a new grant after its root stops: %s', stopsRootPermit);
+
+function generationHeaders(record: { generation: number; recordDigest: string;
+  members: { entry: { serverId: string; connectionId: string; reviewRevision: number } }[] }) {
+  const entry = record.members[0]!.entry;
+  return { 'x-opencrane-gateway-generation': String(record.generation),
+    'x-opencrane-record-digest': record.recordDigest, 'x-opencrane-server-id': entry.serverId,
+    'x-opencrane-connection-id': entry.connectionId,
+    'x-opencrane-review-revision': String(entry.reviewRevision) };
+}
+
+async function publishedFixture() {
+  const setup = await fixture();
+  onTestFinished(setup.close);
+  const headers = await prepare(setup);
+  await reviewRestoration(setup, 'review-generation');
+  const record = await publishRestoration(setup, 'publish-generation');
+  const delivery = await restorationDelivery(setup);
+  await delivery.deliver(record);
+  await delivery.waitForWitness(record);
+  expect(await delivery.observe()).not.toBeNull();
+  const constants = generationHeaders(record);
+  return { setup, headers, record, delivery, constants };
+}
+
+async function nextCarriedGeneration(context: Awaited<ReturnType<typeof publishedFixture>>) {
+  const { recordDigest: _digest, ...previous } = context.record;
+  const saved = { ...previous, generation: previous.generation + 1, changeRef: 'carried-next' };
+  const record = { ...saved, recordDigest: publicationDigest(saved) };
+  await context.setup.append('gateway-config-test', 'gateway.configuration_requested', record);
+  return record;
+}
+
+async function gatewayCall(context: Awaited<ReturnType<typeof publishedFixture>>,
+  extra: Record<string, string> = {}) {
+  const headers = { ...context.headers, ...extra };
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`http://127.0.0.1:${context.setup.options.port}/mcp/fixture/installed`,
+    request);
+  await response.text();
+  return response.status;
+}
+
+async function acceptsCurrentAndCarriedGeneration() {
+  const context = await publishedFixture();
+  const { setup, delivery } = context;
+  expect(await gatewayCall(context)).toBe(200);
+  expect(setup.received()).toBe(1);
+  const next = await nextCarriedGeneration(context);
+  expect(await gatewayCall(context)).toBe(403);
+  await delivery.deliver(next);
+  await delivery.waitForWitness(next);
+  expect(await gatewayCall(context)).toBe(403);
+  expect(await delivery.observe()).not.toBeNull();
+  const request = { method: 'POST', headers: { ...context.headers, ...context.constants }, body };
+  const old = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
+  expect(old.status).toBe(403);
+  expect(await gatewayCall(context)).toBe(200);
+  expect(setup.received()).toBe(2);
+  const rows = await history(setup.nats.store, 'mcp-fixture', 'test');
+  function isReceipt(row: typeof rows[number]) {
+    return row.event.type === 'mcp.configuration_observed';
+  }
+  expect(rows.filter(isReceipt)).toHaveLength(1);
+}
+it('accepts only the current acknowledged generation, including a carried member',
+  acceptsCurrentAndCarriedGeneration);
+
+const constantChanges = ['missing', 'generation', 'record-digest', 'server-id',
+  'connection-id', 'review-revision', 'duplicate'] as const;
+async function refusesInvalidConstants(change: typeof constantChanges[number]) {
+  const context = await publishedFixture();
+  const headers: Record<string, string> = { ...context.headers, ...context.constants };
+  let key = `x-opencrane-${change}`;
+  if (change === 'generation') key = 'x-opencrane-gateway-generation';
+  if (change === 'missing') {
+    for (const name of Object.keys(context.constants)) delete headers[name];
+  } else if (change === 'duplicate') {
+    const value = headers['x-opencrane-gateway-generation']!;
+    headers['x-opencrane-gateway-generation'] = `${value}, ${value}`;
+  } else {
+    headers[key] = 'wrong';
+  }
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(
+    `${context.setup.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
+  expect(response.status).toBe(403);
+  expect(context.setup.received()).toBe(0);
+}
+it.each(constantChanges)('refuses publication constants: %s', refusesInvalidConstants);
+
+async function refusesSpoofedNewGeneration(copies: number) {
+  const context = await publishedFixture();
+  const next = await nextCarriedGeneration(context);
+  const constants = generationHeaders(next);
+  if (copies === 2) constants['x-opencrane-gateway-generation'] = '2, 2';
+  expect(await gatewayCall(context, constants)).toBe(403);
+  expect(context.setup.received()).toBe(0);
+}
+it.each([1, 2])('refuses spoofed unacknowledged constants with %s copies',
+  refusesSpoofedNewGeneration);
+
+async function refusesConstantsOnLegacy() {
+  const setup = await fixture();
+  onTestFinished(setup.close);
+  const headers = await prepare(setup);
+  headers['x-opencrane-gateway-generation'] = '1';
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    request);
+  expect(response.status).toBe(403);
+  expect(setup.received()).toBe(0);
+}
+it('refuses generation constants on a legacy publication', refusesConstantsOnLegacy);
+
+async function refusesGenerationDuringDispatch(afterAdmission: boolean) {
+  const context = await publishedFixture();
+  const { setup } = context;
+  const headers = { ...context.headers, ...context.constants };
+  const value = await permit(setup, headers);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  async function changeAfterAdmission(command: AppendCommand) {
+    const result = await append(command);
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'mcp.dispatch_admitted') await nextCarriedGeneration(context);
+    return result;
+  }
+  if (afterAdmission) {
+    vi.spyOn(setup.nats.store, 'append').mockImplementation(changeAfterAdmission);
+  } else {
+    await nextCarriedGeneration(context);
+  }
+  try {
+    expect((await send(setup, value)).status).toBe(403);
+    expect((await send(setup, value)).status).toBe(403);
+    expect(setup.received()).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each([false, true])('refuses changed gateway generation after admission: %s',
+  refusesGenerationDuringDispatch);
+
+async function consumesPublishedPermitOnce(concurrent: boolean) {
+  const context = await publishedFixture();
+  const { setup } = context;
+  const value = await permit(setup, { ...context.headers, ...context.constants });
+  let replies;
+  if (concurrent) {
+    replies = await Promise.all([send(setup, value), send(setup, value)]);
+  } else {
+    replies = [await send(setup, value), await send(setup, value)];
+  }
+  function status(reply: Response) { return reply.status; }
+  expect(replies.map(status)).toEqual([200, 403]);
+  expect(setup.received()).toBe(1);
+  const restarted = await startDecision(setup.actor, setup.identity, setup.binding,
+    0, setup.keys, undefined, setup.dispatchOptions);
+  onTestFinished(restarted.close);
+  const request = { method: 'POST', headers: { 'x-opencrane-mcp-permit': value }, body };
+  const response = await fetch(`${restarted.url}/dispatch/mcp/fixture/installed`, request);
+  expect(response.status).toBe(403);
+  expect(setup.received()).toBe(1);
+}
+it.each([false, true])('consumes a published permit once, concurrent: %s',
+  consumesPublishedPermitOnce);
