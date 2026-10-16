@@ -868,6 +868,9 @@ The supervisor's disk gate survives restart. Its `quietProof: unavailable` is ne
 complete quiet proof. Paused/failure events, browser and queued input proof, saved
 hold cancellation and writer access remain later work. Fresh-install qualification
 is NOT RUN. Local process tests use Docker and a fixture provider.
+Deploy the server before the computer image: older servers do not recognise
+`bridge_gated`. Older computers still return the accepted quiet/unavailable shapes.
+
 The stop and refusal tests use real issuer keys and bridge sockets. Invalid gates
 are sent first before and after resume while memory-free and restricted turns run.
 They must leave work unchanged and return no gate receipt.
