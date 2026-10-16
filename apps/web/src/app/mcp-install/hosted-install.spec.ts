@@ -137,7 +137,8 @@ it.each(['not_run', 'unavailable', 'pass'] as const)(
     const root = screen();
     validForm(root);
     root.querySelector('form')?.requestSubmit();
-    await vi.waitFor(() => expect(root.querySelector('#hosted-check-status')).not.toBeNull());
+    await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
+      '#hosted-check-status')?.disabled).toBe(false));
     root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain(dateLabel));
     expect(root.textContent).toContain(verdict === 'not_run' ? 'Not run' :
@@ -203,4 +204,64 @@ it('labels an expired pass as expired and keeps Continue disabled', async () => 
   await vi.waitFor(() => expect(root.textContent).toContain('Expired'));
   expect(root.textContent).not.toContain('All four image checks passed');
   expect(root.querySelector<HTMLButtonElement>('#hosted-continue')?.disabled).toBe(true);
+});
+
+it('expires all four pass rows and the summary while the page is idle', async () => {
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  try {
+    vi.setSystemTime(Date.parse(expiry) - 1_000);
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(reply(202,
+      { serverId: 'server-1', changeRef: 'change-1' }))
+      .mockResolvedValueOnce(reply(200, admission('pass', 'admitted')));
+    const fixture = TestBed.createComponent(HostedInstall);
+    fixture.detectChanges();
+    const root: HTMLElement = fixture.nativeElement;
+    validForm(root);
+    root.querySelector('form')?.requestSubmit();
+    await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
+      '#hosted-check-status')?.disabled).toBe(false));
+    root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
+    await vi.waitFor(() => expect(root.textContent?.match(/Passed/gu)).toHaveLength(4));
+    expect(root.textContent).toContain('All four image checks passed');
+
+    await vi.advanceTimersByTimeAsync(1_001);
+    await fixture.whenStable();
+    expect(root.textContent?.match(/Expired/gu)).toHaveLength(4);
+    expect(root.textContent).not.toContain('All four image checks passed');
+    expect(root.querySelector<HTMLButtonElement>('#hosted-continue')?.disabled).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    fixture.destroy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('rejects a punycode host before posting', () => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(202));
+  const root = screen();
+  validForm(root);
+  fill(root, 'upstream-host', 'xn--a.com');
+  root.querySelector('form')?.requestSubmit();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('normalises an uppercase public host before posting', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(202,
+    { serverId: 'server-1', changeRef: 'change-1' }));
+  const root = screen();
+  validForm(root);
+  fill(root, 'upstream-host', 'API.GITHUB.COM');
+  root.querySelector('form')?.requestSubmit();
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  expect(registrationBody(fetch.mock.calls[0]?.[1]).upstream.host).toBe('api.github.com');
+});
+
+it('keeps package details editable after a definitive 400 rejection', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(400));
+  const root = screen();
+  validForm(root);
+  root.querySelector('form')?.requestSubmit();
+  await vi.waitFor(() => expect(root.textContent).toContain('correct the package details'));
+  expect(root.querySelector<HTMLInputElement>('#image-locator')?.value).toBe(locator);
+  expect(root.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
 });

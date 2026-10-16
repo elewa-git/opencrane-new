@@ -233,3 +233,27 @@ it('does not show the source choice on the page for a registered server', async 
   expect(root.textContent).not.toContain('Choose where the MCP server comes from.');
   fixture.destroy();
 });
+
+it('shows the admission heading and hides source choices after package submission', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(202,
+    { serverId: 'server-1', changeRef: 'change-1' }));
+  const fixture = TestBed.createComponent(McpInstall);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  const packageChoice = [...root.querySelectorAll<HTMLInputElement>('input[name="source"]')]
+    .find(input => input.closest('label')?.textContent?.includes('Package (OCI image)'));
+  packageChoice?.click();
+  fixture.detectChanges();
+  const locatorInput = root.querySelector<HTMLInputElement>('#image-locator');
+  const hostInput = root.querySelector<HTMLInputElement>('#upstream-host');
+  if (!locatorInput || !hostInput) throw new Error('Expected package form');
+  locatorInput.value = `registry.example.com/team/clock@sha256:${'a'.repeat(64)}`;
+  locatorInput.dispatchEvent(new Event('input', { bubbles: true }));
+  hostInput.value = 'api.github.com';
+  hostInput.dispatchEvent(new Event('input', { bubbles: true }));
+  root.querySelector('form')?.requestSubmit();
+  await vi.waitFor(() => expect(root.textContent).toContain('Registration saved'));
+  expect(root.querySelector('#add-heading')?.textContent).toContain('Package admission');
+  expect(root.querySelector('fieldset.sources')).toBeNull();
+  fixture.destroy();
+});
