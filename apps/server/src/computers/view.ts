@@ -1,12 +1,15 @@
-import { hasRoom, ViewDelivery } from './view-delivery.ts';
+import { ViewSessions, type ViewTicket as Ticket, type ViewStopReason as StopReason }
+  from './view-sessions.ts';
+import { LiveViewSession } from './view-session.ts';
+import { hasRoom } from './view-delivery.ts';
 import {
-  checkFailureDetails, checkOutcome, relativeLeaseExpiry, timeStage, viewTiming,
+  checkFailureDetails, checkOutcome, timeStage, viewTiming,
   leaseCheckDetails, type DesktopTiming,
 } from './view-timing.ts';
 import { viewerStream, desktopStream } from './rfb.ts';
-import { confirmAccess, deadline, monotonicClock, ViewAccessUnconfirmed, ViewLease } from './view-lease.ts';
+import { confirmAccess, deadline, monotonicClock, ViewAccessUnconfirmed } from './view-lease.ts';
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket, type RawData } from 'ws';
 import type { FastifyInstance } from 'fastify';
@@ -22,9 +25,6 @@ export interface LiveViewOptions extends ViewAccessOptions {
     observe?: DesktopTiming,
   ): Promise<Duplex>;
 }
-type Ticket = { cookie: string; memberId: string; conversationId: string; sessionId: string; expires: number; redeemBy: number };
-type StopReason = 'disconnected' | 'access_changed' | 'expired' | 'protocol'
-  | 'slow_viewer' | 'upstream' | 'shutdown' | 'unavailable';
 const admissionPath = /^\/api\/conversations\/([\w-]{1,200})\/view$/u;
 export const liveViewPath = /^\/ws\/conversations\/([\w-]{1,200})\/view$/u;
 type Computer = Awaited<ReturnType<typeof viewAccess>>;
@@ -49,13 +49,8 @@ interface ViewerSession {
   expiresAt: number;
   timing: Timing;
   upgradeAt: number;
-  sessionStartedAt: number;
-  lease: ViewLease<Computer>;
-  delivery: ViewDelivery;
-  expiryTimer: ReturnType<typeof setTimeout>;
-  stop: (reason: StopReason) => void;
-  stopped: boolean;
-  desktopOpening: boolean;
+  lifetime: LiveViewSession<Computer>;
+  release: () => void;
   upstream?: Duplex;
   upstreamAt?: number;
   viewer?: WebSocket;
@@ -71,10 +66,7 @@ function closeCode(reason: StopReason) {
 }
 
 export function registerLiveView(app: FastifyInstance, config: AuthConfig, options?: LiveViewOptions) {
-  let opening = 0;
-  const tickets = new Map<string, Ticket>();
-  const stops = new Set<(reason: StopReason) => void>();
-  const audits = new Set<Promise<void>>();
+  const sessions = new ViewSessions();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false, autoPong: false,
     handleProtocols: () => 'binary' });
   const origin = new URL(config.redirectUri).origin;
@@ -120,11 +112,8 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         return checkAccess(admittedMemberId, admittedConversationId, timing, 'admission');
       }
       await confirmAccess(checkMemberAccess);
-      for (const [key, value] of tickets) if (value.redeemBy <= Date.now()) tickets.delete(key);
-      if (tickets.size >= 1024 || stops.size + opening >= 16) throw new Error('View capacity');
-      const ticket = randomBytes(32).toString('hex');
-      tickets.set(ticket, { cookie, memberId, conversationId, sessionId,
-        expires: Math.min(session.exp * 1000, Date.now() + 120_000), redeemBy: Date.now() + 15_000 });
+      const identity = { cookie, memberId, conversationId, sessionId };
+      const ticket = sessions.issueTicket(identity, session.exp * 1000);
       timing('ticket_issue', 'ok', performance.now() - admissionAt);
       return { ticket, sessionId };
     } catch (error) {
@@ -172,8 +161,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     const { cookie } = authenticate(headers);
     const protocols = headers['sec-websocket-protocol']?.split(',').map(s => s.trim());
     const key = protocols?.[1] ?? '';
-    const ticket = tickets.get(key);
-    tickets.delete(key);
+    const ticket = sessions.takeTicket(key);
     if (protocols?.[0] !== 'binary' || !ticket || ticket.cookie !== cookie
       || ticket.redeemBy <= Date.now() || ticket.conversationId !== conversationId) {
       throw new Error('Invalid ticket');
@@ -216,41 +204,15 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
   };
   function startViewerSession(options: StartViewerSessionOptions) {
     const { request, socket, head, ticket, computer, audit, expiresAt, timing, upgradeAt } = options;
-    const sessionStartedAt = monotonicClock.now();
-    let firstCheck = true;
-    function check() {
-      let phase: 'post_audit' | 'renewal' = 'renewal';
-      if (firstCheck) {
-        firstCheck = false;
-        phase = 'post_audit';
-      }
+    function check(
+      phase: 'post_audit' | 'renewal', startedAt: number,
+      validUntil: () => number | undefined,
+    ) {
       return checkAccess(ticket.memberId, ticket.conversationId, timing, phase,
-        sessionStartedAt, lease.validUntilAt.bind(lease));
+        startedAt, validUntil);
     }
-    function resumed() {
-      timing('lease_resume', 'ok');
-      if (!session.desktopOpening) {
-        session.desktopOpening = true;
-        void openDesktop(session);
-      }
-      session.delivery.leaseResumed();
-    }
-    function renewed() {
-      session.delivery.leaseRenewed();
-    }
-    function paused() {
-      timing('lease_pause', 'unavailable');
-      // Keeping transports open grants nothing; it only saves the reconnect.
-      session.delivery.leasePaused();
-    }
-    function denied() {
-      stopSession(session, 'access_changed');
-    }
-    function unconfirmed() {
-      stopSession(session, 'unavailable');
-    }
-    function expired() {
-      stopSession(session, 'expired');
+    function open() {
+      void openDesktop(session);
     }
     function stop(reason: StopReason) {
       stopSession(session, reason);
@@ -258,22 +220,19 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     function disconnected() {
       stopSession(session, 'disconnected');
     }
-    const events = { resumed, renewed, paused, denied, unconfirmed };
-    const lease: ViewLease<Computer> = new ViewLease(check, computer, events);
-    const delivery = new ViewDelivery(lease, expiresAt, stop);
-    const expiryTimer = setTimeout(expired, Math.max(0, expiresAt - monotonicClock.now()));
+    const steps = { check, openDesktop: open, stop };
+    const lifetime = new LiveViewSession(computer, expiresAt, timing, steps);
+    const release = sessions.ownSession(stop);
     const session: ViewerSession = {
       request, socket, head, ticket, computer, audit, expiresAt, timing, upgradeAt,
-      lease, delivery, expiryTimer, stop, stopped: false, desktopOpening: false, sessionStartedAt,
+      lifetime, release,
     };
-    stops.add(stop);
     socket.once('close', disconnected);
     if (socket.destroyed) {
       stopSession(session, 'disconnected');
       return;
     }
-    // No authority check runs during the audit append. Only a later success opens the desktop.
-    lease.start();
+    lifetime.start();
   }
 
   async function openDesktop(session: ViewerSession) {
@@ -295,7 +254,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     try {
       const upstream = await timeStage(open, reportStarted, reportSucceeded, reportFailed);
       session.upstream = upstream;
-      if (session.stopped || session.socket.destroyed || upstream.destroyed) {
+      if (session.lifetime.isStopped() || session.socket.destroyed || upstream.destroyed) {
         upstream.destroy();
         stopSession(session, 'upstream');
         return;
@@ -310,13 +269,13 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
   }
 
   function canOpenDesktop(session: ViewerSession) {
-    if (session.stopped) return false;
+    if (session.lifetime.isStopped()) return false;
     const now = monotonicClock.now();
     if (now >= session.expiresAt) {
       stopSession(session, 'expired');
       return false;
     }
-    return session.lease.allows(now);
+    return session.lifetime.lease.allows(now);
   }
 
   function connectViewer(session: ViewerSession, viewer: WebSocket) {
@@ -324,12 +283,12 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     const { timing } = session;
     const upstream = session.upstream;
     if (!upstream) throw new Error('Desktop missing');
-    session.delivery.attach(viewer, upstream);
+    session.lifetime.delivery.attach(viewer, upstream);
     timing('websocket_upgrade', 'ok', performance.now() - session.upgradeAt);
     let pingWindow = Date.now();
     let pings = 0;
     function pong(bytes: Buffer) {
-      if (session.stopped) return;
+      if (session.lifetime.isStopped()) return;
       if (Date.now() - pingWindow >= 1000) {
         pingWindow = Date.now();
         pings = 0;
@@ -351,7 +310,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       stopSession(session, 'upstream');
     }
     function forwardViewer(bytes: Buffer) {
-      session.delivery.toDesktop(bytes);
+      session.lifetime.delivery.toDesktop(bytes);
     }
     const accept = viewerStream(forwardViewer, protocolFault);
     function receiveViewer(bytes: RawData, binary: boolean) {
@@ -364,7 +323,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     let receivedBytes = false;
     let forwardedFrame = false;
     function forwardDisplay(bytes: Buffer, setup: boolean) {
-      const delivered = session.delivery.toBrowser(bytes, setup);
+      const delivered = session.lifetime.delivery.toBrowser(bytes, setup);
       if (delivered && !setup && !forwardedFrame) {
         forwardedFrame = true;
         timing('first_browser_frame', 'ok', performance.now() - session.upstreamAt!);
@@ -389,14 +348,8 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
   }
 
   function stopSession(session: ViewerSession, reason: StopReason) {
-    if (session.stopped) return;
-    session.stopped = true;
-    session.timing('stop', reason, 0,
-      relativeLeaseExpiry(session.lease.validUntilAt(), session.sessionStartedAt));
-    session.lease.stop();
-    session.delivery.stop();
-    clearTimeout(session.expiryTimer);
-    stops.delete(session.stop);
+    if (!session.lifetime.stop(reason)) return;
+    session.release();
     session.upstream?.destroy();
     if (session.viewer) {
       const viewer = session.viewer;
@@ -433,13 +386,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         app.log.error(details, 'View stop audit unavailable');
       }
     }
-    const audit = append();
-    audits.add(audit);
-    function forgetAudit() {
-      audits.delete(audit);
-    }
-    void audit.finally(forgetAudit);
-    return audit;
+    return sessions.recordStop(append);
   }
 
   async function handleViewerUpgrade(
@@ -448,12 +395,6 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     function forbid() {
       socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
     }
-    if (opening + stops.size >= 16) {
-      await refusal('capacity', conversationId);
-      forbid();
-      return;
-    }
-    opening++;
     const upgradeAt = performance.now();
     let timing = viewTiming(app.log, randomUUID());
     let ticket: Ticket | undefined;
@@ -479,8 +420,6 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         await refusal('upgrade', conversationId, ticket?.memberId);
         forbid();
       }
-    } finally {
-      opening--;
     }
   }
 
@@ -491,11 +430,20 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       socket.destroy();
     }
     socket.on('error', socketError);
-    void handleViewerUpgrade(request, socket, head, match[1]);
+    const conversationId = match[1];
+    function start() {
+      return handleViewerUpgrade(request, socket, head, conversationId);
+    }
+    async function refuseCapacity() {
+      await refusal('capacity', conversationId);
+      socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+    }
+    void sessions.open(start, refuseCapacity);
   }
   app.server.on('upgrade', viewerUpgrade);
-  app.addHook('preClose', async () => {
-    for (const stop of stops) stop('shutdown'); tickets.clear();
-    await Promise.all(audits); wss.close();
-  });
+  async function shutdown() {
+    await sessions.shutdown();
+    wss.close();
+  }
+  app.addHook('preClose', shutdown);
 }

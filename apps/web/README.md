@@ -172,6 +172,9 @@ npm run build -w apps/web
 npm run typecheck -w apps/web
 ```
 
+The desktop viewer first asks for access, then connects its socket and display.
+It clears the picture when permission expires or the session closes.
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): routes, message details, limits and test commands.

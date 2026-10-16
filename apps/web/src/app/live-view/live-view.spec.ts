@@ -154,6 +154,35 @@ async function unconfirmedBrowserAdmission() {
   expect(element.querySelector('canvas')).toBeNull();
 }
 it('shows Failed and retries admission when POST returns 503', unconfirmedBrowserAdmission);
+
+async function ignoresOldSocketMessage(message: string, expectedAccess: boolean) {
+  const { fixture } = await watchFakeView(200);
+  const oldSocket = FakeSocket.last;
+  const component = fixture.componentInstance;
+  component['close']('Disconnected');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"ticket":"replacement"}')));
+  await component['open']();
+  const replacementSocket = FakeSocket.last;
+  expect(replacementSocket).not.toBe(oldSocket);
+
+  replacementSocket.message(JSON.stringify({ lease: 'valid', at: 0, until: 1000 }));
+  expect(component['accessConfirmed']()).toBe(true);
+
+  oldSocket.message(message);
+
+  expect(component['accessConfirmed']()).toBe(expectedAccess);
+  expect(component['state']()).toBe('Connecting');
+  fixture.destroy();
+}
+
+it('ignores an old socket pause notice after opening a replacement viewer', async () => {
+  await ignoresOldSocketMessage('{"lease":"paused"}', true);
+});
+
+it('ignores an invalid notice from an old socket after opening a replacement viewer', async () => {
+  await ignoresOldSocketMessage('{"lease":"unknown"}', true);
+});
+
 async function browserCloseState(scenario: { code: number; state: string }) {
   const { fixture, element } = await watchFakeView(200);
   expect(element.querySelector('canvas')).not.toBeNull();

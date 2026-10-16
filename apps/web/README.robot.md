@@ -505,6 +505,8 @@ only. Group and assistant-notes forget, edit, unpin and store Undo have no contr
 `npm run visual:screen-p4-13-forget` captures both widths with intercepted replies;
 see [the receipt](../../docs/process/screen-p4-13-forget/receipt.md).
 
+`LiveView.open` obtains admission and loads the viewer. `connectViewer` connects
+the socket and lease channel; `startViewer` attaches the desktop display.
 Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
 `/ws/conversations/:id/view`, through the existing frontend `/ws` proxy.
 
