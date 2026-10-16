@@ -190,6 +190,7 @@ for (const kind of ['group', 'personal', 'team'] as const) {
         await runtime.work(1);
         if (mode === 'exhaustion') {
           await until(unavailable);
+          await runner.run(projection);
           await expectSharedCleanupStatus(target, 'unavailable');
           expect(keys.status(identity)).toBe('missing');
           expect(keys.status(candidate)).toBe('available');

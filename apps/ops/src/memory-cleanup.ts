@@ -23,8 +23,8 @@ function recordedFor(event: EventEnvelope, saved: Tombstone,
 
 async function cleanupHistory(store: EventStore, trigger: EventEnvelope) {
   const saved = memoryForgottenEventSchema.parse(trigger);
-  if (!('schemaVersion' in saved.data) || saved.data.scopeKind !== 'person') {
-    throw new Error('Memory cleanup requires a person tombstone');
+  if (!('schemaVersion' in saved.data)) {
+    throw new Error('Memory cleanup requires a version-1 tombstone');
   }
   const rows: StoredEvent[] = [];
   let original: Tombstone | undefined;
@@ -224,7 +224,7 @@ export async function recoverMemoryCleanup(runtime: HandlerRuntime, source: Even
       if (event.type === 'memory.forgotten') {
         const result = memoryForgottenEventSchema.safeParse(event);
         if (!result.success || !('schemaVersion' in result.data.data)) continue;
-        if (row.sequence <= checkpoint && result.data.data.scopeKind === 'person') {
+        if (row.sequence <= checkpoint) {
           pending.set(event.id, result.data);
         }
       }

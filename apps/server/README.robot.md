@@ -2824,6 +2824,9 @@ An accepted receipt contains operation, outcome, changeId, memoryId, revision, s
 audience, acceptedAt, hidden and cleanupStatus. The changes GET reads tombstones and matching
 cleanup events directly, without custody or projection catch-up. Completion is final and adds
 forgottenAt; unavailable cleanup keeps hidden true. No receipt includes fact text or key references.
+The HTTP tests run accepted shared forget requests through the queued cleanup worker.
+They check revision and candidate key destruction, forgotten status, exhausted cleanup,
+and facts staying hidden during projection rebuild.
 Scopes and detail advertise canForget from these current rights. Forgotten detail
 returns HTTP 200 with status unavailable and reason forgotten. The memory MCP has no forget.
 Fresh-install qualification remains NOT RUN; no screens, model calls or dev stack are included.

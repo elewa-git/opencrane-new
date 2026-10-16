@@ -14,7 +14,7 @@ flowchart LR
   nats -->|new events, departures, owner appointments and memory facts| ops["apps/ops<br/>workers and memory replay"]
   ops -->|records gateway preparations, departure changes and spending stops| nats
   ops -.->|checks memory history and revisions| libs["libs/*<br/>shared code"]
-  ops -->|destroys forgotten memory keys| keys["Server files<br/>private memory keys"]
+  ops -->|destroys forgotten personal and shared memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables and jobs; locks gateway preparation; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates and checks permissions| fga["OpenFGA<br/>permission service"]
   ops -->|updates computers, delivers passes and keys, stops private tools| kube["Kubernetes<br/>computer manager"]
@@ -39,7 +39,7 @@ flowchart LR
 - Rebuilds tables and permissions for operator recovery.
 - Checks all saved memory keys before rebuilding current memory and search text.
   Readers and workers stay stopped during this process.
-- Destroy forgotten personal memory keys and dependent copies when configured.
+- Destroy forgotten personal, group and assistant-notes memory keys and dependent copies when configured.
   Record completion only after checking key deletion and removal of searchable text.
   Record when cleanup is unavailable after retries run out, and rebuild lost jobs from events.
 - Lists failed reaction jobs and records an operator’s chosen cancellation.
