@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
-  server["apps/server<br/>back end"] -.->|image admission, member flags, access replies, child requests, child invitations, published answers, publication facts, gateway receipts, saved chat choices and spending stop replies| protocol
+  server["apps/server<br/>back end"] -.->|image admission, member flags, access replies, child requests and invitations, origin replies, published answers, publication facts, gateway receipts, saved chat choices and spending stop replies| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list shapes"]
@@ -51,6 +51,7 @@ A saved receipt alone cannot prove that a gateway is still running.
   member headers keep false flags.
 - Check own-group picker pages, reviewed member snapshots and human group chat rows.
 - Check group and child chat participant edits and the current people list.
+- Check child origin replies: a visible parent link or a restricted result without details.
 - Check archive and read requests, and each person's saved choice in chat lists.
 - Check flat group rows and create, add or remove commands for the People & groups screen.
 - Carry a tool server's saved hold after its catalogue changes.

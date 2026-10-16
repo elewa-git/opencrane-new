@@ -165,3 +165,9 @@ export const chatStateCommandSchema = z.discriminatedUnion('action', [
   z.strictObject({ id: chatIdSchema, action: z.literal('read'), joinEventId: chatIdSchema,
     throughPosition: z.int().positive(), throughEventId: chatIdSchema }),
 ]);
+
+export const chatOriginSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('linked'), parentConversationId: chatIdSchema,
+    parentTitle: z.string(), sourceMessageId: chatIdSchema, sourcePosition: z.int().positive() }),
+  z.strictObject({ status: z.literal('restricted') }),
+]);

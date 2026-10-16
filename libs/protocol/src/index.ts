@@ -44,6 +44,7 @@ export {
   chatChangeSchema,
   chatParticipantCommandSchema,
   chatParticipantsSchema,
+  chatOriginSchema,
   type ChatRow,
   type ChatConversation,
 } from './chat.ts';

@@ -2,6 +2,19 @@
 
 For people, read [README.md](README.md) first.
 
+## Child origin GET
+
+`chat/origin.ts` handles `GET /api/conversations/:conversationId/origin`, registered
+inside `registerChatRoutes`. The [API contract](../../docs/api/group-chats.md#child-origin)
+defines the strict linked and restricted replies. Session and active membership checks
+precede creation and source reads, which share a separate ten-second deadline.
+The source uses `readEventAt`; it must match the saved id, type, silo and parent id.
+Child and parent participation checks follow, without an `authorityFence`.
+Only a visible source allows the shared `list-summary.ts` reader to decrypt a title.
+Errors carry no parent details. `test/child-origin.test.ts` uses real NATS, PostgreSQL
+and OpenFGA, including permission outages, delayed reads, removal and unchanged state.
+Fresh-install qualification is NOT RUN.
+
 ## Close-safe turn acknowledgements (P4-6 PR 4, first part; Part of #88)
 
 A stored `conversation.closed` on either `conversation-<id>` or legacy
