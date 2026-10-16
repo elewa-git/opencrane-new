@@ -1910,6 +1910,13 @@ settlement immediately before append. Both refuse with 409. A retry after unchan
 settlement or release returns the original receipt, including after a lost reply.
 Late uncertainty that reopens a hold makes the retry return 403 without another marker.
 The status GET still returns the historical receipt; refusal does not undo switch-on.
+The retry checks the global position too. Reopening a hold between its budget read
+and access check returns 409. A later retry reads the reopened hold and returns 403.
+An accepted zero-cent release with non-dispatch evidence clears reopened uncertainty
+when no final amount conflicts. Settlement saves that release once. Redelivery,
+a new actor and event-store reader, and projection replay preserve the zero hold.
+Conflicting usage amounts keep the full reservation held and switch-on refused,
+even if the release was accepted before those amounts arrived.
 
 Replay uses a new event-store reader and budget actor, restarts the HTTP server, and
 rebuilds the PostgreSQL budget projection. Original payer, tariff, charges and mode

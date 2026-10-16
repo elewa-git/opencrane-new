@@ -23,7 +23,7 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks access and saved work; records admissions and spending| store["libs/event-store<br/>event log"]
+  models -->|checks access and saved work; records admissions, spending and proven unsent releases| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -155,7 +155,9 @@ Retrying a model request does not yet recover an earlier hold.
   own pause stops new model work. An owner or admin can switch this on after
   choosing an explicit default and draining legacy turns. Every saved hold and send
   must have a settlement or release, even if its computer was lost or its turn closed.
-  A retry also refuses if late usage evidence has reopened a hold. The saved
+  A retry also refuses if late usage evidence has reopened a hold, including changes
+  during the retry's reads. An accepted resolution with proof that the call was not
+  sent releases the hold at zero. Conflicting costs keep the hold blocked. The saved
   switch-on stays in place. Replaying events keeps the original payer and charge
   without sending calls again. Sends without a money hold still block switch-on
   because their completion is not yet recorded.

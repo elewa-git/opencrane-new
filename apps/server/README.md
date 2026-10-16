@@ -11,8 +11,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks gateway configurations, public tool addresses, startup, invitations, departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, loaded fact links and shared reference fold, later access changes, tool reviews, hosted image checks, publication status, turn previews and saved references| libs["libs/*<br/>shared code"]
-  server -->|records reviewed child requests and answers, child creation with first inputs, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops, refused turn decisions and managed call modes| nats["NATS<br/>event log"]
+  server -.->|checks gateway settings, public tool addresses, startup, member and child invitations, indexed departures, final tool and memory sends, spending stops for queued messages, renewals and switch-on retries, memory setup and loaded fact links, later access changes through saving, tool reviews, hosted images, publication requests and status, turn previews, saved references, closes and shared reference folds| libs["libs/*<br/>shared code"]
+  server -->|records reviewed child requests and answers, child creation and first inputs, authenticated instance observations and stops, owner and admin stops, control intent, personal and shared memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops, refused turn decisions and managed call modes| nats["NATS<br/>event log"]
   nats -->|saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -253,7 +253,10 @@ computer and tool call is still planned. Owners and admins can record provider
 switch-on after choosing a default and draining legacy turns. Existing holds and
 sends must settle or release first. A lost reply can be recovered, but retrying the
 command refuses if later evidence has reopened a hold. The status read still shows
-the original saved change; that refusal does not undo switch-on.
+the original saved change; that refusal does not undo switch-on. Changes during the
+retry's reads also refuse it. An accepted zero-cost resolution with proof that the
+call was not sent releases a reopened hold. Conflicting costs keep it blocked.
+Both results survive restart and replay.
 
 A person can forget their own saved fact through HTTP. Group members can also forget
 group facts and notes from their group’s assistant when they have both read and write

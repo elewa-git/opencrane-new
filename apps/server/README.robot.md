@@ -2652,7 +2652,11 @@ The command tests also cover duplicate usage and settlement delivery, zero-cost
 release, completion races and restart/replay (PR 4f). The saved marker does not let
 a POST retry bypass an unresolved hold or send. A retry with late unknown settlement
 returns 403; the status GET still returns the original historical receipt. This does
-not undo switch-on. Sends without a reservation have no completion writer yet and
+not undo switch-on. A hold reopened during the retry's history reads returns 409.
+An accepted zero-cent resolution with non-dispatch evidence releases a reopened hold
+once when no final amount conflicts. Tests check successful retry, redelivery,
+server and actor restart, and projection replay. Conflicting usage keeps the full
+hold and refuses retries through the same recovery steps. Sends without a reservation have no completion writer yet and
 remain refused. The fixture records zero provider requests and custody reads during
 replay. Models startup, dev-stack wiring, switch-off, retirement and UI are outside
 this part. Fresh-install qualification and paid calls are NOT RUN.

@@ -256,7 +256,10 @@ The existing changes GET returns its original receipt. A missing receipt remains
 id and body returns the original receipt, including after a lost reply, unless a
 hold or send is unresolved. Late evidence can reopen a released hold; that retry
 returns 403 and saves nothing. The status GET still returns the original receipt,
-and switch-on remains recorded. Changed retry
+and switch-on remains recorded. A hold reopened during the retry's history reads
+returns 409. An accepted zero-cent resolution with non-dispatch evidence clears
+the reopened hold unless final amounts conflict. Redelivery and restart preserve
+that result. Changed retry
 input or stale positions return 409. Missing prerequisites, denied access and a new
 switch-on id after success return 403. Refusals save nothing. Any event saved between
 the initial history position and the append causes 409; reload before trying a new id.
