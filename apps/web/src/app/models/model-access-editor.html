@@ -1,5 +1,14 @@
-<oc-hinge-drawer [open]="opened()" [title]="'Access · ' + model()"
-  [description]="taskRoute()" [returnFocusTo]="opener" (closed)="close()">
+@if (inlineModel()) {
+  <ng-container [ngTemplateOutlet]="content" />
+  <ng-container [ngTemplateOutlet]="actions" />
+} @else {
+  <oc-hinge-drawer [open]="opened()" [title]="'Access · ' + model()"
+    [description]="taskRoute()" [returnFocusTo]="opener" (closed)="close()">
+    <ng-container [ngTemplateOutlet]="content" />
+    <div overlayFooter><ng-container [ngTemplateOutlet]="actions" /></div>
+  </oc-hinge-drawer>
+}
+<ng-template #content>
   <div role="status" aria-live="polite" aria-atomic="true">
     <strong>{{ messages[phase()] }}</strong>
     @if (detail()) { <p>{{ detail() }}</p> }
@@ -7,6 +16,20 @@
   @if (list(); as access) {
     @if (noAudience()) { <p>No audience yet</p> }
     @else { <p>Showing {{ access.grants.length }} of {{ access.grantTotal }}</p> }
+    @if (inlineModel()) {
+      <div class="chips">
+        @for (row of chips(); track row.granteeKind + ':' + row.granteeId) {
+          <span class="chip">
+            <span>{{ glyphs[row.granteeKind] }}
+              {{ labels[row.granteeKind] }} · {{ row.displayName }}
+              @if (row.memberCount !== undefined) { · {{ row.memberCount }} people }
+            </span>
+            <button type="button" [disabled]="locked(true)" [attr.aria-label]="'Remove ' + row.displayName"
+              (click)="choose('revoke', row.granteeKind, row.granteeId, true)">×</button>
+          </span>
+        }
+      </div>
+    } @else {
     @for (row of access.grants; track row.granteeKind + ':' + row.granteeId) {
       <article>
         <strong>{{ row.displayName }}</strong><span>{{ labels[row.granteeKind] }}</span>
@@ -16,6 +39,7 @@
           {{ row.state === 'granted' ? 'Remove' : 'Grant' }}
         </button>
       </article>
+    }
     }
     <h3>Add access</h3>
     <div class="sources">
@@ -45,7 +69,10 @@
   @if (phase() === 'saved') {
     <p>Removing a group stops new calls within two seconds; calls already sent still settle.</p>
   }
-  <div overlayFooter>
+</ng-template>
+<ng-template #actions>
+  <div>
+    @if (reference()) { <p>Reference: <code>{{ reference() }}</code></p> }
     @if (edit()) { <p>One row selected: {{ edit()?.action === 'grant' ? 'Grant' : 'Remove' }}.</p> }
     @if (phase() === 'conflict' || phase() === 'failed') {
       <button type="button" [disabled]="busy()" (click)="refresh()">Refresh</button>
@@ -58,4 +85,4 @@
         (click)="save()">Save access</button>
     }
   </div>
-</oc-hinge-drawer>
+</ng-template>

@@ -100,7 +100,7 @@
     </section>
 
   }
-  @if (loadState() === 'ready' || loadState() === 'retrying') {
+  @if (!setupOpen() && (loadState() === 'ready' || loadState() === 'retrying')) {
     <oc-model-table [providers]="providers()" [registry]="registry()" [routing]="routing()"
       [editorOpened]="accessEditor.opened()" (access)="accessEditor.open($event.model, $event.opener)"
       (lostAccess)="tableDenied($event)" />
@@ -117,7 +117,7 @@
         @for (item of ['provider', 'key', 'verify', 'models', 'access', 'done'];
           track item; let index = $index) {
           <span [class.current]="stepNumber() === index + 1"
-            [class.complete]="stepNumber() > index + 1">
+            [class.visited]="stepNumber() > index + 1">
             <span aria-hidden="true">{{ index + 1 }}</span>{{ item }}
           </span>
         }
@@ -281,29 +281,11 @@
         }
       }
 
-      @if (step() === 'access') {
-        <section class="access-unavailable">
-          <h3>Who can use these models?</h3>
-          <p>Grant access from each model's Access button.
-            Both the requester and the assistant need access.</p>
-        </section>
-      }
-
-      @if (step() === 'done') {
-        <section class="completion">
-          <h3>What was configured</h3>
-          <oc-shared-state kind="confirmed" [message]="activeProviderName() + ' saved'"
-            detail="The provider configuration was saved. The key itself is never shown."
-            [showAction]="false" />
-          @if (activeProvider(); as provider) {
-            <oc-integration-facts [facts]="providerFacts(provider)" />
-            <p>Enabled models: {{ provider.enabledModels.length }}.</p>
-          }
-          <p>Grant access from each model's Access button.
-            Both the requester and the assistant need access.</p>
-          <p class="evidence-note">These checks are evidence only. They do not prove a conversation
-            works or guarantee a fallback.</p>
-        </section>
+      @if (setupOpen()) {
+        <oc-provider-setup-access [hidden]="step() !== 'access' && step() !== 'done'"
+          [active]="step() === 'access'" [models]="selectedModels()" [provider]="activeProvider()"
+          [done]="step() === 'done'" [modelsCurrent]="!!confirmedModels()[providerIdDraft()]"
+          (lostAccess)="clearProtectedData()" />
       }
 
       @if (resultText()) {
@@ -349,6 +331,7 @@
         <button class="button primary" type="button" (click)="nextStep()">Next</button>
         <button class="button secondary" type="button" (click)="previousStep()">Back</button>
       } @else {
+        <button class="button secondary" type="button" (click)="previousStep()">Back to Access</button>
         <button class="button primary" type="button" (click)="closeSetup()">Go to Models</button>
         <button class="button secondary" type="button" (click)="closeSetup()">Close</button>
       }

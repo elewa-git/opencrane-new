@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, effect, input, output, signal, type OnDestroy }
+import { NgTemplateOutlet } from '@angular/common';
+import { ChangeDetectionStrategy, Component, effect, input, output, signal, untracked, type OnDestroy }
   from '@angular/core';
 import { z } from 'zod';
 import { modelAccessResponseSchema, modelAccessCandidatesResponseSchema,
@@ -10,6 +11,9 @@ import type { TaskRouting } from './provider-api';
 type Command = z.infer<typeof modelAccessCommandSchema>;
 type Kind = Command['granteeKind'];
 type Edit = Pick<Command, 'action' | 'granteeKind' | 'granteeId'>;
+type Grantee = Edit & { displayName: string; memberCount?: number | undefined };
+export type AccessOutcome = { modelId: string; commandId: string; operation: Edit['action'];
+  grantee: Grantee; phase: Phase };
 type Phase = 'ready' | 'loading' | 'applying' | 'saved' | 'conflict' | 'unavailable'
   | 'unknown' | 'access' | 'failed' | 'no_effect';
 const recoverySchema = z.object({
@@ -28,11 +32,16 @@ const reasons: Record<string, string> = {
 };
 
 @Component({
-  selector: 'oc-model-access-editor', imports: [HingeDrawer],
+  selector: 'oc-model-access-editor', imports: [HingeDrawer, NgTemplateOutlet],
   templateUrl: './model-access-editor.html', styleUrl: './model-access-editor.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ModelAccessEditor implements OnDestroy {
+  readonly inlineModel = input('');
+  readonly outcome = output<AccessOutcome>();
+  protected readonly reference = signal('');
+  private readonly chosen = signal<Grantee[]>([]);
+  private readonly target = signal<Grantee | undefined>(undefined);
   readonly denied = input(false);
   readonly routing = input<TaskRouting>({});
   readonly lostAccess = output<void>();
@@ -48,6 +57,7 @@ export class ModelAccessEditor implements OnDestroy {
   protected readonly edit = signal<Edit | undefined>(undefined);
   protected opener: HTMLElement | undefined;
   protected readonly kinds: Kind[] = ['member', 'team', 'assistant'];
+  protected readonly glyphs = { member: '♙', team: '♧', assistant: '▲' };
   protected readonly labels = { member: 'Person', team: 'Group', assistant: 'Assistant' };
   protected readonly messages: Record<Phase, string> = {
     ready: '', loading: 'Loading access…', applying: 'Applying', saved: 'Saved',
@@ -62,6 +72,31 @@ export class ModelAccessEditor implements OnDestroy {
 
   constructor() {
     effect(this.clearDenied.bind(this));
+    effect(this.openInline.bind(this));
+    effect(this.reportOutcome.bind(this));
+  }
+  private openInline(): void {
+    const model = this.inlineModel();
+    if (model && !this.denied()) void untracked(this.open.bind(this, model));
+  }
+  private reportOutcome(): void {
+    const grantee = this.target();
+    if (!grantee) return;
+    const outcome = { modelId: this.model(), commandId: this.reference(),
+      operation: grantee.action, grantee, phase: this.phase() };
+    this.outcome.emit(outcome);
+  }
+  protected chips(): Grantee[] {
+    const rows = new Map<string, Grantee>();
+    for (const grant of this.list()?.grants ?? []) {
+      if (grant.state !== 'granted') continue;
+      const row: Grantee = { ...grant, action: 'revoke' };
+      rows.set(grant.granteeKind + grant.granteeId, row);
+    }
+    for (const candidate of this.chosen()) {
+      rows.set(candidate.granteeKind + candidate.granteeId, candidate);
+    }
+    return [...rows.values()];
   }
   private clearDenied(): void {
     if (!this.denied() || this.phase() === 'access') return;
@@ -75,13 +110,14 @@ export class ModelAccessEditor implements OnDestroy {
     this.phase.set('access');
     this.opened.set(opened);
   }
-  async open(model: string, opener: HTMLElement): Promise<void> {
+  async open(model: string, opener?: HTMLElement): Promise<void> {
     this.close();
     this.request = new AbortController();
     this.model.set(model);
     this.opener = opener;
     this.opened.set(true);
-    const recovered = this.pending.has(model) ? undefined : readStoredCommand(model);
+    const recovered = this.inlineModel() || this.pending.has(model)
+      ? undefined : readStoredCommand(model);
     if (recovered) {
       this.pending.set(model, { ...recovered, phase: 'unknown' });
     }
@@ -97,6 +133,9 @@ export class ModelAccessEditor implements OnDestroy {
     this.list.set(undefined);
     this.candidates.set(undefined);
     this.edit.set(undefined);
+    this.target.set(undefined);
+    this.chosen.set([]);
+    this.reference.set('');
     this.detail.set('');
     this.busy.set(false);
     this.picking.set(false);
@@ -120,13 +159,28 @@ export class ModelAccessEditor implements OnDestroy {
     const list = this.list();
     return !!list && list.grants.length === list.grantTotal && !list.grants.some(isGranted);
   }
-  protected locked(): boolean {
-    return this.busy() || !!this.edit() || this.pending.has(this.model())
+  protected locked(allowEdit = false): boolean {
+    return this.busy() || (!allowEdit && !!this.edit()) || this.pending.has(this.model())
       || !this.list()?.canManage || this.phase() === 'conflict';
   }
-  protected choose(action: Edit['action'], granteeKind: Kind, granteeId: string): void {
-    if (this.locked()) return;
+  protected choose(action: Edit['action'], granteeKind: Kind, granteeId: string,
+    allowEdit = false): void {
+    if (this.locked(allowEdit)) return;
     this.edit.set({ action, granteeKind, granteeId });
+    const rows = this.chips();
+    let grantee = rows.find(matchesGrantee(granteeKind, granteeId));
+    if (!grantee) {
+      const candidate = this.candidates()?.rows.find(matchesCandidate(granteeId));
+      if (candidate) {
+        grantee = { action, granteeKind, granteeId, displayName: candidate.displayName,
+          memberCount: candidate.memberCount };
+        this.chosen.set([...this.chosen(), grantee]);
+      }
+    }
+    const target = grantee ? { ...grantee, action } : undefined;
+    this.target.set(target);
+    if (this.inlineModel()) this.candidates.set(undefined);
+    this.reference.set('');
     this.phase.set('ready');
   }
   protected async refresh(): Promise<boolean> {
@@ -186,13 +240,14 @@ export class ModelAccessEditor implements OnDestroy {
     const body = { commandId: crypto.randomUUID(), expectedSequence: list.expectedSequence, ...edit };
     this.pending.set(this.model(), { body, phase: 'unknown', modelId: this.model(),
       commandId: body.commandId, operation: body.action });
+    this.reference.set(body.commandId);
     this.edit.set(undefined);
     await this.send();
   }
   protected async send(): Promise<void> {
     const pending = this.pending.get(this.model());
     if (!pending?.body || this.busy()) return;
-    storeCommand(pending);
+    if (!this.inlineModel()) storeCommand(pending);
     this.busy.set(true);
     this.phase.set('applying');
     // Treat a closed drawer or lost reply as uncertain until a status read proves the result.
@@ -214,14 +269,16 @@ export class ModelAccessEditor implements OnDestroy {
     const status = failure.data?.status;
     if (reply.code === 409 || (reply.code === 200 && status === 'no_effect')) {
       this.pending.delete(this.model());
-      removeStoredCommand(this.model());
+      if (!this.inlineModel()) removeStoredCommand(this.model());
       this.phase.set(reply.code === 409 ? 'conflict' : 'no_effect');
       this.detail.set(reasons[failure.data?.reason ?? ''] ?? 'The grant list may have changed.');
       if (status === 'no_effect') this.detail.set('');
       return;
     }
     pending.phase = reply.code === 503 && status === 'unavailable' ? 'unavailable' : 'unknown';
-    if (pending.phase === 'unavailable') removeStoredCommand(this.model());
+    if (pending.phase === 'unavailable' && !this.inlineModel()) {
+      removeStoredCommand(this.model());
+    }
     this.phase.set(pending.phase);
   }
   protected async check(): Promise<void> {
@@ -262,8 +319,18 @@ export class ModelAccessEditor implements OnDestroy {
     if (!list || list.expectedSequence < sequence || list.projection.content !== 'current') {
       return false;
     }
+    const target = this.target();
+    if (target?.action === 'revoke') {
+      const remaining: Grantee[] = [];
+      for (const row of this.chosen()) {
+        if (row.granteeId !== target.granteeId || row.granteeKind !== target.granteeKind) {
+          remaining.push(row);
+        }
+      }
+      this.chosen.set(remaining);
+    }
     this.pending.delete(this.model());
-    removeStoredCommand(this.model());
+    if (!this.inlineModel()) removeStoredCommand(this.model());
     this.phase.set('saved');
     return true;
   }
@@ -336,4 +403,17 @@ function clearStoredCommands(): void {
     // Clear visible details even when the browser blocks storage.
     return;
   }
+}
+
+function matchesGrantee(kind: Kind, id: string): (row: Grantee) => boolean {
+  function matches(row: Grantee): boolean {
+    return row.granteeKind === kind && row.granteeId === id;
+  }
+  return matches;
+}
+function matchesCandidate(id: string): (row: { id: string }) => boolean {
+  function matches(row: { id: string }): boolean {
+    return row.id === id;
+  }
+  return matches;
 }

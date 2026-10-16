@@ -703,6 +703,15 @@ Names never enter storage or addresses.
 Configured uses and grant paging are absent from the API, so no Missing rows are inferred.
 `npm run visual:screen-p4-22-access` uses intercepted HTTP replies and the web build.
 
+Provider setup keeps one inline editor per selected model. Each editor reports its
+model, command, operation, grantee and phase to `ProviderSetupAccess`. Setup keeps
+these outcomes in memory only. Chosen assistants stay Missing until Saved. Done
+shows provider facts and confirmed grants; the enabled count waits for a current
+models_selected receipt. Back to Access keeps the original pending commands.
+The step markers show navigation, not successful saves. No overall completion is claimed.
+`npm run visual:screen-p4-22-setup-access` uses intercepted replies.
+The [setup receipt](../../docs/process/screen-p4-22-setup-access/receipt.md) records its limits.
+
 ## Models table
 
 The table joins active registry ids and task routes with enabled OpenAI connections.

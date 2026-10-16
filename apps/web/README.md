@@ -13,7 +13,7 @@ flowchart LR
   web["apps/web<br/>sign-in, chat, saved read and archive choices, access clearing, four-step welcome survey and admin pages"] -->|requests, status reads, live updates and access closures| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
-  web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices and access"]
+  web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
   web -->|opens| integrations["Integrations pages<br/>register, package checks, changes, tools and access explanations"]
   web -->|opens and clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
   web -->|reads, stores and forgets| memory["Memory panel<br/>scopes, personal facts, sources, safe receipts and forget outcomes"]
@@ -25,6 +25,8 @@ Admins can grant or remove model access for one person, group or assistant at a 
 The editor checks that each save has taken effect. An uncertain reply offers a status
 check with the original request id, including after a page reload. The candidate list
 loads more people, groups or assistants when requested.
+Provider setup uses the same editor for each selected model. Its last step lists
+confirmed saves separately from changes still being checked.
 
 The Models table shows models enabled on a connection, their task routes and granted
 audiences. It names a shared assistant whose selected model lacks its own grant.
