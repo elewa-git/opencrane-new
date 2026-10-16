@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { promisify } from 'node:util';
 import { databases } from '@opencrane/authz/testing';
 import { createLogger } from '@opencrane/observability';
-import { pgDb, ProjectionRunner, mcpCatalogue } from '@opencrane/projections';
+import { pgDb, ProjectionRunner, mcpCatalogue, readPublication } from '@opencrane/projections';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { gatewayObservationSchema, getEventDefinition, eventEnvelopeSchema } from '@opencrane/events';
 import { lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
@@ -84,6 +84,74 @@ async function fixture() {
   }
   return { ...setup, nats, record, delivery, options, acknowledged, faulty };
 }
+
+async function publicationStatus(setup: Awaited<ReturnType<typeof fixture>>, now = new Date()) {
+  const logger = createLogger('publication-status', { level: 'silent' });
+  const runner = new ProjectionRunner(setup.options.db, setup.nats.reader, logger);
+  await runner.initialise(mcpCatalogue);
+  await runner.run(mcpCatalogue);
+  return readPublication(setup.options.db, 'test', 'alpha', now);
+}
+
+async function readsExactPublication() {
+  const setup = await fixture();
+  expect(await publicationStatus(setup)).toMatchObject({ status: 'applying',
+    stage: 'observation', reason: 'not_observed', generation: 1, changeRef: 'publish-alpha' });
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  const ready = await publicationStatus(setup);
+  expect(ready).toMatchObject({ status: 'ready', generation: 1,
+    recordDigest: setup.record.recordDigest, changeRef: 'publish-alpha' });
+  expect(ready).toHaveProperty('configDigest');
+  expect(ready).toHaveProperty('observedAt');
+  const position = await setup.nats.store.head();
+  const probe = vi.spyOn(globalThis, 'fetch');
+  const append = vi.spyOn(setup.nats.store, 'append');
+  const logger = createLogger('publication-rebuild', { level: 'silent' });
+  const runner = new ProjectionRunner(setup.options.db, setup.nats.reader, logger);
+  await runner.rebuild(mcpCatalogue);
+  expect(await readPublication(setup.options.db, 'test', 'alpha')).toEqual(ready);
+  expect(probe).not.toHaveBeenCalled();
+  expect(append).not.toHaveBeenCalled();
+  expect(await setup.nats.store.head()).toBe(position);
+  vi.restoreAllMocks();
+}
+it('reads exact receipts and rebuilds the same status without appends or probes', readsExactPublication);
+
+async function refusesMismatchedPublication(field: string) {
+  const setup = await fixture();
+  await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
+  const rows = await history(setup.nats.store, 'gateway-config-test', 'test');
+  const receipt = gatewayObservationSchema.parse(rows.at(-1)!.event.data);
+  const changes: Record<string, unknown> = { generation: 2, recordDigest: 'e'.repeat(64),
+    configDigest: 'e'.repeat(64), processRef: '00000000-0000-4000-8000-000000000099',
+    observedAt: '2026-01-01T00:00:00.000Z' };
+  const data = { ...receipt, [field]: changes[field] };
+  await setup.nats.seed([envelope('test', 'gateway-config-test',
+    'gateway.configuration_observed', data)]);
+  expect(await publicationStatus(setup)).toMatchObject({ status: 'applying' });
+}
+it.each(['generation', 'recordDigest', 'configDigest', 'processRef', 'observedAt'])(
+  'refuses a receipt with a different %s', refusesMismatchedPublication);
+
+async function reportsReadFailure(timeout: boolean) {
+  const setup = await fixture();
+  await publicationStatus(setup);
+  function unavailable(): Promise<never> {
+    if (timeout) return new Promise<never>(pending);
+    return Promise.reject(new Error('PRIVATE-ROUTE-CANARY'));
+  }
+  function pending() {}
+  const db = { query: unavailable };
+  vi.useFakeTimers();
+  try {
+    const reading = readPublication(db, 'test', 'alpha');
+    await vi.advanceTimersByTimeAsync(10_001);
+    expect(await reading).toEqual({ status: 'unknown', stage: 'read', reason: 'unavailable' });
+  } finally {
+    vi.useRealTimers();
+  }
+}
+it.each([false, true])('keeps failed or timed-out reads unknown (timeout: %s)', reportsReadFailure);
 
 async function recordsOnlyLiveAcknowledgement() {
   const setup = await fixture();
@@ -228,12 +296,18 @@ async function rejectsStaleOrWrongWitnesses() {
   await expect.poll(rejected, { timeout: 5000 }).toBeUndefined();
   expect(await sends(setup, 'POST', ['mcp-method', 'tools/call', 'mcp-name', 'read'])).toBe(200);
   expect(await rejectedDelivery.observe()).toBeNull();
+  expect(await publicationStatus(setup)).toMatchObject({ status: 'applying',
+    stage: 'observation', reason: 'not_observed', generation: 2 });
+  const late = new Date(Date.now() + 30_001);
+  expect(await publicationStatus(setup, late)).toMatchObject({ status: 'unknown',
+    stage: 'observation', reason: 'deadline' });
   expect(await setup.delivery.observe()).toBeNull();
   await setup.nats.seed([envelope('test', 'mcp-alpha', 'mcp.server_unpublished',
     { serverId: 'alpha', unpublishedBy: 'admin' })]);
   expect(await setup.delivery.observe()).toBeNull();
   expect(await gatewayConfigurationCurrent(setup.nats.store, 'test', setup.record)).toBe(false);
   expect(await history(setup.nats.store, 'gateway-config-test', 'test')).toHaveLength(3);
+  expect(await publicationStatus(setup)).toMatchObject({ status: 'disabled' });
 }
 it('keeps old routes on rejected reload and refuses acknowledgement after withdrawal',
   rejectsStaleOrWrongWitnesses);
@@ -594,6 +668,8 @@ async function rebuildsReceiptsWithoutEffects() {
   const receipts = await memberReceipts(setup);
   expect(before.rows[0]?.['policy']).toMatchObject({
     configurationObservation: receipts[0]!.event.data, published: false });
+  const status = await readPublication(pgDb(storage.queue), 'test', 'alpha');
+  expect(status).toMatchObject({ status: 'ready' });
   const position = await setup.nats.store.head();
   const bytes = await readFile(setup.options.configFile);
   const inode = (await stat(setup.options.configFile)).ino;
@@ -613,6 +689,7 @@ async function rebuildsReceiptsWithoutEffects() {
   const result = await execute('npm', ['run', 'replay', '--', 'mcp-catalogue', '--verify'],
     { env, timeout: 10_000 });
   expect(result.stdout).toContain('rebuilt state matched the live projection');
+  expect(await readPublication(pgDb(storage.queue), 'test', 'alpha')).toEqual(status);
   expect((await storage.queue.query<{ policy: unknown }>('SELECT policy FROM mcp_catalogue')).rows).toEqual(before.rows);
   expect(await setup.nats.store.head()).toBe(position);
   expect(await readFile(setup.options.configFile)).toEqual(bytes);

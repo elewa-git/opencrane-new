@@ -1552,3 +1552,55 @@ async function hidesPublicationSecrets() {
   }
 }
 it('publication keeps secret input out of replies, logs and new events', hidesPublicationSecrets);
+
+async function readsPublicationStatus() {
+  const request = await publicationRequest();
+  expect((await app.inject(request)).statusCode).toBe(200);
+  await runner.run(mcpCatalogue);
+  const position = await nats.store.head();
+  const paths = ['/api/org/integrations/odoo/publication',
+    '/api/org/integrations/changes/publish-odoo'];
+  const append = vi.spyOn(nats.store, 'append');
+  const probe = vi.spyOn(globalThis, 'fetch');
+  try {
+    for (const url of paths) {
+      const response = await app.inject({ url, headers: headers('oidc-amina') });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.json()).toMatchObject({ status: 'applying', stage: 'preparation',
+        changeRef: 'publish-odoo' });
+      for (const sub of ['oidc-bob', 'outsider']) {
+        const refused = await app.inject({ url, headers: headers(sub) });
+        expect(refused.statusCode).toBe(403);
+        expect(refused.body).not.toContain('publish-odoo');
+      }
+    }
+    expect(append).not.toHaveBeenCalled();
+    expect(probe).not.toHaveBeenCalled();
+    expect(await nats.store.head()).toBe(position);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it('reads publication by server and original command without starting work', readsPublicationStatus);
+
+async function keepsHostedChangeSeparate() {
+  const request = await publicationRequest();
+  expect((await app.inject(request)).statusCode).toBe(200);
+  const commandId = 'hosted-original';
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(['test', commandId]));
+  const serverId = hash.digest('hex');
+  const saved = fixture('mcp.server_registered', `mcp-${serverId}`, { serverId,
+    kind: 'hosted', registeredBy: 'admin',
+    installation: { attemptId: 1, platform: 'linux/amd64',
+      upstream: { host: 'example.test', port: 443 } } });
+  await append({ ...saved, id: commandId, commandId });
+  await runner.run(mcpCatalogue);
+  const url = `/api/org/integrations/changes/${commandId}`;
+  const response = await app.inject({ url, headers: headers('oidc-amina') });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'applied', operation: 'register', serverId });
+  expect(response.body).not.toContain('generation');
+}
+it('resolves a hosted original id as registration rather than publication', keepsHostedChangeSeparate);
