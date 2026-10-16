@@ -1,0 +1,1 @@
+- Hosted package admission now shows signature and licence refusals, pending checks and unavailable scanners from dated server results. It keeps tool access closed and offers a read-only status check after a lost response.

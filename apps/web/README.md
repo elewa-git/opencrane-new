@@ -14,7 +14,7 @@ flowchart LR
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
-  web -->|opens| integrations["Integrations pages<br/>register, add, package checks, changes, tools and access explanations"]
+  web -->|opens| integrations["Integrations pages<br/>register, add, package admission with keyboard retry, changes, tools and access explanations"]
   web -->|reviews invitations and removals; clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
   web -->|reads, stores and forgets| memory["Memory panel<br/>scopes, personal facts, sources, safe receipts and forget outcomes"]
 ```
@@ -90,7 +90,10 @@ assistant check open rather than guessing an answer.
   once a policy has been read.
 - Accepts an exact package image digest and shows dated admission checks. Continue
   stays disabled while tool discovery is unavailable. The form checks encoded host
-  names before sending a package. Saving gives nobody access.
+  names before sending a package. It shows when a signature or licence is refused,
+  and when a scanner has no result. A failed read can be checked again. Saving gives
+  nobody access. After a refusal, choosing another version moves keyboard focus to the
+  new image field. An older status reply cannot clear a newer package.
 - Lists current members with search and more pages. A refused member read clears both
   member and group details. A temporary read failure keeps loaded rows visible.
 - Lets Owners and Admins add an active organisation member to a local group from its page.

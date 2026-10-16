@@ -6,7 +6,7 @@
     <form (submit)="submit($event)">
       <h2>Package details</h2>
       <label for="image-locator">Image pinned by sha256 digest</label>
-      <input id="image-locator" type="text" autocomplete="off" required
+      <input #imageField id="image-locator" type="text" autocomplete="off" required
         placeholder="registry.example.com/team/image@sha256:…" [value]="locator()"
         (input)="editLocator($any($event.target).value)" />
       <p>A tag or image name without a digest cannot be submitted.</p>
@@ -28,7 +28,10 @@
       </div>
     </form>
   }
-  <div class="status" role="status" aria-live="polite">
+  <div class="status" role="status" aria-live="polite" tabindex="-1"
+    [class.refused]="admission()?.status === 'rejected'"
+    [class.waiting]="admission()?.status === 'checking'"
+    [class.unavailable]="admission()?.status === 'unavailable'">
     <p>{{ message() }}</p>
     @if (changeRef()) { <p>Change reference: {{ changeRef() }}</p> }
   </div>
@@ -43,21 +46,27 @@
             @if (checkDate(result.checks?.signature); as checkedAt) {
               <span>Checked {{ checkedAt }}</span>
             }
+            @if (checkReason(result.checks?.signature); as reason) { <span>{{ reason }}</span> }
           </li>
           <li>Licence: {{ checkLabel(result.checks?.licence) }}
             @if (checkDate(result.checks?.licence); as checkedAt) {
               <span>Checked {{ checkedAt }}</span>
             }
+            @if (checkReason(result.checks?.licence); as reason) { <span>{{ reason }}</span> }
           </li>
           <li>Vulnerability: {{ checkLabel(result.checks?.vulnerability) }}
             @if (checkDate(result.checks?.vulnerability); as checkedAt) {
               <span>Checked {{ checkedAt }}</span>
+            }
+            @if (checkReason(result.checks?.vulnerability); as reason) {
+              <span>{{ reason }}</span>
             }
           </li>
           <li>Malware: {{ checkLabel(result.checks?.malware) }}
             @if (checkDate(result.checks?.malware); as checkedAt) {
               <span>Checked {{ checkedAt }}</span>
             }
+            @if (checkReason(result.checks?.malware); as reason) { <span>{{ reason }}</span> }
           </li>
         </ul>
       } @else {
@@ -68,6 +77,10 @@
         <button id="hosted-check-status" type="button" [disabled]="busy()"
           (click)="checkStatus()">{{ busy() ? 'Checking status…' : 'Check status' }}</button>
         <button id="hosted-continue" type="button" disabled>Continue</button>
+        @if (admission()?.status === 'rejected') {
+          <button type="button" (click)="chooseAnotherVersion()">{{ alternativeLabel() }}</button>
+        }
+        <a class="button" href="/org/integrations">Back to integrations</a>
       </div>
     </section>
   }

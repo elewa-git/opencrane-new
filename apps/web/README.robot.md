@@ -109,6 +109,16 @@ there is no check-start API or restore action here. Run
 The add page accepts a remote HTTPS address and follows discovery status. It also accepts
 a hosted package only as a sha256 digest locator, one supported Linux platform and a
 public upstream host and port. It posts one command id.
+The hosted admission page renders the admission GET's checking, rejected, unavailable,
+admitted and expired statuses. It shows the four dated verdicts and maps recognised
+refusal reason codes to plain text. Unknown codes get a generic explanation. A rejected
+package can return to the editable form for another digest. An unavailable scanner
+offers only the admission status GET; there is no check-start request. Continue remains
+disabled. Choosing another version returns keyboard focus to the new image field. A
+401 or 403 clears package details only when it belongs to the current request; an old
+status reply from a previous package cannot erase a newer registration or its result.
+The intercepted checks and captures for the refusal and unavailable states
+are in [the second admission receipt](../../docs/process/screen-p3-6-admission2/receipt.md).
 The browser checks each encoded `xn--` host label by decoding and re-encoding it.
 The decoded label must contain a non-ASCII letter, mark or digit and no other
 characters except letters, marks, digits and hyphens. This catches a Chromium URL

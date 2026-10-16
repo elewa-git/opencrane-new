@@ -1,4 +1,7 @@
-import { ChangeDetectionStrategy, Component, output, signal, type OnDestroy } from '@angular/core';
+import {
+  afterNextRender, ChangeDetectionStrategy, Component, ElementRef, inject, Injector, output,
+  signal, viewChild, type OnDestroy,
+} from '@angular/core';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
 import { decode, encode } from 'punycode/';
 import { z } from 'zod';
@@ -60,7 +63,10 @@ function publicHost(value: string): boolean {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HostedInstall implements OnDestroy {
+  private readonly injector = inject(Injector);
+  private readonly imageField = viewChild<ElementRef<HTMLInputElement>>('imageField');
   readonly started = output<void>();
+  readonly editing = output<void>();
   protected readonly locator = signal('');
   protected readonly platform = signal<'linux/amd64' | 'linux/arm64'>('linux/amd64');
   protected readonly upstreamHost = signal('');
@@ -87,6 +93,32 @@ export class HostedInstall implements OnDestroy {
   protected editHost(value: string): void { this.upstreamHost.set(value); }
   protected editPort(value: string): void { this.upstreamPort.set(value); }
 
+  protected chooseAnotherVersion(): void {
+    if (this.admission()?.status !== 'rejected') return;
+    this.accessGeneration += 1;
+    this.commandId = '';
+    this.serverId = '';
+    this.busy.set(false);
+    this.changeRef.set('');
+    this.setAdmission(undefined);
+    this.locator.set('');
+    this.phase.set('draft');
+    this.message.set('Choose an exact image and its permitted upstream.');
+    this.editing.emit();
+    afterNextRender(this.focusImageField.bind(this), { injector: this.injector });
+  }
+
+  private focusImageField(): void {
+    if (this.phase() === 'draft') this.imageField()?.nativeElement.focus();
+  }
+
+  protected alternativeLabel(): string {
+    if (this.admission()?.checks?.signature.verdict === 'fail') {
+      return 'Choose another signed version';
+    }
+    return 'Choose another version';
+  }
+
   protected async submit(event: Event): Promise<void> {
     event.preventDefault();
     if (this.phase() !== 'draft' || this.busy()) return;
@@ -108,8 +140,7 @@ export class HostedInstall implements OnDestroy {
       const response = await fetch('/api/org/integrations', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
       });
-      if (this.lostAccess(response)) return;
-      if (generation !== this.accessGeneration) return;
+      if (generation !== this.accessGeneration || this.lostAccess(response)) return;
       if (response.status === 400) {
         this.commandId = '';
         this.phase.set('draft');
@@ -167,7 +198,7 @@ export class HostedInstall implements OnDestroy {
 
   private async readOriginalChange(generation: number): Promise<void> {
     const response = await fetch(`/api/org/integrations/changes/${encodeURIComponent(this.commandId)}`);
-    if (this.lostAccess(response) || generation !== this.accessGeneration) return;
+    if (generation !== this.accessGeneration || this.lostAccess(response)) return;
     if (!response.ok) throw new Error('Change status unavailable');
     const raw: unknown = await response.json();
     const result = changeReply.parse(raw);
@@ -183,7 +214,7 @@ export class HostedInstall implements OnDestroy {
 
   private async readAdmission(generation: number): Promise<void> {
     const response = await fetch(`/api/org/integrations/${encodeURIComponent(this.serverId)}/admission`);
-    if (this.lostAccess(response) || generation !== this.accessGeneration) return;
+    if (generation !== this.accessGeneration || this.lostAccess(response)) return;
     if (!response.ok) throw new Error('Admission unavailable');
     const raw: unknown = await response.json();
     const result = hostedAdmissionSchema.parse(raw);
@@ -200,9 +231,22 @@ export class HostedInstall implements OnDestroy {
     }
     if (status === 'admitted') return 'Current image checks are unavailable. Discovery is unavailable.';
     if (status === 'expired') return 'The image checks have expired. Discovery is unavailable.';
-    if (status === 'rejected') return 'An image check failed. Discovery is unavailable.';
-    if (status === 'unavailable') return 'An image check is unavailable. Discovery is unavailable.';
-    return 'The image is queued for checks. Discovery is unavailable.';
+    if (status === 'rejected') return 'Not admitted. An image check failed.';
+    if (status === 'unavailable') {
+      return 'A check is unavailable. The image needs a dated result for that check.';
+    }
+    return 'Waiting for dated check results. No scanner result has been returned.';
+  }
+
+  protected checkReason(check: Check | undefined): string | undefined {
+    if (!check || check.verdict !== 'fail') return undefined;
+    if (check.reasonCodes.includes('unsigned')) {
+      return 'This image has no accepted publisher signature.';
+    }
+    if (check.reasonCodes.includes('forbidden_licence')) {
+      return 'This licence is not accepted for an installed package.';
+    }
+    return 'The check did not accept this image.';
   }
 
   private allCurrent(checks: Admission['checks']): boolean {
