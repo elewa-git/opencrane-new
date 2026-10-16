@@ -77,6 +77,9 @@ keeps reviews incomplete until a full rebuild has finished. The index also recor
 which saved history changes affect each person. A small saved count of stream names
 lets removal checks detect new history without reading unrelated events.
 
+File reads return upload details and workspace paths. The private storage key
+stays inside the projection.
+
 - Keep current destination rules, including who revoked them and when.
 
 - Keeps hosted tool policies unpublished, including older records and replay.
