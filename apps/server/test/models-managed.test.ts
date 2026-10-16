@@ -48,7 +48,9 @@ async function startModels(setup: Setup, patch: NodeJS.ProcessEnv = {}) {
     ['--experimental-strip-types', resolve('apps/server/src/models-main.ts')],
     { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let diagnostics = '';
-  function capture(chunk: Buffer) { diagnostics += chunk.toString(); }
+  function capture(chunk: Buffer) {
+    diagnostics += chunk.toString();
+  }
   child.stdout.on('data', capture);
   child.stderr.on('data', capture);
   async function close() {
@@ -72,7 +74,9 @@ async function startModels(setup: Setup, patch: NodeJS.ProcessEnv = {}) {
     const request = { method: 'POST', headers, body: JSON.stringify(body) };
     return fetch(`http://127.0.0.1:${gatewayPort}/v1/responses`, request);
   }
-  async function config() { return readFile(`${directory}/gateway.json`, 'utf8'); }
+  async function config() {
+    return readFile(`${directory}/gateway.json`, 'utf8');
+  }
   return { child, ready, call, config, diagnostics: () => diagnostics, directory };
 }
 
@@ -114,7 +118,9 @@ async function startsManaged() {
   expect(process.diagnostics()).not.toContain(credential);
   expect(process.diagnostics()).not.toContain(setup.options.keyFile);
   const rows = await history(setup.nats.store, 'budget-test', 'test');
-  function reservation(row: typeof rows[number]) { return row.event.type === 'budget.reserved'; }
+  function reservation(row: typeof rows[number]) {
+    return row.event.type === 'budget.reserved';
+  }
   expect(rows.filter(reservation)).toHaveLength(1);
 }
 it('starts managed without a static key and keeps it through a worker reload', startsManaged, 60_000);
@@ -142,7 +148,9 @@ async function replaysWithoutCustody() {
   const process = await startModels(setup, { PROVIDER_SECRETS_DIR: missing });
   await expect.poll(process.ready, { timeout: 15_000 }).toBeUndefined();
   const rows = await history(setup.nats.store, 'budget-test', 'test');
-  function reservation(row: typeof rows[number]) { return row.event.type === 'budget.reserved'; }
+  function reservation(row: typeof rows[number]) {
+    return row.event.type === 'budget.reserved';
+  }
   expect(rows.filter(reservation)).toHaveLength(0);
   expect(await history(setup.nats.store, 'decision-*', 'test')).toHaveLength(0);
   expect(setup.received()).toBe(0);

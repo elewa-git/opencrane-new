@@ -279,7 +279,7 @@ Phase 2 #29 and Phase 3 #54. The decision process verifies the lifecycle compute
 thread-bound turn tokens; agentgateway v1.5.0 enforces its answer and sends
 Responses requests to OpenAI. Reuses S0.2's ext_authz/header allowlist and
 S0.1c's native streamed usage fields and checksum-verified binary fetcher.
-Normal startup uses `backendAuth.key.file` to read `.keys/.openai-key` inside
+Before switch-on, startup uses `backendAuth.key.file` to read `.keys/.openai-key` inside
 agentgateway, never the server or computer.
 
 ### Managed gateway proof, part of #104
@@ -324,8 +324,11 @@ The cold-history test calls the decision HTTP endpoint and delivers 5,000 saved
 events to an empty decision summary after a controlled delay beyond two seconds. It also checks the fixed refusal and zero money held after the history
 limit, and refusal when access changes after history. The gateway still stops waiting
 after two seconds; these tests do not claim a cold call through that gateway succeeds.
-Startup selection, fallback-key refusal, static-route removal and dev-stack custody
-wiring remain for PR 5c. No stack or paid provider call proves this route yet.
+The models process now selects this mode from recorded switch-on and refuses a
+leftover fallback file setting. `startGateway` needs no key file in managed mode;
+legacy configuration requires one. `GatewayRenderSettings.managedCalls` preserves
+the mode through worker reloads. Dev-stack custody wiring remains for PR 5d.
+No stack or paid provider call proves this route yet.
 
 - `BudgetActor` loads the NATS budget stream and serialises reserve/settle
   commands. Each command does one conditional append. The process entrypoint
@@ -1888,7 +1891,8 @@ used for a retry: no drain change can save after switch-on.
 A legacy start already waiting to append can finish after switch-on. Existing decision
 and budget checks refuse its claimless pass before any hold or upstream send. A drain
 alone is not proof that every pending admission has finished. Summaries read no keys
-and perform no provider requests. Calls remain refused until the managed gateway arrives.
+and perform no provider requests. Calls use the managed route after the models process
+restarts with custody configured and its fallback key setting removed.
 
 The new HTTP tests use real NATS, PostgreSQL, OpenFGA and a recording gateway upstream.
 The last requested bullet, testing existing hold settlement and replay through this new

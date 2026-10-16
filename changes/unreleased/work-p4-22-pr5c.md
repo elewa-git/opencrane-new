@@ -1,0 +1,1 @@
+Models startup now follows recorded provider switch-on, rejects leftover fallback key settings and keeps managed calls through gateway configuration reloads. Dev-stack custody wiring is still pending; fresh-install qualification is NOT RUN.

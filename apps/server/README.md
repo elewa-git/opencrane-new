@@ -11,9 +11,9 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops, memory setup, loaded memory fact links, later grant and access changes through saving, tool reviews, hosted image registration and status, publication requests and status, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
-  server -->|records reviewed child requests and answers, child creation and first inputs, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and personal or shared forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops and refused turn decisions| nats["NATS<br/>event log"]
-  nats -->|saved child leave results, spending stop reasons, departure cleanup, gateway configurations and checked origin references| server
+  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops, memory setup, loaded memory fact links, later grant and access changes through saving, tool reviews, hosted image checks, publication requests and status, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -->|records reviewed child requests and answers, child creation, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and personal or shared forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops, refused turn decisions and managed call modes| nats["NATS<br/>event log"]
+  nats -->|saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and history| postgres
@@ -45,6 +45,10 @@ Record a budget refusal before telling the computer that a chat turn cannot star
 The member sees the saved spending notice even when no model call was made.
 Reconnecting recovers the notice from the saved refusal if the computer restarted
 before the notice was saved.
+
+The models process follows the recorded switch-on when choosing how to call a provider.
+After switch-on it uses the checked call's saved provider key. A leftover fallback key
+setting stops startup. Configuration reloads keep the same mode.
 
 Personal memory writes refuse access withdrawn before the fact is saved, including a
 removed write grant or a disabled assistant. They keep the original access time limit.

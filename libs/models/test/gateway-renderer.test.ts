@@ -13,12 +13,12 @@ type Configuration = ReturnType<typeof gatewayConfigurationSchema.parse>;
 type Entry = Configuration['members'][number]['entry'];
 const digest = 'a'.repeat(64);
 const canary = 'PRIVATE-CANARY-renderer';
-const settings: GatewayRenderSettings = {
+const settings = {
   port: 3100, readinessPort: 3101, decisionUrl: 'http://127.0.0.1:3102',
   issuer: 'opencrane-test', keyFile: '/absent/provider-key', upstream: '127.0.0.1:3103',
   egressDecisionUrl: 'http://127.0.0.1:3104',
   memoryRoute: { serverId: 'memory', connectionId: 'internal', upstream: 'unused' },
-};
+} satisfies GatewayRenderSettings;
 const routeSchema = z.looseObject({ name: z.string() });
 const configSchema = z.looseObject({ routes: z.array(routeSchema) });
 
@@ -254,7 +254,7 @@ it('refuses distinct paths that would share a gateway route name', refusesAmbigu
 function fixedRoutesStayUnchanged() {
   const fixed: GatewayRenderSettings = { port: settings.port, readinessPort: settings.readinessPort,
     decisionUrl: settings.decisionUrl, issuer: settings.issuer, keyFile: settings.keyFile,
-    memoryRoute: settings.memoryRoute! };
+    memoryRoute: settings.memoryRoute };
   const { memoryRoute: _memory, ...withoutMemory } = settings;
   const configurations: GatewayRenderSettings[] = [fixed, settings, withoutMemory];
   for (const options of configurations) {

@@ -218,7 +218,8 @@ records the cache budget and the limits on cold reads.
 Its `routines.status` is `absent` after checked empty history, otherwise `unsupported`. Reader failure or changing history returns 503.
 `POST` accepts `commandId`, `expectedProviderSequence`, `expectedRevision`, `kind` (`assistant` or `silo_default`), `dependantId`, `task: chat_turn`, `expectedBindingSequence`, and `action: select|pause`.
 Select requires `model`; a move also requires `expectedSourceRevision`. Pause keeps the provider and model. The existing changes GET recovers the original receipt; retry uses the same body and id.
-Saved choices do not yet control ordinary calls. Retirement remains unavailable.
+After switch-on, new turns use these choices. Models process requirements appear
+below. The bindings reply does not report process readiness. Retirement remains unavailable.
 
 Identical concurrent retries return the saved event id and sequence. A different actor or
 changed request reusing a command id on the same provider gets 409. The automatic default
@@ -247,12 +248,20 @@ input or stale positions return 409. Missing prerequisites, denied access and a 
 switch-on id after success return 403. Refusals save nothing. Any event saved between
 the initial history position and the append causes 409; reload before trying a new id.
 
-New turns use their own or the silo default choice. Calls stay off after switch-on
-until PR 5c supplies gateway startup, fallback-key refusal and shared custody wiring.
-The optional managed route now checks the signed choice, current enabled model,
-permissions and saved key before holding money. Managed history reads have a
-ten-second limit before a fresh two-second access check starts. Expired history
-returns the fixed refusal with no money held. No production process starts it.
+New turns use their own or the silo default choice. After switch-on the models process
+starts the managed route, which checks the signed choice, enabled model, permissions
+and saved key before holding money. Startup requires `PROVIDER_SECRETS_DIR` and refuses
+a configured `MODEL_KEY_FILE`. A running legacy process exits when it sees switch-on;
+its supervisor can restart it with the managed settings. An unreadable mode never
+falls back to the deployment key. Startup and replay read no provider key.
+
+Spawned-process tests prove a checked call through the pinned gateway to a recording
+upstream, including after a configuration reload. They do not qualify a fresh install.
+Dev stacks still set `MODEL_KEY_FILE`, so switch-on stops their models process until
+PR 5d supplies custody wiring. Fresh-install qualification: NOT RUN.
+Managed history reads have a ten-second limit before a fresh two-second access check.
+The gateway still waits only two seconds for a decision, so slow cold history may
+refuse a call. Expired history returns a fixed refusal with no money held.
 
 A model removal saved before the final check refuses that call and releases its hold
 at zero, even after an allow audit. A removal saved after that check affects later

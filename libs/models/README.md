@@ -2,6 +2,9 @@
 
 ## What this is
 
+After recorded switch-on, the gateway uses each checked call's provider key.
+It needs no fallback key file, and configuration reloads preserve that choice.
+
 The AI access and spending library for OpenCrane. Its running part is the models process, a separate program whose start file lives in `apps/server` (`src/models-main.ts`). It runs beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), which forwards AI requests. The library also picks the model for each task, keeps the price list and [budgets](../../GLOSSARY.md#budget), holds the [tool rules](../../GLOSSARY.md#tool-rule-allow-ask-block) and the one-time approvals for Ask tools, and records who owns the silo.
 
 ## Where it fits
@@ -18,7 +21,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|locks preparation during replacement; delivers and probes only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers and probes only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks access and saved work; records admissions and spending| store["libs/event-store<br/>event log"]
 ```
@@ -81,11 +84,12 @@ This internal API has no child-chat caller yet.
   opens a byte tunnel. It uses only the private relay address returned by the
   decision service. Normal startup keeps this route off. Computers cannot use it
   until destination checks and guarded sockets are ready.
-- Provide an optional AI gateway route that uses the key in each decision reply.
+- Provide the managed AI gateway route, which uses the key in each decision reply.
   It keeps the provider's token counts and excludes caller credentials from the
   upstream request. The decision service reads provider history before starting its
   short access check, then checks the saved turn, provider and key before holding money.
-  Normal startup does not select this route, so managed chat is not available yet.
+  Startup selects this route after recorded switch-on. A leftover fallback key setting
+  stops startup. Dev stacks still need shared custody wiring before they can use it.
 - Read private tool-instance status and original changes for their current member owner.
   Save an owner stop request with one event. Wake stays refused until hosted admission
   and personal profiles are available. No instance starts or credentials are released.

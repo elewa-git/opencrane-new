@@ -12,7 +12,7 @@ export const choice = { providerId: 'primary', bindingSequence: 42 };
 export const provider = { providerId: 'primary', revision: 3, changedBy: 'alice' };
 export const credential = 'managed-decision-fixture-value';
 
-export async function switchOn(setup: Awaited<ReturnType<typeof fixture>>) {
+async function switchOn(setup: Awaited<ReturnType<typeof fixture>>) {
   await setup.append('computer-assistant', 'computer.turn_closed', {
     assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
     turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', status: 'completed',
