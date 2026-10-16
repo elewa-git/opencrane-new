@@ -89,7 +89,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
       // for remember would spend more of the recall discovery deadline.
       canRemember = policy.policy.tools.some(allowsRemember);
     }
-    const selected = await selectedMemoryScope(store, binding, claims, parsed, fresh);
+    const selected = await selectedMemoryScope(store, binding, claims, parsed.input?.scopeId, fresh);
     const scope = selected.scope;
     await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
     let contextDigest = await currentAuthority(store, binding, claims.requester,
@@ -117,7 +117,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
 }
 
 async function selectedMemoryScope(store: EventStore, binding: Binding, claims: ThreadIdentity,
-  parsed: ReturnType<typeof parseMemoryRequest>,
+  selectedScopeId: string | undefined,
   fresh: Awaited<ReturnType<typeof authorityFence>>) {
   const subject = `assistant-${claims.assistant}`;
   fresh.include(subject);
@@ -152,7 +152,7 @@ async function selectedMemoryScope(store: EventStore, binding: Binding, claims: 
   // Derive choices from the bound assistant. Other memberships cannot add scopes.
   for (const candidate of candidates) {
     const scopeId = memoryScopeId(binding.silo, candidate.scopeKind, candidate.ownerId);
-    if (!parsed.input || parsed.input.scopeId === scopeId) {
+    if (selectedScopeId === undefined || selectedScopeId === scopeId) {
       const scope = { ...candidate, scopeId };
       return { scope, requesterGroup };
     }
@@ -293,4 +293,17 @@ export function prepareMemorySend(payload: Awaited<ReturnType<typeof prepareMemo
   const operation = payload.operation;
   const method = operation === 'recall' || operation === 'remember' ? 'tools/call' : operation;
   return { method, sign: signContext };
+}
+
+export async function loadedMemoryRights(store: EventStore, binding: Binding,
+  claims: ThreadIdentity, scopeId: string, fresh: Awaited<ReturnType<typeof authorityFence>>,
+  conversation: StoredEvent[]) {
+  const selected = await selectedMemoryScope(store, binding, claims, scopeId, fresh);
+  await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
+  await currentAuthority(store, binding, claims.requester, claims.assistant,
+    claims.conversation, 'mcp_server', 'memory', fresh, conversation);
+  await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scopeId,
+    fresh, selected.requesterGroup);
+  await currentAuthority(store, binding, claims.requester, claims.assistant,
+    claims.conversation, 'memory_read', scopeId, fresh, conversation);
 }

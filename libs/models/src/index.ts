@@ -75,3 +75,5 @@ export { readHostedAdmission, foldHostedAdmission }
   from './hosted-admission.ts';
 
 export { gatewayConfigurationWorker } from './gateway-configuration-worker.ts';
+
+export { foldMemoryContext, type MemoryContextState } from './memory-context-fold.ts';

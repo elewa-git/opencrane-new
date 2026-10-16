@@ -1,3 +1,7 @@
+import type { z } from 'zod';
+import type { ModelCall } from './state.ts';
+import type { legacyTurnSchema } from './decision-turn-token.ts';
+import type { ProviderVerificationOptions } from './provider-verification.ts';
 import { setTimeout as wait } from 'node:timers/promises';
 import { readStreamSummary, type EventStore, type StoredEvent,
   type SummaryKind } from '@opencrane/event-store';
@@ -80,4 +84,16 @@ async function readCredential(secrets: ProviderSecrets, reference: string, deadl
   } finally {
     cancelled.abort();
   }
+}
+
+export async function modelPermission(call: ModelCall, requestId: string,
+  turnToken: z.infer<typeof legacyTurnSchema>,
+  activity: { provider?: Awaited<ReturnType<typeof decisionProvider>> }, deadline: number,
+  providers?: ProviderVerificationOptions) {
+  if (activity.provider) {
+    call.providerId = turnToken.providerId;
+    call.bindingSequence = turnToken.bindingSequence;
+  }
+  const credential = await activity.provider?.credential(providers?.secrets, deadline);
+  return { credential, modelCall: { ...call, requestId } };
 }

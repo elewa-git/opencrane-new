@@ -3020,3 +3020,12 @@ Its unreadable-mode test uses the operating system’s `mkfifo` utility to pause
 startup at signing-file loading, after budget replay. It uses no timed sleep.
 Dev stacks still set `MODEL_KEY_FILE`, so switch-on stops their models process
 until custody wiring is supplied. Fresh-install qualification: NOT RUN.
+
+## Shared memory reference fold
+
+Chat summaries and recall delivery import `foldMemoryContext` from `@opencrane/models`.
+The models decision service uses that same fold before model, tool and recall dispatch.
+The [dispatch contract](../../libs/models/README.robot.md#loaded-memory-before-dispatch-p4-15-pr-2d-part-of-97)
+describes incremental scope checks and event-only revision validation.
+Turn credential renewal still needs this check in P4-15 PR 2e. Output invalidation,
+process interruption and correction target proofs remain separate work.

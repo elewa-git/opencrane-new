@@ -2248,6 +2248,28 @@ retention, hosted per-start capture, zero-TTL per-call capture and credentialed 
 are not implemented here. Fresh-install qualification is NOT RUN. The access-check code
 and its two named regression files are unchanged.
 
+## Loaded memory before dispatch (P4-15 PR 2d; Part of #97)
+
+`prepareLoadedMemory` uses the shared `memory-context-fold` on the turn's saved evidence.
+It checks the saved identity and reads each loaded scope before the short access check.
+The shared decision confirm checks requester and assistant scope/grant access with the
+helpers used by `memoryRights`. It reads only scope rows after its checked position,
+then confirms access again and checks every revision and dependency at the current time.
+`memoryReferences` has an explicit `event-only` mode for processes without revision keys.
+Server reads and writes retain their custody checks. No scope or conversation stream is
+added to the authority fence. A turn with no loaded references reads no scope stream.
+
+The confirm also runs inside budget dispatch admission and MCP send admission. Saved
+memory additions invalidate older pending passes. Refusals use `memory_context_unavailable`
+without memory details. This check writes no context evidence and stops no process.
+Cold replay reconstructs references only; it cannot recover a pending dispatch pass.
+`test/memory-dispatch.test.ts` in apps/server uses recording model/tool endpoints and a
+real memory backend. Native memory admission remains disabled.
+
+Remaining row 2 work: turn-pass renewal in PR 2e and correction target proofs.
+Output release and process interruption remain row 3. Initial injection and native
+forwarding remain later rows. Fresh-install qualification and real model calls: NOT RUN.
+
 ## Hosted publisher verification — P3-6 PR 5, first part
 
 `hosted-verification.ts` is private and has no production caller or event writer.

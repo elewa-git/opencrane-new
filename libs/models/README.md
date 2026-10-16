@@ -17,7 +17,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stop reasons| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
-  models -->|checks revision, spending, catalogue expiry, holds, root stops and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks loaded memory, access, revision, spending, catalogue expiry, holds and root stops before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
@@ -33,6 +33,9 @@ Approval cards include the turn they belong to. The chat hides decisions after t
 
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
 A change to the tools or their rules ends that approval.
+Every model, tool and recall call checks all memory facts already loaded by its turn.
+A corrected, forgotten or expired fact, an invalid dependency, or removed memory access
+refuses the next call. Other facts, messages and uploads do not refuse it.
 Memory writes keep their original access check. Removing and restoring a grant while
 the server reads memory references still refuses the write. The event store repeats
 that same check before saving the fact.

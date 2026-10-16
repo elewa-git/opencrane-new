@@ -9,7 +9,9 @@ const changeFields = changeIdentity.strip();
 type Reference = Pick<MemoryIdentity, 'scopeId' | 'memoryId' | 'revision'>;
 type Status = 'current' | 'erased' | 'superseded' | 'invalid';
 type Write = ReturnType<typeof memoryWrittenEventSchema.parse>;
-type Custody = { status: (identity: MemoryIdentity) => 'available' | 'destroyed' | 'missing' };
+type Custody = 'event-only' | {
+  status: (identity: MemoryIdentity) => 'available' | 'destroyed' | 'missing';
+};
 
 function newerWrite(previous: Write | undefined, next: Write) {
   const previousRevision = previous && 'schemaVersion' in previous.data
@@ -89,6 +91,10 @@ function ownStatus(history: ReturnType<typeof memoryHistory>, scopeId: string,
   if ('schemaVersion' in saved.data && saved.data.expiresAt !== null &&
       Date.parse(saved.data.expiresAt) <= (checkedAt ?? Date.now())) {
     return 'invalid';
+  }
+  // Check saved changes without revision keys in dispatch processes.
+  if (custody === 'event-only') {
+    return 'current';
   }
   const status = custody.status(identity);
   if (status === 'missing') {

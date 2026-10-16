@@ -1,3 +1,5 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import { createEventStore } from '@opencrane/event-store';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
 import { dirname } from 'node:path';
@@ -6,7 +8,7 @@ import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { until } from '@opencrane/authz/testing';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from '@opencrane/models/testing';
-import { history, ingestUsage, parseMemoryRequest, readToolPolicy } from '@opencrane/models';
+import { history, ingestUsage, parseMemoryRequest, readToolPolicy, startDecision, BudgetActor } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
@@ -366,8 +368,9 @@ function recallCall(callId: string) {
   const selectedMetadata = { ...metadata, callId };
   return { ...call, params: { ...call.params, _meta: selectedMetadata } };
 }
-async function directRecall(callId: string) {
-  const body = recallCall(callId);
+async function directRecall(callId: string, limit = 20) {
+  const recalled = recallCall(callId);
+  const body = { ...recalled, params: { ...recalled.params, arguments: { scopeId, limit } } };
   const token = await signedRecall(setup, {}, body);
   const requestHeaders = { ...headers, 'x-memory-context': token };
   const request = { method: 'POST' as const, url: route, headers: requestHeaders, payload: body };
@@ -376,13 +379,14 @@ async function directRecall(callId: string) {
 async function savedContext() {
   return readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
 }
-async function seedRecallFact() {
+async function seedRecallFact(memoryId = 'private-fact', expiresAt: string | null = null,
+  dependsOn: { scopeId: string; memoryId: string; revision: number }[] = []) {
   const keys = memoryKeys(dirname(setup.options.configFile));
   const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
-    ownerId: 'alice', memoryId: 'private-fact', revision: 1 };
+    ownerId: 'alice', memoryId, revision: 1 };
   keys.provision(identity);
   const data = { ...identity, schemaVersion: 1, kind: 'fact', pinned: false,
-    expiresAt: null, sources: [], dependsOn: [], ...keys.encrypt(identity, 'Private canary') };
+    expiresAt, sources: [], dependsOn, ...keys.encrypt(identity, 'Private canary') };
   const { silo: _silo, ...fields } = data;
   await setup.append(`scope-${scopeId}`, 'memory.written', fields);
   const projectionOptions = { decrypt: keys.decrypt };
@@ -683,3 +687,271 @@ async function refusesForgottenLoadedFact() {
   expect(setup.actor.state.dispatches).toHaveLength(1);
 }
 it('refuses a model call after a loaded fact is forgotten', refusesForgottenLoadedFact);
+
+const loadedChanges = ['correct', 'forget', 'member_read', 'assistant_read',
+  'member_mcp', 'assistant_mcp'] as const;
+type LoadedChange = typeof loadedChanges[number];
+async function changeLoadedMemory(change: LoadedChange, memoryId = 'private-fact') {
+  if (change === 'forget' || change === 'correct') {
+    const fields = { scopeId, memoryId };
+    if (change === 'forget') {
+      await setup.append(`scope-${scopeId}`, 'memory.forgotten', fields);
+    } else {
+      const corrected = { ...fields, ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+        keyId: `key:${'a'.repeat(64)}` };
+      await setup.append(`scope-${scopeId}`, 'memory.corrected', corrected);
+    }
+    return;
+  }
+  const resourceType = change.endsWith('read') ? 'memory_read' : 'mcp_server';
+  const resourceId = resourceType === 'memory_read' ? scopeId : 'memory';
+  const granteeKind = change.startsWith('member') ? 'member' : 'assistant';
+  const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+  const revoked = { resourceType, resourceId, granteeKind, granteeId, revokedBy: 'alice' };
+  // Leave IAM and notifications behind. Saved revocation alone must prevent the send.
+  await setup.append(grantStream(resourceType, resourceId), 'grant.revoked', revoked);
+}
+
+const externalTool = toolEvidence({ name: 'read', reviewed: true, costCents: 0 });
+const toolCall = { ...call, params: { ...call.params, name: 'read', arguments: {} } };
+const toolHeaders = { ...headers, 'mcp-name': 'read' };
+const toolRoute = '/mcp/fixture/installed';
+async function prepareExternalTool() {
+  const registration = { serverId: 'fixture', kind: 'remote', registeredBy: 'alice',
+    locator: 'https://fixture.example.test/mcp' };
+  await setup.append('mcp-fixture', 'mcp.server_registered', registration);
+  const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+    ...catalogueEvidence([externalTool]) };
+  await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
+  await reviewCatalogue(setup);
+  const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'read',
+    toolRevision: externalTool.revision, mode: 'allow', setBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+  await setup.append('mcp-fixture', 'mcp.server_published',
+    { serverId: 'fixture', publishedBy: 'alice' });
+  for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'assistant']]) {
+    const grant = { resourceType: 'mcp_server', resourceId: 'fixture',
+      granteeKind, granteeId, grantedBy: 'alice' };
+    const saved = await setup.append(grantStream('mcp_server', 'fixture'), 'grant.given', grant);
+    await setup.auth.handler.handle(saved, setup.db);
+  }
+}
+
+async function refusesChangedLoadedMemory(change: LoadedChange) {
+  await prepareExternalTool();
+  await seedRecallFact('first-fact');
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const dispatches = setup.actor.state.dispatches.length;
+  const received = backendRequests;
+  await changeLoadedMemory(change);
+  const model = await setup.call();
+  expect(model.status, model.text).toBe(403);
+  const tool = await setup.call(toolHeaders, toolCall, toolRoute);
+  expect(tool.status, tool.text).toBe(403);
+  const memory = await setup.call(headers, recallCall('next'), route);
+  expect(memory.status, memory.text).toBe(403);
+  expect(setup.received()).toBe(0);
+  expect(backendRequests).toBe(received);
+  expect(setup.actor.state.reservations).toHaveLength(0);
+  expect(setup.actor.state.dispatches).toHaveLength(dispatches);
+}
+it.each(loadedChanges)('refuses model, tool and recall after loaded memory %s',
+  refusesChangedLoadedMemory);
+
+async function checksExpiryAtUse(offset: number) {
+  const expires = Date.now() + 60_000;
+  await seedRecallFact('private-fact', new Date(expires).toISOString());
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const clock = vi.spyOn(Date, 'now');
+  clock.mockReturnValue(expires + offset);
+  try {
+    const response = await setup.call();
+    expect(response.status, response.text).toBe(offset === -1 ? 200 : 403);
+    expect(setup.received()).toBe(offset === -1 ? 1 : 0);
+  } finally {
+    clock.mockRestore();
+  }
+}
+it.each([-1, 0])('checks loaded expiry at use, offset %s ms', checksExpiryAtUse);
+
+async function refusesForgottenDependency() {
+  await seedRecallFact('dependency');
+  const dependency = { scopeId, memoryId: 'dependency', revision: 1 };
+  await seedRecallFact('a-derived', null, [dependency]);
+  expect((await directRecall('load', 1)).statusCode).toBe(200);
+  const expected = [{ scopeId, memoryId: 'a-derived', revision: 1 }];
+  expect((await savedContext()).memoryContext?.references).toEqual(expected);
+  await changeLoadedMemory('forget', 'dependency');
+  expect((await setup.call()).status).toBe(403);
+  expect(setup.received()).toBe(0);
+}
+it('refuses a loaded fact with a forgotten dependency', refusesForgottenDependency);
+
+async function changesBeforeFinalConfirm(change: LoadedChange, destination: 'model' | 'recall') {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const dispatches = setup.actor.state.dispatches.length;
+  const received = backendRequests;
+  const admit = setup.actor.admitDispatch.bind(setup.actor);
+  async function changeBeforeConfirm(...args: Parameters<typeof admit>) {
+    await changeLoadedMemory(change);
+    return admit(...args);
+  }
+  const spy = vi.spyOn(setup.actor, 'admitDispatch');
+  spy.mockImplementation(changeBeforeConfirm);
+  try {
+    const response = destination === 'model' ? await setup.call()
+      : await setup.call(headers, recallCall('next'), route);
+    expect(response.status, response.text).toBe(403);
+    expect(setup.received()).toBe(0);
+    expect(backendRequests).toBe(received);
+    expect(setup.actor.state.dispatches).toHaveLength(dispatches);
+    for (const reservation of setup.actor.state.reservations) {
+      expect(reservation.settledCents).toBe(0);
+    }
+  } finally {
+    spy.mockRestore();
+  }
+}
+it.each(['forget', 'assistant_read'] as const)(
+  'refuses %s saved before model admission', refusesModelRace);
+async function refusesModelRace(change: LoadedChange) {
+  await changesBeforeFinalConfirm(change, 'model');
+}
+it.each(['forget', 'member_mcp'] as const)(
+  'refuses %s saved before MCP confirmSend', refusesRecallRace);
+async function refusesRecallRace(change: LoadedChange) {
+  await changesBeforeFinalConfirm(change, 'recall');
+}
+
+async function allowsUnrelatedChanges() {
+  await prepareExternalTool();
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  await seedRecallFact('unloaded');
+  await changeLoadedMemory('correct', 'unloaded');
+  const message = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', keyId: 'key:message',
+    contentType: 'text' };
+  await setup.append('conversation-conversation', 'message.posted', message);
+  const upload = { conversationId: 'conversation', fileId: 'upload', uploadedBy: 'alice',
+    name: 'note.txt', size: 5, sha256: 'a'.repeat(64), mime: 'text/plain',
+    objectKey: 'test/conversation/upload' };
+  await setup.append('conversation-conversation', 'file.uploaded', upload);
+  const response = await setup.call();
+  expect(response.status, response.text).toBe(200);
+  const tool = await setup.call(toolHeaders, toolCall, toolRoute);
+  expect(tool.status, tool.text).toBe(200);
+  expect(setup.received()).toBe(2);
+}
+it('allows calls after an unloaded correction, a message and an upload', allowsUnrelatedChanges);
+
+async function ignoresUnusedMemoryGrants() {
+  await prepareExternalTool();
+  await changeLoadedMemory('assistant_read');
+  await changeLoadedMemory('member_mcp');
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  async function* noScopes(...args: Parameters<typeof read>) {
+    expect(args[0]).not.toMatch(/^scope-/u);
+    yield* read(...args);
+  }
+  const spy = vi.spyOn(setup.nats.store, 'readStream');
+  spy.mockImplementation(noScopes);
+  try {
+    expect((await setup.call()).status).toBe(200);
+    expect((await setup.call(toolHeaders, toolCall, toolRoute)).status).toBe(200);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it('reads no scopes and ignores memory grants without loaded references', ignoresUnusedMemoryGrants);
+
+async function refusesAfterColdReplay() {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const pending = await memoryPass(recallCall('pending'), 'recall');
+  await changeLoadedMemory('forget');
+  const coldStore = await createEventStore(setup.nats.connection);
+  const facts = await readChatFacts(coldStore, 'test', 'conversation', 'turn');
+  expect(facts.memoryContext?.executionAvailable).toBe(false);
+  const actor = new BudgetActor(coldStore, 'test');
+  await actor.start();
+  const identity = { ...setup.identity, memory: setup.tokens };
+  const decision = await startDecision(actor, identity, setup.binding, 0,
+    setup.keys, undefined, setup.dispatchOptions);
+  try {
+    const request = { method: 'POST', headers: setup.headers, body: JSON.stringify({
+      model: 'gpt-6-luna', input: 'Hello', stream: true, max_output_tokens: 128 }) };
+    const response = await fetch(`${decision.url}/authorize`, request);
+    expect(response.status).toBe(403);
+    const refused: unknown = await response.json();
+    expect(refused).toMatchObject({ error: 'memory_context_unavailable' });
+    expect(response.headers.get('x-reservation-id')).toBeNull();
+    const dispatchHeaders = { 'x-opencrane-mcp-permit': pending };
+    const dispatchRequest = { method: 'POST', headers: dispatchHeaders,
+      body: JSON.stringify(recallCall('pending')) };
+    const replay = await fetch(`${decision.url}/dispatch${route}`, dispatchRequest);
+    expect(replay.status).toBe(403);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await decision.close();
+  }
+}
+it('refuses loaded memory after cold decision and summary replay', refusesAfterColdReplay);
+
+async function checksOnlyNewScopeRows(revoke: boolean) {
+  await setup.slowDecisions();
+  await renewCredentials();
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const position = await setup.nats.store.head(`scope-${scopeId}`);
+  const admit = setup.actor.admitDispatch.bind(setup.actor);
+  async function unrelatedBeforeConfirm(...args: Parameters<typeof admit>) {
+    await changeLoadedMemory('forget', 'unloaded');
+    return admit(...args);
+  }
+  const admission = vi.spyOn(setup.actor, 'admitDispatch');
+  admission.mockImplementation(unrelatedBeforeConfirm);
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  const starts: number[] = [];
+  async function* observe(...args: Parameters<typeof read>) {
+    if (args[0] === `scope-${scopeId}`) {
+      starts.push(args[1] ?? 1);
+      if (args[1] === 1) await delay(2100);
+      if (revoke && args[1] === position + 1) await changeLoadedMemory('assistant_read');
+    }
+    yield* read(...args);
+  }
+  const spy = vi.spyOn(setup.nats.store, 'readStream');
+  spy.mockImplementation(observe);
+  try {
+    expect((await setup.call()).status).toBe(revoke ? 403 : 200);
+    expect(starts).toEqual([1, position + 1]);
+    if (revoke) {
+      expect(setup.received()).toBe(0);
+      expect(setup.actor.state.reservations[0]?.settledCents).toBe(0);
+    }
+  } finally {
+    spy.mockRestore();
+    admission.mockRestore();
+  }
+}
+it.each([false, true])('loads slow scope history before access and checks new rows, revoke=%s',
+  checksOnlyNewScopeRows);
+
+async function refusesPassAfterAnotherRecall() {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const pending = recallCall('pending');
+  const permit = await memoryPass(pending, 'recall');
+  expect((await directRecall('another')).statusCode).toBe(200);
+  const dispatches = setup.actor.state.dispatches.length;
+  const received = backendRequests;
+  const response = await dispatchMemory(permit, pending);
+  expect(response.status).toBe(403);
+  expect(backendRequests).toBe(received);
+  expect(setup.actor.state.dispatches).toHaveLength(dispatches);
+}
+it('refuses an old pass after another recall changes loaded evidence', refusesPassAfterAnotherRecall);
