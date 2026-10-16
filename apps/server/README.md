@@ -42,6 +42,8 @@ restoring a grant during the write still refuses it.
 
 Record a budget refusal before telling the computer that a chat turn cannot start.
 The member sees the saved spending notice even when no model call was made.
+Reconnecting recovers the notice from the saved refusal if the computer restarted
+before the notice was saved.
 
 Personal memory writes refuse access withdrawn before the fact is saved, including a
 removed write grant or a disabled assistant. They keep the original access time limit.

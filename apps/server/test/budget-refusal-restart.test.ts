@@ -162,7 +162,7 @@ async function recoversNoticeAfterComputerRestart() {
       route: 'model', outcome: 'deny', reason: 'budget_exhausted' });
     await view.runner.run(conversations);
     function isNotice(message: typeof received[number]) {
-      return message.type === 'event' && message.row.type === 'decision.recorded';
+      return message.type === 'event' && message.row?.type === 'decision.recorded';
     }
     function noticeArrived() {
       return received.some(isNotice);
