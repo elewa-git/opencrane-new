@@ -159,13 +159,48 @@ function conversationFeedEntry(event: EventEnvelope) {
   return { conversationId, data };
 }
 
+type FeedRow = { position: string; event_id: string; type: string; data: unknown; time: string };
+
 export async function readConversation(db: Query, silo: string, conversationId: string, since = 0) {
-  const result = await db.query<{ position: string; event_id: string; type: string; data: unknown; time: string }>(
-    'SELECT * FROM conversation_feed WHERE silo = $1 AND conversation_id = $2 AND position > $3 ORDER BY position LIMIT 100', [silo, conversationId, since]);
-  const generation = await db.query<{ generation: string }>('SELECT generation FROM projection_generations WHERE name = $1', [conversations.name]);
-  const head = await db.query<{ position: string | null }>('SELECT max(position) AS position FROM conversation_feed WHERE silo = $1 AND conversation_id = $2', [silo, conversationId]);
-  return { generation: Number(generation.rows[0]?.generation ?? 0), position: Number(head.rows[0]?.position ?? 0),
-    rows: result.rows.map(row => ({ position: Number(row.position), id: row.event_id, type: row.type, data: row.data, time: row.time })) };
+  const deadline = performance.now() + 10_000;
+  // Read the boundary and close together. Later appends belong to the next request.
+  const metadata = await db.query<{ position: string | null; closed_position: string | null;
+    generation: string | null }>(
+    `SELECT (SELECT max(position) FROM conversation_feed
+        WHERE silo=$1 AND conversation_id=$2) AS position,
+      (SELECT closed_position FROM conversations
+        WHERE silo=$1 AND conversation_id=$2) AS closed_position,
+      (SELECT generation FROM projection_generations WHERE name='conversations') AS generation`,
+    [silo, conversationId]);
+  const position = Number(metadata.rows[0]?.position ?? 0);
+  const closedPosition = Number(metadata.rows[0]?.closed_position ?? 0);
+  const rows: ReturnType<typeof displayRow>[] = [];
+  let scannedPosition = since;
+  while (scannedPosition < position && rows.length < 100) {
+    const page = await db.query<FeedRow>(
+      `SELECT * FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
+        AND position > $3 AND position <= $4 ORDER BY position LIMIT $5`,
+      [silo, conversationId, scannedPosition, position, 100 - rows.length]);
+    if (performance.now() >= deadline) throw new Error('Conversation history unavailable');
+    if (!page.rows.length) break;
+    for (const row of page.rows) {
+      // Advance past hidden reports too, without changing a visible row's saved position.
+      scannedPosition = Number(row.position);
+      if (hiddenAfterClose(row, closedPosition)) continue;
+      rows.push(displayRow(row));
+    }
+  }
+  return { generation: Number(metadata.rows[0]?.generation ?? 0), position, rows };
+}
+
+function hiddenAfterClose(row: FeedRow, closedPosition: number) {
+  if (closedPosition === 0 || Number(row.position) <= closedPosition) return false;
+  return row.type.startsWith('agent.') || row.type === 'conversation.closed';
+}
+
+function displayRow(row: FeedRow) {
+  return { position: Number(row.position), id: row.event_id, type: row.type,
+    data: row.data, time: row.time };
 }
 
 export async function listConversations(db: Query, silo: string, memberId?: string) {

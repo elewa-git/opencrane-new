@@ -27,11 +27,12 @@ async function upgradesConversationTables() {
     await runner.initialise(conversations);
     await runner.run(conversations);
     const feed = await readConversation(db, 'test', 'chat');
+    const savedRows = await db.query('SELECT * FROM conversation_feed ORDER BY position');
     await db.query('DROP TABLE conversation_participants, conversations');
     await expect(runner.initialise(conversations)).rejects.toThrow(
       'npm run replay -- conversations --confirm-conversations-stopped');
     expect(await runner.checkpoint(conversations)).toBe(1);
-    expect((await readConversation(db, 'test', 'chat')).rows).toEqual(feed.rows);
+    expect(await db.query('SELECT * FROM conversation_feed ORDER BY position')).toEqual(savedRows);
     const env = { ...nats.env('projection'),
       DATABASE_URL: String(storage.queue.options.connectionString) };
     await replay(['conversations', '--dry-run'], env);

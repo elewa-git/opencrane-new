@@ -219,11 +219,6 @@ export async function activeChatMember(options: ParticipationOptions, memberId: 
   if (!permission.allowed) throw new ChatRefused('Membership unavailable');
 }
 
-export function recordedChatMode(access: Awaited<ReturnType<typeof chatAccess>>) {
-  if (!access.mode) throw new ChatRefused('Conversation refused');
-  return access.mode;
-}
-
 export function isChatRefused(error: unknown) {
   return error instanceof ChatRefused || error instanceof ParticipationRefused ||
     error instanceof GroupRefused ||

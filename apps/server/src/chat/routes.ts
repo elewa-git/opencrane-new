@@ -1,4 +1,4 @@
-import { chatDisplayData, hasDisplayText } from './display.ts';
+import { chatHistoryReply } from './history.ts';
 import { participantCommand, participantList } from './participants.ts';
 import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { creationEvent, privateSessionReader, sharedAssistantAuthority,
@@ -13,13 +13,11 @@ import { z } from 'zod';
 import type { AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import {
-  conversationListCandidates, conversationListRevision, readConversation,
+  conversationListCandidates, conversationListRevision,
 } from '@opencrane/projections';
 import {
-  chatAccess,
   writeChatAccess,
   activeChatMember,
-  recordedChatMode,
   isChatRefused,
   ChatRefused,
   ChatAccessApplying,
@@ -34,7 +32,6 @@ import { memoryAdmission } from './memory-admission.ts';
 import { stateCommand, stateChange, listPreference } from './state.ts';
 
 export type { ChatOptions } from './access.ts';
-type Access = Awaited<ReturnType<typeof chatAccess>>;
 type Fresh = Awaited<ReturnType<typeof writeChatAccess>>;
 const id = idSchema;
 const assistantDetails = z.object({
@@ -42,41 +39,6 @@ const assistantDetails = z.object({
 });
 class InvalidChatRequest extends Error {}
 const parameters = z.object({ conversationId: id.optional(), commandId: id.optional() });
-
-export async function chatRows(options: ChatOptions, conversationId: string,
-  mode: 'agent_session' | 'direct' | 'group', since = 0, joinPosition = 0) {
-  const visibleSince = Math.max(since, joinPosition - 1);
-  const result = await readConversation(options.db, options.silo, conversationId, visibleSince);
-  const computer = await conversationComputerState(options, conversationId, mode);
-  function decryptRow(row: (typeof result.rows)[number]) {
-    const data = chatDisplayData(row.type, row.data);
-    const saved = z.record(z.string(), z.unknown()).parse(row.data);
-    if (!hasDisplayText(row.type) || !('ciphertext' in saved)) return { ...row, data };
-    const text = options.keys.decrypt(options.silo, conversationId, saved);
-    return { ...row, data: { ...data, text } };
-  }
-  const rows = result.rows.map(decryptRow);
-  return { ...result, ...computer, rows };
-}
-
-async function conversationComputerState(options: ChatOptions, conversationId: string,
-  mode: 'agent_session' | 'direct' | 'group') {
-  // Use the mode from the event log; the read table may still be catching up.
-  if (mode !== 'agent_session') {
-    return { computerState: 'not_applicable' as const, computerRecovered: false,
-      computerLostAt: undefined };
-  }
-  const result = await options.db.query<{
-    chat_state: 'ready' | 'starting' | 'recovering'; recovered: boolean; lost_at: string | null;
-  }>(
-    `SELECT c.chat_state, c.recovered, c.lost_at FROM conversation_feed f
-      LEFT JOIN computers c ON c.silo = f.silo AND c.assistant_id = f.data->>'assistantId'
-      WHERE f.silo = $1 AND f.conversation_id = $2 AND f.type = 'conversation.created'`,
-    [options.silo, conversationId]);
-  const computer = result.rows[0];
-  return { computerState: computer?.chat_state ?? 'starting',
-    computerRecovered: computer?.recovered ?? false, computerLostAt: computer?.lost_at ?? undefined };
-}
 
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
   app.get('/api/chat', handler);
@@ -92,12 +54,13 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
     handler,
   };
   const messagesRoute = {
-    method: ['GET', 'POST'] as ('GET' | 'POST')[],
+    method: 'POST' as const,
     url: '/api/conversations/:conversationId/messages',
     handler,
   };
   app.route(conversationsRoute);
   app.route(messagesRoute);
+  app.get(messagesRoute.url, historyHandler);
   const participantsRoute = {
     method: ['GET', 'POST'] as ('GET' | 'POST')[],
     url: '/api/conversations/:conversationId/participants',
@@ -108,6 +71,15 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
   const stateRoute = { method: 'POST' as const, url: '/api/conversations/:conversationId/state',
     bodyLimit: 4096, handler };
   app.route(stateRoute);
+  async function historyHandler(request: FastifyRequest, reply: FastifyReply) {
+    reply.header('cache-control', 'no-store');
+    try {
+      const { conversationId } = parameters.parse(request.params);
+      return await chatHistoryReply(request, reply, config, options, id.parse(conversationId));
+    } catch (error) {
+      return chatRefusal(request, reply, error);
+    }
+  }
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     try {
@@ -149,8 +121,7 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
           result = preference ?? await chatChange(configured, conversationId,
             commandId, access.historyPosition);
         } else {
-          result = await read(request, configured, memberId, conversationId,
-            access, config.cookieSecret);
+          result = await read(request, configured, memberId, config.cookieSecret);
         }
         if ('status' in result && result.status === 'not_found') reply.code(404);
         return reply.send(result);
@@ -181,7 +152,7 @@ async function participantReply(request: FastifyRequest, reply: FastifyReply,
 
 async function read(
   request: FastifyRequest, options: ChatOptions, memberId: string,
-  conversationId: string | undefined, access: Access, secret: string,
+  secret: string,
 ) {
   if (request.routeOptions.url === '/api/chat/colleagues') {
     return colleagues(options, memberId, request.query);
@@ -194,12 +165,6 @@ async function read(
     return chatGroupSnapshot(options, memberId, groupId);
   }
   if (request.routeOptions.url === '/api/chat') return personalContext(options, memberId);
-  if (conversationId) {
-    const query = z.object({ since: z.coerce.number().int().nonnegative().default(0) });
-    const { since } = query.parse(request.query);
-    const mode = recordedChatMode(access);
-    return chatRows(options, conversationId, mode, since, access.historyPosition);
-  }
   return conversationList(options, memberId, request.query, secret);
 }
 

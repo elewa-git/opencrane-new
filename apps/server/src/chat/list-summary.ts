@@ -49,9 +49,14 @@ export async function summary(options: ChatOptions, conversationId: string, mode
         AND data->>'turnId' = (SELECT data->>'turnId' FROM visible_last) LIMIT 1
     ) SELECT * FROM visible_first UNION ALL SELECT * FROM visible_last
       UNION ALL SELECT * FROM lost_output`, [options.silo, conversationId, joinPosition]);
+  const saved = await options.db.query<{ closed: boolean }>(
+    'SELECT closed FROM conversations WHERE silo=$1 AND conversation_id=$2',
+    [options.silo, conversationId]);
   const first = result.rows.find(isFirstMessage);
   const last = result.rows.findLast(changesStatus);
   let title = 'New session';
   if (first) title = sessionSlug(options.keys.decrypt(options.silo, conversationId, first.data));
-  return { title, status: conversationStatus(result.rows, last, mode) };
+  let status = conversationStatus(result.rows, last, mode);
+  if (saved.rows[0]?.closed) status = 'closed';
+  return { title, status };
 }

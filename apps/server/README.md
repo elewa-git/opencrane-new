@@ -10,7 +10,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
+  web["apps/web<br/>the website"] -->|requests, model grants and chat updates frozen at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks gateway settings, public tool addresses, startup, member and child invitations, indexed departures, final tool and memory sends, spending stops for queued messages, renewals and switch-on retries, memory setup and loaded fact links, shared reference folds, later access changes through saving, tool reviews, hosted images, publication requests and status, turn previews, saved references and closes| libs["libs/*<br/>shared code"]
   server -->|records reviewed child requests, final answers and interim updates, child creation and first inputs, authenticated instance observations and stops, owner and admin stops, control intent, personal and shared memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops, refused turn decisions and managed call modes| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
@@ -45,6 +45,11 @@ The server checks access again after reading the latest memory references. Remov
 restoring a grant during the write still refuses it.
 
 ## What it is responsible for
+
+Closed chats keep the assistant's displayed reply as it stood when the chat closed.
+Later assistant reports remain saved but do not appear in history or live updates.
+Saved human posts remain readable. The list keeps showing Closed. History checks
+current participation after loading, before opening the saved text.
 
 Record a budget refusal before telling the computer that a chat turn cannot start.
 The member sees the saved spending notice even when no model call was made.

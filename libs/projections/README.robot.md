@@ -726,3 +726,14 @@ that a stage can run. It does not write a conversation feed row or contain sourc
 Stop server workers before `ProjectionRunner.rebuild(childRequests)`. Replay performs
 only database writes. A new installation or upgrade builds this separate index from
 position one; it does not require rebuilding other conversation tables.
+
+## Closed conversation display reads
+
+`readConversation` reads the feed boundary, first close position and generation in
+one query, then scans only through that boundary. It returns up to 100 visible rows.
+TypeScript hides `agent.*` rows and duplicate closes after the first close; SQL
+only selects rows. Each scan resumes after its last examined position, including
+hidden rows, with a ten-second loading limit. Human posts retain their positions.
+The existing `position` reply is the captured boundary, not a read acknowledgement.
+A full page continues from its last returned row. A shorter page has scanned the
+boundary completely. Raw reports and first-close metadata remain replayable.

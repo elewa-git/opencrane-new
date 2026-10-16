@@ -1484,7 +1484,9 @@ async function participationVolume(sharedChild = false) {
           headers: context.headers('bob'),
         });
         expect(status.statusCode, status.body).toBe(200);
-        expect(client?.socket.readyState).toBe(WebSocket.OPEN);
+        const socketStatus = { code: client?.closeCode(),
+          lastType: client?.received.at(-1)?.type };
+        expect(client?.socket.readyState, JSON.stringify(socketStatus)).toBe(WebSocket.OPEN);
       }
     }
   } finally {
