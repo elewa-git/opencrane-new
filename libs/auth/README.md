@@ -14,7 +14,7 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.->|signs memory passes| auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
-  auth -->|updates readiness and control facts from new events| events["Event log<br/>saved events"]
+  auth -->|reads readiness, control and saved budget refusals| events["Event log<br/>saved events"]
   auth -.->|checks chat turns and refuses native task passes| catalogue["libs/events<br/>event definitions"]
 ```
 
@@ -39,6 +39,7 @@ flowchart LR
 - Refuse passes for native child tasks. Their saved records grant no call authority.
 - Check computer and turn passes against the computer's recorded state. It keeps a
   [stream summary](../../GLOSSARY.md#stream-summary) and reads new events before every check.
+- Keep the saved spending stop on a refused chat turn so reconnects retain its reason.
 - Share the computer summary with the server and models process so starting a
   turn and allowing a call read only new events. Drop older summaries when their
   memory budget is reached. Drop a computer that is too large on its own, so

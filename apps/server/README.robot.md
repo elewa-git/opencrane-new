@@ -2921,3 +2921,17 @@ its current changeRef; it does not acknowledge the superseded command.
 Both routes check current admin membership with `readActiveMember` and send `no-store`.
 Reads perform no append, probe, delivery or retry. Missing projection access returns
 Unknown. Rebuild the MCP catalogue before serving these reads on an existing installation.
+
+## Budget refusal at turn admission
+
+A zero ceiling can refuse a chat turn before the model gateway receives a call.
+The failed `computer.turn_closed` keeps `budgetStopId`. The bridge records a
+`decision.recorded` model denial with reason `budget_exhausted` before sending the
+refused acknowledgement. Each command appends to one stream. The decision uses a
+stable id and its own stream so reconnects cannot create another refusal, even
+after NATS deduplication expires. Failed saves close the connection without an
+acknowledgement. Replaying the start uses the saved stop id, including after the
+ceiling rises. The existing conversation projection supplies the budget notice.
+
+`test/bridge-replay.test.ts` covers the refusal, no reservation, reconnects, a lost
+save before or after append, and recovery after the ceiling rises.

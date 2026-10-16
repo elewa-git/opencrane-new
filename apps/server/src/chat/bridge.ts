@@ -16,7 +16,9 @@ import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { bridgeControl, readyBridgePass } from './bridge-control.ts';
-import { turnCommand, requireTurnMember, TurnAdmissionRejected } from './turns.ts';
+import { turnCommand, requireTurnMember, TurnAdmissionRejected,
+  BudgetAdmissionRejected } from './turns.ts';
+import { recordBudgetRefusal } from './budget-refusal.ts';
 import { readChatFacts } from './chat-summary.ts';
 import { privateContext } from './private-context.ts';
 import { sharedContext } from './shared-context.ts';
@@ -79,6 +81,11 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
         { ...report, status, replay: result === 'duplicate' });
     } catch (error) {
       if (!(error instanceof TurnAdmissionRejected)) throw error;
+      if (error instanceof BudgetAdmissionRejected) {
+        const refused = { silo: options.silo, assistantId: input.assistantId,
+          conversationId: report.conversationId, turnId: report.turnId, stopId: error.stopId };
+        await recordBudgetRefusal(options.store, refused);
+      }
       acknowledgement.refused = error.message;
     }
     if (status === 'started' && binding) {

@@ -68,7 +68,7 @@ async function refusesChangedDefault() {
   expect(await turnBudgetStop(setup.nats.store, 'test', work, position,
     performance.now() + 10_000)).toBe(stopId);
   await expect(turnCommand(setup.nats.store, context, input)).rejects.toThrow('spending');
-  await expect(turnCommand(setup.nats.store, context, input)).rejects.toThrow('refused');
+  await expect(turnCommand(setup.nats.store, context, input)).rejects.toThrow('spending');
   await expectNoSend();
 }
 it('keeps the queued payer after its stop and a default change before fan-out',

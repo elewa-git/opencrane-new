@@ -612,3 +612,10 @@ a SHA-256 review digest and parent-key ciphertext. It accepts no file or plainte
 
 `prepare-gateway-configuration` subscribes only to `mcp.server_published`.
 No event type or field was added. Withdrawal-only preparation remains deferred.
+
+## Budget admission refusal records
+
+Chat `computer.turn_closed` records accept optional `budgetStopId`. Older closes
+remain valid. The server keeps this reference when a spending limit refuses a
+start, so a retry can record the same decision after the ceiling rises.
+`decision.recorded` also covers these pre-call model denials from the server bridge.

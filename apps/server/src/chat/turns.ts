@@ -53,6 +53,14 @@ type TurnContext = {
   silo: string; computerId: string; assistantId: string; binding?: Binding;
 };
 export class TurnAdmissionRejected extends ReportRejected {}
+export class BudgetAdmissionRejected extends TurnAdmissionRejected {
+  readonly stopId: string;
+
+  constructor(stopId: string) {
+    super('Turn stopped by a spending cap');
+    this.stopId = stopId;
+  }
+}
 
 type WriteAuthority = () => Promise<void>;
 
@@ -85,7 +93,8 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
       confirmBudget = admission.confirmBudget;
     } catch (error) {
       if (!isFinalAdmissionRefusal(error)) throw error;
-      refusal = new TurnAdmissionRejected(error.message, { cause: error });
+      refusal = error instanceof TurnAdmissionRejected
+        ? error : new TurnAdmissionRejected(error.message, { cause: error });
       status = 'failed';
     }
   }
@@ -96,7 +105,9 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   const eventData: TurnBinding & {
     assistantId: string; computerId: string; status?: 'completed' | 'failed';
     executionMode?: ExecutionMode; sharingClass?: ContextClass | undefined;
+    budgetStopId?: string;
   } = { ...data, assistantId: context.assistantId, computerId: context.computerId };
+  if (refusal instanceof BudgetAdmissionRejected) eventData.budgetStopId = refusal.stopId;
   const event: EventEnvelope = {
     id, commandId: id, type, subject, silo: context.silo, correlation: {},
     source: 'opencrane-server', principal: { kind: 'system' as const, id: 'turn-lifecycle' },
@@ -147,7 +158,7 @@ async function startAuthority(store: EventStore, context: TurnContext, conversat
 }
 
 function requireNoBudgetStop(stop: string | undefined) {
-  if (stop !== undefined) throw new TurnAdmissionRejected('Turn stopped by a spending cap');
+  if (stop !== undefined) throw new BudgetAdmissionRejected(stop);
 }
 
 async function saveTurn(store: EventStore, facts: ComputerFacts,
@@ -246,11 +257,20 @@ function refuseClosedConversation(turn: TurnSummary | undefined,
   }
 }
 
+function refuseSavedBudgetStop(turn: TurnSummary | undefined, input: TurnInput) {
+  const stopId = turn?.firstClose?.budgetStopId;
+  // Keep the refusal recoverable if its acknowledgement or decision save was lost.
+  if (input.status === 'started' && stopId) {
+    throw new BudgetAdmissionRejected(stopId);
+  }
+}
+
 function decideTurn(facts: ComputerFacts, conversation: ChatFacts, input: TurnInput,
   computerId: string, requesterId: string, sharingClass: ContextClass | undefined) {
   const turn = facts.turn;
   const closed = turn?.firstClose;
   const started = turn?.firstStart;
+  refuseSavedBudgetStop(turn, input);
   refuseClosedConversation(turn, conversation, input);
   if (isRefusedAdmission(turn, conversation, input)) {
     throw new TurnAdmissionRejected('Turn admission was refused');
