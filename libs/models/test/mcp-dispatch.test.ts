@@ -1472,3 +1472,34 @@ async function refuseUnrelatedRestorationReceipts(setup: Fixture,
   expect(response.status).toBe(403);
   expect(setup.received()).toBe(0);
 }
+async function stopsRootPermit() {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const binding = { requesterId: 'alice', conversationId: 'conversation', turnId: 'dispatch',
+      threadId: capture.body.params._meta.threadId, assistantId: 'assistant',
+      computerId: 'computer', generation: 1, payingGroupId: 'personal-default',
+      allowanceCents: 1000 };
+    const root = await setup.actor.setRootAllowance(binding, 1);
+    const value = await permit(setup, headers);
+    // Save the actor stop directly to isolate the budget check from conversation activity.
+    const modelCall = { requesterId: 'alice', conversationId: 'conversation',
+      turnId: 'dispatch', threadId: binding.threadId, assistantId: 'assistant',
+      computerId: 'computer', generation: 1, payingGroupId: 'personal-default',
+      model: 'gpt-6-luna', priceTableId, contextDigest: '0'.repeat(64) };
+    await expect(setup.actor.reserve(modelCall, 1001, undefined, undefined, root.rootId))
+      .rejects.toThrow('Root budget refused');
+    const before = await setup.nats.store.head();
+    expect((await send(setup, value)).status).toBe(403);
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.dispatches).toHaveLength(0);
+    expect(await setup.nats.store.head()).toBe(before);
+    const denied = { method: 'POST', headers, body };
+    const response = await fetch(
+      `${setup.options.decisionUrl}/authorize/mcp/fixture/installed`, denied);
+    expect(response.status).toBe(403);
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses an old MCP permit and a new grant after its root stops', stopsRootPermit);
