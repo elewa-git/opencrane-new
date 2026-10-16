@@ -4,6 +4,7 @@ import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { applyToolPolicy, emptyToolPolicy, mcpCatalogue, ProjectionRunner,
   rebuildMcpCatalogueProjection, isToolPolicyAvailable } from '../src/index.ts';
+import { applyPublicationRecord } from '../src/publication-status.ts';
 import { database } from './database.ts';
 
 const checkedAt = '2026-10-10T12:00:00.000Z';
@@ -159,3 +160,25 @@ function refusesPublishedDriftHold() {
   expect(isToolPolicyAvailable(held, Date.parse(checkedAt))).toBe(false);
 }
 it('refuses an otherwise fresh published policy with a drift hold', refusesPublishedDriftHold);
+
+async function storesOnlySafeRegistrationFields() {
+  let savedData: unknown;
+  const db = {
+    query(_sql: string, values: unknown[]) {
+      savedData = JSON.parse(String(values[6]));
+      return Promise.resolve({ rows: [] });
+    },
+  };
+  const registration = record('mcp.server_registered', {
+    serverId: 'fixture', kind: 'hosted', registeredBy: 'admin',
+    locator: `ghcr.io/elewa/fixture@sha256:${'a'.repeat(64)}`,
+    installation: { attemptId: 1, platform: 'linux/amd64',
+      upstream: { host: 'api.github.com', port: 443 } },
+  });
+
+  await applyPublicationRecord(db, 'mcp_publication_records', registration, 1);
+
+  expect(savedData).toEqual({ serverId: 'fixture', kind: 'hosted' });
+}
+it('does not copy a hosted registration locator or payload into publication records',
+  storesOnlySafeRegistrationFields);

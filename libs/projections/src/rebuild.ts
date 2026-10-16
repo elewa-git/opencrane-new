@@ -154,6 +154,10 @@ async function removeMcpReplay(tx: Query): Promise<void> {
 async function sameMcpState(db: Query): Promise<boolean> {
   const comparisons = await Promise.all([
     Promise.all([
+      rows(db, "mcp_publication_records", "silo, position"),
+      rows(db, replayMcpCatalogueTables.publications, "silo, position"),
+    ]),
+    Promise.all([
       rows(db, "mcp_catalogue", "silo, server_id"),
       rows(db, replayMcpCatalogueTables.catalogue, "silo, server_id"),
     ]),
@@ -172,12 +176,15 @@ async function switchMcpTables(db: Db, changed: boolean): Promise<void> {
     try {
       await db.transaction(async (tx) => {
         await tx.query("SET LOCAL lock_timeout = '250ms'");
-        await tx.query(`LOCK TABLE mcp_catalogue, mcp_tool_modes,
+        await tx.query(`LOCK TABLE mcp_catalogue, mcp_tool_modes, mcp_publication_records,
+          ${replayMcpCatalogueTables.publications},
           ${replayMcpCatalogueTables.catalogue}, ${replayMcpCatalogueTables.toolModes}
           IN ACCESS EXCLUSIVE MODE`);
-        await tx.query("TRUNCATE mcp_catalogue, mcp_tool_modes");
+        await tx.query("TRUNCATE mcp_catalogue, mcp_tool_modes, mcp_publication_records");
         await tx.query(`INSERT INTO mcp_catalogue SELECT * FROM ${replayMcpCatalogueTables.catalogue}`);
         await tx.query(`INSERT INTO mcp_tool_modes SELECT * FROM ${replayMcpCatalogueTables.toolModes}`);
+        await tx.query(`INSERT INTO mcp_publication_records
+          SELECT * FROM ${replayMcpCatalogueTables.publications}`);
         await replayMcpCatalogue.drop(tx);
         await tx.query("DELETE FROM projection_events WHERE projection = $1", [mcpCatalogue.name]);
         await tx.query("UPDATE projection_events SET projection = $1 WHERE projection = $2", [

@@ -1552,3 +1552,119 @@ async function hidesPublicationSecrets() {
   }
 }
 it('publication keeps secret input out of replies, logs and new events', hidesPublicationSecrets);
+
+async function readsPublicationStatus() {
+  const request = await publicationRequest();
+  expect((await app.inject(request)).statusCode).toBe(200);
+  await runner.run(mcpCatalogue);
+  const position = await nats.store.head();
+  const read = nats.store.readStream.bind(nats.store);
+  const realNow = performance.now.bind(performance);
+  let elapsed = 0;
+  function now() {
+    return realNow() + elapsed;
+  }
+  async function* slowMember(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === 'member-amina') elapsed += 2500;
+  }
+  vi.spyOn(performance, 'now').mockImplementation(now);
+  vi.spyOn(nats.store, 'readStream').mockImplementation(slowMember);
+  const paths = ['/api/org/integrations/odoo/publication',
+    '/api/org/integrations/changes/publish-odoo'];
+  const append = vi.spyOn(nats.store, 'append');
+  const probe = vi.spyOn(globalThis, 'fetch');
+  const heads = vi.spyOn(nats.store, 'head');
+  try {
+    for (const url of paths) {
+      const response = await app.inject({ url, headers: headers('oidc-amina') });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.json()).toMatchObject({ status: 'applying', stage: 'preparation',
+        changeRef: 'publish-odoo' });
+      for (const sub of ['oidc-bob', 'outsider']) {
+        const refused = await app.inject({ url, headers: headers(sub) });
+        expect(refused.statusCode).toBe(403);
+        expect(refused.body).not.toContain('publish-odoo');
+      }
+    }
+    expect(append).not.toHaveBeenCalled();
+    expect(probe).not.toHaveBeenCalled();
+    expect(heads).not.toHaveBeenCalled();
+    expect(await nats.store.head()).toBe(position);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it('reads publication by server and original command without starting work', readsPublicationStatus);
+
+async function keepsHostedChangeSeparate() {
+  const request = await publicationRequest();
+  expect((await app.inject(request)).statusCode).toBe(200);
+  const commandId = 'hosted-original';
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(['test', commandId]));
+  const serverId = hash.digest('hex');
+  const saved = fixture('mcp.server_registered', `mcp-${serverId}`, { serverId,
+    kind: 'hosted', registeredBy: 'admin',
+    locator: `ghcr.io/elewa/test@sha256:${'a'.repeat(64)}`,
+    installation: { attemptId: 1, platform: 'linux/amd64',
+      upstream: { host: 'api.github.com', port: 443 } } });
+  await append({ ...saved, id: commandId, commandId });
+  await runner.run(mcpCatalogue);
+  const url = `/api/org/integrations/changes/${commandId}`;
+  const response = await app.inject({ url, headers: headers('oidc-amina') });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'applied', operation: 'register', serverId });
+  expect(response.body).not.toContain('generation');
+}
+it('resolves a hosted original id as registration rather than publication', keepsHostedChangeSeparate);
+
+function hostedHistorySubject(commandId: string) {
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(['test', commandId]));
+  return `mcp-${hash.digest('hex')}`;
+}
+
+async function failsHostedHistoryRead() {
+  const appendIntent = await publicationRequest();
+  expect((await app.inject(appendIntent)).statusCode).toBe(200);
+  await runner.run(mcpCatalogue);
+
+  const readStream = nats.store.readStream.bind(nats.store);
+  async function* failHostedHistory(subject: string, fromSequence?: number,
+    deadline?: number, includeConversationCloses?: boolean) {
+    if (subject === hostedHistorySubject('publish-odoo')) {
+      throw new Error('hosted history unavailable');
+    }
+    yield* readStream(subject, fromSequence, deadline, includeConversationCloses);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(failHostedHistory);
+
+  const response = await app.inject({ url: '/api/org/integrations/changes/publish-odoo',
+    headers: headers('oidc-amina') });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'applying', changeRef: 'publish-odoo' });
+}
+it('reads a saved publication status when hosted history is unavailable', failsHostedHistoryRead);
+
+async function returnsFixedUnknownWhenBothStatusReadsFail() {
+  const readStream = nats.store.readStream.bind(nats.store);
+  async function* failHostedHistory(subject: string, fromSequence?: number,
+    deadline?: number, includeConversationCloses?: boolean) {
+    if (subject === hostedHistorySubject('both-reads-fail')) {
+      throw new Error('hosted history secret');
+    }
+    yield* readStream(subject, fromSequence, deadline, includeConversationCloses);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(failHostedHistory);
+  vi.spyOn(dbs.queue, 'query').mockRejectedValue(new Error('publication query secret'));
+
+  const response = await app.inject({ url: '/api/org/integrations/changes/both-reads-fail',
+    headers: headers('oidc-amina') });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual({ status: 'unknown', stage: 'read', reason: 'unavailable' });
+  expect(response.body).not.toContain('secret');
+}
+it('returns a fixed Unknown result when hosted and publication reads fail',
+  returnsFixedUnknownWhenBothStatusReadsFail);

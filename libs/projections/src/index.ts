@@ -61,3 +61,5 @@ export { readInventoryReferences, inventoryCategoryPositions, inventoryIndexStat
 export { conversationListRevision, conversationListCandidates } from './conversation-list.ts';
 
 export { shouldReplaceMemoryRevision } from './memory-revision.ts';
+
+export { readPublication, publicationChange } from './publication-status.ts';

@@ -317,3 +317,6 @@ Hosted image admission reports dated check results. All four checks must pass be
 an image is admitted. Admission grants no tool access and starts no process.
 The result writer stays inside this package. Server callers can read admission status,
 but the public package exports do not expose the writer.
+
+The projections package reads publication status from saved delivery receipts.
+Reading status never asks this library to deliver or probe a configuration.

@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review and publication receipts, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review and publication receipts and status, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
   projections -->|omits child requests; saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image results, nightly records, tool holds and private instance stops and reports| projections
@@ -35,6 +35,9 @@ flowchart LR
 
 Keep publication requests and their gateway receipts separate from permission to call tools.
 Receipts advance the saved position without changing tool rules or waiting approvals.
+Publication status compares the saved request, gateway observation and server receipt
+in one database snapshot. A missing match stays Applying or Unknown. Rebuilding these
+tables repeats the same checks without sending configuration or probing the gateway.
 
 Keep the first write at an equal memory revision, including its expiry and saved
 position. The nightly scanner shares this rule. A nightly review covers expiry only

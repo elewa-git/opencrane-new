@@ -2153,8 +2153,8 @@ same policyRevision as at sourceSequence. Receipts, call admissions and unchange
 keep it current. Withdrawal, changed policy, failed checks and replacement intents do not.
 The delivery checks the latest preparation again before each receipt and before returning.
 The fold retains only a receipt matching its intent and review; no receipt enables calls.
-The Ready read remains outside this split to keep the change near 600 lines. Worker
-wiring, startup route removal, generation admission and fresh-install qualification remain.
+Publication status is read by `libs/projections` from the catalogue tables.
+Generation admission and fresh-install qualification remain separate work.
 
 Tests use the pinned gateway, disposable NATS and PostgreSQL. The replay CLI compares
 rebuilt policy with the live projection; it writes no events or gateway configuration.
@@ -2179,6 +2179,6 @@ refused delivery preserves the file and appends no receipt.
 Render settings come from the startup gateway options. Memory is optional; when
 present its route bytes are unchanged. Replay performs no delivery or observation.
 
-Left for part d: Ready/applying/disabled/unknown reads and their failure/deadline
-coverage. Generation admission and final-send checks remain row 4. Fresh-install
+The delivery tests also check projection-only Ready/Applying/Disabled/Unknown reads,
+receipt mismatches, failure deadlines and replay. Generation admission and final-send checks remain row 4. Fresh-install
 qualification is NOT RUN. The approval journey prints SKIP until rows 4, 5 and 14.
