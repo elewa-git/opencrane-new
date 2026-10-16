@@ -1,0 +1,2 @@
+- Add a private hosted-image verifier for operator-trusted publisher signatures and exact image hashes. Licence scanning, admission and deployment remain unavailable.
+- Verify publisher signatures without public network requests and report unreadable verification files as unavailable.
