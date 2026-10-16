@@ -2040,8 +2040,8 @@ Parent removal and creator departure remain for activation reconciliation.
 `libs/models/test/root-stop-evidence.test.ts` checks exact references, rejected evidence, serial
 ordering, lost replies, duplicate-window expiry, old writers and PostgreSQL replay.
 No new caller, reaction, route or running-turn interruption is connected here.
-Trusted call ids, grant/dispatch checks and the child dispatcher remain in row 5.
-There is no route, caller, running-turn fan-out or model call in this part.
+Root grant/dispatch checks are described below. Trusted retry ids and the child
+dispatcher remain separate work. Stop callers and running-turn interruption are absent.
 
 ## Hosted registration — first part of P3-6 PR 4
 
@@ -2189,6 +2189,26 @@ present its route bytes are unchanged. Replay performs no delivery or observatio
 The delivery tests also check projection-only Ready/Applying/Disabled/Unknown reads,
 receipt mismatches, failure deadlines and replay. Generation admission and final-send checks remain row 4. Fresh-install
 qualification is NOT RUN. The approval journey prints SKIP until rows 4, 5 and 14.
+
+## Root checks at grant and dispatch (P4-8 PR 5, first part; Part of #90)
+
+`grantModelCall` in `call-retry.ts` handles both legacy and managed model branches.
+It finds the root from the verified conversation and turn, passes it to `reserve`,
+saves the decision, then calls `admitDispatch` with the exact body digest and root.
+MCP and memory grants pass that same root through `checkBudget` and the saved permit.
+The actor checks root identity and permanent Stop after `fresh()` in its serial queue.
+It uses the root admission position for spending stops. A stopped root releases an
+unadmitted hold through `appendNotDispatched`, which refuses any send or usage evidence.
+A changed dispatch root conflicts before any write or release. Older internal callers
+may omit the root on a held call; the actor copies it from the saved hold before checking.
+The new optional event field keeps older admission records readable.
+
+The request id, retry behaviour, provider checks and egress are unchanged. Trusted
+retry binding, lost-reply hold recovery and altered-retry conflicts remain the next
+part of row 5. No source-evidence reader, stop caller, route, activation or running-turn
+interruption is added. Roots remain absent from `budgetSummary`; errors use fixed text.
+Existing settlement keeps the original payer and tariff and accepts late usage once.
+Fresh-install qualification and paid calls: NOT RUN.
 
 ## Reviewed drift restoration (#48 PR 3c, first part)
 

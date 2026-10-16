@@ -16,8 +16,8 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stops| models["libs/models<br/>AI rules, control, provider choice and spending"]
-  models -->|checks revision, spending, catalogue expiry and holds, and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stop reasons| models["libs/models<br/>AI rules, control, provider choice and spending"]
+  models -->|checks revision, spending, catalogue expiry, holds, root stops and changed write grants before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
@@ -59,7 +59,11 @@ or its requester loses access. It checks the saved event and keeps a reference t
 An earlier removal cannot stop a new root after the requester has been re-invited.
 The first stop stays permanent, and later usage still counts. No caller uses this
 command yet.
-This internal API has no child-chat caller yet.
+Model calls find their root from the verified turn. Model, tool and memory calls
+check that root before granting permission and again before admitting a send.
+A stopped root refuses an old pass and releases a proven unsent hold at zero.
+Already admitted calls may still send. They keep their holds until usage or other evidence arrives.
+Retrying a model request does not yet recover an earlier hold.
 
 - Share public address checks with the server’s remote tool discovery. Test a socket
   check that accepts one visible TLS hostname and public DNS answers before connecting.

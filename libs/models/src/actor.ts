@@ -6,12 +6,12 @@ import { budgetCeilingSetDataSchema, budgetCallDispatchAdmittedDataSchema,
   effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budgetStopMessage,
-  exceededReasons, observedPayload, requireDispatchReservation, checkedManagedReservation,
+  exceededReasons, observedPayload, checkedManagedReservation,
   type BudgetState, type ModelCall, type ModelUsage } from './state.ts';
 
 import { history } from './event-history.ts';
-import { checkRootReservation, setRootAllowance, stopRootAtCeiling,
-  stopRootOnOverrun } from './root-budget.ts';
+import { checkDispatchBinding, checkRootDispatch, checkRootGrant, checkRootReservation,
+  setRootAllowance, stopRootAtCeiling, stopRootOnOverrun } from './root-budget.ts';
 import { readRootStopEvidence, saveRootStop, type RootStopReason } from './root-stop-evidence.ts';
 export { history } from './event-history.ts';
 
@@ -199,27 +199,24 @@ export class BudgetActor {
       throw new BudgetRefused(message);
     }
   }
-  checkBudget(call: ModelCall, fresh: () => Promise<void>, admittedAt: number) {
+  checkBudget(call: ModelCall, fresh: () => Promise<void>, admittedAt: number, rootId?: string) {
     const check = async () => {
-      const stopId = budgetStopId(this.state, call, this.now(), admittedAt);
+      const position = await checkRootGrant(this.state, call, rootId, this.now(), fresh,
+        this.append.bind(this), admittedAt);
+      const stopId = budgetStopId(this.state, call, this.now(), position);
       if (stopId !== undefined) {
         await this.recordRefusedWork(call, stopId, fresh);
-        this.requireBudget(call, admittedAt);
+        this.requireBudget(call, position);
       }
     };
     return this.serial(check);
   }
   admitDispatch(raw: unknown, fresh: () => Promise<void>, admittedAt?: number) {
-    const input = budgetCallDispatchAdmittedDataSchema.parse(raw);
+    const parsed = budgetCallDispatchAdmittedDataSchema.parse(raw);
     const admit = async () => {
-      function matchesDispatch(saved: BudgetState['dispatches'][number]) {
-        return saved.callId === input.callId ||
-          (input.reservationId !== undefined && saved.reservationId === input.reservationId);
-      }
-      if (this.state.dispatches.some(matchesDispatch)) {
-        throw new Error('Call already admitted; no further send permission');
-      }
-      requireDispatchReservation(this.state, input);
+      const input = checkDispatchBinding(this.state, parsed);
+      admittedAt = await checkRootDispatch(this.state, input, this.now(), fresh,
+        this.append.bind(this), this.appendNotDispatched.bind(this), admittedAt);
       this.requireBudget(input.modelCall, admittedAt);
       const reasons = exceededReasons(this.state, input.modelCall, this.now(), 0);
       if (reasons.length) {

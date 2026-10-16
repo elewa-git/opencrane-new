@@ -139,7 +139,8 @@ export function requireDispatchReservation(state: BudgetState,
   if (!reservation || reservation.settledCents !== undefined || reservation.expired) {
     throw new Error('Reservation is no longer open');
   }
-  if (!isDeepStrictEqual(reservation.call, input.modelCall) ||
+  if (reservation.rootId !== input.rootId ||
+      !isDeepStrictEqual(reservation.call, input.modelCall) ||
       (reservation.call.requestId !== undefined && reservation.call.requestId !== input.callId)) {
     throw new Error('Reservation binding changed');
   }

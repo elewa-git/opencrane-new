@@ -318,3 +318,20 @@ async function refusesAccessChangeAfterProviderHistory() {
 }
 it('refuses access removed after provider history before any money is held',
   refusesAccessChangeAfterProviderHistory);
+
+async function admitsRootedManagedCall() {
+  const setup = await managedFixture();
+  const binding = { requesterId: 'alice', conversationId: 'conversation', turnId: 'bound',
+    threadId: 'thread', assistantId: 'assistant', computerId: 'computer', generation: 1,
+    payingGroupId: 'personal-default', allowanceCents: 1000 };
+  const root = await setup.actor.setRootAllowance(binding, 1);
+  expect((await setup.call()).status).toBe(200);
+  expect(setup.received()).toBe(1);
+  expect(setup.actor.state.reservations[0]?.rootId).toBe(root.rootId);
+  expect(setup.actor.state.dispatches[0]?.rootId).toBe(root.rootId);
+  await setup.settled();
+  expect(setup.actor.state.reservations[0]).toMatchObject({ settledCents: 1,
+    call: { ...choice, priceTableId, payingGroupId: 'personal-default' } });
+}
+it('uses the same root grant and dispatch checks for a managed model call',
+  admitsRootedManagedCall);

@@ -26,6 +26,7 @@ interface MemorySend {
   sign: (dispatch: MemoryDispatch, expiresAt: number) => Promise<string>;
 }
 interface BudgetBinding {
+  rootId?: string;
   modelCall: ModelCall;
   decisionId: string;
   admittedAt: number;
@@ -158,7 +159,8 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     }
     await options!.requireLeader();
     const dispatch = { callId: permit.requestId, decisionId: permit.budget.decisionId,
-      bodyDigest: permit.bodyDigest, modelCall: permit.budget.modelCall };
+      bodyDigest: permit.bodyDigest, modelCall: permit.budget.modelCall,
+      ...(permit.budget.rootId === undefined ? {} : { rootId: permit.budget.rootId }) };
     async function confirmSend() {
       await permit.confirmAccess();
       requireCurrentRoute(permit);

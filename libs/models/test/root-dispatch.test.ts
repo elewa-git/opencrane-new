@@ -102,8 +102,14 @@ async function stopsOldHold() {
   expect(results[0]?.status).toBe('fulfilled');
   expect(results[1]?.status).toBe('rejected');
   const held = context.actor.state.reservations[2]!;
-  await expect(context.actor.admitDispatch(dispatch(held.id, root.rootId), fresh))
+  let refreshed = false;
+  function confirmAccess() {
+    refreshed = true;
+    return Promise.resolve();
+  }
+  await expect(context.actor.admitDispatch(dispatch(held.id, root.rootId), confirmAccess))
     .rejects.toThrow('Root budget refused');
+  expect(refreshed).toBe(true);
   expect(root.stop?.reason).toBe('allowance_exhausted');
   expect(held.settledCents).toBe(0);
   expect(context.received()).toBe(0);
@@ -142,14 +148,31 @@ async function settlesLateOnce() {
   const root = await context.actor.setRootAllowance(binding, 240);
   const first = await context.actor.reserve(call, 240, fresh, undefined, root.rootId);
   await settle(context, first, 240);
-  const held = await context.actor.reserve(call, 110, fresh, undefined, root.rootId);
-  await context.actor.admitDispatch(dispatch(held, root.rootId), fresh);
+  const reserve = context.actor.reserve.bind(context.actor);
+  async function holdForUsage(...args: Parameters<typeof reserve>) {
+    args[1] = 110;
+    return reserve(...args);
+  }
+  const hold = vi.spyOn(context.actor, 'reserve');
+  hold.mockImplementation(holdForUsage);
+  context.usage(3_680_000, 0, 0);
+  try {
+    expect((await context.call()).status).toBe(200);
+  } finally {
+    hold.mockRestore();
+  }
+  expect(context.received()).toBe(1);
   await stop(context, root.rootId);
   expect(rootTotals(context.actor.state, root.rootId)).toMatchObject({
     settledCents: 240, heldCents: 110 });
-  await settle(context, held, 70);
+  const beforeRetry = await context.nats.store.head();
+  const admission = context.actor.state.dispatches[0]!;
+  await expect(context.actor.admitDispatch(admission, fresh)).rejects.toThrow('already admitted');
+  expect(await context.nats.store.head()).toBe(beforeRetry);
+  expect(rootTotals(context.actor.state, root.rootId).heldCents).toBe(110);
+  await context.settled();
   const before = await context.nats.store.head();
-  await settle(context, held, 70);
+  await context.settled();
   expect(await context.nats.store.head()).toBe(before);
   const recovered = new BudgetActor(context.nats.store, 'test', context.actor.now);
   await recovered.start();
@@ -188,3 +211,23 @@ async function sendsUnaffectedTurns() {
 }
 it('lets another root and a non-root turn send after Stop on the same computer',
   sendsUnaffectedTurns);
+
+async function stopsAtCurrentCeiling() {
+  const context = await setup();
+  const root = await context.actor.setRootAllowance(binding, 110);
+  const held = await context.actor.reserve(call, 110, fresh, undefined, root.rootId);
+  const otherCall = { ...call, turnId: 'other' };
+  const spent = await context.actor.reserve(otherCall, 1);
+  await settle(context, spent, 2001);
+  expect(context.actor.state.stops).toHaveLength(0);
+  await expect(context.actor.admitDispatch(dispatch(held, root.rootId), fresh))
+    .rejects.toThrow('Root budget refused');
+  expect(root.stop?.reason).toBe('ceiling_stop');
+  expect(context.actor.state.reservations[0]?.settledCents).toBe(0);
+  expect(context.actor.state.dispatches).toHaveLength(0);
+  expect(context.received()).toBe(0);
+  expect(await counts(context, 'budget.exhausted')).toBe(1);
+  expect(await counts(context, 'budget.root_stopped')).toBe(1);
+}
+it('stops the root and releases its old hold when late spend exhausts a current ceiling',
+  stopsAtCurrentCeiling);

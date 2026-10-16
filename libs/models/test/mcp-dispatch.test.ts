@@ -1472,7 +1472,7 @@ async function refuseUnrelatedRestorationReceipts(setup: Fixture,
   expect(response.status).toBe(403);
   expect(setup.received()).toBe(0);
 }
-async function stopsRootPermit() {
+async function stopsRootPermit(reason: 'requester_stop' | 'allowance_exhausted') {
   const setup = await fixture();
   try {
     const headers = await prepare(setup);
@@ -1482,13 +1482,21 @@ async function stopsRootPermit() {
       allowanceCents: 1000 };
     const root = await setup.actor.setRootAllowance(binding, 1);
     const value = await permit(setup, headers);
-    // Save the actor stop directly to isolate the budget check from conversation activity.
-    const modelCall = { requesterId: 'alice', conversationId: 'conversation',
-      turnId: 'dispatch', threadId: binding.threadId, assistantId: 'assistant',
-      computerId: 'computer', generation: 1, payingGroupId: 'personal-default',
-      model: 'gpt-6-luna', priceTableId, contextDigest: '0'.repeat(64) };
-    await expect(setup.actor.reserve(modelCall, 1001, undefined, undefined, root.rootId))
-      .rejects.toThrow('Root budget refused');
+    if (reason === 'requester_stop') {
+      const subject = 'conversation-conversation';
+      const payload = { conversationId: 'conversation', turnId: 'dispatch', requestedBy: 'alice' };
+      await setup.append(subject, 'agent.turn_stop_requested', payload);
+      const position = await setup.nats.store.head(subject);
+      await setup.actor.stopRoot(root.rootId, reason, subject, position);
+    } else {
+      // Save the actor stop directly to isolate the budget check from conversation activity.
+      const modelCall = { requesterId: 'alice', conversationId: 'conversation',
+        turnId: 'dispatch', threadId: binding.threadId, assistantId: 'assistant',
+        computerId: 'computer', generation: 1, payingGroupId: 'personal-default',
+        model: 'gpt-6-luna', priceTableId, contextDigest: '0'.repeat(64) };
+      await expect(setup.actor.reserve(modelCall, 1001, undefined, undefined, root.rootId))
+        .rejects.toThrow('Root budget refused');
+    }
     const before = await setup.nats.store.head();
     expect((await send(setup, value)).status).toBe(403);
     expect(setup.received()).toBe(0);
@@ -1502,4 +1510,5 @@ async function stopsRootPermit() {
     await setup.close();
   }
 }
-it('refuses an old MCP permit and a new grant after its root stops', stopsRootPermit);
+it.each(['requester_stop', 'allowance_exhausted'] as const)(
+  'refuses an old MCP permit and a new grant after its root stops: %s', stopsRootPermit);

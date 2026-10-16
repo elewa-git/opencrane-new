@@ -1,0 +1,1 @@
+Model, tool and memory calls check their turn's spending root before granting permission and admitting a send. A stopped root refuses old passes and releases proven unsent holds at zero; late usage still settles once at the original price and payer. Recovering a hold when a model request is resent remains separate work.
