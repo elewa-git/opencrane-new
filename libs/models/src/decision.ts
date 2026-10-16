@@ -1,3 +1,5 @@
+import { grantModelCall } from './call-retry.ts';
+import { turnRootBinding } from './root-budget.ts';
 import { checkNativeCall, NativeDelegationDisabled } from './native-call-check.ts';
 import { mcpDispatch, type McpDispatchOptions } from './mcp-dispatch.ts';
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
@@ -279,6 +281,7 @@ export async function startDecision(
       requireActiveConversationTurn(conversation, turnToken.turn);
       const turn = activeTurn(turnToken, activity.computer, checked.sequence);
       const admittedAt = queuedPosition(conversation, turn);
+      const root = turnRootBinding(actor.state, turnToken.conversation, turnToken.turn);
       const grants = await modelGrantHistory(actor, turnToken.model, route, historyDeadline);
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
       const accessStarted = managedRoute ? performance.now() : started;
@@ -311,9 +314,9 @@ export async function startDecision(
           assistantId: computer.assistant, requesterId: turnToken.requester,
           conversationId: turnToken.conversation, turnId: turnToken.turn, threadId: turnToken.thread,
           payingGroupId: z.string().min(1).parse(data(turn.event)['payingGroupId']), contextDigest };
-        await actor.checkBudget(modelCall, fresh, admittedAt);
+        await actor.checkBudget(modelCall, fresh, admittedAt, root.rootId);
         const decisionId = await audit('allow', 'memory_read_allowed');
-        const budget = { modelCall, decisionId, admittedAt };
+        const budget = { modelCall, decisionId, admittedAt, ...root };
         await fresh();
         const memorySend = prepareMemorySend(memory.payload, identity.memory.memoryContext);
         mcpSender.setPermit(res, 'allow', policy, raw, requestId, fresh,
@@ -346,7 +349,7 @@ export async function startDecision(
         contextDigest = digestContext([call.contextDigest, policy]);
         // Check stops before opening or consuming an approval. Zero-cost calls hold no money.
         const modelCall = { ...call, requestId, model: 'mcp-zero-cost' };
-        await actor.checkBudget(modelCall, fresh, admittedAt);
+        await actor.checkBudget(modelCall, fresh, admittedAt, root.rootId);
         await fresh();
         const approvalBinding = {
           requesterId: turnToken.requester, assistantId: computer.assistant,
@@ -358,7 +361,7 @@ export async function startDecision(
         linkApprovalAttempt(toolFacts, approvalId);
         const decisionId = await audit(outcome, reason,
           approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
-        const budget = { modelCall, decisionId, admittedAt };
+        const budget = { modelCall, decisionId, admittedAt, ...root };
         await fresh();
         mcpSender.setPermit(res, outcome, policy, raw, requestId, fresh, fresh.deadline, budget);
         res.setHeader('x-request-id', requestId);
@@ -377,14 +380,8 @@ export async function startDecision(
       const { credential, modelCall } = await modelPermission(
         call, requestId, turnToken, activity, fresh.deadline, providers);
       requireConnectedClient(req, res);
-      // Keep the original turn stopped after a limit increase, before holding any money.
-      const reservation = await actor.reserve(modelCall, amountCents, fresh, admittedAt);
-      const decisionId = await allowModel(reservation);
-      const bodyHash = createHash('sha256');
-      bodyHash.update(raw);
-      const dispatch = { callId: requestId, decisionId, bodyDigest: bodyHash.digest('hex'),
-        reservationId: reservation, modelCall };
-      await actor.admitDispatch(dispatch, fresh, admittedAt);
+      const reservation = await grantModelCall(actor, modelCall, amountCents, raw,
+        fresh, admittedAt, allowModel);
       res.setHeader('x-request-id', requestId);
       if (credential !== undefined) res.setHeader('x-provider-key', credential);
       res.setHeader('x-reservation-id', reservation); res.end('{}');

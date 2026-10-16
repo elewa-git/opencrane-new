@@ -44,6 +44,7 @@ export const budgetEvents = [
     'The budget actor admitted one call for a single gateway send.',
     data.budgetCallDispatchAdmittedDataSchema,
     {
+      rootId: 'root_1',
       callId: 'call_1',
       decisionId: 'decision_1',
       bodyDigest: '0'.repeat(64),

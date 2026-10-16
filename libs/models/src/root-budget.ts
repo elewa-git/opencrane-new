@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { budgetRootAllowanceSetDataSchema, type budgetRootStoppedDataSchema } from '@opencrane/events';
-import { budgetStopId, exceededReasons, type BudgetState, type ModelCall } from './state.ts';
+import { budgetRootAllowanceSetDataSchema, type budgetCallDispatchAdmittedDataSchema,
+  type budgetRootStoppedDataSchema } from '@opencrane/events';
+import { budgetStopId, exceededReasons, requireDispatchReservation,
+  type BudgetState, type ModelCall } from './state.ts';
 
 type Append = (type: string, payload: unknown) => Promise<void>;
 type Root = BudgetState['roots'][number];
@@ -116,6 +118,35 @@ export async function stopRootOnOverrun(state: BudgetState,
     reservationId: reservation.id };
   await append('budget.root_stopped', stop);
 }
+export function turnRootId(state: BudgetState, conversationId: string, turnId: string) {
+  function matchesTurn(root: Root) {
+    return root.conversationId === conversationId && root.turnId === turnId;
+  }
+  return state.roots.find(matchesTurn)?.rootId;
+}
+export function turnRootBinding(state: BudgetState, conversationId: string,
+  turnId: string): { rootId?: string } {
+  const rootId = turnRootId(state, conversationId, turnId);
+  if (rootId === undefined) {
+    return {};
+  }
+  return { rootId };
+}
+function bindDispatchRoot(state: BudgetState,
+  input: z.infer<typeof budgetCallDispatchAdmittedDataSchema>) {
+  if (input.rootId !== undefined || input.reservationId === undefined) {
+    return input;
+  }
+  function matchesHold(hold: BudgetState['reservations'][number]) {
+    return hold.id === input.reservationId;
+  }
+  // Preserve internal callers made before dispatch records carried the hold's root.
+  const rootId = state.reservations.find(matchesHold)?.rootId;
+  if (rootId === undefined) {
+    return input;
+  }
+  return { ...input, rootId };
+}
 export async function checkRootReservation(state: BudgetState, call: ModelCall,
   rootId: string | undefined, amountCents: number, append: Append) {
   function matchesTurn(root: Root) {
@@ -137,4 +168,60 @@ export async function checkRootReservation(state: BudgetState, call: ModelCall,
     await stopRoot(state, stop, append);
   }
   return root;
+}
+
+export async function checkRootDispatch(state: BudgetState,
+  input: z.infer<typeof budgetCallDispatchAdmittedDataSchema>, now: Date,
+  fresh: () => Promise<void>, append: Append, release: (id: string) => Promise<void>,
+  admittedAt: number | undefined) {
+  // Order Stop and dispatch in the actor queue, after checking current access.
+  try {
+    return await checkRootGrant(state, input.modelCall, input.rootId, now, fresh,
+      append, admittedAt);
+  } catch (error) {
+    // Release only through the existing proof that no send or usage was recorded.
+    if (input.reservationId !== undefined) {
+      await release(input.reservationId);
+    }
+    throw error;
+  }
+}
+
+export async function checkRootGrant(state: BudgetState, call: ModelCall,
+  rootId: string | undefined, now: Date, fresh: () => Promise<void>, append: Append,
+  admittedAt: number | undefined) {
+  const turnRoot = turnRootId(state, call.conversationId, call.turnId);
+  if (rootId === undefined && turnRoot === undefined) {
+    return admittedAt;
+  }
+  await fresh();
+  const root = await checkRootReservation(state, call, rootId, 0, append);
+  let stopId = budgetStopId(state, call, now, root?.position);
+  if (stopId === undefined) {
+    const reasons = exceededReasons(state, call, now, 0);
+    if (reasons.length > 0) {
+      const work = { conversationId: call.conversationId, turnId: call.turnId };
+      const exhaustion = { reasons, work };
+      await append('budget.exhausted', exhaustion);
+      stopId = budgetStopId(state, call, now, root?.position);
+    }
+  }
+  if (stopId !== undefined) {
+    await stopRootAtCeiling(state, root, stopId, append);
+  }
+  return root?.position;
+}
+
+export function checkDispatchBinding(state: BudgetState,
+  parsed: z.infer<typeof budgetCallDispatchAdmittedDataSchema>) {
+  const input = bindDispatchRoot(state, parsed);
+  function matchesDispatch(saved: BudgetState['dispatches'][number]) {
+    return saved.callId === input.callId ||
+      (input.reservationId !== undefined && saved.reservationId === input.reservationId);
+  }
+  if (state.dispatches.some(matchesDispatch)) {
+    throw new Error('Call already admitted; no further send permission');
+  }
+  requireDispatchReservation(state, input);
+  return input;
 }

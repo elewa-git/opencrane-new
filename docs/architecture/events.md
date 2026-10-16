@@ -467,7 +467,13 @@ expiry and replay preserve that settlement. New reservations carry `dispatchGate
 Model, MCP and memory sends and provider checks use one `budget.call_dispatch_admitted` command in
 that same actor queue. It binds the trusted call id, body hash, decision or provider
 request reference, reservation when priced, and the recorded turn, requester,
-payer, assistant and computer generation. It checks current access, stops and
+payer, assistant and computer generation. Optional `rootId` names the hold's root,
+or the verified turn's root for zero-cost MCP and memory calls. Model grants look
+up the root from the verified conversation and turn, including managed model grants.
+The actor checks permanent root Stop after refreshing access in its serial queue.
+Refusal releases a proven unadmitted hold at zero through the existing
+`budget.settled` not-dispatched path; admitted or uncertain calls keep their holds.
+Old dispatch records without `rootId` remain readable. It checks current access, stops and
 capacity without holding money twice. Provider reachability checks and reviewed
 zero-cost MCP calls (`model: mcp-zero-cost`) need no hold. MCP still requires its
 conditional tool-rule admission after budget admission; both must pass before sending.

@@ -647,3 +647,25 @@ async function refusesCallsAfterClose(subject: string) {
 it.each(['conversation-conversation', 'participation-conversation'])(
   'refuses new model and memory calls after %s closes and settles dispatched usage once',
   refusesCallsAfterClose);
+
+async function refusesStoppedRootMemory() {
+  const binding = { requesterId: 'alice', conversationId: 'conversation', turnId: 'turn',
+    threadId: 'thread', assistantId: 'assistant', computerId: 'computer', generation: 1,
+    payingGroupId: 'personal-default', allowanceCents: 1000 };
+  const root = await setup.actor.setRootAllowance(binding, 1);
+  const permit = await memoryPass(call, 'recall');
+  const subject = 'conversation-conversation';
+  const payload = { conversationId: 'conversation', turnId: 'turn', requestedBy: 'alice' };
+  await setup.append(subject, 'agent.turn_stop_requested', payload);
+  const position = await setup.nats.store.head(subject);
+  await setup.actor.stopRoot(root.rootId, 'requester_stop', subject, position);
+  const before = await setup.nats.store.head();
+  const beforeRequests = backendRequests;
+  expect((await dispatchMemory(permit, call)).status).toBe(403);
+  expect(backendRequests).toBe(beforeRequests);
+  expect(await setup.nats.store.head()).toBe(before);
+  const response = await setup.call(headers, call, route);
+  expect(response.status).toBe(403);
+  expect(backendRequests).toBe(beforeRequests);
+}
+it('refuses an old memory permit and a new grant after its root stops', refusesStoppedRootMemory);

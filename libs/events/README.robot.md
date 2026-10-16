@@ -25,7 +25,10 @@ The event parser binds every MCP event's server id to its exact subject.
 
 `budget.call_dispatch_admitted` records the call id, body SHA-256 hash, decision
 or provider request reference, optional reservation and the trusted model-call
-binding. New reservations carry `dispatchGate: 1`; older records remain readable.
+binding. Optional `rootId` equals the hold's root for paid calls and the verified
+turn's root for zero-cost calls. The actor checks it after refreshing access and
+refuses stopped roots. Old records without this field still replay.
+New reservations carry `dispatchGate: 1`; older records remain readable.
 The models actor orders dispatch and expiry on one budget stream. This record
 changes no money. Its absence proves non-dispatch only for the new sender contract.
 The first successful append permits one gateway send; duplicates grant no send.
