@@ -647,8 +647,8 @@ boundary. Selection delays cannot count later expiry as already reviewed.
 
 ## Publication preparation (P3-4 PR 2a; Part of #45)
 
-The tool-policy fold saves reviewRevision and publication intent. New publication events
-leave published false and policyRevision unchanged. Old boolean events cannot supply a
+The tool-policy fold saves reviewRevision, publicationRevision and publication intent. New publication events
+leave published false and advance policyRevision to their saved position. Old boolean events cannot supply a
 generation entry. Rebuilding the catalogue repeats the same fold and starts no preparation.
 
 ## Gateway receipts in tool policy
@@ -705,3 +705,14 @@ A rejected file has no saved rejection event: it remains at `observation/not_obs
 never a fabricated rejection diagnosis. GET never repairs or probes it.
 Replies contain only status, stage/reason, generation, changeRef, digests and safe dates.
 These are saved observations, not a new process health check or permission to call tools.
+
+## Reload approval revisions
+
+`publicationRevision` records the saved publication position. `isToolReviewCurrent`
+accepts either an unchanged review or that exact publication's approval invalidation.
+Other policy events clear this position or advance `policyRevision` past it. Failed checks
+therefore still require a new review. Receipt and status checks use the same rule.
+A replacement publication holds a previously callable server until its exact live receipt.
+An intent with a stale source position or review cannot retain the reviewed authority.
+Rebuild repeats these decisions without configuration writes or upstream calls.
+Rebuild the MCP catalogue on upgrade so earlier publication events gain this position.

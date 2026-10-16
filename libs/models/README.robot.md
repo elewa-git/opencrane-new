@@ -1983,8 +1983,8 @@ records retain both snapshots.
 The models process retains its existing database leader check. No conversation access
 stream, authority implementation or authority test is changed.
 
-This split does not implement in-process configuration reload, pending approval cancellation
-on reload or instance-start observation. Acknowledged restoration is described below.
+This watch split does not implement in-process route replacement or instance-start
+observation. Acknowledged restoration and saved reload cancellation are described below.
 The current routes reload by restarting the models process; its startup invalidates old
 approvals. Recapture of an independently restarted backend still needs instance lifecycle
 wiring. The gateway delivery helper now provides exact receipts; background delivery
@@ -2293,9 +2293,9 @@ stale, withdrawn and failed attempts send zero requests. The replay CLI compares
 live catalogue with its rebuild without sending or appending events. Pre-drift approvals
 stay cancelled. Receipt schema and fold checks also cover foreign and malformed receipts.
 
-Scope is PARTIAL: configuration reload cancellation, unchanged-other-server approval
-retention, hosted per-start capture, zero-TTL per-call capture and credentialed discovery
-are not implemented here. Fresh-install qualification is NOT RUN. The access-check code
+The later reload section covers cancellation and unchanged-other-server approval retention.
+Scope is PARTIAL: hosted per-start capture, zero-TTL per-call capture and credentialed
+discovery are not implemented here. Fresh-install qualification is NOT RUN. The access-check code
 and its two named regression files are unchanged.
 
 ## Loaded memory before dispatch (P4-15 PR 2d; Part of #97)
@@ -2412,6 +2412,28 @@ PARTIAL: this is steps 1–3 of row 4. Part b adds `tool.dispatch_started`, its 
 append and uncertain-reply tests, and the final access and MCP position checks after saving.
 No event contract changes belong to this first part. Row 5 still supplies the guarded
 destination; production routes remain empty. Fresh-install journey: SKIP.
+## Saved reload approval cancellation (Part of #48)
+
+Every new `mcp.server_published` intent advances that server's `policyRevision` at
+its conditional append. The existing approval reader then cancels waiting and unused
+approvals, including ones first read after successful restoration. Consumed approvals
+keep their saved outcome. Command retries recover the original intent without another
+append. The existing gateway preparation assigns the generation; no second route or
+integration-specific handling is added.
+
+`publicationRevision` records this invalidation position separately from `reviewRevision`,
+which still identifies the exact reviewed tools. Preparation and receipts accept that
+review only while no later policy change invalidates it. A replacement of a callable
+publication raises the saved drift hold. The watch keeps its local hold until the existing
+live acknowledgement restores the exact current publication. A failed or obsolete delivery
+cannot undo the invalidation. A new generation carrying another server's unchanged member
+writes no intent on that server and preserves its revision and approvals.
+
+Tests use the recording upstream and real gateway delivery. They cover waiting, approved,
+unread and consumed approvals, unchanged carried entries for Odoo and memory reloads,
+restart, replay, and publication during the final awaited watch read. Tool descriptions
+remain inside catalogue evidence; refusal replies and approval records contain no description.
+Initial publication activation and in-process route replacement remain separate work under #45. Fresh-install qualification: NOT RUN.
 
 ## Bounded connection maintenance (P3-8 PR 3d, Part of #49)
 

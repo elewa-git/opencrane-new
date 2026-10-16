@@ -17,7 +17,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stop reasons| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
-  models -->|rechecks loaded memory after access; checks revision, spending, catalogue expiry, holds and root stops before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
+  models -->|rechecks loaded memory after access; checks revision, reload cancellation, spending, catalogue expiry, holds and root stops before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -32,7 +32,9 @@ uses this library to check saved dependencies at the intended nightly time.
 Approval cards include the turn they belong to. The chat hides decisions after that turn stops.
 
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
-A change to the tools or their rules ends that approval.
+A change to the tools or their rules ends that approval. Saving a replacement publication
+also ends waiting and unused approvals for that server. Reloading another server keeps
+them valid. A gateway acknowledgement cannot revive an ended approval.
 Every model, tool and recall call checks all memory facts already loaded by its turn.
 A corrected, forgotten or expired fact, an invalid dependency, or removed memory access
 refuses the next call. Other facts, messages and uploads do not refuse it.

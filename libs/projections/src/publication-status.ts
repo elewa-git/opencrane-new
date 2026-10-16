@@ -4,6 +4,7 @@ import { gatewayConfigurationSchema, gatewayObservationSchema, getEventDefinitio
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import type { Query } from './db.ts';
+import { isToolReviewCurrent } from './tool-policy.ts';
 
 const types = new Set(['gateway.configuration_requested', 'gateway.configuration_observed',
   'mcp.server_published', 'mcp.server_unpublished', 'mcp.server_registered']);
@@ -165,7 +166,7 @@ function currentMember(policy: ToolPolicy, record: Configuration, member: Member
   return recordDigest === digest && member.fragmentDigest === fragmentDigest &&
     member.fragmentDigest === policy.publication?.fragmentDigest &&
     member.entry.reviewRevision === policy.reviewRevision &&
-    policy.reviewRevision === policy.policyRevision;
+    isToolReviewCurrent(policy);
 }
 
 function exactReceipt(policy: ToolPolicy, member: Member, observation: Observation) {

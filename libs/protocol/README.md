@@ -14,11 +14,13 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|image admission, member flags, access replies, child requests and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices and spending stop replies| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
-  protocol -.-> events["libs/events<br/>saved tool list shapes"]
+  protocol -.-> events["libs/events<br/>saved tool list and publication shapes"]
 ```
 
 Tool rule messages include saved tool lists and their check and expiry dates.
 They also identify the server and silo, and carry the rule revision used by waiting approvals.
+A separate publication position keeps the tool review identifiable when a reload ends
+old approvals.
 
 ## What it is responsible for
 

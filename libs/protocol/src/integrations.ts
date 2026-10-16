@@ -50,6 +50,7 @@ export const toolPolicySchema = z.object({
   published: z.boolean(),
   driftHeld: z.boolean().optional(), reviewRevision: z.int().positive().optional(),
   publication: mcpPublicationIntentDataSchema.optional(),
+  publicationRevision: z.int().positive().optional(),
   configurationObservation: mcpConfigurationObservationSchema.optional(),
   sequence: z.int().nonnegative(),
   policyRevision: z.int().nonnegative().default(0),

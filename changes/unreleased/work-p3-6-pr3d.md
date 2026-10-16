@@ -1,0 +1,1 @@
+Tool approvals waiting or approved but unused now end when a replacement publication is saved for that server. A matching gateway acknowledgement cannot revive them; reloads of other servers preserve their approvals, and consumed approvals keep their outcome.

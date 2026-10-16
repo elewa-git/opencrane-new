@@ -248,3 +248,10 @@ Unknown and queued status replies are strict; saved failure outcomes await the n
 `chatOriginSchema` accepts exactly a linked parent id, title, source message id and
 positive source position, or `{status: "restricted"}` alone. Both alternatives reject
 extra fields. See the [origin contract](../../docs/api/group-chats.md#child-origin).
+
+## Reload cancellation position
+
+ToolPolicy optionally carries `publicationRevision`, the positive saved event position
+that invalidated approvals for a publication. It is distinct from the tool review position.
+Older policy replies still parse. This field contains no tool text and grants no authority
+without the matching saved publication and review.
