@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { AppendCommand } from '@opencrane/event-store';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
-import { mkdtemp, rm, readdir, readFile, stat } from 'node:fs/promises';
+import { mkdtemp, rm, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -10,7 +10,7 @@ import { databases } from '@opencrane/authz/testing';
 import { type Db, pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
 import { foldConnection } from '../src/bearer-connections.ts';
-import { reconcileConnectionStage } from '../src/connection-reconciliation.ts';
+import { reconcileConnectionPage, reconcileConnectionStage } from '../src/connection-reconciliation.ts';
 import { withConnectionStage } from '../src/connection-stage-lock.ts';
 import { z } from 'zod';
 import { connectionCustody, type ConnectionStage } from '../src/connection-custody.ts';
@@ -49,6 +49,8 @@ afterEach(closeServers);
 
 async function fixture() {
   let secret: Secret | undefined;
+  const secrets = new Map<string, Secret>();
+  const pages: number[] = [];
   let creates = 0;
   let deletes = 0;
   let loseCreate = false;
@@ -63,6 +65,27 @@ async function fixture() {
       response.writeHead(503).end(material);
       return;
     }
+    const url = new URL(request.url!, 'http://localhost');
+    if (request.method === 'GET' && url.pathname.endsWith('/secrets')) {
+      const limit = Number(url.searchParams.get('limit'));
+      expect(url.searchParams.get('labelSelector')).toBe(
+        'app.kubernetes.io/managed-by=opencrane-server');
+      expect(limit).toBeGreaterThan(0);
+      expect(limit).toBeLessThanOrEqual(25);
+      const after = url.searchParams.get('continue') ?? '';
+      const items: Secret[] = [];
+      const names = [...secrets.keys()];
+      names.sort();
+      for (const name of names) {
+        if (name > after && items.length < limit) items.push(secrets.get(name)!);
+      }
+      pages.push(items.length);
+      let continuation = '';
+      if (items.length === limit) continuation = items.at(-1)!.metadata.name;
+      response.end(JSON.stringify({ items, metadata: { continue: continuation } }));
+      return;
+    }
+    if (request.method !== 'POST') secret = secrets.get(url.pathname.split('/').at(-1)!);
     const chunks: Buffer[] = [];
     for await (const chunk of request) {
       if (!Buffer.isBuffer(chunk)) throw new Error('Fixture request invalid');
@@ -70,18 +93,19 @@ async function fixture() {
     }
     const body = Buffer.concat(chunks).toString();
     if (request.method === 'POST') {
-      if (secret) {
+      const raw: unknown = JSON.parse(body);
+      const parsed = secretSchema.parse(raw);
+      if (secrets.has(parsed.metadata.name)) {
         response.writeHead(409).end(material);
         return;
       }
-      const raw: unknown = JSON.parse(body);
-      const parsed = secretSchema.parse(raw);
       parsed.metadata.uid = 'uid-original';
       parsed.metadata.resourceVersion = '1';
       if (finalise) {
         parsed.metadata.finalizers = ['fixture.test/retain'];
       }
       secret = parsed;
+      secrets.set(parsed.metadata.name, parsed);
       creates += 1;
       if (loseCreate) {
         loseCreate = false;
@@ -104,6 +128,7 @@ async function fixture() {
         response.end(JSON.stringify(secret));
         return;
       }
+      secrets.delete(secret!.metadata.name);
       secret = undefined;
       if (failRemovalRead) {
         readsUnavailable = true;
@@ -134,13 +159,13 @@ async function fixture() {
     return connectionCustody(`http://127.0.0.1:${port}`, 'custody', keyring, directory);
   }
   const custody = restart();
-  return { custody, restart, directory, get secret() { return secret!; }, get creates() { return creates; },
+  return { custody, restart, directory, pages, secrets, get secret() { return secret!; }, get creates() { return creates; },
     get deletes() { return deletes; }, get preconditions() { return preconditions; },
     loseCreate() { loseCreate = true; }, changeOnDelete() { changeOnDelete = true; },
     fail() { unavailable = true; },
     failReads() { readsUnavailable = true; }, restoreReads() { readsUnavailable = false; },
     retainWithFinaliser() { finalise = true; }, failRemovalRead() { failRemovalRead = true; },
-    finishDeletion() { secret = undefined; } };
+    finishDeletion() { secrets.clear(); secret = undefined; } };
 }
 
 async function recoversRecordedCreate() {
@@ -779,3 +804,145 @@ async function keepsInvalidClosureProof() {
   expect(test.store.deletes).toBe(0);
 }
 it('retains material after an invalid saved closure', keepsInvalidClosureProof);
+
+
+async function scan(test: Awaited<ReturnType<typeof candidateFixture>>, continuation?: string) {
+  return reconcileConnectionPage(events.store, test.db, test.store.restart(), continuation);
+}
+async function forgetJournal(test: Awaited<ReturnType<typeof candidateFixture>>) {
+  await rm(test.store.directory, { recursive: true, force: true });
+}
+async function scanUncertainThenLateSave() {
+  const test = await candidateFixture(Date.now() + 60_000);
+  expect(await scan(test)).toMatchObject({ status: 'scanned', examined: 1, deleted: 0 });
+  await test.activate();
+  await forgetJournal(test);
+  expect(await scan(test)).toMatchObject({ examined: 1, deleted: 0 });
+  expect(await test.store.restart().recover(test.input)).toMatchObject({ status: 'recovered' });
+  expect(test.store.deletes).toBe(0);
+}
+it('enumerates an uncertain stage after restart and keeps its late saved reference',
+  scanUncertainThenLateSave);
+
+async function scanRevokedAfterJournalLoss() {
+  const test = await candidateFixture();
+  await test.activate();
+  await test.invalidate();
+  await forgetJournal(test);
+  expect(await scan(test)).toMatchObject({ examined: 1, deleted: 1 });
+  expect(test.store.preconditions).toEqual({ uid: 'uid-original', resourceVersion: '1' });
+  expect(await scan(test)).toMatchObject({ examined: 0, deleted: 0 });
+  expect(test.store.deletes).toBe(1);
+}
+it('rebuilds missing journal records from saved identity and deletes a revoked generation once',
+  scanRevokedAfterJournalLoss);
+
+async function scanRotationAfterJournalLoss() {
+  const test = await candidateFixture();
+  await test.activate();
+  const rows = await history(events.store, test.subject, 'test');
+  const previous = foldConnection(rows).data!;
+  const replacement = { ...test.input, generation: 2, operationId: 'replacement',
+    expectedSequence: rows[0]!.sequence };
+  const saved = await test.store.custody.stage(replacement, material);
+  const activation = { ...previous.activation, generation: 2, operationId: 'replacement',
+    expectedSequence: rows[0]!.sequence, reason: 'bearer_rotation' };
+  const data = { ...previous, secretRef: `secret:${saved.identity!.reference}`, activation };
+  const event = envelope('test', test.subject, 'connection.refreshed', data, 'replacement');
+  event.principal = { kind: 'human', id: test.input.userId };
+  await events.seed([event]);
+  await forgetJournal(test);
+  expect(await scan(test)).toMatchObject({ examined: 2, deleted: 1 });
+  expect(await test.store.restart().recover(replacement)).toMatchObject({ status: 'recovered' });
+  expect(test.store.secrets.size).toBe(1);
+}
+it('enumerates after rotation and restart and deletes only the superseded exact generation',
+  scanRotationAfterJournalLoss);
+
+async function scanFailure(failure: string) {
+  const test = await candidateFixture();
+  await test.activate();
+  await test.invalidate();
+  const faults = [];
+  function fail(): never { throw new Error(material); }
+  if (failure === 'uid' || failure === 'resourceVersion') {
+    await forgetJournal(test);
+    test.store.secret.metadata[failure] = 'changed';
+  } else if (failure === 'journal') {
+    const files = await readdir(test.store.directory);
+    for (const file of files) await writeFile(`${test.store.directory}/${file}`, '{}');
+  } else if (failure === 'list') {
+    test.store.failReads();
+  } else if (failure === 'read') {
+    const custody = test.store.restart();
+    const candidates = custody.candidates.bind(custody);
+    async function failAfterList(continuation?: string) {
+      const page = await candidates(continuation);
+      test.store.failReads();
+      return page;
+    }
+    vi.spyOn(custody, 'candidates').mockImplementation(failAfterList);
+    expect(await reconcileConnectionPage(events.store, test.db, custody)).toMatchObject({ deleted: 0 });
+    expect(test.store.deletes).toBe(0);
+    return;
+  } else {
+    const fault = failure === 'store'
+      ? vi.spyOn(events.store, 'readStream') : vi.spyOn(test.db, 'lock');
+    fault.mockImplementation(fail);
+    faults.push(fault);
+  }
+  try {
+    const result = await scan(test);
+    expect(JSON.stringify(result)).not.toContain(material);
+    expect(test.store.deletes).toBe(0);
+    expect(test.store.secrets.size).toBe(1);
+  } finally {
+    for (const fault of faults) fault.mockRestore();
+  }
+}
+it.each(['uid', 'resourceVersion', 'journal', 'list', 'read', 'store', 'lock'])(
+  'retains enumerated material when %s fails', scanFailure);
+
+async function scanPages() {
+  const test = await candidateFixture();
+  for (let index = 1; index < 53; index += 1) {
+    const candidate = { ...test.input, profileId: `page-${index}`,
+      operationId: `page-${index}` };
+    await test.store.custody.stage(candidate, material);
+  }
+  let continuation: string | undefined;
+  let examined = 0;
+  let deleted = 0;
+  do {
+    const result = await scan(test, continuation);
+    if (result.status !== 'scanned') throw new Error('Fixture scan failed');
+    examined += result.examined;
+    deleted += result.deleted;
+    continuation = result.continuation;
+  } while (continuation);
+  expect(examined).toBe(53);
+  expect(deleted).toBe(53);
+  expect(test.store.pages).toEqual([25, 25, 3]);
+  expect(test.store.secrets.size).toBe(0);
+}
+it('advances bounded pages across many candidates while deleting earlier pages', scanPages);
+
+async function scanUnprovenIdentity() {
+  const test = await candidateFixture();
+  await forgetJournal(test);
+  expect(await scan(test)).toMatchObject({ examined: 1, deleted: 0 });
+  expect(test.store.deletes).toBe(0);
+  expect((await history(events.store, test.subject, 'test')).length).toBe(0);
+}
+it('never adopts a listed UID without independent journal or event evidence', scanUnprovenIdentity);
+
+async function scanNonPersonal() {
+  const test = await candidateFixture();
+  test.store.finishDeletion();
+  const other = { ...test.input, purpose: 'company' as const, operationId: 'company' };
+  await test.store.custody.stage(other, material);
+  await test.invalidate();
+  expect(await scan(test)).toMatchObject({ examined: 1, deleted: 0 });
+  expect(test.store.deletes).toBe(0);
+}
+it('keeps non-personal candidates even with a later profile revocation', scanNonPersonal);
