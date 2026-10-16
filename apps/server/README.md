@@ -11,12 +11,12 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links, later grant changes and access changes through saving, tool reviews, hosted image status and registration, publication requests, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
+  server -.->|checks public tool addresses, startup, member and child invitation access, indexed departures, final tool and memory sends, spending stops for queued messages and renewals, memory setup, all loaded memory fact links, later grant changes and access changes through saving, tool reviews, hosted image status and registration, publication requests and status, turn previews and saved memory references and closes| libs["libs/*<br/>shared code"]
   server -->|records changes and child answers only while their reviewed results remain valid, reviewed child requests and creation with first inputs, authenticated instance observations and stops, owner and admin stops, control intent, memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues and spending stops| nats["NATS<br/>event log"]
   nats -->|saved child leave results, spending stop reasons, departure cleanup and gateway configurations| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, nightly memory status and history| postgres
+  server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates without waiting for chats; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies| computer
@@ -240,6 +240,11 @@ checked after restart without submitting another change.
 A member can review a child chat from their own group message, then save its first input.
 Retrying a request completes missing saves after a restart. These children stay queued;
 they cannot start assistant work yet. Automatic recovery is not built yet.
+
+Owners and admins can read whether a saved publication is Applying, Ready, Disabled
+or Unknown. Ready requires matching saved gateway and server receipts. Checking a
+change never sends configuration or calls the gateway. The original command id also
+recovers hosted registration results without confusing them with publication.
 
 When a saved event closes a chat, the server refuses new turn passes and rebuilt
 context. It still acknowledges delayed reports, so another person's chat can keep

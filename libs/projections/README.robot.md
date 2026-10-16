@@ -669,3 +669,25 @@ child creation still rebuilds its recorded participants and OpenFGA receipts.
 publication, catalogue dates and discovery state. Catalogue replay uses the same
 fold, starts no work and appends no event. Admission expiry is derived by models
 from the original event dates when read, without a timer or database business rule.
+
+## Publication status records (Part of #45)
+
+The existing MCP catalogue worker now copies publication requests, withdrawals,
+gateway requests and observations into `mcp_publication_records`. Registration rows
+keep only serverId and kind, alongside the original command id and event type.
+The table contains no endpoint, review text or route content. Its two indexes support
+original-command lookup and the latest event of each type on exact subjects.
+Catalogue rebuild and verification include the table and replace it atomically.
+Existing installations need a catalogue rebuild before status reads are available.
+
+`readPublication` uses one PostgreSQL snapshot for the policy and latest records.
+Ready requires the current generation, reviewed record and fragment digests, source
+position, process reference, configuration digest and observedAt to match. A later
+withdrawal is Disabled. Missing preparation or observation stays Applying. After
+30 seconds from the saved gateway request, missing observation or receipt is Unknown;
+this is a status deadline, not proof of delivery failure. Failed reads and reads taking
+more than ten seconds return Unknown with fixed stage/reason values and no error text.
+A rejected file has no saved rejection event: it remains at `observation/not_observed`,
+never a fabricated rejection diagnosis. GET never repairs or probes it.
+Replies contain only status, stage/reason, generation, changeRef, digests and safe dates.
+These are saved observations, not a new process health check or permission to call tools.

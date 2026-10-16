@@ -103,6 +103,8 @@ async function readsExactPublication() {
     recordDigest: setup.record.recordDigest, changeRef: 'publish-alpha' });
   expect(ready).toHaveProperty('configDigest');
   expect(ready).toHaveProperty('observedAt');
+  expect(Object.keys(ready).sort()).toEqual(['changeRef', 'configDigest', 'fragmentDigest',
+    'generation', 'observedAt', 'recordDigest', 'requestedAt', 'status']);
   const position = await setup.nats.store.head();
   const probe = vi.spyOn(globalThis, 'fetch');
   const append = vi.spyOn(setup.nats.store, 'append');
@@ -114,6 +116,18 @@ async function readsExactPublication() {
   expect(append).not.toHaveBeenCalled();
   expect(await setup.nats.store.head()).toBe(position);
   vi.restoreAllMocks();
+  const { recordDigest: _digest, ...saved } = setup.record;
+  const next = { ...saved, generation: 2 };
+  const record = { ...next, recordDigest: publicationDigest(next) };
+  const rows = await history(setup.nats.store, 'gateway-config-test', 'test');
+  const observed = gatewayObservationSchema.parse(rows.at(-1)!.event.data);
+  const observation = { ...observed, generation: 2, recordDigest: record.recordDigest };
+  await setup.nats.seed([
+    envelope('test', 'gateway-config-test', 'gateway.configuration_requested', record),
+    envelope('test', 'gateway-config-test', 'gateway.configuration_observed', observation),
+  ]);
+  expect(await publicationStatus(setup)).toMatchObject({ status: 'applying', stage: 'receipt',
+    generation: 2 });
 }
 it('reads exact receipts and rebuilds the same status without appends or probes', readsExactPublication);
 
@@ -132,6 +146,23 @@ async function refusesMismatchedPublication(field: string) {
 }
 it.each(['generation', 'recordDigest', 'configDigest', 'processRef', 'observedAt'])(
   'refuses a receipt with a different %s', refusesMismatchedPublication);
+
+async function refusesForeignReceipt() {
+  const setup = await fixture();
+  const member = setup.record.members[0]!;
+  const observed = { generation: 1, recordDigest: setup.record.recordDigest,
+    configDigest: 'a'.repeat(64), processRef: '00000000-0000-4000-8000-000000000001',
+    observedAt: new Date().toISOString() };
+  const foreign = envelope('other', 'gateway-config-other', 'gateway.configuration_observed',
+    { ...observed, outcome: 'loaded' });
+  const receipt = { ...observed, serverId: 'alpha', changeRef: member.changeRef,
+    reviewRevision: member.entry.reviewRevision, fragmentDigest: member.fragmentDigest,
+    sourceSequence: member.sourceSequence };
+  await setup.nats.seed([foreign, envelope('test', 'mcp-alpha',
+    'mcp.configuration_observed', receipt)]);
+  expect(await publicationStatus(setup)).toMatchObject({ status: 'applying', stage: 'observation' });
+}
+it('refuses a member receipt supported only by another silo observation', refusesForeignReceipt);
 
 async function reportsReadFailure(timeout: boolean) {
   const setup = await fixture();
@@ -727,6 +758,12 @@ async function changedStateRefusesMemberAppend(change: 'withdrawal' | 'preparati
   await waitForDeliveredWitness(setup);
   expect(await delivery.observe()).toBeNull();
   expect(changed).toBe(true);
+  const status = await publicationStatus(setup);
+  if (change === 'withdrawal') {
+    expect(status).toMatchObject({ status: 'disabled' });
+  } else {
+    expect(status).toMatchObject({ status: 'applying', generation: 2 });
+  }
   expect(await memberReceipts(setup)).toHaveLength(0);
 }
 it.each(['withdrawal', 'preparation'] as const)(

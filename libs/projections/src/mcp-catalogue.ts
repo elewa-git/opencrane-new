@@ -1,3 +1,4 @@
+import { createPublicationRecords, applyPublicationRecord } from './publication-status.ts';
 import { emptyToolPolicy, applyToolPolicy, isToolPolicyAvailable } from './tool-policy.ts';
 import { toolPolicySchema } from '@opencrane/protocol';
 import { getEventDefinition } from '@opencrane/events';
@@ -18,12 +19,15 @@ type ToolMode = 'allow' | 'ask' | 'block';
 interface McpCatalogueTables {
   catalogue: string;
   toolModes: string;
+  publications: string;
 }
 
-const live = { catalogue: 'mcp_catalogue', toolModes: 'mcp_tool_modes' } satisfies McpCatalogueTables;
+const live = { catalogue: 'mcp_catalogue', toolModes: 'mcp_tool_modes',
+  publications: 'mcp_publication_records' } satisfies McpCatalogueTables;
 export const replayMcpCatalogueTables = {
   catalogue: 'mcp_catalogue_replay',
   toolModes: 'mcp_tool_modes_replay',
+  publications: 'mcp_publication_records_replay',
 } satisfies McpCatalogueTables;
 
 function field(data: unknown, name: string): string {
@@ -60,6 +64,7 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
   return {
     name,
     async create(db) {
+      await createPublicationRecords(db, tables.publications);
       await db.query(`CREATE TABLE IF NOT EXISTS ${tables.catalogue} (
       silo TEXT NOT NULL, server_id TEXT NOT NULL, source_kind TEXT NOT NULL,
       locator TEXT NOT NULL, catalogue_ref TEXT, server_name TEXT, server_version TEXT,
@@ -73,10 +78,12 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
       PRIMARY KEY (silo, server_id, tool_name))`);
     },
     async drop(db) {
+      await db.query(`DROP TABLE IF EXISTS ${tables.publications}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.toolModes}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.catalogue}`);
     },
     async apply(db, event, position) {
+      await applyPublicationRecord(db, tables.publications, event, position);
       if (!eventTypes.has(event.type)) return;
       const data: unknown = getEventDefinition(event.type)?.dataSchema.parse(event.data);
       const serverId = field(data, 'serverId');

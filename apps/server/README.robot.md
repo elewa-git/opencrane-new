@@ -2883,3 +2883,14 @@ remain unbuilt. The bridge point-reads the parent intent before delivery or admi
 A saved intent holds all child work; an unavailable read also releases no work.
 `test/child-summon.test.ts` checks real NATS/PostgreSQL/OpenFGA recovery, expiry,
 refused reviews, private status, replay and the delivery/admission hold. Live qualification: NOT RUN.
+
+## Publication status reads (Part of #45)
+
+GET `/api/org/integrations/:serverId/publication` reads the catalogue projection.
+GET `/api/org/integrations/changes/:commandId` first preserves the existing typed
+hosted-registration recovery. Otherwise it resolves the original publication or
+withdrawal event and reads that server's current publication. A replacement returns
+its current changeRef; it does not acknowledge the superseded command.
+Both routes check current admin membership with `readActiveMember` and send `no-store`.
+Reads perform no append, probe, delivery or retry. Missing projection access returns
+Unknown. Rebuild the MCP catalogue before serving these reads on an existing installation.

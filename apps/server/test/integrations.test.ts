@@ -1558,10 +1558,23 @@ async function readsPublicationStatus() {
   expect((await app.inject(request)).statusCode).toBe(200);
   await runner.run(mcpCatalogue);
   const position = await nats.store.head();
+  const read = nats.store.readStream.bind(nats.store);
+  const realNow = performance.now.bind(performance);
+  let elapsed = 0;
+  function now() {
+    return realNow() + elapsed;
+  }
+  async function* slowMember(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === 'member-amina') elapsed += 2500;
+  }
+  vi.spyOn(performance, 'now').mockImplementation(now);
+  vi.spyOn(nats.store, 'readStream').mockImplementation(slowMember);
   const paths = ['/api/org/integrations/odoo/publication',
     '/api/org/integrations/changes/publish-odoo'];
   const append = vi.spyOn(nats.store, 'append');
   const probe = vi.spyOn(globalThis, 'fetch');
+  const heads = vi.spyOn(nats.store, 'head');
   try {
     for (const url of paths) {
       const response = await app.inject({ url, headers: headers('oidc-amina') });
@@ -1577,6 +1590,7 @@ async function readsPublicationStatus() {
     }
     expect(append).not.toHaveBeenCalled();
     expect(probe).not.toHaveBeenCalled();
+    expect(heads).not.toHaveBeenCalled();
     expect(await nats.store.head()).toBe(position);
   } finally {
     vi.restoreAllMocks();
@@ -1593,8 +1607,9 @@ async function keepsHostedChangeSeparate() {
   const serverId = hash.digest('hex');
   const saved = fixture('mcp.server_registered', `mcp-${serverId}`, { serverId,
     kind: 'hosted', registeredBy: 'admin',
+    locator: `ghcr.io/elewa/test@sha256:${'a'.repeat(64)}`,
     installation: { attemptId: 1, platform: 'linux/amd64',
-      upstream: { host: 'example.test', port: 443 } } });
+      upstream: { host: 'api.github.com', port: 443 } } });
   await append({ ...saved, id: commandId, commandId });
   await runner.run(mcpCatalogue);
   const url = `/api/org/integrations/changes/${commandId}`;

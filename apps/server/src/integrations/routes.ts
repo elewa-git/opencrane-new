@@ -1,3 +1,4 @@
+import { readPublication, publicationChange } from '@opencrane/projections';
 import { readHostedAdmission } from '@opencrane/models';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
 import { AuthorityApplying, registerHosted, hostedRegistrationChange } from '@opencrane/models';
@@ -46,6 +47,9 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
       path.endsWith('/admission');
     const method: ('GET' | 'POST')[] = readOnly ? ['GET'] : ['GET', 'POST'];
     async function handleIntegration(request: FastifyRequest, reply: FastifyReply) {
+      if (path.endsWith('/publication') || path.endsWith('/:commandId')) {
+        reply.header('cache-control', 'no-store');
+      }
       const session = sessionFor(request, config, now());
       if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });
       if (!options || !authorisation || !config.expectedOrgId) return reply.code(503).send({ status: 'unavailable' });
@@ -64,7 +68,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
           return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
         }
         if (options.store) {
-          if (path.endsWith('/:commandId') || path.endsWith('/admission')) {
+          if (request.method === 'GET') {
             await readActiveMember(options.store, options.binding, memberId, 'admin');
           } else {
             const authority = { requiredRole: 'admin' as const };
@@ -81,8 +85,8 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
 }
 
 async function authorisedRequest(path: string, request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string, now: Date) {
-      if (path.endsWith('/admission') || path.endsWith('/:commandId')) {
-        return hostedStatus(path, request, reply, options);
+      if (isStatusRead(path, request.method)) {
+        return integrationStatus(path, request, reply, options);
       }
       if (path.endsWith('/discovery')) {
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
@@ -111,12 +115,34 @@ async function authorisedRequest(path: string, request: FastifyRequest, reply: F
       return reply.send(response);
  }
 
-async function hostedStatus(path: string, request: FastifyRequest, reply: FastifyReply,
+function isStatusRead(path: string, method: string) {
+  return method === 'GET' && (path.endsWith('/publication') || path.endsWith('/admission') ||
+    path.endsWith('/:commandId'));
+}
+
+async function publicationStatus(request: FastifyRequest, reply: FastifyReply,
   options: IntegrationOptions) {
+  const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
+  const { serverId } = params.parse(request.params);
+  if (!options.modelDb || !options.store) {
+    return reply.send({ status: 'unknown', stage: 'read', reason: 'unavailable' });
+  }
+  return reply.send(await readPublication(options.modelDb, options.silo, serverId));
+}
+
+async function integrationStatus(path: string, request: FastifyRequest, reply: FastifyReply,
+  options: IntegrationOptions) {
+  if (path.endsWith('/publication')) return publicationStatus(request, reply, options);
   if (!options.store) return reply.code(503).send({ status: 'unavailable' });
   if (path.endsWith('/:commandId')) {
     const params = z.object({ commandId: z.string() }).parse(request.params);
-    return reply.send(await hostedRegistrationChange(options.store, options.silo, params.commandId));
+    const registration = await hostedRegistrationChange(options.store, options.silo, params.commandId);
+    if (registration.status === 'applied') return reply.send(registration);
+    if (options.modelDb) {
+      const status = await publicationChange(options.modelDb, options.silo, params.commandId);
+      if (status) return reply.send(status);
+    }
+    return reply.send(registration);
   }
   const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
   const { serverId } = params.parse(request.params);
