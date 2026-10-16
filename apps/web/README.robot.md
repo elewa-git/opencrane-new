@@ -630,6 +630,7 @@ keeps existing rows on failure and removes duplicate ids. Switching kind resets 
 Names never enter storage or addresses.
 Configured uses and grant paging are absent from the API, so no Missing rows are inferred.
 `npm run visual:screen-p4-22-access` uses intercepted HTTP replies and the web build.
+
 ## Models table
 
 The table joins active registry ids and task routes with enabled OpenAI connections.
