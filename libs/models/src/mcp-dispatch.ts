@@ -64,6 +64,10 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   const signingKey = randomBytes(32);
   const pending = new Map<string, Permit>();
 
+  function acknowledged() {
+    return options?.acknowledged?.() ?? null;
+  }
+
   function routeFor(serverId: string, connectionId: string) {
     function matches(route: Route) {
       return route.serverId === serverId && route.connectionId === connectionId;
@@ -97,7 +101,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     memory?: MemorySend) {
     const route = requireContract(policy);
     if (policy.gatewayBinding) {
-      requireGatewayAcknowledgement(policy.gatewayBinding, options?.acknowledged);
+      requireGatewayAcknowledgement(policy.gatewayBinding, acknowledged);
     }
     if (policy.dispatchBinding !== digest(JSON.stringify(route))) {
       throw new Error('MCP backend changed during the decision');
@@ -159,7 +163,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const remaining = Math.max(0, permit.expiresAt - Date.now());
     const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
-      options?.acknowledged, deadline);
+      acknowledged, deadline);
     const position = await store.head(`mcp-${route.serverId}`, deadline);
     await requireOnlyAdmissions(store, silo, `mcp-${route.serverId}`,
       permit.catalogueSequence, position, deadline);
@@ -174,14 +178,14 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     async function confirmSend() {
       await permit.confirmAccess();
       await requireGatewayPosition(store, silo, permit.gatewayBinding,
-        options?.acknowledged, deadline);
+        acknowledged, deadline);
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     }
     await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
     await admit(req, res, permit, route, position, deadline);
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
-      options?.acknowledged, deadline);
+      acknowledged, deadline);
     requireCurrentRoute(permit);
     requireFreshDispatch(req, res, permit);
     forward(route, permit, body, res, memoryContext);
@@ -189,7 +193,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
 
   function requireCurrentRoute(permit: Permit) {
     if (permit.gatewayBinding) {
-      requireGatewayAcknowledgement(permit.gatewayBinding, options?.acknowledged);
+      requireGatewayAcknowledgement(permit.gatewayBinding, acknowledged);
     }
     const currentRoute = routeFor(permit.route.serverId, permit.route.connectionId);
     if (JSON.stringify(currentRoute) !== JSON.stringify(permit.route)) {
@@ -210,7 +214,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await permit.confirmAccess();
       await requireGatewayPosition(store, silo, permit.gatewayBinding,
-        options?.acknowledged, deadline);
+        acknowledged, deadline);
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
       // Order sends with Block and quarantine writes on the same server stream.
@@ -228,7 +232,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     }
   }
 
-  return { handle, bindPolicy, setPermit };
+  return { handle, bindPolicy, setPermit, acknowledged };
 }
 
 async function requireOnlyAdmissions(store: EventStore, silo: string, subject: string,
