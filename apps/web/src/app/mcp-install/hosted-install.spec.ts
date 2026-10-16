@@ -267,3 +267,89 @@ it('keeps package details editable after a definitive 400 rejection', async () =
   expect(root.querySelector<HTMLInputElement>('#image-locator')?.value).toBe(locator);
   expect(root.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
 });
+
+async function showAdmission(result: unknown): Promise<HTMLElement> {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(reply(202,
+    { serverId: 'server-1', changeRef: 'change-1' }))
+    .mockResolvedValueOnce(reply(200, result));
+  const root = screen();
+  validForm(root);
+  root.querySelector('form')?.requestSubmit();
+  await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
+    '#hosted-check-status')?.disabled).toBe(false));
+  root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
+  await vi.waitFor(() => expect(root.textContent).toContain('Queued'));
+  return root;
+}
+
+it.each([
+  ['checking', 'Waiting for dated check results'],
+  ['rejected', 'Not admitted'],
+  ['unavailable', 'A check is unavailable'],
+  ['expired', 'The image checks have expired'],
+])('shows the %s server status as %s', async (status, expected) => {
+  let result;
+  if (status === 'checking') {
+    result = { ...admission('pass', status), checks: undefined };
+  } else {
+    const malware = status === 'rejected' ?
+      { ...check('pass', true), verdict: 'fail', reasonCodes: ['malware_found'] } :
+      check('unavailable', true);
+    result = { ...admission('pass', status), checks: {
+      ...admission('pass').checks, malware } };
+  }
+  const root = await showAdmission(result);
+  expect(root.textContent).toContain(expected);
+  expect(root.querySelector<HTMLButtonElement>('#hosted-continue')?.disabled).toBe(true);
+});
+
+it('shows a signature refusal and says later checks did not run', async () => {
+  const signature = { ...check('pass'), verdict: 'fail', reasonCodes: ['unsigned'] };
+  const result = { ...admission('pass', 'rejected'), checks: {
+    signature, licence: { verdict: 'not_run' }, vulnerability: { verdict: 'not_run' },
+    malware: { verdict: 'not_run' } } };
+  const root = await showAdmission(result);
+  expect(root.textContent).toContain('Signature: Failed');
+  expect(root.textContent?.match(/Not run/gu)).toHaveLength(3);
+  expect(root.textContent).toContain(`sha256:${digest}`);
+  expect(root.textContent).not.toContain('All four image checks passed');
+});
+
+it('shows a definitive licence refusal without an evidence action', async () => {
+  const licence = { ...check('pass'), verdict: 'fail', reasonCodes: ['forbidden_licence'] };
+  const result = { ...admission('pass', 'rejected'), checks: {
+    ...admission('pass').checks, licence } };
+  const root = await showAdmission(result);
+  expect(root.textContent).toContain('Licence: Failed');
+  expect(root.textContent).toContain('Not admitted');
+  expect(root.querySelector('a[href*="licence"]')).toBeNull();
+});
+
+it('never calls an unavailable scanner failed', async () => {
+  const result = { ...admission('pass', 'unavailable'), checks: {
+    ...admission('pass').checks, malware: check('unavailable', true) } };
+  const root = await showAdmission(result);
+  expect(root.textContent).toContain('Malware: Unavailable');
+  expect(root.textContent).not.toContain('Malware: Failed');
+  expect(root.textContent).not.toContain('All four image checks passed');
+});
+
+it('does not turn a hostile reason code into HTML or a link', async () => {
+  const licence = { ...check('pass'), verdict: 'fail',
+    reasonCodes: ['<a href="https://evil.example">click</a>'] };
+  const result = { ...admission('pass', 'rejected'), checks: {
+    ...admission('pass').checks, licence } };
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(reply(202,
+    { serverId: 'server-1', changeRef: 'change-1' }))
+    .mockResolvedValueOnce(reply(200, result));
+  const root = screen();
+  validForm(root);
+  root.querySelector('form')?.requestSubmit();
+  await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
+    '#hosted-check-status')?.disabled).toBe(false));
+  root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
+  await vi.waitFor(() => expect(root.textContent).toContain('Status is unavailable'));
+  expect(root.querySelector('a[href="https://evil.example"]')).toBeNull();
+  expect(root.querySelector('script')).toBeNull();
+  expect(root.textContent).not.toContain('All four image checks passed');
+});
