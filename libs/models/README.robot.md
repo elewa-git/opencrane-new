@@ -2252,8 +2252,10 @@ and its two named regression files are unchanged.
 
 `prepareLoadedMemory` uses the shared `memory-context-fold` on the turn's saved evidence.
 It checks the saved identity and reads each loaded scope before the short access check.
-The shared decision confirm checks requester and assistant scope/grant access with the
-helpers used by `memoryRights`. It reads only scope rows after its checked position,
+The first confirm checks requester and assistant scope/grant access with the helpers
+used by `memoryRights`. Later confirms retain that authority snapshot and its deadline,
+checking saved grant changes without repeating IAM reads. Each confirm reads only scope
+rows after its checked position,
 then confirms access again and checks every revision and dependency at the current time.
 `memoryReferences` has an explicit `event-only` mode for processes without revision keys.
 Server reads and writes retain their custody checks. No scope or conversation stream is

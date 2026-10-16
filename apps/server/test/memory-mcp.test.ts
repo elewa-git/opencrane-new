@@ -294,9 +294,11 @@ async function scopedRecall(team: boolean) {
           params: { _meta: metadata } };
         const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
         const discovery = await target.call(discoveryHeaders, discoveryBody, route);
-        expect(discovery.status, discovery.text).toBe(200);
-        expect(discovery.text).not.toMatch(/correct|forget/u);
+        expect(discovery.status, discovery.text).toBe(403);
+        expect(discovery.text).toContain('memory_context_unavailable');
       }
+      // Restore this scope before checking another one; its fact remains loaded by the turn.
+      await allowScopedRead(target, selectedId, requester);
     }
   } finally {
     await backend?.close();

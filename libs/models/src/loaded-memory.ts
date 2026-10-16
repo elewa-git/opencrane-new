@@ -68,14 +68,19 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding,
       const scope = scopes.get(saved.scopeId);
       if (scope && scope.position < saved.position) throw new LoadedMemoryRefused();
     }
+    let rightsChecked = false;
     async function confirm(fresh: Awaited<ReturnType<typeof authorityFence>>) {
       if (references.length === 0) {
         await fresh();
         return;
       }
       try {
-        for (const scope of scopes.values()) {
-          await loadedMemoryRights(store, binding, claims, scope.scopeId, fresh, conversation);
+        if (!rightsChecked) {
+          for (const scope of scopes.values()) {
+            await loadedMemoryRights(store, binding, claims, scope.scopeId, fresh, conversation);
+          }
+          // Keep these grants on the original authority check for every later confirmation.
+          rightsChecked = true;
         }
         let changed: boolean;
         do {
