@@ -15,6 +15,10 @@ type Failure = { code: number; status: string };
 let failure: Failure | undefined;
 let statusProjection = 'current';
 let modelsSaved = false;
+let savedModels: string[] = [];
+let returnedModels = ['model-a', 'model-b'];
+let returnedRevision = 2;
+let bindingsStatus = 503;
 const delayed = new Map<string, Promise<Response>>();
 let fixture: ComponentFixture<ModelsScreen>;
 let requests: { url: string; body: Record<string, unknown> | undefined }[];
@@ -36,6 +40,9 @@ function serve(input: RequestInfo | URL, options?: RequestInit): Promise<Respons
   requests.push({ url, body });
   const pending = delayed.get(url);
   if (pending) return pending;
+  if (url.endsWith('/bindings')) {
+    return Promise.resolve(response({ status: 'not_available_yet' }, bindingsStatus));
+  }
   if (url.includes('/candidates')) {
     const memberCount = url.includes('kind=team') ? 12 : undefined;
     return Promise.resolve(response({ rows: [{ id: 'assistant', displayName: 'Helper', memberCount }],
@@ -72,11 +79,11 @@ function serve(input: RequestInfo | URL, options?: RequestInit): Promise<Respons
   }
   if (body || url.includes('/changes/')) {
     modelsSaved = true;
-    return Promise.resolve(response({ status: 'appended', operation: 'provider.models_selected',
+    return Promise.resolve(response({ status: 'appended', operation: 'provider.models_selected', revision: 2,
       projection: { content: 'current', iam: 'current' } }));
   }
-  const enabledModels = modelsSaved ? ['model-a', 'model-b'] : [];
-  return Promise.resolve(response({ rows: [{ ...provider, enabledModels }], loadedAt: time,
+  const enabledModels = modelsSaved ? returnedModels : savedModels;
+  return Promise.resolve(response({ rows: [{ ...provider, enabledModels, revision: returnedRevision }], loadedAt: time,
     access: { grantsAvailable: true, reason: 'model_access_routes' } }));
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -109,12 +116,16 @@ async function click(name: string, scope: Element = root()): Promise<void> {
 }
 function openDialog(this: HTMLDialogElement): void { this.setAttribute('open', ''); }
 function closeDialog(this: HTMLDialogElement): void { this.removeAttribute('open'); }
-async function mount(mode?: Failure): Promise<void> {
+async function mount(mode?: Failure, existing: string[] = [], inventoryStatus = 503): Promise<void> {
   requests = [];
   failure = mode;
   delayed.clear();
   statusProjection = 'current';
   modelsSaved = false;
+  savedModels = existing;
+  returnedModels = ['model-a', 'model-b'];
+  returnedRevision = 2;
+  bindingsStatus = inventoryStatus;
   vi.stubGlobal('fetch', serve);
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
     configurable: true, writable: true, value: openDialog,
@@ -130,8 +141,9 @@ async function mount(mode?: Failure): Promise<void> {
   await settle();
   await click('Next');
   const choices = root().querySelectorAll<HTMLInputElement>('.model-choice input');
-  choices[0]?.click();
-  choices[1]?.click();
+  for (const choice of [choices[0], choices[1]]) {
+    if (choice && !choice.checked) choice.click();
+  }
   await settle();
   await click('Next');
   expect(root().textContent).toContain('Step 5 of 6');
@@ -266,7 +278,7 @@ function onlyRealFacts(): void {
   const view = TestBed.createComponent(ProviderSetupAccess);
   const content = element(view.nativeElement);
   view.componentRef.setInput('models', ['model-a']);
-  view.componentRef.setInput('provider', { ...provider, modelAnswer: undefined });
+  view.componentRef.setInput('provider', { ...provider, enabledModels: ['model-a'], modelAnswer: undefined });
   view.componentRef.setInput('done', true);
   view.detectChanges();
   expect(content.textContent).toContain('Not tested');
@@ -294,3 +306,116 @@ async function candidateCountAndRevoke(): Promise<void> {
   expect(posts[0]?.body?.['granteeId']).toBe('team');
 }
 it('uses candidate counts only and selects a revoke with the chip cross', candidateCountAndRevoke);
+
+async function savedModelsCannotBeRemoved(inventoryStatus: number): Promise<void> {
+  await mount(undefined, ['model-a'], inventoryStatus);
+  await click('Back');
+  const choice = root().querySelector<HTMLInputElement>('.model-choice input');
+  if (!choice) throw new Error('Expected saved model choice');
+  choice.click();
+  await settle();
+  expect(choice.checked).toBe(true);
+  expect(choice.disabled).toBe(true);
+  expect(root().textContent).toContain('Saved models cannot be removed here');
+  expect(root().textContent).toContain('uses');
+  await click('Next');
+  const posts = requests.filter(isModelsPost);
+  for (const post of posts) expect(post.body?.['models']).toContain('model-a');
+}
+function isModelsPost(request: { body: Record<string, unknown> | undefined }): boolean {
+  return request.body?.['action'] === 'models';
+}
+it('keeps saved models selected when the bindings read fails',
+  savedModelsCannotBeRemoved.bind(null, 503));
+it('keeps saved models selected when the bindings read is unsupported',
+  savedModelsCannotBeRemoved.bind(null, 200));
+
+async function loseGrantReply(): Promise<string> {
+  await mount();
+  const editor = root().querySelectorAll('oc-provider-setup-access oc-model-access-editor')[1];
+  if (!editor) throw new Error('Expected second model');
+  await click('Assistant', editor);
+  await click('Grant', editor);
+  await click('Save access', editor);
+  expect(editor.textContent).toContain('Outcome unknown');
+  const posts = requests.filter(isAccessPost);
+  const commandId = posts[0]?.body?.['commandId'];
+  if (typeof commandId !== 'string') throw new Error('Expected original command id');
+  return commandId;
+}
+async function checkOriginalGrant(commandId: string): Promise<void> {
+  const editor = root().querySelectorAll('oc-provider-setup-access oc-model-access-editor')[1];
+  if (!editor) throw new Error('Expected second model');
+  expect(editor.textContent).toContain('Check status');
+  await click('Save access', editor);
+  expect(requests.filter(isAccessPost)).toHaveLength(1);
+  failure = { code: 404, status: 'unknown' };
+  await click('Check status', editor);
+  expect(requests.at(-1)?.url).toBe(`/api/org/models/model-b/access/changes/${commandId}`);
+  expect(editor.textContent).toContain('Outcome unknown');
+  expect(requests.filter(isAccessPost)).toHaveLength(1);
+}
+async function pendingNavigation(): Promise<void> {
+  const commandId = await loseGrantReply();
+  await click('Back');
+  const choice = root().querySelectorAll<HTMLInputElement>('.model-choice input')[1];
+  if (!choice) throw new Error('Expected second model choice');
+  choice.click();
+  await settle();
+  if (!choice.checked) choice.click();
+  await settle();
+  await click('Next');
+  await checkOriginalGrant(commandId);
+}
+it('keeps the first grant command after Back, untick, re-tick and Access', pendingNavigation);
+
+async function pendingClose(): Promise<void> {
+  const commandId = await loseGrantReply();
+  await click('Next');
+  await click('Close');
+  expect(root().querySelector('dialog[open]')).not.toBeNull();
+  expect(root().textContent).toContain('Check pending access changes before closing setup');
+  await click('Go to Models');
+  const dialog = root().querySelector('dialog[open]');
+  if (!dialog) throw new Error('Expected setup to stay open');
+  dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+  await settle();
+  expect(root().querySelector('dialog[open]')).not.toBeNull();
+  await click('Back to Access');
+  await checkOriginalGrant(commandId);
+  failure = undefined;
+  const editor = root().querySelectorAll('oc-provider-setup-access oc-model-access-editor')[1];
+  await click('Check status', editor);
+  expect(editor?.textContent).toContain('Saved');
+  await click('Next');
+  await click('Close');
+  expect(root().querySelector('dialog[open]')).toBeNull();
+  root().querySelector<HTMLButtonElement>('.provider-row-main')?.click();
+  await settle();
+  await click('Next');
+  await click('Next');
+  expect(root().textContent).toContain('Step 5 of 6');
+  expect(requests.filter(isAccessPost)).toHaveLength(1);
+}
+it('blocks closing an unresolved grant and allows close and reopen after its status resolves',
+  pendingClose);
+
+async function serverModelCount(newerRevision: boolean): Promise<void> {
+  await mount();
+  await click('Back');
+  const choice = root().querySelectorAll<HTMLInputElement>('.model-choice input')[2];
+  choice?.click();
+  returnedModels = ['model-a'];
+  if (newerRevision) returnedRevision = 3;
+  await settle();
+  await click('Next');
+  await click('Next');
+  const done = root().querySelector('.completion');
+  expect(done?.textContent).not.toContain('Enabled models: 3');
+  if (newerRevision) expect(done?.textContent).not.toContain('✓ Enabled models');
+  else expect(done?.textContent).toContain('✓ Enabled models: 1');
+}
+it('counts the server models rather than the selection draft after the receipt',
+  serverModelCount.bind(null, false));
+it('does not confirm a model count using a receipt for an older revision',
+  serverModelCount.bind(null, true));
