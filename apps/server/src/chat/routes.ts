@@ -77,7 +77,11 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       const { conversationId } = parameters.parse(request.params);
       return await chatHistoryReply(request, reply, config, options, id.parse(conversationId));
     } catch (error) {
-      return chatRefusal(request, reply, error);
+      if (error instanceof MemberRefusal || error instanceof z.ZodError || isChatRefused(error)) {
+        return chatRefusal(request, reply, error);
+      }
+      const unavailable = new Error('Conversation history unavailable', { cause: error });
+      return chatRefusal(request, reply, unavailable);
     }
   }
   async function handler(request: FastifyRequest, reply: FastifyReply) {

@@ -54,8 +54,12 @@ export async function chatHistoryReply(request: FastifyRequest, reply: FastifyRe
   config: AuthConfig, options: ChatOptions | undefined, conversationId: string) {
   const session = sessionFor(request, config, new Date());
   if (!session) throw new MemberRefusal(401, 'refused');
-  if (!isOrganisationSession(config, session)) throw new MemberRefusal(403, 'refused');
-  if (!options) throw new MemberRefusal(503, 'unavailable');
+  if (!options || !options.silo || !config.expectedOrgId) {
+    throw new MemberRefusal(503, 'unavailable');
+  }
+  if (!isOrganisationSession(config, session) || options.silo !== options.binding.silo) {
+    throw new MemberRefusal(403, 'refused');
+  }
   const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
   if (!memberId) throw new MemberRefusal(403, 'refused');
   const query = z.object({ since: z.coerce.number().int().nonnegative().default(0) });

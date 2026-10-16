@@ -33,6 +33,8 @@ access streams for the write check, rather than private-session ownership.
 more than 100 hidden reports, human posts, read acknowledgements, saved first-close
 position, list status, socket delivery, restart/rebuild and independent parent/child close.
 It also checks removal during HTTP loading and unrelated turn/file activity.
+`test/member-guard-http.test.ts` keeps missing organisation setup at HTTP 503 and
+checks that unexpected read failure details stay out of replies and logs.
 Raw late reports remain in the event log and read table. There is no unread-count API
 in this backend; hidden completed messages are absent from the displayed history.
 
