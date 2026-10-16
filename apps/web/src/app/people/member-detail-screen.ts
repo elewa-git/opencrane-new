@@ -19,7 +19,7 @@ type Check = Row['eligibility']['person'];
   selector: 'oc-member-detail-screen',
   imports: [GrainLoader, HingeDrawer],
   templateUrl: './member-detail-screen.html',
-  styleUrls: ['./people.css'],
+  styleUrls: ['./people.css', './member-detail-screen.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MemberDetailScreen implements OnInit, OnDestroy {
