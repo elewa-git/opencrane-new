@@ -7,10 +7,13 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
+import { HandlerRuntime } from '@opencrane/handlers';
+import { memoryCleanupHandler } from '../../ops/src/memory-cleanup.ts';
+import { until } from '../../../libs/handlers/test/helpers.ts';
 import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
   pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
 import * as projections from '@opencrane/projections';
-import { memoryWrittenEventSchema, type MemoryIdentity,
+import { memoryWrittenEventSchema, memoryForgottenEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
@@ -124,6 +127,94 @@ async function cleanup() {
 }
 beforeAll(setup, 120_000);
 afterAll(cleanup);
+
+async function acceptedSharedCleanup(kind: SharedForgetKind, mode: string) {
+  const target = await sharedForgetTarget(kind, `worker-${mode}`);
+  const identity: MemoryIdentity = { silo: 'acme', scopeId: target.scopeId,
+    scopeKind: target.scopeKind, ownerId: target.ownerId, memoryId: 'target', revision: 1 };
+  const candidate = { ...identity, revision: 2 };
+  keys.provision(candidate);
+  const response = await sharedForget(target);
+  expect(response.statusCode).toBe(200);
+  const receipt = response.json<{ changeId: string }>();
+  expect(receipt).toMatchObject({ outcome: 'accepted', hidden: true, cleanupStatus: 'pending' });
+  let tombstone;
+  for await (const row of nats.store.readStream(`scope-${target.scopeId}`)) {
+    if (row.event.id === receipt.changeId) tombstone = row.event;
+  }
+  if (!tombstone) throw new Error('Accepted forget has no saved tombstone');
+  await runner.run(projection);
+  return { target, identity, candidate, tombstone };
+}
+
+async function expectSharedCleanupStatus(target: SharedForgetTarget, cleanupStatus: string) {
+  const status = await get(`${target.url}/changes/forget`);
+  expect(status.statusCode).toBe(200);
+  expect(status.json()).toMatchObject({ hidden: true, cleanupStatus });
+  if (cleanupStatus === 'forgotten') expect(status.json()).toHaveProperty('forgottenAt');
+  const detail = await get(`${target.url}/facts/target`);
+  expect(detail.statusCode).toBe(200);
+  expect(detail.json()).toMatchObject({ status: 'unavailable', reason: 'forgotten' });
+  const list = await get(`${target.url}/facts`);
+  expect(list.statusCode).toBe(200);
+  expect(list.json()).toMatchObject({ facts: [] });
+}
+
+for (const kind of ['group', 'personal', 'team'] as const) {
+  it.each(['completion', 'exhaustion'] as const)(
+    `runs shared cleanup worker for ${kind}: %s`, async function sharedCleanupWorker(mode) {
+      const { target, identity, candidate, tombstone } = await acceptedSharedCleanup(kind, mode);
+      const reaction = memoryCleanupHandler(nats.store, keys);
+      const logger = createLogger('shared-cleanup-http-test');
+      const db = pgDb(storage.queue);
+      const options = { db, logger, silo: 'acme', handlers: [reaction], retryLimit: 0 };
+      const runtime = new HandlerRuntime(options);
+      const keyId = keys.provision(identity);
+      const keyFile = `${directory}/${keyId.slice(4)}`;
+      const keyBytes = await readFile(keyFile);
+      if (mode === 'exhaustion') await rm(keyFile);
+      async function enqueue(transaction: Parameters<typeof reaction.handle>[1]) {
+        await runtime.enqueue(reaction, tombstone, transaction);
+      }
+      async function completed() {
+        const status = await get(`${target.url}/changes/forget`);
+        return status.json<{ cleanupStatus: string }>().cleanupStatus === 'forgotten';
+      }
+      async function unavailable() {
+        const status = await get(`${target.url}/changes/forget`);
+        return status.json<{ cleanupStatus: string }>().cleanupStatus === 'unavailable';
+      }
+      try {
+        await runtime.start();
+        await db.transaction(enqueue);
+        await runtime.work(1);
+        if (mode === 'exhaustion') {
+          await until(unavailable);
+          await expectSharedCleanupStatus(target, 'unavailable');
+          expect(keys.status(identity)).toBe('missing');
+          expect(keys.status(candidate)).toBe('available');
+          await runner.rebuild(projection);
+          await expectSharedCleanupStatus(target, 'unavailable');
+          const failures = await runtime.deadLetters('cleanup-memory');
+          function matchesTarget(job: { data: unknown }) {
+            const saved = memoryForgottenEventSchema.parse(job.data);
+            return saved.id === tombstone.id;
+          }
+          const failed = failures.find(matchesTarget);
+          expect(failed).toBeDefined();
+          await writeFile(keyFile, keyBytes);
+          await runtime.replay('cleanup-memory', failed!.id);
+        }
+        await until(completed);
+        expect(keys.status(identity)).toBe('destroyed');
+        expect(keys.status(candidate)).toBe('destroyed');
+        await runner.run(projection);
+        await expectSharedCleanupStatus(target, 'forgotten');
+      } finally {
+        await runtime.stop();
+      }
+    });
+}
 
 // Check replay before the other cases build large unrelated histories.
 it('loads shared forget history before the write deadline and keeps replay hidden',
