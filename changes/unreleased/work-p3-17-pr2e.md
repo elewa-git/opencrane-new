@@ -1,0 +1,2 @@
+- Computer control requests now stop local executors through the root supervisor and save pausing after checked receipts. Work stays blocked after a restart; desktop control remains unavailable.
+- Reconnecting computers acknowledge signed stop requests before progress reports resume, so active work cannot delay the root supervisor stop.

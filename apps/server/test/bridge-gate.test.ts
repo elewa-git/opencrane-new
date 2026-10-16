@@ -6,7 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { afterEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { computerTokenAudience } from '@opencrane/auth';
+import { computerTokenAudience, readComputerControl, computerSummary } from '@opencrane/auth';
 import { databases, until } from '@opencrane/authz/testing';
 import { envelope } from '@opencrane/models';
 import { conversations, pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -24,9 +24,17 @@ afterEach(async function closeFixture() {
   vi.restoreAllMocks();
 });
 
-async function setup(real = false) {
+type StopInput = { computerId: string; generation: number; podUid: string;
+  takeoverId: string; affectedTurnIds: string[] };
+async function setup(real = false, stopExecution?: (input: StopInput) => Promise<unknown>,
+  active = false) {
   const nats = await natsFixture();
   const computer = await computerFixture();
+  if (active) {
+    computer.start('first');
+    function running() { return computer.calls.includes('turn/start:thread-1'); }
+    await until(running);
+  }
   computer.socket.terminate();
   const server = createServer();
   const sockets = new WebSocketServer({ server });
@@ -46,7 +54,8 @@ async function setup(real = false) {
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing port');
   const url = real ? computer.socket.url : `ws://127.0.0.1:${address.port}`;
-  const options = { store: nats.store, silo: 'test', keys: conversationKeys(dirname(computer.keyPath)) };
+  const options = { store: nats.store, silo: 'test', keys: conversationKeys(dirname(computer.keyPath)),
+    stopExecution };
   const input = { url, computerId: 'computer', assistantId: 'assistant', bearer: 'test' };
   const links: Awaited<ReturnType<typeof connectBridge>>[] = [];
   async function append(subject: string, type: string, data: unknown) {
@@ -72,6 +81,7 @@ async function setup(real = false) {
     return link;
   }
   async function close() {
+    computer.finish('thread-1');
     for (const link of links) {
       link.socket.terminate();
       await link.settled();
@@ -102,7 +112,7 @@ async function realReceipt() {
   const before = await test.store.head('computer-assistant');
   const start = performance.now();
   await link.control.send();
-  function received() { return link.control.receipt !== undefined; }
+  function received() { return link.control.receipt?.type === 'bridge_quiet'; }
   await until(received, 2000);
   expect(performance.now() - start).toBeLessThan(2000);
   expect(link.control.receipt).toMatchObject({ type: 'bridge_quiet',
@@ -462,3 +472,237 @@ async function gateSigningDuringReplay() {
 }
 it('waits for one in-flight gate when intent arrives during report replay',
   gateSigningDuringReplay);
+
+async function savesPausing() {
+  const stops: StopInput[] = [];
+  function stopExecution(input: StopInput) {
+    stops.push(input);
+    const { computerId: _computer, ...binding } = input;
+    const receipt = { kind: 'executor_stop', ...binding, epoch: 'supervisor-epoch',
+      executionQuiet: true, executionInventory: [], quietProof: 'unavailable',
+      controlEnabled: false };
+    return Promise.resolve(receipt);
+  }
+  const test = await setup(true, stopExecution);
+  await test.save();
+  const link = await test.connect();
+  async function pausing() {
+    const control = await readComputerControl(test.store, test.silo, 'assistant');
+    return control?.phase === 'pausing';
+  }
+  await until(pausing, 2000);
+  expect(stops).toEqual([{ computerId: 'computer', podUid: 'pod', generation: 1,
+    takeoverId: 'takeover', affectedTurnIds: ['first', 'second'] }]);
+  await link.control.send();
+  const rebuilt = computerSummary.empty();
+  const types = [];
+  for await (const row of test.store.readStream('computer-assistant')) {
+    computerSummary.add(rebuilt, row);
+    types.push(row.event.type);
+  }
+  expect(rebuilt.control?.phase).toBe('pausing');
+  expect(types).toEqual(['computer.claimed', 'computer.ready',
+    'takeover.requested', 'takeover.pausing']);
+  expect(stops).toHaveLength(1);
+  await refusesLateWork(test.computer, link.socket);
+}
+it('saves pausing after a verified bridge gate and bound root stop, and replays without effects',
+  savesPausing);
+
+const badStops = [
+  {}, { podUid: 'other' }, { generation: 2 }, { takeoverId: 'other' },
+  { affectedTurnIds: [] }, { epoch: '' }, { executionQuiet: false },
+  { executionInventory: ['process'] }, { quietProof: 'complete' },
+  { controlEnabled: true }, { rawOutput: 'protected-process' },
+];
+function stopped(input: StopInput, changes = {}) {
+  const { computerId: _computer, ...binding } = input;
+  return { kind: 'executor_stop', ...binding, epoch: 'supervisor-epoch',
+    executionQuiet: true, executionInventory: [], quietProof: 'unavailable',
+    controlEnabled: false, ...changes };
+}
+async function refusesStop(changes: Record<string, unknown>) {
+  const completed = Promise.withResolvers<void>();
+  function stop(input: StopInput) {
+    completed.resolve();
+    if (Object.keys(changes).length === 0) return Promise.resolve({});
+    return Promise.resolve(stopped(input, changes));
+  }
+  const test = await setup(true, stop);
+  await test.save();
+  const before = await test.store.head('computer-assistant');
+  const link = await test.connect();
+  await completed.promise;
+  await link.control.settled();
+  expect(await test.store.head('computer-assistant')).toBe(before);
+  expect(await readComputerControl(test.store, test.silo, 'assistant'))
+    .toMatchObject({ phase: 'requested' });
+}
+it.each(badStops)('keeps requested after an empty or forged supervisor result %j', refusesStop);
+
+async function recoversTransition(fault: string) {
+  const stopping = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let first = true;
+  async function stop(input: StopInput) {
+    stopping.resolve();
+    await release.promise;
+    if (first && fault === 'stop') {
+      first = false;
+      throw new Error('protected-process');
+    }
+    return stopped(input);
+  }
+  const test = await setup(true, stop);
+  await test.save();
+  const before = await test.store.head('computer-assistant');
+  const append = test.store.append.bind(test.store);
+  const eventType = z.object({ type: z.string() });
+  async function interruptedAppend(...args: Parameters<typeof append>) {
+    const event = eventType.parse(args[0].event);
+    if (first && event.type === 'takeover.pausing') {
+      first = false;
+      if (fault === 'after') await append(...args);
+      throw new Error('Lost append reply');
+    }
+    return append(...args);
+  }
+  if (fault === 'before' || fault === 'after') {
+    vi.spyOn(test.store, 'append').mockImplementation(interruptedAppend);
+  }
+  const link = await test.connect();
+  await stopping.promise;
+  if (fault === 'changed') {
+    await test.append('computer-assistant', 'computer.turn_closed', {
+      computerId: 'computer', assistantId: 'assistant', conversationId: 'chat',
+      turnId: 'first', requesterId: 'alice', task: 'chat_turn', status: 'completed' });
+  }
+  release.resolve();
+  await link.control.settled();
+  const expected = before + Number(fault === 'changed' || fault === 'after');
+  expect(await test.store.head('computer-assistant')).toBe(expected);
+  link.socket.terminate();
+  await link.settled();
+  const reconnected = await test.connect();
+  async function pausing() {
+    const control = await readComputerControl(test.store, test.silo, 'assistant');
+    return control?.phase === 'pausing';
+  }
+  await until(pausing);
+  await reconnected.control.settled();
+  const transitions = [];
+  for await (const row of test.store.readStream('computer-assistant')) {
+    if (row.event.type.startsWith('takeover.')) transitions.push(row.event.type);
+  }
+  expect(transitions).toEqual(['takeover.requested', 'takeover.pausing']);
+  await refusesLateWork(test.computer, reconnected.socket);
+}
+it.each(['before', 'after', 'changed', 'stop'])(
+  'recovers one pausing transition after %s interruption without admitting work', recoversTransition);
+
+async function refusesLateWork(computer: Awaited<ReturnType<typeof computerFixture>>,
+  socket: WebSocket) {
+  const turn = { type: 'turn', id: 'late', conversationId: 'late', assistantId: 'assistant',
+    executionMode: 'memory_free', text: 'Hello', token: 'initial', expiresAt: Date.now() + 60_000 };
+  socket.send(JSON.stringify(turn));
+  await computer.flush(socket);
+  expect(computer.calls.some(isThreadStart)).toBe(false);
+  expect(computer.grants.size).toBe(0);
+}
+function isThreadStart(method: string) { return method.startsWith('thread/start:'); }
+
+async function stopsBeforeResume() {
+  const stops: StopInput[] = [];
+  const releaseStop = Promise.withResolvers<void>();
+  const replayRelease = Promise.withResolvers<void>();
+  let replayHeld = false;
+  async function stop(input: StopInput) {
+    stops.push(input);
+    await releaseStop.promise;
+    test.computer.finish('thread-1');
+    return stopped(input);
+  }
+  const test = await setup(true, stop, true);
+  await test.save();
+  const head = test.store.head.bind(test.store);
+  async function holdReportPosition(...args: Parameters<typeof head>) {
+    if (args.length === 0 && !replayHeld) {
+      replayHeld = true;
+      await replayRelease.promise;
+    }
+    return head(...args);
+  }
+  vi.spyOn(test.store, 'head').mockImplementation(holdReportPosition);
+  const start = performance.now();
+  const connecting = test.connect();
+  try {
+    function stopping() { return stops.length > 0; }
+    await until(stopping, 2000);
+    expect(performance.now() - start).toBeLessThan(2000);
+    expect(replayHeld).toBe(true);
+    expect(test.computer.calls).toContain('turn/interrupt:thread-1');
+    expect(await readComputerControl(test.store, test.silo, 'assistant'))
+      .toMatchObject({ phase: 'requested' });
+    // Keep the root stop pending across timer retries to check that they share one call.
+    await delay(550);
+    expect(stops).toHaveLength(1);
+    releaseStop.resolve();
+    async function pausing() {
+      const control = await readComputerControl(test.store, test.silo, 'assistant');
+      return control?.phase === 'pausing';
+    }
+    await until(pausing, 2000);
+    expect(stops).toEqual([{ computerId: 'computer', podUid: 'pod', generation: 1,
+      takeoverId: 'takeover', affectedTurnIds: ['first', 'second'] }]);
+  } finally {
+    releaseStop.resolve();
+    replayRelease.resolve();
+    const link = await connecting;
+    link.socket.terminate();
+    await link.settled();
+  }
+  const reconnected = await test.connect();
+  function accepted() { return reconnected.control.receipt !== undefined; }
+  await until(accepted);
+  await reconnected.control.settled();
+  expect(stops).toHaveLength(1);
+  expect(await readComputerControl(test.store, test.silo, 'assistant'))
+    .toMatchObject({ phase: 'pausing' });
+}
+it('calls root stop within two seconds while reconnect resume waits for active work',
+  stopsBeforeResume);
+
+const badAcceptances = [
+  { takeoverId: 'old-takeover' }, { generation: 2 }, { affectedTurnIds: ['first'] },
+  { affectedTurnIds: ['second', 'first'] }, { epoch: '' }, { extra: true },
+];
+async function refusesAcceptance(changes: Record<string, unknown>, saved = true) {
+  const stops: StopInput[] = [];
+  function stop(input: StopInput) {
+    stops.push(input);
+    return Promise.resolve(stopped(input));
+  }
+  const test = await setup(false, stop);
+  if (saved) await test.save();
+  const before = await test.store.head('computer-assistant');
+  const link = await test.connect();
+  const peer = test.peers[0]!;
+  const closed = once(peer, 'close');
+  const receipt = { type: 'bridge_gated', takeoverId: 'takeover', generation: 1,
+    affectedTurnIds: ['first', 'second'], epoch: 'old-epoch', ...changes };
+  peer.send(JSON.stringify(receipt));
+  const closedValues: unknown = await closed;
+  const [code, reason] = z.tuple([z.number(), z.instanceof(Buffer)]).parse(closedValues);
+  expect(code).toBe(1008);
+  expect(String(reason)).toBe('Invalid bridge receipt');
+  await link.control.settled();
+  expect(stops).toEqual([]);
+  expect(await test.store.head('computer-assistant')).toBe(before);
+}
+async function forgedAcceptance(changes: Record<string, unknown>) {
+  await refusesAcceptance(changes);
+}
+it.each(badAcceptances)('refuses a forged or old acceptance %j before root stop',
+  forgedAcceptance);
+it('refuses a replayed acceptance on a connection without saved intent',
+  async function replayedAcceptance() { await refusesAcceptance({}, false); });

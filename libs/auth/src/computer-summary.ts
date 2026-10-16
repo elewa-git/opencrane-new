@@ -1,5 +1,7 @@
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { takeoverRequestedDataSchema, computerTurnStartedDataSchema as startDetails,
+import { takeoverRequestedDataSchema, takeoverPausingDataSchema,
+  computerTurnStartedDataSchema as startDetails,
   computerTurnClosedDataSchema as closeDetails } from '@opencrane/events';
 import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
   from '@opencrane/event-store';
@@ -12,7 +14,7 @@ export function isComputerLifecycle(type: string) {
   return lifecycleTypes.has(type);
 }
 export type ComputerControl = (z.infer<typeof takeoverRequestedDataSchema> & {
-  phase: 'requested'; position: number; commandId: string; requestedAt: string;
+  phase: 'requested' | 'pausing'; position: number; commandId: string; requestedAt: string;
 }) | { phase: 'unverified'; position: number };
 export async function readComputerControl(store: Pick<EventStore, 'readStream'>,
   silo: string, assistantId: string, deadline = performance.now() + 10_000) {
@@ -69,6 +71,7 @@ function addComputer(summary: ComputerSummary, row: StoredEvent) {
     summary.control = { ...details, phase: 'requested', position: row.sequence,
       commandId: z.string().parse(row.event.commandId), requestedAt: row.event.time };
   }
+  if (type === 'takeover.pausing') addPausing(summary, row);
   // Keep old records paused. They contain no checked proof of writer closure.
   if (type === 'takeover.started' || type === 'takeover.ended') {
     summary.control = { phase: 'unverified', position: row.sequence };
@@ -76,6 +79,25 @@ function addComputer(summary: ComputerSummary, row: StoredEvent) {
   if (isComputerLifecycle(type)) summary.lifecycle = row;
   if (type === 'computer.claimed') summary.claim = row;
   if (type === 'computer.claimed' || type === 'computer.resumed') summary.grant = row;
+}
+function addPausing(summary: ComputerSummary, row: StoredEvent) {
+  const details = takeoverPausingDataSchema.parse(row.event.data);
+  const control = summary.control;
+  if (!control || control.phase === 'unverified' || details.takeoverId !== control.takeoverId
+    || details.computerId !== control.computerId || details.assistantId !== control.assistantId
+    || details.generation !== control.generation || details.podUid !== control.podUid
+    || !sameAffectedTurns(details.affectedTurnIds, control.affectedTurnIds)) {
+    summary.control = { phase: 'unverified', position: row.sequence };
+  } else {
+    summary.control = { ...control, phase: 'pausing', position: row.sequence };
+  }
+}
+function sameAffectedTurns(first: string[], second: string[]) {
+  const sortedFirst = [...first];
+  const sortedSecond = [...second];
+  sortedFirst.sort();
+  sortedSecond.sort();
+  return isDeepStrictEqual(sortedFirst, sortedSecond);
 }
 function addClose(summary: ComputerSummary, row: StoredEvent,
   details: z.infer<typeof closeDetails>) {

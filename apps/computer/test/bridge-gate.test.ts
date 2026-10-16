@@ -14,6 +14,9 @@ async function stopsEveryConversation() {
     test.send(gate);
     function interrupted() { return test.calls.includes('turn/interrupt:thread-2'); }
     await until(interrupted, 2000);
+    const accepted = test.frames.find(isAccepted);
+    expect(accepted).toMatchObject({ type: 'bridge_gated', takeoverId: 'takeover',
+      generation: 1, affectedTurnIds: ['first', 'second'] });
     expect(test.calls).toContain('turn/interrupt:thread-1');
     expect(test.grants.size).toBe(0);
     expect(test.catalogues.size).toBe(0);
@@ -189,3 +192,36 @@ async function doesNotInferQuiet(cause: string) {
 it.each(['thread/closed', 'eof', 'socket'])(
   'returns unavailable at thirty seconds after %s without terminal proof',
   doesNotInferQuiet);
+
+function isAccepted(frame: Record<string, unknown>) { return frame['type'] === 'bridge_gated'; }
+
+async function acceptsBeforeResume() {
+  const test = await fixture();
+  try {
+    test.start('first');
+    function running() { return test.calls.includes('turn/start:thread-1'); }
+    await until(running);
+    const gate = await test.signedGate();
+    let epoch: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const socket = await test.connect(false);
+      test.frames.length = 0;
+      socket.send(JSON.stringify(gate));
+      await test.flush(socket);
+      const accepted = test.frames.find(isAccepted);
+      expect(accepted).toMatchObject({ type: 'bridge_gated', takeoverId: 'takeover',
+        generation: 1, affectedTurnIds: ['first', 'second'] });
+      if (attempt === 0) epoch = accepted?.['epoch'];
+      expect(accepted?.['epoch']).toBe(epoch);
+      expect(test.receipt()).toBeUndefined();
+      expect(test.frames).toHaveLength(1);
+      expect(test.calls).toContain('turn/interrupt:thread-1');
+      socket.terminate();
+    }
+  } finally {
+    test.finish('thread-1');
+    await test.close();
+  }
+}
+it('acknowledges active work before resume on every reconnect, without claiming completion',
+  acceptsBeforeResume);

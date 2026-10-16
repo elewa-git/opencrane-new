@@ -154,7 +154,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     if (assistant.controlPending && assistant.current?.type === 'computer.ready') {
       const computer = computerData.parse(assistant.current.data);
       const control = await readComputerControl(options.store, options.silo, assistantId);
-      if (control?.phase === 'requested' && !refused.has(computer.computerId)) {
+      if (control && control.phase !== 'unverified' && !refused.has(computer.computerId)) {
         const link = await connection(computer.computerId, assistantId);
         await link.control.send();
       }

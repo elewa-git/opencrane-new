@@ -252,7 +252,8 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 | `computer.retired` | server | computers | delete snapshots after retention |
 | `computer.view_refused` | authenticated proxy | audit | Safe refusal metadata on `view-<attemptId>`; no connection or lifecycle effect. The additive reason `unavailable` means access checks did not answer within the 5 s retry window, or the member lookup was unavailable. |
 | `computer.view_started` / `computer.view_stopped` | authenticated proxy | audit | Audit on `view-<sessionId>`; no lifecycle effect or replayed connection. Start records a maximum two-minute ticket and stop records its reason. The additive reason `unavailable` means there was no confirmed access for 10 s, either before the first valid lease or after a lease lapsed. |
-| `takeover.requested` | internal requester command | computer control summary, audit | Record intent on the computer stream with a conditional append. Refuse new work; no writer or pause effect is enabled yet. |
+| `takeover.requested` | internal requester command | computer control summary, server bridge reaction, audit | Record intent on the computer stream with a conditional append. Refuse new work, deliver the signed bridge gate and request the root supervisor stop. No writer is enabled. |
+| `takeover.pausing` | server bridge reaction | computer control summary, audit | Save matching bridge acceptance and root executor exit on the computer stream with one conditional append. Keep work denied; browser and full quiet proof remain unavailable. |
 | `takeover.started` / `takeover.ended` | historical live-view records | computer control summary, audit | Read old shapes as unverified and paused. They cannot grant a writer or resume work. |
 | `toolset.changed` | admin command (publishes a computer profile) | toolsets | notify admins for review; computers adopt it at their next claim or resume |
 

@@ -2924,7 +2924,7 @@ route lists; `MODEL_MCP_ROUTES` is ignored. No call is enabled by this worker.
 ## Signed bridge gate delivery (P3-17 PR 2d; Part of #58)
 
 `bridge-control.ts` sends one signed `bridge_gate` per connection after saved
-`takeover.requested` intent. `readComputerControl` must return `requested`, never
+`takeover.requested` intent. `readComputerControl` must return `requested` or `pausing`, never
 `unverified`. The ready computer, generation and Pod UID must match. The sender
 checks the requester's membership again with `requireTurnMember`. Missing signing
 support, changed identity, removed membership or more than 64 affected turns sends
@@ -2945,14 +2945,29 @@ Finishing setup or closing the socket stops that link's timer. The independent
 watcher continues to check for saved intent afterwards.
 
 Every new connection sends a qualifying gate before `resume`. Receipt parsing runs before
-report parsing. Only strict `bridge_quiet` and `bridge_unavailable` replies matching
+report parsing. The computer sends `bridge_gated` before report resume on the socket
+that received the gate, and repeats acceptance after reconnect. Root stop can start
+while report replay waits and active work has acknowledged interruption without ending.
+Only strict `bridge_gated`, `bridge_quiet` and `bridge_unavailable` replies matching
 that connection's takeover id, generation and sorted affected turns are accepted.
 The first accepted epoch cannot change. Quiet requires empty preparation, running,
 loaded-thread and held-approval lists, interrupted turns within the affected list,
 and both executor and browser proofs exactly `unavailable`. A bad reply clears the
 in-memory receipt and closes with 1008 and `Invalid bridge receipt`. A computer's
 1008 close before any receipt prevents reconnecting. No signed gate enters logs,
-events or API replies. Receipts live only on the connection, with no durable write.
+events or API replies. After bridge acceptance, root Pod exec calls the fixed local
+supervisor socket. The server caps output at 16 KiB, ignores stderr and stops the
+transport after fifteen seconds. Strict receipt checks require the exact Pod,
+generation, takeover and affected turns, an epoch, an empty execution inventory,
+executor exit, unavailable full quiet proof and disabled control.
+
+One conditional append saves `takeover.pausing` at the position read before `/stop`.
+A computer-stream change refuses that append. The next check reads current facts
+again. The command id is derived from the takeover and transition; saved history
+prevents a duplicate after a lost reply or restart. The gate remains closed when
+stop or append fails. Reconnection delivers the gate for pausing too. Replay only
+rebuilds the phase and makes no outside call. No conversation history enters a
+short access check. Receipts and affected turns remain internal.
 
 Tests use real NATS, signing keys, sockets and the real computer bridge with a saved
 signing identity. PostgreSQL supplies the watcher's conversation list. Tests hold chat
@@ -2960,8 +2975,10 @@ reads for 2,300 ms and require a verified gate within two seconds, for both idle
 connected computers. They hold report replay, close a turn during signing and hold
 signing across replay completion. Each requires the gate before resume. Scripted
 replies cover forged receipts. Fresh-install qualification
-is NOT RUN. Pausing events, supervisor calls, full quiet proof, writer access, leases
-and recovery remain later work. The existing access checks and event schemas are unchanged.
+is NOT RUN. Paused/failure events, browser and queued input proof, saved hold
+cancellation, writer access, leases and full recovery remain later work. The access
+checks are unchanged. `bridge-gate.test.ts` also covers refusal and lost append replies;
+`supervisor-stop.test.ts` checks real executor children and restart denial.
 
 ## Reviewed child starts (P4-8 PR 7a, first part)
 
