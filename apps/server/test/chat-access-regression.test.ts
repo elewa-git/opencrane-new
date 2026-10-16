@@ -19,7 +19,7 @@ import {
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { envelope } from '@opencrane/models';
-import { chatMessageSchema, chatParticipantsSchema } from '@opencrane/protocol';
+import { chatMessageSchema, chatParticipantsSchema, chatFeedSchema } from '@opencrane/protocol';
 import type { ChatOptions } from '../src/chat/routes.ts';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer } from '../src/websocket.ts';
@@ -891,7 +891,7 @@ const changedAccessEvents = [
   { subject: 'member-alice', type: 'member.role_changed',
     data: { memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob' } },
 ];
-it.each(changedAccessEvents)('returns history authorised before $type was recorded',
+it.each(changedAccessEvents)('checks current history access after $type was recorded',
   readDuringAccessChange, 120_000);
 
 async function readDuringAccessChange(event: AccessEvent) {
@@ -906,8 +906,10 @@ async function readDuringAccessChange(event: AccessEvent) {
     await context.append(event.subject, event.type, event.data, false);
     pause.release();
     const response = await reading;
-    expect(response.statusCode).toBe(200);
-    expect(response.body).toContain('Hello');
+    const removed = event.type.endsWith('.removed');
+    expect(response.statusCode).toBe(removed ? 403 : 200);
+    if (removed) expect(response.body).not.toContain('Hello');
+    else expect(response.body).toContain('Hello');
   } finally {
     pause?.release();
     await context.close();
@@ -2443,3 +2445,139 @@ async function hidesOtherRequesterReview() {
 }
 it('hides another requester’s child approval review before decryption',
   hidesOtherRequesterReview, 120_000);
+
+async function appendCloseOutput(context: Fixture, type: string, text = 'Late answer') {
+  const encrypted = context.keys.encrypt('test', 'child', text);
+  const data = { conversationId: 'child', turnId: 'close-turn', messageId: 'close-answer',
+    contentType: 'text', ...encrypted };
+  return context.append('conversation-child', type, data, false);
+}
+
+async function readClosedHistory(context: Fixture, memberId: string) {
+  const rows: ReturnType<typeof chatFeedSchema.parse>['rows'] = [];
+  let since = 0;
+  for (let page = 0; page < 5; page++) {
+    const response = await childRead(context, `messages?since=${since}`, memberId);
+    expect(response.statusCode).toBe(200);
+    const result = chatFeedSchema.parse(response.json());
+    rows.push(...result.rows);
+    if (result.rows.length < 100) return rows;
+    const next = result.rows.at(-1)!.position;
+    expect(next).toBeGreaterThan(since);
+    since = next;
+  }
+  throw new Error('History paging did not finish');
+}
+
+function chatRowId(row: ReturnType<typeof chatFeedSchema.parse>['rows'][number]) {
+  return row.id;
+}
+
+async function frozenChildOutput(memberId: string) {
+  const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    const creation = await childSession(context);
+    const before = await appendCloseOutput(context, 'agent.message_delta', 'Partial answer');
+    await context.runner.run(conversations);
+    client = await openChatSocket(context, 'child', true, memberId);
+    const initial = await readClosedHistory(context, memberId);
+    const closed = await context.append('conversation-child', 'conversation.closed',
+      { conversationId: 'child', closedBy: 'alice' }, false);
+    const closePosition = await context.nats.store.head('conversation-child');
+    for (let index = 0; index < 105; index++) {
+      await appendCloseOutput(context, 'agent.message_delta');
+    }
+    const late = await appendCloseOutput(context, 'agent.message_completed');
+    for (const type of ['agent.turn_failed', 'agent.output_lost', 'agent.turn_completed']) {
+      const example = getEventDefinition(type)!.example;
+      const data = { ...example, conversationId: 'child', turnId: 'close-turn' };
+      await context.append('conversation-child', type, data, false);
+    }
+    // Retain human posts already admitted on another stream before close was observed.
+    const encrypted = context.keys.encrypt('test', 'child', 'Retained human post');
+    const humanData = { conversationId: 'child', authorId: 'bob', authorKind: 'human',
+      contentType: 'text', ...encrypted };
+    const human = await context.append('conversation-child', 'message.posted', humanData, false);
+    const humanPosition = await context.nats.store.head('conversation-child');
+    await context.append('conversation-child', 'conversation.closed',
+      { conversationId: 'child', closedBy: 'bob' }, false);
+    await context.runner.run(conversations);
+    function receivedHuman() {
+      return client!.received.some(isHuman);
+    }
+    function isHuman(message: ReturnType<typeof chatMessageSchema.parse>) {
+      return message.row?.id === human.id;
+    }
+    await until(receivedHuman);
+    const expected = [...initial.map(chatRowId), closed.id, human.id];
+    const rows = await readClosedHistory(context, memberId);
+    expect(rows.map(chatRowId)).toEqual(expected);
+    expect(rows.find(isBefore)?.data.text).toBe('Partial answer');
+    function isBefore(row: typeof rows[number]) { return row.id === before.id; }
+    const delivered = [];
+    for (const message of client.received) {
+      if (message.row) delivered.push(message.row.id);
+    }
+    expect(delivered).toEqual(expected);
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    const list = await context.app.inject({ url: '/api/conversations?limit=1',
+      headers: context.headers(memberId) });
+    expect(list.statusCode).toBe(200);
+    const listed = list.json<{ rows: { conversationId: string; status: string }[];
+      nextCursor: string | null }>();
+    expect(listed.rows).toEqual([expect.objectContaining({ conversationId: 'child',
+      status: 'closed' })]);
+    expect(listed.nextCursor).not.toBeNull();
+    const next = await context.app.inject({
+      url: `/api/conversations?limit=1&cursor=${encodeURIComponent(listed.nextCursor!)}`,
+      headers: context.headers(memberId) });
+    expect(next.json()).toMatchObject({ rows: [{ conversationId: 'parent', status: 'open' }],
+      nextCursor: null });
+    const read = { id: `closed-read-${memberId}`, action: 'read', joinEventId: creation.id,
+      throughPosition: humanPosition, throughEventId: human.id };
+    const acknowledgement = await context.app.inject({ method: 'POST',
+      url: '/api/conversations/child/state', headers: context.headers(memberId), payload: read });
+    expect(acknowledgement.statusCode).toBe(200);
+    await context.runner.run(conversations);
+    await client.close();
+    client = undefined;
+    const restarted = new ProjectionRunner(context.db, context.nats.store,
+      createLogger('closed-restart', { level: 'silent' }));
+    await restarted.initialise(conversations);
+    await restarted.run(conversations);
+    await restarted.rebuild(conversations);
+    expect((await readClosedHistory(context, memberId)).map(chatRowId)).toEqual(expected);
+    const rebuilt = await context.app.inject({ url: '/api/conversations?limit=1',
+      headers: context.headers(memberId) });
+    expect(rebuilt.json()).toMatchObject({ rows: [{ status: 'closed',
+      throughPosition: humanPosition, throughEventId: human.id }] });
+    const evidence = await context.db.query<{ event_id: string }>(
+      'SELECT event_id FROM conversation_feed WHERE event_id=$1', [late.id]);
+    expect(evidence.rows).toHaveLength(1);
+    const metadata = await context.db.query<{ closed_position: string }>(
+      "SELECT closed_position FROM conversations WHERE conversation_id='child'");
+    expect(Number(metadata.rows[0]!.closed_position)).toBe(closePosition);
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+it.each(['alice', 'bob'])('freezes closed output for %s through paging, sockets and replay',
+  frozenChildOutput, 120_000);
+
+async function closedParentKeepsChildOutput() {
+  const context = await fixture();
+  try {
+    await childSession(context);
+    await context.append('conversation-parent', 'conversation.closed',
+      { conversationId: 'parent', closedBy: 'alice' }, false);
+    const output = await appendCloseOutput(context, 'agent.message_completed', 'Child continues');
+    await context.runner.run(conversations);
+    const rows = await readClosedHistory(context, 'bob');
+    expect(rows.map(chatRowId)).toContain(output.id);
+  } finally {
+    await context.close();
+  }
+}
+it('keeps child output visible after its parent closes', closedParentKeepsChildOutput, 120_000);
