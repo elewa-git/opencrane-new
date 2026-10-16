@@ -27,7 +27,8 @@ import { workspaceTitle } from './conversations-data';
 import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
-  budgetStoppedTurnIds, rejectedScreenshotIds, toolActivityResult, toolActivityResultLabel,
+  budgetStoppedTurnIds, findToolRecord, hasHighlightedTool, rejectedScreenshotIds,
+  toolActivityResult, toolActivityResultLabel,
   toolKind as getToolKind, turnContent, turnOutcome, turnStatusIcon,
   type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
@@ -223,11 +224,7 @@ export class Workspace implements OnInit {
     this.highlightedToolId.set('');
   }
   protected isHighlighted(tools: ToolActivityRecord[]): boolean {
-    const highlightedToolId = this.highlightedToolId();
-    for (const tool of tools) {
-      if (tool.id === highlightedToolId) return true;
-    }
-    return false;
+    return hasHighlightedTool(tools, this.highlightedToolId());
   }
   protected openToolDetails(record: ToolActivityRecord, opener: HTMLElement): void {
     this.toolDetails.set({ record, opener });
@@ -252,7 +249,7 @@ export class Workspace implements OnInit {
   private followOpenToolDetails(): void {
     const details = this.toolDetails();
     if (!details) return;
-    const currentRecord = this.findToolRecord(details.record.id);
+    const currentRecord = findToolRecord(this.activity(), details.record.id);
     if (currentRecord === details.record) return;
     if (currentRecord) {
       this.toolDetails.set({ ...details, record: currentRecord });
@@ -260,12 +257,6 @@ export class Workspace implements OnInit {
     }
     this.toolDetails.set(undefined);
     requestAnimationFrame(this.focusTranscript.bind(this));
-  }
-  private findToolRecord(recordId: string): ToolActivityRecord | undefined {
-    for (const record of this.activity()) {
-      if (record.id === recordId) return record;
-    }
-    return undefined;
   }
   private focusTranscript(): void {
     this.transcriptElement()?.nativeElement.focus();

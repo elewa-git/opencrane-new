@@ -114,6 +114,22 @@ export interface ToolActivityRecord {
   durationMs?: number;
 }
 
+export function findToolRecord(
+  records: ToolActivityRecord[], recordId: string,
+): ToolActivityRecord | undefined {
+  for (const record of records) {
+    if (record.id === recordId) return record;
+  }
+  return undefined;
+}
+
+export function hasHighlightedTool(records: ToolActivityRecord[], highlightedId: string): boolean {
+  for (const record of records) {
+    if (record.id === highlightedId) return true;
+  }
+  return false;
+}
+
 export function toolKind(record: ToolActivityRecord): string {
   if (record.nativeRequestId) return 'Native consent request';
   if (record.callId) return 'Governed tool call';
