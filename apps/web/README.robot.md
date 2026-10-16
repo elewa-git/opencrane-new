@@ -186,6 +186,22 @@ Integrations, Routines and Change history. People & groups reads the flat group 
 shows read-only group details and lets Owners and Admins create groups. Overview and
 Routines show explicit availability states until their screens are built. Desktop uses a
 220px sidebar; phones use the shared modal menu. Back to workspace opens `/workspace`.
+
+The member detail page opens a departure drawer for a non-owner when the detail reply
+allows removal. GET `/api/members/:memberId/departure` supplies the reviewed access,
+shared work, version-specific routine and connection states, retained history and
+`memberSequence`/`reviewRevision`. The review lists organisation and group membership
+separately from resource access, and shows any recorded personal computer. The Remove
+button requires `complete` and `permissions.remove`, with no unresolved shared work.
+POST `/remove` sends only
+`commandId`, `expectedSequence` and `reviewRevision`. A lost reply keeps that command id
+for GET `/changes/:commandId`; 404 does not permit a second POST. Conflict reads a new
+review and uses a new command id for any later removal. Refusal clears all protected
+detail. A confirmed removal closes the drawer and replaces the member detail with the
+removed outcome. Removal ends access at the saved event; IAM and content progress are
+separate. The current status route has no clean-up field, so the outcome says that
+computer clean-up has not yet been reported. `npm run visual:screen-p4-3-departure`
+captures intercepted desktop and phone states in `docs/process/screen-p4-3-departure`.
 `/org/states` renders the shared state vocabulary for development and visual checks,
 but is not a navigation destination. [F3 source receipt](../../docs/process/f3-org-shell/README.md).
 [proxy.conf.json](proxy.conf.json) forwards `/api`, `/auth` and `/ws` to port 8080.

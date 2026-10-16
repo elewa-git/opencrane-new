@@ -1,8 +1,11 @@
-import { memberAccessSchema, memberDetailSchema, memberHeaderSchema } from '@opencrane/protocol';
+import { memberAccessSchema, memberDepartureSchema, memberDetailSchema,
+  memberHeaderSchema } from '@opencrane/protocol';
+import { z } from 'zod';
 
 export type Header = ReturnType<typeof memberHeaderSchema.parse>;
 export type Detail = ReturnType<typeof memberDetailSchema.parse>;
 export type Access = ReturnType<typeof memberAccessSchema.parse>;
+export type Departure = ReturnType<typeof memberDepartureSchema.parse>;
 export type ReadResult<T> = { kind: 'ok'; value: T } | { kind: 'denied'; status: number }
   | { kind: 'missing' | 'failed' };
 
@@ -41,4 +44,60 @@ export async function fetchMemberAccess(
   const parsed = memberAccessSchema.safeParse(result.value);
   if (!parsed.success) return { kind: 'failed' };
   return { kind: 'ok', value: parsed.data };
+}
+
+export async function fetchDeparture(
+  memberId: string, signal: AbortSignal,
+): Promise<ReadResult<Departure>> {
+  const result = await read(`/api/members/${encodeURIComponent(memberId)}/departure`, signal);
+  if (result.kind !== 'ok') return result;
+  const parsed = memberDepartureSchema.safeParse(result.value);
+  if (!parsed.success) return { kind: 'failed' };
+  return { kind: 'ok', value: parsed.data };
+}
+
+const removalReceiptSchema = z.object({
+  status: z.literal('recorded'), removedAt: z.iso.datetime(), access: z.literal('revoked'),
+  projection: z.object({ iam: z.enum(['applying', 'current']),
+    content: z.enum(['applying', 'current']) }).optional(),
+});
+export type RemovalReceipt = z.infer<typeof removalReceiptSchema>;
+export type RemovalResult = ReadResult<RemovalReceipt> | { kind: 'conflict'; reason: string };
+
+async function removalReply(response: Response): Promise<RemovalResult> {
+  if (response.status === 401 || response.status === 403) {
+    return { kind: 'denied', status: response.status };
+  }
+  if (response.status === 404) return { kind: 'missing' };
+  if (response.status === 409) {
+    const raw: unknown = await response.json();
+    const parsed = z.object({ reason: z.string().optional() }).safeParse(raw);
+    return { kind: 'conflict', reason: parsed.success ? parsed.data.reason ?? '' : '' };
+  }
+  if (!response.ok) return { kind: 'failed' };
+  const raw: unknown = await response.json();
+  const parsed = removalReceiptSchema.safeParse(raw);
+  if (!parsed.success) return { kind: 'failed' };
+  return { kind: 'ok', value: parsed.data };
+}
+
+export async function sendMemberRemoval(memberId: string, body: {
+  commandId: string; expectedSequence: number; reviewRevision: string,
+}, signal: AbortSignal): Promise<RemovalResult> {
+  try {
+    const response = await fetch(`/api/members/${encodeURIComponent(memberId)}/remove`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body), signal,
+    });
+    return await removalReply(response);
+  } catch { return { kind: 'failed' }; }
+}
+
+export async function fetchRemovalStatus(memberId: string, commandId: string,
+  signal: AbortSignal): Promise<RemovalResult> {
+  try {
+    const path = `/api/members/${encodeURIComponent(memberId)}/changes/`;
+    const response = await fetch(path + encodeURIComponent(commandId), { signal });
+    return await removalReply(response);
+  } catch { return { kind: 'failed' }; }
 }

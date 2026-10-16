@@ -1,0 +1,37 @@
+.member-detail-page { display: grid; gap: 18px; min-width: 0; }
+.page-heading { display: flex; justify-content: space-between; gap: 24px; align-items: start; }
+.page-heading h1 { margin: 0; }
+.page-heading p { max-width: 720px; margin-top: 4px; }
+.member-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.member-crumb { color: var(--oc-accent-dark); overflow-wrap: anywhere; }
+.member-crumb a { display: inline-flex; align-items: center; min-height: 44px;
+  color: inherit; }
+.member-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.member-summary h2 { font: var(--oc-type-column); text-transform: uppercase; }
+.member-access-table { width: 100%; table-layout: fixed; border-spacing: 0;
+  border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-app);
+  background: white; overflow-wrap: anywhere; }
+.member-access-table th, .member-access-table td { padding: 12px 14px;
+  text-align: left; vertical-align: top; }
+.member-access-table thead { background: var(--oc-surface-table-header);
+  color: var(--oc-ink-admin-muted); font: var(--oc-type-column); text-transform: uppercase; }
+.member-access-table tbody tr + tr > * { border-top: 1px solid var(--oc-border-row); }
+.member-access-table small, .member-access-line { display: block; margin-top: 4px; }
+.member-access-table small { color: var(--oc-ink-admin-muted); }
+.member-boundary { border: 1px dashed var(--oc-accent); padding: 12px; }
+.member-detail-page .stale { opacity: .7; }
+@media (max-width: 700px) {
+  .page-heading { display: block; }
+  .member-summary { grid-template-columns: 1fr; }
+  .member-access-table, .member-access-table tbody, .member-access-table tr,
+  .member-access-table th, .member-access-table td { display: block; }
+  .member-access-table { border: 0; background: none; }
+  .member-access-table thead { display: none; }
+  .member-access-table tbody tr { margin-bottom: 12px; background: white;
+    border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-app); }
+  .member-access-table tbody tr + tr > * { border-top: 0; }
+  .member-access-table th, .member-access-table td { padding: 10px 14px; }
+  .member-access-table th::before, .member-access-table td::before {
+    content: attr(data-label); display: block; color: var(--oc-ink-admin-muted);
+    font: var(--oc-type-column); text-transform: uppercase; margin-bottom: 4px; }
+}
