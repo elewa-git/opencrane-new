@@ -359,7 +359,8 @@ it('does not turn a hostile reason code into HTML or a link', async () => {
   expect(root.textContent).not.toContain('All four image checks passed');
 });
 
-it.each([200, 403])('handles an old admission GET after a new package: %s', async status => {
+it.each([200, 401, 403])(
+  'ignores an old admission GET after the new package is visible: %s', async status => {
   let releaseOldRead: (response: Response) => void = () => undefined;
   const oldRead = new Promise<Response>(resolve => { releaseOldRead = resolve; });
   const signature = { ...check('pass'), verdict: 'fail', reasonCodes: ['unsigned'] };
@@ -388,20 +389,37 @@ it.each([200, 403])('handles an old admission GET after a new package: %s', asyn
   await vi.waitFor(() => expect(root.querySelector('form')).not.toBeNull());
   validForm(root);
   root.querySelector('form')?.requestSubmit();
-  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(4));
-  releaseOldRead(reply(status, admission('pass', 'admitted')));
-  if (status === 403) {
-    await vi.waitFor(() => expect(root.textContent).toContain('no longer have permission'));
-    expect(root.textContent).not.toContain(locator);
-    expect(root.textContent).not.toContain('All four image checks passed');
-    return;
-  }
-  await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
-    '#hosted-check-status')?.disabled).toBe(false));
-  expect(root.textContent).not.toContain('All four image checks passed');
+  await vi.waitFor(() => expect(root.textContent).toContain('change-2'));
   root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
-  expect(fetch.mock.calls[4]?.[0]).toBe('/api/org/integrations/server-2/admission');
+  await vi.waitFor(() => expect(root.textContent).toContain('No result reported'));
+  releaseOldRead(reply(status, admission('pass', 'admitted')));
+  await vi.waitFor(() => expect(root.textContent).toContain('change-2'));
+  await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
+    '#hosted-check-status')?.disabled).toBe(false));
+  expect(root.textContent).toContain('No result reported');
+  expect(root.textContent).not.toContain('no longer have permission');
+  expect(root.textContent).not.toContain('change-1');
+  expect(root.textContent).not.toContain('All four image checks passed');
+  root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(6));
+  expect(fetch.mock.calls[5]?.[0]).toBe('/api/org/integrations/server-2/admission');
+});
+
+it('moves focus to the new image field after choosing another version', async () => {
+  const signature = { ...check('pass'), verdict: 'fail', reasonCodes: ['unsigned'] };
+  const rejected = { ...admission('pass', 'rejected'), checks: {
+    signature, licence: { verdict: 'not_run' }, vulnerability: { verdict: 'not_run' },
+    malware: { verdict: 'not_run' } } };
+  const root = await showAdmission(rejected);
+  const buttons = Array.from(root.querySelectorAll('button'));
+  const choose = buttons.find(isAlternativeButton);
+  if (!choose) throw new Error('Expected another version action');
+  choose.focus();
+  expect(document.activeElement).toBe(choose);
+  choose.click();
+  await vi.waitFor(() => expect(root.querySelector('#image-locator')).not.toBeNull());
+  await vi.waitFor(() => expect(document.activeElement).toBe(root.querySelector('#image-locator')));
 });
 
 it('ignores an old successful GET after a newer GET refuses access', async () => {

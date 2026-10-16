@@ -135,6 +135,30 @@ async function capture(browser, frame, width) {
   }
 }
 
+async function captureAnotherVersion(browser, width) {
+  const page = await browser.newPage({ viewport: { width, height: width === 1280 ? 900 : 844 },
+    reducedMotion: 'reduce' });
+  await page.clock.install({ time: new Date('2026-10-15T10:02:00.000Z') });
+  await page.route('**/*', serve.bind(null, 'INT-14'));
+  try {
+    await page.goto(`${origin}/org/integrations/new`);
+    await prepare(page, 'INT-14');
+    const choose = page.getByRole('button', { name: 'Choose another signed version' });
+    await choose.focus();
+    await page.keyboard.press('Enter');
+    const imageField = page.getByLabel('Image pinned by sha256 digest');
+    await imageField.waitFor();
+    assert(await imageField.evaluate(hasFocus),
+      `The new image field must take focus after keyboard activation at ${width}px`);
+    assert(await page.evaluate(pageHasNoOverflow), `The new form overflows at ${width}px`);
+    const filename = `INT-14-EDIT-${width}.png`;
+    await page.screenshot({ path: `${output}/${filename}`, fullPage: true });
+    return filename;
+  } finally {
+    await page.close();
+  }
+}
+
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
@@ -143,6 +167,9 @@ try {
     for (const width of [1280, 390]) {
       captures.push(await capture(browser, frame, width));
     }
+  }
+  for (const width of [1280, 390]) {
+    captures.push(await captureAnotherVersion(browser, width));
   }
   const receipt = '# Hosted package admission screens\n\n' +
     'PASS: Captured checking, signature refusal, licence refusal and scanner-unavailable ' +
