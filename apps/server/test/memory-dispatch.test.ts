@@ -1047,3 +1047,147 @@ async function refusesForgetAtFinalAccess(race: typeof finalAccessRaces[number])
 it.each(finalAccessRaces)(
   'refuses $destination when a loaded forget is saved $timing final access',
   refusesForgetAtFinalAccess);
+
+async function refusesDamagedScopeHistory(damage: 'backwards' | 'incomplete') {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  await changeLoadedMemory('forget', 'unloaded-older');
+  const scopeSubject = `scope-${scopeId}`;
+  const olderPosition = await setup.nats.store.head(scopeSubject);
+  const olderRows = await history(setup.nats.store, scopeSubject, 'test');
+  const olderRow = olderRows.at(-1)!;
+  await changeLoadedMemory('forget', 'unloaded-newer');
+  const position = await setup.nats.store.head(scopeSubject);
+  let armed = false;
+  const admit = setup.actor.admitDispatch.bind(setup.actor);
+  async function damageAtAdmission(...args: Parameters<typeof admit>) {
+    armed = true;
+    if (damage === 'incomplete') await changeLoadedMemory('forget', 'unloaded-last');
+    return admit(...args);
+  }
+  const head = setup.nats.store.head.bind(setup.nats.store);
+  async function restoredPosition(...args: Parameters<typeof head>) {
+    if (armed && args[0] === scopeSubject && damage === 'backwards') return olderPosition;
+    return head(...args);
+  }
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  async function* damagedHistory(...args: Parameters<typeof read>) {
+    if (armed && args[0] === scopeSubject) {
+      expect(args[1]).toBe(position + 1);
+      // Simulate a restored older snapshot, or a read missing its newest event.
+      if (damage === 'backwards') yield olderRow;
+      return;
+    }
+    yield* read(...args);
+  }
+  const admission = vi.spyOn(setup.actor, 'admitDispatch');
+  admission.mockImplementation(damageAtAdmission);
+  const headSpy = vi.spyOn(setup.nats.store, 'head');
+  headSpy.mockImplementation(restoredPosition);
+  const readSpy = vi.spyOn(setup.nats.store, 'readStream');
+  readSpy.mockImplementation(damagedHistory);
+  const dispatches = setup.actor.state.dispatches.length;
+  try {
+    const response = await setup.call();
+    expect(response.status, response.text).toBe(403);
+    expect(response.text).toContain('memory_context_unavailable');
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.dispatches).toHaveLength(dispatches);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBe(0);
+  } finally {
+    admission.mockRestore();
+    headSpy.mockRestore();
+    readSpy.mockRestore();
+  }
+}
+it.each(['backwards', 'incomplete'] as const)(
+  'refuses loaded memory with %s scope history at final admission', refusesDamagedScopeHistory);
+
+async function expiresDuringFinalAccess() {
+  const expires = Date.now() + 60_000;
+  await seedRecallFact('private-fact', new Date(expires).toISOString());
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const clock = vi.spyOn(Date, 'now');
+  clock.mockReturnValue(expires - 1);
+  let armed = false;
+  let advanced = false;
+  const admit = setup.actor.admitDispatch.bind(setup.actor);
+  async function armAtAdmission(...args: Parameters<typeof admit>) {
+    armed = true;
+    return admit(...args);
+  }
+  const confirm = decisionAccess.confirmDecisionAccess;
+  async function advanceAfterAccess(...args: Parameters<typeof confirm>) {
+    await confirm(...args);
+    if (armed) {
+      clock.mockReturnValue(expires);
+      advanced = true;
+    }
+  }
+  const admission = vi.spyOn(setup.actor, 'admitDispatch');
+  admission.mockImplementation(armAtAdmission);
+  const access = vi.spyOn(decisionAccess, 'confirmDecisionAccess');
+  access.mockImplementation(advanceAfterAccess);
+  const dispatches = setup.actor.state.dispatches.length;
+  try {
+    const response = await setup.call();
+    expect(advanced).toBe(true);
+    expect(response.status, response.text).toBe(403);
+    expect(response.text).toContain('memory_context_unavailable');
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.dispatches).toHaveLength(dispatches);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBe(0);
+  } finally {
+    clock.mockRestore();
+    admission.mockRestore();
+    access.mockRestore();
+  }
+}
+it('refuses loaded memory when expiry advances during final confirmation', expiresDuringFinalAccess);
+
+async function refusesUnsettledMemoryAtDeadline() {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const clock = vi.spyOn(performance, 'now');
+  let armed = false;
+  let rounds = 0;
+  let originalDeadline: number | undefined;
+  const admit = setup.actor.admitDispatch.bind(setup.actor);
+  async function armAtAdmission(...args: Parameters<typeof admit>) {
+    armed = true;
+    return admit(...args);
+  }
+  const confirm = decisionAccess.confirmDecisionAccess;
+  async function changeAfterEachAccess(...args: Parameters<typeof confirm>) {
+    await confirm(...args);
+    if (!armed) return;
+    originalDeadline ??= args[1].deadline;
+    expect(args[1].deadline).toBe(originalDeadline);
+    rounds += 1;
+    await changeLoadedMemory('forget', `unloaded-${rounds}`);
+    if (rounds === 3) clock.mockReturnValue(originalDeadline);
+  }
+  const admission = vi.spyOn(setup.actor, 'admitDispatch');
+  admission.mockImplementation(armAtAdmission);
+  const access = vi.spyOn(decisionAccess, 'confirmDecisionAccess');
+  access.mockImplementation(changeAfterEachAccess);
+  const dispatches = setup.actor.state.dispatches.length;
+  try {
+    const response = await setup.call();
+    expect(rounds).toBe(3);
+    expect(response.status, response.text).toBe(403);
+    expect(response.text).toContain('memory_context_unavailable');
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.dispatches).toHaveLength(dispatches);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBe(0);
+  } finally {
+    clock.mockRestore();
+    admission.mockRestore();
+    access.mockRestore();
+  }
+}
+it('refuses repeated memory changes at the original access deadline',
+  refusesUnsettledMemoryAtDeadline);
