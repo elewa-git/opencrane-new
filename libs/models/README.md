@@ -20,7 +20,7 @@ flowchart LR
   models -->|rechecks loaded memory after access; checks revision, spending, catalogue expiry, holds and root stops before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
-  models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
+  models -->|stages credentials, scans bounded pages and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks access and saved work; records admissions, spending, unsent releases and relay closures| store["libs/event-store<br/>event log"]
@@ -315,7 +315,11 @@ staging and saving. It keeps current references. After the save deadline, it rec
 that the unsaved operation is closed, so a delayed save cannot succeed. Only a confirmed
 closure or another saved conflict permits deletion of that exact stored version.
 Closing a replacement keeps the previous token and records the closed generation number.
-A later replacement uses the next number. Automatic scanning is still planned.
+A later replacement uses the next number. A separate live maintenance call scans one
+small page of private credentials. After restart, it can rebuild missing repair records
+from confirmed saved identities. It keeps uncertain stages and changed storage identities.
+Older credentials without discovery details stay in storage for individual checks.
+Automatic cleanup after a revoke or replacement is still planned.
 The event store checks profile changes and admin blocks together when it saves a profile.
 If the block is saved first, the profile save is refused, even if its access check has finished.
 A simultaneous change to another connection can also refuse the save; the caller can retry.

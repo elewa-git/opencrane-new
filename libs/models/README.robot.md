@@ -1789,7 +1789,7 @@ The operation id hashes silo, subject and changeRef. History retains retry ident
 NATS deduplication. A retry must recover the same private material and exact identity and
 match the saved payload. Confirmed appends are read back and compared before returning.
 Unknown appends retain custody; these commands never delete it. Explicit candidate cleanup
-is described below. Scanning remains planned. `foldConnection` keeps old or incomplete
+and bounded live scanning are described below. `foldConnection` keeps old or incomplete
 records unavailable and new profiles `saved_unverified`. It reads no secret store and starts
 no work.
 
@@ -1859,8 +1859,8 @@ preconditions. A conflict, missing record or failed read returns `retained`, wit
 copying dependency errors or adopting a replacement identity.
 
 This is the first bounded cleanup part under the approximately 600-line review target.
-Candidate scanning, journal reconstruction from custody enumeration, automatic revoke/rotation
-reactions and tracking future active credential injections remain planned. The caller must
+Automatic revoke/rotation reactions and tracking future active credential injections
+remain planned. Bounded scanning and journal reconstruction are described below. The caller must
 supply a trusted private stage, never browser input. All credentialed routes stay closed.
 
 P3-8 PR 3c adds the strict `connection.operation_closed` event. Its id hashes silo, subject,
@@ -2412,3 +2412,34 @@ PARTIAL: this is steps 1–3 of row 4. Part b adds `tool.dispatch_started`, its 
 append and uncertain-reply tests, and the final access and MCP position checks after saving.
 No event contract changes belong to this first part. Row 5 still supplies the guarded
 destination; production routes remain empty. Fresh-install journey: SKIP.
+
+## Bounded connection maintenance (P3-8 PR 3d, Part of #49)
+
+`reconcileConnectionPage(store, db, custody, continuation?)` is a private live-maintenance
+entry point. Each call lists at most 25 Secrets in the configured custody namespace,
+using the managed-by label. It reads at most 1 MiB and accepts a continuation of at most
+4,096 characters. It passes each verified stage through `reconcileConnectionStage`.
+The result contains counts and a private continuation, never credential material.
+Callers retain that continuation between pages and start a new pass after the last page.
+An unknown page result must be retried with the same continuation. An expired Kubernetes
+continuation requires a new pass; duplicate checks are harmless. No timer, command,
+HTTP route or replay path calls this entry point yet.
+
+New stages carry their complete stage details in a private Secret annotation. The
+existing HMAC check verifies these details before using them to find the profile.
+The list response cannot establish the original UID or resourceVersion. Under the
+profile lock, the reconciler reads history and checks the original activation through
+`foldConnection`. Only a matching saved stage can supply its recorded exact identity
+when journal files are missing. Exclusive journal writes preserve existing records;
+corrupt or conflicting records are not replaced. Unknown unsaved stages without their
+original identity remain stored. A later confirmed activation can provide that evidence.
+Older Secrets without the annotation remain stored and need a trusted stage supplied
+to the existing individual reconciler. This change does not migrate those Secrets.
+
+Tests use real NATS, PostgreSQL locks and synthetic HTTP custody. They cover restart,
+late activation, missing and corrupt records, revoke and rotation, changed UID/version,
+store/list/read/lock failure, non-personal candidates, duplicate scans, bounded pages
+while earlier pages are deleted, response limits and replay without external work.
+Automatic reactions and active credential injection coordination are deferred to the
+next part. Credentialed routes remain closed. Live Kubernetes/provider and fresh-install
+qualification: NOT RUN. No dependency, event field or API field was added.

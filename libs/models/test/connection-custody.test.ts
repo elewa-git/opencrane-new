@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AppendCommand } from '@opencrane/event-store';
+import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, rm, readdir, readFile, stat, writeFile } from 'node:fs/promises';
@@ -77,15 +77,22 @@ async function fixture() {
       const names = [...secrets.keys()];
       names.sort();
       for (const name of names) {
-        if (name > after && items.length < limit) items.push(secrets.get(name)!);
+        if (name > after && items.length < limit) {
+          items.push(secrets.get(name)!);
+        }
       }
       pages.push(items.length);
       let continuation = '';
-      if (items.length === limit) continuation = items.at(-1)!.metadata.name;
+      if (items.length === limit) {
+        continuation = items.at(-1)!.metadata.name;
+      }
       response.end(JSON.stringify({ items, metadata: { continue: continuation } }));
       return;
     }
-    if (request.method !== 'POST') secret = secrets.get(url.pathname.split('/').at(-1)!);
+    if (request.method !== 'POST') {
+      const segments = url.pathname.split('/');
+      secret = secrets.get(segments.at(-1)!);
+    }
     const chunks: Buffer[] = [];
     for await (const chunk of request) {
       if (!Buffer.isBuffer(chunk)) throw new Error('Fixture request invalid');
@@ -159,7 +166,8 @@ async function fixture() {
     return connectionCustody(`http://127.0.0.1:${port}`, 'custody', keyring, directory);
   }
   const custody = restart();
-  return { custody, restart, directory, pages, secrets, get secret() { return secret!; }, get creates() { return creates; },
+  return { custody, restart, directory, pages, secrets,
+    get secret() { return secret!; }, get creates() { return creates; },
     get deletes() { return deletes; }, get preconditions() { return preconditions; },
     loseCreate() { loseCreate = true; }, changeOnDelete() { changeOnDelete = true; },
     fail() { unavailable = true; },
@@ -570,7 +578,15 @@ async function keepsCurrentAndReplay() {
   const rows = await history(events.store, test.subject, 'test');
   const recovery = vi.spyOn(test.store.custody, 'recover');
   const removal = vi.spyOn(test.store.custody, 'remove');
+  const enumeration = vi.spyOn(test.store.custody, 'candidates');
+  const provider = vi.spyOn(globalThis, 'fetch');
+  const append = vi.spyOn(events.store, 'append');
   const replayed = foldConnection(rows);
+  expect(enumeration).not.toHaveBeenCalled();
+  expect(provider).not.toHaveBeenCalled();
+  expect(append).not.toHaveBeenCalled();
+  provider.mockRestore();
+  append.mockRestore();
   expect(replayed.status).toBe('saved_unverified');
   expect(recovery).not.toHaveBeenCalled();
   expect(removal).not.toHaveBeenCalled();
@@ -864,13 +880,20 @@ async function scanFailure(failure: string) {
   await test.activate();
   await test.invalidate();
   const faults = [];
-  function fail(): never { throw new Error(material); }
+  function fail(): never {
+    throw new Error(material);
+  }
   if (failure === 'uid' || failure === 'resourceVersion') {
     await forgetJournal(test);
     test.store.secret.metadata[failure] = 'changed';
+  } else if (failure === 'journal-write') {
+    await forgetJournal(test);
+    await writeFile(test.store.directory, material);
   } else if (failure === 'journal') {
     const files = await readdir(test.store.directory);
-    for (const file of files) await writeFile(`${test.store.directory}/${file}`, '{}');
+    for (const file of files) {
+      await writeFile(`${test.store.directory}/${file}`, '{}');
+    }
   } else if (failure === 'list') {
     test.store.failReads();
   } else if (failure === 'read') {
@@ -897,10 +920,12 @@ async function scanFailure(failure: string) {
     expect(test.store.deletes).toBe(0);
     expect(test.store.secrets.size).toBe(1);
   } finally {
-    for (const fault of faults) fault.mockRestore();
+    for (const fault of faults) {
+      fault.mockRestore();
+    }
   }
 }
-it.each(['uid', 'resourceVersion', 'journal', 'list', 'read', 'store', 'lock'])(
+it.each(['uid', 'resourceVersion', 'journal', 'journal-write', 'list', 'read', 'store', 'lock'])(
   'retains enumerated material when %s fails', scanFailure);
 
 async function scanPages() {
@@ -915,7 +940,9 @@ async function scanPages() {
   let deleted = 0;
   do {
     const result = await scan(test, continuation);
-    if (result.status !== 'scanned') throw new Error('Fixture scan failed');
+    if (result.status !== 'scanned') {
+      throw new Error('Fixture scan failed');
+    }
     examined += result.examined;
     deleted += result.deleted;
     continuation = result.continuation;
@@ -939,10 +966,113 @@ it('never adopts a listed UID without independent journal or event evidence', sc
 async function scanNonPersonal() {
   const test = await candidateFixture();
   test.store.finishDeletion();
-  const other = { ...test.input, purpose: 'company' as const, operationId: 'company' };
+  const other = { ...test.input, purpose: 'company' as const, operationId: 'company',
+    generation: 2 };
   await test.store.custody.stage(other, material);
   await test.invalidate();
   expect(await scan(test)).toMatchObject({ examined: 1, deleted: 0 });
   expect(test.store.deletes).toBe(0);
 }
 it('keeps non-personal candidates even with a later profile revocation', scanNonPersonal);
+
+
+async function refusesInvalidRecovery(result: 'status' | 'identity') {
+  const test = await candidateFixture();
+  await test.invalidate();
+  const custody = test.store.restart();
+  const actual = await custody.recover(test.input);
+  const recovery = vi.spyOn(custody, 'recover');
+  if (result === 'status') {
+    recovery.mockResolvedValue({ status: 'conflict', identity: actual.identity! });
+  } else {
+    recovery.mockResolvedValue({ status: 'recovered' });
+  }
+  const removal = vi.spyOn(custody, 'remove');
+  expect(await reconcileConnectionPage(events.store, test.db, custody)).toMatchObject({ deleted: 0 });
+  expect(removal).not.toHaveBeenCalled();
+}
+it.each(['status', 'identity'] as const)(
+  'keeps candidates when recovery has an invalid %s', refusesInvalidRecovery);
+
+async function refusesMissingLockBeforeReadingProfile() {
+  const profile = { ...stage };
+  function unavailable(): never {
+    throw new Error('Profile read before lock check');
+  }
+  Object.defineProperty(profile, 'siloId', { get: unavailable });
+  const work = vi.fn();
+  await expect(withConnectionStage({}, profile, work)).rejects.toThrow(
+    'Connection coordination unavailable');
+  expect(work).not.toHaveBeenCalled();
+}
+it('refuses missing coordination before using candidate details', refusesMissingLockBeforeReadingProfile);
+
+async function refusesUntrustedListing(change: string) {
+  const test = await candidateFixture();
+  await test.activate();
+  await test.invalidate();
+  if (change === 'missing') {
+    delete test.store.secret.metadata.annotations['opencrane.ai/stage'];
+  } else if (change === 'binding') {
+    const altered = { ...test.input, appendUntil: 1 };
+    test.store.secret.metadata.annotations['opencrane.ai/stage'] = JSON.stringify(altered);
+  } else {
+    test.store.secret.metadata.annotations['opencrane.ai/stage'] = '{';
+  }
+  await scan(test);
+  expect(test.store.deletes).toBe(0);
+}
+it.each(['missing', 'binding', 'malformed'])(
+  'keeps material with %s private discovery metadata', refusesUntrustedListing);
+
+async function refusesUnboundedPage(kind: string) {
+  const test = await candidateFixture();
+  const original = structuredClone(test.store.secret);
+  let body: string;
+  if (kind === 'count') {
+    body = JSON.stringify({ items: Array(26).fill(original), metadata: {} });
+  } else if (kind === 'bytes') {
+    body = ' '.repeat(1_048_577);
+  } else {
+    body = JSON.stringify({ items: [original], metadata: { continue: 'x'.repeat(4097) } });
+  }
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  fetch.mockResolvedValue(new Response(body));
+  try {
+    expect(await scan(test)).toEqual({ status: 'unknown' });
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    fetch.mockRestore();
+  }
+}
+it.each(['count', 'bytes', 'continuation'])(
+  'refuses a custody page exceeding the %s bound', refusesUnboundedPage);
+
+
+async function refusesMismatchedSavedStage() {
+  const test = await candidateFixture();
+  await test.activate();
+  const rows = await history(events.store, test.subject, 'test');
+  const saved = foldConnection(rows).data!;
+  const changed = { ...saved, activation: { ...saved.activation, appendUntil: 1 } };
+  const event = { ...rows[0]!.event, data: changed };
+  const conflicting: StoredEvent[] = [{ ...rows[0]!, event }];
+  await test.invalidate();
+  const current = await history(events.store, test.subject, 'test');
+  conflicting.push(current[1]!);
+  await forgetJournal(test);
+  async function* wrongRecord() {
+    const recovered = await Promise.resolve(conflicting);
+    yield* recovered;
+  }
+  const reading = vi.spyOn(events.store, 'readStream');
+  reading.mockImplementation(wrongRecord);
+  try {
+    expect(await scan(test)).toMatchObject({ examined: 1, deleted: 0 });
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    reading.mockRestore();
+  }
+}
+it('requires the saved activation to match the private stage before rebuilding records',
+  refusesMismatchedSavedStage);
