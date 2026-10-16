@@ -125,9 +125,7 @@ export class SurveyScreen implements OnDestroy {
       this.progress.set(parsed);
       this.draftWithoutProgress = false;
       if (!keepDraft) {
-        this.nameDraft.restore(parsed.survey.steps[0]?.answers);
-        this.restoreSavedWork(parsed);
-        this.choices.restore(parsed.survey.steps);
+        this.restoreConfirmedAnswers(parsed);
         this.openStep(parsed.survey.nextStep ?? 4);
       }
       this.state.set('ready');
@@ -155,6 +153,12 @@ export class SurveyScreen implements OnDestroy {
       return;
     }
     this.workDescription.set(secondStep.data.workDescription);
+  }
+
+  private restoreConfirmedAnswers(progress: Progress): void {
+    this.nameDraft.restore(progress.survey.steps[0]?.answers);
+    this.restoreSavedWork(progress);
+    this.choices.restore(progress.survey.steps);
   }
 
   private clearAccess(): void {
@@ -479,7 +483,7 @@ export class SurveyScreen implements OnDestroy {
   protected keepSavedProgress(): void {
     const progress = this.progress();
     if (this.state() !== 'recovered' || !progress) return;
-    this.nameDraft.restore(progress.survey.steps[0]?.answers);
+    this.restoreConfirmedAnswers(progress);
     this.openStep(progress.survey.nextStep ?? 4);
     this.state.set('ready');
   }

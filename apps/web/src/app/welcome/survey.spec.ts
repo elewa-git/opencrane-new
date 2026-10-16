@@ -408,6 +408,7 @@ describe('welcome survey', () => {
       fixture.detectChanges();
       expect(element.querySelector<HTMLTextAreaElement>('#survey-work')?.value)
         .toBe('Teaching colleagues');
+      expect(buttonNamed(element, 'Continue').disabled).toBe(false);
     });
     buttonNamed(element, 'Continue').click();
     fixture.detectChanges();

@@ -55,6 +55,11 @@ async function serve(state, route) {
 }
 
 async function prepare(page, state) {
+  if (state === 'assistant') {
+    await page.getByText('Persona review is not available yet.').waitFor();
+    assert.equal(await page.getByText('Your assistant is assigned').count(), 0);
+    return;
+  }
   if (state === 'ONB-16') {
     await page.getByText('Steps 1–2 saved').waitFor();
     return;
@@ -93,13 +98,16 @@ async function capture(browser, width, state) {
   });
   await page.route('**/*', serve.bind(null, state));
   try {
-    await page.goto(`${origin}/welcome/survey`);
+    const path = state === 'assistant' ? '/account/assistant' : '/welcome/survey';
+    await page.goto(`${origin}${path}`);
     await prepare(page, state);
     await page.evaluate(waitForFonts);
     assert(await page.evaluate(pageHasNoOverflow), `${state} overflows at ${width}px`);
-    const selector = 'button:visible, input:not([type=checkbox]):visible, a:visible';
-    const small = await page.locator(selector).evaluateAll(findSmallControls);
-    assert.deepEqual(small, [], `${state} controls meet 44px at ${width}px`);
+    if (state !== 'assistant') {
+      const selector = 'button:visible, input:not([type=checkbox]):visible, a:visible';
+      const small = await page.locator(selector).evaluateAll(findSmallControls);
+      assert.deepEqual(small, [], `${state} controls meet 44px at ${width}px`);
+    }
     const filename = `${state}-${width}.png`;
     await page.screenshot({ path: `${output}/${filename}`, fullPage: true });
     return filename;
@@ -124,7 +132,7 @@ const browser = await chromium.launch({ headless: true });
 try {
   const states = ['ONB-13', 'ONB-14', 'ONB-14-long', 'ONB-15-saving', 'ONB-15-failed',
     'ONB-15-conflict',
-    'ONB-15-unknown', 'ONB-16', 'complete'];
+    'ONB-15-unknown', 'ONB-16', 'complete', 'assistant'];
   for (const width of [1280, 390]) {
     for (const state of states) await capture(browser, width, state);
   }
