@@ -319,6 +319,13 @@ Agent Sandbox Pods under gVisor on `ocn`. Helm packaging is Phase 5, following
 [the owner's 1 October decision](https://github.com/elewa-git/opencrane-new/issues/7).
 A dev-stack PASS does not claim OIDC, R3, failover or disaster-recovery qualification.
 
+The [Phase 5 qualification spec](docs/specs/phase-5/spec.md) and its
+[PR rows](docs/specs/phase-5/tickets.md) separate local and hosted proof. The
+[16 October default](https://github.com/elewa-git/opencrane-new/issues/15#issuecomment-6209646545)
+lets local k3d packaging and drills start alongside Phase 4. Hosting still waits
+for the owner. P3-22 and P4-28 retain their product journeys and live completion
+gates; Phase 5 reruns them on fresh packaged installs.
+
 ## Estimate
 
 Measured rate: about **5 whole features per nightly cycle**. On 1 October,
@@ -407,7 +414,7 @@ Record the source commit in each copied file's header or README.
 - **Dreaming:** budget the nightly job, keep it within one scope, record changes as `memory.corrected`, and test correction, forgetting and replay.
 - **Recall quality:** qualify Postgres full-text search on real tasks before adding vector search or a later projection.
 - **Persistent volumes hold sensitive state:** use per-silo encrypted storage and short-lived tokens only; keep memory off the shared computer's disk and prevent a volume from being mounted by another computer identity.
-- **Scope creep:** a phase starts only when the previous phase's live PASS is in the ledger.
+- **Scope creep:** a phase starts only when the previous phase's live PASS is in the ledger, except the owner-authorised local Phase 5 rows described above. This exception changes scheduling, not product completion or hosted acceptance.
 
 ## Model selection decision — 2 October 2026
 
