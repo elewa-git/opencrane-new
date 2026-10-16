@@ -1,5 +1,8 @@
 import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { beforeAll, expect, it } from 'vitest';
 import { z } from 'zod';
 import { hostedImageCheckedSchema } from '@opencrane/events';
@@ -99,6 +102,34 @@ async function acceptsExactImage(architecture: string) {
   expect(hostedImageCheckedSchema.safeParse(incomplete).success).toBe(false);
 }
 it.each(['amd64', 'arm64'])('verifies the signed %s subject and all stored bytes', acceptsExactImage);
+
+function shellQuote(value: string) {
+  return "'" + value.replaceAll("'", "'\\''") + "'";
+}
+
+async function verifiesWithoutNetwork() {
+  const directory = await mkdtemp(join(tmpdir(), 'hosted-offline-test-'));
+  try {
+    const tracePath = join(directory, 'network.trace');
+    const wrapperPath = join(directory, 'cosign');
+    // Block socket creation and record attempts across every Cosign thread.
+    const script = '#!/bin/sh\nexec timeout 5s strace -f -e trace=network ' +
+      '-e inject=socket:error=EACCES -o ' + shellQuote(tracePath) + ' ' +
+      shellQuote(cosign) + ' "$@"\n';
+    const executable = { mode: 0o700 };
+    await writeFile(wrapperPath, script, executable);
+    const image = fixture();
+    const result = await image.verify(wrapperPath);
+    const trace = await readFile(tracePath, 'utf8');
+    expect(trace).not.toMatch(/socket\(AF_INET6?,/u);
+    expect(trace).toContain('exited with 0');
+    expect(result.verdict).toBe('pass');
+    expect(image.reads).toHaveLength(5);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+it('verifies a valid signature with no outbound network attempts', verifiesWithoutNetwork);
 
 const signatureFailures = ['unsigned', 'wrong_key', 'wrong_subject', 'wrong_repository',
   'revoked', 'scope', 'malformed', 'installer_key'];

@@ -94,6 +94,9 @@ jobs:
       - name: Install pinned NATS server
         run: sh scripts/fetch-nats.sh
 
+      - name: Install socket tracing for offline signature tests
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y strace
+
       # Authz tests use disposable Docker containers and the PostgreSQL service above.
       - name: Verify Docker for real OpenFGA tests
         run: docker info
