@@ -1,7 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -118,3 +118,82 @@ async function startsManaged() {
   expect(rows.filter(reservation)).toHaveLength(1);
 }
 it('starts managed without a static key and keeps it through a worker reload', startsManaged, 60_000);
+
+async function refusesConfiguration(problem: string) {
+  const setup = await managedFixture();
+  const patch = problem === 'fallback'
+    ? { MODEL_KEY_FILE: setup.options.keyFile } : { PROVIDER_SECRETS_DIR: undefined };
+  const process = await startModels(setup, patch);
+  await exited(process.child);
+  expect(process.child.exitCode).toBe(1);
+  const reason = problem === 'fallback' ? 'A fallback key file is still configured after switch-on'
+    : 'Provider custody is required after switch-on';
+  expect(process.diagnostics()).toContain(reason);
+  expect(process.diagnostics()).not.toContain(setup.options.keyFile);
+  await expect(process.config()).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(setup.received()).toBe(0);
+}
+it.each(['fallback', 'custody'])('refuses startup with %s configuration',
+  refusesConfiguration, 60_000);
+
+async function replaysWithoutCustody() {
+  const setup = await managedFixture();
+  const missing = `${dirname(setup.options.keyFile)}/missing-custody`;
+  const process = await startModels(setup, { PROVIDER_SECRETS_DIR: missing });
+  await expect.poll(process.ready, { timeout: 15_000 }).toBeUndefined();
+  const rows = await history(setup.nats.store, 'budget-test', 'test');
+  function reservation(row: typeof rows[number]) { return row.event.type === 'budget.reserved'; }
+  expect(rows.filter(reservation)).toHaveLength(0);
+  expect(await history(setup.nats.store, 'decision-*', 'test')).toHaveLength(0);
+  expect(setup.received()).toBe(0);
+  await expect(readFile(missing)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(process.diagnostics()).not.toContain(missing);
+}
+it('restarts ready with absent custody and creates no call or hold', replaysWithoutCustody, 60_000);
+
+async function stopsLegacy() {
+  const setup = await managedFixture('marker');
+  setup.headers['x-turn-token'] = await setup.sign(setup.t, 'decision-service');
+  const process = await startModels(setup, { MODEL_KEY_FILE: setup.options.keyFile });
+  await expect.poll(process.ready, { timeout: 15_000 }).toBeUndefined();
+  expect(await process.config()).toContain('backendAuth');
+  const enabled = { providerId: 'primary', revision: 3, changedBy: 'alice',
+    expectedProviderSequence: 0 };
+  await setup.append('budget-test', 'provider.managed_calls_enabled', enabled);
+  const started = performance.now();
+  try {
+    const response = await process.call();
+    expect(response.status).toBe(403);
+    await response.text();
+  } catch (error) {
+    // Accept connection closure when the process has already stopped admission.
+    if (!(error instanceof TypeError && error.message === 'fetch failed')) throw error;
+  }
+  await exited(process.child);
+  expect(performance.now() - started).toBeLessThan(3000);
+  expect(process.child.exitCode).toBe(1);
+  expect(setup.received()).toBe(0);
+}
+it('stops a legacy process after switch-on and refuses its next call', stopsLegacy, 60_000);
+
+async function refusesUnreadableMode() {
+  const setup = await managedFixture();
+  const directory = dirname(setup.options.keyFile);
+  const fifo = `${directory}/startup-barrier`;
+  execFileSync('mkfifo', [fifo]);
+  const process = await startModels(setup, { TOKEN_SIGNING_KEY_FILE: fifo });
+  // Wait for budget replay to finish and signing-file loading to begin.
+  const writer = await open(fifo, 'w');
+  setup.nats.pauseResponses(true);
+  try {
+    await writer.writeFile(await readFile(`${directory}/issuer.pem`));
+    await writer.close();
+    await exited(process.child);
+    expect(process.child.exitCode).toBe(1);
+    await expect(process.config()).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(setup.received()).toBe(0);
+  } finally {
+    setup.nats.pauseResponses(false);
+  }
+}
+it('refuses startup when the recorded mode cannot be read', refusesUnreadableMode, 60_000);
