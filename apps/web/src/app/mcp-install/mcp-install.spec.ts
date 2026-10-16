@@ -7,6 +7,10 @@ function screenRoot(fixture: ComponentFixture<McpInstall>): HTMLElement {
   return root;
 }
 
+function isPackageChoice(input: HTMLInputElement): boolean {
+  return input.closest('label')?.textContent?.includes('Package (OCI image)') ?? false;
+}
+
 function isRequestCall(value: unknown): value is [RequestInfo | URL, RequestInit | undefined] {
   if (!Array.isArray(value) || value.length < 2) return false;
   const options: unknown = value[1];
@@ -55,7 +59,7 @@ afterEach(() => {
   history.replaceState({}, '', '/');
 });
 
-it('offers only the remote URL source and names the unavailable choices', () => {
+it('offers remote and package sources while the catalogue stays unavailable', () => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(404));
   const fixture = TestBed.createComponent(McpInstall);
   fixture.detectChanges();
@@ -64,8 +68,8 @@ it('offers only the remote URL source and names the unavailable choices', () => 
   expect(radios).toHaveLength(3);
   expect(radios[0]?.disabled).toBe(true);
   expect(radios[1]?.checked).toBe(true);
-  expect(radios[2]?.disabled).toBe(true);
-  expect(root.textContent).toContain('Not available yet. Hosted packages need admission checks first.');
+  expect(radios[2]?.disabled).toBe(false);
+  expect(root.textContent).toContain('An exact image checked before it can run.');
   expect(root.querySelector('ol[aria-label="Add an integration steps"]')).not.toBeNull();
   expect(root.querySelector('nav[aria-label="Add an integration progress"]')).toBeNull();
   expect(root.querySelector('button[aria-label="Continue and discover tools"]')).not.toBeNull();
@@ -231,5 +235,29 @@ it('does not show the source choice on the page for a registered server', async 
     .toContain('Review MCP server'));
   expect(root.querySelector('fieldset.sources')).toBeNull();
   expect(root.textContent).not.toContain('Choose where the MCP server comes from.');
+  fixture.destroy();
+});
+
+it('shows the admission heading and hides source choices after package submission', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(202,
+    { serverId: 'server-1', changeRef: 'change-1' }));
+  const fixture = TestBed.createComponent(McpInstall);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  const packageChoice = [...root.querySelectorAll<HTMLInputElement>('input[name="source"]')]
+    .find(isPackageChoice);
+  packageChoice?.click();
+  fixture.detectChanges();
+  const locatorInput = root.querySelector<HTMLInputElement>('#image-locator');
+  const hostInput = root.querySelector<HTMLInputElement>('#upstream-host');
+  if (!locatorInput || !hostInput) throw new Error('Expected package form');
+  locatorInput.value = `registry.example.com/team/clock@sha256:${'a'.repeat(64)}`;
+  locatorInput.dispatchEvent(new Event('input', { bubbles: true }));
+  hostInput.value = 'api.github.com';
+  hostInput.dispatchEvent(new Event('input', { bubbles: true }));
+  root.querySelector('form')?.requestSubmit();
+  await vi.waitFor(() => expect(root.textContent).toContain('Registration saved'));
+  expect(root.querySelector('#add-heading')?.textContent).toContain('Package admission');
+  expect(root.querySelector('fieldset.sources')).toBeNull();
   fixture.destroy();
 });

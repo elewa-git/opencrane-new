@@ -2,10 +2,12 @@ import { SharedState, type PresentationState } from '../shared-state/shared-stat
 import { IntegrationsAccessLost } from '../integrations/integrations-access-lost';
 import { AddFlowSteps } from '../integrations/add-flow-steps';
 import { DogEar } from '../ui/paper';
+import { HostedInstall } from './hosted-install';
 import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   inject,
   signal,
   type OnInit,
@@ -40,7 +42,7 @@ type DiscoveryStatus = z.infer<typeof statusSchema>;
 
 @Component({
   selector: 'oc-mcp-install',
-  imports: [SharedState, DogEar, IntegrationsAccessLost, AddFlowSteps],
+  imports: [SharedState, DogEar, IntegrationsAccessLost, AddFlowSteps, HostedInstall],
   templateUrl: './mcp-install.html',
   styleUrl: './mcp-install.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,6 +52,7 @@ export class McpInstall implements OnInit {
   protected readonly toolGroups = [true, false];
   protected readonly serverId = new URLSearchParams(globalThis.location.search).get('server');
   protected readonly locator = signal('');
+  protected readonly source = signal<'remote' | 'hosted'>('remote');
   protected readonly phase = signal<
     'draft' | 'checking' | 'unknown' | 'needs_input' | 'failed' | 'access' | 'refused'
   >('draft');
@@ -58,6 +61,11 @@ export class McpInstall implements OnInit {
   protected readonly discoveredServerId = signal('');
   protected readonly inventory = signal<DiscoveryStatus['inventory']>(undefined);
   protected readonly message = signal('Enter the server address to discover its tools.');
+  protected readonly heading = computed(() => {
+    if (this.serverId) return 'Review MCP server';
+    if (this.source() === 'hosted' && this.phase() !== 'draft') return 'Package admission';
+    return 'Add an integration';
+  });
 
   ngOnInit(): void {
     if (this.serverId) {
@@ -77,6 +85,11 @@ export class McpInstall implements OnInit {
     if (this.phase() !== 'refused') return;
     this.phase.set('draft');
     this.message.set('Enter the server address to discover its tools.');
+  }
+
+  protected chooseSource(source: 'remote' | 'hosted'): void {
+    if (this.phase() !== 'draft') return;
+    this.source.set(source);
   }
 
   protected async submit(event: Event): Promise<void> {

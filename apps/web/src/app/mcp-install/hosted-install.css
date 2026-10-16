@@ -1,0 +1,24 @@
+:host { display: block; min-width: 0; }
+form, section { padding: 22px; border: 1px solid var(--oc-border-default);
+  border-radius: 12px; background: white; margin: 18px 0; }
+h2 { font-size: 16px; }
+label { display: block; margin: 16px 0 8px; font-weight: 600; }
+input, select { box-sizing: border-box; width: 100%; min-height: 44px; padding: 9px 12px;
+  border: 1px solid var(--oc-border-input); border-radius: 7px; font: inherit; }
+button, .button { display: inline-flex; align-items: center; justify-content: center;
+  box-sizing: border-box; min-height: 44px; padding: 8px 16px; border-radius: 7px;
+  border: 1px solid var(--oc-border-input); background: var(--oc-accent);
+  color: var(--oc-ink-strong); font: inherit; text-decoration: none; }
+.button { background: white; }
+button:disabled { opacity: .65; cursor: not-allowed; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.status { min-height: 1px; }
+li { padding: 12px 0; border-top: 1px solid var(--oc-border-default); }
+li span { display: block; color: var(--oc-ink-secondary); }
+.digest { overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--oc-focus-ring); outline-offset: 2px; }
+@media (max-width: 700px) {
+  form, section { padding: 16px; }
+  .actions { display: grid; }
+  .actions > * { width: 100%; }
+}

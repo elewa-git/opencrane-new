@@ -6,43 +6,48 @@
     <a href="/org/integrations">Integrations</a>
     <span class="breadcrumb-step">
       <span aria-hidden="true">›</span>
-      <span aria-current="page">{{ serverId ? 'Review MCP server' : 'Add an integration' }}</span>
+      <span aria-current="page">{{ heading() }}</span>
     </span>
   </nav>
   <h1 id="add-heading" tabindex="-1">
-    {{ serverId ? 'Review MCP server' : 'Add an integration' }}
+    {{ heading() }}
   </h1>
-  @if (!serverId) {
-    <p>Choose where the MCP server comes from. Protocol details are under Advanced.</p>
+  @if (!serverId && (source() !== 'hosted' || phase() === 'draft')) {
+    <p>Choose where the MCP server comes from.</p>
   }
   <oc-add-flow-steps [current]="phase() === 'draft' || phase() === 'refused' ? 1 : 2" />
 
-  @if (!serverId) {
+  @if (!serverId && (source() !== 'hosted' || phase() === 'draft')) {
     <fieldset class="sources">
       <legend>Source</legend>
       <label class="source-card unavailable">
         <input type="radio" name="source" disabled aria-describedby="catalogue-source-detail" />
         <span><strong>Catalogue</strong><span id="catalogue-source-detail">Not available yet</span></span>
       </label>
-      <label class="source-card selected" [ocDogEar]="true">
-        <input type="radio" name="source" checked aria-describedby="remote-source-detail" />
+      <label class="source-card" [class.selected]="source() === 'remote'" [ocDogEar]="source() === 'remote'">
+        <input type="radio" name="source" [checked]="source() === 'remote'"
+          [disabled]="phase() !== 'draft'" (change)="chooseSource('remote')"
+          aria-describedby="remote-source-detail" />
         <span>
           <strong>Remote server (URL)</strong>
           <span id="remote-source-detail">An HTTPS endpoint someone else runs.</span>
         </span>
       </label>
-      <label class="source-card unavailable">
-        <input type="radio" name="source" disabled aria-describedby="package-source-detail" />
+      <label class="source-card" [class.selected]="source() === 'hosted'" [ocDogEar]="source() === 'hosted'">
+        <input type="radio" name="source" [checked]="source() === 'hosted'"
+          [disabled]="phase() !== 'draft'" (change)="chooseSource('hosted')"
+          aria-describedby="package-source-detail" />
         <span>
           <strong>Package (OCI image)</strong>
-          <span id="package-source-detail">
-            Not available yet. Hosted packages need admission checks first.
-          </span>
+          <span id="package-source-detail">An exact image checked before it can run.</span>
         </span>
       </label>
     </fieldset>
   }
 
+  @if (!serverId && source() === 'hosted') {
+    <oc-hosted-install (started)="phase.set('checking')" />
+  } @else {
   @if (phase() !== 'access' && !serverId) {
     <form [attr.aria-busy]="busy()" (submit)="submit($event)">
       <label for="remote-url">Server URL</label>
@@ -107,5 +112,6 @@
   }
   @if (!serverId && (phase() === 'needs_input' || phase() === 'failed' || phase() === 'refused')) {
     <button type="button" class="secondary" (click)="another()">Add another server</button>
+  }
   }
 }

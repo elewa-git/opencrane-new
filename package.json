@@ -60,6 +60,7 @@
     "visual:screen-p4-6-list": "npm run build -w apps/web && node scripts/capture-screen-p4-6-list.mjs",
     "visual:screen-p4-19-survey": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-19-survey.mjs",
     "visual:screen-p4-23-explain": "npm run build -w apps/web && node scripts/capture-screen-p4-23-explain.mjs",
+    "visual:screen-p3-6-admission": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-6-admission.mjs",
     "visual:screen-p4-6-archive": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-6-archive.mjs",
     "visual:screen-p4-19-survey2": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-19-survey2.mjs",
     "visual:screen-p3-7-drift": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-7-drift.mjs",

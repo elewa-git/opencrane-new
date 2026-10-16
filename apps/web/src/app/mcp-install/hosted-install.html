@@ -1,0 +1,74 @@
+@if (phase() === 'access') {
+  <h2>Access refused</h2>
+  <p role="status">{{ message() }}</p>
+} @else {
+  @if (phase() === 'draft') {
+    <form (submit)="submit($event)">
+      <h2>Package details</h2>
+      <label for="image-locator">Image pinned by sha256 digest</label>
+      <input id="image-locator" type="text" autocomplete="off" required
+        placeholder="registry.example.com/team/image@sha256:…" [value]="locator()"
+        (input)="editLocator($any($event.target).value)" />
+      <p>A tag or image name without a digest cannot be submitted.</p>
+      <label for="image-platform">Platform</label>
+      <select id="image-platform" [value]="platform()"
+        (change)="editPlatform($any($event.target).value)">
+        <option value="linux/amd64">linux/amd64</option>
+        <option value="linux/arm64">linux/arm64</option>
+      </select>
+      <label for="upstream-host">Upstream host</label>
+      <input id="upstream-host" type="text" autocomplete="off" required
+        [value]="upstreamHost()" (input)="editHost($any($event.target).value)" />
+      <label for="upstream-port">Upstream port</label>
+      <input id="upstream-port" type="number" min="1" max="65535" required
+        [value]="upstreamPort()" (input)="editPort($any($event.target).value)" />
+      <div class="actions">
+        <button type="submit" [disabled]="busy()">Save package</button>
+        <a class="button" href="/org/integrations">Cancel</a>
+      </div>
+    </form>
+  }
+  <div class="status" role="status" aria-live="polite">
+    <p>{{ message() }}</p>
+    @if (changeRef()) { <p>Change reference: {{ changeRef() }}</p> }
+  </div>
+  @if (phase() !== 'draft') {
+    <section aria-label="Package admission">
+      <h2>Admission checks</h2>
+      @if (admission(); as result) {
+        <p>Queued {{ date(result.queuedAt) }}</p>
+        <p class="digest">Image sha256:{{ result.imageDigest }}</p>
+        <ul>
+          <li>Signature: {{ checkLabel(result.checks?.signature) }}
+            @if (checkDate(result.checks?.signature); as checkedAt) {
+              <span>Checked {{ checkedAt }}</span>
+            }
+          </li>
+          <li>Licence: {{ checkLabel(result.checks?.licence) }}
+            @if (checkDate(result.checks?.licence); as checkedAt) {
+              <span>Checked {{ checkedAt }}</span>
+            }
+          </li>
+          <li>Vulnerability: {{ checkLabel(result.checks?.vulnerability) }}
+            @if (checkDate(result.checks?.vulnerability); as checkedAt) {
+              <span>Checked {{ checkedAt }}</span>
+            }
+          </li>
+          <li>Malware: {{ checkLabel(result.checks?.malware) }}
+            @if (checkDate(result.checks?.malware); as checkedAt) {
+              <span>Checked {{ checkedAt }}</span>
+            }
+          </li>
+        </ul>
+      } @else {
+        <p>No dated check result has been returned.</p>
+      }
+      <p>Discovery is unavailable. No person or assistant gained access to this server.</p>
+      <div class="actions">
+        <button id="hosted-check-status" type="button" [disabled]="busy()"
+          (click)="checkStatus()">{{ busy() ? 'Checking status…' : 'Check status' }}</button>
+        <button id="hosted-continue" type="button" disabled>Continue</button>
+      </div>
+    </section>
+  }
+}

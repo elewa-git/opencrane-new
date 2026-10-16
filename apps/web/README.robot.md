@@ -99,7 +99,23 @@ An expired catalogue says that calls stay paused;
 there is no check-start API or restore action here. Run
 `npm run visual:screen-p3-7-drift` for intercepted desktop and phone captures.
 
-The add page accepts a remote HTTPS address and follows discovery status. When discovery
+The add page accepts a remote HTTPS address and follows discovery status. It also accepts
+a hosted package only as a sha256 digest locator, one supported Linux platform and a
+public upstream host and port. It posts one command id.
+The browser checks each encoded `xn--` host label by decoding and re-encoding it.
+The decoded label must contain a non-ASCII letter, mark or digit and no other
+characters except letters, marks, digits and hyphens. This catches a Chromium URL
+case that the server rejects before the browser sends a command.
+An uncertain POST keeps the command id
+and reads `/api/org/integrations/changes/:commandId` without posting again. Once the
+server id is known, Check status reads `/api/org/integrations/:serverId/admission`.
+The page shows the returned queue time and each check's verdict and date. It updates
+passed rows and the summary when the earliest check expires, even without another read. A failed read
+remains unavailable; 401 or 403 clears package details and ignores older replies. Four
+current passes still leave Continue disabled because discovery is unavailable. The
+intercepted browser capture and checks are in
+[the admission receipt](../../docs/process/screen-p3-6-admission/receipt.md).
+When discovery
 returns an inventory, the page links to Tools & access. That page saves a changed tool
 mode once. If its reply is lost, Check status reads the saved modes and never sends the
 save again. A saved tool policy stays visible until the server replies with new modes.
