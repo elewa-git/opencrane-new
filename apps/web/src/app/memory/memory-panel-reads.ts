@@ -1,7 +1,7 @@
 import { isDetail, type Detail, type Scope, type Source } from './memory-panel-data';
 
 export type DetailRead = { kind: 'ok'; detail: Exclude<Detail, { status: 'unavailable' }> } |
-  { kind: 'access' } | { kind: 'missing' } | { kind: 'unavailable' };
+  { kind: 'access' } | { kind: 'missing'; reason: string } | { kind: 'unavailable' };
 export type JsonRead = { kind: 'ok'; body: unknown } | { kind: 'access' } |
   { kind: 'invalid' } | { kind: 'conflict' } | { kind: 'missing' } | { kind: 'unavailable' };
 
@@ -28,7 +28,7 @@ export function detailResult(reply: JsonRead): DetailRead {
   if (reply.kind !== 'ok' || !isDetail(reply.body)) {
     return { kind: 'unavailable' };
   }
-  if ('status' in reply.body) return { kind: 'missing' };
+  if ('status' in reply.body) return { kind: 'missing', reason: reply.body.reason };
   return { kind: 'ok', detail: reply.body };
 }
 
@@ -55,6 +55,12 @@ export function isCurrentScopeRead(controller: AbortController, startedRequestId
 
 export function scopeHasId(scopeId: string, scope: Scope): boolean {
   return scope.scopeId === scopeId;
+}
+
+export function selectedScopeAudience(scopes: Scope[], scopeId: string): string {
+  const scope = scopes.find(scopeHasId.bind(null, scopeId));
+  if (!scope) return 'Audience unavailable';
+  return scopeAudience(scope);
 }
 
 export function waitForRetry(seconds: number, resolve: () => void): void {

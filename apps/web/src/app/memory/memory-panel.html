@@ -100,7 +100,7 @@
         }
       </dialog>
     }
-    @if (forgetTarget(); as target) {
+    @for (target of forgetTargets(); track target) {
       <oc-memory-forget [target]="target" (accepted)="forgetAccepted($event)"
         (reviewLatest)="reviewLatest($event)" (closed)="closeForget($event)"
         (accessLost)="forgetAccessLost($event)" />

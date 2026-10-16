@@ -16,7 +16,7 @@ flowchart LR
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices and access"]
   web -->|opens| integrations["Integrations pages<br/>register, add, changes, tools and access explanations"]
   web -->|opens and clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
-  web -->|reads, stores and forgets| memory["Memory panel<br/>scopes, personal facts, sources and safe receipts"]
+  web -->|reads, stores and forgets| memory["Memory panel<br/>scopes, personal facts, sources, safe receipts and forget outcomes"]
 ```
 
 ## What it is responsible for
@@ -158,7 +158,8 @@ assistant check open rather than guessing an answer.
 15. **A person forgets one of their facts.** The Memory panel asks them to review the effect
     before sending one request. The fact disappears when the server confirms it is hidden.
     The panel shows whether cleanup is pending, complete or unavailable. An uncertain reply
-    offers a status check for the same request.
+    offers a status check for the same request. A second fact gets its own review while the
+    first fact's pending outcome stays on the page.
 
 ## How to run or test it
 

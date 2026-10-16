@@ -1,6 +1,8 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryPanel } from './memory-panel';
+import { MemoryForget } from './memory-forget';
 import { isObject } from './memory-panel-data';
 
 const privateText = 'A private fact that must disappear.';
@@ -192,12 +194,13 @@ it('opens a fresh confirmation for a second fact and keeps the first outcome', a
   expect(text(fixture)).toContain('Hidden · cleanup pending');
   button(fixture, 'Forget from your memory').click();
   await vi.waitFor(() => expect(posts).toHaveLength(2));
-  const first = JSON.parse(posts[0] ?? '{}') as { commandId: string };
-  const second = JSON.parse(posts[1] ?? '{}') as { commandId: string };
-  expect(second.commandId).not.toBe(first.commandId);
+  const first: unknown = JSON.parse(posts[0] ?? '{}');
+  const second: unknown = JSON.parse(posts[1] ?? '{}');
+  if (!isObject(first) || !isObject(second)) throw new Error('Missing forget command');
+  expect(second['commandId']).not.toBe(first['commandId']);
 });
 
-it('allows one status read and keeps Forgotten after a late pending reply', async () => {
+it('allows only one status read while the first is in flight', async () => {
   let finishStatus: ((response: Response) => void) | undefined;
   const delayed = new Promise<Response>(resolve => { finishStatus = resolve; });
   const { fixture, statusGets } = await openDetail('person', undefined,
@@ -220,6 +223,28 @@ it('allows one status read and keeps Forgotten after a late pending reply', asyn
     fixture.detectChanges();
     expect(text(fixture)).toContain('Forgotten');
   });
+});
+
+it('keeps Forgotten when an older pending status body arrives late', async () => {
+  const { fixture } = await openDetail();
+  button(fixture, 'Forget').click();
+  fixture.detectChanges();
+  button(fixture, 'Forget from your memory').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Hidden · cleanup pending');
+  });
+  button(fixture, 'Check status').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Forgotten');
+  });
+  const forget: unknown = fixture.debugElement.query(By.directive(MemoryForget))?.componentInstance;
+  if (!(forget instanceof MemoryForget)) throw new Error('Missing Forget component');
+  forget['applyBody'](receipt('pending'));
+  fixture.detectChanges();
+  expect(text(fixture)).toContain('Forgotten');
+  expect(text(fixture)).not.toContain('Hidden · cleanup pending');
 });
 
 it.each(['group', 'assistant_notes'] as const)('hides Forget in %s detail', async kind => {

@@ -26,6 +26,7 @@ export class MemoryForget implements OnDestroy {
   readonly accessLost = output<ForgetTarget>();
   protected readonly state = signal<ForgetState>('review');
   protected readonly forgottenAt = signal('');
+  protected readonly statusReading = signal(false);
   private commandId: string | undefined;
   private alive = true;
   private acceptedOnce = false;
@@ -56,16 +57,19 @@ export class MemoryForget implements OnDestroy {
   }
 
   protected async checkStatus(): Promise<void> {
-    if (!this.commandId || this.state() === 'sending') return;
+    if (!this.commandId || this.state() === 'sending' || this.statusReading()) return;
     const target = this.target();
     const url = `/api/memory/${encodeURIComponent(target.scopeId)}/changes/` +
       encodeURIComponent(this.commandId);
+    this.statusReading.set(true);
     if (!this.acceptedOnce) this.state.set('sending');
     try {
       const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
       await this.readReply(response);
     } catch {
       if (this.alive && !this.acceptedOnce) this.state.set('unknown');
+    } finally {
+      if (this.alive) this.statusReading.set(false);
     }
   }
 
@@ -104,6 +108,7 @@ export class MemoryForget implements OnDestroy {
     }
     if (isReceipt(body) && body.memoryId === this.target().memoryId &&
       body.scopeId === this.target().scopeId) {
+      if (this.isFinalOutcome() && body.cleanupStatus === 'pending') return;
       this.forgottenAt.set(body.forgottenAt ?? '');
       this.state.set(body.cleanupStatus);
       if (!this.acceptedOnce) {
@@ -113,6 +118,10 @@ export class MemoryForget implements OnDestroy {
       return;
     }
     if (!this.acceptedOnce) this.state.set('unknown');
+  }
+
+  private isFinalOutcome(): boolean {
+    return this.state() === 'forgotten' || this.state() === 'unavailable';
   }
 }
 

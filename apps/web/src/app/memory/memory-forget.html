@@ -23,7 +23,7 @@
         Forget from your memory</button>
       <button type="button" (click)="cancel()">Cancel</button>
     } @else if (state() === 'unknown') {
-      <button type="button" (click)="checkStatus()">Check status</button>
+      <button type="button" [disabled]="statusReading()" (click)="checkStatus()">Check status</button>
     } @else if (state() === 'conflict') {
       <button type="button" (click)="review()">Review latest revision</button>
     }
@@ -33,7 +33,7 @@
   <div class="forget-outcome" role="status">
     @if (state() === 'pending') {
       <strong>Hidden · cleanup pending</strong><p>Not used in any new turn</p>
-      <button type="button" (click)="checkStatus()">Check status</button>
+      <button type="button" [disabled]="statusReading()" (click)="checkStatus()">Check status</button>
     } @else if (state() === 'forgotten') {
       <strong>Forgotten</strong><p>{{ formatDate() }}</p>
     } @else {

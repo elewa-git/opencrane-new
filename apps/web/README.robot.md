@@ -476,10 +476,14 @@ The detail shows Forget only when its current reply has `canForget: true` and th
 scope is the person's own scope. The review uses `oc-modal-sheet` and contains no fact text.
 It sends one `POST /api/memory/:scopeId/facts/:memoryId/forget` with a fresh `mem_` command id
 and the current detail revision. An accepted receipt removes the list row and detail text
-immediately. `cleanupStatus` controls the pending, forgotten and unavailable labels. Pending
-and unknown outcomes use `GET /api/memory/:scopeId/changes/:commandId`; they never POST again.
-Conflict offers one fresh detail read. A 401, 403 or 404 clears protected state, and late
-replies after a scope or requester change are ignored. The command remains in component memory
+immediately. It also clears search and stops older list and detail reads. A fresh detail read
+that reports a forgotten fact removes its old list row and clears search too. Each selected
+fact has its own command and review. A pending outcome for an earlier fact remains available
+while another fact is selected. `cleanupStatus` controls the pending, forgotten and unavailable
+labels. Pending and unknown outcomes use `GET /api/memory/:scopeId/changes/:commandId`; they
+never POST again. Only one status read runs at a time, and a late pending reply cannot replace
+a final outcome. Conflict offers one fresh detail read. A 401, 403 or 404 clears protected
+state. Late replies after a scope or requester change are ignored. The command remains in component memory
 only. Group and assistant-notes forget, edit, unpin and store Undo have no controls here.
 `memory-panel-forget.spec.ts` covers the review, one POST, safe outcome and refusals.
 `npm run visual:screen-p4-13-forget` captures both widths with intercepted replies;

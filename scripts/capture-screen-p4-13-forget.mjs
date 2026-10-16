@@ -22,6 +22,7 @@ function receipt(cleanupStatus) {
 }
 
 async function serveMemory(page, scenario, posts) {
+  let detailReads = 0;
   async function answer(route) {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -30,11 +31,18 @@ async function serveMemory(page, scenario, posts) {
     if (path === '/api/memory/scopes') body = { scopes: [scope] };
     else if (path.endsWith('/facts/fact-one/forget')) {
       posts.push(JSON.parse(request.postData() || '{}'));
-      if (scenario === 'conflict') { status = 409; body = { outcome: 'conflict' }; }
+      if (scenario === 'conflict' || scenario === 'forgotten-detail') {
+        status = 409;
+        body = { outcome: 'conflict' };
+      }
       else body = receipt('pending');
     } else if (path.includes('/changes/')) body = receipt('forgotten');
     else if (path.endsWith('/facts/fact-one')) {
-      body = { scopeId: scope.scopeId, fact, sources: [], canForget: true };
+      detailReads += 1;
+      if (scenario === 'forgotten-detail' && detailReads > 1) {
+        body = { status: 'unavailable', scopeId: scope.scopeId, memoryId: fact.memoryId,
+          revision: 4, reason: 'forgotten' };
+      } else body = { scopeId: scope.scopeId, fact, sources: [], canForget: true };
     } else {
       body = { scopeId: scope.scopeId, facts: [fact], returnedCount: 1, nextCursor: null };
     }
@@ -89,6 +97,21 @@ async function serveBuild(route) { await serveWebBuild(route, build); }
 function focusedText() { return globalThis.document.activeElement?.textContent?.trim(); }
 function headingHasFocus() { return globalThis.document.activeElement?.id === 'memory-title'; }
 function storageCount() { return globalThis.localStorage.length + globalThis.sessionStorage.length; }
+function enterSearch(input, value) {
+  input.value = value;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+async function assertFactHidden(page) {
+  assert.equal(await page.locator('.search input').inputValue(), '');
+  const results = await page.locator('.results').textContent();
+  assert(!results.includes(fact.text), 'The list still contains forgotten text');
+  const liveRegions = await page.locator('[aria-live], [role="status"], [role="alert"]')
+    .allTextContents();
+  for (const region of liveRegions) {
+    assert(!region.includes(fact.text), 'A live region still contains forgotten text');
+  }
+}
 
 async function captureWidth(browser, width) {
   const posts = [];
@@ -133,6 +156,27 @@ async function captureWidth(browser, width) {
     await capture(conflictPage, 'MEM-41-conflict', width);
     assert.equal(conflictPosts.length, 1);
   } finally { await conflictPage.close(); }
+
+  const searchedPage = await openPage(browser, width, 'accepted', []);
+  try {
+    await searchedPage.locator('.search input').evaluate(enterSearch, fact.text);
+    await searchedPage.getByRole('button', { name: 'Forget', exact: true }).click();
+    await searchedPage.getByRole('button', { name: 'Forget from your memory' }).click();
+    await searchedPage.getByText('Hidden · cleanup pending').waitFor();
+    await assertFactHidden(searchedPage);
+    await capture(searchedPage, 'MEM-42-search-cleared', width);
+  } finally { await searchedPage.close(); }
+
+  const forgottenPage = await openPage(browser, width, 'forgotten-detail', []);
+  try {
+    await forgottenPage.getByRole('button', { name: 'Forget', exact: true }).click();
+    await forgottenPage.getByRole('button', { name: 'Forget from your memory' }).click();
+    await forgottenPage.getByText('Changed before you forgot it').waitFor();
+    await forgottenPage.getByRole('button', { name: 'Review latest revision' }).click();
+    await forgottenPage.getByText('This fact or its text is no longer available.').waitFor();
+    await assertFactHidden(forgottenPage);
+    await capture(forgottenPage, 'MEM-43-review-hidden', width);
+  } finally { await forgottenPage.close(); }
 }
 
 const browser = await chromium.launch();
@@ -141,8 +185,10 @@ try {
   for (const width of [1280, 390]) await captureWidth(browser, width);
   await writeFile(`${output}/receipt.md`, `# Personal memory forget screen receipt\n\n` +
     `PASS: intercepted memory replies at 1280px and 390px with reduced motion.\n` +
-    `Captured detail, review, pending, forgotten and conflict. The review showed no fact text.\n` +
-    `After acceptance, the fact text was absent from the page. Each confirmation sent one POST.\n` +
+    `Captured detail, review, pending, forgotten, conflict, searched acceptance and a\n` +
+    `forgotten detail after conflict. The review showed no fact text. Search input, list\n` +
+    `and live regions held no forgotten text after either hidden outcome.\n` +
+    `Each confirmation sent one POST.\n` +
     `Visible dialog buttons were at least 44px high. No horizontal overflow, browser storage\n` +
     `or fact id in the address was found. No dev stack or live journey was run.\n`);
   console.log('PASS Personal memory forget screen captures');
