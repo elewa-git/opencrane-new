@@ -173,8 +173,10 @@ it('shows the WRK-12 waiting card without decision buttons', async () => {
 });
 
 it('names missing review fields and permits only the requester to deny', async () => {
+  const requested = card();
   const incomplete = {
-    ...card(), missingFields: ['orderId'], canApprove: false, canDeny: true,
+    ...requested, review: { ...requested.review, target: '' },
+    missingFields: ['orderId'], canApprove: false, canDeny: true,
   };
   const fetchImplementation = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === 'POST') return Promise.resolve(response([], 200));
@@ -183,6 +185,7 @@ it('names missing review fields and permits only the requester to deny', async (
   const fixture = await mount(fetchImplementation);
   const root = rootOf(fixture);
   expect(root.textContent).toContain('orderId');
+  expect(root.textContent).toContain('Not provided');
   expect(root.textContent).toContain('Approve is unavailable');
   const approve = requiredElement<HTMLButtonElement>(root, '.approval.pending .approve');
   expect(approve.disabled).toBe(true);
@@ -198,8 +201,9 @@ it('names missing review fields and permits only the requester to deny', async (
 
 it('keeps complete requester controls and hides participant decisions for incomplete reviews', async () => {
   const complete = { ...card(), missingFields: [], canApprove: true, canDeny: true };
+  const waiting = card('requested', false);
   const participant = {
-    ...card('requested', false), missingFields: ['orderId'],
+    ...waiting, review: { ...waiting.review, target: '' }, missingFields: ['orderId'],
     canApprove: false, canDeny: false,
   };
   const completeFixture = await mount(() => Promise.resolve(response([complete])));

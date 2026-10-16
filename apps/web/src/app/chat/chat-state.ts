@@ -107,11 +107,15 @@ export interface ToolActivityRecord {
   failed: boolean;
   time: string;
   callId?: string;
+  nativeRequestId?: string;
+  serverName?: string;
+  turnId?: string;
   status?: 'running' | 'completed' | 'failed' | 'finished' | 'unconfirmed';
   durationMs?: number;
 }
 
 export function toolKind(record: ToolActivityRecord): string {
+  if (record.nativeRequestId) return 'Native consent request';
   if (record.callId) return 'Governed tool call';
   if (record.label === 'Reply failed') {
     return 'Agent run';
@@ -120,6 +124,9 @@ export function toolKind(record: ToolActivityRecord): string {
 }
 
 export function toolActivityResult(record: ToolActivityRecord): string {
+  if (record.nativeRequestId) {
+    return 'Unsupported native consent · No gateway permission was granted.';
+  }
   if (record.status === 'running') return 'Running · The call has not finished.';
   if (record.status === 'unconfirmed') {
     return 'No finish report was received before the turn ended.';
@@ -289,6 +296,10 @@ function updateTurnTools(turn: Turn, row: ChatRow): void {
       detail: failureDetail(row.data.reason), failed: true, time: row.time });
     return;
   }
+  if (row.type === 'agent.native_consent_refused') {
+    addNativeConsentRefusal(turn, row);
+    return;
+  }
   if (row.type === 'agent.tool_call_started') {
     const toolName = row.data.toolName ?? 'Tool call';
     const callId = row.data.callId;
@@ -312,6 +323,22 @@ function updateTurnTools(turn: Turn, row: ChatRow): void {
   const label = succeeded ? 'Command completed' : 'Command failed';
   turn.tools.push({ id: row.id, label, detail: `Exit code ${row.data.exitCode ?? 'unknown'}`,
     failed: !succeeded, time: row.time });
+}
+
+function addNativeConsentRefusal(turn: Turn, row: ChatRow): void {
+  const nativeRequestId = row.data.nativeRequestId;
+  if (!nativeRequestId) return;
+  const refusal: ToolActivityRecord = {
+    id: row.id,
+    label: 'Unsupported native consent',
+    detail: 'No gateway permission was granted.',
+    failed: true,
+    nativeRequestId,
+    turnId: turn.id,
+    time: row.time,
+  };
+  if (row.data.serverName) refusal.serverName = row.data.serverName;
+  turn.tools.push(refusal);
 }
 
 function finishToolCall(turn: Turn, row: ChatRow): void {

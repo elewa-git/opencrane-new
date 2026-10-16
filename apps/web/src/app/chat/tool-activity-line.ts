@@ -30,6 +30,10 @@ export class ToolActivityLine {
 
   protected lineLabel(): string {
     const record = this.record();
+    if (record.nativeRequestId) {
+      const server = record.serverName ? ` · ${record.serverName}` : '';
+      return `Unsupported native consent · Request ${record.nativeRequestId}${server}`;
+    }
     if (record.status === 'running') return `${record.label} · Running`;
     if (record.status === 'unconfirmed') return `${record.label} · Unconfirmed`;
     if (record.status === 'completed') return `${record.label} · Completed`;

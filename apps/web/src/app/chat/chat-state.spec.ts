@@ -74,10 +74,15 @@ it('shows recorded native refusal with its request reference and no tool call', 
   ];
   const refusal = transcript(rows, 'me').find(isAgentTurn)?.tools[0];
   expect(refusal).toMatchObject({
-    nativeRequestId: 'native-request-92', serverName: 'Files server', failed: true,
+    nativeRequestId: 'native-request-92', serverName: 'Files server',
+    turnId: 'message', failed: true,
   });
   expect(refusal?.callId).toBeUndefined();
   expect(toolKind(refusal!)).toBe('Native consent request');
+  delete rows[1]!.data.serverName;
+  const withoutServer = transcript(rows, 'me').find(isAgentTurn)?.tools[0];
+  expect(withoutServer?.nativeRequestId).toBe('native-request-92');
+  expect(withoutServer?.serverName).toBeUndefined();
 });
 
 it('keeps a completed turn incomplete when the private reply output was lost', () => {

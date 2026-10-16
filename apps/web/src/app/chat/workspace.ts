@@ -90,6 +90,7 @@ export class Workspace implements OnInit {
     record: ToolActivityRecord;
     opener: HTMLElement;
   } | undefined>(undefined);
+  protected readonly nativeDetailState = signal<'ready' | 'loading' | 'failed'>('ready');
   protected readonly highlightedToolId = signal('');
   protected readonly panelOverlay = signal(false);
   protected readonly searchDialog = viewChild<ElementRef<HTMLDialogElement>>('searchDialog');
@@ -230,9 +231,20 @@ export class Workspace implements OnInit {
   }
   protected openToolDetails(record: ToolActivityRecord, opener: HTMLElement): void {
     this.toolDetails.set({ record, opener });
+    if (!record.nativeRequestId) return;
+    this.nativeDetailState.set('loading');
+    void this.refreshNativeDetails(record.id);
   }
   protected closeToolDetails(): void {
     this.toolDetails.set(undefined);
+    this.nativeDetailState.set('ready');
+  }
+  private async refreshNativeDetails(recordId: string): Promise<void> {
+    const conversationId = this.chat.selected();
+    const refreshed = await this.chat.refresh();
+    if (this.chat.denied() || this.chat.selected() !== conversationId) return;
+    if (this.toolDetails()?.record.id !== recordId) return;
+    this.nativeDetailState.set(refreshed ? 'ready' : 'failed');
   }
   protected toolTime(record: ToolActivityRecord): string {
     return utcDateTime(record.time);
@@ -358,6 +370,7 @@ export class Workspace implements OnInit {
       this.draft.set('');
       this.search.set('');
       this.toolDetails.set(undefined);
+      this.nativeDetailState.set('ready');
       this.highlightedToolId.set('');
       this.approvalWaiting.set(false);
       this.panelOverlay.set(false);

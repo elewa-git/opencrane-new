@@ -791,6 +791,66 @@ it('opens tool details from the line and focuses the line from Activity', async 
   expect(document.activeElement).toBe(toolLine);
 });
 
+it('shows the recorded native refusal and keeps its safe details after a failed read', async () => {
+  Object.assign(HTMLDialogElement.prototype, {
+    showModal: openPanelDialog,
+    close: closePanelDialog,
+  });
+  const rows = [
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-16T10:00:00Z', data: { text: 'Help with a file', authorId: 'me' } },
+    { id: 'refused', position: 2, type: 'agent.native_consent_refused',
+      time: '2026-10-16T10:00:01Z', data: { turnId: 'message', conversationId: 'chat',
+        nativeRequestId: 'native-92', serverName: '<Files server>',
+        reason: 'unsupported_native_consent' } },
+  ];
+  const incompleteApproval = {
+    approvalId: 'a'.repeat(64), conversationId: 'chat', requesterId: 'me',
+    expiresAt: '2026-10-16T10:32:00Z', state: 'requested', stepUp: false,
+    canDecide: false, canApprove: false, canDeny: true, missingFields: ['orderId'],
+    review: { action: 'Change order note', tool: 'update_note', target: '',
+      data: '{}', destination: 'Files server', account: 'No account needed',
+      consequence: 'Changes the draft note.' },
+  };
+  const context = await createCaptureWorkspace(rows, [incompleteApproval]);
+  const line = context.root.querySelector<HTMLButtonElement>('.tool-line');
+  if (!line) throw new Error('Missing native refusal line');
+  expect(line.textContent).toContain('native-92');
+  expect(line.textContent).toContain('<Files server>');
+  expect(line.querySelector('files')).toBeNull();
+  line.click();
+  await context.fixture.whenStable();
+  context.fixture.detectChanges();
+  const dialogs = Array.from(context.root.querySelectorAll('oc-hinge-drawer dialog'));
+  const drawer = dialogs.find(candidate => candidate.querySelector('h2')?.textContent
+    === 'Unsupported native consent');
+  expect(drawer?.textContent).toContain('No gateway permission was granted');
+  expect(drawer?.textContent).toContain('native-92');
+  expect(drawer?.textContent).not.toContain('Call status');
+  context.fixture.componentInstance['closeToolDetails']();
+  context.fixture.detectChanges();
+  context.setMessageStatus(503);
+  line.click();
+  await context.fixture.whenStable();
+  context.fixture.detectChanges();
+  expect(context.root.textContent).toContain('Unsupported native consent');
+  expect(context.root.textContent).toContain('native-92');
+  expect(context.root.textContent).toContain('Saved details could not be refreshed');
+  expect(context.root.textContent).toContain('orderId');
+  context.denyFeedRead();
+  await context.fixture.componentInstance['chat'].refresh();
+  await context.fixture.whenStable();
+  context.fixture.detectChanges();
+  expect(context.root.textContent).not.toContain('native-92');
+  expect(context.root.textContent).not.toContain('orderId');
+  expect(context.root.textContent).not.toContain('No gateway permission was granted');
+  sendConversationRow(context.socket, rows[1]!);
+  context.fixture.detectChanges();
+  expect(context.root.textContent).not.toContain('native-92');
+  expect(context.root.textContent).not.toContain('orderId');
+  context.fixture.destroy();
+});
+
 it('updates an open tool drawer when its finish event arrives', async () => {
   Object.assign(HTMLDialogElement.prototype, {
     showModal: openPanelDialog,

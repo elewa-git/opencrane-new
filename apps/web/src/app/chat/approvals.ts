@@ -125,6 +125,29 @@ export class ApprovalCards implements OnDestroy {
       || state?.kind === 'conflict';
   }
 
+  protected canApprove(card: ApprovalCard): boolean {
+    return card.requesterId === this.viewerId()
+      && !card.missingFields?.length && (card.canApprove ?? card.canDecide);
+  }
+
+  protected canDeny(card: ApprovalCard): boolean {
+    return card.requesterId === this.viewerId() && (card.canDeny ?? card.canDecide);
+  }
+
+  protected approveBlocked(card: ApprovalCard): boolean {
+    return !this.canApprove(card) || this.isBlocked(card);
+  }
+
+  protected denyBlocked(card: ApprovalCard): boolean {
+    return !this.canDeny(card) || this.isBlocked(card);
+  }
+
+  protected missingFieldReason(card: ApprovalCard): string {
+    const names = card.missingFields ?? [];
+    return `Approve is unavailable. Missing reviewed fields: ${names.join(', ')}. `
+      + 'Ask the assistant again with these details.';
+  }
+
   protected async decide(card: ApprovalCard, decision: Decision, fromDrawer = false): Promise<void> {
     if (!this.canStartDecision(card, decision)) return;
     const conversationId = this.conversationId();
@@ -147,6 +170,8 @@ export class ApprovalCards implements OnDestroy {
   }
 
   private canStartDecision(card: ApprovalCard, decision: Decision): boolean {
+    if (decision === 'approved' && !this.canApprove(card)) return false;
+    if (decision === 'rejected' && !this.canDeny(card)) return false;
     const state = this.localState(card);
     if (this.isBlocked(card) || card.state !== 'requested') return false;
     if (!state) return true;
@@ -197,7 +222,7 @@ export class ApprovalCards implements OnDestroy {
     this.setState(card.approvalId, { kind: 'conflict', decision });
     await this.read(conversationId, undefined, 'decision');
     const current = this.findCard(card.approvalId);
-    if (current?.state === 'requested' && current.canDecide) {
+    if (current?.state === 'requested' && this.canDeny(current)) {
       this.setState(card.approvalId, { kind: 'conflict_still_open', decision });
     }
     this.announceDecision(current);
@@ -213,7 +238,7 @@ export class ApprovalCards implements OnDestroy {
     await this.read(conversationId, undefined, 'decision');
     const current = this.findCard(card.approvalId);
     if (current?.state !== 'requested') return;
-    if (current.canDecide) {
+    if (this.canDeny(current)) {
       this.setState(card.approvalId, { kind: 'not_recorded', decision });
       this.announced.set('Your decision was not recorded. You can decide again.');
       return;
@@ -407,7 +432,7 @@ export class ApprovalCards implements OnDestroy {
       if (card.state !== 'requested' || !state) continue;
       if (state.kind === 'conflict') {
         nextStates[card.approvalId] = conflictStateAfterRead(
-          card.canDecide,
+          this.canDeny(card),
           state.decision,
         );
         continue;
@@ -425,7 +450,7 @@ export class ApprovalCards implements OnDestroy {
     }
     let added: ApprovalCard | undefined;
     for (const card of cards) {
-      if (card.state !== 'requested' || !card.canDecide) continue;
+      if (card.state !== 'requested' || !this.canDeny(card)) continue;
       if (this.announcedApprovalIds.has(card.approvalId)) continue;
       added = card;
       break;
@@ -477,7 +502,7 @@ export class ApprovalCards implements OnDestroy {
   }
 
   private shouldShowWaitingOnViewer(card: ApprovalCard): boolean {
-    if (card.state !== 'requested' || !card.canDecide || this.isStopped(card)) return false;
+    if (card.state !== 'requested' || !this.canDeny(card) || this.isStopped(card)) return false;
     const state = this.localState(card);
     return state?.kind !== 'submitting' && state?.kind !== 'recorded'
       && state?.kind !== 'unknown' && state?.kind !== 'conflict';

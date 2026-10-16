@@ -1,6 +1,8 @@
 <dl class="approval-ledger">
   <dt>Tool</dt><dd class="ledger-mono">{{ card().review.tool }}</dd>
-  <dt>Target</dt><dd class="ledger-target">{{ card().review.target }}</dd>
+  <dt>Target</dt><dd class="ledger-target">
+    {{ card().review.target || 'Not provided' }}
+  </dd>
   <dt>Data sent</dt><dd class="ledger-mono">{{ card().review.data }}</dd>
   <dt>Where</dt><dd>{{ card().review.destination }}</dd>
   <dt>Account</dt><dd>{{ card().review.account }}</dd>
