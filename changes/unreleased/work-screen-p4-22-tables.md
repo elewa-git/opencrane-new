@@ -1,0 +1,1 @@
+The Models page now shows enabled models, their task routes and granted audiences in one table. It warns when a named shared assistant uses a model without its own grant. Updating grants and assistants it cannot name stay unchecked.

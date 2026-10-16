@@ -39,17 +39,24 @@ async function serve(route, state) {
     return;
   }
   state.requests.push({ path, query: url.search, method: request.method() });
+  if (path === base) state.accessReads = (state.accessReads ?? 0) + 1;
   if (state.holdReads?.includes(path)) {
     state.held.set(path, route);
     return;
   }
   let response;
   if (path === '/api/org/providers') {
-    response = json({ rows: [], loadedAt: time,
+    response = json({ rows: [{ providerId: 'fixture-provider', provider: 'openai',
+      name: 'Fixture provider', revision: 2, position: 2, enabledModels: [modelId],
+      status: 'saved_unverified' }], loadedAt: time,
       access: { grantsAvailable: true, reason: 'model_access_routes' } });
   } else if (path === '/api/org/models') {
     response = json({ models: [{ id: modelId, retired: false }],
       taskRouting: { chat_turn: { model: modelId, reason: 'Chat' } } });
+  } else if (path === '/api/assistants') {
+    response = json({ rows: [] });
+  } else if (path.endsWith('/bindings')) {
+    response = json({ rows: [] });
   } else if (request.method() === 'POST') {
     state.posts.push(request.postDataJSON());
     if (state.holdPost) return;
@@ -77,7 +84,7 @@ async function serve(route, state) {
     if (state.slow) await delay(800);
     response = state.failList ? json({ status: 'unavailable' }, 503) : json(state.list);
   }
-  if (state.deny && path.startsWith(base)
+  if (state.deny && path.startsWith(base) && (path !== base || state.accessReads > 1)
     && (!state.denyPath || path.includes(state.denyPath))) response = json({ status: 'refused' }, state.deny);
   await route.fulfill(response);
 }

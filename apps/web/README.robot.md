@@ -630,6 +630,22 @@ keeps existing rows on failure and removes duplicate ids. Switching kind resets 
 Names never enter storage or addresses.
 Configured uses and grant paging are absent from the API, so no Missing rows are inferred.
 `npm run visual:screen-p4-22-access` uses intercepted HTTP replies and the web build.
+
+## Models table
+
+The table joins active registry ids and task routes with enabled OpenAI connections.
+It reads one access list per enabled model, bindings only for connections that enable
+one, and shared names from `/api/assistants`. A current, complete grant list permits a
+missing assistant-grant warning. An applying list says Still updating. The bindings
+reply counts personal assistants as well as shared ones. When that count differs from the
+assistants the page can check, it says Assistant access not checked. Failed reads keep
+the same unchecked status.
+The table clears on any 401 or 403 and ignores pending replies. A failed parent refresh
+keeps dated rows and locks provider actions. Closing Access rereads that model's list.
+`npm run visual:screen-p4-22-tables` captures the table states at both widths.
+The [receipt](../../docs/process/screen-p4-22-tables/receipt.md) records visual limits.
+
+The existing screen receipt records its limits.
 Adding `-- --part2` writes only the new paging and reload captures.
 The [original screen receipt](../../docs/process/screen-p4-22-access/receipt.md) and
 [reload and paging receipt](../../docs/process/screen-p4-22-access2/receipt.md) record the limits.
