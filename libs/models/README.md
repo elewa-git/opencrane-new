@@ -47,8 +47,9 @@ interrupt the current call. Ending or invalidating that turn’s memory context 
 and refuses a context it has already received. It repeats the final access check when
 other calls arrive, so a saved revocation still stops the write within the same deadline.
 Other hosted images still need image admission. A private verifier checks a publisher's
-signature and each image file's hash against operator trust. It does not scan licences,
-admit images or start them yet.
+signature and each image file's hash against operator trust. The signature check uses
+only the operator's local public key and makes no network requests. Unreadable files
+make the verifier unavailable. It does not scan licences, admit images or start them yet.
 
 ## What it is responsible for
 

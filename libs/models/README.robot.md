@@ -2267,6 +2267,13 @@ Limits are deliberately smaller than the design's eventual scan job: 64 KiB sign
 1 MiB manifest/configuration, 32 MiB per layer, 64 layers and 128 MiB total.
 The subprocess has a ten-second deadline and 64 KiB output limit. Its temporary files
 are private, its environment excludes inherited credentials, and its output is discarded.
+`SIGSTORE_REKOR_PUBLIC_KEY` names the local operator key file. In Cosign 2.6.1 this
+prevents the automatic TUF metadata download, including with an empty HOME.
+`--offline` and `--insecure-ignore-tlog` disable transparency-log lookups; `--key`
+still verifies the signature. No public trust service is needed.
+Only complete, recognised signature rejection messages from an exit-1 process return
+`signature_refused`. File errors and unknown errors return `verifier_unavailable`.
+Subprocess output is inspected for that distinction but never returned or logged.
 
 Evidence contains only image/platform, trust version, public-key fingerprint and trust
 hash. `currentHostedVerification` must receive current operator trust before evidence
@@ -2282,6 +2289,12 @@ runtime image. The exact runtime binary and its bundled notices still need revie
 before deployment. Fixtures sign in memory with ephemeral keys; no private key is saved.
 The fake registry tests real Cosign verification, both architectures, refusals, byte
 limits, outages, trust replacement and pending admission. They make no model calls.
+The offline regression uses `strace` to block socket creation and record network calls
+across every Cosign thread. It requires a valid signature to pass without any IPv4 or
+IPv6 socket attempts. Install `strace` before running this test; CI installs it too.
+It is test tooling only, licensed under LGPL-2.1-or-later, with no runtime image change.
+File-error regressions replace each scratch file with a directory before real Cosign
+reads it. They require exit code 1 to report unavailable, while a wrong key still fails.
 
 Remaining row 5 work: Syft 1.54.0, image-specific reviewed notices and licence rules,
 complete SBOM coverage, private evidence storage and worker wiring. Malware,
