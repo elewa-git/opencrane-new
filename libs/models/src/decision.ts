@@ -162,11 +162,37 @@ function requireActiveConversationTurn(conversation: StoredEvent[], turnId: stri
   if (conversation.some(closesCurrentTurn)) throw new Error('Turn is not active');
 }
 
-function requireDeploymentKeyTurn(turnToken: z.infer<typeof legacyTurnSchema>) {
-  // Refuse a bound call before holding money until the gateway uses that provider's key.
-  if (turnToken.providerId !== undefined) {
+function requireModelRoute(turnToken: z.infer<typeof legacyTurnSchema>,
+  managedRoute: boolean, enabled: boolean) {
+  if (managedRoute) {
+    if (!enabled) throw new Error('Managed calls are not enabled');
+  } else if (turnToken.providerId !== undefined) {
     throw new RequestRefused('Managed provider calls are not available yet');
   }
+}
+
+function knownDecisionRoute(url: string | undefined) {
+  return url === '/authorize/models/managed' || url === '/authorize' ||
+    url?.startsWith('/authorize/mcp/');
+}
+
+async function modelPermission(call: ModelCall, requestId: string,
+  turnToken: z.infer<typeof legacyTurnSchema>,
+  activity: Awaited<ReturnType<typeof decisionActivity>>, deadline: number,
+  providers?: ProviderVerificationOptions) {
+  if (activity.provider) {
+    call.providerId = turnToken.providerId;
+    call.bindingSequence = turnToken.bindingSequence;
+  }
+  const credential = await activity.provider?.credential(providers?.secrets, deadline);
+  return { credential, modelCall: { ...call, requestId } };
+}
+
+function decisionHistoryDeadline(managedRoute: boolean, decisionDeadline: number) {
+  if (managedRoute) {
+    return performance.now() + 10_000;
+  }
+  return decisionDeadline;
 }
 
 function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
@@ -231,36 +257,40 @@ export async function startDecision(
     void (async () => {
       res.setHeader('content-type', 'application/json');
       if (await internalRoutes(req, res, actor, identity, binding, providers)) return;
-      if ((!req.url?.startsWith('/authorize/mcp/') && req.url !== '/authorize') || req.method !== 'POST') { res.writeHead(404); res.end(); return; }
+      const managedRoute = req.url === '/authorize/models/managed';
+      if (!knownDecisionRoute(req.url) || req.method !== 'POST') {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
       const decisionDeadline = started + 2000;
       const checked = await credentials.check(req.headers, undefined, decisionDeadline);
       const computer = computerSchema.parse(checked.computer);
       const turnToken = parseTurnToken(checked.turn);
       await checkNativeCall(actor.store, actor.silo, computer, turnToken,
         checked.sequence, decisionDeadline);
-      // Share two seconds between history and access because the gateway waits only that long.
-      // Read new activity before watching the small streams that decide access.
+      const managedTurn = requireManagedTurnClaims(checked.turn, managedRoute);
+      // Load managed history before starting the short access check.
+      const historyDeadline = decisionHistoryDeadline(managedRoute, decisionDeadline);
       const activity = await decisionActivity(actor.store, actor.silo,
-        computer.assistant, turnToken.conversation, turnToken.turn, decisionDeadline);
+        computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);
       requireManagedTurnClaims(checked.turn, activity.managedCallsEnabled);
       const conversation = activity.conversation;
       requireActiveConversationTurn(conversation, turnToken.turn);
       const turn = activeTurn(turnToken, activity.computer, checked.sequence);
       const admittedAt = queuedPosition(conversation, turn);
-      const grants = await modelGrantHistory(actor, turnToken.model, route, decisionDeadline);
+      const grants = await modelGrantHistory(actor, turnToken.model, route, historyDeadline);
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const authority = await decisionAuthorityFence(actor.store, started,
+      const accessStarted = managedRoute ? performance.now() : started;
+      const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);
       let needsApproval = false;
       async function confirmAccess() {
         await confirmDecisionAccess(activity, authority, needsApproval);
       }
-      async function confirmDecision() {
-        await confirmAccess();
-      }
       const snapshot = { include: authority.include, head: authority.head,
         deadline: authority.deadline };
-      const fresh = Object.assign(confirmDecision, snapshot);
+      const fresh = Object.assign(confirmAccess, snapshot);
       auditedContext = { requesterId: turnToken.requester, assistantId: computer.assistant };
       correlation = { conversationId: turnToken.conversation, turnId: turnToken.turn };
       contextDigest = digestContext([computer, turnToken]);
@@ -335,7 +365,7 @@ export async function startDecision(
         markRefusedDecision(res, outcome === 'allow');
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
       }
-      requireDeploymentKeyTurn(turnToken);
+      requireModelRoute(turnToken, managedRoute, activity.managedCallsEnabled);
       const parsed = requestSchema.safeParse(JSON.parse(raw));
       if (!parsed.success) throw new RequestRefused('Model request refused: use a supported model, a positive integer output bound (max_output_tokens: 16–2000), n = 1 and supported text/local tools only');
       const body = parsed.data;
@@ -344,8 +374,9 @@ export async function startDecision(
       const call = await context(actor, binding, computer, turnToken, checked.sequence,
         'model', body.model, fresh, conversation, turn, grants);
       contextDigest = call.contextDigest;
+      const { credential, modelCall } = await modelPermission(
+        call, requestId, turnToken, activity, fresh.deadline, providers);
       requireConnectedClient(req, res);
-      const modelCall = { ...call, requestId };
       // Keep the original turn stopped after a limit increase, before holding any money.
       const reservation = await actor.reserve(modelCall, amountCents, fresh, admittedAt);
       const decisionId = await allowModel(reservation);
@@ -355,6 +386,7 @@ export async function startDecision(
         reservationId: reservation, modelCall };
       await actor.admitDispatch(dispatch, fresh, admittedAt);
       res.setHeader('x-request-id', requestId);
+      if (credential !== undefined) res.setHeader('x-provider-key', credential);
       res.setHeader('x-reservation-id', reservation); res.end('{}');
     })().catch(async (error: unknown) => {
       const capped = error instanceof BudgetRefused;

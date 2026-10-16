@@ -18,7 +18,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|locks preparation during replacement; delivers and probes only the latest current configuration; checks calls, spending, holds and stops against queued work; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|locks preparation during replacement; delivers and probes only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks open spending before provider switch-on; saves hosted image results and registration, publication receipts, gateway, root allowance, source-linked root stops, overrun, spending, expired connection closures and instance stops; records matching private and shared child admissions; checks private child calls and root activity before refusing them| store["libs/event-store<br/>event log"]
 ```
@@ -78,8 +78,9 @@ This internal API has no child-chat caller yet.
   until destination checks and guarded sockets are ready.
 - Provide an optional AI gateway route that uses the key in each decision reply.
   It keeps the provider's token counts and excludes caller credentials from the
-  upstream request. Normal startup does not select it. The decision service still
-  refuses these calls, so managed chat is not available yet.
+  upstream request. The decision service reads provider history before starting its
+  short access check, then checks the saved turn, provider and key before holding money.
+  Normal startup does not select this route, so managed chat is not available yet.
 - Read private tool-instance status and original changes for their current member owner.
   Save an owner stop request with one event. Wake stays refused until hosted admission
   and personal profiles are available. No instance starts or credentials are released.
@@ -164,7 +165,8 @@ This internal API has no child-chat caller yet.
   stopped after a limit increase, including when its access pass is renewed.
 - Release an expired new hold only when no send permission or other call evidence
   was saved. Keep older holds for review because their senders used older rules.
-- Stop new holds after provider switch-on while settling or releasing existing holds.
+- After provider switch-on, allow holds only for checked calls with a saved provider choice.
+  Keep settling or releasing existing holds.
   Keep those holds moving without restarting the models process.
 - Read each new usage line once and leave old lines alone while idle. Retry a line
   if its event could not be saved.
@@ -175,7 +177,9 @@ This internal API has no child-chat caller yet.
   before a decision.
 - Refuse provider-bound model passes on the deployment-key gateway before holding money.
   Read switch-on from the silo’s spending stream before checking access.
-  Calls through saved provider choices are not available yet.
+  The managed decision checks that the chosen connection still enables the model, then
+  reads its key before holding money. Removing the model before the final check refuses
+  the call and releases any hold at zero. No running process starts this route yet.
 - Save internal child admissions for private and shared child turns with a fixed model and provider.
   Check the signed decision, parent, narrowed model access and server limits first.
   Save a separate delegation start from the computer record and require both to agree.

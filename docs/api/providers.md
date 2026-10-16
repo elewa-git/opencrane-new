@@ -247,10 +247,17 @@ input or stale positions return 409. Missing prerequisites, denied access and a 
 switch-on id after success return 403. Refusals save nothing. Any event saved between
 the initial history position and the append causes 409; reload before trying a new id.
 
-New turns use their own or the silo default choice. Calls stay refused after switch-on
-until managed admission is completed and PR 5b supplies gateway startup and fallback-key
-refusal. The optional gateway route has passed its per-call key test, but no process
-starts it and the production decision service refuses its path. The budget actor
-also refuses all new reservations after switch-on; that guard needs a checked managed
-call path before activation. Switch-off,
-retirement and screens remain unavailable. This command never reads a key or calls a provider.
+New turns use their own or the silo default choice. Calls stay off after switch-on
+until PR 5c supplies gateway startup, fallback-key refusal and shared custody wiring.
+The optional managed route now checks the signed choice, current enabled model,
+permissions and saved key before holding money. Managed history reads have a
+ten-second limit before a fresh two-second access check starts. Expired history
+returns the fixed refusal with no money held. No production process starts it.
+
+A model removal saved before the final check refuses that call and releases its hold
+at zero, even after an allow audit. A removal saved after that check affects later
+calls. Admission does not prove that the provider received bytes. After permission
+leaves, an unknown result keeps its hold until usage or the existing settlement
+process resolves it. Settlement uses the original payer and tariff.
+Switch-off and retirement remain unavailable. The switch-on command itself never
+reads a key or calls a provider.
