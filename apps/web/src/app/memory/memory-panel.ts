@@ -1,13 +1,22 @@
 import { ChangeDetectionStrategy, Component, input, signal,
   type OnDestroy, type OnInit, type SimpleChanges } from '@angular/core';
 import { Overlay } from '../ui/overlay';
-import { canReadScope, hasRefusedMemoryControl, isObject, isPage, isScopes,
+import { canReadScope, isObject, isPage, isScopes,
   type Fact,
   type PageFact, type Scope, type Source } from './memory-panel-data';
 import { detailResult, detailUrl, isCurrentDetailRead, isCurrentListRead,
   isCurrentScopeRead, readJson, scopeHasId }
   from './memory-panel-reads';
 import { readStoreReply } from './memory-panel-store-reply';
+import { storeBytes, storeKindFromEvent, storePayload, storeSourceLabel, storeValidation } from
+  './memory-panel-store-input';
+import { MemoryForget, type ForgetTarget } from './memory-forget';
+import { factIndex, focusAfterForget, withoutForgetTarget, withoutForgottenFact } from
+  './memory-panel-forget';
+import { firstTrustedSource, scopeUrl, waitForRetry } from
+  './memory-panel-reads';
+import { savedDate, scopeAudience, scopeKeydown, scopeName, selectedScopeAudience, sourceLink } from
+  './memory-panel-reads';
 type ScreenState = 'loading' | 'ready' | 'unavailable' | 'access';
 type StoreState = 'editing' | 'saving' | 'saved' | 'failed' | 'busy' | 'unknown';
 type StoreCommand = { generation: number; scopeId: string; commandId: string;
@@ -15,7 +24,7 @@ type StoreCommand = { generation: number; scopeId: string; commandId: string;
 
 @Component({
   selector: 'oc-memory-panel',
-  imports: [Overlay],
+  imports: [Overlay, MemoryForget],
   templateUrl: './memory-panel.html',
   styleUrl: './memory-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -30,6 +39,8 @@ export class MemoryPanel implements OnInit, OnDestroy {
   protected readonly sources = signal<Source[]>([]);
   protected readonly selectedScope = signal('');
   protected readonly selectedFact = signal<Fact | undefined>(undefined);
+  protected readonly detailCanForget = signal(false);
+  protected readonly forgetTargets = signal<ForgetTarget[]>([]);
   protected readonly state = signal<ScreenState>('loading');
   protected readonly listState = signal<
     'loading' | 'ready' | 'empty' | 'unavailable' | 'invalid' | 'conflict'>('loading');
@@ -57,6 +68,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.generation += 1;
+    this.forgetTargets.set([]);
     this.scopeRequestId += 1;
     this.scopeController?.abort();
     this.listController?.abort();
@@ -90,42 +102,20 @@ export class MemoryPanel implements OnInit, OnDestroy {
   private listController?: AbortController;
   private detailController?: AbortController;
 
-  protected scopeName(scope: Scope): string {
-    if (scope.scopeKind === 'person') return 'Your memory';
-    if (scope.scopeKind === 'group') return 'Group memory';
-    return 'Assistant notes';
-  }
-
-  protected scopeAudience(scope: Scope): string {
-    if (scope.audience.kind === 'person') return 'Only you';
-    return `Shared with ${scope.audience.kind} ${scope.audience.ownerId}`;
-  }
+  protected readonly scopeName = scopeName;
+  protected readonly scopeAudience = scopeAudience;
+  protected readonly savedDate = savedDate;
+  protected readonly sourceLink = sourceLink;
+  protected readonly scopeKeydown = scopeKeydown;
 
   protected selectedScopeAudience(): string {
-    const selectedScopeId = this.selectedScope();
-    const scope = this.scopes().find(this.isSelectedScope.bind(null, selectedScopeId));
-    if (!scope) return 'Audience unavailable';
-    return this.scopeAudience(scope);
-  }
-
-  private isSelectedScope(selectedScopeId: string, scope: Scope): boolean {
-    return scope.scopeId === selectedScopeId;
-  }
-
-  protected savedDate(value: string): string {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return 'Date unavailable';
-    return new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'UTC' })
-      .format(date);
-  }
-
-  protected sourceLink(conversationId: string): string {
-    return `/workspace?conversation=${encodeURIComponent(conversationId)}`;
+    return selectedScopeAudience(this.scopes(), this.selectedScope());
   }
 
   protected async chooseScope(scopeId: string): Promise<void> {
     if (!scopeId || scopeId === this.selectedScope()) return;
     this.generation += 1;
+    this.forgetTargets.set([]);
     this.clearStoreState();
     this.listController?.abort();
     this.detailController?.abort();
@@ -138,21 +128,6 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.query.set('');
     this.cursor.set(null);
     await this.loadFacts();
-  }
-
-  protected scopeKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.scopes button'));
-    const target = event.target;
-    if (!(target instanceof HTMLButtonElement)) return;
-    const currentIndex = buttons.indexOf(target);
-    if (currentIndex < 0 || buttons.length === 0) return;
-    event.preventDefault();
-    const direction = event.key === 'ArrowRight' ? 1 : -1;
-    const nextIndex = (currentIndex + direction + buttons.length) % buttons.length;
-    const nextButton = buttons[nextIndex];
-    nextButton?.focus();
-    nextButton?.click();
   }
 
   protected queryChanged(event: Event): void {
@@ -178,6 +153,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
     const generation = this.generation;
     this.detailController = controller;
     this.selectedFact.set(fact);
+    this.detailCanForget.set(false);
     this.sources.set([]);
     this.detailState.set('');
     const url = detailUrl(this.selectedScope(), fact.memoryId);
@@ -185,9 +161,17 @@ export class MemoryPanel implements OnInit, OnDestroy {
     if (!isCurrentDetailRead(controller, generation, this.generation)) return;
     const result = detailResult(reply);
     if (result.kind === 'access') { this.revoke(); return; }
-    if (result.kind === 'missing') { this.detailState.set('missing'); return; }
+    if (result.kind === 'missing') {
+      if (result.reason === 'forgotten') {
+        this.hideForgottenFact(fact.memoryId);
+        this.selectedFact.set({ ...fact, text: '' });
+      }
+      this.detailState.set('missing');
+      return;
+    }
     if (result.kind !== 'ok') { this.detailState.set('unavailable'); return; }
     this.selectedFact.set(result.detail.fact);
+    this.detailCanForget.set(result.detail.canForget && this.currentScopeKind() === 'person');
     this.sources.set(result.detail.sources);
     this.detailState.set('ready');
   }
@@ -196,6 +180,64 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.detailController?.abort();
     this.selectedFact.set(undefined);
     this.detailState.set('');
+  }
+
+  protected openForget(event: Event): void {
+    const fact = this.selectedFact();
+    const opener = event.currentTarget;
+    if (!fact || !this.detailCanForget() || !(opener instanceof HTMLElement)) return;
+    const target = { scopeId: this.selectedScope(), memoryId: fact.memoryId,
+      revision: fact.revision, opener };
+    this.forgetTargets.set([...this.forgetTargets(), target]);
+  }
+
+  protected forgetAccepted(target: ForgetTarget): void {
+    if (!this.isCurrentForget(target)) return;
+    const index = factIndex(target.memoryId, this.facts());
+    const generation = this.generation;
+    this.hideForgottenFact(target.memoryId);
+    this.closeDetail();
+    this.detailOpener = undefined;
+    window.setTimeout(this.focusAfterForget.bind(this, index, generation), 0);
+  }
+
+  private hideForgottenFact(memoryId: string): void {
+    // Stop older reads before they can restore text that the server has hidden.
+    this.listController?.abort();
+    this.listRequestId += 1;
+    this.detailController?.abort();
+    this.query.set('');
+    const remainingFacts = withoutForgottenFact(memoryId, this.facts());
+    this.facts.set(remainingFacts);
+    this.listState.set(remainingFacts.length ? 'ready' : 'empty');
+    this.sources.set([]);
+    this.detailCanForget.set(false);
+  }
+
+  private focusAfterForget(index: number, generation: number): void {
+    if (generation !== this.generation) return;
+    focusAfterForget(index);
+  }
+
+  protected reviewLatest(target: ForgetTarget): void {
+    if (!this.isCurrentForget(target)) return;
+    const fact = this.selectedFact();
+    this.closeForget(target);
+    if (fact) void this.openFact(fact, new Event('review'));
+  }
+
+  protected closeForget(target: ForgetTarget): void {
+    if (this.isCurrentForget(target)) {
+      this.forgetTargets.set(withoutForgetTarget(target, this.forgetTargets()));
+    }
+  }
+
+  protected forgetAccessLost(target: ForgetTarget): void {
+    if (this.isCurrentForget(target)) this.revoke();
+  }
+
+  private isCurrentForget(target: ForgetTarget): boolean {
+    return this.forgetTargets().includes(target) && this.selectedScope() === target.scopeId;
   }
 
   protected openStore(event?: Event): void {
@@ -238,13 +280,12 @@ export class MemoryPanel implements OnInit, OnDestroy {
   }
 
   protected storeKindChanged(event: Event): void {
-    const target = event.target;
-    if (!(target instanceof HTMLSelectElement)) return;
-    this.storeKind.set(target.value === 'preference' ? 'preference' : 'fact');
+    const kind = storeKindFromEvent(event);
+    if (kind) this.storeKind.set(kind);
   }
 
   protected storeBytes(): number {
-    return new TextEncoder().encode(this.storeText()).byteLength;
+    return storeBytes(this.storeText());
   }
 
   protected storeInputError(): string {
@@ -253,17 +294,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
   }
 
   protected storeValidation(): string {
-    const text = this.storeText();
-    const bytes = this.storeBytes();
-    if (bytes < 1 || bytes > 4096) return 'Facts must be 1 to 4,096 UTF-8 bytes.';
-    if (hasRefusedMemoryControl(text) || new TextDecoder('utf-8', { ignoreBOM: true })
-      .decode(new TextEncoder().encode(text)) !== text) {
-      return 'Remove unsupported control characters and try again.';
-    }
-    if (this.storeKind() === 'preference' && this.currentScopeKind() !== 'person') {
-      return 'Preferences can only be saved in your memory.';
-    }
-    return '';
+    return storeValidation(this.storeText(), this.storeKind(), this.currentScopeKind());
   }
 
   protected currentScopeKind(): Scope['scopeKind'] | undefined {
@@ -282,7 +313,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.storeCommandId.set(commandId);
     this.storeState.set('saving');
     this.storeError.set('');
-    const payload = this.storePayload(commandId);
+    const payload = storePayload(commandId, this.storeText(), this.storeKind(), this.storeSource());
     const command: StoreCommand = { generation: this.generation,
       scopeId: this.selectedScope(), commandId, payload };
     this.storeCommand = command;
@@ -295,13 +326,6 @@ export class MemoryPanel implements OnInit, OnDestroy {
     } catch {
       if (this.isCurrentStoreCommand(command)) this.storeState.set('unknown');
     }
-  }
-
-  private storePayload(commandId: string): Record<string, unknown> {
-    const source = this.storeSource();
-    const sources = source ? [source] : [];
-    return { commandId, text: this.storeText(), kind: this.storeKind(), pinned: false,
-      expiresAt: null, sources, dependsOn: [] };
   }
 
   private async applyStoreReply(response: Response, command: StoreCommand): Promise<void> {
@@ -380,10 +404,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
   }
 
   protected storeSourceLabel(): string {
-    const selected = this.storeSource();
-    if (!selected) return 'Your statement';
-    const source = this.sources().find(sourceMatchesReference.bind(null, selected));
-    return source?.label || 'Available source';
+    return storeSourceLabel(this.storeSource(), this.sources());
   }
 
   protected detailOverlayClosed(): void {
@@ -398,6 +419,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
   private async loadScopes(): Promise<void> {
     this.scopeController?.abort();
     this.generation += 1;
+    this.forgetTargets.set([]);
     this.clearStoreState();
     this.listController?.abort();
     this.detailController?.abort();
@@ -475,8 +497,9 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.listState.set(result.body.facts.length ? 'ready' : 'empty');
   }
 
-  private revoke(): void {
+  protected revoke(): void {
     this.generation += 1;
+    this.forgetTargets.set([]);
     this.scopeRequestId += 1;
     this.scopeController?.abort();
     this.listController?.abort();
@@ -513,30 +536,4 @@ export class MemoryPanel implements OnInit, OnDestroy {
     return this.storeCommand === command && command.generation === this.generation &&
       command.scopeId === this.selectedScope();
   }
-}
-
-function waitForRetry(seconds: number, resolve: () => void): void {
-  window.setTimeout(resolve, seconds * 1000);
-}
-
-function firstTrustedSource(sources: Source[]): Source['reference'] | undefined {
-  for (const source of sources) {
-    if (source.status === 'available' && source.reference) return source.reference;
-  }
-  return undefined;
-}
-
-function sourceMatchesReference(reference: NonNullable<Source['reference']>, source: Source) {
-  return source.status === 'available' &&
-    source.reference?.conversationId === reference.conversationId &&
-    source.reference.messageId === reference.messageId;
-}
-
-function scopeUrl(groupId: string | undefined, assistantId: string | undefined): string {
-  const params = new URLSearchParams();
-  if (groupId) params.set('groupId', groupId);
-  if (assistantId) params.set('assistantId', assistantId);
-  const query = params.toString();
-  if (!query) return '/api/memory/scopes';
-  return `/api/memory/scopes?${query}`;
 }

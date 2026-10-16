@@ -8,6 +8,9 @@
   border: 1px solid #8d999c; border-radius: 8px; background: #fff; color: #16191a;
   font: inherit; cursor: pointer; }
 .store-open, .store-submit { background: #087d8d; border-color: #087d8d; color: #fff; }
+.forget-open { min-height: 44px; margin-left: 8px; padding: 9px 16px;
+  border: 1px solid #a12a20; border-radius: 8px; background: white; color: #a12a20;
+  font: inherit; cursor: pointer; }
 .store-submit:disabled { opacity: .5; cursor: not-allowed; }
 .audience { margin: -10px 0 12px; color: #4f575a; }
 .heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
@@ -61,6 +64,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   outline-offset: 2px; }
 @media (max-width: 600px) {
   .detail, .store { padding: 20px 16px; }
+  .detail .store-open, .detail .forget-open { display: block; width: 100%; margin: 8px 0; }
   .memory-actions { justify-content: stretch; }
   .memory-actions button { width: 100%; }
 }

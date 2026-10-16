@@ -1,0 +1,12 @@
+.forget-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.forget-actions button, .forget-outcome button { min-height: 44px; padding: 9px 16px;
+  border: 1px solid #8d999c; border-radius: 8px; background: white; color: #16191a;
+  font: inherit; cursor: pointer; }
+.forget-actions .forget-confirm { background: #a12a20; border-color: #a12a20; color: white; }
+.forget-outcome { margin: 16px 0; padding: 16px; border: 1px solid #cdd4d5;
+  border-radius: 8px; background: white; }
+.forget-outcome p { margin: 4px 0 10px; }
+@media (max-width: 600px) {
+  .forget-actions { display: grid; width: 100%; }
+  .forget-actions button { width: 100%; }
+}

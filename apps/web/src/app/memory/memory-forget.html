@@ -1,0 +1,43 @@
+<oc-modal-sheet [open]="state() === 'review' || state() === 'sending' ||
+    state() === 'unknown' || state() === 'conflict'"
+  title="Forget this fact from your memory?" backLabel="Cancel"
+  [dismissDisabled]="state() === 'sending' || state() === 'unknown' ||
+    state() === 'conflict'" [returnFocusTo]="target().opener"
+  (closed)="cancel()">
+  @if (state() === 'review') {
+    <p>Only you lose it from memory.</p>
+    <ul>
+      <li>Removes the fact and dependent copies from usable memory</li>
+      <li>Independent chat messages and backups aren’t erased by this action</li>
+    </ul>
+  } @else if (state() === 'sending') {
+    <p role="status">Forgetting…</p>
+  } @else if (state() === 'unknown') {
+    <p role="status">Outcome unknown</p>
+  } @else if (state() === 'conflict') {
+    <p role="status">Changed before you forgot it</p>
+  }
+  <div overlayFooter class="forget-actions">
+    @if (state() === 'review') {
+      <button type="button" class="forget-confirm" (click)="confirm()">
+        Forget from your memory</button>
+      <button type="button" (click)="cancel()">Cancel</button>
+    } @else if (state() === 'unknown') {
+      <button type="button" [disabled]="statusReading()" (click)="checkStatus()">Check status</button>
+    } @else if (state() === 'conflict') {
+      <button type="button" (click)="review()">Review latest revision</button>
+    }
+  </div>
+</oc-modal-sheet>
+@if (state() === 'pending' || state() === 'forgotten' || state() === 'unavailable') {
+  <div class="forget-outcome" role="status">
+    @if (state() === 'pending') {
+      <strong>Hidden · cleanup pending</strong><p>Not used in any new turn</p>
+      <button type="button" [disabled]="statusReading()" (click)="checkStatus()">Check status</button>
+    } @else if (state() === 'forgotten') {
+      <strong>Forgotten</strong><p>{{ formatDate() }}</p>
+    } @else {
+      <strong>Cleanup unavailable</strong><p>Stays hidden — it won’t reappear</p>
+    }
+  </div>
+}

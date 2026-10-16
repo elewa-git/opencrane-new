@@ -145,7 +145,8 @@ it('keeps a readable fact visible when its source check is unavailable', async (
   const savedFact = fact('Keep the short project name.');
   stubReplies(response(200, { scopes: [personalScope()] }),
     response(200, { scopeId: 'scope', facts: [savedFact], returnedCount: 1, nextCursor: null }),
-    response(200, { scopeId: 'scope', fact: savedFact, sources: [{ status: 'unavailable' }] }));
+    response(200, { scopeId: 'scope', fact: savedFact, canForget: false,
+      sources: [{ status: 'unavailable' }] }));
   const fixture = await loadPanel();
   const element: unknown = fixture.nativeElement;
   if (!(element instanceof HTMLElement)) throw new Error('Missing memory page');
@@ -258,7 +259,7 @@ it('shows the detail audience and saved fact metadata', async () => {
   stubReplies(response(200, { scopes: [{ ...personalScope(), scopeKind: 'group',
     audience: { kind: 'group', ownerId: 'group-a' } }] }),
     response(200, { scopeId: 'scope', facts: [savedFact], returnedCount: 1, nextCursor: null }),
-    response(200, { scopeId: 'scope', fact: savedFact, sources: [] }));
+    response(200, { scopeId: 'scope', fact: savedFact, sources: [], canForget: false }));
   const fixture = await loadPanel();
   const element = pageElement(fixture);
   element.querySelector<HTMLButtonElement>('.fact')?.click();
