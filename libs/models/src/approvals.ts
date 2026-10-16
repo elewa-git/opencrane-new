@@ -221,7 +221,8 @@ async function approvalPolicyChanged(store: EventStore, silo: string, request: R
   let published = policy.published;
   if (policy.publication) published = policy.configurationObservation !== undefined;
   // Keep consent tied to the reviewed publication, without requiring a running gateway.
-  const available = isToolPolicyAvailable({ ...policy, published });
+  const currentPublication = { ...policy, published };
+  const available = isToolPolicyAvailable(currentPublication);
   return !available || policy.policyRevision !== request.policySequence ||
     policy.connectionId !== request.connectionId;
 }

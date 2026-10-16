@@ -1693,7 +1693,8 @@ it.each([false, true])('refuses changed gateway generation after admission: %s',
 async function consumesPublishedPermitOnce(concurrent: boolean) {
   const context = await publishedFixture();
   const { setup } = context;
-  const value = await permit(setup, { ...context.headers, ...context.constants });
+  const headers = { ...context.headers, ...context.constants };
+  const value = await permit(setup, headers);
   let replies;
   if (concurrent) {
     replies = await Promise.all([send(setup, value), send(setup, value)]);
@@ -1706,7 +1707,7 @@ async function consumesPublishedPermitOnce(concurrent: boolean) {
   const statuses = replies.map(status);
   expect(statuses.sort()).toEqual([200, 403]);
   expect(setup.received()).toBe(1);
-  const unused = await permit(setup, { ...context.headers, ...context.constants });
+  const unused = await permit(setup, headers);
   const restarted = await startDecision(setup.actor, setup.identity, setup.binding,
     0, setup.keys, undefined, setup.dispatchOptions);
   onTestFinished(restarted.close);
@@ -1729,7 +1730,8 @@ async function refusesRejectedGeneration() {
   setup.gatewayChild()!.stdout?.on('data', record);
   setup.gatewayChild()!.stderr?.on('data', record);
   const settings = { ...delivery.options.settings, keyFile: `${setup.options.configFile}.missing` };
-  const rejected = gatewayDelivery({ ...delivery.options, settings });
+  const options = { ...delivery.options, settings };
+  const rejected = gatewayDelivery(options);
   await rejected.deliver(next);
   function reloadRejected() {
     return logs.join('').includes('Failed to reload config');
@@ -1746,9 +1748,10 @@ it('refuses an old gateway route after its replacement configuration is rejected
 async function refusesWithdrawnPublishedPermit() {
   const context = await publishedFixture();
   const { setup } = context;
-  const value = await permit(setup, { ...context.headers, ...context.constants });
-  await setup.append('mcp-fixture', 'mcp.server_unpublished',
-    { serverId: 'fixture', unpublishedBy: 'alice' });
+  const headers = { ...context.headers, ...context.constants };
+  const value = await permit(setup, headers);
+  const withdrawal = { serverId: 'fixture', unpublishedBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.server_unpublished', withdrawal);
   expect((await send(setup, value)).status).toBe(403);
   expect(await gatewayCall(context)).toBe(403);
   expect(setup.received()).toBe(0);
@@ -1777,7 +1780,8 @@ async function keepsApprovalAcrossCarriedGeneration() {
   const result = await decideApproval(setup.nats.store, 'test', approvalId,
     'alice', 'approved', true, fresh, after, setup.actor.now());
   expect(result.status).toBe('appended');
-  const value = await permit(setup, { ...context.headers, ...generationHeaders(next) });
+  const currentHeaders = { ...context.headers, ...generationHeaders(next) };
+  const value = await permit(setup, currentHeaders);
   expect((await send(setup, value)).status).toBe(200);
   expect(setup.received()).toBe(1);
 }

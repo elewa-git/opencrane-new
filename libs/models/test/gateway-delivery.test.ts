@@ -197,9 +197,9 @@ async function recordsOnlyLiveAcknowledgement() {
   expect(rows[1]!.event.data).toMatchObject({ generation: 1,
     recordDigest: setup.record.recordDigest, outcome: 'loaded' });
   expect(await setup.delivery.observe()).toEqual(rows[1]);
-  expect(setup.delivery.acknowledged()).toEqual({ generation: 1,
-    recordDigest: setup.record.recordDigest, members: setup.record.members,
-    position: rows[1]!.sequence });
+  const observation = { generation: 1, recordDigest: setup.record.recordDigest,
+    members: setup.record.members, position: rows[1]!.sequence };
+  expect(setup.delivery.acknowledged()).toEqual(observation);
   expect(await gatewayConfigurationCurrent(setup.nats.store, 'test', setup.record)).toBe(true);
   expect(await prepareGatewayConfiguration(setup.nats.store, 'test', 'alpha', 'publish-alpha'))
     .toEqual(setup.record);
@@ -826,7 +826,8 @@ async function reconcilesLatestOnly() {
   const oldWitness = await fetch(`http://127.0.0.1:${options.controlPort}${oldPath}`,
     { signal: AbortSignal.timeout(1000) });
   expect(oldWitness.status).toBe(404);
-  expect(worker.acknowledged()).toMatchObject({ generation: 2, recordDigest: next.recordDigest });
+  const expectedObservation = { generation: 2, recordDigest: next.recordDigest };
+  expect(worker.acknowledged()).toMatchObject(expectedObservation);
   const file = await stat(setup.options.configFile);
   await worker.check();
   expect((await stat(setup.options.configFile)).ino).toBe(file.ino);
