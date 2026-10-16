@@ -46,7 +46,7 @@
   }
 
   @if (!serverId && source() === 'hosted') {
-    <oc-hosted-install (started)="phase.set('checking')" />
+    <oc-hosted-install (started)="phase.set('checking')" (editing)="phase.set('draft')" />
   } @else {
   @if (phase() !== 'access' && !serverId) {
     <form [attr.aria-busy]="busy()" (submit)="submit($event)">

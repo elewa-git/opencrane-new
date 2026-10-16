@@ -61,6 +61,7 @@ function publicHost(value: string): boolean {
 })
 export class HostedInstall implements OnDestroy {
   readonly started = output<void>();
+  readonly editing = output<void>();
   protected readonly locator = signal('');
   protected readonly platform = signal<'linux/amd64' | 'linux/arm64'>('linux/amd64');
   protected readonly upstreamHost = signal('');
@@ -86,6 +87,27 @@ export class HostedInstall implements OnDestroy {
   }
   protected editHost(value: string): void { this.upstreamHost.set(value); }
   protected editPort(value: string): void { this.upstreamPort.set(value); }
+
+  protected chooseAnotherVersion(): void {
+    if (this.admission()?.status !== 'rejected') return;
+    this.accessGeneration += 1;
+    this.commandId = '';
+    this.serverId = '';
+    this.busy.set(false);
+    this.changeRef.set('');
+    this.setAdmission(undefined);
+    this.locator.set('');
+    this.phase.set('draft');
+    this.message.set('Choose an exact image and its permitted upstream.');
+    this.editing.emit();
+  }
+
+  protected alternativeLabel(): string {
+    if (this.admission()?.checks?.signature.verdict === 'fail') {
+      return 'Choose another signed version';
+    }
+    return 'Choose another version';
+  }
 
   protected async submit(event: Event): Promise<void> {
     event.preventDefault();
@@ -200,9 +222,22 @@ export class HostedInstall implements OnDestroy {
     }
     if (status === 'admitted') return 'Current image checks are unavailable. Discovery is unavailable.';
     if (status === 'expired') return 'The image checks have expired. Discovery is unavailable.';
-    if (status === 'rejected') return 'An image check failed. Discovery is unavailable.';
-    if (status === 'unavailable') return 'An image check is unavailable. Discovery is unavailable.';
-    return 'The image is queued for checks. Discovery is unavailable.';
+    if (status === 'rejected') return 'Not admitted. An image check failed.';
+    if (status === 'unavailable') {
+      return 'A check is unavailable. The image needs a dated result for that check.';
+    }
+    return 'Waiting for dated check results. No scanner result has been returned.';
+  }
+
+  protected checkReason(check: Check | undefined): string | undefined {
+    if (!check || check.verdict !== 'fail') return undefined;
+    if (check.reasonCodes.includes('unsigned')) {
+      return 'This image has no accepted publisher signature.';
+    }
+    if (check.reasonCodes.includes('forbidden_licence')) {
+      return 'This licence is not accepted for an installed package.';
+    }
+    return 'The check did not accept this image.';
   }
 
   private allCurrent(checks: Admission['checks']): boolean {

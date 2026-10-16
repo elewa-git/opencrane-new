@@ -64,6 +64,10 @@ function validForm(root: HTMLElement) {
   fill(root, 'upstream-port', '443');
 }
 
+function isAlternativeButton(button: HTMLButtonElement): boolean {
+  return button.textContent?.includes('Choose another') ?? false;
+}
+
 beforeEach(() => sessionStorage.clear());
 afterEach(() => vi.restoreAllMocks());
 
@@ -149,7 +153,7 @@ it.each(['not_run', 'unavailable', 'pass'] as const)(
   });
 
 it('keeps a safe read retry and clears protected content after access loss', async () => {
-  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(reply(202,
+  vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(reply(202,
     { status: 'appended', serverId: 'server-1', changeRef: 'chg_command-1' }))
     .mockResolvedValueOnce(reply(503)).mockResolvedValueOnce(reply(403));
   const root = screen();
@@ -313,6 +317,7 @@ it('shows a signature refusal and says later checks did not run', async () => {
   expect(root.textContent?.match(/Not run/gu)).toHaveLength(3);
   expect(root.textContent).toContain(`sha256:${digest}`);
   expect(root.textContent).not.toContain('All four image checks passed');
+  expect(root.textContent).toContain('Choose another signed version');
 });
 
 it('shows a definitive licence refusal without an evidence action', async () => {
@@ -339,7 +344,7 @@ it('does not turn a hostile reason code into HTML or a link', async () => {
     reasonCodes: ['<a href="https://evil.example">click</a>'] };
   const result = { ...admission('pass', 'rejected'), checks: {
     ...admission('pass').checks, licence } };
-  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(reply(202,
+  vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(reply(202,
     { serverId: 'server-1', changeRef: 'change-1' }))
     .mockResolvedValueOnce(reply(200, result));
   const root = screen();
@@ -351,5 +356,86 @@ it('does not turn a hostile reason code into HTML or a link', async () => {
   await vi.waitFor(() => expect(root.textContent).toContain('Status is unavailable'));
   expect(root.querySelector('a[href="https://evil.example"]')).toBeNull();
   expect(root.querySelector('script')).toBeNull();
+  expect(root.textContent).not.toContain('All four image checks passed');
+});
+
+it.each([200, 403])('handles an old admission GET after a new package: %s', async status => {
+  let releaseOldRead: (response: Response) => void = () => undefined;
+  const oldRead = new Promise<Response>(resolve => { releaseOldRead = resolve; });
+  const signature = { ...check('pass'), verdict: 'fail', reasonCodes: ['unsigned'] };
+  const rejected = { ...admission('pass', 'rejected'), checks: {
+    signature, licence: { verdict: 'not_run' }, vulnerability: { verdict: 'not_run' },
+    malware: { verdict: 'not_run' } } };
+  const fetch = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(202, { serverId: 'server-1', changeRef: 'change-1' }))
+    .mockResolvedValueOnce(reply(200, rejected))
+    .mockReturnValueOnce(oldRead)
+    .mockResolvedValueOnce(reply(202, { serverId: 'server-2', changeRef: 'change-2' }))
+    .mockResolvedValueOnce(reply(200, { ...admission('pass', 'checking'),
+      serverId: 'server-2', checks: undefined }));
+  const root = screen();
+  validForm(root);
+  root.querySelector('form')?.requestSubmit();
+  await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
+    '#hosted-check-status')?.disabled).toBe(false));
+  root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
+  await vi.waitFor(() => expect(root.textContent).toContain('Signature: Failed'));
+  root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+  const buttons = Array.from(root.querySelectorAll('button'));
+  const choose = buttons.find(isAlternativeButton);
+  choose?.click();
+  await vi.waitFor(() => expect(root.querySelector('form')).not.toBeNull());
+  validForm(root);
+  root.querySelector('form')?.requestSubmit();
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(4));
+  releaseOldRead(reply(status, admission('pass', 'admitted')));
+  if (status === 403) {
+    await vi.waitFor(() => expect(root.textContent).toContain('no longer have permission'));
+    expect(root.textContent).not.toContain(locator);
+    expect(root.textContent).not.toContain('All four image checks passed');
+    return;
+  }
+  await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
+    '#hosted-check-status')?.disabled).toBe(false));
+  expect(root.textContent).not.toContain('All four image checks passed');
+  root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
+  expect(fetch.mock.calls[4]?.[0]).toBe('/api/org/integrations/server-2/admission');
+});
+
+it('ignores an old successful GET after a newer GET refuses access', async () => {
+  let releaseOldRead: (response: Response) => void = () => undefined;
+  const oldRead = new Promise<Response>(resolve => { releaseOldRead = resolve; });
+  const signature = { ...check('pass'), verdict: 'fail', reasonCodes: ['unsigned'] };
+  const rejected = { ...admission('pass', 'rejected'), checks: {
+    signature, licence: { verdict: 'not_run' }, vulnerability: { verdict: 'not_run' },
+    malware: { verdict: 'not_run' } } };
+  const fetch = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(202, { serverId: 'server-1', changeRef: 'change-1' }))
+    .mockResolvedValueOnce(reply(200, rejected))
+    .mockReturnValueOnce(oldRead)
+    .mockResolvedValueOnce(reply(202, { serverId: 'server-2', changeRef: 'change-2' }))
+    .mockResolvedValueOnce(reply(403));
+  const root = screen();
+  validForm(root);
+  root.querySelector('form')?.requestSubmit();
+  await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
+    '#hosted-check-status')?.disabled).toBe(false));
+  root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
+  await vi.waitFor(() => expect(root.textContent).toContain('Signature: Failed'));
+  root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+  const buttons = Array.from(root.querySelectorAll('button'));
+  buttons.find(isAlternativeButton)?.click();
+  await vi.waitFor(() => expect(root.querySelector('form')).not.toBeNull());
+  validForm(root);
+  root.querySelector('form')?.requestSubmit();
+  await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
+    '#hosted-check-status')?.disabled).toBe(false));
+  root.querySelector<HTMLButtonElement>('#hosted-check-status')?.click();
+  await vi.waitFor(() => expect(root.textContent).toContain('no longer have permission'));
+  releaseOldRead(reply(200, admission('pass', 'admitted')));
+  await vi.waitFor(() => expect(root.textContent).not.toContain(locator));
   expect(root.textContent).not.toContain('All four image checks passed');
 });
