@@ -152,10 +152,11 @@ it.each(['not_run', 'unavailable', 'pass'] as const)(
     expect(root.textContent).toContain('Discovery is unavailable');
   });
 
-it('keeps a safe read retry and clears protected content after access loss', async () => {
+it.each([401, 403])(
+  'keeps a safe read retry and clears protected content after current %s', async status => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(reply(202,
     { status: 'appended', serverId: 'server-1', changeRef: 'chg_command-1' }))
-    .mockResolvedValueOnce(reply(503)).mockResolvedValueOnce(reply(403));
+    .mockResolvedValueOnce(reply(503)).mockResolvedValueOnce(reply(status));
   const root = screen();
   validForm(root);
   root.querySelector('form')?.requestSubmit();
