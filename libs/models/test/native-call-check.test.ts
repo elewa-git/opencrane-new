@@ -224,8 +224,9 @@ async function directCheck(fields: Record<string, unknown>, patch = {},
   const turn = parseTurnToken({ iat: 1, exp: 121, ...fields });
   const computer = { assistant: 'assistant', computer: 'computer', generation: 1, ...patch };
   const checked = await context.credentials.check(context.headers);
-  return checkNativeCall(store, 'test', computer, turn, checked.sequence,
-    performance.now() + 2000);
+  const started = performance.now();
+  return checkNativeCall(store, context.binding, computer, turn, checked.sequence,
+    started, started + 2000);
 }
 async function refusesComputer(field: string, value: unknown) {
   const patch = { [field]: value };
