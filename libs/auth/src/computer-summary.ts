@@ -25,7 +25,8 @@ export async function readComputerControl(store: Pick<EventStore, 'readStream'>,
 type ExecutionMode = 'restricted' | 'memory_free';
 export type TurnSummary = {
   hasStart: boolean;
-  firstClose: { sequence: number; status: z.infer<typeof closeDetails>['status'] } | undefined;
+  firstClose: { sequence: number; status: z.infer<typeof closeDetails>['status'];
+    budgetStopId?: string | undefined } | undefined;
   firstStart?: StoredEvent;
   lastStartExecutionMode?: ExecutionMode | undefined;
   startCommandKeys?: Set<string>;
@@ -83,6 +84,9 @@ function addClose(summary: ComputerSummary, row: StoredEvent,
   summary.startCommandCount -= previous?.startCommandKeys?.size ?? 0;
   const closedTurn: TurnSummary = { hasStart: previous?.hasStart ?? false,
     firstClose: { sequence: row.sequence, status: details.status } };
+  if ('budgetStopId' in details && details.budgetStopId) {
+    closedTurn.firstClose!.budgetStopId = details.budgetStopId;
+  }
   summary.turns.set(details.turnId, closedTurn);
 }
 function addStart(summary: ComputerSummary, row: StoredEvent,

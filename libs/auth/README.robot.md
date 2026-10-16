@@ -241,3 +241,9 @@ refuse it. Only trusted server code may call this signer after saving intent;
 there is no server caller or delivery path yet. Token values must never enter
 logs, errors, events, receipts or API responses. `test/tokens.test.ts` checks
 the signature, claims, expiry and audience separation with a real issuer key.
+
+## Saved budget admission refusals
+
+The computer summary retains a chat close's optional `budgetStopId`. The server
+uses it to finish recording a refused start after a lost connection, even if the
+ceiling has since risen. The field grants no pass and cannot reopen a closed turn.

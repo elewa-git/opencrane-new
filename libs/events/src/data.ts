@@ -678,6 +678,7 @@ function hasProviderTurnModel(data: { providerId?: string | undefined; model?: s
 const computerTurnClosedFieldsSchema = optionalProviderTurnBindingSchema.safeExtend({
   ...computerTurnStartedFieldsSchema.shape,
   threadId: id.optional(), status: z.enum(['completed', 'failed']),
+  budgetStopId: id.optional(),
 });
 const chatTurnClosed = computerTurnClosedFieldsSchema
   .refine(hasProviderTurnModel, 'Provider turns require a model');

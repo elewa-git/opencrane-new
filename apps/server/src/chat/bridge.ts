@@ -16,7 +16,9 @@ import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { bridgeControl, readyBridgePass } from './bridge-control.ts';
-import { turnCommand, requireTurnMember, TurnAdmissionRejected } from './turns.ts';
+import { turnCommand, requireTurnMember, TurnAdmissionRejected,
+  BudgetAdmissionRejected } from './turns.ts';
+import { recordBudgetRefusal, recoverBudgetRefusals } from './budget-refusal.ts';
 import { readChatFacts } from './chat-summary.ts';
 import { privateContext } from './private-context.ts';
 import { sharedContext } from './shared-context.ts';
@@ -79,6 +81,11 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
         { ...report, status, replay: result === 'duplicate' });
     } catch (error) {
       if (!(error instanceof TurnAdmissionRejected)) throw error;
+      if (error instanceof BudgetAdmissionRejected) {
+        const refused = { silo: options.silo, assistantId: input.assistantId,
+          conversationId: report.conversationId, turnId: report.turnId, stopId: error.stopId };
+        await recordBudgetRefusal(options.store, refused);
+      }
       acknowledgement.refused = error.message;
     }
     if (status === 'started' && binding) {
@@ -277,6 +284,7 @@ async function resumeBridgeReports(options: BridgeOptions, input: BridgeInput,
   socket.once('close', stopPolling);
   try {
     await control.send();
+    await recoverBudgetRefusals(options.store, options.silo, input.assistantId);
     const position = await reportPosition(options.store, options.silo, input.computerId);
     await control.send();
     const resume = { type: 'resume', since: position, approvalWaiting: true };
@@ -315,7 +323,12 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   socket.once('close', closed);
   const reports = reportReceiver(options, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
-  await resumeBridgeReports(options, input, socket, control);
+  try {
+    await resumeBridgeReports(options, input, socket, control);
+  } catch (error) {
+    socket.terminate();
+    throw error;
+  }
   const delivered = new Set<string>();
   let transfers = Promise.resolve();
   function deliver(file: Upload, bytes: Buffer, checkControl?: () => Promise<boolean>) {

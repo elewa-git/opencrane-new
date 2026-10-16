@@ -2195,6 +2195,29 @@ Owner/Admin budget reads and commands include saved stop reasons and known turns
 Rebuild budget projections on upgrade. The integration test checks PostgreSQL
 replay and member refusal; dispatch and cancellation follow later.
 
+## Budget refusal at turn admission
+
+A zero ceiling can refuse a chat turn before the model gateway receives a call.
+The failed `computer.turn_closed` keeps `budgetStopId`. The bridge records a
+`decision.recorded` model denial with reason `budget_exhausted` before sending the
+refused acknowledgement. Each command appends to one stream. The decision uses a
+stable id and its own stream so reconnects cannot create another refusal, even
+after NATS deduplication expires. Failed saves close the connection without an
+acknowledgement. Before sending `resume`, the bridge reads saved budget closes
+from the computer summary and records their decisions with the same stable ids.
+This also works after a restricted computer restarts and replaces its unfinished
+start with a failed report, or has no reports left to replay. Recovery uses the
+original stop id even after the ceiling rises. It never admits or reserves money
+for that turn. History loads outside access checks. The existing conversation
+projection supplies the budget notice.
+
+`test/bridge-replay.test.ts` covers the refusal, no reservation, reconnects, a lost
+save before or after append, and recovery after the ceiling rises.
+
+`test/budget-refusal-restart.test.ts` restarts the real restricted computer channel
+after a decision save fails before append. It checks one decision, the authenticated
+member feed and reload, a second restart, no reservation and no revived turn.
+
 ## Internal control intent
 
 `src/computers/takeover.ts` checks the latest accepted human request, its reviewed

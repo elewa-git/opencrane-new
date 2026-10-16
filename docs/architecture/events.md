@@ -116,7 +116,7 @@ no access and start no model work. Replay copies ciphertext without touching key
 | `egress.destination_revoked` | Owner/Admin destination command | egress-policy, audit | none; networking stays off |
 | `egress.observed` | egress observer (networking disabled; existing records remain readable) | audit | none; never dispatch on replay |
 | `gateway.observation_recorded` | safe gateway log ingest | audit, including unverified JWT failures | none; no asserted requester identity |
-| `decision.recorded` | ext_authz | audit; MCP decisions feed conversations with turn id, outcome, reason, request id and optional call id and approval id; model budget refusals keep only turn id and reason | none; admission is not an observed effect |
+| `decision.recorded` | ext_authz; server bridge for budget admission refusals | audit; MCP decisions feed conversations with turn id, outcome, reason, request id and optional call id and approval id; model budget refusals keep only turn id and reason | none; admission is not an observed effect |
 
 Each admission attempt records `requestId`, `route`, `outcome` (allow/ask/deny),
 `reason` and `contextDigest`. Verified callers also carry `requesterId`,
@@ -246,7 +246,7 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 | `assistant.settings_changed` | owner, admin or departure deactivation reaction | assistants (model, persona, tools, active) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
-| `computer.turn_started` / `computer.turn_closed` | server turn command | chat admission and idle-suspend checks; native computer-root read indexes and internal admission limits | chat starts bind the message, thread and `executionMode`, with optional provider/model identity; native starts bind root and ancestry, copying `sharingClass` for shared-only roots without granting authority; closed is permanent |
+| `computer.turn_started` / `computer.turn_closed` | server turn command | chat admission and idle-suspend checks; native computer-root read indexes and internal admission limits | chat starts bind the message, thread and `executionMode`, with optional provider/model identity; native starts bind root and ancestry, copying `sharingClass` for shared-only roots without granting authority; closed is permanent; a chat budget refusal retains `budgetStopId` for reliable decision recording |
 | `computer.suspended` / `computer.resumed` | server or idle/departure worker (suspend intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) or departure worker (confirm an existing loss) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim only the current loss, unless its personal owner was removed; departure confirmation advances the computer stream to reject earlier pending claims before cleanup completes |
 | `computer.retired` | server | computers | delete snapshots after retention |
