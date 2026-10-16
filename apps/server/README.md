@@ -147,7 +147,7 @@ have not been checked. Unrelated read receipts do not require reading the event 
   Refuses agent writes until saved records cover every fact loaded into the turn.
 - After managed calls are switched on, records the assistant's provider choice or the
   silo default for each new turn. A turn keeps that model when its pass is renewed.
-  No command to switch this on is built yet.
+  The switch-on command waits for existing holds and sends to settle or release.
 - Signs people in and keeps their browser session.
 - Uses the shared organisation check for session routes and WebSocket connections.
   Production refuses extra sign-in identities. Development can allow named identities
@@ -250,8 +250,10 @@ Owner and admin spending reads include saved budget stop reasons and UTC resets.
 A zero limit, or a limit lowered to the money already spent or held, stops affected
 model reservations as soon as the change is saved. Applying stops to every running
 computer and tool call is still planned. Owners and admins can record provider
-switch-on after choosing a default and draining legacy turns. Calls then stay refused
-until the managed gateway is available.
+switch-on after choosing a default and draining legacy turns. Existing holds and
+sends must settle or release first. A lost reply can be recovered, but retrying the
+command refuses if later evidence has reopened a hold. The status read still shows
+the original saved change; that refusal does not undo switch-on.
 
 A person can forget their own saved fact through HTTP. Group members can also forget
 group facts and notes from their group’s assistant when they have both read and write

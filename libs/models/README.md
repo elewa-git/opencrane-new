@@ -155,8 +155,10 @@ Retrying a model request does not yet recover an earlier hold.
   own pause stops new model work. An owner or admin can switch this on after
   choosing an explicit default and draining legacy turns. Every saved hold and send
   must have a settlement or release, even if its computer was lost or its turn closed.
-  Calls then stay refused
-  until the managed gateway is available.
+  A retry also refuses if late usage evidence has reopened a hold. The saved
+  switch-on stays in place. Replaying events keeps the original payer and charge
+  without sending calls again. Sends without a money hold still block switch-on
+  because their completion is not yet recorded.
   Reads the personal paying group and switch-on state together, once per new spending event.
 - Pause new model turns with a saved drain command while running turns finish.
   An administrator can cancel the drain with another saved command.

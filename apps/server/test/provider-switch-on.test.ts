@@ -501,7 +501,6 @@ async function replaySwitch(command: Awaited<ReturnType<typeof input>>, receipt:
   await setup.runner.run(budgets);
   const before = await readBudget(setup.db, 'test');
   const records = await spendingRecords();
-  const keysRead = secrets.read.mock.calls.length;
   await app.close();
   await setup.decisionDown();
   // Use a new store object so restart cannot reuse the previous process's summaries.
@@ -525,7 +524,7 @@ async function replaySwitch(command: Awaited<ReturnType<typeof input>>, receipt:
     { enabled: true, draining: false });
   expect((await request(command)).json()).toEqual(receipt);
   expect(await spendingRecords()).toEqual(records);
-  expect(secrets.read.mock.calls).toHaveLength(keysRead);
+  expect(secrets.read).not.toHaveBeenCalled();
   expect(setup.received()).toBe(0);
   const payer = { scope: 'paying_group' as const, scopeId: 'sales' };
   expect(totals(after, recovered.now(), payer)).toMatchObject(
@@ -540,7 +539,7 @@ async function settlementProof() {
   await refused(403);
   // Change the default model after admission; usage must still use the held call's tariff.
   await choice({ model: 'gpt-6.1-sol' });
-  const effectId = await recordUsage(reservationId);
+  const effectId = await recordUsage(reservationId, 100_000);
   const command = await input();
   const response = await request(command);
   expect(response.statusCode).toBe(200);
@@ -553,6 +552,8 @@ async function settlementProof() {
   ]);
   const effects = await history(setup.nats.store, `effect-${reservationId}`, 'test');
   expect(effects).toHaveLength(1);
+  expect(effects[0]?.event.data).toMatchObject({ tool: 'gpt-6-luna', costCents: 1,
+    usage: { priceTableId, inputTokens: 100_000, outputTokens: 120 } });
   const records = await spendingRecords();
   function isSettlement(row: typeof records[number]) {
     return row.event.type === 'budget.settled';
@@ -694,7 +695,6 @@ async function lostReplyWithCompletion(kind: 'settlement' | 'release' | 'unknown
 }
 it.each(['settlement', 'release', 'unknown'] as const)(
   'checks %s saved while the switch-on append reply is lost', lostReplyWithCompletion);
-
 
 async function lateSettlementBeforeAppend() {
   const reservationId = await heldCall();

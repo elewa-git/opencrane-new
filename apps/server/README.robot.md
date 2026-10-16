@@ -2648,7 +2648,14 @@ The provider route table exposes the [switch-on command](../../docs/api/provider
 It uses the existing session, organisation, Origin and error handling. Changes GET
 also finds the saved marker on the silo budget stream and checks provider management
 permission and its creation receipt. Missing results remain unknown, never proof of failure.
-Managed gateway startup, fallback-key refusal, switch-off, retirement and UI are outside this part.
+The command tests also cover duplicate usage and settlement delivery, zero-cost
+release, completion races and restart/replay (PR 4f). The saved marker does not let
+a POST retry bypass an unresolved hold or send. A retry with late unknown settlement
+returns 403; the status GET still returns the original historical receipt. This does
+not undo switch-on. Sends without a reservation have no completion writer yet and
+remain refused. The fixture records zero provider requests and custody reads during
+replay. Models startup, dev-stack wiring, switch-off, retirement and UI are outside
+this part. Fresh-install qualification and paid calls are NOT RUN.
 
 ## Dispatch catalogue capture (#48 PR 3b, first split)
 

@@ -1,0 +1,1 @@
+Provider switch-on retries now refuse unresolved spending after a lost reply, including a hold reopened by late usage evidence. Command tests cover settlement once at the original payer and tariff, zero-cost release, completion races and restart/replay without new calls. Sends without reservations remain blocked until completion can be recorded.

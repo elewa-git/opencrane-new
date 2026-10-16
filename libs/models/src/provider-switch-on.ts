@@ -129,6 +129,11 @@ function addBudget(summary: Budget, row: StoredEvent) {
 const budget: SummaryKind<Budget> = {
   name: 'provider-switch-budget', keep: 4, empty: emptyBudget, add: addBudget,
 };
+function requireSettledSpending(openSpending: boolean) {
+  if (openSpending) {
+    throw new ProviderRefused();
+  }
+}
 function takeMarker(summary: Budget) {
   return structuredClone(summary.marker);
 }
@@ -211,6 +216,8 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
       throw new ProviderConflict();
     }
     reconcileProvider(spending.marker, event);
+    // Recheck holds reopened by late evidence, even when the original reply was lost.
+    requireSettledSpending(spending.openSpending);
     await fresh();
     return providerReceipt(spending.marker);
   }
@@ -220,9 +227,10 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
   if (providerCommandExists) {
     throw new ProviderConflict();
   }
-  if (spending.marker || !current.draining || activeLegacy || spending.openSpending) {
+  if (spending.marker || !current.draining || activeLegacy) {
     throw new ProviderRefused();
   }
+  requireSettledSpending(spending.openSpending);
   requirePositions(current, input, providerId);
   if (!choicesValid) {
     throw new ProviderRefused();
