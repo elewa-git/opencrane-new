@@ -2311,7 +2311,7 @@ A saved retry compares event type, stream, silo and the complete ceiling payload
 including `setBy`, before returning the original receipt. The expected revision is
 not part of the saved payload. Budget reservation churn still conflicts; the existing
 managed switch-on revision rule is unchanged. Each new change appends once.
-`test/actor.test.ts` covers original receipts after restart and NATS duplicate expiry,
+`test/actor.test.ts` covers original receipts after restart, writer replacement and NATS duplicate expiry,
 changed callers/payloads and unchanged event positions on retries.
 
 ## Loaded memory before dispatch (P4-15 PR 2d; Part of #97)

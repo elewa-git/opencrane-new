@@ -3,8 +3,7 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { budgetCeilingSetDataSchema } from '@opencrane/events';
 import { history } from './event-history.ts';
 import { readActiveMember, MemberAccessRefused } from './member-authority.ts';
-import { applyBudget, emptyBudget } from './state.ts';
-import { ceilingReceipt } from './ceiling-command.ts';
+import { ceilingReceiptFromHistory } from './ceiling-command.ts';
 
 export async function budgetChange(store: EventStore, binding: Binding,
   memberId: string, commandId: string) {
@@ -32,7 +31,5 @@ export async function budgetChange(store: EventStore, binding: Binding,
   if (permission.status === 'unavailable') throw new Error('IAM unavailable');
   if (!permission.allowed) throw new MemberAccessRefused('Owner or Admin required');
   if (!saved || !rows) return { status: 'unknown' };
-  const state = emptyBudget();
-  for (const row of rows) applyBudget(state, row.event, row.sequence);
-  return ceilingReceipt(saved, state);
+  return ceilingReceiptFromHistory(saved, rows);
 }

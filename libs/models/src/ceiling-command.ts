@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { budgetCeilingSetDataSchema } from '@opencrane/events';
 import { history } from './event-history.ts';
-import type { BudgetState } from './state.ts';
+import { applyBudget, emptyBudget, type BudgetState } from './state.ts';
 
 export function ceilingReceipt(row: StoredEvent, state: BudgetState) {
   const payload = budgetCeilingSetDataSchema.parse(row.event.data);
@@ -19,6 +19,12 @@ export function ceilingReceipt(row: StoredEvent, state: BudgetState) {
   return { status: 'appended' as const, receipt };
 }
 
+export function ceilingReceiptFromHistory(row: StoredEvent, rows: StoredEvent[]) {
+  const state = emptyBudget();
+  for (const saved of rows) applyBudget(state, saved.event, saved.sequence);
+  return ceilingReceipt(row, state);
+}
+
 export async function prepareCeilingChange(
   actor: { store: EventStore; silo: string; state: BudgetState },
   raw: unknown, commandId: string, expectedSequence?: number, fresh?: () => Promise<void>,
@@ -30,15 +36,15 @@ export async function prepareCeilingChange(
     return row.event.commandId === commandId;
   }
   const prior = rows.find(matchesCommand);
+  let receipt: ReturnType<typeof ceilingReceipt> | undefined;
+  if (prior?.event.type === 'budget.ceiling_set' && prior.event.subject === subject &&
+      isDeepStrictEqual(prior.event.data, payload)) {
+    // Read the saved stop too; a replacement writer may have recorded this change.
+    receipt = ceilingReceiptFromHistory(prior, rows);
+  }
   // Start the caller's write check only after history and queue waiting have finished.
   await fresh?.();
-  if (prior) {
-    if (prior.event.type !== 'budget.ceiling_set' || prior.event.subject !== subject ||
-        !isDeepStrictEqual(prior.event.data, payload)) {
-      return { status: 'conflict' as const };
-    }
-    return ceilingReceipt(prior, actor.state);
-  }
+  if (prior) return receipt ?? { status: 'conflict' as const };
   // Keep reservation changes in this revision; a conflict need not mean another edit.
   if (expectedSequence !== undefined && expectedSequence !== actor.state.sequence) {
     return { status: 'conflict' as const };
