@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { IntegrationFacts } from '../integrations/integration-facts';
 import type { IntegrationFact } from '../integrations/integration-facts-map';
 import { ModelAccessEditor } from './model-access-editor';
+import { ProviderSetupAccess } from './provider-setup-access';
 import { ModelTable } from './model-table';
 import { ModalSheet } from '../ui/modal-sheet';
 import { SharedState } from '../shared-state/shared-state';
@@ -17,7 +18,8 @@ function commandId(): string {
 
 @Component({
   selector: 'oc-models',
-  imports: [SharedState, ModalSheet, IntegrationFacts, ModelAccessEditor, ModelTable],
+  imports: [SharedState, ModalSheet, IntegrationFacts, ModelAccessEditor, ModelTable,
+    ProviderSetupAccess],
   templateUrl: './model-registry.html',
   styleUrls: ['./model-registry.css', './provider-setup.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -62,6 +64,11 @@ export class ModelsScreen extends ProviderKeyChanges {
       if (isCurrent) {
         const remainingChanges = without(this.pendingModels(), providerIdValue);
         this.pendingModels.set(remainingChanges);
+        const confirmed = without(this.confirmedModels(), providerIdValue);
+        if (result.value.revision !== undefined) {
+          confirmed[providerIdValue] = result.value.revision;
+        }
+        this.confirmedModels.set(confirmed);
         this.resultText.set('Model choices saved. They do not grant access.');
         this.resultKind.set('confirmed');
         await this.refreshOne(providerIdValue);
@@ -192,7 +199,7 @@ export class ModelsScreen extends ProviderKeyChanges {
       this.resultText.set('No price is available for this model, so it cannot be tested.');
       this.resultKind.set('refused');
     } else if (result.kind === 'forbidden') {
-      await this.showCommandFailure('forbidden', '', 'Price read');
+      this.clearForbiddenData();
     } else {
       const priceFailure = "Couldn't read the price. Nothing was sent. "
         + 'Read the price again to retry.';
@@ -207,6 +214,9 @@ export class ModelsScreen extends ProviderKeyChanges {
     if (!provider || this.busy() || this.hasPendingFor(providerIdValue)) {
       return;
     }
+    // Keep saved models even if a newer provider read added one after this draft opened.
+    const models = new Set([...provider.enabledModels, ...this.selectedModels()]);
+    this.selectedModels.set([...models]);
     if (provider.provider !== 'openai'
       || sameModels(provider.enabledModels, this.selectedModels())) {
       this.nextStep();
@@ -248,6 +258,10 @@ export class ModelsScreen extends ProviderKeyChanges {
     if (!(target instanceof HTMLInputElement)) {
       return;
     }
+    if (this.modelSelectionLocked(model)) {
+      target.checked = true;
+      return;
+    }
     const selected = this.selectedModels();
     if (target.checked && !selected.includes(model)) {
       this.selectedModels.set([...selected, model]);
@@ -280,7 +294,7 @@ export class ModelsScreen extends ProviderKeyChanges {
   }
 
   protected setupTitle(): string {
-    return this.step() === 'done' ? 'Provider setup complete' : 'Connect a provider';
+    return this.step() === 'done' ? 'Provider setup receipts' : 'Connect a provider';
   }
   protected isOpenAiDraft(): boolean {
     return this.draft().provider === 'openai';
@@ -300,8 +314,13 @@ export class ModelsScreen extends ProviderKeyChanges {
   protected activePendingCheck(): PendingChange | undefined {
     return this.pendingChecks()[this.providerIdDraft()];
   }
+  protected modelSelectionLocked(model: string): boolean {
+    return this.activeProvider()?.enabledModels.includes(model) === true
+      || this.pendingAccessModels().includes(model);
+  }
   protected isModelSelected(model: string): boolean {
-    return this.selectedModels().includes(model);
+    return this.selectedModels().includes(model)
+      || this.activeProvider()?.enabledModels.includes(model) === true;
   }
   protected canRunModelTest(): boolean {
     const consent = this.modelTestConsent();

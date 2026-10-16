@@ -998,7 +998,7 @@ it('keeps a recorded model selection locked until its records are current', asyn
   const serve = serveScenario(state);
   const fixture = await mount(request => {
     if (request.url.includes('/changes/')) {
-      return reply({ status: 'appended', operation: 'provider.models_selected',
+      return reply({ status: 'appended', operation: 'provider.models_selected', revision: state.row.revision,
         projection: { content: current ? 'current' : 'applying', iam: 'current' } });
     }
     return serve(request);

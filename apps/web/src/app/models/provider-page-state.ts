@@ -29,6 +29,8 @@ export class ProviderPageState implements OnInit, OnDestroy {
   protected readonly step = signal<SetupStep>('provider');
   protected readonly draft = signal<ProviderDraft>({ provider: 'openai', name: '' });
   protected readonly selectedModels = signal<string[]>([]);
+  protected readonly confirmedModels = signal<Record<string, number>>({});
+  protected readonly pendingAccessModels = signal<string[]>([]);
   protected readonly providerIdDraft = signal('');
   protected readonly keyDraft = signal('');
   protected readonly keyError = signal('');
@@ -312,7 +314,7 @@ export class ProviderPageState implements OnInit, OnDestroy {
       return undefined;
     }
     if (result.kind === 'forbidden') {
-      await this.showCommandFailure('forbidden', pending.commandId, 'Status read');
+      this.clearForbiddenData();
       return undefined;
     }
     return result;
@@ -342,6 +344,8 @@ export class ProviderPageState implements OnInit, OnDestroy {
     this.pendingCreates.set({});
     this.pendingKeys.set({});
     this.pendingModels.set({});
+    this.confirmedModels.set({});
+    this.pendingAccessModels.set([]);
     this.pendingChecks.set({});
     this.draft.set({ provider: 'openai', name: '' });
     this.keyError.set('');
@@ -386,7 +390,7 @@ export class ProviderPageState implements OnInit, OnDestroy {
       return;
     }
     if (result.kind === 'forbidden') {
-      await this.showCommandFailure('forbidden', '', 'Provider read');
+      this.clearForbiddenData();
       return;
     }
     if (result.kind !== 'ok') {

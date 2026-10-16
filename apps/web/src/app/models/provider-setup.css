@@ -6,7 +6,7 @@
   border: 1px solid var(--oc-border-default); border-radius: 50%; background: var(--oc-surface-subtle); }
 .steps .current { color: var(--oc-ink-strong); font-weight: 600; }
 .steps .current > span { border-color: var(--oc-accent); }
-.steps .complete > span { background: #2a7d4f; border-color: #2a7d4f; color: #fff; }
+.steps .visited > span { border-color: var(--oc-accent); }
 .step-title { font-size: 14px; font-weight: 600; }
 .step-form, .verify-step, .completion { display: grid; gap: 15px; min-width: 0; }
 fieldset { display: grid; gap: 9px; min-width: 0; margin: 0; padding: 0; border: 0; }
@@ -66,3 +66,7 @@ legend, .field-label { display: block; margin-bottom: 8px; font-size: 13px; font
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important;
     animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.completion p, .completion small { overflow-wrap: anywhere; }
+.completion p, .completion h3 { margin: 0; }
+.completion small { display: block; }

@@ -1,0 +1,45 @@
+<div [hidden]="done()">
+  @if (started()) {
+  @for (model of models(); track model) {
+    <section>
+      <h3>{{ model }} — who can use it</h3>
+      <oc-model-access-editor [inlineModel]="model" (outcome)="record($event)"
+        (lostAccess)="lostAccess.emit()" />
+      @for (row of outcomes(); track $index) {
+        @if (row.modelId === model && missing(row)) {
+          <p>Missing: {{ row.grantee.displayName }} has no grant yet for {{ model }}.</p>
+        }
+      }
+    </section>
+  }
+  }
+  <p>Access does not choose this connection for anyone's chats.</p>
+</div>
+@if (done()) {
+  <section class="completion">
+    <h3>What was configured and tested</h3>
+    @if (provider(); as connection) {
+      @if (connection.saved) {
+        <p>✓ Connection “{{ connection.name }}” saved · {{ time(connection.saved.time) }}</p>
+      }
+      @for (fact of facts(connection); track fact.label) {
+        <p>{{ fact.kind === 'confirmed' ? '✓' : '○' }} {{ fact.label }} · {{ fact.value }}
+          <small>{{ fact.evidence }}</small>
+        </p>
+      }
+      @if (modelsRevision() === connection.revision) {
+        <p>✓ Enabled models: {{ connection.enabledModels.length }}.</p>
+      }
+    }
+    @for (row of outcomes(); track $index) {
+      <p>{{ label(row) }} {{ row.grantee.displayName }} — {{ row.modelId }}
+        @if (row.commandId) { <small>Reference: {{ row.commandId }}</small> }
+      </p>
+      @if (missing(row)) {
+        <p>⚠ {{ row.grantee.displayName }} still lacks {{ row.modelId }}. Grant it in Models.</p>
+      }
+    }
+    <p class="evidence-note">Evidence only. These checks do not prove a conversation works
+      or guarantee a fallback.</p>
+  </section>
+}

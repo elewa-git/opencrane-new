@@ -16,3 +16,8 @@ button:focus-visible { outline: 2px solid #0a8497; outline-offset: 2px; }
   article { grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; }
   article strong { grid-column: auto; }
 }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; max-width: 100%; padding-left: 12px;
+  border: 1px solid var(--oc-border-default); border-radius: 8px; overflow-wrap: anywhere; }
+.chip button { flex-shrink: 0; border: 0; }
+code { overflow-wrap: anywhere; }
