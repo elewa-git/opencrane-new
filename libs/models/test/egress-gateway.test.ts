@@ -4,6 +4,7 @@ import { clientHello } from './egress-hello-fixture.ts';
 import { expect, it } from 'vitest';
 import { egressFixture, type EgressScenario } from './egress-fixture.ts';
 import { egressGatewayRoute } from '../src/egress-gateway.ts';
+import { history } from '../src/event-history.ts';
 
 async function routesAfterSavedAdmission() {
   const setup = await egressFixture();
@@ -121,6 +122,11 @@ async function guardedTunnel(bytes: Buffer, connections: number) {
   else expect(setup.received()).toHaveLength(0);
   expect(setup.received().includes(bearer)).toBe(false);
   expect(setup.received().includes('secret-canary')).toBe(false);
+  function closedRelays() { return setup.closeRecords.length; }
+  await expect.poll(closedRelays).toBe(1);
+  await setup.receipt.retry();
+  const observations = await history(setup.store, `egress-${setup.permit}`, 'test');
+  expect(observations).toHaveLength(0);
 }
 it.each([[clientHello(), 1], [Buffer.from('GET https://registry.npmjs.org/ HTTP/1.1\r\n\r\n'), 0]])(
   'checks tunnel bytes behind the real gateway before connecting', guardedTunnel);
