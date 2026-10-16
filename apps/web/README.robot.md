@@ -275,22 +275,23 @@ text contrast. The receipt records the visible differences from PPL-30 to PPL-35
 
 ## Sign-in
 
-`/` shows the SSO-first sign-in screen or the current session and sign-out action.
-`/signin/handoff` focuses Cancel and announces “Opening single sign-on…” for 2.5 seconds before
-opening the existing server login route; Cancel returns home and stops the timer.
-`/signin/rejected` shows fixed, safe failure copy with an SSO recovery action.
-Set the public `opencrane-org` meta tag in `src/index.html` for the deployment’s
-organisation display name. A non-empty `?invitation=…` arrival shows the frame’s
-invitation copy using that name; it does not grant membership or validate an invite.
-All three use the onboarding SSO colour token and shared states at desktop and
-390px widths. Passwords stay on Zitadel. Email sign-in is unavailable until
-delivery is qualified; there is no fake sent-email screen.
+`/` checks `/auth/me` and shows the SSO-first card or the current session with a
+native sign-out form. A signed-out reply focuses Continue with single sign-on.
+The email field is read-only and explained; it has no submit action.
+`/signin/handoff` focuses Cancel and announces “Opening single sign-on…” for 2.5 seconds
+before opening `/auth/login?returnTo=/`. Cancel returns home and stops the timer.
+`/signin/rejected` never reads `/auth/me`. It selects one fixed message from the
+reason lookup, focuses the heading and announces one polite status. Sign in again
+opens the same handoff. No reason or session value is stored or logged.
+The public `opencrane-org` meta tag in `src/index.html` supplies the organisation
+name. A non-empty `?invitation=…` shows invitation copy but does not grant membership.
+These views use one dog-eared card on the paper page at desktop and 390px widths.
 
-Run `npm run visual:signin` with the dev stack running to capture the three screens
-and 1× card comparisons cropped from the design source in `/home/jente/.fleet/signin-shots/`. The capture checks card dimensions, spacing, tokens, copy, overflow and 44px
-controls. Browser-clock checks exercise focus, Enter/Space cancellation and timing. The live journey uses normal
-timers, real Zitadel and both test accounts; see the
-[sign-in evidence](../../docs/process/signin-evidence.md).
+`npm run visual:screen-p4-19-signin` builds the web app and writes twelve
+intercepted-reply captures with a [receipt](../../docs/process/screen-p4-19-signin/README.md).
+It checks card width and gutters, overflow, 44px controls, focus, Enter/Space Cancel
+and the redirect timer. It does not run a dev stack or qualify real sign-in.
+The earlier live journey is recorded in [sign-in evidence](../../docs/process/signin-evidence.md).
 
 ## Chat workspace
 

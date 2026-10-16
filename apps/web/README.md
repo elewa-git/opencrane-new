@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>chat, saved archive choices, welcome survey and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>sign-in, chat, saved archive choices, welcome survey and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices and access"]
@@ -31,7 +31,8 @@ audiences. It names a shared assistant whose selected model lacks its own grant.
 While grants are updating, or when some assistants cannot be checked, it leaves the
 assistant check open rather than guessing an answer.
 
-- Shows sign-in and the first-owner claim page.
+- Shows a single sign-on card with a clear email sign-in notice, a cancellable
+  handoff, and a plain failure message. It also shows the first-owner claim page.
 - Lets a person enter their name, optional pronouns and work description for the
   welcome survey. It shows their current groups without offering to change membership.
   It shows saved progress, checks an uncertain save, and asks before changing
@@ -96,8 +97,10 @@ assistant check open rather than guessing an answer.
 
 ## Processes it handles
 
-1. **A person signs in.** The website sends them to the sign-in service. After sign-in,
-   it brings them back to the start page, where they can open the workspace.
+1. **A person signs in.** The website checks whether they already have a session.
+   Otherwise, it sends them to the sign-in service after a short cancellable wait.
+   A failed sign-in shows a safe message and offers another try. After sign-in,
+   they return to the start page and can open the workspace.
 2. **The first owner claims a new installation.** They sign in and enter its one-time token. The server records them as the owner.
 3. **A person sends a message.** The website opens a conversation and sends the message to the server. It shows the reply as it arrives and offers Stop.
    After Stop, it says “Stopping…” while it waits for an ending report. If no report

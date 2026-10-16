@@ -1,4 +1,9 @@
-# Zitadel sign-in evidence
+# Sign-in evidence
+
+The current card is captured by `npm run visual:screen-p4-19-signin`. Its
+[screen receipt](screen-p4-19-signin/README.md) checks the ready, handoff and
+rejected views at 1280px and 390px with intercepted replies. It does not run a
+live sign-in journey. The record below describes the earlier sign-in release.
 
 Issue #11, 2 October 2026, branch `work/zitadel-signin`.
 Final findings fixed on top of `747102fc38cf3a4dcfb1d9aa45d48bdad5c8ef98`.
@@ -61,19 +66,16 @@ WebSocket, typed integrations, anonymous/member refusal and replay verification.
 ## Design evidence
 
 Source: `Onboarding Wireframes.dc.html` in the supplied design handoff.
-`npm run visual:signin` produces six card captures and six same-scale comparisons
-in `/home/jente/.fleet/signin-shots/`:
+The retired capture script produced six card captures and six same-scale
+comparisons in `/home/jente/.fleet/signin-shots/`:
 
 - `{1a,1b,1d}-{1280,390}.png`: live cards at device scale 1.
 - `reference-{1a,1b,1d}.png`: source frame crops without labels or notes.
 - `compare-{1a,1b,1d}-{1280,390}.{html,png}`: both cards at their native 1× size.
 
-The unsupported email path remains explicitly unavailable. Its explanation and
-44px controls need more vertical content than the reference's smaller controls;
-the desktop card still measures 420px and the content uses the frame's 14px gap.
-Frame 1d uses SSO recovery and truthful rejection copy instead of local password
-fields or invented lockout counts. Frame 1b names Zitadel, includes announced
-progress and focuses Cancel. Physical-device qualification is separate.
+Those captures show the former card. The current card uses fixed rejection copy,
+names no provider, and keeps email sign-in visibly unavailable. Physical-device
+qualification remains separate.
 
 ## Gates
 

@@ -29,12 +29,11 @@ const browser = await chromium.launch();
 try {
   await mkdir(output, { recursive: true });
   for (const width of [1280, 390]) {
-    for (const place of ['handoff', 'folding', 'streaming']) {
+    for (const place of ['folding', 'streaming']) {
       const page = await browser.newPage({ viewport: { width, height: 844 } });
-      if (place === 'handoff') { await page.clock.install({ time: new Date("2026-10-03T00:00:00Z") }); await page.clock.pauseAt(new Date("2026-10-03T00:00:01Z")); }
       await chatFixture(page, place);
-      await page.goto(`${origin}${place === 'handoff' ? '/signin/handoff' : '/workspace?conversation=chat'}`);
-      const loader = page.locator(before ? (place === 'handoff' ? '.folds' : '.fold') : 'oc-fold-loader');
+      await page.goto(`${origin}/workspace?conversation=chat`);
+      const loader = page.locator(before ? '.fold' : 'oc-fold-loader');
       await loader.waitFor({ timeout: 10_000 });
       await page.evaluate(() => globalThis.document.fonts.ready);
       // Wait for entrance transforms to finish before measuring screen-space geometry.
@@ -53,17 +52,8 @@ try {
       assert(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth), 'No horizontal overflow');
       const box = await loader.boundingBox();
       assert(box.x >= 0 && box.x + box.width <= width, 'Loader fits viewport');
-      if (place === 'handoff') assert(Math.abs(box.x + box.width / 2 - width / 2) < 1, 'Handoff loader is centred');
       if (capture) {
         await page.screenshot({ path: `${output}/${before ? 'before' : 'after'}-${place}-${width}.png` });
-        if (!before && width === 1280 && place === 'handoff') {
-          for (let frame = 0; frame < 32; frame++) {
-            await loader.evaluate((node, time) => {
-              for (const animation of node.getAnimations({ subtree: true })) { animation.pause(); animation.currentTime = time; }
-            }, frame * 50);
-            await loader.screenshot({ path: `${output}/frame-${String(frame).padStart(2, '0')}.png` });
-          }
-        }
       }
       await page.emulateMedia({ reducedMotion: 'reduce' });
       if (!before) assert.equal(await loader.evaluate(node => node.getAnimations({ subtree: true }).length), 0, 'Reduced motion is static');
