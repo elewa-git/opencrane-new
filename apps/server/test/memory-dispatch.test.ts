@@ -13,6 +13,7 @@ import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projecti
 import { buildServer } from '../src/server.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { memoryContextRecordedEventSchema } from '@opencrane/events';
+import * as decisionAccess from '../../../libs/models/src/decision-activity.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 let setup: Awaited<ReturnType<typeof fixture>>;
@@ -955,3 +956,94 @@ async function refusesPassAfterAnotherRecall() {
   expect(setup.actor.state.dispatches).toHaveLength(dispatches);
 }
 it('refuses an old pass after another recall changes loaded evidence', refusesPassAfterAnotherRecall);
+
+
+const finalAccessRaces = [
+  { destination: 'model', timing: 'during' },
+  { destination: 'tool', timing: 'during' },
+  { destination: 'model', timing: 'after' },
+  { destination: 'tool', timing: 'after' },
+  { destination: 'tool send', timing: 'during' },
+  { destination: 'tool send', timing: 'after' },
+] as const;
+async function refusesForgetAtFinalAccess(race: typeof finalAccessRaces[number]) {
+  if (race.destination !== 'model') await prepareExternalTool();
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  let dispatches = setup.actor.state.dispatches.length;
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let armed = false;
+  let scopeSampled = false;
+  let paused = false;
+  async function pauseOnce() {
+    if (paused) return;
+    paused = true;
+    entered.resolve();
+    await release.promise;
+  }
+  const head = setup.nats.store.head.bind(setup.nats.store);
+  async function pauseMemberRead(...args: Parameters<typeof head>) {
+    const position = await head(...args);
+    if (armed && args[0] === `scope-${scopeId}`) scopeSampled = true;
+    if (armed && scopeSampled && args[0] === 'member-alice' && race.timing === 'during') {
+      await pauseOnce();
+    }
+    return position;
+  }
+  const confirm = decisionAccess.confirmDecisionAccess;
+  async function pauseAfterAccess(...args: Parameters<typeof confirm>) {
+    await confirm(...args);
+    if (armed && scopeSampled && race.timing === 'after') await pauseOnce();
+  }
+  const admit = setup.actor.admitDispatch.bind(setup.actor);
+  async function armAtAdmission(...args: Parameters<typeof admit>) {
+    if (race.destination !== 'tool send') armed = true;
+    const result = await admit(...args);
+    if (race.destination === 'tool send') {
+      // Pause the later MCP send check, after the separate budget permission was saved.
+      dispatches = setup.actor.state.dispatches.length;
+      armed = true;
+    }
+    return result;
+  }
+  const headSpy = vi.spyOn(setup.nats.store, 'head');
+  headSpy.mockImplementation(pauseMemberRead);
+  const accessSpy = vi.spyOn(decisionAccess, 'confirmDecisionAccess');
+  accessSpy.mockImplementation(pauseAfterAccess);
+  const admitSpy = vi.spyOn(setup.actor, 'admitDispatch');
+  admitSpy.mockImplementation(armAtAdmission);
+  const pending = race.destination === 'model' ? setup.call()
+    : setup.call(toolHeaders, toolCall, toolRoute);
+  try {
+    await entered.promise;
+    await changeLoadedMemory('forget');
+    release.resolve();
+    const response = await pending;
+    expect.soft(response.status, response.text).toBe(403);
+    expect.soft(setup.received()).toBe(0);
+    expect.soft(setup.actor.state.dispatches).toHaveLength(dispatches);
+    if (race.destination === 'model') {
+      expect(setup.actor.state.reservations).toHaveLength(1);
+    } else {
+      expect(setup.actor.state.reservations).toHaveLength(0);
+    }
+    for (const reservation of setup.actor.state.reservations) {
+      expect.soft(reservation.settledCents).toBe(0);
+    }
+    const admissions = [];
+    for await (const row of setup.nats.store.readStream('mcp-fixture')) {
+      if (row.event.type === 'mcp.dispatch_admitted') admissions.push(row);
+    }
+    expect.soft(admissions).toHaveLength(0);
+  } finally {
+    release.resolve();
+    await pending;
+    headSpy.mockRestore();
+    accessSpy.mockRestore();
+    admitSpy.mockRestore();
+  }
+}
+it.each(finalAccessRaces)(
+  'refuses $destination when a loaded forget is saved $timing final access',
+  refusesForgetAtFinalAccess);
