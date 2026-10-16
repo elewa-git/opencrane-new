@@ -115,10 +115,22 @@ export async function scopeAccess(options: MemoryOptions, requester: string, sco
   }
   if (scope.scopeKind === 'group') {
     await checks.group(scope.ownerId);
+    let canForget = false;
+    if (describeRights) {
+      const canRead = await operationAllowed(options, requester, scope, 'memory_read', checks);
+      const canWrite = await operationAllowed(options, requester, scope, 'memory_write', checks);
+      canForget = canRead && canWrite;
+    }
     return { ...scope, audience: { kind: 'group', ownerId: scope.ownerId },
-      canRead: true, canWrite: true, canForget: false };
+      canRead: true, canWrite: true, canForget };
   }
   return notesAccess(options, requester, scope, describeRights, checks, writeOnly);
+}
+
+export function requireForgetAccess(access: { canForget: boolean }) {
+  if (!access.canForget) {
+    throw new MemoryRefused();
+  }
 }
 
 async function notesAccess(options: MemoryOptions, requester: string, scope: Scope,
@@ -157,7 +169,7 @@ async function notesAccess(options: MemoryOptions, requester: string, scope: Sco
     audienceKind = 'group';
   }
   return { ...scope, audience: { kind: audienceKind, ownerId: assistant.ownerId },
-    canRead, canWrite, canForget: false };
+    canRead, canWrite, canForget: canRead && canWrite };
 }
 
 export async function readAssistant(options: MemoryOptions, assistantId: string) {

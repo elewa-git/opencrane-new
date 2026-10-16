@@ -106,7 +106,7 @@ async function handleCommand(request: FastifyRequest, options: MemoryOptions, re
     throw new MemoryRefused();
   }
   return { status: 200, body: await readCommand(options, requester, scope,
-    params.commandId, access.audience) };
+    params.commandId, access) };
 }
 
 function wrongOrigin(request: FastifyRequest, config: AuthConfig) {

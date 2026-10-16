@@ -109,7 +109,8 @@ async function readContent(request: FastifyRequest, options: MemoryOptions, requ
   }
   const params = readParams.strip().parse(request.params);
   const scope = await resolveScope(options, requester, params.scopeId);
-  const access = await scopeAccess(options, requester, scope, false, checks);
+  const describeRights = request.routeOptions.url?.endsWith('/:memoryId') ?? false;
+  const access = await scopeAccess(options, requester, scope, describeRights, checks);
   if (!access.canRead) {
     throw new MemoryRefused();
   }

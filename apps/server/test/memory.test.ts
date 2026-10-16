@@ -7,10 +7,13 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
+import { HandlerRuntime } from '@opencrane/handlers';
+import { memoryCleanupHandler } from '../../ops/src/memory-cleanup.ts';
+import { until } from '../../../libs/handlers/test/helpers.ts';
 import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
   pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
 import * as projections from '@opencrane/projections';
-import { memoryWrittenEventSchema, type MemoryIdentity,
+import { memoryWrittenEventSchema, memoryForgottenEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
@@ -124,6 +127,145 @@ async function cleanup() {
 }
 beforeAll(setup, 120_000);
 afterAll(cleanup);
+
+async function acceptedSharedCleanup(kind: SharedForgetKind, mode: string) {
+  const target = await sharedForgetTarget(kind, `worker-${mode}`);
+  const identity: MemoryIdentity = { silo: 'acme', scopeId: target.scopeId,
+    scopeKind: target.scopeKind, ownerId: target.ownerId, memoryId: 'target', revision: 1 };
+  const candidate = { ...identity, revision: 2 };
+  keys.provision(candidate);
+  const response = await sharedForget(target);
+  expect(response.statusCode).toBe(200);
+  const receipt = response.json<{ changeId: string }>();
+  expect(receipt).toMatchObject({ outcome: 'accepted', hidden: true, cleanupStatus: 'pending' });
+  let tombstone;
+  for await (const row of nats.store.readStream(`scope-${target.scopeId}`)) {
+    if (row.event.id === receipt.changeId) tombstone = row.event;
+  }
+  if (!tombstone) throw new Error('Accepted forget has no saved tombstone');
+  await runner.run(projection);
+  return { target, identity, candidate, tombstone };
+}
+
+async function expectSharedCleanupStatus(target: SharedForgetTarget, cleanupStatus: string) {
+  const status = await get(`${target.url}/changes/forget`);
+  expect(status.statusCode).toBe(200);
+  expect(status.json()).toMatchObject({ hidden: true, cleanupStatus });
+  if (cleanupStatus === 'forgotten') expect(status.json()).toHaveProperty('forgottenAt');
+  const detail = await get(`${target.url}/facts/target`);
+  expect(detail.statusCode).toBe(200);
+  expect(detail.json()).toMatchObject({ status: 'unavailable', reason: 'forgotten' });
+  const list = await get(`${target.url}/facts`);
+  expect(list.statusCode).toBe(200);
+  expect(list.json()).toMatchObject({ facts: [] });
+}
+
+for (const kind of ['group', 'personal', 'team'] as const) {
+  it.each(['completion', 'exhaustion'] as const)(
+    `runs shared cleanup worker for ${kind}: %s`, async function sharedCleanupWorker(mode) {
+      const { target, identity, candidate, tombstone } = await acceptedSharedCleanup(kind, mode);
+      const reaction = memoryCleanupHandler(nats.store, keys);
+      const logger = createLogger('shared-cleanup-http-test');
+      const db = pgDb(storage.queue);
+      const options = { db, logger, silo: 'acme', handlers: [reaction], retryLimit: 0 };
+      const runtime = new HandlerRuntime(options);
+      const keyId = keys.provision(identity);
+      const keyFile = `${directory}/${keyId.slice(4)}`;
+      const keyBytes = await readFile(keyFile);
+      if (mode === 'exhaustion') await rm(keyFile);
+      async function enqueue(transaction: Parameters<typeof reaction.handle>[1]) {
+        await runtime.enqueue(reaction, tombstone, transaction);
+      }
+      async function completed() {
+        const status = await get(`${target.url}/changes/forget`);
+        return status.json<{ cleanupStatus: string }>().cleanupStatus === 'forgotten';
+      }
+      async function unavailable() {
+        const status = await get(`${target.url}/changes/forget`);
+        return status.json<{ cleanupStatus: string }>().cleanupStatus === 'unavailable';
+      }
+      try {
+        await runtime.start();
+        await db.transaction(enqueue);
+        await runtime.work(1);
+        if (mode === 'exhaustion') {
+          await until(unavailable);
+          await runner.run(projection);
+          await expectSharedCleanupStatus(target, 'unavailable');
+          expect(keys.status(identity)).toBe('missing');
+          expect(keys.status(candidate)).toBe('available');
+          await runner.rebuild(projection);
+          await expectSharedCleanupStatus(target, 'unavailable');
+          const failures = await runtime.deadLetters('cleanup-memory');
+          function matchesTarget(job: { data: unknown }) {
+            const saved = memoryForgottenEventSchema.parse(job.data);
+            return saved.id === tombstone.id;
+          }
+          const failed = failures.find(matchesTarget);
+          expect(failed).toBeDefined();
+          await writeFile(keyFile, keyBytes);
+          await runtime.replay('cleanup-memory', failed!.id);
+        }
+        await until(completed);
+        expect(keys.status(identity)).toBe('destroyed');
+        expect(keys.status(candidate)).toBe('destroyed');
+        await runner.run(projection);
+        await expectSharedCleanupStatus(target, 'forgotten');
+      } finally {
+        await runtime.stop();
+      }
+    });
+}
+
+// Check replay before the other cases build large unrelated histories.
+it('loads shared forget history before the write deadline and keeps replay hidden',
+  async function sharedHistory() {
+    const target = await sharedForgetTarget('team', 'history');
+    const original = nats.store.readStream.bind(nats.store);
+    let delayed = false;
+    async function* slow(subject: string, from?: number, deadline?: number) {
+      if (subject === `scope-${target.scopeId}` && !delayed) {
+        delayed = true;
+        await new Promise(function pause(resolve) { setTimeout(resolve, 2100); });
+      }
+      yield* original(subject, from, deadline);
+    }
+    const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
+    let response;
+    try {
+      response = await sharedForget(target);
+      expect(response.statusCode).toBe(200);
+    } finally { spy.mockRestore(); }
+    const receipt = response.json<{ changeId: string }>();
+    const cleanupId = `shared-cleanup-${++count}`;
+    const data = { schemaVersion: 1, scopeId: target.scopeId, scopeKind: target.scopeKind,
+      ownerId: target.ownerId, changeId: receipt.changeId, outcome: 'unavailable',
+      failureCode: 'retry_exhausted' };
+    const record = { ...event(cleanupId, `scope-${target.scopeId}`, 'memory.cleanup_recorded'),
+      silo: 'acme', source: 'opencrane-worker', commandId: cleanupId,
+      principal: { kind: 'system' as const, id: 'opencrane-worker' }, data };
+    await nats.store.append({ event: record, expectedSequence: await nats.store.head(record.subject) });
+    const position = await nats.store.head();
+    function checkedDecrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
+      expect(identity.scopeId).not.toBe(target.scopeId);
+      return decrypt(identity, encrypted);
+    }
+    const rebuild = memoryProjection({ decrypt: checkedDecrypt });
+    const appendSpy = vi.spyOn(nats.store, 'append');
+    try {
+      await runner.rebuild(rebuild);
+      expect(appendSpy).not.toHaveBeenCalled();
+      expect(await nats.store.head()).toBe(position);
+      const identity = { silo: 'acme', scopeId: target.scopeId, scopeKind: target.scopeKind,
+        ownerId: target.ownerId, memoryId: 'target', revision: 1 };
+      expect(keys.status(identity)).toBe('available');
+      const detail = await get(`${target.url}/facts/target`);
+      expect(detail.json()).toMatchObject({ reason: 'forgotten', canForget: true });
+      const status = await get(`${target.url}/changes/forget`);
+      expect(status.json()).toMatchObject({ hidden: true, cleanupStatus: 'unavailable' });
+      expect((await get(`${target.url}/facts`)).json()).toMatchObject({ facts: [] });
+    } finally { appendSpy.mockRestore(); }
+  });
 
 const previewUrl = '/api/memory/turns/preview-chat/preview-turn';
 const previewScopes = [scopeForPreview('person', 'preview'),
@@ -2476,7 +2618,7 @@ async function forgetRights() {
   const detail = await get(`${path('bob')}/facts/own`);
   expect(detail.json()).toHaveProperty('canForget', true);
 }
-it('exposes forget rights only for personal memory', forgetRights);
+it('exposes forget rights only for permitted scopes', forgetRights);
 async function forgetBoundary() {
   const memoryId = await forgetTarget('forget-validation');
   expect((await forget(memoryId, 'invalid-forget', 1, 'bob', 'bob', { text: 'private' })).statusCode)
@@ -2585,6 +2727,235 @@ async function forgetRecheck(change: 'other' | 'original' | 'removed' | 'removed
 }
 it.each(['other', 'original', 'removed', 'removed-late'] as const)(
   'rechecks a %s event saved after forget history', forgetRecheck);
+
+type SharedForgetKind = 'group' | 'personal' | 'team';
+async function sharedForgetTarget(kind: SharedForgetKind, label: string, rights = 'both') {
+  const ownerId = `forget-${kind}-${label}`;
+  const teamId = `${ownerId}-team`;
+  const scopeKind: MemoryIdentity['scopeKind'] = kind === 'group' ? 'group' : 'assistant_notes';
+  const scopeId = memoryScopeId('acme', scopeKind, ownerId);
+  const groupId = kind === 'group' ? ownerId : teamId;
+  if (kind !== 'personal' || rights === 'team-grants') {
+    await append(`team-${groupId}`, 'team.created',
+      { teamId: groupId, name: 'Forget tests', createdBy: 'owner' });
+    await append(`team-${groupId}`, 'team.member_added',
+      { teamId: groupId, memberId: 'bob', addedBy: 'owner' });
+  }
+  if (kind !== 'group') {
+    const assistantOwner = kind === 'personal' ? 'bob' : teamId;
+    await append(`assistant-${ownerId}`, 'assistant.created',
+      { assistantId: ownerId, kind, ownerId: assistantOwner });
+  }
+  for (const operation of ['read', 'write']) {
+    if (rights !== 'both' && rights !== 'team-grants' && rights !== operation) continue;
+    const granteeKind = rights === 'team-grants' ? 'team' : 'member';
+    let granteeId = 'bob';
+    if (granteeKind === 'team') granteeId = groupId;
+    await append(grantStream(`memory_${operation}`, scopeId), 'grant.given', {
+      resourceType: `memory_${operation}`, resourceId: scopeId, granteeKind,
+      granteeId, grantedBy: 'owner' });
+  }
+  await write(ownerId, scopeKind, 'target', 'Shared private memory');
+  for (const target of [groups, computers, projection]) await runner.run(target);
+  const url = path(ownerId, scopeKind);
+  const audience = kind === 'personal' ? { kind: 'person', ownerId: 'bob' }
+    : { kind: 'group', ownerId: groupId };
+  return { ownerId, scopeKind, scopeId, groupId, url, audience };
+}
+type SharedForgetTarget = Awaited<ReturnType<typeof sharedForgetTarget>>;
+function sharedForget(target: SharedForgetTarget, commandId = 'forget', member = 'bob',
+  memoryId = 'target') {
+  const session = { sub: `idp-${member}`, orgId: 'org-acme', roles: ['admin'],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+    origin: new URL(config.redirectUri).origin };
+  const payload = { commandId, expectedRevision: 1 };
+  return app.inject({ method: 'POST', url: `${target.url}/facts/${memoryId}/forget`,
+    headers, payload });
+}
+async function revokeShared(target: SharedForgetTarget, operation = 'write', apply = true) {
+  const resourceType = `memory_${operation}`;
+  return append(grantStream(resourceType, target.scopeId), 'grant.revoked', {
+    resourceType, resourceId: target.scopeId, granteeKind: 'member', granteeId: 'bob',
+    revokedBy: 'owner' }, apply);
+}
+for (const kind of ['group', 'personal', 'team'] as const) {
+  it.each(['both', 'team-grants', 'read', 'write', 'neither', 'admin', 'removed', 'revoked-read',
+    'revoked-write', 'unapplied-read', 'unapplied-write', 'iam', 'fga-denied',
+    'fga-read', 'fga-write',
+    'pending-read', 'pending-write', 'inaccessible-source', 'foreign', 'unknown'])(`checks shared forget ${kind} rights: %s`,
+    async function sharedRights(condition) {
+      const rights = ['read', 'write', 'neither', 'team-grants'].includes(condition)
+        ? condition : 'both';
+      const target = await sharedForgetTarget(kind, condition, rights);
+      let expected = ['both', 'team-grants'].includes(condition) ? 200 : 404;
+      let permissionSpy;
+      if (condition.startsWith('revoked-') || condition.startsWith('unapplied-')) {
+        const operation = condition.endsWith('read') ? 'read' : 'write';
+        await revokeShared(target, operation, !condition.startsWith('unapplied-'));
+        if (condition.startsWith('unapplied-')) expected = 503;
+      }
+      if (condition.startsWith('pending-')) {
+        const resourceType = condition.endsWith('read') ? 'memory_read' : 'memory_write';
+        await append(grantStream(resourceType, target.scopeId), 'grant.given', {
+          resourceType, resourceId: target.scopeId, granteeKind: 'member', granteeId: 'bob',
+          grantedBy: 'owner' }, false);
+        expected = 503;
+      }
+      if (condition === 'removed') {
+        await append('member-bob', 'member.removed', { memberId: 'bob', removedBy: 'owner' });
+      }
+      if (condition === 'iam') {
+        const unavailable = { status: 'unavailable' as const, allowed: false as const,
+          error: new Error('Private IAM failure') };
+        permissionSpy = vi.spyOn(auth, 'use').mockResolvedValue(unavailable);
+        expected = 503;
+      }
+      if (condition === 'fga-read' || condition === 'fga-write') {
+        const originalUse = auth.use.bind(auth);
+        const deniedOperation = condition === 'fga-read' ? 'memory_read' : 'memory_write';
+        function use(...args: Parameters<typeof auth.use>) {
+          if (args[2] === deniedOperation) {
+            return Promise.resolve({ status: 'ok' as const, allowed: false });
+          }
+          return originalUse(...args);
+        }
+        permissionSpy = vi.spyOn(auth, 'use').mockImplementation(use);
+      }
+      if (condition === 'fga-denied') {
+        const denied = { status: 'ok' as const, allowed: false };
+        if (kind === 'group') permissionSpy = vi.spyOn(auth, 'team').mockResolvedValue(denied);
+        else permissionSpy = vi.spyOn(auth, 'actsFor').mockResolvedValue(denied);
+      }
+      if (condition === 'inaccessible-source') {
+        const sources = [{ conversationId: 'private-chat', messageId: 'private-message' }];
+        await write(target.ownerId, target.scopeKind, 'target', 'Private source', false,
+          'acme', sources);
+      }
+      if (condition === 'foreign') {
+        await write(target.ownerId, target.scopeKind, 'foreign', 'Foreign private memory',
+          false, 'foreign');
+      }
+      const position = await nats.store.head(`scope-${target.scopeId}`);
+      const appendSpy = vi.spyOn(nats.store, 'append');
+      try {
+        const member = condition === 'admin' ? 'admin' : 'bob';
+        let memoryId = 'target';
+        if (condition === 'foreign' || condition === 'unknown') memoryId = condition;
+        const response = await sharedForget(target, 'forget', member, memoryId);
+        expect(response.statusCode).toBe(expected);
+        expect(response.body).not.toMatch(/Shared private|Foreign private|Private source|ciphertext|keyId|IAM failure/u);
+        if (expected === 200) {
+          expect(response.json()).toMatchObject({ hidden: true, cleanupStatus: 'pending',
+            audience: target.audience });
+          expect(appendSpy).toHaveBeenCalledTimes(1);
+        } else {
+          expect(appendSpy).not.toHaveBeenCalled();
+          if (expected === 404) expect(response.json()).toEqual({ status: 'refused' });
+          expect(await nats.store.head(`scope-${target.scopeId}`)).toBe(position);
+        }
+      } finally {
+        appendSpy.mockRestore();
+        permissionSpy?.mockRestore();
+        if (condition === 'removed') {
+          await append('member-bob', 'member.joined', { memberId: 'bob', role: 'member',
+            email: 'bob@example.test', displayName: 'Bob' });
+        }
+      }
+    });
+
+  it.each([['history', 'grant'], ['final', 'grant'],
+    ['history', 'audience'], ['final', 'audience']])(`refuses shared forget ${kind} rights lost during %s %s`,
+    async function sharedRace(stage, change) {
+      const target = await sharedForgetTarget(kind, `race-${stage}-${change}`);
+      const subject = `scope-${target.scopeId}`;
+      const position = await nats.store.head(subject);
+      const originalRead = nats.store.readStream.bind(nats.store);
+      const originalHead = nats.store.head.bind(nats.store);
+      let changed = false;
+      async function removeAccess() {
+        if (change === 'grant') {
+          await revokeShared(target);
+        } else if (kind === 'personal') {
+          await append(`assistant-${target.ownerId}`, 'assistant.settings_changed', {
+            assistantId: target.ownerId, active: false, changedBy: 'owner',
+            changedFields: ['active'] }, false);
+        } else {
+          await append(`team-${target.groupId}`, 'team.member_removed', {
+            teamId: target.groupId, memberId: 'bob', removedBy: 'owner' }, false);
+        }
+      }
+      async function* read(stream: string, from?: number, deadline?: number) {
+        yield* originalRead(stream, from, deadline);
+        if (stage === 'history' && stream === subject && !changed) {
+          changed = true;
+          await removeAccess();
+        }
+      }
+      async function head(stream?: string, deadline?: number) {
+        const result = await originalHead(stream, deadline);
+        if (stage === 'final' && stream === subject && !changed) {
+          changed = true;
+          await removeAccess();
+        }
+        return result;
+      }
+      const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(read);
+      const headSpy = vi.spyOn(nats.store, 'head').mockImplementation(head);
+      try {
+        const response = await sharedForget(target);
+        expect(response.statusCode).toBe(stage === 'history' ? 404 : 503);
+        expect(changed).toBe(true);
+        expect(await originalHead(subject)).toBe(position);
+        expect((await sharedForget(target)).statusCode).toBe(404);
+      } finally {
+        readSpy.mockRestore();
+        headSpy.mockRestore();
+      }
+    });
+
+  it(`recovers shared forget ${kind} across restart with current rights`, async function sharedRetry() {
+    const target = await sharedForgetTarget(kind, 'retry');
+    await write(target.ownerId, target.scopeKind, 'other');
+    await runner.run(projection);
+    const original = nats.store.append.bind(nats.store);
+    async function lostReply(command: Parameters<typeof original>[0]): Promise<never> {
+      await original(command);
+      throw new Error('Lost private reply');
+    }
+    const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(lostReply);
+    try {
+      expect((await sharedForget(target)).json()).toEqual({ outcome: 'unknown' });
+      await app.close();
+      app = buildServer(config, { memory });
+      await app.ready();
+      const status = await get(`${target.url}/changes/forget`);
+      expect(status.statusCode).toBe(200);
+      expect(status.json()).toMatchObject({ hidden: true, audience: target.audience });
+      expect((await sharedForget(target)).json()).toEqual(status.json());
+      expect((await sharedForget(target, 'forget', 'bob', 'other')).statusCode).toBe(409);
+      expect(appendSpy).toHaveBeenCalledTimes(1);
+    } finally { appendSpy.mockRestore(); }
+    for (const operation of ['read', 'write']) {
+      await revokeShared(target, operation);
+      expect((await get(`${target.url}/changes/forget`)).statusCode).toBe(404);
+      expect((await sharedForget(target)).statusCode).toBe(404);
+      await append(grantStream(`memory_${operation}`, target.scopeId), 'grant.given', {
+        resourceType: `memory_${operation}`, resourceId: target.scopeId,
+        granteeKind: 'member', granteeId: 'bob', grantedBy: 'owner' });
+    }
+  });
+}
+
+it.each(['personal', 'team'] as const)('refuses shared forget for inactive %s notes',
+  async function inactiveNotes(kind) {
+    const target = await sharedForgetTarget(kind, 'inactive');
+    await append(`assistant-${target.ownerId}`, 'assistant.settings_changed', {
+      assistantId: target.ownerId, active: false, changedBy: 'owner', changedFields: ['active'] });
+    const position = await nats.store.head(`scope-${target.scopeId}`);
+    expect((await sharedForget(target)).statusCode).toBe(404);
+    expect(await nats.store.head(`scope-${target.scopeId}`)).toBe(position);
+  });
 
 // Keep these history checks on shared services before fairness tests replace them.
 it.each(['destroyed', 'missing'] as const)(

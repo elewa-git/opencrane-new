@@ -2802,12 +2802,20 @@ messages, participants, files, approvals and a new socket subscription after rec
 The guard tests cover direct/private routes, a non-creator with OpenFGA management
 permission, absent removal targets, and changed saved subjects and principals.
 
-## Personal memory forget HTTP
+## Memory forget HTTP
 
 `POST /api/memory/:scopeId/facts/:memoryId/forget` accepts only `commandId` and
-`expectedRevision`. The active person can forget only their own person-scope fact.
+`expectedRevision`. An active person can forget their own person-scope fact. Group
+forget requires current event-backed membership, OpenFGA team membership and applied
+`memory_read` and `memory_write` grants. Assistant notes require the current personal
+owner or owner-group membership, an active assistant, `actsFor` and both notes grants.
+Read-only and write-only callers cannot forget or recover an original forget receipt.
+Shared chat sources remain refused, as for shared remember commands. A member statement
+does not restrict a group fact to its original author. Agent shared writes remain disabled.
 The server checks saved metadata, including historical dependencies, without opening keys.
-It reads history before the two-second `authorityFence`, which watches only their member stream.
+It reads scope history before the two-second `authorityFence`. That check watches only
+member, assistant, relevant team and grant streams, and runs again before append.
+Reads check current rights once, with no write deadline or conversation watch.
 The command uses remember's command reference and lock, then makes one conditional append.
 Its durable attempt record prevents a second append after a lost reply, including after restart.
 Unknown attempts stay unknown; startup must never use them to recover or destroy a key.
@@ -2816,7 +2824,10 @@ An accepted receipt contains operation, outcome, changeId, memoryId, revision, s
 audience, acceptedAt, hidden and cleanupStatus. The changes GET reads tombstones and matching
 cleanup events directly, without custody or projection catch-up. Completion is final and adds
 forgottenAt; unavailable cleanup keeps hidden true. No receipt includes fact text or key references.
-Scopes and detail advertise canForget only for the requester's person scope. Forgotten detail
+The HTTP tests run accepted shared forget requests through the queued cleanup worker.
+They check revision and candidate key destruction, forgotten status, exhausted cleanup,
+and facts staying hidden during projection rebuild.
+Scopes and detail advertise canForget from these current rights. Forgotten detail
 returns HTTP 200 with status unavailable and reason forgotten. The memory MCP has no forget.
 Fresh-install qualification remains NOT RUN; no screens, model calls or dev stack are included.
 

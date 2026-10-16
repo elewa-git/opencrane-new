@@ -9,7 +9,7 @@ import { memoryKeys, memoryIdentity } from '@opencrane/projections';
 import { memoryTextSchema, memoryWrittenDataSchema, memoryWrittenEventSchema,
   } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
-import { memoryAccessChecks, scopeAccess, MemoryRefused, type MemoryOptions,
+import { memoryAccessChecks, scopeAccess, requireForgetAccess, MemoryRefused, type MemoryOptions,
   type Scope } from './access.ts';
 import { bindingReceipt } from './maintenance.ts';
 import { MemoryConflict, memorySnapshot } from './reads.ts';
@@ -289,9 +289,12 @@ function pendingForgetReceipt(stage: string) {
 }
 
 export async function readCommand(options: MemoryOptions, requester: string, scope: Scope,
-  commandId: string, audience: { kind: string; ownerId: string }) {
+  commandId: string, access: Pick<Awaited<ReturnType<typeof scopeAccess>>,
+    'audience' | 'canForget'>) {
+  const { audience } = access;
   const state = await commandHistory(options, scope.scopeId, requester, commandId);
   if (state.original?.event.type === 'memory.forgotten') {
+    requireForgetAccess(access);
     return forgottenReceipt(state.original, state.rows, audience);
   }
   await memorySnapshot(options, scope);
@@ -307,6 +310,7 @@ export async function readCommand(options: MemoryOptions, requester: string, sco
   if (!state.original) {
     const entry = journal.read();
     if (entry?.operation === 'forget') {
+      requireForgetAccess(access);
       return pendingForgetReceipt(entry.stage);
     }
     if (entry && (entry.stage !== 'unknown' || Date.now() > entry.appendUntil) && options.db.lock) {

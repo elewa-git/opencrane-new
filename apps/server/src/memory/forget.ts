@@ -5,8 +5,8 @@ import { memoryErasureHistory, memoryIdentity } from '@opencrane/projections';
 import { memoryForgottenEventSchema, memoryCleanupRecordedEventSchema,
   memoryWrittenEventSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
-import { memoryAccessChecks, scopeFor, MemoryRefused, type MemoryOptions,
-  type Scope } from './access.ts';
+import { memoryAccessChecks, resolveScope, scopeAccess, requireForgetAccess, MemoryRefused,
+  type MemoryOptions, type Scope } from './access.ts';
 import { MemoryConflict } from './reads.ts';
 import { commandJournal } from './journal.ts';
 import { commandReference, commandHistory } from './command-history.ts';
@@ -48,7 +48,7 @@ export function forgottenReceipt(row: StoredEvent, rows: StoredEvent[],
     hidden: true, cleanupStatus, ...(forgottenAt ? { forgottenAt } : {}) };
 }
 function originalForget(row: StoredEvent, rows: StoredEvent[], input: Input, memoryId: string,
-  scope: Scope) {
+  audience: { kind: string; ownerId: string }) {
   if (row.event.type !== 'memory.forgotten') {
     throw new MemoryConflict();
   }
@@ -57,8 +57,14 @@ function originalForget(row: StoredEvent, rows: StoredEvent[], input: Input, mem
     saved.data.expectedRevision !== input.expectedRevision) {
     throw new MemoryConflict();
   }
-  const audience = { kind: 'person', ownerId: scope.ownerId };
   return forgottenReceipt(row, rows, audience);
+}
+function requireForgetSources(scope: Scope, saved: ReturnType<typeof memoryWrittenEventSchema.parse>) {
+  if (scope.scopeKind === 'person' || !('schemaVersion' in saved.data)) return;
+  for (const source of saved.data.sources) {
+    // Keep chat sources out of shared mutations, as for shared remember commands.
+    if ('conversationId' in source) throw new MemoryRefused();
+  }
 }
 async function requireTarget(rows: StoredEvent[], options: MemoryOptions, scope: Scope,
   memoryId: string, expectedRevision: number) {
@@ -80,7 +86,8 @@ async function requireTarget(rows: StoredEvent[], options: MemoryOptions, scope:
     const saved = memoryWrittenEventSchema.parse(row.event);
     const identity = memoryIdentity(saved);
     if (identity?.memoryId === memoryId && identity.scopeId === scope.scopeId &&
-      identity.ownerId === scope.ownerId && identity.scopeKind === 'person') {
+      identity.ownerId === scope.ownerId && identity.scopeKind === scope.scopeKind) {
+      requireForgetSources(scope, saved);
       revision = Math.max(revision, identity.revision);
     }
   }
@@ -93,10 +100,12 @@ async function requireTarget(rows: StoredEvent[], options: MemoryOptions, scope:
 }
 export async function forget(options: MemoryOptions, requester: string, params: unknown, raw: unknown) {
   const target = targetParams.safeParse(params);
-  const scope = scopeFor(options.silo, 'person', requester);
-  if (!target.success || target.data.scopeId !== scope.scopeId) {
+  if (!target.success) {
     throw new MemoryRefused();
   }
+  const scope = await resolveScope(options, requester, target.data.scopeId);
+  const initialAccess = await scopeAccess(options, requester, scope, true);
+  requireForgetAccess(initialAccess);
   const { memoryId } = target.data;
   const input = forgetInput.parse(raw);
   // Refuse unknown ids before reading private history. The events still decide the revision.
@@ -112,13 +121,16 @@ export async function forget(options: MemoryOptions, requester: string, params: 
   const fresh = await authorityFence(options.store, performance.now(), [`member-${requester}`]);
   const checks = memoryAccessChecks(options, requester, fresh);
   await readActiveMember(options.store, options.binding, requester, 'member', checks.applied);
+  const access = await scopeAccess(options, requester, scope, true, checks);
+  requireForgetAccess(access);
   await fresh();
   if (!options.keyDirectory || !options.db.lock) {
     throw new Error('Memory command records unavailable');
   }
   const reference = commandReference(options.silo, scope.scopeId, requester, input.commandId);
   async function execute() {
-    return forgetLocked(options, requester, scope, memoryId, input, state, fresh, reference);
+    return forgetLocked(options, requester, scope, memoryId, input, state, fresh, reference,
+      access.audience);
   }
   const release = await acquireMemoryWrite(options.silo, requester, scope.scopeId);
   try {
@@ -130,14 +142,15 @@ export async function forget(options: MemoryOptions, requester: string, params: 
 }
 async function forgetLocked(options: MemoryOptions, requester: string, scope: Scope,
   memoryId: string, input: Input, state: Awaited<ReturnType<typeof commandHistory>>,
-  fresh: Awaited<ReturnType<typeof authorityFence>>, reference: string) {
+  fresh: Awaited<ReturnType<typeof authorityFence>>, reference: string,
+  audience: { kind: string; ownerId: string }) {
   const journal = commandJournal(options.keyDirectory!, reference);
   const fingerprint = createHash('sha256');
   const metadata = { operation: 'forget', memoryId, ...input };
   fingerprint.update(JSON.stringify(metadata));
   const inputDigest = fingerprint.digest('hex');
   function recoveredReceipt(row: StoredEvent, rows: StoredEvent[]) {
-    const receipt = originalForget(row, rows, input, memoryId, scope);
+    const receipt = originalForget(row, rows, input, memoryId, audience);
     journal.remove();
     return receipt;
   }
@@ -194,7 +207,6 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   if (result.status === 'appended') {
     journal.remove();
     const saved = { event, sequence: result.sequence };
-    const audience = { kind: 'person', ownerId: requester };
     return forgottenReceipt(saved, [], audience);
   }
   const failed = { ...entry, stage: 'failed' as const };
