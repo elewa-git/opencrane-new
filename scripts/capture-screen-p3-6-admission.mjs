@@ -14,6 +14,10 @@ const queuedAt = '2026-10-15T10:00:00.000Z';
 const checkedAt = '2026-10-15T10:01:00.000Z';
 const expiresAt = '2026-10-16T10:01:00.000Z';
 
+function normaliseText(value) {
+  return value.replace(/\s+/gu, ' ').trim();
+}
+
 function pass(extra = {}) {
   return { verdict: 'pass', checkedAt, expiresAt, engineVersion: 'fixture',
     reportDigest: digest, ...extra };
@@ -56,12 +60,25 @@ async function prepare(page, frame) {
   await page.getByRole('button', { name: 'Save package' }).click();
   await page.getByRole('button', { name: 'Check status' }).click();
   await page.getByText('Queued 15 Oct 2026').waitFor();
+  if (frame === 'INT-12') {
+    const rows = page.locator('section[aria-label="Package admission"] li');
+    const rowText = await rows.allTextContents();
+    const visibleRows = rowText.map(normaliseText);
+    assert.deepEqual(visibleRows, [
+      'Signature: Passed Checked 15 Oct 2026, 10:01 UTC',
+      'Licence: Passed Checked 15 Oct 2026, 10:01 UTC',
+      'Vulnerability: Passed Checked 15 Oct 2026, 10:01 UTC',
+      'Malware: Passed Checked 15 Oct 2026, 10:01 UTC',
+    ]);
+    await page.getByText('All four image checks passed. Discovery is unavailable.').waitFor();
+  }
   assert(await page.getByRole('button', { name: 'Continue' }).isDisabled());
 }
 
 async function capture(browser, width, frame) {
   const page = await browser.newPage({ viewport: { width, height: width === 1280 ? 900 : 844 },
     reducedMotion: 'reduce' });
+  await page.clock.install({ time: new Date('2026-10-15T10:02:00.000Z') });
   await page.route('**/*', serve.bind(null, frame));
   try {
     await page.goto(`${origin}/org/integrations/new`);
@@ -96,7 +113,8 @@ try {
   }
   const receipt = '# Package admission screen checks\n\n' +
     'PASS: Captured source, queued checks and four passed checks at 1280 and 390 pixels. ' +
-    'The browser used intercepted API replies, reduced motion and no development stack. ' +
+    'The browser used intercepted API replies, a fixed 15 October 2026 10:02 UTC clock, ' +
+    'reduced motion and no development stack. The four passed rows were checked before capture. ' +
     'Package form, source choices and action targets measured at least 44 pixels, ' +
     'and the pages had no horizontal overflow. ' +
     'Continue stayed disabled after four passes because discovery is unavailable.\n\n' +

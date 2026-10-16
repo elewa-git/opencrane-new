@@ -104,7 +104,8 @@ a hosted package only as a sha256 digest locator, one supported Linux platform a
 public upstream host and port. It posts one command id. An uncertain POST keeps that id
 and reads `/api/org/integrations/changes/:commandId` without posting again. Once the
 server id is known, Check status reads `/api/org/integrations/:serverId/admission`.
-The page shows the returned queue time and each check's verdict and date. A failed read
+The page shows the returned queue time and each check's verdict and date. It updates
+passed rows and the summary when the earliest check expires, even without another read. A failed read
 remains unavailable; 401 or 403 clears package details and ignores older replies. Four
 current passes still leave Continue disabled because discovery is unavailable. The
 intercepted browser capture and checks are in

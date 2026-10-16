@@ -7,6 +7,7 @@ import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   inject,
   signal,
   type OnInit,
@@ -60,6 +61,11 @@ export class McpInstall implements OnInit {
   protected readonly discoveredServerId = signal('');
   protected readonly inventory = signal<DiscoveryStatus['inventory']>(undefined);
   protected readonly message = signal('Enter the server address to discover its tools.');
+  protected readonly heading = computed(() => {
+    if (this.serverId) return 'Review MCP server';
+    if (this.source() === 'hosted' && this.phase() !== 'draft') return 'Package admission';
+    return 'Add an integration';
+  });
 
   ngOnInit(): void {
     if (this.serverId) {

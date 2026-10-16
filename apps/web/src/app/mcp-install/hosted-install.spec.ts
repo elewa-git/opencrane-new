@@ -215,7 +215,8 @@ it('expires all four pass rows and the summary while the page is idle', async ()
       .mockResolvedValueOnce(reply(200, admission('pass', 'admitted')));
     const fixture = TestBed.createComponent(HostedInstall);
     fixture.detectChanges();
-    const root: HTMLElement = fixture.nativeElement;
+    const root: unknown = fixture.nativeElement;
+    if (!(root instanceof HTMLElement)) throw new Error('Expected package form');
     validForm(root);
     root.querySelector('form')?.requestSubmit();
     await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(

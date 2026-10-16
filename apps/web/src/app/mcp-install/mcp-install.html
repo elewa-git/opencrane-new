@@ -6,18 +6,18 @@
     <a href="/org/integrations">Integrations</a>
     <span class="breadcrumb-step">
       <span aria-hidden="true">›</span>
-      <span aria-current="page">{{ serverId ? 'Review MCP server' : 'Add an integration' }}</span>
+      <span aria-current="page">{{ heading() }}</span>
     </span>
   </nav>
   <h1 id="add-heading" tabindex="-1">
-    {{ serverId ? 'Review MCP server' : 'Add an integration' }}
+    {{ heading() }}
   </h1>
-  @if (!serverId) {
+  @if (!serverId && (source() !== 'hosted' || phase() === 'draft')) {
     <p>Choose where the MCP server comes from.</p>
   }
   <oc-add-flow-steps [current]="phase() === 'draft' || phase() === 'refused' ? 1 : 2" />
 
-  @if (!serverId) {
+  @if (!serverId && (source() !== 'hosted' || phase() === 'draft')) {
     <fieldset class="sources">
       <legend>Source</legend>
       <label class="source-card unavailable">

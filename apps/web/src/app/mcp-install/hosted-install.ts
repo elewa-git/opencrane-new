@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, output, signal, type OnDestroy } from '@angular/core';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
 import { z } from 'zod';
 
@@ -13,8 +13,19 @@ const imagePattern = new RegExp(
 const internalSuffixes = ['localhost', 'local', 'internal', 'lan', 'home', 'svc',
   'test', 'invalid', 'example', 'onion', 'home.arpa'];
 
+function normaliseHost(host: string): string {
+  // Match the event store's URL check before sending a registration request.
+  if (/[^\p{L}\p{N}.-]/u.test(host)) return '';
+  try {
+    return new URL(`https://${host}`).hostname;
+  } catch {
+    return '';
+  }
+}
+
 function publicHost(value: string): boolean {
   if (value.length > 253 || !/^[a-z0-9.-]+$/u.test(value)) return false;
+  if (normaliseHost(value) !== value) return false;
   const labels = value.split('.');
   const suffix = labels.at(-1) ?? '';
   if (labels.length < 2 || !/[a-z]/u.test(suffix)) return false;
@@ -33,7 +44,7 @@ function publicHost(value: string): boolean {
   styleUrl: './hosted-install.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class HostedInstall {
+export class HostedInstall implements OnDestroy {
   readonly started = output<void>();
   protected readonly locator = signal('');
   protected readonly platform = signal<'linux/amd64' | 'linux/arm64'>('linux/amd64');
@@ -47,6 +58,12 @@ export class HostedInstall {
   private commandId = '';
   private serverId = '';
   private accessGeneration = 0;
+  private expiryTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly currentTime = signal(Date.now());
+
+  ngOnDestroy(): void {
+    this.clearExpiryTimer();
+  }
 
   protected editLocator(value: string): void { this.locator.set(value); }
   protected editPlatform(value: 'linux/amd64' | 'linux/arm64'): void {
@@ -59,7 +76,8 @@ export class HostedInstall {
     event.preventDefault();
     if (this.phase() !== 'draft' || this.busy()) return;
     const port = Number(this.upstreamPort());
-    if (!this.validDetails(port)) {
+    const host = normaliseHost(this.upstreamHost());
+    if (!this.validDetails(host, port)) {
       this.message.set('Enter a sha256 image digest, a public upstream host and a port from 1 to 65535.');
       return;
     }
@@ -70,13 +88,19 @@ export class HostedInstall {
     this.message.set('Sending the package for admission checks…');
     const generation = this.accessGeneration;
     const body = { kind: 'hosted', locator: this.locator(), platform: this.platform(),
-      upstream: { host: this.upstreamHost(), port }, commandId: this.commandId };
+      upstream: { host, port }, commandId: this.commandId };
     try {
       const response = await fetch('/api/org/integrations', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
       });
       if (this.lostAccess(response)) return;
       if (generation !== this.accessGeneration) return;
+      if (response.status === 400) {
+        this.commandId = '';
+        this.phase.set('draft');
+        this.message.set('The server refused these details. Please correct the package details.');
+        return;
+      }
       if (!response.ok) {
         this.unknownOutcome();
         return;
@@ -95,11 +119,11 @@ export class HostedInstall {
     }
   }
 
-  private validDetails(port: number): boolean {
+  private validDetails(host: string, port: number): boolean {
     const platform = this.platform();
     if (!imagePattern.test(this.locator()) ||
         (platform !== 'linux/amd64' && platform !== 'linux/arm64') ||
-        !publicHost(this.upstreamHost()) ||
+        !publicHost(host) ||
         !Number.isInteger(port) || port < 1 || port > 65535) {
       return false;
     }
@@ -118,7 +142,7 @@ export class HostedInstall {
       }
     } catch {
       if (generation === this.accessGeneration) {
-        this.admission.set(undefined);
+        this.setAdmission(undefined);
         this.message.set('Status is unavailable. Check status again when the service responds.');
       }
     } finally {
@@ -149,7 +173,7 @@ export class HostedInstall {
     const raw: unknown = await response.json();
     const result = hostedAdmissionSchema.parse(raw);
     if (generation !== this.accessGeneration) return;
-    this.admission.set(result);
+    this.setAdmission(result);
     this.phase.set('queued');
     this.message.set(this.admissionMessage(result));
   }
@@ -169,7 +193,7 @@ export class HostedInstall {
   private allCurrent(checks: Admission['checks']): boolean {
     if (!checks) return false;
     for (const check of Object.values(checks)) {
-      if (check.verdict !== 'pass' || Date.parse(check.expiresAt) <= Date.now()) return false;
+      if (check.verdict !== 'pass' || Date.parse(check.expiresAt) <= this.currentTime()) return false;
     }
     return true;
   }
@@ -179,7 +203,7 @@ export class HostedInstall {
     if (check.verdict === 'not_run') return 'Not run';
     if (check.verdict === 'unavailable') return 'Unavailable';
     if (check.verdict === 'fail') return 'Failed';
-    if (Date.parse(check.expiresAt) <= Date.now()) return 'Expired';
+    if (Date.parse(check.expiresAt) <= this.currentTime()) return 'Expired';
     return 'Passed';
   }
 
@@ -201,13 +225,44 @@ export class HostedInstall {
     this.message.set('The registration outcome is unknown. Check status for this request.');
   }
 
+  private setAdmission(result: Admission | undefined): void {
+    this.clearExpiryTimer();
+    this.currentTime.set(Date.now());
+    this.admission.set(result);
+    if (result) this.scheduleExpiry(result);
+  }
+
+  private scheduleExpiry(result: Admission): void {
+    // Wake when the next pass expires so an idle page stops showing it as current.
+    if (!result.checks) return;
+    let nextExpiry = Infinity;
+    for (const check of Object.values(result.checks)) {
+      if (check.verdict !== 'pass') continue;
+      const expiry = Date.parse(check.expiresAt);
+      if (expiry > this.currentTime() && expiry < nextExpiry) nextExpiry = expiry;
+    }
+    if (nextExpiry === Infinity) return;
+    const delay = Math.max(1, nextExpiry - Date.now());
+    this.expiryTimer = setTimeout(() => {
+      this.currentTime.set(Date.now());
+      this.message.set(this.admissionMessage(result));
+      this.scheduleExpiry(result);
+    }, delay);
+  }
+
+  private clearExpiryTimer(): void {
+    if (this.expiryTimer === undefined) return;
+    clearTimeout(this.expiryTimer);
+    this.expiryTimer = undefined;
+  }
+
   private lostAccess(response: Response): boolean {
     if (response.status !== 401 && response.status !== 403) return false;
     this.accessGeneration += 1;
     this.locator.set('');
     this.upstreamHost.set('');
     this.upstreamPort.set('');
-    this.admission.set(undefined);
+    this.setAdmission(undefined);
     this.changeRef.set('');
     this.commandId = '';
     this.serverId = '';

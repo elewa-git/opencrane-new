@@ -7,6 +7,10 @@ function screenRoot(fixture: ComponentFixture<McpInstall>): HTMLElement {
   return root;
 }
 
+function isPackageChoice(input: HTMLInputElement): boolean {
+  return input.closest('label')?.textContent?.includes('Package (OCI image)') ?? false;
+}
+
 function isRequestCall(value: unknown): value is [RequestInfo | URL, RequestInit | undefined] {
   if (!Array.isArray(value) || value.length < 2) return false;
   const options: unknown = value[1];
@@ -241,7 +245,7 @@ it('shows the admission heading and hides source choices after package submissio
   fixture.detectChanges();
   const root = screenRoot(fixture);
   const packageChoice = [...root.querySelectorAll<HTMLInputElement>('input[name="source"]')]
-    .find(input => input.closest('label')?.textContent?.includes('Package (OCI image)'));
+    .find(isPackageChoice);
   packageChoice?.click();
   fixture.detectChanges();
   const locatorInput = root.querySelector<HTMLInputElement>('#image-locator');
