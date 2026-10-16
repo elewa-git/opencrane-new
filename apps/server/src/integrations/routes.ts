@@ -135,7 +135,8 @@ async function integrationStatus(path: string, request: FastifyRequest, reply: F
   if (path.endsWith('/publication')) return publicationStatus(request, reply, options);
   if (!options.store) return reply.code(503).send({ status: 'unavailable' });
   if (path.endsWith('/:commandId')) {
-    const params = z.object({ commandId: z.string() }).parse(request.params);
+    const params = z.object({ commandId: z.string().regex(/^[\w-]{1,200}$/u) })
+      .parse(request.params);
     let registration: Awaited<ReturnType<typeof hostedRegistrationChange>> | undefined;
     try {
       registration = await hostedRegistrationChange(options.store, options.silo, params.commandId);
