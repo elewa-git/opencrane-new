@@ -6,6 +6,7 @@ import { isObject } from './memory-panel-data';
 const privateText = 'A private fact that must disappear.';
 const savedFact = { memoryId: 'fact-one', revision: 3, text: privateText,
   kind: 'fact', pinned: false, expiresAt: null, savedAt: '2026-10-02T10:00:00Z' };
+const otherFact = { ...savedFact, memoryId: 'fact-two', text: 'Another saved fact.' };
 
 function reply(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status });
@@ -48,25 +49,35 @@ function closeModal(this: HTMLDialogElement): void { this.removeAttribute('open'
 async function openDetail(kind: 'person' | 'group' | 'assistant_notes' = 'person',
   detail: unknown = { scopeId: 'scope', fact: savedFact, sources: [], canForget: true },
   postReply: Response | Promise<Response> = reply(200, receipt('pending')),
-  statusReply: Response = reply(200, receipt('forgotten')),
+  statusReply: Response | Promise<Response> = reply(200, receipt('forgotten')),
+  listFacts = [savedFact],
+  reviewedDetail?: unknown,
 ): Promise<{ fixture: ComponentFixture<MemoryPanel>; posts: string[];
-  detailGets: () => number }> {
+  detailGets: () => number; statusGets: () => number }> {
   const posts: string[] = [];
   let detailReads = 0;
+  let statusReads = 0;
   async function fetchReply(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = requestUrl(input);
     if (url.endsWith('/scopes')) return reply(200, { scopes: [scope(kind)] });
-    if (url.includes('/facts?')) return reply(200, { scopeId: 'scope', facts: [savedFact],
-      returnedCount: 1, nextCursor: null });
+    if (url.includes('/facts?')) return reply(200, { scopeId: 'scope', facts: listFacts,
+      returnedCount: listFacts.length, nextCursor: null });
     if (url.endsWith('/forget')) {
       posts.push(typeof init?.body === 'string' ? init.body : '');
       return postReply;
     }
     if (url.endsWith('/facts/fact-one')) {
       detailReads += 1;
+      if (detailReads > 1 && reviewedDetail) return reply(200, reviewedDetail);
       return reply(200, detail);
     }
-    if (url.includes('/changes/')) return statusReply;
+    if (url.endsWith('/facts/fact-two')) {
+      return reply(200, { scopeId: 'scope', fact: otherFact, sources: [], canForget: true });
+    }
+    if (url.includes('/changes/')) {
+      statusReads += 1;
+      return statusReply;
+    }
     throw new Error('Unexpected request');
   }
   vi.stubGlobal('fetch', vi.fn(fetchReply));
@@ -85,7 +96,8 @@ async function openDetail(kind: 'person' | 'group' | 'assistant_notes' = 'person
     expect(text(fixture)).toMatch(/Revision|no longer available/);
   });
   function detailGets(): number { return detailReads; }
-  return { fixture, posts, detailGets };
+  function statusGets(): number { return statusReads; }
+  return { fixture, posts, detailGets, statusGets };
 }
 
 function requestUrl(input: RequestInfo | URL): string {
@@ -101,6 +113,114 @@ afterEach(() => {
 });
 
 Object.assign(HTMLDialogElement.prototype, { showModal, close: closeModal });
+
+function searchInput(fixture: ComponentFixture<MemoryPanel>): HTMLInputElement {
+  const input = pageElement(fixture).querySelector<HTMLInputElement>('input[type="search"]');
+  if (!input) throw new Error('Missing search input');
+  return input;
+}
+
+function expectFactHidden(fixture: ComponentFixture<MemoryPanel>): void {
+  expect(searchInput(fixture).value).not.toContain(privateText);
+  expect(pageElement(fixture).querySelector('.results')?.textContent).not.toContain(privateText);
+  const liveRegions = pageElement(fixture).querySelectorAll('[aria-live], [role="status"], [role="alert"]');
+  for (const region of liveRegions) expect(region.textContent).not.toContain(privateText);
+}
+
+it.each([1280, 390])('clears searched fact text after acceptance at %spx', async width => {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+  const { fixture } = await openDetail();
+  const input = searchInput(fixture);
+  input.value = privateText;
+  input.dispatchEvent(new Event('input'));
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(searchInput(fixture).value).toBe(privateText);
+  });
+  button(fixture, 'Forget').click();
+  fixture.detectChanges();
+  button(fixture, 'Forget from your memory').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Hidden · cleanup pending');
+  });
+  expectFactHidden(fixture);
+});
+
+it.each([1280, 390])('removes a fact after a forgotten detail at %spx', async width => {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+  const forgotten = { status: 'unavailable', scopeId: 'scope', memoryId: 'fact-one',
+    revision: 4, reason: 'forgotten' };
+  const { fixture } = await openDetail('person', undefined,
+    reply(409, { outcome: 'conflict' }), reply(200, receipt('forgotten')),
+    [savedFact], forgotten);
+  button(fixture, 'Forget').click();
+  fixture.detectChanges();
+  button(fixture, 'Forget from your memory').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Changed before you forgot it');
+  });
+  button(fixture, 'Review latest revision').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('no longer available');
+  });
+  expectFactHidden(fixture);
+});
+
+it('opens a fresh confirmation for a second fact and keeps the first outcome', async () => {
+  const { fixture, posts } = await openDetail('person', undefined,
+    reply(200, receipt('pending')), reply(200, receipt('forgotten')),
+    [savedFact, otherFact]);
+  button(fixture, 'Forget').click();
+  fixture.detectChanges();
+  button(fixture, 'Forget from your memory').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Hidden · cleanup pending');
+  });
+  const otherRow = pageElement(fixture).querySelectorAll<HTMLButtonElement>('button.fact')[0];
+  if (!otherRow) throw new Error('Missing second fact row');
+  otherRow.click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(button(fixture, 'Forget')).toBeTruthy();
+  });
+  button(fixture, 'Forget').click();
+  fixture.detectChanges();
+  expect(text(fixture)).toContain('Hidden · cleanup pending');
+  button(fixture, 'Forget from your memory').click();
+  await vi.waitFor(() => expect(posts).toHaveLength(2));
+  const first = JSON.parse(posts[0] ?? '{}') as { commandId: string };
+  const second = JSON.parse(posts[1] ?? '{}') as { commandId: string };
+  expect(second.commandId).not.toBe(first.commandId);
+});
+
+it('allows one status read and keeps Forgotten after a late pending reply', async () => {
+  let finishStatus: ((response: Response) => void) | undefined;
+  const delayed = new Promise<Response>(resolve => { finishStatus = resolve; });
+  const { fixture, statusGets } = await openDetail('person', undefined,
+    reply(200, receipt('pending')), delayed);
+  button(fixture, 'Forget').click();
+  fixture.detectChanges();
+  button(fixture, 'Forget from your memory').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Hidden · cleanup pending');
+  });
+  const check = button(fixture, 'Check status');
+  check.click();
+  fixture.detectChanges();
+  expect(check.disabled).toBe(true);
+  check.click();
+  expect(statusGets()).toBe(1);
+  finishStatus?.(reply(200, receipt('forgotten')));
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Forgotten');
+  });
+});
 
 it.each(['group', 'assistant_notes'] as const)('hides Forget in %s detail', async kind => {
   const { fixture } = await openDetail(kind);
