@@ -332,6 +332,97 @@ describe('welcome survey', () => {
     });
   }
 
+  it('restores every saved answer after keeping progress found during a draft', async () => {
+    const confirmedProgress = {
+      state: 'review',
+      survey: { generation: 1, position: 4, nextStep: null, steps: [
+        savedProgress.survey.steps[0],
+        { time: '2026-10-14T09:31:00.000Z', answers: {
+          step: 2, workDescription: 'Teaching colleagues', groupIds: [],
+        } },
+        { time: '2026-10-14T09:32:00.000Z', answers: {
+          step: 3, tone: 'warm', length: 'detailed', citations: false,
+        } },
+        { time: '2026-10-14T09:33:00.000Z', answers: {
+          step: 4, tasks: ['draft_documents', 'summarise_meetings'], ownTask: 'Plan lessons',
+        } },
+      ] },
+    };
+    let progressReads = 0;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+      if (url === '/api/onboarding') {
+        progressReads += 1;
+        if (progressReads === 1) return json({ status: 'unavailable' }, 503);
+        return json(confirmedProgress);
+      }
+      if (url === '/auth/me') return json({ authenticated: true, user: { name: 'Alex' } });
+      if (url === '/api/chat/groups?limit=16') return json({ rows: [], next: null });
+      return json({ status: 'unexpected' }, 503);
+    });
+    TestBed.configureTestingModule({ imports: [SurveyScreen] });
+    const fixture = TestBed.createComponent(SurveyScreen);
+    fixture.detectChanges();
+    const element: unknown = fixture.nativeElement;
+    if (!(element instanceof HTMLElement)) throw new Error('Missing survey root');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Start again');
+    });
+    buttonNamed(element, 'Start again').click();
+    fixture.detectChanges();
+    const name = element.querySelector<HTMLInputElement>('#survey-name');
+    if (!name) throw new Error('Missing name field');
+    name.value = 'Taylor';
+    name.dispatchEvent(new Event('input'));
+    buttonNamed(element, 'Continue').click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Keep saved progress');
+    });
+    buttonNamed(element, 'Keep saved progress').click();
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Your survey is saved');
+    expect(element.textContent).not.toContain('Your assistant is assigned');
+    buttonNamed(element, 'Edit tasks').click();
+    fixture.detectChanges();
+    expect(buttonNamed(element, 'Draft documents').getAttribute('aria-pressed')).toBe('true');
+    expect(buttonNamed(element, 'Summarise meetings').getAttribute('aria-pressed')).toBe('true');
+    expect(buttonNamed(element, 'Compare supplier proposals').getAttribute('aria-pressed'))
+      .toBe('false');
+    expect(element.querySelector<HTMLTextAreaElement>('#survey-own-task')?.value).toBe('Plan lessons');
+    buttonNamed(element, 'Review persona').click();
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Your survey is saved');
+    buttonNamed(element, 'Back').click();
+    fixture.detectChanges();
+    expect(element.querySelector('[data-value="warm"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(element.querySelector('[data-value="detailed"]')?.getAttribute('aria-checked'))
+      .toBe('true');
+    expect(element.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
+    buttonNamed(element, 'Continue').click();
+    fixture.detectChanges();
+    buttonNamed(element, 'Back').click();
+    fixture.detectChanges();
+    buttonNamed(element, 'Back').click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.querySelector<HTMLTextAreaElement>('#survey-work')?.value)
+        .toBe('Teaching colleagues');
+      expect(buttonNamed(element, 'Continue').disabled).toBe(false);
+    });
+    buttonNamed(element, 'Continue').click();
+    fixture.detectChanges();
+    buttonNamed(element, 'Back').click();
+    fixture.detectChanges();
+    buttonNamed(element, 'Back').click();
+    fixture.detectChanges();
+    expect(element.querySelector<HTMLInputElement>('#survey-name')?.value).toBe('Alex');
+    buttonNamed(element, 'Continue').click();
+    fixture.detectChanges();
+    const posts = fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey');
+    expect(posts).toHaveLength(0);
+  });
+
   for (const [identityStatus, identityBody, expectedMessage] of [
     [200, { authenticated: false, user: null }, 'Your session has expired'],
     [401, { status: 'signed_out' }, 'Your session has expired'],
