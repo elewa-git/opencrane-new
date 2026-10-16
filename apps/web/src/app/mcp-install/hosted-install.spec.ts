@@ -394,6 +394,7 @@ it.each([200, 401, 403])(
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
   await vi.waitFor(() => expect(root.textContent).toContain('No result reported'));
   releaseOldRead(reply(status, admission('pass', 'admitted')));
+  await new Promise<void>(resolve => setTimeout(resolve, 0));
   await vi.waitFor(() => expect(root.textContent).toContain('change-2'));
   await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(
     '#hosted-check-status')?.disabled).toBe(false));

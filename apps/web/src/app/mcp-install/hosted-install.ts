@@ -1,4 +1,7 @@
-import { ChangeDetectionStrategy, Component, output, signal, type OnDestroy } from '@angular/core';
+import {
+  afterNextRender, ChangeDetectionStrategy, Component, ElementRef, inject, Injector, output,
+  signal, viewChild, type OnDestroy,
+} from '@angular/core';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
 import { decode, encode } from 'punycode/';
 import { z } from 'zod';
@@ -60,6 +63,8 @@ function publicHost(value: string): boolean {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HostedInstall implements OnDestroy {
+  private readonly injector = inject(Injector);
+  private readonly imageField = viewChild<ElementRef<HTMLInputElement>>('imageField');
   readonly started = output<void>();
   readonly editing = output<void>();
   protected readonly locator = signal('');
@@ -100,6 +105,11 @@ export class HostedInstall implements OnDestroy {
     this.phase.set('draft');
     this.message.set('Choose an exact image and its permitted upstream.');
     this.editing.emit();
+    afterNextRender(this.focusImageField.bind(this), { injector: this.injector });
+  }
+
+  private focusImageField(): void {
+    if (this.phase() === 'draft') this.imageField()?.nativeElement.focus();
   }
 
   protected alternativeLabel(): string {
@@ -130,8 +140,7 @@ export class HostedInstall implements OnDestroy {
       const response = await fetch('/api/org/integrations', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
       });
-      if (this.lostAccess(response)) return;
-      if (generation !== this.accessGeneration) return;
+      if (generation !== this.accessGeneration || this.lostAccess(response)) return;
       if (response.status === 400) {
         this.commandId = '';
         this.phase.set('draft');
@@ -189,7 +198,7 @@ export class HostedInstall implements OnDestroy {
 
   private async readOriginalChange(generation: number): Promise<void> {
     const response = await fetch(`/api/org/integrations/changes/${encodeURIComponent(this.commandId)}`);
-    if (this.lostAccess(response) || generation !== this.accessGeneration) return;
+    if (generation !== this.accessGeneration || this.lostAccess(response)) return;
     if (!response.ok) throw new Error('Change status unavailable');
     const raw: unknown = await response.json();
     const result = changeReply.parse(raw);
@@ -205,7 +214,7 @@ export class HostedInstall implements OnDestroy {
 
   private async readAdmission(generation: number): Promise<void> {
     const response = await fetch(`/api/org/integrations/${encodeURIComponent(this.serverId)}/admission`);
-    if (this.lostAccess(response) || generation !== this.accessGeneration) return;
+    if (generation !== this.accessGeneration || this.lostAccess(response)) return;
     if (!response.ok) throw new Error('Admission unavailable');
     const raw: unknown = await response.json();
     const result = hostedAdmissionSchema.parse(raw);

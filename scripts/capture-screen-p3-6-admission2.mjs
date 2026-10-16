@@ -172,13 +172,17 @@ try {
     captures.push(await captureAnotherVersion(browser, width));
   }
   const receipt = '# Hosted package admission screens\n\n' +
-    'PASS: Captured checking, signature refusal, licence refusal and scanner-unavailable ' +
-    'states at 1280 and 390 pixels. Chromium used intercepted registration and admission ' +
-    'replies, a fixed 15 October 2026 10:02 UTC clock, reduced motion and no development ' +
-    'stack. Continue stayed disabled. Back took focus, visible actions measured at least ' +
-    '44 pixels, and no page overflowed horizontally. ' +
-    'No admission or scanner command was sent.\n\n' +
-    `Files: ${captures.join(', ')}.\n`;
+    'Date: 16 October 2026. Fixture image digest: sha256:' + digest + '.\n\n' +
+    'PASS: `npm run visual:screen-p3-6-admission2` captured checking, signature refusal, ' +
+    'licence refusal, scanner unavailable and the replacement form at 1280 and 390 pixels. ' +
+    'Chromium used intercepted registration and admission replies with a fixed ' +
+    '15 October 2026 10:02 UTC clock and reduced motion. This was a local build, ' +
+    'not a fresh install. Continue stayed disabled. Back took focus, and pressing Enter ' +
+    'on Choose another signed version moved focus to the new image field. Visible actions ' +
+    'measured at least 44 pixels, and no page overflowed horizontally. No admission or ' +
+    'scanner command was sent.\n\n' +
+    'NOT RUN: Fresh-install live qualification.\n\n' +
+    `Captures: ${captures.join(', ')}.\n`;
   await writeFile(`${output}/receipt.md`, receipt);
   console.log(`Captured ${captures.join(', ')}`);
 } finally {

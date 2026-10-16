@@ -6,7 +6,7 @@
     <form (submit)="submit($event)">
       <h2>Package details</h2>
       <label for="image-locator">Image pinned by sha256 digest</label>
-      <input id="image-locator" type="text" autocomplete="off" required
+      <input #imageField id="image-locator" type="text" autocomplete="off" required
         placeholder="registry.example.com/team/image@sha256:…" [value]="locator()"
         (input)="editLocator($any($event.target).value)" />
       <p>A tag or image name without a digest cannot be submitted.</p>
