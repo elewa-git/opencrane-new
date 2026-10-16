@@ -1787,3 +1787,56 @@ async function keepsApprovalAcrossCarriedGeneration() {
 }
 it('keeps a waiting approval bound to its review across a carried generation',
   keepsApprovalAcrossCarriedGeneration);
+async function approvalForReviewedTool(setup: Fixture, headers: Record<string, string>,
+  approve: boolean) {
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    request);
+  const answer = z.object({ approvalId: z.string() }).parse(await response.json());
+  const waiting = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  if (approve) {
+    async function fresh() {}
+    const result = await decideApproval(setup.nats.store, 'test', answer.approvalId,
+      'alice', 'approved', true, fresh, waiting);
+    expect(result.status).toBe('appended');
+  }
+  return answer.approvalId;
+}
+
+async function cancelsApprovalOnSavedReload(approve: boolean) {
+  const setup = await fixture();
+  async function close() {
+    await setup.close();
+  }
+  onTestFinished(close);
+  const headers = await prepare(setup);
+  await reviewRestoration(setup, 'review-reload', 'ask');
+  const approvalId = await approvalForReviewedTool(setup, headers, approve);
+  const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  const record = await publishRestoration(setup, 'reload');
+  const pending = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect.soft(pending.policyRevision).toBeGreaterThan(before.policyRevision);
+  expect((await readApproval(setup.nats.store, 'test', approvalId)).state).toBe('cancelled');
+  const delivery = await restorationDelivery(setup);
+  await delivery.deliver(record);
+  await delivery.waitForWitness(record);
+  async function acknowledged() {
+    expect(await delivery.observe()).not.toBeNull();
+  }
+  await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
+  const restored = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(restored.published).toBe(true);
+  expect(restored.policyRevision).toBe(pending.policyRevision);
+  const old = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(old.state).toBe('cancelled');
+  async function fresh() {}
+  for (const action of ['approved', 'retry'] as const) {
+    const result = await decideApproval(setup.nats.store, 'test', approvalId,
+      'alice', action, true, fresh, old);
+    expect(result.status).toBe('conflict');
+  }
+  expect((await approvalPermit(setup, headers, approvalId)).status).not.toBe(200);
+  expect(setup.received()).toBe(0);
+}
+it.each([false, true])('cancels old approvals on saved reload (approved %s)',
+  cancelsApprovalOnSavedReload, 60_000);
