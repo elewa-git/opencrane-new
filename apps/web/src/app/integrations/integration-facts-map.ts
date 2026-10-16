@@ -22,6 +22,24 @@ export function buildIntegrationFacts(
   facts.push(buildConnectedFact());
   facts.push(buildAllowedForFact());
   facts.push(buildAvailabilityFact(policy, toolsReadState));
+  if (policy?.driftHeld === true && toolsReadState === 'loaded') {
+    for (const fact of facts) {
+      if (fact.label === 'Installed') {
+        fact.kind = 'needs_input';
+        fact.value = 'Paused: tools changed';
+        fact.evidence = 'The integration is installed, but its changed tools need review.';
+      }
+      if (fact.label === 'Allowed for') {
+        fact.kind = 'needs_input';
+        fact.value = 'Paused';
+        fact.evidence = 'Saved access choices remain, but calls are paused for everyone.';
+      }
+      if (fact.label === 'Available to the assistant') {
+        fact.value = 'Paused';
+        fact.evidence = 'Every call stays paused while changed tools need review.';
+      }
+    }
+  }
   return facts;
 }
 
@@ -73,6 +91,13 @@ export function buildAvailabilityFact(
       kind: 'failed',
       value: "Couldn't check",
       evidence: 'The tool policy read failed. Refresh to read it again.',
+    };
+  }
+  if (policy?.catalogue &&
+      (policy.expiresAt === null || Date.parse(policy.expiresAt) <= Date.now())) {
+    return {
+      label: 'Available to the assistant', kind: 'blocked', value: 'Paused',
+      evidence: 'The last successful tool check has expired. Calls stay paused.',
     };
   }
   if (policy?.published === false) {

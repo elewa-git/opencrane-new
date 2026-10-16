@@ -4,7 +4,12 @@
     <span class="breadcrumb-step">
       <span aria-hidden="true">›</span>
       @if (row(); as integration) {
-        <span aria-current="page">{{ integration.name }}</span>
+        @if (view() === 'changes') {
+          <a [href]="'/org/integrations/' + integration.serverId">{{ integration.name }}</a>
+          <span aria-hidden="true">›</span><span aria-current="page">Changes</span>
+        } @else {
+          <span aria-current="page">{{ integration.name }}</span>
+        }
       } @else if (state() === 'not-found') {
         <span aria-current="page">Integration not found</span>
       } @else {
@@ -55,6 +60,70 @@
       [attr.aria-disabled]="refreshing()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button>
   </section>
 } @else if (row(); as integration) {
+  @if (view() === 'changes') {
+    <header class="detail-heading">
+      <div class="heading-copy">
+        <h1>Review changed tools</h1>
+        <p>{{ integration.name }} ·
+          {{ policy() ? 'Last successful check ' + checkedTime() : 'Tool policy not checked' }}</p>
+      </div>
+      <div class="actions">
+        <a class="button secondary" [href]="'/org/integrations/' + integration.serverId">Back</a>
+        <button id="integration-refresh" class="button secondary" type="button"
+          (click)="refresh()" [attr.aria-disabled]="refreshing()">
+          {{ refreshing() ? 'Refreshing…' : 'Refresh' }}
+        </button>
+      </div>
+    </header>
+    @if (toolsReadState() === 'failed' && !refreshing()) {
+      <div class="policy-failure" aria-hidden="true">
+        <oc-shared-state kind="failed" message="Couldn't check the tool policy."
+          [detail]="policy() ? 'Showing rows from the last successful read: ' + checkedTime()
+            : 'No saved tool comparison is available. Refresh to try again.'"
+          [showAction]="false" />
+      </div>
+    }
+    @if (driftHeld()) {
+      <div class="draft-notice">
+        <h2>{{ integration.name }} is paused: its tools changed</h2>
+        <p>{{ driftSummary() }}</p>
+        <p>Every tool stays paused. Your saved choices are kept.</p>
+      </div>
+    }
+    @if (checkExpired()) {
+      <div class="draft-notice">
+        Last check expired: the last successful check was {{ checkedTime() }}.
+        Calls stay paused until a fresh check passes.
+      </div>
+    }
+    @if (comparison(); as changes) {
+      <section class="changes-list" aria-label="Changed tools">
+        @for (change of changes.rows; track change.name) {
+          <article class="change-row">
+            <div class="change-title"><h2>{{ change.name }}</h2><strong>{{ change.kind }}</strong></div>
+            @if (change.fields.length) {
+              <p class="field-list">{{ change.fields.join(' · ') }}</p>
+            }
+            <div class="change-columns">
+              <div><h3>Before</h3><p>{{ change.before }}</p></div>
+              <div><h3>After</h3><p>{{ change.after }}</p></div>
+              <div><h3>Access</h3><p>{{ change.access }}</p></div>
+            </div>
+          </article>
+        }
+      </section>
+    } @else if (policy()) {
+      <p class="draft-notice">The earlier list isn't saved, so review every tool.</p>
+    }
+    <p>There's no rollback. Reviewing saves your choices, but restoring calls isn't available yet.</p>
+    @if (policy()) {
+      <div class="actions">
+        <a class="button primary" [href]="'/org/integrations/' + integration.serverId + '/tools'">
+          Review tools
+        </a>
+      </div>
+    }
+  } @else {
   <header class="detail-heading">
     <div class="heading-copy">
       <h1>{{ integration.name }}</h1>
@@ -62,9 +131,15 @@
         {{ integration.source.detail }}</p>
     </div>
     <div class="actions">
-      <a class="button primary" [href]="'/org/integrations/' + integration.serverId + '/tools'">
-        {{ needsReview(integration) ? 'Continue review' : 'Manage tools' }}
-      </a>
+      @if (driftHeld()) {
+        <a class="button primary" [href]="'/org/integrations/' + integration.serverId + '/changes'">
+          Review changes
+        </a>
+      } @else {
+        <a class="button primary" [href]="'/org/integrations/' + integration.serverId + '/tools'">
+          {{ needsReview(integration) ? 'Continue review' : 'Manage tools' }}
+        </a>
+      }
       <a class="button secondary"
         [href]="'/org/integrations/new?server=' + integration.serverId">
         Check discovery status
@@ -78,11 +153,24 @@
       }
     </div>
   </header>
-  @if (needsReview(integration)) {
+  @if (driftHeld()) {
+    <div class="draft-notice">
+      <h2>{{ integration.name }} is paused: its tools changed</h2>
+      <p>{{ driftSummary() }}</p>
+      <p>Last successful check {{ checkedTime() }}</p>
+    </div>
+  } @else if (needsReview(integration)) {
     <div class="draft-notice">
       <oc-shared-state kind="draft" message="Draft — review not finished"
         [detail]="reviewDetail()" [showAction]="false" />
     </div>
   }
+  @if (checkExpired()) {
+    <div class="draft-notice">
+      Last check expired: the last successful check was {{ checkedTime() }}.
+      Calls stay paused until a fresh check passes.
+    </div>
+  }
   <oc-integration-facts [facts]="facts()" />
+  }
 }

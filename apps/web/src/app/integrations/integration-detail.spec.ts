@@ -67,9 +67,175 @@ function root(fixture: ComponentFixture<IntegrationDetail>): HTMLElement {
   return element;
 }
 
+function driftPolicy(): ToolPolicy {
+  const before = { name: 'old_tool', revision: 'a'.repeat(64), reviewed: false,
+    definition: JSON.stringify({ name: 'old_tool', description: 'Before',
+      inputSchema: { type: 'object' } }) };
+  const after = { name: '<img src=x onerror=alert(1)>', revision: 'b'.repeat(64),
+    reviewed: false, definition: JSON.stringify({
+      name: '<img src=x onerror=alert(1)>', description: '<img src=x onerror=alert(1)>',
+      inputSchema: { type: 'object' },
+    }) };
+  const current = policy(false);
+  return { ...current, driftHeld: true, catalogue: { serverId: 'fixture-server',
+    toolCount: 1, schemaDigest: 'c'.repeat(64),
+    checkedAt: loadedAt, expiresAt: '2026-10-05T09:19:00.000Z', tools: [after] },
+  previousCatalogue: { serverId: 'fixture-server', toolCount: 1,
+    schemaDigest: 'd'.repeat(64), checkedAt: loadedAt,
+    expiresAt: '2026-10-05T09:19:00.000Z', tools: [before] },
+  checkedAt: loadedAt, expiresAt: null,
+  tools: [{ name: after.name, revision: after.revision, reviewed: false,
+    readOnly: false, mode: 'block', suggestion: 'ask' }] };
+}
+
+function createChanges(policyReply: Response): ComponentFixture<IntegrationDetail> {
+  fetchSpy = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(response(listResponse(row('ready', 'Published'))))
+    .mockResolvedValueOnce(policyReply);
+  const fixture = TestBed.createComponent(IntegrationDetail);
+  fixture.componentRef.setInput('serverId', 'fixture-server');
+  fixture.componentRef.setInput('view', 'changes');
+  fixture.detectChanges();
+  return fixture;
+}
+
 describe('integration detail', () => {
   beforeEach(() => TestBed.configureTestingModule({ imports: [IntegrationDetail] }));
   afterEach(() => fetchSpy?.mockRestore());
+
+  it('shows drift, counts and expired evidence on the detail page', async () => {
+    const fixture = create(row('ready', 'Published'), response(driftPolicy()));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Found 1 added'));
+    expect(root(fixture).textContent).toContain('Fixture server is paused: its tools changed');
+    expect(root(fixture).textContent).toContain('Last check expired:');
+    expect(root(fixture).textContent).toContain('Calls stay paused');
+    const changesLink = root(fixture)
+      .querySelector('a[href="/org/integrations/fixture-server/changes"]');
+    expect(changesLink?.textContent).toContain('Review changes');
+    expect(root(fixture).textContent).not.toContain('Draft — review not finished');
+    fixture.destroy();
+  });
+
+  it('shows an expired check without a drift banner or review-changes action', async () => {
+    const expired = { ...driftPolicy(), driftHeld: false, previousCatalogue: null };
+    const fixture = create(row('ready', 'Published'), response(expired));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Last check expired:'));
+    expect(root(fixture).textContent).not.toContain('is paused: its tools changed');
+    expect(root(fixture).textContent).not.toContain('Review changes');
+    expect(root(fixture).textContent).not.toContain('Run check now');
+    fixture.destroy();
+  });
+
+  it('renders untrusted comparison text without HTML or check actions', async () => {
+    const fixture = createChanges(response(driftPolicy()));
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(2));
+    expect(root(fixture).textContent).toContain('<img src=x onerror=alert(1)>');
+    expect(root(fixture).querySelector('img')).toBeNull();
+    expect(root(fixture).textContent).toContain('Block (new)');
+    expect(root(fixture).textContent).toContain('Removed');
+    expect(root(fixture).textContent).toContain("There's no rollback.");
+    expect(root(fixture).textContent).not.toContain('Run check now');
+    expect(root(fixture).textContent).not.toContain('Watch failed');
+    fixture.destroy();
+  });
+
+  it('clears comparison rows after a refused tools read', async () => {
+    const fixture = createChanges(new Response(null, { status: 401 }));
+    await vi.waitFor(() => expect(root(fixture).querySelector('.access-state')).not.toBeNull());
+    expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(0);
+    expect(root(fixture).textContent).not.toContain('Fixture server');
+    fixture.destroy();
+  });
+
+  it.each([
+    ['503', new Response(null, { status: 503 })],
+    ['bad JSON', response({ unexpected: true })],
+  ])('shows a visible policy failure for %s without claiming review is ready',
+    async (_reason, policyReply) => {
+      const fixture = createChanges(policyReply);
+      await vi.waitFor(() => expect(root(fixture).querySelector('.policy-failure')).not.toBeNull());
+      const notice = root(fixture).querySelector('.policy-failure');
+      expect(notice?.textContent).toContain("Couldn't check the tool policy");
+      expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(0);
+      expect(root(fixture).textContent).not.toContain('Review tools');
+      fixture.destroy();
+    });
+
+  it('keeps comparison rows and labels their check time after a policy refresh fails', async () => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response(listResponse(row('ready', 'Published'))))
+      .mockResolvedValueOnce(response(driftPolicy()))
+      .mockResolvedValueOnce(response(listResponse(row('ready', 'Published'))))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }));
+    const fixture = TestBed.createComponent(IntegrationDetail);
+    fixture.componentRef.setInput('serverId', 'fixture-server');
+    fixture.componentRef.setInput('view', 'changes');
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(2));
+    const refresh = root(fixture).querySelector<HTMLButtonElement>('#integration-refresh');
+    refresh?.click();
+    await vi.waitFor(() => expect(root(fixture).querySelector('.policy-failure')).not.toBeNull());
+    expect(root(fixture).querySelector('.policy-failure')?.textContent)
+      .toContain('last successful read');
+    expect(root(fixture).textContent).toContain('5 Oct 2026, 09:14 UTC');
+    expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(2);
+    fixture.destroy();
+  });
+
+  it('shows no comparison after a refused register read', async () => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(null, { status: 403 }));
+    const fixture = TestBed.createComponent(IntegrationDetail);
+    fixture.componentRef.setInput('serverId', 'fixture-server');
+    fixture.componentRef.setInput('view', 'changes');
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(root(fixture).querySelector('.access-state')).not.toBeNull());
+    expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(0);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    fixture.destroy();
+  });
+
+  it('keeps comparison rows after a failed refresh', async () => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response(listResponse(row('ready', 'Published'))))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(response(listResponse(row('ready', 'Published'))))
+      .mockResolvedValueOnce(response(driftPolicy()))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }));
+    const fixture = TestBed.createComponent(IntegrationDetail);
+    fixture.componentRef.setInput('serverId', 'fixture-server');
+    fixture.componentRef.setInput('view', 'changes');
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't check"));
+    const refresh = root(fixture).querySelector<HTMLButtonElement>('#integration-refresh');
+    refresh?.click();
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(2));
+    refresh?.click();
+    await vi.waitFor(() => expect(root(fixture).textContent)
+      .toContain('The details below are from the last successful read.'));
+    expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(2);
+    fixture.destroy();
+  });
+
+  it('ignores a late changes reply after access ends', async () => {
+    let finishTools!: (reply: Response) => void;
+    fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response(listResponse(row('ready', 'Published'))))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        finishTools = resolve;
+      }));
+    const fixture = TestBed.createComponent(IntegrationDetail);
+    fixture.componentRef.setInput('serverId', 'fixture-server');
+    fixture.componentRef.setInput('view', 'changes');
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(finishTools).toBeTypeOf('function'));
+    fixture.componentInstance.isAccessRefusal(new Response(null, { status: 403 }));
+    finishTools(response(driftPolicy()));
+    await fixture.whenStable();
+    expect(root(fixture).querySelectorAll('.change-row')).toHaveLength(0);
+    expect(root(fixture).textContent).not.toContain('old_tool');
+    fixture.destroy();
+  });
 
   it('shows the review notice only for a row pending review', async () => {
     const fixture = create(row('needs_input', 'Pending review · tools changed'));
