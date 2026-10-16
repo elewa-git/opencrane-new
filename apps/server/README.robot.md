@@ -2945,7 +2945,10 @@ Finishing setup or closing the socket stops that link's timer. The independent
 watcher continues to check for saved intent afterwards.
 
 Every new connection sends a qualifying gate before `resume`. Receipt parsing runs before
-report parsing. Only strict `bridge_gated`, `bridge_quiet` and `bridge_unavailable` replies matching
+report parsing. The computer sends `bridge_gated` before report resume on the socket
+that received the gate, and repeats acceptance after reconnect. Root stop can start
+while report replay waits and active work has acknowledged interruption without ending.
+Only strict `bridge_gated`, `bridge_quiet` and `bridge_unavailable` replies matching
 that connection's takeover id, generation and sorted affected turns are accepted.
 The first accepted epoch cannot change. Quiet requires empty preparation, running,
 loaded-thread and held-approval lists, interrupted turns within the affected list,

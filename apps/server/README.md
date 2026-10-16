@@ -282,7 +282,8 @@ After saved control intent, the server sends a signed request to stop computer w
 An idle computer receives it too. Slow chat reads, file uploads and report replay do
 not delay this request. If a turn finishes while the request is being signed, the
 server checks it again before telling the computer to resume reports.
-The server checks the computer's reply and keeps it only for that connection.
+The server checks the computer's immediate reply and keeps it only for that connection.
+It can then ask the root supervisor to stop executors while reports still wait to resume.
 This does not grant desktop control or save proof that all computer work has stopped.
 
 A child chat can link back to its source only when the reader can still read that

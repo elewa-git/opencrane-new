@@ -847,6 +847,9 @@ and checks unloaded threads. A failed cleanup leaves proof unavailable.
 
 `bridge_gated` immediately confirms the checked request and process-local epoch.
 It proves admission is closed, without waiting for interruption or claiming quiet.
+The reply uses the authenticated socket that delivered the gate and does not wait
+for report `resume`. Every matching signed gate sends acceptance again, including
+after a lost connection. Approval signals still wait for report resume.
 
 `bridge_quiet` binds the request, epoch and `interruptedTurnIds`. Its
 `preparingTurnIds`, `runningTurnIds`, `loadedThreadIds` and `heldApprovalIds` are empty.

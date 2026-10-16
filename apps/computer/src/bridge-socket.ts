@@ -14,7 +14,8 @@ export interface BridgeSocketState {
 
 interface TurnRunnerPort {
   gate: { readonly closed: boolean };
-  stopBridge(value: Record<string, unknown>): Promise<Record<string, unknown>>;
+  stopBridge(value: Record<string, unknown>,
+    accept: (value: Record<string, unknown>) => void): Promise<Record<string, unknown>>;
   start(turn: ReturnType<typeof parseTurn>): Promise<void>;
   interrupt(value: Record<string, unknown>): Promise<void>;
   acknowledge(sequence: unknown, value?: Record<string, unknown>): void;
@@ -110,8 +111,10 @@ function settleApproval(input: Record<string, unknown>,
 function gateDispatch(input: Record<string, unknown>, next: WebSocket, runner: TurnRunnerPort) {
   const type = input['type'];
   if (type === 'bridge_gate') {
-    const receipt = runner.stopBridge(input);
     function reply(value: Record<string, unknown>) { sendFileReceipt(next, value); }
+    // Reply on this authenticated socket before reports resume. Repeat on every signed gate
+    // so a lost connection cannot lose acceptance and delay the root supervisor stop.
+    const receipt = runner.stopBridge(input, reply);
     void receipt.then(reply);
     return true;
   }
