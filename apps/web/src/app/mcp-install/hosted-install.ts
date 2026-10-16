@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, output, signal, type OnDestroy } from '@angular/core';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
-import { decode, encode } from 'punycode';
+import { decode, encode } from 'punycode/';
 import { z } from 'zod';
 
 type Admission = z.infer<typeof hostedAdmissionSchema>;
