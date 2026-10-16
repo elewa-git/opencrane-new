@@ -729,3 +729,41 @@ async function lateSettlementBeforeAppend() {
 }
 it('conflicts when late settlement reopens a hold immediately before the switch-on append',
   lateSettlementBeforeAppend);
+
+async function retryReopenedDuringHistory() {
+  const reservationId = await heldCall(true, false);
+  await setup.actor.releaseUndispatched(reservationId);
+  const command = await input();
+  const originalAppend = setup.nats.store.append.bind(setup.nats.store);
+  async function loseReply(change: Parameters<typeof originalAppend>[0]) {
+    await originalAppend(change);
+    throw new Error('Lost reply');
+  }
+  vi.spyOn(setup.nats.store, 'append').mockImplementationOnce(loseReply);
+  expect((await request(command)).statusCode).toBe(503);
+  const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+  let reopened = false;
+  async function* readWithReopening(...args: Parameters<typeof readStream>) {
+    if (args[0] === 'computer-*' && !reopened) {
+      reopened = true;
+      await setup.actor.uncertain(reservationId, 'transport_failure');
+    }
+    yield* readStream(...args);
+  }
+  vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readWithReopening);
+  const retry = await request(command);
+  expect(reopened).toBe(true);
+  expect(setup.actor.state.reservations[0]?.outcomeUnknown).toBe(true);
+  expect(retry.statusCode).toBe(409);
+  expect(retry.json()).toEqual({ status: 'refused' });
+  expect((await request(command)).statusCode).toBe(403);
+  const status = await request(undefined, `changes/${command.commandId}`);
+  expect(status.statusCode).toBe(200);
+  const records = await spendingRecords();
+  function isMarker(row: typeof records[number]) {
+    return row.event.type === 'provider.managed_calls_enabled';
+  }
+  expect(records.filter(isMarker)).toHaveLength(1);
+}
+it('conflicts when a lost-reply retry reads spending before a hold reopens', retryReopenedDuringHistory);
+
