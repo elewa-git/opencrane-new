@@ -26,7 +26,9 @@ The editor checks that each save has taken effect. An uncertain reply offers a s
 check with the original request id, including after a page reload. The candidate list
 loads more people, groups or assistants when requested.
 Provider setup uses the same editor for each selected model. Its last step lists
-confirmed saves separately from changes still being checked.
+confirmed saves separately from changes still being checked. Saved models stay selected
+until removal can check their existing uses. Pending access changes keep setup open
+so the original request can still be checked.
 
 The Models table shows models enabled on a connection, their task routes and granted
 audiences. It names a shared assistant whose selected model lacks its own grant.

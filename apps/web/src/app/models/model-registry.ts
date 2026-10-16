@@ -64,7 +64,10 @@ export class ModelsScreen extends ProviderKeyChanges {
       if (isCurrent) {
         const remainingChanges = without(this.pendingModels(), providerIdValue);
         this.pendingModels.set(remainingChanges);
-        const confirmed = { ...this.confirmedModels(), [providerIdValue]: true };
+        const confirmed = without(this.confirmedModels(), providerIdValue);
+        if (result.value.revision !== undefined) {
+          confirmed[providerIdValue] = result.value.revision;
+        }
         this.confirmedModels.set(confirmed);
         this.resultText.set('Model choices saved. They do not grant access.');
         this.resultKind.set('confirmed');
@@ -211,6 +214,9 @@ export class ModelsScreen extends ProviderKeyChanges {
     if (!provider || this.busy() || this.hasPendingFor(providerIdValue)) {
       return;
     }
+    // Keep saved models even if a newer provider read added one after this draft opened.
+    const models = new Set([...provider.enabledModels, ...this.selectedModels()]);
+    this.selectedModels.set([...models]);
     if (provider.provider !== 'openai'
       || sameModels(provider.enabledModels, this.selectedModels())) {
       this.nextStep();
@@ -250,6 +256,10 @@ export class ModelsScreen extends ProviderKeyChanges {
   protected toggleModel(model: string, event: Event): void {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    if (this.modelSelectionLocked(model)) {
+      target.checked = true;
       return;
     }
     const selected = this.selectedModels();
@@ -303,6 +313,10 @@ export class ModelsScreen extends ProviderKeyChanges {
   }
   protected activePendingCheck(): PendingChange | undefined {
     return this.pendingChecks()[this.providerIdDraft()];
+  }
+  protected modelSelectionLocked(model: string): boolean {
+    return this.activeProvider()?.enabledModels.includes(model) === true
+      || this.pendingAccessModels().includes(model);
   }
   protected isModelSelected(model: string): boolean {
     return this.selectedModels().includes(model);

@@ -707,7 +707,13 @@ Provider setup keeps one inline editor per selected model. Each editor reports i
 model, command, operation, grantee and phase to `ProviderSetupAccess`. Setup keeps
 these outcomes in memory only. Chosen assistants stay Missing until Saved. Done
 shows provider facts and confirmed grants; the enabled count waits for a current
-models_selected receipt. Back to Access keeps the original pending commands.
+models_selected receipt at the same provider revision and counts the server's
+`enabledModels`, never the draft. A newer provider revision hides the count's tick.
+Back to Access keeps the original pending commands. Saved models cannot be unticked;
+setup does not offer reviewed removal or rely on a failed or unsupported use inventory.
+A model with an applying or unknown grant cannot be unticked either. These grants
+block closing setup, including Escape and the footer buttons, until status resolves.
+Access loss still clears protected content immediately.
 The step markers show navigation, not successful saves. No overall completion is claimed.
 `npm run visual:screen-p4-22-setup-access` uses intercepted replies.
 The [setup receipt](../../docs/process/screen-p4-22-setup-access/receipt.md) records its limits.

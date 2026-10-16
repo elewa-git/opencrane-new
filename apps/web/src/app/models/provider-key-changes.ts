@@ -41,7 +41,7 @@ export class ProviderKeyChanges extends ProviderPageState {
   }
 
   protected closeSetup(): void {
-    if (this.busy()) {
+    if (this.busy() || this.pendingAccessModels().length > 0) {
       return;
     }
     this.setupOpen.set(false);
@@ -50,6 +50,9 @@ export class ProviderKeyChanges extends ProviderPageState {
   }
 
   protected setupClosed(): void {
+    if (this.pendingAccessModels().length > 0) {
+      return;
+    }
     this.setupOpen.set(false);
     this.clearKeyDraft();
     this.focusedOpener = undefined;

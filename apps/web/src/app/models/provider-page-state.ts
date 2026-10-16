@@ -29,7 +29,8 @@ export class ProviderPageState implements OnInit, OnDestroy {
   protected readonly step = signal<SetupStep>('provider');
   protected readonly draft = signal<ProviderDraft>({ provider: 'openai', name: '' });
   protected readonly selectedModels = signal<string[]>([]);
-  protected readonly confirmedModels = signal<Record<string, boolean>>({});
+  protected readonly confirmedModels = signal<Record<string, number>>({});
+  protected readonly pendingAccessModels = signal<string[]>([]);
   protected readonly providerIdDraft = signal('');
   protected readonly keyDraft = signal('');
   protected readonly keyError = signal('');
@@ -344,6 +345,7 @@ export class ProviderPageState implements OnInit, OnDestroy {
     this.pendingKeys.set({});
     this.pendingModels.set({});
     this.confirmedModels.set({});
+    this.pendingAccessModels.set([]);
     this.pendingChecks.set({});
     this.draft.set({ provider: 'openai', name: '' });
     this.keyError.set('');

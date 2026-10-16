@@ -108,11 +108,16 @@
 
   <oc-modal-sheet [open]="setupOpen()" [title]="setupTitle()"
     [description]="activeProviderName() ? activeProviderName() : 'Provider setup'"
-    [dismissDisabled]="busy()" [returnFocusTo]="focusedOpener" (closed)="setupClosed()">
+    [dismissDisabled]="busy() || pendingAccessModels().length > 0"
+    [returnFocusTo]="focusedOpener" (closed)="setupClosed()">
     <div class="setup-content">
       <div class="live-status" role="status" aria-live="polite" aria-atomic="true">
         {{ resultText() || liveStatus() }}
       </div>
+      @if (pendingAccessModels().length > 0) {
+        <p>Check pending access changes before closing setup or removing their models.
+          Return to Access to check the original requests.</p>
+      }
       <nav class="steps" aria-label="Provider setup steps">
         @for (item of ['provider', 'key', 'verify', 'models', 'access', 'done'];
           track item; let index = $index) {
@@ -256,12 +261,15 @@
             <button class="button secondary" type="button" [disabled]="busy()"
               (click)="checkModelsStatus(providerIdDraft())">Check status</button>
           }
+          <p>Saved models cannot be removed here. Their existing uses must be checked
+            and removal reviewed first. Failed or unsupported checks cannot allow removal.</p>
           <fieldset class="model-options"
             [disabled]="busy() || !!pendingModels()[providerIdDraft()]">
             <legend>Enable from the registry ({{ registry().length }})</legend>
             @for (model of registry(); track model) {
               <label class="model-choice">
                 <input type="checkbox" [checked]="isModelSelected(model)"
+                  [disabled]="modelSelectionLocked(model)"
                   (change)="toggleModel(model, $event)" />
                 <span><strong>{{ model }}</strong>
                   <small>
@@ -284,7 +292,8 @@
       @if (setupOpen()) {
         <oc-provider-setup-access [hidden]="step() !== 'access' && step() !== 'done'"
           [active]="step() === 'access'" [models]="selectedModels()" [provider]="activeProvider()"
-          [done]="step() === 'done'" [modelsCurrent]="!!confirmedModels()[providerIdDraft()]"
+          [done]="step() === 'done'" [modelsRevision]="confirmedModels()[providerIdDraft()]"
+          (pendingModels)="pendingAccessModels.set($event)"
           (lostAccess)="clearProtectedData()" />
       }
 
@@ -332,8 +341,10 @@
         <button class="button secondary" type="button" (click)="previousStep()">Back</button>
       } @else {
         <button class="button secondary" type="button" (click)="previousStep()">Back to Access</button>
-        <button class="button primary" type="button" (click)="closeSetup()">Go to Models</button>
-        <button class="button secondary" type="button" (click)="closeSetup()">Close</button>
+        <button class="button primary" type="button"
+          [disabled]="pendingAccessModels().length > 0" (click)="closeSetup()">Go to Models</button>
+        <button class="button secondary" type="button"
+          [disabled]="pendingAccessModels().length > 0" (click)="closeSetup()">Close</button>
       }
     </div>
   </oc-modal-sheet>

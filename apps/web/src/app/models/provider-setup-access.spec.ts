@@ -1,4 +1,6 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { ModelAccessEditor } from './model-access-editor';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ModelsScreen } from './model-registry';
 import { ProviderSetupAccess } from './provider-setup-access';
@@ -116,14 +118,15 @@ async function click(name: string, scope: Element = root()): Promise<void> {
 }
 function openDialog(this: HTMLDialogElement): void { this.setAttribute('open', ''); }
 function closeDialog(this: HTMLDialogElement): void { this.removeAttribute('open'); }
-async function mount(mode?: Failure, existing: string[] = [], inventoryStatus = 503): Promise<void> {
+async function mount(mode?: Failure, existing: string[] = [], inventoryStatus = 503,
+  serverModels = ['model-a', 'model-b']): Promise<void> {
   requests = [];
   failure = mode;
   delayed.clear();
   statusProjection = 'current';
   modelsSaved = false;
   savedModels = existing;
-  returnedModels = ['model-a', 'model-b'];
+  returnedModels = serverModels;
   returnedRevision = 2;
   bindingsStatus = inventoryStatus;
   vi.stubGlobal('fetch', serve);
@@ -284,7 +287,7 @@ function onlyRealFacts(): void {
   expect(content.textContent).toContain('Not tested');
   expect(content.textContent).not.toContain('Enabled models');
   expect(content.textContent).not.toContain('✓ Helper');
-  view.componentRef.setInput('modelsCurrent', true);
+  view.componentRef.setInput('modelsRevision', 2);
   view.detectChanges();
   expect(content.textContent).toContain('Enabled models: 1');
 }
@@ -331,7 +334,7 @@ it('keeps saved models selected when the bindings read is unsupported',
   savedModelsCannotBeRemoved.bind(null, 200));
 
 async function loseGrantReply(): Promise<string> {
-  await mount();
+  await mount(undefined, [], 503, ['model-a']);
   const editor = root().querySelectorAll('oc-provider-setup-access oc-model-access-editor')[1];
   if (!editor) throw new Error('Expected second model');
   await click('Assistant', editor);
@@ -347,7 +350,11 @@ async function checkOriginalGrant(commandId: string): Promise<void> {
   const editor = root().querySelectorAll('oc-provider-setup-access oc-model-access-editor')[1];
   if (!editor) throw new Error('Expected second model');
   expect(editor.textContent).toContain('Check status');
-  await click('Save access', editor);
+  expect(editor.textContent).not.toContain('Save access');
+  const setup = fixture.debugElement.query(By.directive(ProviderSetupAccess));
+  const editors = setup.queryAll(By.directive(ModelAccessEditor));
+  const instance = editors[1]?.componentInstance as ModelAccessEditor;
+  await instance['save']();
   expect(requests.filter(isAccessPost)).toHaveLength(1);
   failure = { code: 404, status: 'unknown' };
   await click('Check status', editor);

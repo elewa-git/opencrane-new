@@ -16,7 +16,8 @@ export class ProviderSetupAccess {
   readonly active = input(false);
   readonly done = input(false);
   protected readonly started = signal(false);
-  readonly modelsCurrent = input(false);
+  readonly modelsRevision = input<number>();
+  readonly pendingModels = output<string[]>();
   readonly lostAccess = output<void>();
   protected readonly outcomes = signal<AccessOutcome[]>([]);
   protected readonly facts = providerFacts;
@@ -35,7 +36,15 @@ export class ProviderSetupAccess {
         && row.grantee.granteeKind === outcome.grantee.granteeKind) continue;
       rows.push(row);
     }
-    this.outcomes.set([...rows, outcome]);
+    rows.push(outcome);
+    this.outcomes.set(rows);
+    const pending: string[] = [];
+    for (const row of rows) {
+      if (row.phase === 'applying' || row.phase === 'unknown') {
+        pending.push(row.modelId);
+      }
+    }
+    this.pendingModels.emit(pending);
   }
   protected missing(outcome: AccessOutcome): boolean {
     return outcome.grantee.granteeKind === 'assistant'

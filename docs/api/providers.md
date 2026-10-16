@@ -143,7 +143,10 @@ as not available yet. The editor does not infer missing users from configured us
 opens it inline for each selected model. Chosen assistants remain Missing until a
 Saved receipt. Setup outcomes stay in memory; each model keeps its own command id
 and sequence. Done ticks only confirmed grants and waits for the current model-selection
-receipt before showing the enabled count. Grants do not select a connection for chats.
+receipt at the returned provider revision before ticking the server's enabled count.
+Saved models stay selected because setup cannot check and review their removal yet.
+Applying or unknown grants block removing their model or closing setup until their
+original command status resolves. Grants do not select a connection for chats.
 
 ## Changing model grants
 

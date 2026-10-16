@@ -54,11 +54,11 @@ async function serve(route, state) {
     }
   } else if (request.method() === 'POST' || path.includes('/changes/')) {
     state.modelsSaved = true;
-    body = { status: 'appended', operation: 'provider.models_selected',
+    body = { status: 'appended', operation: 'provider.models_selected', revision: 2,
       projection: { content: 'current', iam: 'current' } };
   } else {
     body = { rows: [{ providerId: 'fixture', provider: 'openai', name: 'Sales connection',
-      revision: 2, position: 2, enabledModels: state.modelsSaved ? models : [],
+      revision: 2, position: 2, enabledModels: state.modelsSaved ? [models[0]] : [],
       saved: fact, reachable: fact,
       modelAnswer: { ...fact, model: models[0], outcome: state.untested ? 'skipped' : 'pass' },
       status: 'ready' }], loadedAt: time,
@@ -103,10 +103,26 @@ async function captureSetup(browser, width, untested) {
     await editor.getByRole('button', { name: 'Save access', exact: true }).click();
     await editor.getByText(index === 0 ? 'Saved' : 'Outcome unknown', { exact: true }).waitFor();
   }
-  if (!untested) await capture(page, 'MOD-20-partial', width);
+  if (!untested) {
+    await capture(page, 'MOD-20-partial', width);
+    await dialog.getByRole('button', { name: 'Back', exact: true }).last().click();
+    const choices = dialog.locator('.model-choice input');
+    assert.equal(await choices.nth(0).isChecked(), true);
+    assert.equal(await choices.nth(0).isDisabled(), true);
+    assert.equal(await choices.nth(1).isChecked(), true);
+    assert.equal(await choices.nth(1).isDisabled(), true);
+    await capture(page, 'saved-models', width);
+    await dialog.getByRole('button', { name: 'Next', exact: true }).click();
+    await editors.nth(1).getByText('Outcome unknown', { exact: true }).waitFor();
+  }
   await dialog.getByRole('button', { name: 'Next', exact: true }).click();
   await dialog.locator('.completion').waitFor();
   assert.equal(state.posts.size, 2);
+  const completion = await dialog.locator('.completion').textContent();
+  assert.ok(completion.includes('Enabled models: 1'));
+  assert.ok(!completion.includes('Enabled models: 2'));
+  assert.equal(await dialog.getByRole('button', { name: 'Close', exact: true }).isDisabled(), true);
+  assert.equal(await dialog.getByRole('button', { name: 'Go to Models' }).isDisabled(), true);
   await capture(page, untested ? 'MOD-21-untested' : 'MOD-21', width);
   await page.close();
 }

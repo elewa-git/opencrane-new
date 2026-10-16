@@ -27,7 +27,9 @@
           <small>{{ fact.evidence }}</small>
         </p>
       }
-      @if (modelsCurrent()) { <p>✓ Enabled models: {{ models().length }}.</p> }
+      @if (modelsRevision() === connection.revision) {
+        <p>✓ Enabled models: {{ connection.enabledModels.length }}.</p>
+      }
     }
     @for (row of outcomes(); track $index) {
       <p>{{ label(row) }} {{ row.grantee.displayName }} — {{ row.modelId }}

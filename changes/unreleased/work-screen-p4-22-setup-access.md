@@ -1,1 +1,1 @@
-Provider setup now edits access for each selected model and shows separate save receipts. Uncertain grants keep their references, and unconfirmed assistants stay marked Missing.
+Provider setup now edits access for each selected model and shows separate save receipts. Uncertain grants keep their references, and unconfirmed assistants stay marked Missing. Saved models cannot be removed in setup. Pending access changes keep setup open for status checks, and the enabled count uses the server list and matching selection revision.
