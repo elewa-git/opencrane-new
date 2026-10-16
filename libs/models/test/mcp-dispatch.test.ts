@@ -1239,12 +1239,22 @@ async function invalidateRestoration(context: RestorationFixture, change: Restor
   delivery: Awaited<ReturnType<typeof restorationDelivery>>,
   record: Awaited<ReturnType<typeof publishRestoration>>) {
   const { setup, capture, watch } = context;
+  let liveRecord = record;
   if (change === 'new intent' || change === 'older generation') {
     const newer = await publishRestoration(setup, 'restore-newer');
+    expect(await delivery.observe()).toBeNull();
     if (change === 'older generation') {
       await delivery.deliver(newer);
+      liveRecord = newer;
     }
-    await delivery.deliver(record);
+    const before = await readFile(setup.options.configFile);
+    const position = await setup.nats.store.head();
+    await expect(delivery.deliver(record)).rejects.toThrow('Gateway delivery unavailable');
+    expect(await readFile(setup.options.configFile)).toEqual(before);
+    expect(await delivery.observe()).toBeNull();
+    expect(await setup.nats.store.head()).toBe(position);
+    const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    expect(policy).toMatchObject({ driftHeld: true, published: false });
   } else if (change === 'unpublish') {
     await setup.append('mcp-fixture', 'mcp.server_unpublished',
       { serverId: 'fixture', unpublishedBy: 'alice' });
@@ -1262,6 +1272,7 @@ async function invalidateRestoration(context: RestorationFixture, change: Restor
   } else if (change === 'restart before') {
     await restartRestoration(context);
   }
+  return liveRecord;
 }
 
 async function observeRestoration(context: RestorationFixture, change: RestorationCase,
@@ -1369,9 +1380,9 @@ async function restoresReviewedDrift(change: RestorationCase) {
     const delivery = await restorationDelivery(setup);
     await delivery.deliver(record);
     await delivery.waitForWitness(record);
-    await invalidateRestoration(context, change, delivery, record);
+    const liveRecord = await invalidateRestoration(context, change, delivery, record);
     if (change !== 'restart before') {
-      await delivery.waitForWitness(record);
+      await delivery.waitForWitness(liveRecord);
     }
     await observeRestoration(context, change, delivery);
   }
