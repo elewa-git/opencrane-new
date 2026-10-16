@@ -117,6 +117,32 @@ async function retriesAdmission() {
 }
 it('retries two unavailable admission checks before issuing a ticket', retriesAdmission, 30_000);
 
+async function ticketRedemptionBoundary() {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const fixture = await admissionFixture(600);
+  let accepted: WebSocket | undefined;
+  let refused: WebSocket | undefined;
+  try {
+    const acceptedTicket = (await fixture.post()).json<{ ticket: string }>().ticket;
+    vi.setSystemTime(Date.now() + 14_999);
+    accepted = await fixture.connect(acceptedTicket);
+    await once(accepted, 'open');
+
+    const refusedTicket = (await fixture.post()).json<{ ticket: string }>().ticket;
+    vi.setSystemTime(Date.now() + 15_001);
+    refused = await fixture.connect(refusedTicket);
+    const response = await once(refused, 'unexpected-response');
+    expect(response[1]).toMatchObject({ statusCode: 403 });
+  } finally {
+    accepted?.terminate();
+    refused?.terminate();
+    await fixture.close();
+    vi.useRealTimers();
+  }
+}
+it('redeems a ticket just before 15 seconds and refuses one just after',
+  ticketRedemptionBoundary, 30_000);
+
 async function unconfirmedAdmission() {
   const fixture = await admissionFixture();
   try {
