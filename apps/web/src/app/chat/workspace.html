@@ -15,7 +15,7 @@
         <div class="header-main">
           @if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }
           <h1 [class.draft-title]="!chat.selected()">
-            {{ chat.requestedUnavailable() || chat.requestedLookupFailed() ? 'Unavailable' : title() }}
+            {{ chat.denied() || chat.requestedUnavailable() || chat.requestedLookupFailed() ? 'Unavailable' : title() }}
           </h1>
         </div>
         <span class="header-status" [class.waiting-status]="approvalWaiting() && chat.selected() && !chat.denied()"
@@ -26,7 +26,7 @@
         </span>
       </div>
       @if (teamSession()) { <span class="private-session-label">Private session</span> }
-      @if (!chat.selected()) { <span class="draft-label">Draft</span> }
+      @if (!chat.selected() && !chat.denied()) { <span class="draft-label">Draft</span> }
       <span class="avatar agent"
         [attr.aria-label]="teamSession() ? 'Shared assistant' : 'Personal agent'">
         <oc-icon name="agent" />
@@ -60,9 +60,12 @@
         </div> }
         @if (chat.error() && !chat.queued()) { <div class="error" role="alert">{{ chat.error() }} @if (!chat.queued()) { <button type="button" (click)="chat.load()">Retry</button> } @if (chat.denied()) { <a href="/">Sign in</a> }</div> }
         @if (chat.denied()) {
-          <oc-shared-state kind="access_changed"
-            message="You don't have access to this conversation's files"
-            detail="Nothing from this conversation is shown." [showAction]="false" />
+          <div class="access-lock" #accessNotice tabindex="-1">
+          <oc-shared-state kind="access_changed" message="You no longer have access"
+            detail="Transcript, drafts, names, files and counts were cleared. Late results won't appear."
+            [showAction]="false" />
+          <a href="/">Sign in</a>
+          </div>
         }
         @if (chat.requestedUnavailable()) {
           <oc-shared-state kind="failed" message="Conversation not found or unavailable"
@@ -92,7 +95,7 @@
           <article class="message"
             [class.own]="turn.author === 'you'"
             [class.agent-turn]="turn.author === 'agent'"
-            [class.file-turn]="hasScreenshot(turn.files) || !!turn.screenshotRejected"
+            [class.file-turn]="hasScreenshotFile(turn.files, screenshots()) || !!turn.screenshotRejected"
             [class.unroll]="turn.author === 'agent' && !!turn.text"
             [class.highlighted]="isHighlighted(turn.tools)"
             [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
@@ -185,6 +188,7 @@
             detail="Memory-free turns use local tools and write to the shared computer disk. This mode applies to your next turn."
             [showAction]="false" />
         }
+      @if (!chat.denied()) {
       <oc-chat-composer [draft]="draft()" [placeholder]="composerPlaceholder()"
         [working]="!!chat.active()"
         [stopping]="chat.active()?.state === 'stopping'"
@@ -205,6 +209,7 @@
           Your personal Agent · private to you
         }
       </p>
+      }
     </div>
     }
   </main>

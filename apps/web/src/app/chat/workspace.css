@@ -224,3 +224,11 @@ oc-file-preview { position: absolute; }
     box-shadow: var(--oc-shadow-active-nav);
   }
 }
+.access-lock {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 20px 28px;
+  border: 1px solid #d9dfe0;
+  border-radius: 9px;
+  background: #eef1f2;
+}

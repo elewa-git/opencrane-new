@@ -1,6 +1,31 @@
 import { computed, signal } from '@angular/core';
 import { chatListSchema, sessionSlug, type ChatConversation } from '@opencrane/protocol';
 
+export function workspaceTitle(
+  denied: boolean, selected: string,
+  turns: { author: string; text: string }[], conversations: ChatConversation[],
+): string {
+  if (denied) return 'Unavailable';
+  if (!selected) return 'New session';
+  for (const turn of turns) {
+    if (turn.author === 'you' && turn.text) return sessionSlug(turn.text);
+  }
+  for (const conversation of conversations) {
+    if (conversation.conversationId === selected) {
+      return sessionSlug(conversation.title ?? 'Personal session');
+    }
+  }
+  return sessionSlug('Personal session');
+}
+
+export function selectedSessionPayingGroupId(
+  conversations: ChatConversation[], selectedId: string,
+): string {
+  const selectedRow = conversations.find(isSelectedConversation.bind(null, selectedId));
+  if (!selectedRow || selectedRow.mode !== 'agent_session') return '';
+  return selectedRow.payingGroupId ?? '';
+}
+
 export type ConversationSection = 'recent' | 'archived';
 type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -191,7 +216,7 @@ export function includeRequestedConversation(
   return [...rows, requested];
 }
 
-export function isSelectedConversation(conversationId: string, row: ChatConversation): boolean {
+function isSelectedConversation(conversationId: string, row: ChatConversation): boolean {
   return row.conversationId === conversationId;
 }
 

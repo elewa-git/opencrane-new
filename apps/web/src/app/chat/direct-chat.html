@@ -211,9 +211,12 @@
         @if (pageState() === 'loading') {
           <oc-shared-state kind="checking" message="Loading direct conversations…" />
         } @else if (pageState() === 'access_changed') {
+          <div class="access-lock">
           <oc-shared-state kind="access_changed" message="You no longer have access"
-            detail="Transcript, drafts and names were cleared. Late results will not appear."
+            detail="Transcript, drafts, names, files and counts were cleared. Late results won't appear."
             [showAction]="false" />
+          <a href="/">Sign in</a>
+          </div>
         } @else if (pageState() === 'not_found') {
           <oc-shared-state kind="failed" message="Conversation not found or unavailable"
             detail="Choose a conversation from the list to continue." [showAction]="false" />

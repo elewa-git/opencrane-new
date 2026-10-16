@@ -8,14 +8,11 @@ import { WebSocketService } from '../core/websocket.service';
 import { conversationStatus, isActiveTurn, isBudgetStop, lastConfirmedTurnAt,
   recoveredLostTurn, transcript, uploadedFile } from './chat-state';
 import { shortTime } from './file-presentation';
-import { displayAgentSessions, includeRequestedConversation, isSelectedConversation,
-  isTeamConversation, resumeAgentSession }
+import { ChatSessionStop, type StopScreen } from './chat-session-stop';
+import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
+import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
+  resumeAgentSession, selectedSessionPayingGroupId }
   from './conversations-data';
-
-class ReadFailure extends Error {
-  readonly status: number;
-  constructor(status: number) { super('Chat request failed'); this.status = status; }
-}
 
 @Injectable()
 export class ChatSession implements OnDestroy {
@@ -45,18 +42,15 @@ export class ChatSession implements OnDestroy {
   readonly waitSeconds = signal(0);
   readonly waiting = computed(() => this.queued() ? 'queued' : this.active() && this.computer() !== 'ready' ? 'starting' : this.selected() && !this.connected() && !this.loading() ? 'reconnecting' : '');
   readonly busy = signal(false);
-  private readonly stoppingTurnId = signal('');
-  private readonly stopNotConfirmedTurnId = signal('');
-  private stopConfirmationTimer: ReturnType<typeof setTimeout> | undefined;
-  private stopAttempt = 0;
   readonly error = signal('');
   readonly announcement = signal('');
   readonly reconnectedAt = signal('');
   readonly denied = signal(false);
   readonly queued = signal(false);
   readonly connected = this.socket.isConnected;
+  private readonly stopState: ChatSessionStop = new ChatSessionStop(this.stopScreen());
   readonly turns = computed(() =>
-    transcript(this.rows(), this.memberId(), this.stoppingTurnId()));
+    transcript(this.rows(), this.memberId(), this.stopState.stoppingTurnId()));
   readonly selectedConversation = computed(() =>
     this.conversations().find(row => row.conversationId === this.selected()));
   readonly teamSession = computed(this.isTeamSession.bind(this));
@@ -86,6 +80,7 @@ export class ChatSession implements OnDestroy {
   private pending: { id: string; conversationId: string; text: string;
     executionMode?: 'memory_free' } | undefined;
   private subscription = this.socket.received.subscribe(message => this.receive(message));
+  private readonly accessLossSubscription = this.socket.accessLost.subscribe(this.clearDenied.bind(this));
 
   constructor() {
     effect(onCleanup => {
@@ -107,46 +102,55 @@ export class ChatSession implements OnDestroy {
     effect(this.subscribeWhenConnected.bind(this));
   }
   async load(): Promise<void> {
+    if (this.denied()) return;
+    const revision = this.revision;
     this.error.set('');
     this.announcement.set('');
     this.loading.set(true);
     this.railLoading.set(true);
     this.railUnavailable.set(false);
     try {
-      const context = chatContextSchema.parse(await this.request('/api/chat'));
-      const me = z.object({ authenticated: z.boolean(), user: z.object({ name: z.string().optional() }).nullable() }).parse(await this.request('/auth/me'));
-      this.memberId.set(context.memberId); this.displayName.set(me.authenticated ? me.user?.name?.trim() || 'You' : 'You'); this.assistantId.set(context.assistantId); this.denied.set(false);
+      const context = chatContextSchema.parse(await requestChat('/api/chat'));
+      const me = z.object({ authenticated: z.boolean(), user: z.object({ name: z.string().optional() }).nullable() }).parse(await requestChat('/auth/me'));
+      if (revision !== this.revision) return;
+      this.memberId.set(context.memberId);
+      this.displayName.set(me.authenticated ? me.user?.name?.trim() || 'You' : 'You');
+      this.assistantId.set(context.assistantId);
+      this.denied.set(false);
       if (context.memoryAdmission) this.memoryAdmission.set(context.memoryAdmission);
-      await this.list();
+      await this.list(revision);
+      if (revision !== this.revision) return;
       const id = new URL(location.href).searchParams.get('conversation');
-      if (id) {
-        const requested = await resumeAgentSession(id, this.conversations());
-        if (requested.kind === 'denied') throw new ReadFailure(403);
-        if (requested.kind === 'unavailable') {
-          this.requestedLookupFailed.set(true);
-          throw new Error('Conversation lookup unavailable');
-        }
-        if (requested.kind === 'changed') {
-          this.requestedLookupFailed.set(true);
-          this.error.set('Conversation list changed again. Retry.');
-          return;
-        }
-        if (requested.kind === 'missing') {
-          this.requestedUnavailable.set(true);
-          return;
-        }
-        const conversations = includeRequestedConversation(this.conversations(), requested.row);
-        this.conversations.set(conversations);
-        this.requestedUnavailable.set(false);
-        this.requestedLookupFailed.set(false);
-        await this.select(id);
-      }
+      if (id) await this.resumeRequested(id, revision);
       else if (this.conversations()[0]) await this.select(this.conversations()[0]!.conversationId);
     } catch (error) {
-      this.fail(error);
+      if (revision === this.revision) this.fail(error);
       this.railUnavailable.set(!this.denied() && !this.requestedLookupFailed());
     }
     finally { this.loading.set(false); this.railLoading.set(false); }
+  }
+  private async resumeRequested(id: string, revision: number): Promise<void> {
+    const requested = await resumeAgentSession(id, this.conversations());
+    if (revision !== this.revision) return;
+    if (requested.kind === 'denied') throw new ReadFailure(403);
+    if (requested.kind === 'unavailable') {
+      this.requestedLookupFailed.set(true);
+      throw new Error('Conversation lookup unavailable');
+    }
+    if (requested.kind === 'changed') {
+      this.requestedLookupFailed.set(true);
+      this.error.set('Conversation list changed again. Retry.');
+      return;
+    }
+    if (requested.kind === 'missing') {
+      this.requestedUnavailable.set(true);
+      return;
+    }
+    const conversations = includeRequestedConversation(this.conversations(), requested.row);
+    this.conversations.set(conversations);
+    this.requestedUnavailable.set(false);
+    this.requestedLookupFailed.set(false);
+    await this.select(id);
   }
   async select(id: string): Promise<void> {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
@@ -155,9 +159,7 @@ export class ChatSession implements OnDestroy {
     const revision = ++this.revision;
     this.sawReconnecting = false;
     this.conversationReady = false;
-    this.stoppingTurnId.set('');
-    this.stopNotConfirmedTurnId.set('');
-    this.clearStopConfirmationTimer();
+    this.stopState.reset();
     this.reconnectCount = 0;
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
@@ -188,9 +190,7 @@ export class ChatSession implements OnDestroy {
   newSession(): void {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     ++this.revision; this.sawReconnecting = false; this.reconnectCount = 0;
-    this.stoppingTurnId.set('');
-    this.stopNotConfirmedTurnId.set('');
-    this.clearStopConfirmationTimer();
+    this.stopState.reset();
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
@@ -203,99 +203,88 @@ export class ChatSession implements OnDestroy {
     history.replaceState({}, '', '/workspace');
   }
   async send(text: string): Promise<boolean> {
-    if (!text.trim() || this.busy() || this.active() || this.uploading() || this.uploadPending()
-      || this.denied() || this.computer() === 'recovering' || !this.selectedAssistantId()) return false;
+    if (!this.canSend(text)) return false;
     this.reconnectedAt.set('');
-    if (!this.pending) {
-      const pending: { id: string; conversationId: string; text: string;
-        executionMode?: 'memory_free' } = { id: crypto.randomUUID(),
-        conversationId: this.selected() || this.creationId || (this.creationId = crypto.randomUUID()),
-        text: text.trim() };
-      if (this.teamSession() && this.executionMode() === 'memory_free') {
-        pending.executionMode = 'memory_free';
-      }
-      this.pending = pending;
-    }
+    if (!this.pending) this.pending = this.newPendingMessage(text);
     this.busy.set(true); this.error.set('');
+    const revision = this.revision;
     try {
-      await this.deliver();
+      await this.deliver(revision);
+      if (revision !== this.revision) return false;
       this.queued.set(false);
       this.executionMode.set('restricted');
       return true;
-    } catch (error) { this.queued.set(true); this.fail(error); return false; }
-    finally { this.busy.set(false); }
+    } catch (error) {
+      if (revision === this.revision) { this.queued.set(true); this.fail(error); }
+      return false;
+    }
+    finally { if (revision === this.revision) this.busy.set(false); }
+  }
+  private canSend(text: string): boolean {
+    return Boolean(text.trim() && !this.busy() && !this.active() && !this.uploading()
+      && !this.uploadPending() && !this.denied() && this.computer() !== 'recovering'
+      && this.selectedAssistantId());
+  }
+  private newPendingMessage(text: string): { id: string; conversationId: string;
+    text: string; executionMode?: 'memory_free' } {
+    let conversationId = this.selected() || this.creationId;
+    if (!conversationId) {
+      conversationId = crypto.randomUUID();
+      this.creationId = conversationId;
+    }
+    const pending: { id: string; conversationId: string; text: string;
+      executionMode?: 'memory_free' } = { id: crypto.randomUUID(), conversationId,
+        text: text.trim() };
+    if (this.teamSession() && this.executionMode() === 'memory_free') {
+      pending.executionMode = 'memory_free';
+    }
+    return pending;
   }
   async refresh(): Promise<boolean> {
+    if (this.denied() || !this.selected()) return false;
     const revision = this.revision;
     try {
       await this.catchUp(this.selected(), revision);
       return revision === this.revision;
     } catch (error) {
-      this.fail(error);
+      if (revision === this.revision) this.fail(error);
       return false;
     }
   }
-  reconnect(): void { this.socket.connect(); }
+  reconnect(): void { if (!this.denied()) this.socket.connect(); }
   selectedPayingGroupId(): string {
-    const selectedRow = this.conversations().find(isSelectedConversation.bind(null, this.selected()));
-    if (!selectedRow || selectedRow.mode !== 'agent_session') return '';
-    return selectedRow.payingGroupId ?? '';
+    return selectedSessionPayingGroupId(this.conversations(), this.selected());
   }
   async stop(): Promise<void> {
-    const turn = this.active();
-    const retryingUnconfirmedStop = turn
-      && this.stopNotConfirmedTurnId() === turn.id;
-    if (!turn || turn.state !== 'working' || (this.busy() && !retryingUnconfirmedStop)) return;
-    const attempt = ++this.stopAttempt;
-    const commandId = `stop-${turn.id}-${crypto.randomUUID()}`;
-    this.clearStopConfirmationTimer();
-    this.stoppingTurnId.set(turn.id);
-    this.stopNotConfirmedTurnId.set('');
-    this.busy.set(true); this.error.set('');
-    this.startStopConfirmationTimer(turn.id, attempt);
-    try {
-      await this.request(`/api/conversations/${this.selected()}/messages`, {
-        id: commandId,
-        stopTurnId: turn.id,
-      });
-      if (attempt !== this.stopAttempt) return;
-      await this.catchUp(this.selected(), this.revision);
-    } catch {
-      try {
-        const recorded = await this.pendingWasRecorded({
-          id: commandId,
-          conversationId: this.selected(),
-        });
-        if (!recorded && attempt === this.stopAttempt) {
-          this.error.set('');
-          this.markStopNotConfirmed(turn.id);
-          return;
-        }
-        if (recorded && attempt === this.stopAttempt) {
-          await this.catchUp(this.selected(), this.revision);
-        }
-      } catch (statusError) {
-        this.fail(statusError);
-      }
-    }
-    finally {
-      if (attempt === this.stopAttempt) this.busy.set(false);
-    }
+    await this.stopState.stop();
   }
   ngOnDestroy(): void {
     this.transfer?.abort();
-    this.clearStopConfirmationTimer();
+    this.stopState.reset();
     ++this.revision;
     this.subscription.unsubscribe();
+    this.accessLossSubscription.unsubscribe();
     this.socket.disconnect();
   }
 
   stopNotConfirmedFor(turnId = this.active()?.id ?? ''): boolean {
-    return !!turnId && this.stopNotConfirmedTurnId() === turnId;
+    return this.stopState.notConfirmedFor(turnId);
   }
 
-  private async list(): Promise<void> {
-    const value = chatListSchema.parse(await this.request('/api/conversations'));
+  private stopScreen(): StopScreen {
+    return {
+      active: this.currentActiveTurn.bind(this), busy: this.busy, error: this.error,
+      selected: this.selected.bind(this), revision: this.currentRevision.bind(this),
+      request: requestChat, catchUp: this.catchUp.bind(this),
+      recorded: savedChatChange, fail: this.fail.bind(this),
+    };
+  }
+  private currentActiveTurn() { return this.active(); }
+  private currentRevision(): number { return this.revision; }
+
+  private async list(revision = this.revision): Promise<void> {
+    const value = chatListSchema.parse(await requestChat('/api/conversations'));
+    if (revision !== this.revision || this.denied()) return;
     this.listHasMore.set(Boolean(value.nextCursor));
     this.conversations.set(displayAgentSessions(value.rows));
   }
@@ -308,6 +297,7 @@ export class ChatSession implements OnDestroy {
     return this.assistantId();
   }
   private subscribeWhenConnected(): void {
+    if (this.denied() || !this.selected()) return;
     const state = this.socket.state();
     if (state === 'reconnecting') {
       this.sawReconnecting = true;
@@ -325,39 +315,34 @@ export class ChatSession implements OnDestroy {
       generation: this.generation,
     });
   }
-  private async deliver(): Promise<void> {
+  private async deliver(revision: number): Promise<void> {
     const command = this.pending!;
     await this.ensureConversation(command.conversationId);
-    const confirmed = this.queued() && await this.pendingWasRecorded(command);
+    if (revision !== this.revision) return;
+    const confirmed = this.queued() && await savedChatChange(command);
+    if (revision !== this.revision) return;
     if (!confirmed) {
-      await this.request(`/api/conversations/${command.conversationId}/messages`, {
+      await requestChat(`/api/conversations/${command.conversationId}/messages`, {
         id: command.id, text: command.text, executionMode: command.executionMode,
       });
+      if (revision !== this.revision) return;
     }
     // Give the temporary row the saved event's id so the later event replaces it.
     this.rows.update(rows => rows.some(row => row.id === command.id) ? rows : [...rows, { id: command.id, position: 0, type: 'message.posted', time: new Date().toISOString(), data: { text: command.text, authorId: this.memberId() } }]);
     this.pending = undefined;
     this.socket.connect();
   }
-  private async pendingWasRecorded(command: { id: string; conversationId: string }): Promise<boolean> {
-    try {
-      const path = `/api/conversations/${command.conversationId}/changes/${command.id}`;
-      const result = await this.request(path);
-      const receipt = z.object({ status: z.literal('appended'), commandId: z.string() }).parse(result);
-      return receipt.commandId === command.id;
-    } catch (error) {
-      if (error instanceof ReadFailure && error.status === 404) return false;
-      throw error;
-    }
-  }
   private async ensureConversation(conversationId: string): Promise<void> {
+    const revision = this.revision;
     if (this.selected() && this.selected() !== conversationId) throw new Error('Retry belongs to another session');
     if (!this.selected()) {
-      await this.request('/api/conversations', { id: `create-${conversationId}`,
+      await requestChat('/api/conversations', { id: `create-${conversationId}`,
         conversationId, assistantId: this.selectedAssistantId(), mode: 'agent_session' });
+      if (revision !== this.revision) return;
       // Access details appear after creation. Read again until they appear or the deadline passes.
       for (let attempt = 0; attempt < 50; attempt++) {
         await this.list();
+        if (revision !== this.revision) return;
         if (this.conversations().some(row => row.conversationId === conversationId)) break;
         if (attempt === 49) throw new Error('Creation catch-up timed out');
         await new Promise(resolve => setTimeout(resolve, 200));
@@ -367,19 +352,30 @@ export class ChatSession implements OnDestroy {
     }
   }
   async upload(file?: File): Promise<void> {
-    if (this.pending || this.uploading() || this.busy() || this.denied() || !this.assistantId()) return;
+    if (!this.canUpload()) return;
     if (file) this.uploadFile = { file, key: crypto.randomUUID(), conversation: this.selected() || this.creationId || (this.creationId = crypto.randomUUID()) };
     const pending = this.uploadFile; if (!pending) return;
+    const revision = this.revision;
     this.uploadName.set(pending.file.name); this.uploadProgress.set(0); this.uploadError.set(''); this.uploading.set(true);
     try {
       if (pending.file.size > 20 * 1024 * 1024) throw new Error('File too large. Maximum size is 20 MiB.');
       await this.ensureConversation(pending.conversation);
+      if (revision !== this.revision) return;
       this.socket.connect();
       this.transfer = sendUpload(pending.conversation, pending.file, pending.key, percent => this.uploadProgress.set(percent));
       this.pendingDelivery.set(await this.transfer.completed);
+      if (revision !== this.revision) return;
       this.uploadProgress.set(100); this.uploadFile = undefined;
-    } catch (error) { this.uploadError.set(error instanceof Error ? error.message : 'Upload unavailable. Retry.'); }
-    finally { this.uploading.set(false); }
+    } catch (error) {
+      if (revision === this.revision) {
+        this.uploadError.set(error instanceof Error ? error.message : 'Upload unavailable. Retry.');
+      }
+    }
+    finally { if (revision === this.revision) this.uploading.set(false); }
+  }
+  private canUpload(): boolean {
+    return !this.pending && !this.uploading() && !this.busy()
+      && !this.denied() && Boolean(this.assistantId());
   }
   private clearUpload(): void {
     this.uploadFile = undefined; this.pendingDelivery.set(''); this.creationId = ''; this.uploadName.set(''); this.uploadError.set('');
@@ -387,7 +383,7 @@ export class ChatSession implements OnDestroy {
   private async catchUp(id: string, revision: number): Promise<void> {
     let more = true;
     while (more) {
-      const feed = chatFeedSchema.parse(await this.request(`/api/conversations/${id}/messages?since=${this.position}`));
+      const feed = chatFeedSchema.parse(await requestChat(`/api/conversations/${id}/messages?since=${this.position}`));
       if (revision !== this.revision) return;
       if (this.position && feed.generation !== this.generation) { this.position = 0; this.rows.set([]); continue; }
       this.generation = feed.generation;
@@ -399,6 +395,7 @@ export class ChatSession implements OnDestroy {
     }
   }
   private receive(message: ServerMessage): void {
+    if (this.denied() || !this.selected()) return;
     if (!('topic' in message) || message.topic !== 'conversation' || message.conversationId !== this.selected()) return;
     if (message.type === 'refused') { this.fail(new ReadFailure(403)); return; }
     if (message.type === 'resync') {
@@ -416,19 +413,22 @@ export class ChatSession implements OnDestroy {
     this.conversationReady = message.type === 'ready' || this.conversationReady;
     this.generation = message.generation;
     this.updateComputerState(message);
-    if (message.row) {
-      const parsed = chatRowSchema.safeParse(message.row);
-      if (parsed.success) {
-        const added = this.apply(parsed.data);
-        const toolAnnouncement = toolTransitionAnnouncement(
-          added, this.conversationReady, parsed.data, this.turns());
-        if (toolAnnouncement) this.announcement.set(toolAnnouncement);
-        // Do not announce old notices when the workspace reloads.
-        if (added && isBudgetStop(parsed.data)) {
-          this.announcement.set(`Spending limit reached · ${shortTime(parsed.data.time)}`);
-        }
-      }
-      else { this.error.set('× Could not read a conversation update. Reload to retry.'); this.socket.disconnect(); }
+    if (message.row) this.receiveRow(message.row);
+  }
+  private receiveRow(raw: unknown): void {
+    const parsed = chatRowSchema.safeParse(raw);
+    if (!parsed.success) {
+      this.error.set('× Could not read a conversation update. Reload to retry.');
+      this.socket.disconnect();
+      return;
+    }
+    const added = this.apply(parsed.data);
+    const toolAnnouncement = toolTransitionAnnouncement(
+      added, this.conversationReady, parsed.data, this.turns());
+    if (toolAnnouncement) this.announcement.set(toolAnnouncement);
+    // Do not announce old notices when the workspace reloads.
+    if (added && isBudgetStop(parsed.data)) {
+      this.announcement.set(`Spending limit reached · ${shortTime(parsed.data.time)}`);
     }
   }
   private updateComputerState(message: ServerMessage): void {
@@ -457,33 +457,8 @@ export class ChatSession implements OnDestroy {
     this.position = row.position;
     this.rows.update(rows => [...rows.filter(existing => existing.id !== row.id), row].sort((a, b) => (a.position || Infinity) - (b.position || Infinity)));
     this.updateSummary();
-    this.clearStopStateWhenTurnEnds(row);
+    this.stopState.apply(row);
     return true;
-  }
-  private startStopConfirmationTimer(turnId: string, attempt: number): void {
-    this.stopConfirmationTimer = setTimeout(() => {
-      if (attempt !== this.stopAttempt || this.stoppingTurnId() !== turnId) return;
-      this.markStopNotConfirmed(turnId);
-    }, 10_000);
-  }
-  private markStopNotConfirmed(turnId: string): void {
-    this.clearStopConfirmationTimer();
-    this.stoppingTurnId.set('');
-    this.stopNotConfirmedTurnId.set(turnId);
-  }
-  private clearStopConfirmationTimer(): void {
-    if (this.stopConfirmationTimer) clearTimeout(this.stopConfirmationTimer);
-    this.stopConfirmationTimer = undefined;
-  }
-  private clearStopStateWhenTurnEnds(row: ChatRow): void {
-    if (row.type !== 'agent.turn_completed' && row.type !== 'agent.turn_failed'
-      && row.type !== 'agent.output_lost') return;
-    const turnId = row.data['turnId'];
-    if (typeof turnId !== 'string') return;
-    if (this.stoppingTurnId() !== turnId && this.stopNotConfirmedTurnId() !== turnId) return;
-    this.clearStopConfirmationTimer();
-    this.stoppingTurnId.set('');
-    this.stopNotConfirmedTurnId.set('');
   }
   private updateSummary(): void {
     const turns = this.turns(), latest = turns.filter(turn => turn.author === 'agent').at(-1);
@@ -492,20 +467,44 @@ export class ChatSession implements OnDestroy {
       ? 'closed' : conversationStatus(latest?.state);
     this.conversations.update(rows => rows.map(row => row.conversationId === this.selected() ? { ...row, ...(title ? { title: sessionSlug(title) } : {}), status } : row));
   }
-  private async request(path: string, body?: unknown): Promise<unknown> {
-    for (let attempt = 0; ; attempt++) {
-      const response = await fetch(path, { signal: AbortSignal.timeout(15_000), ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
-      // A streamed report can make this append return 409. Retry the same id up to twice
-      // so an already saved command cannot be saved again.
-      if (body && response.status === 409 && attempt < 2) continue;
-      if (response.status !== 200) throw new ReadFailure(response.status);
-      return response.json() as Promise<unknown>;
-    }
-  }
   private fail(error: unknown): void {
     if (error instanceof ReadFailure && [401, 403].includes(error.status)) {
-      this.denied.set(true); this.rows.set([]); this.conversations.set([]); this.pending = undefined; this.queued.set(false); this.socket.disconnect();
-      this.error.set('⊘ Access unavailable. Sign in with an account invited to this workspace.');
+      this.clearDenied();
     } else this.error.set(this.pending ? '↻ Offline or unavailable — message queued on this page. Retry to send it once.' : '× Could not load the conversation. Retry when the connection returns.');
+  }
+  private clearDenied(): void {
+    ++this.revision;
+    this.denied.set(true);
+    this.transfer?.abort();
+    this.transfer = undefined;
+    this.clearUpload();
+    this.uploadProgress.set(0);
+    this.uploading.set(false);
+    this.rows.set([]);
+    this.conversations.set([]);
+    this.listHasMore.set(false);
+    this.memberId.set('');
+    this.displayName.set('You');
+    this.assistantId.set(null);
+    this.computer.set('ready');
+    this.computerRecovered.set(false);
+    this.computerLostAt.set('');
+    this.memoryAdmission.set({ state: 'disabled', failing: [] });
+    this.selected.set('');
+    this.position = 0;
+    this.generation = 0;
+    this.pending = undefined;
+    this.stopState.reset();
+    this.queued.set(false);
+    this.busy.set(false);
+    this.announcement.set('');
+    this.reconnectedAt.set('');
+    this.conversationReady = false;
+    this.socket.disconnect();
+    history.replaceState({}, '', '/workspace');
+    this.error.set('');
+    this.loading.set(false);
+    this.railLoading.set(false);
+    this.railUnavailable.set(false);
   }
 }

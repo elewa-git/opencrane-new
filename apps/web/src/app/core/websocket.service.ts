@@ -44,8 +44,11 @@ export class WebSocketService implements OnDestroy {
   private readonly historySignal = signal<ServerMessage[]>([]);
   private readonly lastMessageSignal = signal<ServerMessage | undefined>(undefined);
   private readonly incoming = new Subject<ServerMessage>();
+  private readonly policyClose = new Subject<void>();
   /** Include each checked message, even when several arrive in one render. */
   readonly received = this.incoming.asObservable();
+  /** A policy close can arrive without a refusal message. Clear open chats at once. */
+  readonly accessLost = this.policyClose.asObservable();
 
   /** The current connection state, for a status indicator. */
   readonly state = this.stateSignal.asReadonly();
@@ -142,13 +145,19 @@ export class WebSocketService implements OnDestroy {
       console.warn('[websocket] connection error');
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event: CloseEvent) => {
       if (this.socket !== socket) {
         return;
       }
       this.socket = undefined;
       if (this.userClosed) {
         this.stateSignal.set('closed');
+        return;
+      }
+      if (event.code === 1008) {
+        this.clearMessages();
+        this.stateSignal.set('closed');
+        this.policyClose.next();
         return;
       }
       this.scheduleReconnect(url);

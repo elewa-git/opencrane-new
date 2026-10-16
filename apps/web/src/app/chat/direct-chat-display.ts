@@ -9,6 +9,14 @@ export type DirectUpdate =
   | { kind: 'invalid' }
   | { kind: 'append'; row: ChatRow };
 
+export function directSubscription(conversationId: string, position: number,
+  generation: number) {
+  return {
+    type: 'subscribe' as const, topic: 'conversation' as const, conversationId,
+    since: position, generation,
+  };
+}
+
 export function readDirectUpdate(
   raw: unknown, conversationId: string, generation: number, position: number,
 ): DirectUpdate {

@@ -89,6 +89,7 @@ it('moves a confirmed chat from the server row and clears it when archive access
 it('keeps an uncertain archive command through Recent, Archived, another chat and Back', async () => {
   const api = createFetchFixture();
   let checkedCommandId = '';
+  let archiveCommandId = '';
   function lostArchiveReply(request: RequestRecord): Response | undefined {
     const url = new URL(request.url, location.origin);
     if (url.pathname === '/api/conversations' && request.method === 'GET') {
@@ -101,10 +102,14 @@ it('keeps an uncertain archive command through Recent, Archived, another chat an
       return reply({ rows, nextCursor: null });
     }
     if (url.pathname.endsWith('/state') && request.method === 'POST') {
+      if (request.body?.['action'] === 'archive') {
+        archiveCommandId = String(request.body['id']);
+      }
       return reply({}, 503);
     }
     if (url.pathname.includes('/changes/')) {
-      checkedCommandId = url.pathname.split('/').at(-1) ?? '';
+      const checkedId = url.pathname.split('/').at(-1) ?? '';
+      if (checkedId === archiveCommandId) checkedCommandId = checkedId;
       return reply({}, 404);
     }
     return undefined;
@@ -115,7 +120,7 @@ it('keeps an uncertain archive command through Recent, Archived, another chat an
   root(fixture).querySelector<HTMLButtonElement>('.archive-button')?.click();
   await settle(fixture);
   const firstPost = api.requests.find(request => request.method === 'POST'
-    && request.url.endsWith('/state'));
+    && request.url.endsWith('/state') && request.body?.['action'] === 'archive');
   const originalBody = firstPost?.body;
   const commandId = String(originalBody?.['id']);
   expect(commandId).not.toBe('undefined');
@@ -145,7 +150,7 @@ it('keeps an uncertain archive command through Recent, Archived, another chat an
   root(fixture).querySelector<HTMLButtonElement>('.archive-notice button:last-child')?.click();
   await settle(fixture);
   const posts = api.requests.filter(request => request.method === 'POST'
-    && request.url.endsWith('/state'));
+    && request.url.endsWith('/state') && request.body?.['action'] === 'archive');
   expect(posts).toHaveLength(2);
   expect(posts[1]?.body).toEqual(originalBody);
   fixture.destroy();
@@ -1333,6 +1338,39 @@ async function clearsAfterRealRefusal(): Promise<void> {
 }
 
 it('clears protected data and ignores a held refresh after real access loss', clearsAfterRealRefusal);
+
+it.each(['direct', 'group'])(
+  'clears an open %s chat on a bare policy close without reconnecting', async mode => {
+    const api = createFetchFixture();
+    if (mode === 'group') {
+      function groupList(request: RequestRecord): Response | undefined {
+        if (request.url !== '/api/conversations' || request.method !== 'GET') return undefined;
+        return reply({ rows: [{ ...conversation('existing', 'bob'), mode: 'group',
+          participantIds: ['alice', 'bob', 'carol'], title: 'Private planning' }] });
+      }
+      api.override(groupList);
+    }
+    const fixture = await mount(api);
+    await openExisting(fixture);
+    typeDraft(fixture, 'Private draft');
+    const socket = api.sockets.at(-1);
+    const socketCount = api.sockets.length;
+    expect(root(fixture).textContent).toContain('Is the Tuesday slot still open?');
+    socket?.onclose?.(new CloseEvent('close', { code: 1008 }));
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('You no longer have access');
+    await settle(fixture);
+
+    expect(root(fixture).textContent).toContain('You no longer have access');
+    expect(root(fixture).textContent).not.toContain('Is the Tuesday slot still open?');
+    expect(root(fixture).textContent).not.toContain('Grace Achieng');
+    expect(root(fixture).textContent).not.toContain('Private draft');
+    expect(root(fixture).querySelector('textarea')).toBeNull();
+    await new Promise<void>(resolve => setTimeout(resolve, 550));
+    expect(api.sockets).toHaveLength(socketCount);
+    fixture.destroy();
+  },
+);
 
 async function purgesSocketHistoryAndIgnoresLatePrivateEvents(): Promise<void> {
   const api = createFetchFixture();

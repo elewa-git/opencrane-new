@@ -11,6 +11,7 @@ interface CaptureWorkspace {
   calls: string[];
   postBodies: unknown[];
   socket: SocketLike;
+  socketFactory: ReturnType<typeof vi.fn>;
   setReply(status: number): void;
   denyFeedRead(): void;
   setMessageStatus(status: number): void;
@@ -128,8 +129,9 @@ async function createCaptureWorkspace(
     readyState: 1, onopen: null, onclose: null, onerror: null, onmessage: null,
     send: vi.fn(), close: vi.fn(),
   };
+  const socketFactory = vi.fn(() => socket);
   TestBed.configureTestingModule({ providers: [
-    { provide: SOCKET_FACTORY, useValue: () => socket },
+    { provide: SOCKET_FACTORY, useValue: socketFactory },
     { provide: RANDOM_SOURCE, useValue: () => 0 },
   ] });
   const fixture = TestBed.createComponent(Workspace);
@@ -143,7 +145,7 @@ async function createCaptureWorkspace(
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('Missing workspace root');
   return {
-    fixture, root, calls, postBodies, rows, socket,
+    fixture, root, calls, postBodies, rows, socket, socketFactory,
     setReply(status) { replyStatus = status; },
     denyFeedRead() { denyMessages = true; },
     confirmPendingMessage() { messageRecorded = true; },
@@ -466,6 +468,34 @@ it('clears the preview, screenshot rows and counts when access is denied', async
   context.fixture.destroy();
 });
 
+it('clears an open session after a bare policy close without another socket', async () => {
+  const context = await createCaptureWorkspace([screenshotRow(1)]);
+  context.fixture.componentInstance['draft'].set('Private draft');
+  context.fixture.detectChanges();
+  const transcript = context.root.querySelector<HTMLElement>('.transcript');
+  if (!transcript) throw new Error('Expected a transcript');
+  Object.defineProperty(transcript, 'scrollHeight', { configurable: true, value: 1500 });
+  transcript.scrollTop = 200;
+  const socketCount = context.socketFactory.mock.calls.length;
+
+  context.socket.onclose?.(new CloseEvent('close', { code: 1008 }));
+  context.fixture.detectChanges();
+  expect(context.root.textContent).toContain('You no longer have access');
+  await context.fixture.whenStable();
+  context.fixture.detectChanges();
+  await new Promise(requestAnimationFrame);
+
+  expect(context.root.textContent).toContain('You no longer have access');
+  expect(context.root.textContent).not.toContain('screen.png');
+  expect(context.root.textContent).not.toContain('Private draft');
+  expect(context.root.querySelector('oc-chat-composer')).toBeNull();
+  expect(transcript.scrollTop).toBe(0);
+  expect(document.activeElement).toBe(context.root.querySelector('.access-lock'));
+  await new Promise<void>(resolve => setTimeout(resolve, 550));
+  expect(context.socketFactory).toHaveBeenCalledTimes(socketCount);
+  context.fixture.destroy();
+});
+
 it('resets the capture state when the conversation changes', async () => {
   const context = await createCaptureWorkspace();
   context.setReply(503);
@@ -509,7 +539,8 @@ it.each([500, 503, 403])('does not show empty states after a %s conversation rea
 
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('No workspace root');
-  const expectedMessage = status === 403 ? 'Access unavailable' : 'Could not load the conversation';
+  const expectedMessage = status === 403 ? 'You no longer have access'
+    : 'Could not load the conversation';
   await vi.waitFor(() => expect(root.textContent).toContain(expectedMessage));
   expect(root.textContent).not.toContain('No messages yet');
   root.querySelector<HTMLButtonElement>('#panel-toggle')?.click();
