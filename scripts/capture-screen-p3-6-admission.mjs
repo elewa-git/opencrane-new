@@ -102,9 +102,41 @@ async function capture(browser, width, frame) {
   }
 }
 
+async function checkInvalidHost(browser) {
+  let postCount = 0;
+  async function serveInvalidHost(route) {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname === '/api/org/integrations' && request.method() === 'POST') {
+      postCount += 1;
+      await route.fulfill({ status: 400 });
+      return;
+    }
+    await serve('INT-10', route);
+  }
+
+  const page = await browser.newPage();
+  await page.route('**/*', serveInvalidHost);
+  try {
+    await page.goto(`${origin}/org/integrations/new`);
+    await page.getByLabel('Package (OCI image)').check();
+    await page.getByLabel('Image pinned by sha256 digest').fill(locator);
+    await page.getByLabel('Upstream host').fill('xn--a.com');
+    await page.getByLabel('Upstream port').fill('443');
+    await page.getByRole('button', { name: 'Save package' }).click();
+    await page.waitForLoadState('networkidle');
+    assert.equal(postCount, 0, 'An invalid punycode host must not be posted');
+    await page.getByText('Enter a sha256 image digest, a public upstream host and a port from 1 to 65535.')
+      .waitFor({ timeout: 2_000 });
+  } finally {
+    await page.close();
+  }
+}
+
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
+  await checkInvalidHost(browser);
   const captures = [];
   for (const width of [1280, 390]) {
     for (const frame of ['INT-10', 'INT-11', 'INT-12']) {
@@ -112,6 +144,7 @@ try {
     }
   }
   const receipt = '# Package admission screen checks\n\n' +
+    'PASS: Chromium rejected xn--a.com, showed the public host error and sent no POST. ' +
     'PASS: Captured source, queued checks and four passed checks at 1280 and 390 pixels. ' +
     'The browser used intercepted API replies, a fixed 15 October 2026 10:02 UTC clock, ' +
     'reduced motion and no development stack. The four passed rows were checked before capture. ' +

@@ -237,13 +237,14 @@ it('expires all four pass rows and the summary while the page is idle', async ()
   }
 });
 
-it('rejects a punycode host before posting', () => {
+it('rejects a punycode host before posting', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(202));
   const root = screen();
   validForm(root);
   fill(root, 'upstream-host', 'xn--a.com');
   root.querySelector('form')?.requestSubmit();
   expect(fetch).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(root.textContent).toContain('a public upstream host'));
 });
 
 it('normalises an uppercase public host before posting', async () => {
