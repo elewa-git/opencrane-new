@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { Readable } from 'node:stream';
+import { setImmediate as nextTurn, setTimeout as delay } from 'node:timers/promises';
 import { tokenIssuer } from '@opencrane/auth';
 import { until } from '@opencrane/authz/testing';
 import { BudgetActor } from '@opencrane/models';
@@ -165,6 +166,10 @@ async function budgetWatcher() {
       binding: view.binding, objects };
     work = watchBridges(options, tokens, kube, proxyUrl, abort.signal, logger);
   }
+  async function stopWatching() {
+    abort.abort();
+    await work;
+  }
   async function close() {
     abort.abort();
     for (const peer of peers) peer.socket.terminate();
@@ -174,8 +179,8 @@ async function budgetWatcher() {
     await view.close();
     await rm(directory, { recursive: true, force: true });
   }
-  return { store, peers, lines, message, chat, start, stop, upload, watch, project,
-    morePolls, close };
+  return { store, heads, peers, lines, message, chat, start, stop, upload, watch, project,
+    morePolls, stopWatching, close };
 }
 
 async function savedEvents(test: Awaited<ReturnType<typeof budgetWatcher>>,
@@ -295,3 +300,134 @@ async function recoversStopOnly(source: string) {
 }
 it.each(['computer', 'assistant'])(
   'retries a saved Stop without a new event after unreadable %s history recovers', recoversStopOnly);
+
+async function startHeldUpload() {
+  fixture = await budgetWatcher();
+  const test = fixture;
+  await test.chat('second');
+  const stopped = await test.message('second');
+  await test.start(stopped);
+  await test.watch();
+  function started() {
+    return test.peers[0]?.matching('turn', 'second').length === 1;
+  }
+  await until(started);
+  const peer = test.peers[0]!;
+  await test.chat('first');
+  await test.upload('first');
+  await test.message('first');
+  await test.project();
+  await peer.held;
+  return { test, peer, stopped };
+}
+
+async function heldHistoryLeavesOtherWorkFree(work: string) {
+  const { test, peer, stopped } = await startHeldUpload();
+  const reading = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const secondChecked = Promise.withResolvers<void>();
+  const read = test.store.readStream.bind(test.store);
+  async function* holdHistory(...args: Parameters<typeof read>) {
+    if (args[0] === 'conversation-first') {
+      reading.resolve();
+      await release.promise;
+    }
+    yield* read(...args);
+  }
+  test.heads.mockRestore();
+  const head = test.store.head.bind(test.store);
+  async function noteHead(...args: Parameters<typeof head>) {
+    const value = await head(...args);
+    if (args[0] === 'conversation-second') secondChecked.resolve();
+    return value;
+  }
+  vi.spyOn(test.store, 'readStream').mockImplementation(holdHistory);
+  vi.spyOn(test.store, 'head').mockImplementation(noteHead);
+  try {
+    await reading.promise;
+    // Finish the other chat's unchanged check before saving its Stop.
+    await secondChecked.promise;
+    await nextTurn();
+    const savedAt = await test.stop(stopped);
+    if (work === 'Stop') {
+      await expectStop(peer, stopped, savedAt);
+    } else {
+      const approvalId = 'a'.repeat(64);
+      const waiting = { type: 'approval_waiting', approvalId, ...stopped };
+      peer.socket.send(JSON.stringify(waiting));
+      function replied() {
+        return peer.matching('approval_settled').length === 1;
+      }
+      await until(replied, 2000);
+      const expected = { type: 'approval_settled', approvalId, state: 'outcome_unknown' };
+      expect(peer.matching('approval_settled')[0]!.value).toEqual(expected);
+    }
+    expect(peer.released).toBe(false);
+    expect(peer.matching('file_begin')).toHaveLength(1);
+    expect(peer.matching('turn', 'first')).toEqual([]);
+  } finally {
+    release.resolve();
+    peer.release();
+  }
+}
+it.each(['Stop', 'approval reply'])(
+  'delivers %s while another chat holds both its file receipt and next history read',
+  heldHistoryLeavesOtherWorkFree);
+
+async function unfinishedStopReadIsTracked(check: string) {
+  const { test, peer, stopped } = await startHeldUpload();
+  const release = Promise.withResolvers<void>();
+  const read = test.store.readStream.bind(test.store);
+  let active = 0;
+  let started = 0;
+  let failures = 0;
+  async function* failAndHold(...args: Parameters<typeof read>) {
+    if (args[0] === 'conversation-first') {
+      failures++;
+      throw new Error('Temporary history failure');
+    }
+    if (args[0] !== 'conversation-second') {
+      yield* read(...args);
+      return;
+    }
+    active++;
+    started++;
+    try {
+      await release.promise;
+      yield* read(...args);
+    } finally {
+      active--;
+    }
+  }
+  vi.spyOn(test.store, 'readStream').mockImplementation(failAndHold);
+  let stopping: Promise<void> | undefined;
+  try {
+    await test.stop(stopped);
+    await test.morePolls();
+    expect(failures).toBeGreaterThanOrEqual(3);
+    if (check === 'polling') {
+      expect(started).toBe(1);
+      expect(active).toBe(1);
+    } else {
+      let finished = false;
+      function markFinished() {
+        finished = true;
+      }
+      stopping = test.stopWatching().then(markFinished);
+      await delay(350);
+      // Keep shutdown pending until the unfinished history read can finish.
+      expect(finished).toBe(false);
+      release.resolve();
+      await stopping;
+      expect(active).toBe(0);
+      expect(peer.socket.readyState).toBe(WebSocket.CLOSED);
+    }
+  } finally {
+    release.resolve();
+    peer.release();
+    await stopping;
+  }
+}
+it.each(['polling', 'shutdown'])(
+  'tracks an unfinished Stop read during %s when another chat read fails',
+  unfinishedStopReadIsTracked);
