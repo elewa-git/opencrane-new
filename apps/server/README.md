@@ -11,8 +11,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, model grants and live updates| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks gateway settings, public tool addresses, startup, member and child invitations, indexed departures, final tool and memory sends, spending stops for queued messages, renewals and switch-on retries, memory setup and loaded fact links, later access changes through saving, tool reviews, hosted images, publication requests and status, turn previews, saved references, closes and shared reference folds| libs["libs/*<br/>shared code"]
-  server -->|records reviewed child requests and answers, child creation and first inputs, authenticated instance observations and stops, owner and admin stops, control intent, personal and shared memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops, refused turn decisions and managed call modes| nats["NATS<br/>event log"]
+  server -.->|checks gateway settings, public tool addresses, startup, member and child invitations, indexed departures, final tool and memory sends, spending stops for queued messages, renewals and switch-on retries, memory setup and loaded fact links, shared reference folds, later access changes through saving, tool reviews, hosted images, publication requests and status, turn previews, saved references and closes| libs["libs/*<br/>shared code"]
+  server -->|records reviewed child requests, final answers and interim updates, child creation and first inputs, authenticated instance observations and stops, owner and admin stops, control intent, personal and shared memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops, refused turn decisions and managed call modes| nats["NATS<br/>event log"]
   nats -->|saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -66,7 +66,8 @@ matching failure report. The turn stays closed and other chats keep their connec
 Reports containing output still need a saved, admitted turn.
 
 Members can review a saved child answer and publish its text to the parent chat.
-The entry credits the person who publishes it. Files and interim updates are unavailable.
+They can also publish a saved reply from a running turn or write an interim update.
+The entry credits the person who publishes it. Files are unavailable.
 Publication refuses an answer if its turn fails or its output is lost before the
 parent entry is saved. Unrelated child messages still allow publication.
 

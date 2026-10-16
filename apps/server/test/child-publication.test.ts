@@ -34,6 +34,9 @@ async function savedResult(context: Fixture, kind = 'final') {
     return append(...args);
   }
   await childSession({ ...context, append: withSource });
+  if (kind === 'human') {
+    return { publicationKind: 'interim', resultEventId: undefined, text: '  Reviewed answer  ' };
+  }
   const common = { conversationId: 'child', turnId: 'saved-turn' };
   const start = { ...common, assistantId: 'child-assistant',
     executionMode: 'restricted', sharingClass: 'shared_only' };
@@ -44,9 +47,7 @@ async function savedResult(context: Fixture, kind = 'final') {
   if (kind === 'final') {
     await append('conversation-child', 'agent.turn_completed', common, false);
   }
-  const publicationKind = kind === 'human' ? 'interim' : kind;
-  const resultEventId = kind === 'human' ? undefined : result.id;
-  return { publicationKind, resultEventId, text: '  Reviewed answer  ' };
+  return { publicationKind: kind, resultEventId: result.id, text: '  Reviewed answer  ' };
 }
 async function publishesOnce(kind: string) {
   const publicationKind = kind === 'human' ? 'interim' : kind;
@@ -67,6 +68,18 @@ async function publishesOnce(kind: string) {
     await context.append('conversation-parent', 'message.posted', unrelated, false);
     await context.append('participation-child', 'conversation.closed',
       { conversationId: 'child', closedBy: 'alice' }, false);
+    if (kind !== 'final') {
+      const append = context.nats.store.append.bind(context.nats.store);
+      async function loseReply(...args: Parameters<typeof append>) {
+        const saved = await append(...args);
+        if (saved.status === 'appended') throw new Error('Lost reply');
+        return saved;
+      }
+      context.nats.store.append = loseReply;
+      const lost = await request(context, 'publications', payload);
+      expect(lost.statusCode, lost.body).toBe(503);
+      context.nats.store.append = append;
+    }
     const concurrent = [request(context, 'publications', payload),
       request(context, 'publications', payload)];
     const [sent, duplicate] = await Promise.all(concurrent);
@@ -279,6 +292,7 @@ async function socketPublication(context: Fixture, publicationKind: string) {
     const received = Promise.withResolvers<unknown>();
     function receive(raw: Buffer) {
       const message = chatMessageSchema.parse(JSON.parse(raw.toString()) as unknown);
+      if (message.type === 'refused') received.resolve(message);
       if (message.row?.id === 'publication') received.resolve(message.row.data);
     }
     socket.on('message', receive);

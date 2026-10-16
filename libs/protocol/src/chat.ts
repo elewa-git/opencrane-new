@@ -62,7 +62,7 @@ export const chatRowSchema = z.object({
     approvalId: z.string().optional(),
     messageId: z.string().optional(),
     authorId: z.string().optional(),
-    publicationKind: z.literal('final').optional(),
+    publicationKind: z.enum(['final', 'interim']).optional(),
     path: z.string().optional(),
     exitCode: z.number().optional(),
     commandDigest: z.string().optional(),
