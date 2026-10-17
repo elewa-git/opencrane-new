@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+import { OpenFgaClient } from '@openfga/sdk';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { chatMessageSchema } from '@opencrane/protocol';
@@ -17,7 +19,7 @@ function request(context: Fixture, path: string, payload?: object, memberId = 'a
     ...(payload === undefined ? {} : { payload }) };
   return context.app.inject(options);
 }
-async function savedResult(context: Fixture) {
+async function savedResult(context: Fixture, kind = 'final') {
   const append = context.append;
   async function withSource(...args: Parameters<typeof append>) {
     if (args[0] === 'team-child-team') {
@@ -32,6 +34,9 @@ async function savedResult(context: Fixture) {
     return append(...args);
   }
   await childSession({ ...context, append: withSource });
+  if (kind === 'human') {
+    return { publicationKind: 'interim', resultEventId: undefined, text: '  Reviewed answer  ' };
+  }
   const common = { conversationId: 'child', turnId: 'saved-turn' };
   const start = { ...common, assistantId: 'child-assistant',
     executionMode: 'restricted', sharingClass: 'shared_only' };
@@ -39,18 +44,21 @@ async function savedResult(context: Fixture) {
   const encrypted = context.keys.encrypt('test', 'child', 'Saved answer');
   const data = { ...common, messageId: 'saved-message', contentType: 'text', ...encrypted };
   const result = await append('conversation-child', 'agent.message_completed', data, false);
-  await append('conversation-child', 'agent.turn_completed', common, false);
-  return { publicationKind: 'final', resultEventId: result.id, text: '  Reviewed answer  ' };
+  if (kind === 'final') {
+    await append('conversation-child', 'agent.turn_completed', common, false);
+  }
+  return { publicationKind: kind, resultEventId: result.id, text: '  Reviewed answer  ' };
 }
-async function publishesOnce() {
+async function publishesOnce(kind: string) {
+  const publicationKind = kind === 'human' ? 'interim' : kind;
   const context = await childFixture();
   try {
-    const input = await savedResult(context);
+    const input = await savedResult(context, kind);
     const before = await context.nats.store.head();
     const review = await request(context, 'publication-review', input);
     expect(review.statusCode, review.body).toBe(200);
     expect(review.json()).toMatchObject({ status: 'reviewed', text: 'Reviewed answer',
-      publicationKind: 'final', parentConversationId: 'parent',
+      publicationKind, parentConversationId: 'parent',
       audience: ['alice', 'bob'], publishedBy: 'alice' });
     expect(await context.nats.store.head()).toBe(before);
     const payload = { id: 'publication', review: review.json<{ review: string }>().review,
@@ -60,6 +68,18 @@ async function publishesOnce() {
     await context.append('conversation-parent', 'message.posted', unrelated, false);
     await context.append('participation-child', 'conversation.closed',
       { conversationId: 'child', closedBy: 'alice' }, false);
+    if (kind !== 'final') {
+      const append = context.nats.store.append.bind(context.nats.store);
+      async function loseReply(...args: Parameters<typeof append>) {
+        const saved = await append(...args);
+        if (saved.status === 'appended') throw new Error('Lost reply');
+        return saved;
+      }
+      context.nats.store.append = loseReply;
+      const lost = await request(context, 'publications', payload);
+      expect(lost.statusCode, lost.body).toBe(503);
+      context.nats.store.append = append;
+    }
     const concurrent = [request(context, 'publications', payload),
       request(context, 'publications', payload)];
     const [sent, duplicate] = await Promise.all(concurrent);
@@ -84,11 +104,11 @@ async function publishesOnce() {
       return row.id === 'publication';
     }
     expect(rows.find(isPublication)?.data).toEqual({ text: 'Reviewed answer', authorId: 'alice',
-      publicationKind: 'final', contentType: 'text' });
+      publicationKind, contentType: 'text' });
     await context.runner.rebuild(conversations);
     const replay = await request(context, 'messages', undefined, 'bob', 'parent');
     expect(replay.json<{ rows: unknown[] }>().rows).toEqual(rows);
-    await socketPublication(context);
+    await socketPublication(context, publicationKind);
     await context.append('participation-parent', 'participant.removed',
       { conversationId: 'parent', participantId: 'bob', removedBy: 'alice' }, false);
     expect((await request(context, 'publications', payload)).json()).toEqual(sent!.json());
@@ -97,10 +117,11 @@ async function publishesOnce() {
     await context.close();
   }
 }
-it('reviews without saving and publishes one credited parent entry across retry and replay',
+it.each(['final', 'interim', 'human'])(
+  'reviews and cancels without saving; publishes once across retry and replay: %s',
   publishesOnce, 120_000);
 
-async function refusesChangedReview(change: string) {
+async function refusesChangedReview(change: string, kind = 'final') {
   const context = await childFixture();
   const warnings: unknown[] = [];
   function recordWarning(...args: unknown[]) {
@@ -112,7 +133,7 @@ async function refusesChangedReview(change: string) {
   }
   context.app.addHook('onRequest', captureWarnings);
   try {
-    const input = await savedResult(context);
+    const input = await savedResult(context, kind);
     const reviewed = await request(context, 'publication-review', input);
     expect(reviewed.statusCode, reviewed.body).toBe(200);
     const payload = { id: 'refused-publication', text: 'Reviewed answer',
@@ -176,12 +197,12 @@ async function refusesChangedReview(change: string) {
 }
 it.each(['text', 'expiry', 'lost', 'moved', 'missing', 'incomplete', 'unshared',
   'delta', 'outage', 'join', 'removal', 'closed'])(
-  'refuses a changed review without an entry: %s', refusesChangedReview, 120_000);
+  'refuses a changed review without an entry: %s', refusesFinalChange, 120_000);
 
-async function refusesUniformly(denial: string) {
+async function refusesUniformly(denial: string, kind = 'final') {
   const context = await childFixture();
   try {
-    const input = await savedResult(context);
+    const input = await savedResult(context, kind);
     const reviewed = await request(context, 'publication-review', input);
     const payload = { id: 'denied-publication', text: 'Reviewed answer',
       review: reviewed.json<{ review: string }>().review };
@@ -235,12 +256,12 @@ async function refusesUniformly(denial: string) {
 }
 it.each(['signature', 'another-publisher', 'unknown', 'parent', 'private', 'foreign',
   'other-child', 'parent-only', 'child-only'])(
-  'uses the same refusal for %s', refusesUniformly, 120_000);
+  'uses the same refusal for %s', refusesFinalAccess, 120_000);
 
-async function refusesFiles(fileIds: string[]) {
+async function refusesFiles(fileIds: string[], kind = 'final') {
   const context = await childFixture();
   try {
-    const input = { ...await savedResult(context), fileIds };
+    const input = { ...await savedResult(context, kind), fileIds };
     const malformed = { method: 'POST' as const,
       url: '/api/conversations/child/publication-review',
       headers: { ...context.headers(), 'content-type': 'application/json' },
@@ -258,9 +279,9 @@ async function refusesFiles(fileIds: string[]) {
   }
 }
 it.each([[[]], [['private-file-name']]])('refuses any file list without details: %j',
-  refusesFiles, 120_000);
+  refusesFinalFiles, 120_000);
 
-async function socketPublication(context: Fixture) {
+async function socketPublication(context: Fixture, publicationKind: string) {
   const address = await context.app.listen({ host: '127.0.0.1', port: 0 });
   const realtime = { feed: context.feed, binding: context.options.binding, chat: context.options };
   const server = attachWebSocketServer(context.app.server, context.app.log, context.config, realtime);
@@ -271,13 +292,14 @@ async function socketPublication(context: Fixture) {
     const received = Promise.withResolvers<unknown>();
     function receive(raw: Buffer) {
       const message = chatMessageSchema.parse(JSON.parse(raw.toString()) as unknown);
+      if (message.type === 'refused') received.resolve(message);
       if (message.row?.id === 'publication') received.resolve(message.row.data);
     }
     socket.on('message', receive);
     socket.send(JSON.stringify({ type: 'subscribe', topic: 'conversation',
       conversationId: 'parent', since: 0 }));
     expect(await received.promise).toEqual({ text: 'Reviewed answer', authorId: 'alice',
-      publicationKind: 'final', contentType: 'text' });
+      publicationKind, contentType: 'text' });
   } finally {
     socket.terminate();
     function close(resolve: () => void) {
@@ -393,11 +415,11 @@ it.each(['lost', 'message', 'other-turn'])(
   'checks result validity after complete child history loads: %s',
   changesAfterChildHistory, 120_000);
 
-async function verifyPublicationWindow(caseName: string) {
+async function verifyPublicationWindow(kind: string, caseName: string) {
   const [window, change] = caseName.split(':');
   const context = await childFixture();
   try {
-    const input = await savedResult(context);
+    const input = await savedResult(context, kind);
     const review = await request(context, 'publication-review', input);
     expect(review.statusCode, review.body).toBe(200);
     const payload = { id: 'verify-window', text: 'Reviewed answer',
@@ -428,7 +450,7 @@ async function verifyPublicationWindow(caseName: string) {
     async function* interceptRead(...args: Parameters<typeof read>) {
       let completed = false;
       for await (const row of read(...args)) {
-        if (row.event.type === 'agent.turn_completed') completed = true;
+        if (row.event.id === input.resultEventId) completed = true;
         yield row;
       }
       if (args[0] === 'conversation-child' && completed) readCompleteHistory = true;
@@ -450,7 +472,17 @@ async function verifyPublicationWindow(caseName: string) {
       return append(...args);
     }
     context.nats.store.append = interceptAppend;
+    const head = context.nats.store.head.bind(context.nats.store);
+    const watched = new Set<string>();
+    async function recordHead(subject?: string, deadline?: number) {
+      if (subject) watched.add(subject);
+      return head(subject, deadline);
+    }
+    context.nats.store.head = recordHead;
     const response = await request(context, 'publications', payload);
+    expect([...watched].sort()).toEqual([
+      'member-alice', 'participation-child', 'participation-parent',
+    ]);
     const parentAfter = await parentHistory(context);
     const childAfter = [];
     for await (const row of read('conversation-child')) childAfter.push(row);
@@ -470,9 +502,194 @@ async function verifyPublicationWindow(caseName: string) {
     await context.close();
   }
 }
-it.each(['history:lost', 'history:message', 'history:other-turn',
+const publicationWindows = ['history:lost', 'history:message', 'history:other-turn',
   'recheck:lost', 'recheck:message', 'recheck:other-turn',
   'append:lost', 'append:message', 'append:other-turn',
   'history:failed', 'recheck:failed', 'append:failed',
-  'history:other-failed', 'recheck:other-failed', 'append:other-failed'])(
-  'keeps selected result valid through the parent append: %s', verifyPublicationWindow, 120_000);
+  'history:other-failed', 'recheck:other-failed', 'append:other-failed'];
+for (const kind of ['final', 'interim']) {
+  async function checkWindow(caseName: string) {
+    await verifyPublicationWindow(kind, caseName);
+  }
+  it.each(publicationWindows)(
+    `keeps ${kind} result valid through the parent append: %s`, checkWindow, 120_000);
+}
+
+async function refusesFinalChange(change: string) {
+  await refusesChangedReview(change);
+}
+async function refusesFinalAccess(denial: string) {
+  await refusesUniformly(denial);
+}
+async function refusesFinalFiles(fileIds: string[]) {
+  await refusesFiles(fileIds);
+}
+async function refusesInterimChange(change: string) {
+  await refusesChangedReview(change, 'interim');
+}
+async function refusesInterimAccess(denial: string) {
+  await refusesUniformly(denial, 'interim');
+}
+async function refusesInterimFiles(fileIds: string[]) {
+  await refusesFiles(fileIds, 'interim');
+}
+it.each(['text', 'expiry', 'lost', 'moved', 'missing', 'unshared', 'delta',
+  'outage', 'join', 'removal', 'closed'])(
+  'refuses changed interim review: %s', refusesInterimChange, 120_000);
+it.each(['signature', 'another-publisher', 'unknown', 'parent', 'private', 'foreign',
+  'other-child', 'parent-only', 'child-only'])(
+  'refuses interim access: %s', refusesInterimAccess, 120_000);
+it.each([[[]], [['private-file-name']]])('refuses interim files: %j',
+  refusesInterimFiles, 120_000);
+
+async function refusesInterimSource(change: string) {
+  const context = await childFixture();
+  try {
+    const input = await savedResult(context, 'interim');
+    if (change === 'final') {
+      const data = { conversationId: 'child', turnId: 'saved-turn' };
+      await context.append('conversation-child', 'agent.turn_completed', data, false);
+    } else {
+      const data = { conversationId: 'child', turnId: 'other-turn', messageId: 'delta',
+        ...context.keys.encrypt('test', 'child', 'Live text'), contentType: 'text' };
+      const delta = await context.append('conversation-child', 'agent.message_delta', data, false);
+      input.resultEventId = delta.id;
+    }
+    const before = await parentHistory(context);
+    const response = await request(context, 'publication-review', input);
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json()).toEqual({ status: 'review_stale' });
+    expect(await parentHistory(context)).toEqual(before);
+  } finally {
+    await context.close();
+  }
+}
+it.each(['final', 'delta'])('refuses an interim source that is %s', refusesInterimSource, 120_000);
+
+async function conflictsWithSavedId(change: string) {
+  const context = await childFixture();
+  try {
+    const input = await savedResult(context, 'interim');
+    const review = await request(context, 'publication-review', input);
+    expect(review.statusCode, review.body).toBe(200);
+    const payload = { id: 'same-id', text: 'Reviewed answer',
+      review: review.json<{ review: string }>().review };
+    expect((await request(context, 'publications', payload)).statusCode).toBe(200);
+    if (change === 'kind') {
+      await context.append('conversation-child', 'agent.turn_completed',
+        { conversationId: 'child', turnId: 'saved-turn' }, false);
+      input.publicationKind = 'final';
+    } else if (change === 'text') {
+      input.text = 'Another reviewed answer';
+      payload.text = input.text;
+    } else {
+      input.resultEventId = undefined;
+    }
+    const changed = await request(context, 'publication-review', input);
+    expect(changed.statusCode, changed.body).toBe(200);
+    payload.review = changed.json<{ review: string }>().review;
+    const before = await parentHistory(context);
+    const response = await request(context, 'publications', payload);
+    expect(response.statusCode, response.body).toBe(409);
+    expect(await parentHistory(context)).toEqual(before);
+  } finally {
+    await context.close();
+  }
+}
+it.each(['kind', 'text', 'source'])('conflicts with a saved id after changed %s',
+  conflictsWithSavedId, 120_000);
+
+async function refusesSignedChanges(change: string) {
+  const context = await childFixture();
+  try {
+    const input = await savedResult(context, 'interim');
+    const review = await request(context, 'publication-review', input);
+    expect(review.statusCode, review.body).toBe(200);
+    const signed = review.json<{ review: string }>().review;
+    const decoded = Buffer.from(signed.split('.')[0]!, 'base64url').toString();
+    const binding = z.record(z.string(), z.unknown()).parse(JSON.parse(decoded));
+    if (change === 'turn') binding['turnId'] = 'other-turn';
+    if (change === 'ancestor') binding['parentConversationId'] = 'ancestor';
+    if (change === 'silo') binding['silo'] = 'foreign';
+    const encoded = Buffer.from(JSON.stringify(binding)).toString('base64url');
+    let purpose = 'child-publication';
+    if (change === 'purpose') purpose = 'child-review';
+    const hmac = createHmac('sha256', context.config.cookieSecret);
+    hmac.update(`${purpose}:${encoded}`);
+    const signature = hmac.digest('base64url');
+    const payload = { id: 'forged', text: 'Reviewed answer', review: `${encoded}.${signature}` };
+    const before = await parentHistory(context);
+    const response = await request(context, 'publications', payload);
+    expect(response.statusCode, response.body).toBe(change === 'turn' ? 409 : 403);
+    expect(await parentHistory(context)).toEqual(before);
+  } finally {
+    await context.close();
+  }
+}
+it.each(['turn', 'ancestor', 'silo', 'purpose'])(
+  'refuses an interim review with substituted %s', refusesSignedChanges, 120_000);
+
+async function removesAccessAfterHistory(change: string) {
+  const context = await childFixture();
+  try {
+    const input = await savedResult(context, 'interim');
+    const reviewed = await request(context, 'publication-review', input);
+    expect(reviewed.statusCode, reviewed.body).toBe(200);
+    const payload = { id: 'access-race', text: 'Reviewed answer',
+      review: reviewed.json<{ review: string }>().review };
+    let injected = false;
+    let historyLoaded = false;
+    const read = context.nats.store.readStream.bind(context.nats.store);
+    async function* interceptHistory(...args: Parameters<typeof read>) {
+      for await (const row of read(...args)) {
+        if (row.event.id === input.resultEventId) historyLoaded = true;
+        yield row;
+      }
+      if (injected || !historyLoaded || args[0] !== 'participation-child') return;
+      injected = true;
+      if (change === 'role') {
+        const personId = Buffer.from(JSON.stringify(['test', 'alice'])).toString('base64url');
+        const siloId = Buffer.from(JSON.stringify(['test'])).toString('base64url');
+        const tuple = { user: `person:${personId}`, relation: 'member', object: `silo:${siloId}` };
+        const client = new OpenFgaClient(context.options.binding);
+        await client.write({ deletes: [tuple] });
+      } else if (change === 'member') {
+        const data = { memberId: 'alice', removedBy: 'bob' };
+        await context.append('member-alice', 'member.removed', data, false);
+      } else {
+        let conversationId = 'child';
+        if (change === 'parent' || change === 'source' || change === 'close') {
+          conversationId = 'parent';
+        }
+        if (change === 'close') {
+          const data = { conversationId, closedBy: 'alice' };
+          await context.append('conversation-parent', 'conversation.closed', data, false);
+          return;
+        }
+        const data = { conversationId, participantId: 'alice', removedBy: 'bob' };
+        await context.append(`participation-${conversationId}`, 'participant.removed', data, false);
+        if (change === 'source') {
+          const join = { conversationId, participantId: 'alice', addedBy: 'bob' };
+          await context.append('participation-parent', 'participant.added', join);
+          const childJoin = { conversationId: 'child', participantId: 'alice', addedBy: 'bob',
+            contextKind: 'shared_child', joinKind: 'explicit_child', reviewPosition: 1 };
+          await context.append('participation-child', 'participant.removed',
+            { conversationId: 'child', participantId: 'alice', removedBy: 'bob' });
+          await context.append('participation-child', 'participant.added', childJoin);
+        }
+      }
+    }
+    context.nats.store.readStream = interceptHistory;
+    const before = await parentHistory(context);
+    const response = await request(context, 'publications', payload);
+    expect(injected).toBe(true);
+    expect(response.statusCode, response.body).toBe(change === 'close' ? 409 : 403);
+    const after = await parentHistory(context);
+    if (change === 'close') expect(after).toHaveLength(before.length + 1);
+    else expect(after).toEqual(before);
+  } finally {
+    await context.close();
+  }
+}
+it.each(['child', 'parent', 'source', 'member', 'role', 'close'])(
+  'refuses interim publication after history and loss of %s', removesAccessAfterHistory, 120_000);

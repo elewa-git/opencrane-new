@@ -13,16 +13,30 @@ import { chatHistory } from './commands.ts';
 import { participationClosed } from './participation.ts';
 
 const textSchema = z.string().trim().min(1).max(32_000);
-const reviewInput = z.strictObject({ publicationKind: z.literal('final'),
-  resultEventId: chatIdSchema, text: textSchema, fileIds: z.array(chatIdSchema).optional() });
+const reviewShape = z.strictObject({ publicationKind: z.enum(['final', 'interim']),
+  resultEventId: chatIdSchema.optional(), text: textSchema,
+  fileIds: z.array(chatIdSchema).optional() });
+function hasRequiredResult(value: z.infer<typeof reviewShape>) {
+  return value.publicationKind === 'interim' || value.resultEventId !== undefined;
+}
+const reviewInput = reviewShape.refine(hasRequiredResult);
 const publishInput = z.strictObject({ id: chatIdSchema, review: z.string().max(8000),
   text: textSchema });
-const bindingSchema = reviewInput.omit({ text: true, fileIds: true }).extend({
+const bindingShape = reviewShape.omit({ text: true, fileIds: true }).extend({
   silo: chatIdSchema, publishedBy: chatIdSchema, parentConversationId: chatIdSchema,
-  childConversationId: chatIdSchema, resultPosition: z.int().positive(), turnId: chatIdSchema,
+  childConversationId: chatIdSchema, resultPosition: z.int().positive().optional(),
+  turnId: chatIdSchema.optional(),
   textDigest: z.string(), accessPosition: z.int().nonnegative(), expiresAt: z.int().positive(),
 });
-type Binding = z.infer<typeof bindingSchema>;
+type Binding = z.infer<typeof bindingShape>;
+function hasCompleteSource(value: Binding) {
+  if (value.resultEventId === undefined) {
+    return value.publicationKind === 'interim' && value.resultPosition === undefined &&
+      value.turnId === undefined;
+  }
+  return value.resultPosition !== undefined && value.turnId !== undefined;
+}
+const bindingSchema = bindingShape.refine(hasCompleteSource);
 class PublicationConflict extends Error {}
 function digest(value: string) {
   const hash = createHash('sha256');
@@ -88,8 +102,9 @@ function find(rows: StoredEvent[], id: string) {
   }
   return rows.find(matches);
 }
-function result(loaded: Loaded, resultEventId: string) {
-  const selected = find(loaded.childRows, resultEventId);
+function result(loaded: Loaded, selection: Pick<Binding, 'publicationKind' | 'resultEventId'>) {
+  if (selection.resultEventId === undefined) return {};
+  const selected = find(loaded.childRows, selection.resultEventId);
   if (!selected || selected.event.type !== 'agent.message_completed' ||
       selected.sequence < loaded.access.historyPosition) {
     throw new PublicationConflict('review_stale');
@@ -108,19 +123,20 @@ function result(loaded: Loaded, resultEventId: string) {
       shared = data['sharingClass'] === 'shared_only' && data['executionMode'] === 'restricted';
     }
   }
-  if (!shared || !completed) throw new PublicationConflict('review_stale');
-  return { resultPosition: selected.sequence, turnId: fields.turnId };
+  const needsCompletion = selection.publicationKind === 'final';
+  if (!shared || completed !== needsCompletion) throw new PublicationConflict('review_stale');
+  return { resultEventId: selected.event.id, resultPosition: selected.sequence, turnId: fields.turnId };
 }
 async function review(options: ChatOptions, memberId: string, loaded: Loaded,
   value: unknown, secret: string) {
   const input = reviewInput.parse(value);
   const parent = await check(options, memberId, loaded);
   if (input.fileIds !== undefined) throw new PublicationConflict('files_unavailable');
-  const selected = result(loaded, input.resultEventId);
+  const selected = result(loaded, input);
   const expiresAt = Date.now() + 600_000;
   const binding: Binding = { silo: options.silo, publishedBy: memberId,
     parentConversationId: loaded.origin.parentConversationId, childConversationId: loaded.child,
-    publicationKind: input.publicationKind, resultEventId: input.resultEventId, ...selected,
+    publicationKind: input.publicationKind, ...selected,
     textDigest: digest(input.text), accessPosition: parent.accessPosition, expiresAt };
   return { status: 'reviewed', text: input.text, publicationKind: input.publicationKind,
     parentConversationId: binding.parentConversationId, audience: parent.participantIds,
@@ -144,7 +160,7 @@ function verifySaved(row: StoredEvent, options: ChatOptions, binding: Binding,
   return { status: 'appended', sequence: row.sequence };
 }
 function currentResult(loaded: Loaded, binding: Binding, text: string) {
-  const selected = result(loaded, binding.resultEventId);
+  const selected = result(loaded, binding);
   if (binding.expiresAt <= Date.now() || binding.textDigest !== digest(text) ||
       binding.resultPosition !== selected.resultPosition || binding.turnId !== selected.turnId) {
     throw new PublicationConflict('review_stale');
@@ -208,7 +224,7 @@ async function appendPublication(options: ChatOptions, memberId: string, loaded:
   const data = childResultPublishedDataSchema.parse({
     conversationId: binding.parentConversationId, publishedBy: memberId,
     childConversationId: loaded.child, publicationKind: binding.publicationKind,
-    resultEventId: binding.resultEventId, ...selected, reviewDigest: digest(input.review),
+    ...selected, reviewDigest: digest(input.review),
     ...encrypted, contentType: 'text' });
   const subject = `conversation-${binding.parentConversationId}`;
   const expectedSequence = streamPosition(loaded.parentRows, subject);

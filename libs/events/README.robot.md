@@ -607,9 +607,11 @@ requires the matching MCP subject. This receipt grants no call permission.
 
 ## Reviewed child answers
 
-Final text publication follows the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
-`childResultPublishedDataSchema` requires final result and turn references,
-a SHA-256 review digest and parent-key ciphertext. It accepts no file or plaintext field.
+Final and interim text publication follow the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
+`childResultPublishedDataSchema` requires a SHA-256 review digest and parent-key
+ciphertext. Final publications require result id, position and turn references.
+Interim publications accept either all three references or none for human text.
+Partial references, file fields and plaintext fields are refused.
 
 ## Gateway publication subscription
 

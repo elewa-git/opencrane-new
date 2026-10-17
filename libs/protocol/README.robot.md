@@ -233,8 +233,8 @@ Approval cards accept an optional `turnId`; older replies still parse.
 
 ## Reviewed child answers
 
-Final text publication follows the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
-`chatRowSchema` includes `publicationKind: final`. The server selects the
+Final and interim text publication follow the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
+`chatRowSchema` includes `publicationKind: final | interim`. The server selects the
 published entry fields before decrypting text for HTTP and sockets.
 
 ## Reviewed child requests

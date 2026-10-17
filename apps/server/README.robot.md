@@ -2900,7 +2900,7 @@ reconciliation remain part b; root stops remain with #90.
 
 ## Reviewed child answers
 
-Final text publication follows the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
+Final and interim text publication follow the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
 `test/child-publication.test.ts` covers real NATS, PostgreSQL and OpenFGA,
 retries, access refusals, closure, HTTP/socket display and projection replay.
 Turn lifecycle events share the conversation stream; there is no separate result stream.
@@ -2922,7 +2922,14 @@ streams enter `authorityFence`; neither conversation does. The tests save loss a
 failure after complete history, after the incremental read and immediately before
 append. The event-store test also saves a change inside the NATS publish call.
 Saved publication retries keep their existing receipt and current-access checks.
-Interim publication, files, screens and fresh-install qualification remain NOT RUN.
+Interim reviews accept a visible saved reply from an open shared-only turn, or human
+text without a result reference. A completed turn cannot be labelled interim. Signed
+reviews bind kind and optional result id, position and turn alongside the existing
+text digest, publisher, child, parent, audience position and expiry. Human updates carry
+no result fields. Partial result references are refused by the event schema.
+Tests cover both kinds through all three result-change windows, human updates without
+agent output, lost replies, changed-id conflicts, late access loss and signature purpose.
+Files and screens remain deferred. Fresh-install qualification is NOT RUN.
 
 ## Gateway configuration worker
 

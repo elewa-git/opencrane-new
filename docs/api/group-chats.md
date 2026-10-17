@@ -70,19 +70,22 @@ invitation is required. An explicit child join survives parent or creator depart
 ## Reviewed child publication
 
 `POST /api/conversations/:child/publication-review` accepts strict
-`{publicationKind: "final", resultEventId, text, fileIds?}`. Text is trimmed and must
+`{publicationKind: "final" | "interim", resultEventId?, text, fileIds?}`. Text is trimmed and must
 contain 1–32,000 characters. Any file list, including an empty list, returns
-409 `files_unavailable` without file details. Interim publication is not available yet.
+409 `files_unavailable` without file details.
 
-The result must be a visible saved `agent.message_completed` from a restricted
-shared-only turn with `agent.turn_completed` and no `agent.output_lost` or
-`agent.turn_failed`. The publisher
+Final reviews require a visible saved `agent.message_completed` from a restricted
+shared-only turn with `agent.turn_completed`. Interim reviews accept a saved
+`agent.message_completed` while that turn is still open, or human-written text with
+no `resultEventId`. A sourced review refuses `agent.output_lost` or `agent.turn_failed`
+for that turn. Deltas and final results labelled interim are refused. The publisher
 must read the child, post to its open immediate parent and see its original source
 message there. A closed child can still publish. Review returns `status: reviewed`,
 `text`, `publicationKind`, `parentConversationId`, `audience` (member ids),
 `publishedBy`, signed `review` and `expiresAt` (Unix milliseconds). It saves nothing.
 Cancel needs no request. The review expires after ten minutes and binds the exact
-text hash, publisher, silo, parent, child, result id/position and parent access position.
+text hash, kind, publisher, silo, parent, child, optional result id/position/turn and
+parent access position. A sourced interim review becomes stale when its turn completes.
 
 `POST /api/conversations/:child/publications` accepts strict `{id, review, text}`.
 It records one `conversation.child_result_published` encrypted with the parent's key
