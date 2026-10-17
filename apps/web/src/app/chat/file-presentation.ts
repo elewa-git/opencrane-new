@@ -63,7 +63,7 @@ export function capturedByLine(
   if (!includeImageSize) return `Captured by you · ${capturedAt}`;
   return `Captured by you · ${capturedAt} · ${imageSize(facts.width, facts.height)}`;
 }
-import type { ChatAttachment } from './chat-state';
+import type { ChatAttachment, Turn } from './chat-state';
 import type { ChatConversation } from '@opencrane/protocol';
 
 export function isOwnedAgentFile(
@@ -83,8 +83,21 @@ export function screenshotIdFromFile(file: ChatAttachment): string {
   return file.fileId;
 }
 
-export function screenshotWithId(fileId: string, file: ChatAttachment): boolean {
+function screenshotWithId(fileId: string, file: ChatAttachment): boolean {
   return file.fileId === fileId;
+}
+
+export function hasTranscriptScreenshot(
+  fileId: string,
+  screenshots: ChatAttachment[],
+  turns: Turn[],
+): boolean {
+  const screenshot = screenshots.find(screenshotWithId.bind(undefined, fileId));
+  const screenshotPath = screenshot?.path ?? '';
+  for (const turn of turns) {
+    if (turn.files.includes(screenshotPath)) return true;
+  }
+  return false;
 }
 
 export function isScreenshotAttachment(file: ChatAttachment): boolean {
