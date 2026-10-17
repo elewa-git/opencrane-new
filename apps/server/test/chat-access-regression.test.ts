@@ -210,9 +210,14 @@ async function openChatSocket(context: Fixture, conversationId: string, waitRead
   }
   socket.on('message', receive);
   let code: number | undefined;
-  function rememberClose(value: number) { code = value; }
+  let reason: string | undefined;
+  function rememberClose(value: number, closeReason: Buffer) {
+    code = value;
+    reason = closeReason.toString();
+  }
   socket.on('close', rememberClose);
   function closeCode() { return code; }
+  function closeReason() { return reason; }
   await once(socket, 'open');
   const subscription = { type: 'subscribe', topic: 'conversation', conversationId, since: 0 };
   socket.send(JSON.stringify(subscription));
@@ -227,7 +232,7 @@ async function openChatSocket(context: Fixture, conversationId: string, waitRead
     }
     await new Promise<void>(closeServer);
   }
-  return { socket, received, close, closeCode };
+  return { socket, received, close, closeCode, closeReason };
 }
 
 async function readsApprovalsDuringToolProgress(type: string) {
@@ -917,6 +922,29 @@ async function readDuringAccessChange(event: AccessEvent) {
   }
 }
 
+async function deniedMemberSkipsHistoryLoad() {
+  const context = await fixture();
+  try {
+    await context.agentSession('agent');
+    const history = vi.spyOn(context.nats.store, 'readStream');
+    function isConversationRead(call: typeof history.mock.calls[number]) {
+      return call[0] === 'conversation-agent';
+    }
+    const response = await context.app.inject({
+      url: '/api/conversations/agent/messages', headers: context.headers('stranger'),
+    });
+    expect(response.statusCode).toBe(403);
+    const conversationReads = history.mock.calls.filter(isConversationRead);
+    expect(conversationReads).toHaveLength(0);
+    history.mockRestore();
+  } finally {
+    await context.close();
+  }
+}
+
+it('refuses a non-member before loading conversation history',
+  deniedMemberSkipsHistoryLoad, 120_000);
+
 it('returns history when its content read takes more than two seconds', slowHistoryRead, 120_000);
 
 async function slowHistoryRead() {
@@ -1484,7 +1512,7 @@ async function participationVolume(sharedChild = false) {
           headers: context.headers('bob'),
         });
         expect(status.statusCode, status.body).toBe(200);
-        const socketStatus = { code: client?.closeCode(),
+        const socketStatus = { code: client?.closeCode(), reason: client?.closeReason(),
           lastType: client?.received.at(-1)?.type };
         expect(client?.socket.readyState, JSON.stringify(socketStatus)).toBe(WebSocket.OPEN);
       }
@@ -2532,6 +2560,7 @@ async function frozenChildOutput(memberId: string) {
     const humanPosition = await context.nats.store.head('conversation-child');
     await context.append('conversation-child', 'conversation.closed',
       { conversationId: 'child', closedBy: 'bob' }, false);
+    const socketReads = vi.spyOn(context.db, 'query');
     await context.runner.run(conversations);
     function receivedHuman() {
       return client!.received.some(isHuman);
@@ -2540,6 +2569,14 @@ async function frozenChildOutput(memberId: string) {
       return message.row?.id === human.id;
     }
     await until(receivedHuman);
+    await delay(400);
+    const trailingReads = socketReads.mock.calls.filter(isTrailingRead);
+    function isTrailingRead(call: typeof socketReads.mock.calls[number]) {
+      return call[0].startsWith('SELECT * FROM conversation_feed') &&
+        call[1]?.[2] === humanPosition;
+    }
+    expect(trailingReads).toHaveLength(1);
+    socketReads.mockRestore();
     const expected = [...initial.map(chatRowId), closed.id, human.id];
     const query = vi.spyOn(context.db, 'query');
     const rows = await readClosedHistory(context, memberId);
