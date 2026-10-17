@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { writeFile } from 'node:fs/promises';
+import { createEventStore } from '@opencrane/event-store';
 import { encodeSession } from '@opencrane/auth';
 import { parseEventByType } from '@opencrane/events';
 import { event } from '@opencrane/event-store/testing';
-import { priceTableId, providerCommand, providerSecretRef } from '@opencrane/models';
+import { BudgetActor, budgets, history, ingestUsage, managedProviderCallsEnabled,
+  priceTableId, providerCommand, providerSecretRef, readBudget, readEffect, resolveEffect, totals } from '@opencrane/models';
 import { fixture } from '../../../libs/models/test/fixture.ts';
 import { buildServer } from '../src/server.ts';
 import { turnCommand } from '../src/chat/turns.ts';
@@ -49,11 +52,19 @@ async function initialise(withDefault = true) {
     await choice();
   }
   await drain();
+  buildApp();
+}
+function unusedCustody() {
+  return Promise.reject<never>(new Error('Unexpected custody access'));
+}
+const secrets = { read: vi.fn(unusedCustody), save: vi.fn(unusedCustody),
+  remove: vi.fn(unusedCustody) };
+function buildApp() {
   function memberId(_silo: string, _issuer: string, sub: string) {
     return Promise.resolve(sub);
   }
   const options = { silo: 'test', binding: setup.binding, store: setup.nats.store,
-    db: setup.db, feed: { memberId } };
+    db: setup.db, feed: { memberId }, secrets };
   app = buildServer(config, { providers: options });
 }
 async function initialFixture() {
@@ -436,3 +447,401 @@ async function legacyDuringReads() {
   expect(await setup.nats.store.head()).toBe(before + 1);
 }
 it('reports a conflict when a legacy start arrives between the history reads', legacyDuringReads);
+
+
+const originalCall = {
+  model: 'gpt-6-luna', priceTableId, payingGroupId: 'sales',
+  assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+  turnId: 'legacy', threadId: 'legacy-thread', requesterId: 'alice',
+  contextDigest: 'a'.repeat(64), requestId: 'proof-call',
+};
+
+async function heldCall(permitted = true, dispatched = true) {
+  // Deliver settlement explicitly so each race has a controlled order.
+  await setup.stopDispatch();
+  await setup.runtime.stop();
+  const reservationId = await setup.actor.reserve(originalCall, 12);
+  if (permitted) {
+    const admission = { requestId: originalCall.requestId, permitId: reservationId,
+      route: 'model', outcome: 'allow', reason: 'model_allowed',
+      contextDigest: originalCall.contextDigest };
+    await setup.append('decision-proof-call', 'decision.recorded', admission);
+  }
+  if (dispatched) {
+    const dispatch = { callId: originalCall.requestId, decisionId: 'proof-decision',
+      bodyDigest: 'b'.repeat(64), reservationId, modelCall: originalCall };
+    async function fresh() {}
+    await setup.actor.admitDispatch(dispatch, fresh);
+  }
+  return reservationId;
+}
+
+async function recordUsage(reservationId: string, inputTokens = 1000) {
+  const usage = { id: reservationId, inputTokens, outputTokens: 120 };
+  const line = JSON.stringify(usage) + '\n';
+  await writeFile(setup.options.usageFile, line + line);
+  await ingestUsage(setup.actor, setup.options.usageFile);
+  const effects = await history(setup.nats.store, `effect-${reservationId}`, 'test');
+  const observed = effects.at(-1)!;
+  await setup.actor.settleRecorded(reservationId, observed.event.id);
+  return observed.event.id;
+}
+
+async function spendingRecords() {
+  const rows = await history(setup.nats.store, 'budget-test', 'test');
+  function changesMoneyOrMode(row: typeof rows[number]) {
+    return ['budget.reserved', 'budget.call_dispatch_admitted', 'budget.settled',
+      'provider.managed_calls_enabled'].includes(row.event.type);
+  }
+  return rows.filter(changesMoneyOrMode);
+}
+
+async function replaySwitch(command: Awaited<ReturnType<typeof input>>, receipt: unknown,
+  reservationId: string, settledCents: number, effectId?: string) {
+  await setup.runner.run(budgets);
+  const before = await readBudget(setup.db, 'test');
+  const records = await spendingRecords();
+  await app.close();
+  await setup.decisionDown();
+  // Use a new store object so restart cannot reuse the previous process's summaries.
+  setup.nats.store = await createEventStore(setup.nats.connection);
+  const recovered = new BudgetActor(setup.nats.store, 'test', setup.actor.now);
+  await recovered.start();
+  buildApp();
+  if (effectId) {
+    await recovered.settleRecorded(reservationId, effectId);
+  } else {
+    await recovered.releaseUndispatched(reservationId);
+  }
+  await setup.runner.rebuild(budgets);
+  const after = await readBudget(setup.db, 'test');
+  expect(after.reservations).toEqual(before.reservations);
+  expect(totals(after, recovered.now())).toEqual(totals(before, recovered.now()));
+  expect(recovered.state.reservations).toEqual(before.reservations);
+  expect(await managedProviderCallsEnabled(setup.nats.store, 'test',
+    performance.now() + 10_000)).toBe(true);
+  expect((await request(undefined, 'drain')).json()).toMatchObject(
+    { enabled: true, draining: false });
+  expect((await request(command)).json()).toEqual(receipt);
+  expect(await spendingRecords()).toEqual(records);
+  expect(secrets.read).not.toHaveBeenCalled();
+  expect(setup.received()).toBe(0);
+  const payer = { scope: 'paying_group' as const, scopeId: 'sales' };
+  expect(totals(after, recovered.now(), payer)).toMatchObject(
+    { reservedCents: 0, monthCents: settledCents });
+  const otherPayer = { ...payer, scopeId: 'personal-default' };
+  expect(totals(after, recovered.now(), otherPayer)).toMatchObject(
+    { reservedCents: 0, monthCents: 0 });
+}
+
+async function settlementProof() {
+  const reservationId = await heldCall();
+  await refused(403);
+  // Change the default model after admission; usage must still use the held call's tariff.
+  await choice({ model: 'gpt-6.1-sol' });
+  const effectId = await recordUsage(reservationId, 100_000);
+  const command = await input();
+  const response = await request(command);
+  expect(response.statusCode).toBe(200);
+  const before = await setup.nats.store.head();
+  await ingestUsage(setup.actor, setup.options.usageFile);
+  await setup.actor.settleRecorded(reservationId, effectId);
+  expect(await setup.nats.store.head()).toBe(before);
+  expect(setup.actor.state.reservations).toMatchObject([
+    { id: reservationId, call: originalCall, amountCents: 12, settledCents: 1 },
+  ]);
+  const effects = await history(setup.nats.store, `effect-${reservationId}`, 'test');
+  expect(effects).toHaveLength(1);
+  expect(effects[0]?.event.data).toMatchObject({ tool: 'gpt-6-luna', costCents: 1,
+    usage: { priceTableId, inputTokens: 100_000, outputTokens: 120 } });
+  const records = await spendingRecords();
+  function isSettlement(row: typeof records[number]) {
+    return row.event.type === 'budget.settled';
+  }
+  expect(records.filter(isSettlement)).toHaveLength(1);
+  await replaySwitch(command, response.json(), reservationId, 1, effectId);
+}
+it('proves switch-on settlement once after duplicate usage, redelivery and replay', settlementProof);
+
+async function releaseProof() {
+  const reservationId = await heldCall(false, false);
+  await refused(403);
+  await setup.actor.releaseUndispatched(reservationId);
+  const command = await input();
+  const response = await request(command);
+  expect(response.statusCode).toBe(200);
+  const before = await setup.nats.store.head();
+  await setup.actor.releaseUndispatched(reservationId);
+  expect(await setup.nats.store.head()).toBe(before);
+  const records = await spendingRecords();
+  expect(records).toHaveLength(3);
+  expect(records[1]?.event.data).toEqual({ reservationId, permitId: reservationId,
+    settledCents: 0, outcome: 'not_dispatched' });
+  await replaySwitch(command, response.json(), reservationId, 0);
+}
+it('proves an unsent hold releases once at zero and stays released after switch-on replay',
+  releaseProof);
+
+async function stillBlocked(kind: 'dispatched' | 'unknown') {
+  const reservationId = await heldCall();
+  if (kind === 'unknown') {
+    await recordUsage(reservationId);
+    await recordUsage(reservationId, 200_000);
+    expect(setup.actor.state.reservations[0]?.outcomeUnknown).toBe(true);
+  }
+  await setup.append('computer-assistant', 'computer.turn_closed',
+    { ...turn, status: 'completed' });
+  await refused(403);
+  await expect(setup.actor.releaseUndispatched(reservationId)).rejects.toThrow();
+  await refused(403);
+}
+it.each(['dispatched', 'unknown'] as const)(
+  'keeps a potentially sent hold blocked when %s despite closure and attempted release', stillBlocked);
+
+async function completionRace(kind: 'settlement' | 'release') {
+  const permitted = kind === 'settlement';
+  const reservationId = await heldCall(permitted, permitted);
+  const command = await input();
+  const head = setup.nats.store.head.bind(setup.nats.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function captured(...args: Parameters<typeof head>) {
+    const sequence = await head(...args);
+    entered.resolve();
+    await release.promise;
+    return sequence;
+  }
+  vi.spyOn(setup.nats.store, 'head').mockImplementationOnce(captured);
+  const pending = Promise.resolve(request(command));
+  try {
+    await entered.promise;
+    if (permitted) {
+      await recordUsage(reservationId);
+    } else {
+      await setup.actor.releaseUndispatched(reservationId);
+    }
+  } finally {
+    release.resolve();
+  }
+  const conflicted = await pending;
+  expect(conflicted.statusCode).toBe(409);
+  expect(conflicted.json()).toEqual({ status: 'refused' });
+  const saved = await request(command);
+  expect(saved.statusCode).toBe(200);
+  expect((await request(command)).json()).toEqual(saved.json());
+}
+it.each(['settlement', 'release'] as const)(
+  'conflicts when %s saves after switch-on captures history, then recovers one receipt',
+  completionRace);
+
+async function lostReplyWithCompletion(kind: 'settlement' | 'release' | 'unknown') {
+  const permitted = kind !== 'release';
+  const reservationId = await heldCall(permitted, kind === 'settlement');
+  let effectId: string | undefined;
+  if (kind === 'settlement') {
+    effectId = await recordUsage(reservationId);
+  } else {
+    await setup.actor.releaseUndispatched(reservationId);
+  }
+  const command = await input();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function lost(change: Parameters<typeof append>[0]) {
+    const result = await append(change);
+    const parsed = parseEventByType(change.event);
+    if (parsed.success && parsed.event.type === 'provider.managed_calls_enabled') {
+      expect(result.status).toBe('appended');
+      entered.resolve();
+      await release.promise;
+      throw new Error('Lost reply');
+    }
+    return result;
+  }
+  vi.spyOn(setup.nats.store, 'append').mockImplementation(lost);
+  const pending = Promise.resolve(request(command));
+  try {
+    await entered.promise;
+    if (effectId) {
+      await setup.actor.settleRecorded(reservationId, effectId);
+    } else if (kind === 'unknown') {
+      await setup.actor.uncertain(reservationId, 'transport_failure');
+    } else {
+      await setup.actor.releaseUndispatched(reservationId);
+    }
+  } finally {
+    release.resolve();
+  }
+  expect((await pending).statusCode).toBe(503);
+  const retry = await request(command);
+  const status = await request(undefined, `changes/${command.commandId}`);
+  expect(status.statusCode).toBe(200);
+  if (kind === 'unknown') {
+    expect(setup.actor.state.reservations[0]?.outcomeUnknown).toBe(true);
+    expect(retry.statusCode).toBe(403);
+    expect(retry.json()).toEqual({ status: 'refused' });
+    await refused(403);
+    const resolutionId = await resolveUnsentHold(reservationId);
+    await setup.actor.settleRecorded(reservationId, resolutionId);
+    expect(setup.actor.state.reservations).toMatchObject([
+      { id: reservationId, settledCents: 0, outcomeUnknown: false },
+    ]);
+    expect(totals(setup.actor.state, setup.actor.now())).toMatchObject(
+      { reservedCents: 0, monthCents: 0 });
+    const before = await setup.nats.store.head();
+    await setup.actor.settleRecorded(reservationId, resolutionId);
+    expect(await setup.nats.store.head()).toBe(before);
+    const saved = await request(command);
+    expect(saved.statusCode).toBe(200);
+    expect(status.json()).toMatchObject(saved.json());
+    const settlements = await spendingRecords();
+    expect(settlements).toHaveLength(5);
+    expect(settlements.at(-1)?.event.data).toEqual({ reservationId,
+      permitId: reservationId, settledCents: 0, outcome: 'not_dispatched' });
+    await replaySwitch(command, saved.json(), reservationId, 0, resolutionId);
+  } else {
+    expect(retry.statusCode).toBe(200);
+    expect(status.json()).toMatchObject(retry.json());
+    expect((await request(command)).json()).toEqual(retry.json());
+  }
+  const records = await spendingRecords();
+  function isMarker(row: typeof records[number]) {
+    return row.event.type === 'provider.managed_calls_enabled';
+  }
+  expect(records.filter(isMarker)).toHaveLength(1);
+  expect(setup.received()).toBe(0);
+}
+it.each(['settlement', 'release', 'unknown'] as const)(
+  'checks %s saved while the switch-on append reply is lost', lostReplyWithCompletion);
+
+async function lateSettlementBeforeAppend() {
+  const reservationId = await heldCall();
+  await recordUsage(reservationId);
+  const command = await input();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function delayed(change: Parameters<typeof append>[0]) {
+    const parsed = parseEventByType(change.event);
+    if (parsed.success && parsed.event.type === 'provider.managed_calls_enabled') {
+      entered.resolve();
+      await release.promise;
+    }
+    return append(change);
+  }
+  vi.spyOn(setup.nats.store, 'append').mockImplementation(delayed);
+  const pending = Promise.resolve(request(command));
+  try {
+    await entered.promise;
+    await recordUsage(reservationId, 200_000);
+  } finally {
+    release.resolve();
+  }
+  expect((await pending).statusCode).toBe(409);
+  expect((await request(command)).statusCode).toBe(403);
+  const status = await request(undefined, `changes/${command.commandId}`);
+  expect(status.json()).toEqual({ status: 'not_found' });
+  const enabled = await managedProviderCallsEnabled(setup.nats.store, 'test',
+    performance.now() + 10_000);
+  expect(enabled).toBe(false);
+}
+it('conflicts when late settlement reopens a hold immediately before the switch-on append',
+  lateSettlementBeforeAppend);
+
+async function retryReopenedDuringHistory() {
+  const reservationId = await heldCall(true, false);
+  await setup.actor.releaseUndispatched(reservationId);
+  const command = await input();
+  const originalAppend = setup.nats.store.append.bind(setup.nats.store);
+  async function loseReply(change: Parameters<typeof originalAppend>[0]): Promise<never> {
+    await originalAppend(change);
+    throw new Error('Lost reply');
+  }
+  vi.spyOn(setup.nats.store, 'append').mockImplementationOnce(loseReply);
+  expect((await request(command)).statusCode).toBe(503);
+  const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+  let reopened = false;
+  async function* readWithReopening(...args: Parameters<typeof readStream>) {
+    if (args[0] === 'computer-*' && !reopened) {
+      reopened = true;
+      await setup.actor.uncertain(reservationId, 'transport_failure');
+    }
+    yield* readStream(...args);
+  }
+  vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readWithReopening);
+  const retry = await request(command);
+  expect(reopened).toBe(true);
+  expect(setup.actor.state.reservations[0]?.outcomeUnknown).toBe(true);
+  expect(retry.statusCode).toBe(409);
+  expect(retry.json()).toEqual({ status: 'refused' });
+  expect((await request(command)).statusCode).toBe(403);
+  const status = await request(undefined, `changes/${command.commandId}`);
+  expect(status.statusCode).toBe(200);
+  const records = await spendingRecords();
+  function isMarker(row: typeof records[number]) {
+    return row.event.type === 'provider.managed_calls_enabled';
+  }
+  expect(records.filter(isMarker)).toHaveLength(1);
+}
+it('conflicts when a lost-reply retry reads spending before a hold reopens', retryReopenedDuringHistory);
+
+
+async function resolveUnsentHold(reservationId: string) {
+  const status = await readEffect(setup.nats.store, 'test', reservationId);
+  expect(status?.state).toBe('outcome_unknown');
+  const resolution = {
+    commandId: 'resolve-unsent', expectedSequence: status!.sequence,
+    outcome: 'released', settledCents: 0,
+    evidence: [{ kind: 'dispatch_record', reference: 'unsent-receipt',
+      digest: 'a'.repeat(64), notDispatched: true }],
+  };
+  const result = await resolveEffect(setup.nats.store, 'test', reservationId, 'alice', resolution);
+  expect(result.status).toBe('appended');
+  return resolution.commandId;
+}
+
+async function conflictingUsageAfterResolution() {
+  const reservationId = await heldCall(true, false);
+  await setup.actor.releaseUndispatched(reservationId);
+  const command = await input();
+  expect((await request(command)).statusCode).toBe(200);
+  await setup.actor.uncertain(reservationId, 'transport_failure');
+  const resolutionId = await resolveUnsentHold(reservationId);
+  // Save conflicting usage before the accepted resolution reaches settlement.
+  await recordUsage(reservationId);
+  await recordUsage(reservationId, 200_000);
+  const before = await setup.nats.store.head();
+  await setup.actor.settleRecorded(reservationId, resolutionId);
+  await setup.actor.settleRecorded(reservationId, resolutionId);
+  expect(await setup.nats.store.head()).toBe(before);
+  expect(setup.actor.state.reservations).toMatchObject([
+    { id: reservationId, settledCents: 2, outcomeUnknown: true },
+  ]);
+  expect(totals(setup.actor.state, setup.actor.now())).toMatchObject(
+    { reservedCents: 12, monthCents: 2 });
+  expect((await request(command)).statusCode).toBe(403);
+  await refused(403);
+  await setup.runner.run(budgets);
+  const projected = await readBudget(setup.db, 'test');
+  const records = await spendingRecords();
+  await app.close();
+  await setup.decisionDown();
+  setup.nats.store = await createEventStore(setup.nats.connection);
+  const recovered = new BudgetActor(setup.nats.store, 'test', setup.actor.now);
+  await recovered.start();
+  buildApp();
+  await recovered.settleRecorded(reservationId, resolutionId);
+  await setup.runner.rebuild(budgets);
+  const replayed = await readBudget(setup.db, 'test');
+  expect(replayed.reservations).toEqual(projected.reservations);
+  expect(recovered.state.reservations).toEqual(projected.reservations);
+  expect(totals(replayed, recovered.now())).toMatchObject(
+    { reservedCents: 12, monthCents: 2 });
+  expect((await request(command)).statusCode).toBe(403);
+  await refused(403);
+  expect(await spendingRecords()).toEqual(records);
+  expect(secrets.read).not.toHaveBeenCalled();
+  expect(setup.received()).toBe(0);
+}
+it('keeps conflicting usage blocked after an accepted release, redelivery and restart',
+  conflictingUsageAfterResolution);

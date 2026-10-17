@@ -1885,8 +1885,10 @@ outside that check. One conditional budget append uses `historyChecked` and
 The budget summary also keeps unresolved reservation and dispatch identities.
 Computer loss, turn closure and reservation expiry do not clear them.
 Only a confirmed settlement or zero-cost release clears a hold or send; an unknown
-outcome keeps switch-on refused. A send without a reservation also needs saved
-settlement or release evidence. These history reads precede the short access check.
+outcome keeps switch-on refused, including a retry after a lost switch-on reply.
+A send without a reservation also needs saved settlement evidence. There is no
+completion writer for those sends yet, so they remain refused. These history reads
+precede the short access check.
 The event schema is unchanged. The saved provider position also identifies the drain
 used for a retry: no drain change can save after switch-on.
 
@@ -1896,18 +1898,32 @@ alone is not proof that every pending admission has finished. Summaries read no 
 and perform no provider requests. Calls use the managed route after the models process
 restarts with custody configured and its fallback key setting removed.
 
-The new HTTP tests use real NATS, PostgreSQL, OpenFGA and a recording gateway upstream.
-The last requested bullet, testing existing hold settlement and replay through this new
-command, is split into follow-up work to keep this change small. Existing hold regressions
-are rerun after rebasing. Fresh-install qualification, paid calls and a journey are NOT RUN.
-
 The HTTP tests use real NATS, PostgreSQL, OpenFGA and a recording gateway upstream.
 They refuse open holds after computer loss and admitted sends after turn closure,
 including sends without a reservation. Expired holds and unknown settlements stay refused.
 A released hold and a settled paid send each allow the command to complete.
-The paid-send test keeps the original tariff and payer and charges one integer cent.
-Settlement redelivery and restart/replay through this command remain follow-up work.
-Fresh-install qualification, paid provider calls and a journey are NOT RUN.
+
+PR 4f adds command-specific settlement, release, duplicate usage, redelivery and
+restart/replay proofs in `apps/server/test/provider-switch-on.test.ts`. Controlled
+barriers place completion after the captured history position and conflicting
+settlement immediately before append. Both refuse with 409. A retry after unchanged
+settlement or release returns the original receipt, including after a lost reply.
+Late uncertainty that reopens a hold makes the retry return 403 without another marker.
+The status GET still returns the historical receipt; refusal does not undo switch-on.
+The retry checks the global position too. Reopening a hold between its budget read
+and access check returns 409. A later retry reads the reopened hold and returns 403.
+An accepted zero-cent release with non-dispatch evidence clears reopened uncertainty
+when no final amount conflicts. Settlement saves that release once. Redelivery,
+a new actor and event-store reader, and projection replay preserve the zero hold.
+Conflicting usage amounts keep the full reservation held and switch-on refused,
+even if the release was accepted before those amounts arrived.
+
+Replay uses a new event-store reader and budget actor, restarts the HTTP server, and
+rebuilds the PostgreSQL budget projection. Original payer, tariff, charges and mode
+are preserved, with no new holds, dispatch admissions, provider requests or custody
+reads. Actor startup may record its usual budget-period event. This is an isolated
+test fixture, not models-main startup or fresh-install qualification. Paid calls,
+dev-stack switch-on and a journey are NOT RUN.
 
 ## Catalogue watch and dispatch holds (#48 PR 3b, first split)
 

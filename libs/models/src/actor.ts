@@ -271,7 +271,11 @@ export class BudgetActor {
     const d = effectResolvedDataSchema.parse(event.data);
     const r = this.state.reservations.find(r => r.id === d.reservationId && r.id === d.permitId);
     if (!r || event.principal?.kind !== 'human' || event.principal.id !== d.resolvedBy) throw new Error('Invalid resolution');
-    await this.settleCharge(r, d.settledCents, d.outcome === 'released');
+    function provesNoDispatch(evidence: typeof d.evidence[number]) {
+      return evidence.kind === 'dispatch_record';
+    }
+    const released = d.outcome === 'released' && d.evidence.every(provesNoDispatch);
+    await this.settleCharge(r, d.settledCents, released);
   }
   private async settleCharge(r: BudgetState['reservations'][number], cents: number, released = false) {
     const rows = await history(this.store, `effect-${r.id}`, this.silo);
@@ -280,7 +284,9 @@ export class BudgetActor {
       if (event.type === 'effect.resolved') return [effectResolvedDataSchema.parse(event.data).settledCents];
       return [];
     });
-    const conflict = Boolean(r.outcomeUnknown) || amounts.some(amount => amount !== cents) ||
+    // Clear temporary uncertainty only with non-dispatch proof; keep conflicting amounts held.
+    const unresolved = Boolean(r.outcomeUnknown) && !released;
+    const conflict = unresolved || amounts.some(amount => amount !== cents) ||
       (r.settledCents !== undefined && r.settledCents !== cents);
     const amount = Math.max(r.settledCents ?? 0, cents, ...amounts);
     // Save the stop first so a failed settlement write cannot reopen the root after restart.

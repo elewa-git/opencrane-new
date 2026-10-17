@@ -246,11 +246,20 @@ Switch-on requires an active drain, an explicit active silo default on this conn
 and a saved key, successful reachability evidence and an enabled supported model for
 every active binding. Automatic defaults need an explicit administrator choice first.
 Legacy chat turns must have closed or have a later computer loss, retirement or claim.
+Existing holds and send permissions also need confirmed settlement or release.
+Expired or unknown holds still block the command. Sends without reservations have
+no completion writer yet, so they remain refused.
 Success saves one `provider.managed_calls_enabled` event on `budget-<silo>` and ends draining.
 
 The existing changes GET returns its original receipt. A missing receipt remains
 `not_found`: the outcome is unknown while a request is in flight. Retrying the same
-id and body returns the original receipt, including after a lost reply. Changed retry
+id and body returns the original receipt, including after a lost reply, unless a
+hold or send is unresolved. Late evidence can reopen a released hold; that retry
+returns 403 and saves nothing. The status GET still returns the original receipt,
+and switch-on remains recorded. A hold reopened during the retry's history reads
+returns 409. An accepted zero-cent resolution with non-dispatch evidence clears
+the reopened hold unless final amounts conflict. Redelivery and restart preserve
+that result. Changed retry
 input or stale positions return 409. Missing prerequisites, denied access and a new
 switch-on id after success return 403. Refusals save nothing. Any event saved between
 the initial history position and the append causes 409; reload before trying a new id.
