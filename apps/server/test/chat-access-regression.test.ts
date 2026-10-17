@@ -2576,7 +2576,7 @@ async function frozenChildOutput(memberId: string) {
       return call[0].startsWith('SELECT * FROM conversation_feed') &&
         call[1]?.[2] === humanPosition;
     }
-    expect(trailingReads).toHaveLength(1);
+    expect(trailingReads).toHaveLength(0);
     socketReads.mockRestore();
     const expected = [...initial.map(chatRowId), closed.id, human.id];
     const query = vi.spyOn(context.db, 'query');
