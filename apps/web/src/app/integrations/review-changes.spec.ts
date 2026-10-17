@@ -8,7 +8,7 @@ function reply(body: unknown, status = 200): Response {
 
 function policy(): ToolPolicy {
   const checkedAt = new Date(Date.now() - 60_000).toISOString();
-  const expiresAt = new Date(Date.now() + 240_000).toISOString();
+  const expiresAt = new Date(Date.now() + 239_000).toISOString();
   const oldDefinition = JSON.stringify({ name: 'update_note', inputSchema: {
     type: 'object', properties: { note: { type: 'string', maxLength: 500 } },
   } });
@@ -18,10 +18,12 @@ function policy(): ToolPolicy {
   const addedDefinition = JSON.stringify({ name: 'confirm_order', inputSchema: {
     type: 'object',
   } });
+  const review = { action: 'Update a note', consequence: 'A draft changes',
+    targetArgument: 'note', fields: ['note'], stepUp: false };
   const before = [{ name: 'update_note', revision: 'a'.repeat(64), reviewed: true,
     definition: oldDefinition, costCents: 0 }];
   const after = [{ name: 'update_note', revision: 'b'.repeat(64), reviewed: false,
-    definition: newDefinition, costCents: 0 },
+    definition: newDefinition, costCents: 0, review },
   { name: 'confirm_order', revision: 'c'.repeat(64), reviewed: false,
     definition: addedDefinition, costCents: 0 }];
   return { silo: 'test', serverId: 'fixture-server', connectionId: 'connection',
@@ -81,13 +83,17 @@ describe('reviewed changed tools', () => {
   });
 
   it('reviews the exact read before publishing the returned revision', async () => {
+    async function currentStatus(): Promise<Response> {
+      const body = JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body));
+      return reply({ status: 'applying', changeRef: body.commandId });
+    }
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
       .mockResolvedValueOnce(reply(policy()))
       .mockResolvedValueOnce(reply({ status: 'disabled' }))
       .mockResolvedValueOnce(reply({ status: 'appended', sequence: 9 }))
       .mockResolvedValueOnce(reply({ status: 'appended', sequence: 10 }))
-      .mockResolvedValueOnce(reply({ status: 'applying', changeRef: 'change-test' }));
+      .mockImplementationOnce(currentStatus);
     const fixture = page();
     await vi.waitFor(() => expect(content(fixture).textContent).toContain('maxLength: 2000'));
     click(fixture, 'Review and publish');
@@ -98,7 +104,8 @@ describe('reviewed changed tools', () => {
     expect(review).toMatchObject({ expectedSequence: 8, policyRevision: 7,
       catalogueDigest: 'd'.repeat(64), connectionId: 'connection', accountMode: 'none' });
     expect(review.tools).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'update_note', mode: 'ask' }),
+      expect.objectContaining({ name: 'update_note', mode: 'ask',
+        reviewDigest: 'cbb22f0f6ee74151de8abc96912dcca08942e943cdb2740e13d7ae8b20af7ca2' }),
       expect.objectContaining({ name: 'confirm_order', mode: 'block' }),
     ]));
     expect(publication).toMatchObject({ expectedSequence: 9, reviewRevision: 9 });
@@ -128,7 +135,7 @@ describe('reviewed changed tools', () => {
       .mockResolvedValueOnce(reply({ status: 'disabled' }))
       .mockResolvedValueOnce(reply({ status: 'appended', sequence: 9 }))
       .mockRejectedValueOnce(new Error('lost reply'))
-      .mockResolvedValueOnce(reply({ status: 'unknown', stage: 'read', reason: 'unavailable' }));
+      .mockResolvedValueOnce(reply({ status: 'ready', changeRef: 'another-change' }));
     const fixture = page();
     await vi.waitFor(() => expect(content(fixture).textContent).toContain('maxLength: 2000'));
     click(fixture, 'Review and publish');
@@ -136,8 +143,34 @@ describe('reviewed changed tools', () => {
     click(fixture, 'Check status');
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
     expect(String(fetchMock.mock.calls[5]?.[0])).toMatch(/\/changes\//);
+    expect(content(fixture).textContent).not.toContain('The current publication is confirmed');
     expect(fetchMock.mock.calls.filter((call) => call[1]?.method === 'POST'))
       .toHaveLength(2);
+    fixture.destroy();
+  });
+
+  it('clears protected rows and ignores a late review receipt after access ends', async () => {
+    let finishReview!: (response: Response) => void;
+    function saveResolver(resolve: (response: Response) => void): void {
+      finishReview = resolve;
+    }
+    function waitForReview(): Promise<Response> {
+      return new Promise<Response>(saveResolver);
+    }
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(policy()))
+      .mockResolvedValueOnce(reply({ status: 'disabled' }))
+      .mockImplementationOnce(waitForReview);
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).querySelectorAll('.change-row')).toHaveLength(2));
+    click(fixture, 'Review and publish');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    fixture.componentInstance.isAccessRefusal(new Response(null, { status: 403 }));
+    finishReview(reply({ status: 'appended', sequence: 9 }));
+    await vi.waitFor(() => expect(content(fixture).querySelector('.access-state')).not.toBeNull());
+    expect(content(fixture).querySelectorAll('.change-row')).toHaveLength(0);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     fixture.destroy();
   });
 });

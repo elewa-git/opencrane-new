@@ -165,6 +165,7 @@ describe('integration detail', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(response(listResponse(row('ready', 'Published'))))
       .mockResolvedValueOnce(response(driftPolicy()))
+      .mockResolvedValueOnce(response({ status: 'disabled' }))
       .mockResolvedValueOnce(response(listResponse(row('ready', 'Published'))))
       .mockResolvedValueOnce(new Response(null, { status: 503 }));
     const fixture = TestBed.createComponent(IntegrationDetail);
