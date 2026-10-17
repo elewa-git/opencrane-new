@@ -611,7 +611,12 @@ try {
   // Error causes may contain database passwords; never print raw dependency errors.
   if (prepared) await save('failure.log', String(error));
   if (process.argv[2]?.startsWith('package-')) {
-    console.error('Package command refused; check pins, named secrets and slot ownership');
+    let message = 'Package command refused; check pins, named secrets and slot ownership';
+    if (error instanceof Error &&
+        /^Required secret (is absent|field is absent): [a-z0-9.-]+$/u.test(error.message)) {
+      message = error.message;
+    }
+    console.error(message);
   } else {
     console.error(prepared ? `Dev stack failed; inspect private logs in ${directory}` : 'DEV_STACK_DIR must be an empty dedicated directory outside the repository, or owned by this worktree');
   }

@@ -23,14 +23,14 @@ function requireSecret(name, value) {
 function check(values, review) {
   const allowedKeys = ['chartVersion', 'images', 'secrets', 'exposure'];
   for (const key of Object.keys(values)) {
-    if (!allowedKeys.includes(key)) throw new Error(`Unsupported package setting: ${key}`);
+    if (!allowedKeys.includes(key)) throw new Error('Unsupported package setting');
   }
   if (!values.images || !review.images) throw new Error('Image pins are missing');
   for (const [name, image] of Object.entries(review.images)) {
     requireImage(name, values.images[name], image);
   }
   for (const name of Object.keys(values.images)) {
-    if (!(name in review.images)) throw new Error(`Unreviewed image role: ${name}`);
+    if (!(name in review.images)) throw new Error('Unreviewed image role');
   }
   if (!values.secrets) throw new Error('Secret references are missing');
   const requiredSecrets = review.requiredSecrets ?? ['runtime'];
@@ -38,7 +38,7 @@ function check(values, review) {
     requireSecret(name, values.secrets[name]);
   }
   for (const name of Object.keys(values.secrets)) {
-    if (!requiredSecrets.includes(name)) throw new Error(`Unsupported secret setting: ${name}`);
+    if (!requiredSecrets.includes(name)) throw new Error('Unsupported secret setting');
   }
   const exposure = values.exposure;
   if (!exposure || exposure.ingress !== false || exposure.loadBalancer !== false ||
@@ -47,7 +47,7 @@ function check(values, review) {
   }
   for (const name of Object.keys(exposure)) {
     if (!['ingress', 'loadBalancer', 'funnel'].includes(name)) {
-      throw new Error(`Unsupported exposure setting: ${name}`);
+      throw new Error('Unsupported exposure setting');
     }
   }
   if (review.chartVersion && values.chartVersion !== review.chartVersion) {
@@ -60,6 +60,7 @@ try {
   const review = readJson(process.argv[3]);
   check(values, review);
 } catch (error) {
-  console.error(error.message);
+  if (error instanceof SyntaxError) console.error('Invalid package JSON');
+  else console.error(error.message);
   process.exitCode = 1;
 }

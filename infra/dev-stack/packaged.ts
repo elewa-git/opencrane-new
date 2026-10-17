@@ -41,6 +41,13 @@ type PackageOwner = {
   heartbeatAt: string;
   releaseSecretUid?: string;
 };
+type PackageValues = { secrets: Record<string, string> };
+type PackageReview = {
+  requiredSecrets: string[];
+  chartVersion: string;
+  images: Record<string, string>;
+};
+type SecretData = { data?: Record<string, string> };
 
 async function command(program: string, args: string[], timeoutMs = 120_000) {
   const result = await execute(program, args, { cwd: root, timeout: timeoutMs });
@@ -124,51 +131,56 @@ export async function verifyPackageOwner() {
   return owner;
 }
 
-export async function installPackage(valuesFile: string) {
+async function readReviewedValues(valuesFile: string) {
   const reviewFile = 'infra/package/reviewed-images.json';
   await command('node', ['infra/package/preflight.mjs', valuesFile, reviewFile]);
-  const values = JSON.parse(await readFile(valuesFile, 'utf8')) as {
-    secrets: Record<string, string>;
-  };
-  const review = JSON.parse(await readFile(reviewFile, 'utf8')) as {
-    requiredSecrets: string[];
-    chartVersion: string;
-    images: Record<string, string>;
-  };
+  const values = JSON.parse(await readFile(valuesFile, 'utf8')) as PackageValues;
+  const review = JSON.parse(await readFile(reviewFile, 'utf8')) as PackageReview;
   const chart = await readFile('infra/package/chart/Chart.yaml', 'utf8');
   const version = chart.match(/^version:\s*["']?([^"'\s]+)["']?\s*$/mu)?.[1];
   if (version !== review.chartVersion) throw new Error('Chart version is not reviewed');
-  const owner = await verifyPackageOwner();
+  return { values, review };
+}
+
+function checkSecretFields(name: string, stored: SecretData) {
+  for (const key of secretKeys[name] ?? []) {
+    if (!stored.data?.[key]) throw new Error(`Required secret field is absent: ${name}.${key}`);
+  }
+  if (name === 'runtime') {
+    const encodedName = stored.data!['OIDC_CLIENT_SECRET_ENV_VAR']!;
+    const secretName = Buffer.from(encodedName, 'base64').toString('utf8').trim();
+    if (!/^[A-Z][A-Z0-9_]*$/u.test(secretName) || !stored.data?.[secretName]) {
+      throw new Error('OIDC client secret reference is absent');
+    }
+  }
+  // Read secret bytes only in memory; report field names, never endpoint credentials.
+  for (const [key, expectedHost] of Object.entries(privateHosts)) {
+    if (!stored.data?.[key]) continue;
+    const address = Buffer.from(stored.data[key], 'base64').toString('utf8');
+    let actualHost: string;
+    try {
+      actualHost = new URL(address).hostname;
+    } catch {
+      throw new Error(`Invalid private service endpoint: ${key}`);
+    }
+    if (actualHost !== expectedHost) {
+      throw new Error(`Service endpoint must stay private: ${key}`);
+    }
+  }
+}
+
+async function checkNamedSecrets(values: PackageValues, review: PackageReview) {
   for (const name of review.requiredSecrets) {
     const secret = values.secrets[name]!;
     const found = await kubectl(['-n', namespace, 'get', 'secret', secret,
       '--ignore-not-found', '-o', 'json']);
     if (!found) throw new Error(`Required secret is absent: ${name}`);
-    const stored = JSON.parse(found) as { data?: Record<string, string> };
-    for (const key of secretKeys[name] ?? []) {
-      if (!stored.data?.[key]) throw new Error(`Required secret field is absent: ${name}.${key}`);
-    }
-    if (name === 'runtime') {
-      const encodedName = stored.data!['OIDC_CLIENT_SECRET_ENV_VAR']!;
-      const secretName = Buffer.from(encodedName, 'base64').toString('utf8').trim();
-      if (!/^[A-Z][A-Z0-9_]*$/u.test(secretName) || !stored.data?.[secretName]) {
-        throw new Error('OIDC client secret reference is absent');
-      }
-    }
-    for (const [key, expectedHost] of Object.entries(privateHosts)) {
-      if (!stored.data?.[key]) continue;
-      const address = Buffer.from(stored.data[key], 'base64').toString('utf8');
-      let actualHost: string;
-      try {
-        actualHost = new URL(address).hostname;
-      } catch {
-        throw new Error(`Invalid private service endpoint: ${key}`);
-      }
-      if (actualHost !== expectedHost) {
-        throw new Error(`Service endpoint must stay private: ${key}`);
-      }
-    }
+    const stored = JSON.parse(found) as SecretData;
+    checkSecretFields(name, stored);
   }
+}
+
+async function checkRenderedPackage(valuesFile: string, review: PackageReview) {
   const rendered = await command('helm', ['template', release, 'infra/package/chart',
     '--namespace', namespace, '--values', valuesFile]);
   const reviewedImages = new Set(Object.values(review.images));
@@ -185,9 +197,9 @@ export async function installPackage(valuesFile: string) {
       /tailscale\.com\/funnel/u.test(rendered)) {
     throw new Error('Rendered package exposes a public endpoint');
   }
-  await command('helm', ['install', release, 'infra/package/chart',
-    '--kube-context', context, '--namespace', namespace, '--values', valuesFile,
-    '--wait', '--timeout', '5m'], 360_000);
+}
+
+async function checkLiveExposure() {
   const live = await kubectl(['-n', namespace, 'get',
     'services,ingresses,gateways.gateway.networking.k8s.io', '-o', 'json']);
   const resources = JSON.parse(live) as {
@@ -199,6 +211,17 @@ export async function installPackage(valuesFile: string) {
       throw new Error('Live package exposes a public endpoint');
     }
   }
+}
+
+export async function installPackage(valuesFile: string) {
+  const { values, review } = await readReviewedValues(valuesFile);
+  const owner = await verifyPackageOwner();
+  await checkNamedSecrets(values, review);
+  await checkRenderedPackage(valuesFile, review);
+  await command('helm', ['install', release, 'infra/package/chart',
+    '--kube-context', context, '--namespace', namespace, '--values', valuesFile,
+    '--wait', '--timeout', '5m'], 360_000);
+  await checkLiveExposure();
   const secret = await kubectl(['-n', namespace, 'get', 'secret',
     `sh.helm.release.v1.${release}.v1`, '-o', 'json']);
   owner.releaseSecretUid = JSON.parse(secret).metadata.uid as string;

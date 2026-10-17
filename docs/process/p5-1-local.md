@@ -18,7 +18,7 @@ The baseline claim tests failed in two concrete ways. After a 16 minute claim
 with a dead launcher and a simulated live package namespace, a second worktree
 received slot 1. A foreign `down` completed. In this worktree, the matching
 tests passed: the second worktree received slot 2 and foreign cleanup was
-refused. The full claim suite passed all eleven cases, including a foreign
+refused. The full claim suite passed all twelve cases, including a foreign
 package record and a fresh Compose startup against a package namespace.
 These are controlled Kubernetes fixtures, not a live Helm release.
 
@@ -28,10 +28,11 @@ These are controlled Kubernetes fixtures, not a live Helm release.
 | --- | --- | --- |
 | Chart render | PASS | `helm lint` passed. The render has five ClusterIP services and no public route. |
 | Pinned website image | PASS | The final local image served HTTP 200 on a loopback Docker port. This was not a Helm smoke test. |
+| Local Kubernetes image pull | PASS | A Pod in the claimed package namespace ran `node --version` from the pinned digest and completed. It was removed before slot cleanup. |
 | Registry push | PARTIAL | Docker push through the published loopback port reset. A direct upload on the local Docker network published the final image by digest. |
 | Package preparation | PASS | Slot 1 created only `opencrane-package-1`, UID `d0ee43b4-2add-41a9-b8dc-c85255e184a2`. |
 | Missing pin | PASS | `package-up` exited 1 before Helm created a release or workload. |
-| Missing named secret | PASS | A values file with all reviewed pins passed preflight. `package-up` then exited 1 because the named secret was absent; Helm still had no release or workload. |
+| Missing named secret | PASS | A values file with all reviewed pins passed preflight. `package-up` reported `Required secret is absent: runtime` and exited 1. Helm still had no release or workload. |
 | Rejected-install cleanup | PASS | `package-down` removed that namespace, then `down` released slot 1. |
 | Owner stack isolation | PASS | The owner namespace UID and Compose container names matched the snapshots taken before preparation. |
 | Other installs | NOT RUN | No other package install was present to compare before and after. |
@@ -45,3 +46,16 @@ The final local image is pinned as
 This is a source and registry pin, not a runtime licence approval. No secret
 value was placed in a values file or receipt. The package is not ready for
 fresh-install acceptance.
+
+## Source checks
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| `npm ci` | PASS | Clean worktree packages installed. |
+| `npm run lint` | PASS | No errors; 20 existing function-length warnings remain elsewhere. |
+| `npm run typecheck` | PASS | All workspaces completed. |
+| `npm run check:events` | PASS | 143 event types agree. |
+| Claim tests | PASS | Twelve Node tests passed, including foreign and other-slot cleanup. |
+| Package refusal tests | PASS | Eight Node tests passed. |
+| Angular tests | PASS | 61 files and 1,017 tests passed. |
+| Root suite | NOT RUN to completion | It was still running with `PG_TEST_URL` when this note was written. |
