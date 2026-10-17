@@ -2501,6 +2501,24 @@ async function frozenChildOutput(memberId: string) {
     }
     const late = await appendCloseOutput(context, 'agent.message_completed');
     const latePosition = await context.nats.store.head('conversation-child');
+    const decisionExample = getEventDefinition('decision.recorded')!.example;
+    const decisionData = { ...z.record(z.string(), z.unknown()).parse(decisionExample),
+      conversationId: 'child', turnId: 'close-turn', route: 'model', outcome: 'deny',
+      reason: 'budget_exhausted' };
+    const decision = await context.append('decision-late-budget',
+      'decision.recorded', decisionData, false);
+    const dispatchExample = getEventDefinition('tool.dispatch_recorded')!.example;
+    const dispatchData = { ...z.record(z.string(), z.unknown()).parse(dispatchExample),
+      conversationId: 'child', turnId: 'close-turn' };
+    const dispatch = await context.append('decision-late-dispatch',
+      'tool.dispatch_recorded', dispatchData, false);
+    const publicationExample = getEventDefinition('conversation.child_result_published')!.example;
+    const publicationData = { ...z.record(z.string(), z.unknown()).parse(publicationExample),
+      conversationId: 'child', childConversationId: 'grandchild',
+      ...context.keys.encrypt('test', 'child', 'Late child publication') };
+    const publication = await context.append('conversation-child',
+      'conversation.child_result_published', publicationData, false);
+    const publicationPosition = await context.nats.store.head('conversation-child');
     for (const type of ['agent.turn_failed', 'agent.output_lost', 'agent.turn_completed']) {
       const example = z.record(z.string(), z.unknown()).parse(getEventDefinition(type)!.example);
       const data = { ...example, conversationId: 'child', turnId: 'close-turn' };
@@ -2533,6 +2551,9 @@ async function frozenChildOutput(memberId: string) {
     expect(scans.length).toBeGreaterThan(2);
     expect(new Set(scans).size).toBe(scans.length);
     expect(rows.map(chatRowId)).toEqual(expected);
+    for (const hiddenId of [decision.id, dispatch.id, publication.id]) {
+      expect(rows.map(chatRowId)).not.toContain(hiddenId);
+    }
     expect(rows.find(isBefore)?.data.text).toBe('Partial answer');
     function isBefore(row: typeof rows[number]) {
       return row.id === before.id;
@@ -2542,6 +2563,9 @@ async function frozenChildOutput(memberId: string) {
       if (message.row) delivered.push(message.row.id);
     }
     expect(delivered).toEqual(expected);
+    for (const hiddenId of [decision.id, dispatch.id, publication.id]) {
+      expect(delivered).not.toContain(hiddenId);
+    }
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
     const list = await context.app.inject({ url: '/api/conversations?limit=1',
       headers: context.headers(memberId) });
@@ -2567,6 +2591,12 @@ async function frozenChildOutput(memberId: string) {
       url: '/api/conversations/child/state', headers: context.headers(memberId),
       payload: hiddenRead });
     expect(hiddenAcknowledgement.statusCode).toBe(409);
+    const publicationRead = { ...read, id: `publication-read-${memberId}`,
+      throughPosition: publicationPosition, throughEventId: publication.id };
+    const publicationAcknowledgement = await context.app.inject({ method: 'POST',
+      url: '/api/conversations/child/state', headers: context.headers(memberId),
+      payload: publicationRead });
+    expect(publicationAcknowledgement.statusCode).toBe(409);
     await context.runner.run(conversations);
     await client.close();
     client = undefined;
