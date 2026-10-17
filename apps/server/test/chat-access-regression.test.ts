@@ -2558,8 +2558,9 @@ async function frozenChildOutput(memberId: string) {
       contentType: 'text', ...encrypted };
     const human = await context.append('conversation-child', 'message.posted', humanData, false);
     const humanPosition = await context.nats.store.head('conversation-child');
-    await context.append('conversation-child', 'conversation.closed',
+    const duplicateClose = await context.append('conversation-child', 'conversation.closed',
       { conversationId: 'child', closedBy: 'bob' }, false);
+    const duplicatePosition = await context.nats.store.head('conversation-child');
     const socketReads = vi.spyOn(context.db, 'query');
     await context.runner.run(conversations);
     function receivedHuman() {
@@ -2634,6 +2635,12 @@ async function frozenChildOutput(memberId: string) {
       url: '/api/conversations/child/state', headers: context.headers(memberId),
       payload: publicationRead });
     expect(publicationAcknowledgement.statusCode).toBe(409);
+    const repeatedCloseRead = { ...read, id: `repeated-close-read-${memberId}`,
+      throughPosition: duplicatePosition, throughEventId: duplicateClose.id };
+    const repeatedCloseAcknowledgement = await context.app.inject({ method: 'POST',
+      url: '/api/conversations/child/state', headers: context.headers(memberId),
+      payload: repeatedCloseRead });
+    expect(repeatedCloseAcknowledgement.statusCode).toBe(409);
     await context.runner.run(conversations);
     await client.close();
     client = undefined;
