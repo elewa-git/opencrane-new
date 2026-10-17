@@ -73,14 +73,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it.each([
+const changedApprovalCards: [string, ApprovalCard][] = [
   ['denied', card('denied', false)],
   ['cancelled', card('cancelled', false)],
   ['approval disabled', { ...card(), canApprove: false, canDeny: true }],
   ['denial disabled', { ...card(), canApprove: true, canDeny: false }],
   ['missing review fields', { ...card(), missingFields: ['orderId'] }],
   ['another requester', { ...card(), requesterId: 'someone-else' }],
-] as const)('rejects an old handler after a poll changes %s', async (_, currentCard) => {
+];
+
+it.each(changedApprovalCards)('rejects an old handler after a poll changes %s', async (_, currentCard) => {
   const originalCard = card();
   let latestCard: ApprovalCard = originalCard;
   const posts: string[] = [];
