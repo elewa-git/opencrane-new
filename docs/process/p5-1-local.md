@@ -59,4 +59,4 @@ fresh-install acceptance.
 | Claim tests | PASS | Thirteen Node tests passed, including foreign and other-slot cleanup. |
 | Package refusal tests | PASS | Nine Node tests passed. |
 | Angular tests | PASS | 61 files and 1,017 tests passed. |
-| Root suite | FAIL so far | It reported four failures in `memory-mcp.test.ts` while running with a throwaway `PG_TEST_URL` database. The full suite was still active when this note was written. |
+| Root suite | FAIL | It reported four failures in `memory-mcp.test.ts` under `nice -n 10` with a throwaway `PG_TEST_URL` database. The run was stopped after almost 50 minutes because the gate had failed. It did not finish all test files. The test database and volume were removed. |
