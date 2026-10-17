@@ -27,7 +27,7 @@ assistants, claims computers and stops private tool processes when configured.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|starts work, including ordered publications and private tool stops| handlers["libs/handlers<br/>reaction jobs"]
+  ops["apps/ops<br/>workers"] -->|starts memory cleanup, ordered publications and private tool stops| handlers["libs/handlers<br/>reaction jobs"]
   nats["NATS JetStream<br/>event log"] -->|new events, appointments and upgrade history| handlers
   reactions["libs/models and libs/authz<br/>registered reactions"] -.->|registers reactions| handlers
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
@@ -54,6 +54,9 @@ even though their events use separate streams. Both new jobs and historical jobs
 queued during an upgrade use that order.
 
 ## Processes it handles
+
+Memory cleanup jobs cover corrections as well as forgetting. When retries run out,
+the retained failed job records an unavailable result for that saved change.
 
 Publication jobs from different tool servers share one queue key per silo. This
 keeps complete gateway configurations in saved event order.

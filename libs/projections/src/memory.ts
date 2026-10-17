@@ -1,4 +1,4 @@
-import { parseEventByType, memoryWrittenEventSchema, memoryTextSchema, type EventEnvelope,
+import { parseEventByType, memoryValueEventSchema, memoryTextSchema, type EventEnvelope,
   type MemoryIdentity, memoryMaintenanceBoundDataSchema, memoryForgottenEventSchema,
   memoryForgottenDataSchema, memoryMaintenanceRecordedDataSchema } from '@opencrane/events';
 import type { Query } from './db.ts';
@@ -8,7 +8,7 @@ import { memoryErasureHistory } from './memory-erasure.ts';
 import { memoryIdentity } from './memory-keys.ts';
 import { shouldReplaceMemoryRevision } from './memory-revision.ts';
 
-type SavedMemoryWrite = ReturnType<typeof memoryWrittenEventSchema.parse>['data'];
+type SavedMemoryWrite = ReturnType<typeof memoryValueEventSchema.parse>['data'];
 type MemoryWrite = Extract<SavedMemoryWrite, { schemaVersion: 1 }>;
 
 async function create(db: Query): Promise<void> {
@@ -123,7 +123,7 @@ async function writeChange(
   position: number,
 ): Promise<void> {
   // Record what the event changed, so deleting a key cannot rewrite this history.
-  let outcome = 'written';
+  let outcome = event.type === 'memory.corrected' ? 'corrected' : 'written';
   if (current === null) {
     outcome = 'quarantined';
   }
@@ -188,6 +188,29 @@ function prepareMaintenance(envelope: EventEnvelope) {
   return applyMaintenance;
 }
 
+function checkedMemoryValue(envelope: EventEnvelope) {
+  const saved = memoryValueEventSchema.parse(checkedEvent(envelope));
+  if (saved.type === 'memory.corrected' && !('schemaVersion' in saved.data)) {
+    throw new Error('Memory change is not supported by this projection yet');
+  }
+  return saved;
+}
+
+function hiddenStatus(identity: MemoryIdentity | null,
+  erasure: Awaited<ReturnType<typeof memoryErasureHistory>> | undefined) {
+  if (!identity || !erasure) {
+    return undefined;
+  }
+  if (erasure.hidden(identity.silo, identity.scopeId).has(identity.memoryId)) {
+    return 'erased';
+  }
+  const superseded = erasure.superseded(identity.silo, identity.scopeId);
+  if (identity.revision <= (superseded.get(identity.memoryId) ?? 0)) {
+    return 'superseded';
+  }
+  return undefined;
+}
+
 /** Give replay only decryption access, so it cannot create or delete a revision key. */
 export function memoryProjection(custody: {
   decrypt(identity: MemoryIdentity, value: { ciphertext: string; keyId: string }):
@@ -209,21 +232,20 @@ export function memoryProjection(custody: {
     if (envelope.type === 'memory.forgotten') {
       return prepareForgotten(envelope, erasure);
     }
-    if (envelope.type !== 'memory.written') {
+    if (envelope.type !== 'memory.written' && envelope.type !== 'memory.corrected') {
       if (envelope.type.startsWith('memory.')) {
         throw new Error('Memory change is not supported by this projection yet');
       }
       return ignored;
     }
-    const parsed = memoryWrittenEventSchema.parse(checkedEvent(envelope));
+    const parsed = checkedMemoryValue(envelope);
     const identity = memoryIdentity(parsed);
     const data = parsed.data;
     let text: string | null = null;
     let status = 'quarantined';
-    const hidden = identity !== null &&
-      erasure?.hidden(identity.silo, identity.scopeId).has(identity.memoryId);
-    if (hidden) {
-      status = 'erased';
+    const prohibition = hiddenStatus(identity, erasure);
+    if (prohibition) {
+      status = prohibition;
     } else if (identity !== null) {
       text = await custody.decrypt(identity, data);
       if (text !== null) text = text.normalize('NFC');

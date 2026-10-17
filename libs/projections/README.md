@@ -22,10 +22,9 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
-  server["apps/server<br/>back end"] -->|reads chats frozen at close, bounded candidates, join times and old joins| pg["PostgreSQL<br/>database"]
-  projections -->|indexes unfinished child requests outside feeds; omits them from feeds; saves public chat rows, activity and closing details| pg
-  projections -->|saves control references, private choices, confirmed owners, startup review and historical fact links| pg
+  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
+  server["apps/server<br/>back end"] -->|reads tables, bounded candidates, chats frozen at close, join times and old joins| pg["PostgreSQL<br/>database"]
+  projections -->|indexes unfinished child requests outside feeds; saves public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs and indexes unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
@@ -158,6 +157,10 @@ these details. The reports remain in the feed so their saved evidence is availab
 
 The server builds an index of unfinished child requests from saved events. It keeps only
 event references and ids. Rebuilding this index creates no child and copies no message.
+
+Memory replay reads saved corrections before opening any text. It rebuilds only
+the latest usable revision and hides facts derived from superseded revisions.
+It creates no keys and starts no cleanup work.
 
 Internal child-chat requests stay in the event log. They do not appear in parent
 history or change its visible activity, including when the tables are rebuilt.

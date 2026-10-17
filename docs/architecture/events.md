@@ -582,7 +582,7 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 | `memory.maintenance_recorded` | Native nightly scheduler | Payload-free scope night history; `no_changes` reviews exact input revisions and a content position | No dispatch or spending |
 | `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | Native scheduling records intent only; no dispatch or spending |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
-| `memory.corrected` | OpenCrane memory MCP (planned); nightly dreaming job (planned) | Postgres memory projection (planned) | correction cleanup is planned |
+| `memory.corrected` | OpenCrane memory MCP (planned); nightly dreaming job (planned) | Publishes the new revision and hides superseded content and dependent facts | `cleanup-memory` destroys superseded and dependent keys and verifies search removal |
 | `memory.forgotten` | Authorised person, group and assistant-notes HTTP forget commands | Postgres memory projection hides the fact and all dependent facts | `cleanup-memory` destroys revision and candidate keys in all three scopes and verifies search removal |
 | `memory.cleanup_recorded` | Configured cleanup worker after verified deletion or exhausted retries | Memory projection checks the fixed `completed` or `unavailable` outcome without changing fact rows; scope history retains both | — |
 | `memory.consolidated` | Reserved for later use; not emitted by MVP dreaming | Postgres memory projection for that scope | — |
@@ -591,6 +591,13 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 For the MVP, `memory.*` events in NATS JetStream are the truth; the Postgres memory projection holds facts per scope and uses full-text search. Replay applies recorded changes without model calls. Scopes are person, assistant notes and flat group only, with no organisation or department memory. Any group member may write group memory without approval. Each member works in their own thread or sub-agent of the group assistant, with personal memory plus group memory; preferences stay personal and shared knowledge goes to the group.
 
 Codex reaches the OpenCrane memory MCP through the local forwarding proxy and agentgateway. `ext_authz` passes allowed scopes from IAM context (assistant grants ∩ requester rights); per-thread turn tokens keep each member's personal memory out of other threads. Memory is never written to the shared computer's disk. Preferences and pinned facts enter the thread's instructions at turn start with a size cap; the rest is fetched with `recall`.
+
+Version-1 corrections carry the full encrypted replacement and retained sources/dependencies,
+`expectedRevision`, next `revision`, matching `supersedes` memory/revision and fixed `reason`.
+The projection hides superseded revisions and their transitive dependent facts before
+opening any text. Cleanup deletes their keys while retaining the current replacement
+and its candidate key. The existing completion, exhaustion and recovery rules apply.
+Legacy corrections still parse but stop replay. HTTP and MCP correction emitters remain planned.
 
 Version-1 forgotten data records scope identity, memory id, expected revision and the
 next tombstone revision. It contains no text, ciphertext or key. The projection reads
@@ -699,7 +706,7 @@ events. Desktop admission additionally requires an explicit member
 | `prepare-gateway-configuration` | `mcp.server_published` |
 | `stop-mcp-instance` | `mcp.instance_stop_requested` |
 | `cleanup-departure` | `member.removed` |
-| `cleanup-memory` | `memory.forgotten` |
+| `cleanup-memory` | `memory.forgotten`, `memory.corrected` |
 | `stop-budget-turns` | `budget.ceiling_set`, `budget.exhausted` |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
 | `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |

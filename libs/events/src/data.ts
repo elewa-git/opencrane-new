@@ -619,9 +619,7 @@ export const budgetExhaustedDataSchema = z.union([
 
 export { memoryWrittenDataSchema } from './memory.ts';
 
-export const memoryCorrectedDataSchema = z
-  .object({ scopeId: id, memoryId: id, ...encryptedText })
-  .strict();
+export { memoryCorrectedDataSchema } from './memory.ts';
 
 export { memoryForgottenDataSchema } from './memory.ts';
 

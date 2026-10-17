@@ -9,6 +9,7 @@ import { memoryKeys, memoryProjection, memoryScopeId, ProjectionRunner,
 import type { EventEnvelope, MemoryIdentity } from '@opencrane/events';
 import { database } from '../../../libs/projections/test/database.ts';
 import { memoryCleanupHandler, recoverMemoryCleanup } from '../src/memory-cleanup.ts';
+import { scanNightlyMemory } from '../src/nightly-memory.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof database>>;
@@ -58,7 +59,9 @@ async function save(memoryId: string, revision = 1,
 
 async function history() {
   const rows = [];
-  for await (const row of nats.store.readStream(`scope-${scopeId}`)) rows.push(row);
+  for await (const row of nats.store.readStream(`scope-${scopeId}`)) {
+    rows.push(row);
+  }
   return rows;
 }
 
@@ -77,9 +80,10 @@ async function correctedChain() {
 it('publishes only revision four, preserves its links and erases the old dependent chain',
   async function correctedReplay() {
     const correction = await correctedChain();
+    await save('fresh-child', 1, [{ scopeId, memoryId: 'root', revision: 4 }]);
     const before = await readdir(directory);
     function visibleOnly(identity: MemoryIdentity, value: { ciphertext: string; keyId: string }) {
-      if (identity.memoryId !== 'source' &&
+      if (identity.memoryId !== 'source' && identity.memoryId !== 'fresh-child' &&
           (identity.memoryId !== 'root' || identity.revision !== 4)) {
         throw new Error('Hidden content was decrypted');
       }
@@ -105,13 +109,18 @@ it('publishes only revision four, preserves its links and erases the old depende
     expect(keys.status({ ...root, memoryId: 'grandchild' })).toBe('destroyed');
     await runner.rebuild(projection);
     expect(await readMemoryFactIds(storage.db, 'test', scopeId)).toEqual([
-      { memory_id: 'source' }, { memory_id: 'root' },
+      { memory_id: 'source' }, { memory_id: 'root' }, { memory_id: 'fresh-child' },
     ]);
     const result = await storage.db.query(`SELECT revision, sources, search_text
       FROM memory_facts WHERE memory_id='root'`);
     expect(result.rows).toEqual([{ revision: '4',
       sources: [{ memberId: 'alice', commandId: 'statement' }],
       search_text: 'Private root revision 4' }]);
+    const sourceChange = await save('source', 2);
+    await runner.run(memoryProjection(keys));
+    await reaction.handle(sourceChange, storage.db);
+    expect(keys.status({ ...root, revision: 4 })).toBe('destroyed');
+    expect(keys.status({ ...root, memoryId: 'fresh-child' })).toBe('destroyed');
   });
 
 it('recovers correction cleanup, records exhaustion and keeps later revision keys',
@@ -127,9 +136,14 @@ it('recovers correction cleanup, records exhaustion and keeps later revision key
       await runtime.start();
       const checkpoint = await nats.reader.head();
       expect(await recoverMemoryCleanup(runtime, nats.reader, checkpoint)).toBe(4);
-      await storage.db.query("UPDATE pgboss.job SET state='failed' WHERE name='cleanup-memory'");
+      await storage.db.query("UPDATE pgboss.job SET state='failed' " +
+        "WHERE name='cleanup-memory' AND data->>'id'=$1", [correction.id]);
       expect(await recoverMemoryCleanup(runtime, nats.reader, checkpoint)).toBe(0);
       await runner.run(memoryProjection(keys));
+      await storage.db.query("UPDATE memory_facts SET revision=4 WHERE memory_id='root'");
+      await expect(reaction.handle(correction, storage.db)).rejects.toThrow(
+        'Superseded memory remains projected');
+      await runner.rebuild(memoryProjection(keys));
       await reaction.handle(correction, storage.db);
       expect(keys.status({ ...root, revision: 4 })).toBe('destroyed');
       expect(keys.status({ ...root, revision: 5 })).toBe('available');
@@ -138,7 +152,7 @@ it('recovers correction cleanup, records exhaustion and keeps later revision key
       for (const row of await history()) {
         if (row.event.type === 'memory.cleanup_recorded') records.push(row.event);
       }
-      expect(records).toHaveLength(5);
+      expect(records).toHaveLength(2);
       expect(JSON.stringify(records)).not.toMatch(/Private|ciphertext|keyId/);
     } finally {
       await runtime.stop();
@@ -164,3 +178,23 @@ it('keeps a later forget permanent and removes the current and candidate keys',
     const refs = memoryReferences(await history(), 'test', scopeId, 'event-only');
     expect(refs.current({ ...root, revision: 6 })).toBe('erased');
   });
+
+
+it('selects the current correction for nightly review without opening old text', async function night() {
+  const binding: EventEnvelope = { ...event('binding'), subject: `scope-${scopeId}`,
+    source: 'opencrane-server', principal: { kind: 'human', id: 'alice' },
+    type: 'memory.maintenance_bound', data: { scopeId, scopeKind: 'person', ownerId: 'alice',
+      memberId: 'alice', assistantId: 'assistant', payingGroupId: 'team', enabled: true,
+      acceptedCapCents: 100, revision: 1 } };
+  await nats.seed([binding]);
+  await correctedChain();
+  await runner.run(memoryProjection(keys));
+  function clock() {
+    return new Date('2027-01-01T02:01:00Z');
+  }
+  await scanNightlyMemory(storage.db, nats.store, 'test', clock(), clock);
+  const rows = await history();
+  expect(rows.at(-1)?.event.data).toMatchObject({
+    inputRefs: [{ memoryId: 'source', revision: 1 }, { memoryId: 'root', revision: 4 }],
+  });
+});

@@ -60,7 +60,7 @@ runtime against the same projection tables concurrently.
 Failed heads remain in place and block their stream. Monitor
 `runtime.deadLetters(name)` and pg-boss queue errors in the host. Each failure
 also has a diagnostic copy in `<handler>-dead` (14-day queued retention).
-`cleanup-memory` handles its copy after confirming that the original is failed.
+`cleanup-memory` handles correction and forget copies after confirming that the original is failed.
 Its callback records one durable unavailable result. The runtime then logs only the
 change id, scope id and original job id. Duplicate copies cannot add another result.
 The ops recovery pass checks the same retained failed original after restart. If the

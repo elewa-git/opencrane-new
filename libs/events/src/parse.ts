@@ -4,7 +4,7 @@ import { memoryContextRecordedEventSchema } from './memory-context.ts';
 import { validSurveyEvent } from './survey.ts';
 import { validEgressRuleEvent } from './egress.ts';
 import { validPreferenceIdentity } from './conversation.ts';
-import { memoryWrittenEventSchema, memoryForgottenEventSchema,
+import { memoryWrittenEventSchema, memoryForgottenEventSchema, memoryCorrectedEventSchema,
   memoryCleanupRecordedEventSchema } from './memory.ts';
 import { checkDelegationEvent } from './delegation.ts';
 import { checkRoutineEvent } from './routines.ts';
@@ -77,15 +77,7 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   if (definition.type === 'agent.memory_context_recorded') {
     schema = memoryContextRecordedEventSchema;
   }
-  if (definition.type === 'memory.written') {
-    schema = memoryWrittenEventSchema;
-  }
-  if (definition.type === 'memory.forgotten') {
-    schema = memoryForgottenEventSchema;
-  }
-  if (definition.type === 'memory.cleanup_recorded') {
-    schema = memoryCleanupRecordedEventSchema;
-  }
+  schema = memoryEventSchema(definition.type) ?? schema;
   const result = schema.safeParse(input);
   if (!result.success) {
     return { success: false, reason: 'invalid_event', error: result.error };
@@ -100,6 +92,21 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     }
   }
   return { success: true, event };
+}
+
+function memoryEventSchema(type: string): z.ZodType<EventEnvelope> | undefined {
+  switch (type) {
+    case 'memory.written':
+      return memoryWrittenEventSchema;
+    case 'memory.corrected':
+      return memoryCorrectedEventSchema;
+    case 'memory.forgotten':
+      return memoryForgottenEventSchema;
+    case 'memory.cleanup_recorded':
+      return memoryCleanupRecordedEventSchema;
+    default:
+      return undefined;
+  }
 }
 
 function validMcpIdentity(event: EventEnvelope): boolean {

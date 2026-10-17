@@ -26,7 +26,7 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests, hosted image results, registration, startup, saved turn, budget refusal and spending stop references, memory setup and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
+  server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests, hosted image results, registration, startup, saved turn, budget refusal and spending stop references, memory setup, correction and removal rules and records access changes, consent, tool decisions and dispatch| events["libs/events<br/>checks records<br/>previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication subscriptions, nightly memory reviews and records, and cleanup results| events
@@ -152,6 +152,10 @@ Define records that close expired connection saves without carrying credentials.
 These records let live cleanup prove a delayed save can no longer succeed.
 
 ## Processes it handles
+
+Memory correction records name the replacement revision and the revision it replaces.
+The replacement stays encrypted. Older records still parse for recovery, but cannot
+supply the ownership and revision needed to read a fact.
 
 The publication subscription names the worker that prepares complete gateway
 configurations. Withdrawal has no preparation subscription.

@@ -14,7 +14,7 @@ flowchart LR
   nats -->|new events, departures, owner appointments and memory facts| ops["apps/ops<br/>workers and memory replay"]
   ops -->|records gateway preparations, departure changes and spending stops| nats
   ops -.->|checks memory history and revisions| libs["libs/*<br/>shared code"]
-  ops -->|destroys forgotten personal and shared memory keys| keys["Server files<br/>private memory keys"]
+  ops -->|destroys forgotten and superseded memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables and jobs; locks gateway preparation; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates and checks permissions| fga["OpenFGA<br/>permission service"]
   ops -->|updates computers, delivers passes and keys, stops private tools| kube["Kubernetes<br/>computer manager"]
@@ -46,6 +46,10 @@ flowchart LR
 - Runs one-off upgrades for model access, the default budget group and handler subscriptions.
 
 ## Processes it handles
+
+A saved memory correction keeps the new revision and removes old revision keys and
+facts derived from them. Cleanup retries and restart recovery use the saved change.
+Correction requests through HTTP and tools are still planned.
 
 The dispatcher prepares one complete gateway configuration for each current reviewed
 publication request. Jobs for the same silo run in saved order. Old or withdrawn

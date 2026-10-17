@@ -16,6 +16,7 @@ it('accepts a complete correction and retains the explicit legacy parser', funct
 });
 
 const invalid = [
+  { keyId: 'key:old' }, { ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0' },
   { expectedRevision: 2 }, { revision: Number.MAX_SAFE_INTEGER + 1 },
   { supersedes: { memoryId: 'other', revision: 3 } },
   { supersedes: { memoryId: memoryWrittenExample.memoryId, revision: 2 } },

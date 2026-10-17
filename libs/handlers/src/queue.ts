@@ -175,7 +175,8 @@ export class HandlerRuntime {
     originalId: string,
     expectedData: unknown = event,
   ): Promise<boolean> {
-    if (handler.name !== 'cleanup-memory' || event.type !== 'memory.forgotten' ||
+    if (handler.name !== 'cleanup-memory' ||
+        (event.type !== 'memory.forgotten' && event.type !== 'memory.corrected') ||
         event.silo !== this.options.silo) {
       throw new Error('Invalid cleanup original');
     }

@@ -54,7 +54,7 @@ const legacyWritten = z.strictObject({
 });
 export const memoryWrittenDataSchema = memoryWrittenV1Schema;
 const replayWritten = z.union([memoryWrittenV1Schema, legacyWritten]);
-type WrittenEvent = z.infer<ReturnType<typeof eventEnvelopeSchema<typeof replayWritten>>>;
+type WrittenEvent = z.infer<typeof writtenEnvelope> | z.infer<typeof correctedEnvelope>;
 function validWritten(event: WrittenEvent): boolean {
   const data = event.data;
   if (!('schemaVersion' in data)) {
@@ -88,7 +88,7 @@ function validWritten(event: WrittenEvent): boolean {
   const encoded = encoder.encode(JSON.stringify(event));
   return encoded.byteLength <= 16384;
 }
-function dataIdentity(data: z.infer<typeof memoryWrittenV1Schema>) {
+function dataIdentity(data: Omit<MemoryIdentity, 'silo'>) {
   return {
     scopeId: data.scopeId, scopeKind: data.scopeKind, ownerId: data.ownerId,
     memoryId: data.memoryId, revision: data.revision,
@@ -98,8 +98,32 @@ const writtenEnvelope = eventEnvelopeSchema(replayWritten);
 const writtenType = writtenEnvelope.extend({ type: z.literal('memory.written') });
 export const memoryWrittenEventSchema = writtenType
   .refine(validWritten, 'Invalid memory scope, metadata or event size');
+const memoryCorrectedV1Schema = memoryWrittenV1Schema.extend({
+  revision, expectedRevision: revision,
+  supersedes: z.strictObject({ memoryId: identifier, revision }),
+  reason: z.enum(['human', 'merge', 'contradiction', 'expiry']),
+});
+export const memoryCorrectedDataSchema = z.union([legacyWritten, memoryCorrectedV1Schema]);
+const correctedEnvelope = eventEnvelopeSchema(memoryCorrectedDataSchema);
+function validCorrection(event: z.infer<typeof correctedEnvelope>): boolean {
+  const data = event.data;
+  if (!('schemaVersion' in data)) {
+    return true;
+  }
+  for (const dependency of data.dependsOn) {
+    if (dependency.memoryId === data.memoryId) {
+      return false;
+    }
+  }
+  return data.revision === data.expectedRevision + 1 &&
+    data.supersedes.memoryId === data.memoryId &&
+    data.supersedes.revision === data.expectedRevision && validWritten(event);
+}
+export const memoryCorrectedEventSchema = correctedEnvelope
+  .extend({ type: z.literal('memory.corrected') }).refine(validCorrection);
+export const memoryValueEventSchema = z.union([memoryWrittenEventSchema, memoryCorrectedEventSchema]);
 export function memoryWrittenIdentity(event: unknown): MemoryIdentity | null {
-  const parsed = memoryWrittenEventSchema.parse(event);
+  const parsed = memoryValueEventSchema.parse(event);
   if (!('schemaVersion' in parsed.data)) {
     return null;
   }

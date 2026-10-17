@@ -470,7 +470,7 @@ old text during rebuild. HTTP forget supports person, group and assistant-notes 
 ## Verified memory key cleanup
 
 The dispatcher registers `cleanup-memory` when `MEMORY_KEY_DIRECTORY` is set.
-Its `memory.forgotten` subscription accepts version-1 person, group and assistant-notes tombstones.
+Its `memory.forgotten` and `memory.corrected` subscriptions accept version-1 changes.
 Apply the normal handler subscription upgrade before restarting an existing dispatcher.
 The separate memory worker must catch up before completion can be recorded.
 
@@ -635,3 +635,14 @@ so it obtains a separate connection and shares the lock with gateway delivery.
 Legacy or stale intent completes
 without an append. Store failures retry. Enable it through the normal offline
 handler subscription upgrade before restarting the dispatcher. Replay never runs it.
+
+## Correction cleanup (Part of #95, row 4 first part)
+
+Correction cleanup deletes superseded keys and all revisions of dependent facts.
+It retains the current replacement and its reusable next-revision candidate.
+Completion requires caught-up rows beyond the superseded revision and no hidden search
+text. Recovery and exhaustion use the original correction id, like forget.
+The nightly selector reads the corrected revision. No HTTP correction, `canCorrect`,
+command reservation or MCP operation is added in this split. Those remain row 4 work;
+the command must preserve sources/dependencies and reserve fresh revision custody.
+Fresh-install HTTP correction qualification: NOT RUN.
