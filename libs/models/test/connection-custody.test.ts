@@ -1078,7 +1078,8 @@ async function refusesUnboundedPage(kind: string) {
   if (kind === 'count') {
     body = JSON.stringify({ items: Array(26).fill(original), metadata: {} });
   } else if (kind === 'bytes') {
-    body = ' '.repeat(1_048_577);
+    original.metadata.annotations['fixture.test/padding'] = 'x'.repeat(1_048_576);
+    body = JSON.stringify({ items: [original], metadata: {} });
   } else {
     body = JSON.stringify({ items: [original], metadata: { continue: 'x'.repeat(4097) } });
   }
