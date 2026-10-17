@@ -142,8 +142,9 @@ snapshot details. Personal-session rows keep the assistant and creator identifie
 
 ### Closed history
 
-History and sockets hide assistant reports after the first saved close. They retain
-human posts and their original positions. A page scans past hidden reports until it
+History and sockets hide execution, approval and publication rows after the first saved
+close. They retain human posts and their original positions. A page scans past hidden
+rows until it
 has 100 visible rows or reaches its captured boundary. Continue from the last returned
 row while a page is full. A shorter page is complete through its `position`.
 Later closes do not replace the first close. Late terminal reports cannot change the

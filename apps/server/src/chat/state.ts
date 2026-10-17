@@ -7,6 +7,7 @@ import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema,
 import { readStreamSummary, type StoredEvent, type SummaryKind } from '@opencrane/event-store';
 import { conversationAccessFence } from '@opencrane/models';
 import { chatStateCommandSchema } from '@opencrane/protocol';
+import { isHiddenConversationRow } from '@opencrane/projections';
 import { activeChatMember, conversationParticipation, type ChatOptions } from './access.ts';
 import { privateSessionCreation, requirePrivateReader } from './private-session.ts';
 import { ChatConflict } from './commands.ts';
@@ -116,8 +117,7 @@ async function verifyRead(options: ChatOptions, conversationId: string,
   const target = visible.rows[0];
   if (!target) throw new ChatConflict('Read row is not available');
   const closedPosition = Number(target.closed_position ?? 0);
-  if (closedPosition > 0 && input.throughPosition > closedPosition &&
-      (target.type.startsWith('agent.') || target.type === 'conversation.closed')) {
+  if (isHiddenConversationRow(target.type, input.throughPosition, closedPosition)) {
     throw new ChatConflict('Read row is not available');
   }
   const row = await options.store.readEvent(input.throughPosition, deadline);

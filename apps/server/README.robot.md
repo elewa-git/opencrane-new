@@ -21,8 +21,9 @@ Fresh-install qualification is NOT RUN.
 join facts and encrypted rows before checking current access once with `requireMember`.
 It decrypts only after that check. Join changes refuse the loaded page. No conversation
 stream enters an authority fence. Socket access polling remains independent of loading.
-The conversations reader returns up to 100 visible rows, scanning past late agent reports
-and later duplicate closes. Socket delivery advances through a completely scanned page,
+The conversations reader returns up to 100 visible rows, scanning past late execution,
+approval and publication rows and later duplicate closes. Socket delivery advances
+through a completely scanned page,
 including hidden reports, so an idle closed chat does not keep rereading its last page.
 Human row positions and current history bounds stay unchanged. The list reads the stored
 `conversations.closed` flag, which late terminal reports cannot reverse.

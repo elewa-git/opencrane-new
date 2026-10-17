@@ -186,16 +186,17 @@ export async function readConversation(db: Query, silo: string, conversationId: 
     for (const row of page.rows) {
       // Advance past hidden reports too, without changing a visible row's saved position.
       scannedPosition = Number(row.position);
-      if (hiddenAfterClose(row, closedPosition)) continue;
+      if (isHiddenConversationRow(row.type, scannedPosition, closedPosition)) continue;
       rows.push(displayRow(row));
     }
   }
   return { generation: Number(metadata.rows[0]?.generation ?? 0), position, rows };
 }
 
-function hiddenAfterClose(row: FeedRow, closedPosition: number) {
-  if (closedPosition === 0 || Number(row.position) <= closedPosition) return false;
-  return row.type.startsWith('agent.') || row.type === 'conversation.closed';
+export function isHiddenConversationRow(type: string, position: number, closedPosition: number) {
+  if (closedPosition === 0 || position <= closedPosition) return false;
+  // Keep human posts that were saved after close, but freeze all other displayed output.
+  return type !== 'message.posted';
 }
 
 function displayRow(row: FeedRow) {
