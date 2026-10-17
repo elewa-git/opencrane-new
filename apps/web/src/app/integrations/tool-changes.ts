@@ -231,11 +231,15 @@ function fieldText(value: unknown): string {
 function accessText(name: string, kind: ToolChangeRow['kind'], policy: ToolPolicy): string {
   if (kind === 'Removed') return 'Removed';
   const saved = policy.tools.find((tool) => tool.name === name);
-  if (!saved?.reviewed && kind === 'Added') return 'Block (new)';
-  if (!saved?.reviewed && saved?.mode === 'ask') return 'Ask (saved choice; paused)';
-  if (!saved?.reviewed && saved?.mode === 'allow') return 'Allow (saved choice; paused)';
-  if (!saved?.reviewed) return 'Block until reviewed';
+  if (!saved?.reviewed) return unreviewedAccess(saved?.mode, kind);
   if (saved.mode === 'allow') return 'Allow automatically';
   if (saved.mode === 'ask') return 'Ask';
   return 'Block';
+}
+
+function unreviewedAccess(mode: string | undefined, kind: ToolChangeRow['kind']): string {
+  if (kind === 'Added') return 'Block (new)';
+  if (mode === 'ask') return 'Ask (saved choice; paused)';
+  if (mode === 'allow') return 'Allow (saved choice; paused)';
+  return 'Block until reviewed';
 }

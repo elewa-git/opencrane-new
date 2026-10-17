@@ -1,6 +1,31 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
+import { z } from 'zod';
+import type { MockInstance } from 'vitest';
 import { IntegrationDetail } from './integration-detail';
+
+const commandSchema = z.object({
+  commandId: z.string(), expectedSequence: z.number(),
+  policyRevision: z.number().optional(), catalogueDigest: z.string().optional(),
+  connectionId: z.string().optional(), accountMode: z.string().optional(),
+  reviewRevision: z.number().optional(),
+  tools: z.array(z.object({ name: z.string(), mode: z.string(),
+    reviewDigest: z.string() })).optional(),
+}).passthrough();
+
+function postedCommand(fetchMock: MockInstance<typeof fetch>, index: number) {
+  const body = fetchMock.mock.calls[index]?.[1]?.body;
+  if (typeof body !== 'string') throw new Error('Expected a JSON command');
+  const raw: unknown = JSON.parse(body);
+  return commandSchema.parse(raw);
+}
+
+function requestUrl(input: RequestInfo | URL | undefined): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  if (input instanceof Request) return input.url;
+  return '';
+}
 
 function reply(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
@@ -53,7 +78,9 @@ function page(): ComponentFixture<IntegrationDetail> {
 }
 
 function content(fixture: ComponentFixture<IntegrationDetail>): HTMLElement {
-  return fixture.nativeElement as HTMLElement;
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Expected detail root');
+  return element;
 }
 
 function click(fixture: ComponentFixture<IntegrationDetail>, label: string): void {
@@ -83,9 +110,9 @@ describe('reviewed changed tools', () => {
   });
 
   it('reviews the exact read before publishing the returned revision', async () => {
-    async function currentStatus(): Promise<Response> {
-      const body = JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body));
-      return reply({ status: 'applying', changeRef: body.commandId });
+    function currentStatus(): Promise<Response> {
+      const body = postedCommand(fetchMock, 4);
+      return Promise.resolve(reply({ status: 'applying', changeRef: body.commandId }));
     }
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
@@ -99,8 +126,8 @@ describe('reviewed changed tools', () => {
     click(fixture, 'Review and publish');
     await vi.waitFor(() => expect(content(fixture).textContent)
       .toContain('Publishing the reviewed tool list'));
-    const review = JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body));
-    const publication = JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body));
+    const review = postedCommand(fetchMock, 3);
+    const publication = postedCommand(fetchMock, 4);
     expect(review).toMatchObject({ expectedSequence: 8, policyRevision: 7,
       catalogueDigest: 'd'.repeat(64), connectionId: 'connection', accountMode: 'none' });
     expect(review.tools).toEqual(expect.arrayContaining([
@@ -123,7 +150,7 @@ describe('reviewed changed tools', () => {
     await vi.waitFor(() => expect(content(fixture).textContent).toContain('maxLength: 2000'));
     click(fixture, 'Review and publish');
     await vi.waitFor(() => expect(content(fixture).textContent).toContain('Review again'));
-    expect(fetchMock.mock.calls.filter((call) => String(call[0]).includes('/publication')))
+    expect(fetchMock.mock.calls.filter((call) => requestUrl(call[0]).includes('/publication')))
       .toHaveLength(1);
     fixture.destroy();
   });
@@ -142,7 +169,7 @@ describe('reviewed changed tools', () => {
     await vi.waitFor(() => expect(content(fixture).textContent).toContain('Check status'));
     click(fixture, 'Check status');
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
-    expect(String(fetchMock.mock.calls[5]?.[0])).toMatch(/\/changes\//);
+    expect(requestUrl(fetchMock.mock.calls[5]?.[0])).toMatch(/\/changes\//);
     expect(content(fixture).textContent).not.toContain('The current publication is confirmed');
     expect(fetchMock.mock.calls.filter((call) => call[1]?.method === 'POST'))
       .toHaveLength(2);

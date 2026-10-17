@@ -138,6 +138,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       if (!response || this.shouldIgnoreResult()) return;
       if (response.status === 409) {
         this.publicationCommandId = '';
+        this.changeRef.set('');
         this.changeState.set('conflict');
         return;
       }
@@ -305,37 +306,39 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       this.state.set('ready');
       this.hasRenderedProtectedContent.set(true);
       this.focusHeaderRefreshAfterMessageRetry();
-      try {
-        const toolsResponse = await fetch(this.toolsUrl(), {
-          headers: { accept: 'application/json' }, signal: this.request.signal,
-        });
-        if (this.shouldIgnoreResult()) return;
-        if (this.isAccessRefusal(toolsResponse)) return;
-        if (!toolsResponse.ok) {
-          this.markToolsReadFailed();
-          return;
-        }
-        const toolsRaw: unknown = await toolsResponse.json();
-        if (this.shouldIgnoreResult()) return;
-        const policy = toolPolicySchema.parse(toolsRaw);
-        this.policy.set(policy);
-        this.toolsReadState.set('loaded');
-        this.state.set('ready');
-        this.refreshing.set(false);
-        this.hasRenderedProtectedContent.set(true);
-        if (this.view() === 'changes' && !this.publicationCommandId) {
-          await this.readPublicationStatus();
-        }
-      } catch {
-        if (this.shouldIgnoreResult()) return;
-        this.markToolsReadFailed();
-      }
+      await this.loadToolPolicy();
     } catch {
       if (this.shouldIgnoreResult()) return;
       this.state.set('failed');
       this.toolsReadState.set(this.row() ? 'list-failed' : 'failed');
       this.refreshing.set(false);
       this.showRefresh.set(true);
+    }
+  }
+
+  private async loadToolPolicy(): Promise<void> {
+    try {
+      const toolsResponse = await fetch(this.toolsUrl(), {
+        headers: { accept: 'application/json' }, signal: this.request.signal,
+      });
+      if (this.shouldIgnoreResult() || this.isAccessRefusal(toolsResponse)) return;
+      if (!toolsResponse.ok) {
+        this.markToolsReadFailed();
+        return;
+      }
+      const toolsRaw: unknown = await toolsResponse.json();
+      if (this.shouldIgnoreResult()) return;
+      const policy = toolPolicySchema.parse(toolsRaw);
+      this.policy.set(policy);
+      this.toolsReadState.set('loaded');
+      this.state.set('ready');
+      this.refreshing.set(false);
+      this.hasRenderedProtectedContent.set(true);
+      if (this.view() === 'changes' && !this.publicationCommandId) {
+        await this.readPublicationStatus();
+      }
+    } catch {
+      if (!this.shouldIgnoreResult()) this.markToolsReadFailed();
     }
   }
 

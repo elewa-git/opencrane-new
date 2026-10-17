@@ -97,8 +97,9 @@ async function capture(browser, scenario, width) {
     if (scenario === 'pending') {
       await page.getByText('Publishing the reviewed tool list', { exact: false }).first().waitFor();
     }
-    await page.evaluate(() => document.fonts.ready);
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+    await page.evaluate(() => globalThis.document.fonts.ready);
+    const overflow = await page.evaluate(() =>
+      globalThis.document.documentElement.scrollWidth > globalThis.innerWidth);
     assert.equal(overflow, false, `${scenario} ${width}: horizontal scroll`);
     if (width === 390) {
       const buttons = page.locator('main button');

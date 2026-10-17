@@ -4,26 +4,16 @@ type Declaration = NonNullable<NonNullable<ToolPolicy['catalogue']>['tools']>[nu
 type Choice = { name: string; revision: string; reviewDigest: string;
   mode: 'allow' | 'ask' | 'block' };
 
-function sortedJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    const entries: string[] = [];
-    for (const entry of value) entries.push(sortedJson(entry));
-    return `[${entries.join(',')}]`;
-  }
-  if (value !== null && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    const keys = Object.keys(record).sort();
-    const entries: string[] = [];
-    for (const key of keys) entries.push(`${JSON.stringify(key)}:${sortedJson(record[key])}`);
-    return `{${entries.join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
 async function reviewDigest(declaration: Declaration): Promise<string> {
+  const review = declaration.review;
+  const sortedReview = review ? {
+    action: review.action, consequence: review.consequence, fields: review.fields,
+    stepUp: review.stepUp, targetArgument: review.targetArgument,
+  } : null;
   const evidence = { costCents: declaration.costCents ?? null,
-    review: declaration.review ?? null };
-  const bytes = new TextEncoder().encode(sortedJson(evidence));
+    review: sortedReview };
+  // Use the same key order as the server's saved review digest.
+  const bytes = new TextEncoder().encode(JSON.stringify(evidence));
   const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
   const hex: string[] = [];
   for (const byte of new Uint8Array(digest)) hex.push(byte.toString(16).padStart(2, '0'));
