@@ -23,7 +23,7 @@ flowchart LR
   models -->|stages credentials, checks safe cleanup and confirms removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks access and saved work; records admissions, spending and proven unsent releases| store["libs/event-store<br/>event log"]
+  models -->|checks access and saved work; records admissions, spending, unsent releases and relay closures| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -57,6 +57,11 @@ only the operator's local public key and makes no network requests. Unreadable f
 make the verifier unavailable. It does not scan licences, admit images or start them yet.
 
 ## What it is responsible for
+
+A private relay receipt writer saves safe connection details after both sockets close.
+It keeps a pending record when storage is unavailable and can retry the same record.
+Byte counts describe socket writes; they do not prove an operation succeeded.
+Command networking remains off.
 
 The budget actor can save a fixed allowance for one turn, called a root. Calls share
 that allowance through their existing holds. A spending refusal stops further holds

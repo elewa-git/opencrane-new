@@ -106,3 +106,6 @@ export { childRequestedDataSchema, childRequestedEventSchema, type ChildRequest 
   from './child-request.ts';
 
 export { childResultPublishedDataSchema } from './child-publication.ts';
+
+export { egressCloseSchema, egressObservationSchema, egressObservationId }
+  from './egress-observation.ts';

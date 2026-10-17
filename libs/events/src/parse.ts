@@ -1,3 +1,4 @@
+import { validEgressObservation } from './egress-observation.ts';
 import { childRequestedEventSchema } from './child-request.ts';
 import { memoryContextRecordedEventSchema } from './memory-context.ts';
 import { validSurveyEvent } from './survey.ts';
@@ -53,6 +54,7 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
   let envelopeSchema = eventEnvelopeSchema(definition.dataSchema);
   envelopeSchema = envelopeSchema.superRefine(checkDelegationEvent);
   envelopeSchema = envelopeSchema.refine(validEgressRuleEvent);
+  envelopeSchema = envelopeSchema.refine(validEgressObservation);
   envelopeSchema = envelopeSchema.refine(validSurveyEvent);
   envelopeSchema = envelopeSchema.refine(validChildRequest);
   envelopeSchema = envelopeSchema.superRefine(checkRoutineEvent);
