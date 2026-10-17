@@ -2412,6 +2412,7 @@ PARTIAL: this is steps 1–3 of row 4. Part b adds `tool.dispatch_started`, its 
 append and uncertain-reply tests, and the final access and MCP position checks after saving.
 No event contract changes belong to this first part. Row 5 still supplies the guarded
 destination; production routes remain empty. Fresh-install journey: SKIP.
+
 ## Saved reload approval cancellation (Part of #48)
 
 Every new `mcp.server_published` intent advances that server's `policyRevision` at
