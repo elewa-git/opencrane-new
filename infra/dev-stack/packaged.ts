@@ -200,8 +200,14 @@ async function checkRenderedPackage(valuesFile: string, review: PackageReview) {
 }
 
 async function checkLiveExposure() {
+  const gatewayResources = await kubectl(['api-resources',
+    '--api-group=gateway.networking.k8s.io', '--no-headers', '--output=name']);
+  const resourcesToCheck = ['services', 'ingresses'];
+  if (gatewayResources.split('\n').includes('gateways.gateway.networking.k8s.io')) {
+    resourcesToCheck.push('gateways.gateway.networking.k8s.io');
+  }
   const live = await kubectl(['-n', namespace, 'get',
-    'services,ingresses,gateways.gateway.networking.k8s.io', '-o', 'json']);
+    resourcesToCheck.join(','), '-o', 'json']);
   const resources = JSON.parse(live) as {
     items: Array<{ kind: string; spec?: { type?: string } }>;
   };

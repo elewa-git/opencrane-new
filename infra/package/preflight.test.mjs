@@ -11,11 +11,12 @@ const reviewedImage = `registry.local/server@${digest}`;
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), 'package-preflight-'));
   const values = {
+    chartVersion: '0.1.0',
     images: { server: reviewedImage },
     secrets: { runtime: 'runtime-settings' },
     exposure: { ingress: false, loadBalancer: false, funnel: false },
   };
-  const review = { images: { server: reviewedImage } };
+  const review = { chartVersion: '0.1.0', images: { server: reviewedImage } };
   return { directory, values, review };
 }
 
@@ -46,6 +47,7 @@ function removeSecret(values) { delete values.secrets.runtime; }
 function enableIngress(values) { values.exposure.ingress = true; }
 function enableLoadBalancer(values) { values.exposure.loadBalancer = true; }
 function enableFunnel(values) { values.exposure.funnel = true; }
+function removeChartVersion(values) { delete values.chartVersion; }
 
 const refusals = [
   ['missing pin', removePin, /Missing immutable image pin/u],
@@ -55,6 +57,7 @@ const refusals = [
   ['public ingress', enableIngress, /Public ingress/u],
   ['LoadBalancer', enableLoadBalancer, /Public ingress/u],
   ['Funnel', enableFunnel, /Public ingress/u],
+  ['missing chart version', removeChartVersion, /Chart version differs/u],
 ];
 
 for (const [name, change, expected] of refusals) {

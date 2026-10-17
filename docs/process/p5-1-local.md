@@ -8,11 +8,11 @@ hosted resource was used.
 ## Before and after
 
 The new tests were copied into a clean `origin/main` snapshot and run there
-before checking this worktree. The baseline preflight suite had eight failures:
+before checking this worktree. The baseline preflight suite had nine failures:
 there was no package preflight command, so none of the expected refusals could
-be identified. The updated suite passed all eight cases. It distinguishes a
+be identified. The updated suite passed all nine cases. It distinguishes a
 missing digest, a mutable tag, an image outside the reviewed list, a missing
-secret name, public ingress, LoadBalancer and Funnel.
+secret name, public ingress, LoadBalancer, Funnel and a missing chart version.
 
 The baseline claim tests failed in two concrete ways. After a 16 minute claim
 with a dead launcher and a simulated live package namespace, a second worktree
@@ -56,6 +56,6 @@ fresh-install acceptance.
 | `npm run typecheck` | PASS | All workspaces completed. |
 | `npm run check:events` | PASS | 143 event types agree. |
 | Claim tests | PASS | Twelve Node tests passed, including foreign and other-slot cleanup. |
-| Package refusal tests | PASS | Eight Node tests passed. |
+| Package refusal tests | PASS | Nine Node tests passed. |
 | Angular tests | PASS | 61 files and 1,017 tests passed. |
-| Root suite | NOT RUN to completion | It was still running with `PG_TEST_URL` when this note was written. |
+| Root suite | FAIL so far | It reported four failures in `memory-mcp.test.ts` while running with a throwaway `PG_TEST_URL` database. The full suite was still active when this note was written. |
