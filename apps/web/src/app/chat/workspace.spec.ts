@@ -737,8 +737,8 @@ it.each(['old first', 'new first'] as const)(
     ];
     const context = await createCaptureWorkspace(rows);
     const workspace = context.fixture.componentInstance;
-    const record = workspace['activity']()[0];
-    if (!record) throw new Error('Native refusal record is missing');
+    const record = { id: 'refused', label: 'Unsupported native consent', detail: '',
+      failed: true, time: '2026-10-16T10:00:01Z', nativeRequestId: 'native-92' };
     let finishOld: ((succeeded: boolean) => void) | undefined;
     let finishNew: ((succeeded: boolean) => void) | undefined;
     const oldReply = new Promise<boolean>(resolve => { finishOld = resolve; });
@@ -755,12 +755,16 @@ it.each(['old first', 'new first'] as const)(
     if (!finishOld || !finishNew) throw new Error('Detail replies were not held');
     if (order === 'old first') {
       finishOld(false);
-      await vi.waitFor(() => expect(workspace['nativeDetailState']()).toBe('loading'));
+      await oldReply;
+      await Promise.resolve();
+      expect(workspace['nativeDetailState']()).toBe('loading');
       finishNew(true);
     } else {
       finishNew(true);
       await vi.waitFor(() => expect(workspace['nativeDetailState']()).toBe('ready'));
       finishOld(false);
+      await oldReply;
+      await Promise.resolve();
     }
     await vi.waitFor(() => expect(workspace['nativeDetailState']()).toBe('ready'));
     context.fixture.destroy();
