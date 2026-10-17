@@ -96,6 +96,12 @@
         Calls stay paused until a fresh check passes.
       </div>
     }
+    @if (changeMessage()) {
+      <div class="draft-notice publication-notice" role="status">
+        <p>{{ changeMessage() }}</p>
+        @if (changeRef()) { <p>Change reference: {{ changeRef() }}</p> }
+      </div>
+    }
     @if (comparison(); as changes) {
       <section class="changes-list" aria-label="Changed tools">
         @for (change of changes.rows; track change.name) {
@@ -115,12 +121,24 @@
     } @else if (policy()) {
       <p class="draft-notice">The earlier list isn't saved, so review every tool.</p>
     }
-    <p>There's no rollback. Reviewing saves your choices, but restoring calls isn't available yet.</p>
+    <p>Audience: the reviewed tool list for this connection. People and assistants still need
+      their own grants. Old approvals stay ended and cannot be restored by publishing.</p>
+    <p>There's no rollback. Calls stay paused until the current publication is confirmed.</p>
     @if (policy()) {
       <div class="actions">
-        <a class="button primary" [href]="'/org/integrations/' + integration.serverId + '/tools'">
-          Review tools
-        </a>
+        @if (canReviewChanges()) {
+          <button class="button primary" type="button" (click)="reviewAndPublish()">
+            Review and publish
+          </button>
+        }
+        @if (changeState() === 'conflict' || changeState() === 'unknown-review') {
+          <button class="button primary" type="button" (click)="refresh()">Review again</button>
+        }
+        @if (changeState() === 'applying' || changeState() === 'unknown-publication') {
+          <button class="button secondary" type="button" (click)="checkPublicationChange()">
+            Check status
+          </button>
+        }
       </div>
     }
   } @else {

@@ -113,9 +113,18 @@ are limited to 300 characters; changed input fields show their types and limits,
 most ten fields and 180 characters of detail per field. Titles, annotations and metadata
 are also bounded. A failed tool policy read shows a visible notice. It hides Review tools
 until a policy has loaded, or labels retained comparison rows with their last check time.
-An expired catalogue says that calls stay paused;
-there is no check-start API or restore action here. Run
-`npm run visual:screen-p3-7-drift` for intercepted desktop and phone captures.
+An expired catalogue says that calls stay paused. The changes page posts the exact
+catalogue digest, policy revision, connection, account mode and every tool choice to
+`POST /api/org/integrations/:id/review`. A new tool is Block. The next POST to
+`/:id/publication` uses the review receipt's sequence for both `expectedSequence` and
+`reviewRevision`. An unknown review needs a fresh detail read; there is no review
+status endpoint. An unknown publication checks only
+`GET /api/org/integrations/changes/:commandId` for its original command. A 409 needs
+a fresh read. `GET /:id/publication` supplies current progress; only its current
+acknowledgement can confirm publication. Publishing never restores old approvals.
+The check-start API and dated restored view are unavailable here. Run
+`npm run visual:screen-p3-7-drift` and `npm run visual:screen-p3-7-drift2` for
+intercepted desktop and phone captures.
 
 The add page accepts a remote HTTPS address and follows discovery status. It also accepts
 a hosted package only as a sha256 digest locator, one supported Linux platform and a

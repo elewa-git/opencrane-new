@@ -42,6 +42,10 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
 }
 .draft-notice h2 { margin: 0 0 8px; font-size: 18px; }
 .draft-notice p { margin-top: 6px; }
+.publication-notice {
+  border-color: #b9e4ec;
+  background: #f1fbfd;
+}
 .changes-list { display: grid; gap: 12px; min-width: 0; }
 .change-row {
   min-width: 0;

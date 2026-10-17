@@ -1,0 +1,1 @@
+Admins can review the exact changed tool list and save its publication. The changes page keeps calls paused while the current publication is applying, shows saved choices and new blocked tools, and checks uncertain saves by their original reference.

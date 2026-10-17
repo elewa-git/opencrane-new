@@ -232,7 +232,8 @@ function accessText(name: string, kind: ToolChangeRow['kind'], policy: ToolPolic
   if (kind === 'Removed') return 'Removed';
   const saved = policy.tools.find((tool) => tool.name === name);
   if (!saved?.reviewed && kind === 'Added') return 'Block (new)';
-  if (!saved?.reviewed && kind !== 'Unchanged') return 'Block until reviewed';
+  if (!saved?.reviewed && saved?.mode === 'ask') return 'Ask (saved choice; paused)';
+  if (!saved?.reviewed && saved?.mode === 'allow') return 'Allow (saved choice; paused)';
   if (!saved?.reviewed) return 'Block until reviewed';
   if (saved.mode === 'allow') return 'Allow automatically';
   if (saved.mode === 'ask') return 'Ask';

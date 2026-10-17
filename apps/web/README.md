@@ -14,7 +14,7 @@ flowchart LR
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
-  web -->|opens| integrations["Integrations pages<br/>register, add, package admission with keyboard retry, changes, tools and access explanations"]
+  web -->|reviews and publishes changed tools| integrations["Integrations pages<br/>register, add, package admission, changes, tools and access explanations"]
   web -->|reviews invitations and removals; clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
   web -->|reads, stores and forgets| memory["Memory panel<br/>scopes, personal facts, sources, safe receipts and forget outcomes"]
 ```
@@ -93,8 +93,10 @@ assistant check open rather than guessing an answer.
   modes for each tool, as well as models, spending and change history.
 - Shows when changed tools pause an integration. The changes page compares the saved
   field types and limits, titles and other details. A failed policy read is visible;
-  earlier rows keep their last successful check time. The page opens tool review
-  once a policy has been read.
+  earlier rows keep their last successful check time. Admins can review the current
+  tool list and save its publication. Calls stay paused while publication is applying.
+  A lost reply can be checked by its original reference. Publishing cannot restore
+  old approvals.
 - Accepts an exact package image digest and shows dated admission checks. Continue
   stays disabled while tool discovery is unavailable. The form checks encoded host
   names before sending a package. It shows when a signature or licence is refused,
@@ -158,7 +160,7 @@ assistant check open rather than guessing an answer.
    for that direct or group chat.
    Access loss clears protected chat details and late replies.
 5. **An admin adds a tool server.** MCP (Model Context Protocol) lets an assistant use tools from another server. The website accepts a remote HTTPS address and shows the discovery result. When tools are ready, the admin can continue to set each tool to Allow automatically, Ask or Block. If a save reply is lost, the website checks the saved modes before offering another action. It never sends the save again.
-6. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. A tool access explanation shows the two grants and account check from a dated server reply. It does not say that a call can run.
+6. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. An admin reviews changed tools, saves publication and checks its progress before calls resume. Refresh keeps the current page and keyboard focus in place while it reads again. A tool access explanation shows the two grants and account check from a dated server reply. It does not say that a call can run.
 7. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.
 8. **An admin checks a change.** The website shows organisation history to people with access.
 9. **An Owner or Admin opens People & groups.** The website checks group reads,
