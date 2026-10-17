@@ -954,6 +954,52 @@ async function scanPages() {
 }
 it('advances bounded pages across many candidates while deleting earlier pages', scanPages);
 
+async function scanPastDamagedCandidate(damage: string) {
+  const test = await candidateFixture();
+  for (let generation = 2; generation <= 53; generation += 1) {
+    const candidate = { ...test.input, generation, operationId: `generation-${generation}` };
+    expect(await test.store.custody.stage(candidate, material)).toMatchObject({ status: 'staged' });
+  }
+  await test.invalidate();
+  const names = [...test.store.secrets.keys()];
+  names.sort();
+  const damagedName = names[0]!;
+  const damaged = test.store.secrets.get(damagedName)!;
+  if (damage === 'object') {
+    damaged.metadata.uid = '';
+  } else {
+    damaged.metadata.annotations['opencrane.ai/stage'] = '{';
+  }
+  const original = structuredClone(damaged);
+  for (let pass = 0; pass < 2; pass += 1) {
+    let continuation: string | undefined;
+    let deleted = 0;
+    let examined = 0;
+    do {
+      const result = await scan(test, continuation);
+      expect(result.status).toBe('scanned');
+      if (result.status !== 'scanned') {
+        throw new Error('Fixture scan failed');
+      }
+      examined += result.examined;
+      deleted += result.deleted;
+      continuation = result.continuation;
+    } while (continuation);
+    const expectedCount = pass === 0 ? 52 : 0;
+    expect(examined).toBe(expectedCount);
+    expect(deleted).toBe(expectedCount);
+    expect(test.store.secrets.size).toBe(1);
+    expect(test.store.secrets.get(damagedName)).toEqual(original);
+  }
+  expect(test.store.pages).toEqual([25, 25, 3, 1]);
+  expect(test.store.deletes).toBe(52);
+  const rows = await history(events.store, test.subject, 'test');
+  expect(foldConnection(rows).status).toBe('unavailable');
+  expect(rows).toHaveLength(1);
+}
+it.each(['object', 'annotation'])(
+  'scans past a damaged first %s and cleans healthy revoked generations', scanPastDamagedCandidate);
+
 async function scanUnprovenIdentity() {
   const test = await candidateFixture();
   await forgetJournal(test);
