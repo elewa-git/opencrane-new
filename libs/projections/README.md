@@ -36,7 +36,7 @@ flowchart LR
 
 Closed chat history stops showing assistant output, decisions, tool dispatches and
 child publications at the first saved close. Human posts remain visible.
-Later reports stay in the read table as evidence. History pages skip those reports
+Later rows stay in the read table as evidence. History pages skip those rows
 and keep scanning for visible human posts, using their original saved positions.
 
 Keep publication requests and gateway receipts separate from permission to call tools.

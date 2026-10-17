@@ -23,8 +23,8 @@ It decrypts only after that check. Join changes refuse the loaded page. No conve
 stream enters an authority fence. Socket access polling remains independent of loading.
 The conversations reader returns up to 100 visible rows, scanning past late execution,
 approval and publication rows and later duplicate closes. Socket delivery advances
-through a completely scanned page,
-including hidden reports, so an idle closed chat does not keep rereading its last page.
+through a completely scanned page, including hidden rows, so an idle closed chat
+does not keep rereading its last page.
 Human row positions and current history bounds stay unchanged. The list reads the stored
 `conversations.closed` flag, which late terminal reports cannot reverse.
 Shared-child read acknowledgements use participant access, including inherited parent
@@ -36,7 +36,7 @@ position, list status, socket delivery, restart/rebuild and independent parent/c
 It also checks removal during HTTP loading and unrelated turn/file activity.
 `test/member-guard-http.test.ts` keeps missing organisation setup at HTTP 503 and
 checks that unexpected read failure details stay out of replies and logs.
-Raw late reports remain in the event log and read table. There is no unread-count API
+Raw late rows remain in the event log and read table. There is no unread-count API
 in this backend; hidden completed messages are absent from the displayed history.
 
 PARTIAL: conversation-list paging beyond its existing 100-candidate limit remains
