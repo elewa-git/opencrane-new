@@ -223,6 +223,32 @@ async function foreignPackageRecordIsRefused() {
 }
 test('cleanup refuses a package record from another worktree', foreignPackageRecordIsRefused);
 
+async function unrecordedReleaseIsRefused() {
+  const fixture = await createClaimFixture();
+  try {
+    const stackOwner = `worktree=${process.cwd()}\nstartedAt=${new Date().toISOString()}\n`;
+    await writeFile(`${fixture.slotDirectory}/stack-owner`, stackOwner);
+    const packageOwner = {
+      worktree: process.cwd(), slot: '1', context: 'k3d-ocn',
+      namespace: 'opencrane-package-1', namespaceUid: 'owned-package',
+      release: 'opencrane-package-1', heartbeatAt: new Date().toISOString(),
+    };
+    await writeFile(`${fixture.slotDirectory}/package-owner.json`, JSON.stringify(packageOwner));
+    const namespace = JSON.stringify({ metadata: { uid: 'owned-package', annotations: {
+      'opencrane.dev/worktree': process.cwd(), 'opencrane.dev/slot': '1',
+    } } });
+    const releaseList = '[{"name":"opencrane-package-1"}]';
+    const helmScript = `#!/bin/sh\ncase " $* " in\n  *" list "*) echo '${releaseList}' ;;\nesac\n`;
+    await writeFile(`${fixture.home}/bin/helm`, helmScript);
+    const env = { ...fixture.env, KUBE_TEST_NAMESPACE: namespace };
+    await assert.rejects(exec('infra/dev-stack/run.sh', ['package-down', '--id', '1'], { env }));
+    assert.ok((await stat(`${fixture.slotDirectory}/package-owner.json`)).isFile());
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+test('cleanup refuses a Helm release with no recorded identity', unrecordedReleaseIsRefused);
+
 async function ownedPackageCleanupLeavesOtherSlot() {
   const fixture = await createClaimFixture();
   const otherSlot = `${fixture.home}/.config/opencrane/dev-stack-2`;

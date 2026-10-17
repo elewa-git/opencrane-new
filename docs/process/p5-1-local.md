@@ -18,8 +18,9 @@ The baseline claim tests failed in two concrete ways. After a 16 minute claim
 with a dead launcher and a simulated live package namespace, a second worktree
 received slot 1. A foreign `down` completed. In this worktree, the matching
 tests passed: the second worktree received slot 2 and foreign cleanup was
-refused. The full claim suite passed all twelve cases, including a foreign
-package record and a fresh Compose startup against a package namespace.
+refused. The full claim suite passed all thirteen cases, including a foreign
+package record, an unrecorded Helm release and a fresh Compose startup against
+a package namespace.
 These are controlled Kubernetes fixtures, not a live Helm release.
 
 ## Local exercise
@@ -55,7 +56,7 @@ fresh-install acceptance.
 | `npm run lint` | PASS | No errors; 20 existing function-length warnings remain elsewhere. |
 | `npm run typecheck` | PASS | All workspaces completed. |
 | `npm run check:events` | PASS | 143 event types agree. |
-| Claim tests | PASS | Twelve Node tests passed, including foreign and other-slot cleanup. |
+| Claim tests | PASS | Thirteen Node tests passed, including foreign and other-slot cleanup. |
 | Package refusal tests | PASS | Nine Node tests passed. |
 | Angular tests | PASS | 61 files and 1,017 tests passed. |
 | Root suite | FAIL so far | It reported four failures in `memory-mcp.test.ts` while running with a throwaway `PG_TEST_URL` database. The full suite was still active when this note was written. |

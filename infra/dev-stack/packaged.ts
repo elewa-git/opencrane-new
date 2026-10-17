@@ -219,19 +219,32 @@ async function checkLiveExposure() {
   }
 }
 
+async function releaseSecretUid() {
+  const secret = await kubectl(['-n', namespace, 'get', 'secret',
+    `sh.helm.release.v1.${release}.v1`, '--ignore-not-found', '-o', 'json']);
+  if (!secret) return undefined;
+  return JSON.parse(secret).metadata.uid as string;
+}
+
 export async function installPackage(valuesFile: string) {
   const { values, review } = await readReviewedValues(valuesFile);
   const owner = await verifyPackageOwner();
   await checkNamedSecrets(values, review);
   await checkRenderedPackage(valuesFile, review);
-  await command('helm', ['install', release, 'infra/package/chart',
-    '--kube-context', context, '--namespace', namespace, '--values', valuesFile,
-    '--wait', '--timeout', '5m'], 360_000);
-  await checkLiveExposure();
-  const secret = await kubectl(['-n', namespace, 'get', 'secret',
-    `sh.helm.release.v1.${release}.v1`, '-o', 'json']);
-  owner.releaseSecretUid = JSON.parse(secret).metadata.uid as string;
+  if (await releaseSecretUid()) throw new Error('A Helm release already uses this namespace');
+  try {
+    await command('helm', ['install', release, 'infra/package/chart',
+      '--kube-context', context, '--namespace', namespace, '--values', valuesFile,
+      '--wait', '--timeout', '5m'], 360_000);
+  } catch (error) {
+    owner.releaseSecretUid = await releaseSecretUid();
+    await saveOwner(owner);
+    throw error;
+  }
+  owner.releaseSecretUid = await releaseSecretUid();
+  if (!owner.releaseSecretUid) throw new Error('Helm did not record its release');
   await saveOwner(owner);
+  await checkLiveExposure();
 }
 
 export async function removePackage() {
@@ -252,10 +265,11 @@ export async function removePackage() {
   for (const installed of releases) {
     if (installed.name !== release) throw new Error('Another Helm release uses this namespace');
   }
+  if (releases.length > 0 && !owner.releaseSecretUid) {
+    throw new Error('Helm release ownership was not recorded');
+  }
   if (owner.releaseSecretUid) {
-    const secret = await kubectl(['-n', namespace, 'get', 'secret',
-      `sh.helm.release.v1.${release}.v1`, '-o', 'json']);
-    if (JSON.parse(secret).metadata.uid !== owner.releaseSecretUid) {
+    if (await releaseSecretUid() !== owner.releaseSecretUid) {
       throw new Error('Helm release belongs to another install');
     }
   }
