@@ -89,6 +89,8 @@ function mode(target: Awaited<ReturnType<typeof fixture>>, value: 'allow' | 'ask
     mode: value, setBy: 'alice' });
 }
 async function prepare(team = false) {
+  setup = undefined!;
+  app = undefined!;
   setup = await fixture(2000, 20000, false, 'gpt-6-luna', team, 'manual', 'sales',
     'restricted');
   await setup.stopDispatch();
@@ -145,8 +147,12 @@ function captureContext(request: import('fastify').FastifyRequest,
   done();
 }
 async function close() {
-  await app?.close();
-  await setup?.close();
+  const currentApp = app;
+  app = undefined!;
+  await currentApp?.close();
+  const currentSetup = setup;
+  setup = undefined!;
+  await currentSetup?.close();
 }
 async function renewGatewayCredentials() {
   // Keep each test on the same live turn with a fresh two-minute token.

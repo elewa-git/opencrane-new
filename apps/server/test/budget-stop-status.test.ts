@@ -22,6 +22,8 @@ function memberId(_silo: string, _issuer: string, sub: string) {
   return Promise.resolve(sub);
 }
 async function initialise() {
+  setup = undefined!;
+  app = undefined!;
   setup = await fixture();
   await setup.runner.initialise(conversations);
   const chat = { silo: 'test', store: setup.nats.store, db: setup.db, keys: setup.keys,
@@ -32,8 +34,12 @@ async function initialise() {
 }
 async function close() {
   vi.restoreAllMocks();
-  await app?.close();
-  await setup?.close();
+  const currentApp = app;
+  app = undefined!;
+  await currentApp?.close();
+  const currentSetup = setup;
+  setup = undefined!;
+  await currentSetup?.close();
 }
 beforeEach(initialise);
 afterEach(close);

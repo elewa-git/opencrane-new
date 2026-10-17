@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
+import { setTimeout as delay } from "node:timers/promises";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { connect, createServer, type Socket } from "node:net";
 import { resolve } from "node:path";
@@ -171,7 +172,7 @@ export async function natsFixture({ provision = true } = {}) {
   const dispatcherConnection = await client("dispatcher");
   const readerStore = await createEventStore(readerConnection);
   const store = await createEventStore(connection);
-  if (provision) await store.ensureStream({ replicas: 1 });
+  if (provision) await ensureFixtureStream(store);
   return {
     store,
     pauseResponses: proxy.pauseResponses,
@@ -221,6 +222,24 @@ export async function natsFixture({ provision = true } = {}) {
       await rm(directory, { recursive: true, force: true });
     },
   };
+}
+
+async function ensureFixtureStream(store: EventStore) {
+  const deadline = Date.now() + 10_000;
+  let lastTimeout: TimeoutError | undefined;
+  while (Date.now() < deadline) {
+    try {
+      await store.ensureStream({ replicas: 1 });
+      return;
+    } catch (error) {
+      if (!(error instanceof TimeoutError)) throw error;
+      lastTimeout = error;
+      // A fresh test server can miss the 250 ms JetStream request limit under CI load.
+      await delay(100);
+    }
+  }
+  if (lastTimeout) throw lastTimeout;
+  throw new Error("Timed out while creating the test JetStream stream");
 }
 
 export interface ReadCall {
