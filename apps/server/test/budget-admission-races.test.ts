@@ -11,6 +11,7 @@ let position: number;
 const limit = { scope: 'paying_group', scopeId: 'personal-default', setBy: 'alice' };
 
 async function initialise() {
+  setup = undefined!;
   setup = await fixture();
   const queued = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
@@ -22,7 +23,9 @@ async function initialise() {
 }
 async function close() {
   vi.restoreAllMocks();
-  await setup?.close();
+  const currentSetup = setup;
+  setup = undefined!;
+  await currentSetup?.close();
 }
 beforeEach(initialise);
 afterEach(close);

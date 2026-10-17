@@ -35,6 +35,8 @@ async function drain(draining = true) {
   await setup.append('provider-primary', 'provider.managed_calls_drain_set', data);
 }
 async function initialise(withDefault = true) {
+  setup = undefined!;
+  app = undefined!;
   setup = await fixture();
   await setup.append('computer-assistant', 'computer.turn_closed',
     { ...turn, turnId: 'turn', status: 'completed' });
@@ -73,8 +75,12 @@ async function initialFixture() {
 beforeEach(initialFixture, 120_000);
 async function close() {
   vi.restoreAllMocks();
-  await app?.close();
-  await setup?.close();
+  const currentApp = app;
+  app = undefined!;
+  await currentApp?.close();
+  const currentSetup = setup;
+  setup = undefined!;
+  await currentSetup?.close();
 }
 afterEach(close);
 function request(payload?: unknown, suffix = 'switch-on', sub = 'alice',

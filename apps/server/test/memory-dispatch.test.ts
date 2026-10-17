@@ -52,6 +52,8 @@ async function govern(target: typeof setup) {
   await target.append('mcp-memory', 'mcp.server_published', published);
 }
 async function prepare() {
+  setup = undefined!;
+  app = undefined!;
   setup = await fixture(2000, 20000, false, 'gpt-6-luna', false, 'manual', 'sales', 'restricted');
   await setup.stopDispatch();
   await setup.runtime.stop();
@@ -91,8 +93,12 @@ async function prepare() {
   await setup.call(discoveryHeaders, discovery, route);
 }
 async function close() {
-  await app?.close();
-  await setup?.close();
+  const currentApp = app;
+  app = undefined!;
+  await currentApp?.close();
+  const currentSetup = setup;
+  setup = undefined!;
+  await currentSetup?.close();
 }
 async function renewCredentials() {
   const claims = decodeJwt(setup.headers['x-turn-token']);
