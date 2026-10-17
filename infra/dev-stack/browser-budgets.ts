@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 import { history, migrateBudgetDefault } from '@opencrane/models';
@@ -83,11 +83,13 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
         await member.waitForFunction(hasNewBudgetNotice, notices);
         const notice = member.locator('oc-budget-stop-notice').last();
         await notice.waitFor();
+        await waitForBudgetNoticeToSettle(notice);
         assert((await notice.innerText()).includes('An Owner or Admin can review the limit'));
         assert((await notice.innerText()).includes('next monthly budget period (UTC)'));
         await member.reload();
         await member.waitForFunction(hasNewBudgetNotice, notices);
         await notice.waitFor();
+        await waitForBudgetNoticeToSettle(notice);
         const rows = [];
         const after = await store.head();
         for await (const row of readEvents(store, head + 1, after)) {
@@ -183,4 +185,8 @@ function isReservation(row: StoredEvent) {
 
 function hasNewBudgetNotice(count: number) {
   return document.querySelectorAll('oc-budget-stop-notice').length > count;
+}
+
+async function waitForBudgetNoticeToSettle(notice: Locator) {
+  await notice.getByText('Checking stop details', { exact: true }).waitFor({ state: 'hidden' });
 }
