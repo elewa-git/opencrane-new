@@ -73,6 +73,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it.each([
+  ['denied', card('denied', false)],
+  ['cancelled', card('cancelled', false)],
+  ['approval disabled', { ...card(), canApprove: false, canDeny: true }],
+  ['denial disabled', { ...card(), canApprove: true, canDeny: false }],
+  ['missing review fields', { ...card(), missingFields: ['orderId'] }],
+  ['another requester', { ...card(), requesterId: 'someone-else' }],
+] as const)('rejects an old handler after a poll changes %s', async (_, currentCard) => {
+  const originalCard = card();
+  let latestCard: ApprovalCard = originalCard;
+  const posts: string[] = [];
+  const fetchImplementation = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST') posts.push(String(input));
+    return Promise.resolve(response([latestCard]));
+  });
+  const fixture = await mount(fetchImplementation);
+  latestCard = currentCard;
+  await fixture.componentInstance['read']('chat');
+  await fixture.componentInstance['decide'](originalCard, 'approved');
+  await fixture.componentInstance['decide'](originalCard, 'rejected');
+  expect(posts).toEqual([]);
+  fixture.destroy();
+});
+
 it('keeps a requested card readable but removes decisions for a stopped turn', async () => {
   const stoppedCard = { ...card(), turnId: 'message' };
   const fetchImplementation = vi.fn(() => Promise.resolve(response([stoppedCard])));

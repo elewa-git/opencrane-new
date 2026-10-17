@@ -725,6 +725,48 @@ function toolRows(): Record<string, unknown>[] {
   ];
 }
 
+it.each(['old first', 'new first'] as const)(
+  'ignores an old native detail reply after the same drawer reopens: %s',
+  async order => {
+    const rows = [
+      { id: 'message', position: 1, type: 'message.posted',
+        time: '2026-10-16T10:00:00Z', data: { text: 'Help', authorId: 'me' } },
+      { id: 'refused', position: 2, type: 'agent.native_consent_refused',
+        time: '2026-10-16T10:00:01Z', data: { turnId: 'message', conversationId: 'chat',
+          nativeRequestId: 'native-92', reason: 'unsupported_native_consent' } },
+    ];
+    const context = await createCaptureWorkspace(rows);
+    const workspace = context.fixture.componentInstance;
+    const record = workspace['activity']()[0];
+    if (!record) throw new Error('Native refusal record is missing');
+    let finishOld: ((succeeded: boolean) => void) | undefined;
+    let finishNew: ((succeeded: boolean) => void) | undefined;
+    const oldReply = new Promise<boolean>(resolve => { finishOld = resolve; });
+    const newReply = new Promise<boolean>(resolve => { finishNew = resolve; });
+    vi.spyOn(workspace['chat'], 'refresh')
+      .mockImplementationOnce(() => oldReply)
+      .mockImplementationOnce(() => newReply);
+    const opener = document.createElement('button');
+    workspace['openToolDetails'](record, opener);
+    workspace['closeToolDetails']();
+    workspace['openToolDetails'](record, opener);
+    expect(workspace['nativeDetailState']()).toBe('loading');
+
+    if (!finishOld || !finishNew) throw new Error('Detail replies were not held');
+    if (order === 'old first') {
+      finishOld(false);
+      await vi.waitFor(() => expect(workspace['nativeDetailState']()).toBe('loading'));
+      finishNew(true);
+    } else {
+      finishNew(true);
+      await vi.waitFor(() => expect(workspace['nativeDetailState']()).toBe('ready'));
+      finishOld(false);
+    }
+    await vi.waitFor(() => expect(workspace['nativeDetailState']()).toBe('ready'));
+    context.fixture.destroy();
+  },
+);
+
 function runningToolRows(): Record<string, unknown>[] {
   return [
     { id: 'message', position: 1, type: 'message.posted',
