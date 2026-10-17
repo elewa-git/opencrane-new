@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { memoryContextRecordedEventSchema, type MemoryContextRecord } from '@opencrane/events';
-import { history, memoryReferences, type MemoryContext, type memoryRights } from '@opencrane/models';
+import { history, memoryReferences, foldMemoryContext, type MemoryContext,
+  type memoryRights, type MemoryContextState } from '@opencrane/models';
 import { memoryKeys } from '@opencrane/projections';
 import { readChatFacts } from '../chat/chat-summary.ts';
-import { foldMemoryContext, type MemoryContextState } from '../chat/memory-context-fold.ts';
 import type { MemoryOptions } from './access.ts';
 import { memorySnapshot, type listFacts } from './reads.ts';
 

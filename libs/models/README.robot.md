@@ -2248,6 +2248,38 @@ retention, hosted per-start capture, zero-TTL per-call capture and credentialed 
 are not implemented here. Fresh-install qualification is NOT RUN. The access-check code
 and its two named regression files are unchanged.
 
+## Loaded memory before dispatch (P4-15 PR 2d; Part of #97)
+
+`prepareLoadedMemory` uses the shared `memory-context-fold` on the turn's saved evidence.
+It checks the saved identity and reads each loaded scope before the short access check.
+The first confirm checks requester and assistant scope/grant access with the helpers
+used by `memoryRights`. Later confirms retain that authority snapshot and its deadline,
+checking saved grant changes without repeating IAM reads. Each confirm reads only scope
+rows after its checked position, confirms access, then reads scope changes again.
+If new rows arrived during access checking, it repeats both checks under the original
+two-second deadline. It refuses with `memory_context_unavailable` if they cannot settle
+before that deadline. It then checks every revision and dependency at the current time.
+`memoryReferences` has an explicit `event-only` mode for processes without revision keys.
+Server reads and writes retain their custody checks. No scope or conversation stream is
+added to the authority fence. A turn with no loaded references reads no scope stream.
+
+The confirm also runs inside budget dispatch admission and MCP send admission. Saved
+memory additions invalidate older pending passes. Refusals use `memory_context_unavailable`
+without memory details. This check writes no context evidence and stops no process.
+Cold replay reconstructs references only; it cannot recover a pending dispatch pass.
+`test/memory-dispatch.test.ts` in apps/server uses recording model/tool endpoints and a
+real memory backend. Barriers cover forgetting during the member read and just after
+access returns, at model admission, tool budget admission and the later MCP send check.
+They assert no upstream send, no held money and no new send admission. The later MCP
+check runs after its separate budget permission already exists. Tests also cover a
+backwards scope position, incomplete history, expiry advancing during confirmation,
+and repeated unrelated changes reaching the original deadline.
+Native memory admission remains disabled.
+
+Remaining row 2 work: turn-pass renewal in PR 2e and correction target proofs.
+Output release and process interruption remain row 3. Initial injection and native
+forwarding remain later rows. Fresh-install qualification and real model calls: NOT RUN.
+
 ## Hosted publisher verification — P3-6 PR 5, first part
 
 `hosted-verification.ts` is private and has no production caller or event writer.

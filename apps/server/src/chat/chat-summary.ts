@@ -1,4 +1,4 @@
-import { foldMemoryContext, type MemoryContextState } from './memory-context-fold.ts';
+import { foldMemoryContext, type MemoryContextState } from '@opencrane/models';
 import { readStreamSummary, WrongSiloError, type EventStore,
   type StoredEvent, type SummaryKind } from '@opencrane/event-store';
 import { z } from 'zod';

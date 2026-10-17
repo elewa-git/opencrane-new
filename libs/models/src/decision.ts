@@ -1,5 +1,7 @@
 import { grantModelCall } from './call-retry.ts';
 import { turnRootBinding } from './root-budget.ts';
+import { modelPermission } from './decision-provider.ts';
+import { LoadedMemoryRefused, prepareLoadedMemory } from './loaded-memory.ts';
 import { checkNativeCall, NativeDelegationDisabled } from './native-call-check.ts';
 import { mcpDispatch, type McpDispatchOptions } from './mcp-dispatch.ts';
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
@@ -11,7 +13,9 @@ import { approvalDecision, closesDecisionTurn, type ReviewKeys } from './approva
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
-import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
+import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
+  decisionAccessStarted }
+  from './decision-activity.ts';
 import { requireCurrentComputer, requireRecordedActiveTurn, requireSharedTurnTools }
   from './turn-binding-check.ts';
 import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims }
@@ -31,7 +35,8 @@ import { requestReservationCents, ModelRequestRefused as RequestRefused, data, m
 
 function decisionError(error: unknown) {
   if (error instanceof BudgetRefused || error instanceof RequestRefused ||
-      error instanceof MemoryPersonScopeOnly || error instanceof PayingGroupRefused ||
+      error instanceof LoadedMemoryRefused || error instanceof MemoryPersonScopeOnly ||
+      error instanceof PayingGroupRefused ||
       error instanceof AuthorityApplying || error instanceof NativeDelegationDisabled) {
     return error.message;
   }
@@ -178,25 +183,6 @@ function knownDecisionRoute(url: string | undefined) {
     url?.startsWith('/authorize/mcp/');
 }
 
-async function modelPermission(call: ModelCall, requestId: string,
-  turnToken: z.infer<typeof legacyTurnSchema>,
-  activity: Awaited<ReturnType<typeof decisionActivity>>, deadline: number,
-  providers?: ProviderVerificationOptions) {
-  if (activity.provider) {
-    call.providerId = turnToken.providerId;
-    call.bindingSequence = turnToken.bindingSequence;
-  }
-  const credential = await activity.provider?.credential(providers?.secrets, deadline);
-  return { credential, modelCall: { ...call, requestId } };
-}
-
-function decisionHistoryDeadline(managedRoute: boolean, decisionDeadline: number) {
-  if (managedRoute) {
-    return performance.now() + 10_000;
-  }
-  return decisionDeadline;
-}
-
 function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
   // Refuse before holding money when the gateway or another client has hung up.
   if (req.socket.destroyed || res.destroyed) {
@@ -283,17 +269,24 @@ export async function startDecision(
       const admittedAt = queuedPosition(conversation, turn);
       const root = turnRootBinding(actor.state, turnToken.conversation, turnToken.turn);
       const grants = await modelGrantHistory(actor, turnToken.model, route, historyDeadline);
+      const memoryClaims = { silo: actor.silo, requester: turnToken.requester,
+        assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
+        conversation: turnToken.conversation, turn: turnToken.turn, thread: turnToken.thread };
+      const memory = await prepareLoadedMemory(actor.store, binding, memoryClaims,
+        conversation, performance.now() + 10_000);
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const accessStarted = managedRoute ? performance.now() : started;
+      const accessStarted = decisionAccessStarted(managedRoute, memory.loaded, started);
       const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);
       let needsApproval = false;
       async function confirmAccess() {
-        await confirmDecisionAccess(activity, authority, needsApproval);
+        await confirmDecisionAccess(activity, authority, needsApproval, true);
       }
       const snapshot = { include: authority.include, head: authority.head,
         deadline: authority.deadline };
-      const fresh = Object.assign(confirmAccess, snapshot);
+      const access = Object.assign(confirmAccess, snapshot);
+      const confirmLoadedMemory = memory.confirm.bind(undefined, access);
+      const fresh = Object.assign(confirmLoadedMemory, snapshot);
       auditedContext = { requesterId: turnToken.requester, assistantId: computer.assistant };
       correlation = { conversationId: turnToken.conversation, turnId: turnToken.turn };
       contextDigest = digestContext([computer, turnToken]);
@@ -305,7 +298,7 @@ export async function startDecision(
           assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
           conversation: turnToken.conversation, turn: turnToken.turn, thread: turnToken.thread };
         const memory = await prepareMemoryContext(actor.store, binding, claims, raw,
-          req.headers, decisionDeadline, requestId, fresh.include);
+          req.headers, fresh.deadline, requestId, fresh.include);
         const policy = mcpSender.bindPolicy(memory.policy);
         contextDigest = memory.contextDigest;
         callId = memory.callId;
@@ -390,7 +383,11 @@ export async function startDecision(
       const capped = error instanceof BudgetRefused;
       try {
         if (!auditAttempted) await audit('deny', capped ? 'budget_exhausted' : 'request_refused');
-        else { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
+        else if (!(error instanceof LoadedMemoryRefused)) {
+          res.writeHead(503);
+          res.end('{"error":"Decision audit unavailable"}');
+          return;
+        }
       }
       catch { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
       res.setHeader('x-request-id', requestId);
@@ -412,10 +409,11 @@ async function dispatchRequest(req: IncomingMessage, res: ServerResponse,
   try {
     const body = await readBody(req);
     await dispatch.handle(req, res, body);
-  } catch {
+  } catch (error) {
     res.setHeader('x-opencrane-decision', 'refused');
     res.writeHead(403);
-    res.end('{}');
+    const refusal = error instanceof LoadedMemoryRefused ? { reason: error.message } : {};
+    res.end(JSON.stringify(refusal));
   }
 }
 

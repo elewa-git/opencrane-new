@@ -14,9 +14,10 @@ const harmlessConversationTypes = [
 ];
 
 export async function confirmDecisionAccess(activity: Awaited<ReturnType<typeof decisionActivity>>,
-  authority: Awaited<ReturnType<typeof decisionAuthorityFence>>, needsApproval: boolean) {
+  authority: Awaited<ReturnType<typeof decisionAuthorityFence>>, needsApproval: boolean,
+  refuseMemoryLoads = false) {
   while (true) {
-    const activityChanged = await activity.confirm(authority.deadline, needsApproval);
+    const activityChanged = await activity.confirm(authority.deadline, needsApproval, refuseMemoryLoads);
     const authorityChanged = await authority();
     if (!activityChanged && !authorityChanged) {
       return;
@@ -35,13 +36,13 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
     turnId, deadline, head);
   const provider = choice === undefined ? undefined
     : await decisionProvider(store, silo, choice, deadline, head);
-  async function confirm(deadline: number, needsApproval: boolean) {
+  async function confirm(deadline: number, needsApproval: boolean, refuseMemoryLoads = false) {
     const enabledNow = await managedProviderCallsEnabled(store, silo, deadline);
     if (enabledNow !== managedCallsEnabled) {
       throw new Error('Provider setup changed');
     }
     const providerChanged = await provider?.confirm(deadline);
-    const activityChanged = await activity.confirm(deadline, needsApproval);
+    const activityChanged = await activity.confirm(deadline, needsApproval, refuseMemoryLoads);
     return activityChanged || providerChanged === true;
   }
   const providerFacts = provider === undefined ? {} : { provider };
@@ -89,7 +90,7 @@ async function readTurnActivity(store: EventStore, silo: string, assistantId: st
   const positions = new Map<string, number>();
   const subjects = [conversationSubject, computerSubject];
 
-  async function confirm(deadline: number, needsApproval: boolean) {
+  async function confirm(deadline: number, needsApproval: boolean, refuseMemoryLoads = false) {
     // Read only activity saved since the histories above. Never replay a long chat
     // inside the short access check. Keep these positions within this request only.
     let foundNewRows = false;
@@ -100,7 +101,7 @@ async function readTurnActivity(store: EventStore, silo: string, assistantId: st
       if (to < from) continue;
       for await (const row of store.readStream(subject, from, deadline, includeConversationCloses)) {
         if (row.sequence > to) break;
-        const changed = changesDecisionActivity(row.event, turnId, needsApproval);
+        const changed = changesDecisionActivity(row.event, turnId, needsApproval, refuseMemoryLoads);
         if (changed) throw new Error('Authority changed');
       }
       positions.set(subject, to);
@@ -111,7 +112,8 @@ async function readTurnActivity(store: EventStore, silo: string, assistantId: st
   return { conversation, computer, confirm };
 }
 
-function changesDecisionActivity(event: EventEnvelope, turnId: string, needsApproval: boolean) {
+function changesDecisionActivity(event: EventEnvelope, turnId: string, needsApproval: boolean,
+  refuseMemoryLoads = false) {
   if (event.subject.startsWith('computer-')) {
     const turnActivity = ['computer.turn_started', 'computer.turn_closed'].includes(event.type);
     return !turnActivity || data(event)['turnId'] === turnId;
@@ -123,12 +125,27 @@ function changesDecisionActivity(event: EventEnvelope, turnId: string, needsAppr
   if (closesDecisionTurn(event, turnId)) return true;
   if (event.type === 'agent.memory_context_recorded') {
     const fields = data(event);
+    // Refuse old passes when a recall adds references after their history was read.
     const terminal = fields['action'] === 'invalidated' || fields['action'] === 'ended';
-    return terminal && fields['turnId'] === turnId;
+    return (terminal || refuseMemoryLoads) && fields['turnId'] === turnId;
   }
   if (harmlessConversationTypes.includes(event.type)) return false;
   const olderTurnEnded = [
     'agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested',
   ].includes(event.type);
   return !olderTurnEnded;
+}
+
+export function decisionHistoryDeadline(managedRoute: boolean, decisionDeadline: number) {
+  if (managedRoute) {
+    return performance.now() + 10_000;
+  }
+  return decisionDeadline;
+}
+
+export function decisionAccessStarted(managedRoute: boolean, loadedMemory: boolean, started: number) {
+  if (managedRoute || loadedMemory) {
+    return performance.now();
+  }
+  return started;
 }
