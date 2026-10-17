@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 import { history, migrateBudgetDefault } from '@opencrane/models';
@@ -74,20 +74,18 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
         const conversationId = new URL(member.url()).searchParams.get('conversation');
         assert(conversationId);
         const head = await store.head();
-        const notices = await member.locator('oc-budget-stop-notice').count();
         const budgetBefore = await history(store, `budget-${silo}`, silo);
         const reservations = budgetBefore.filter(isReservation).length;
         const prompt = `Ceiling refusal: ${scope} at ${width}px.`;
         await member.getByRole('textbox', { name: 'Message your agent' }).fill(prompt);
         await member.getByRole('button', { name: 'Send message', exact: true }).click();
-        await member.waitForFunction(hasNewBudgetNotice, notices);
-        const notice = member.locator('oc-budget-stop-notice').last();
-        await notice.waitFor();
-        assert((await notice.innerText()).includes('An Owner or Admin can review the limit'));
-        assert((await notice.innerText()).includes('next monthly budget period (UTC)'));
+        const notice = await findBudgetNoticeForPrompt(member, prompt);
+        await waitForBudgetNoticeToSettle(notice);
+        await assertSavedBudgetNotice(notice);
         await member.reload();
-        await member.waitForFunction(hasNewBudgetNotice, notices);
-        await notice.waitFor();
+        const reloadedNotice = await findBudgetNoticeForPrompt(member, prompt);
+        await waitForBudgetNoticeToSettle(reloadedNotice);
+        await assertSavedBudgetNotice(reloadedNotice);
         const rows = [];
         const after = await store.head();
         for await (const row of readEvents(store, head + 1, after)) {
@@ -181,6 +179,27 @@ function isReservation(row: StoredEvent) {
   return row.event.type === 'budget.reserved';
 }
 
-function hasNewBudgetNotice(count: number) {
-  return document.querySelectorAll('oc-budget-stop-notice').length > count;
+async function findBudgetNoticeForPrompt(member: Page, prompt: string): Promise<Locator> {
+  const message = member.getByText(prompt, { exact: true });
+  await message.waitFor({ state: 'visible' });
+  const entry = message.locator('xpath=ancestor::article[1]');
+  const agentTurn = entry.locator('xpath=following-sibling::article[1]');
+  const notice = agentTurn.locator('oc-budget-stop-notice');
+  await notice.waitFor({ state: 'attached' });
+  return notice;
+}
+
+async function assertSavedBudgetNotice(notice: Locator): Promise<void> {
+  const copy = await notice.innerText();
+  assert(copy.includes('limit reached'), 'Saved budget notice names the reached limit');
+  assert(copy.includes('Ask an admin to review the limit'),
+    'Saved budget notice says an admin can review the limit');
+  assert(copy.includes("Waiting for the reset won't help"),
+    'A zero ceiling says waiting for the reset will not help');
+  assert(!copy.includes('next monthly budget period'),
+    'A zero ceiling does not suggest waiting for the next monthly period');
+}
+
+async function waitForBudgetNoticeToSettle(notice: Locator) {
+  await notice.getByText('Checking stop details', { exact: true }).waitFor({ state: 'hidden' });
 }
