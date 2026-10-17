@@ -2421,6 +2421,8 @@ using the managed-by label. It reads at most 1 MiB and accepts a continuation of
 4,096 characters. It passes each verified stage through `reconcileConnectionStage`.
 The result contains counts and a private continuation, never credential material.
 Callers retain that continuation between pages and start a new pass after the last page.
+Malformed objects or stage annotations stay in storage and are excluded from the
+examined count. Healthy neighbours are still checked and the continuation is preserved.
 An unknown page result must be retried with the same continuation. An expired Kubernetes
 continuation requires a new pass; duplicate checks are harmless. No timer, command,
 HTTP route or replay path calls this entry point yet.

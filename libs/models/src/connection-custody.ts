@@ -29,7 +29,7 @@ const secretSchema = z.object({
 type Secret = z.infer<typeof secretSchema>;
 const pageSchema = z.object({
   metadata: z.object({ continue: z.string().max(4096).optional() }),
-  items: z.array(secretSchema).max(25),
+  items: z.array(z.unknown()).max(25),
 });
 const prefix = 'opencrane.ai/';
 
@@ -223,15 +223,9 @@ class ConnectionCustody {
       const body = await readResponse(response, 1_048_576);
       const page = pageSchema.parse(body);
       const stages: ConnectionStage[] = [];
-      for (const secret of page.items) {
-        const record = secret.metadata.annotations[`${prefix}stage`];
-        if (!record) {
-          continue;
-        }
-        const raw: unknown = JSON.parse(record);
-        const stage = checkedStage(raw);
-        // Use the keyed check to find a profile, never to establish the original UID.
-        if (this.verify(secret, stage)) {
+      for (const item of page.items) {
+        const stage = this.candidate(item);
+        if (stage) {
           stages.push(stage);
         }
       }
@@ -239,6 +233,25 @@ class ConnectionCustody {
         continuation: page.metadata.continue || undefined };
     } catch {
       return { status: 'unknown' as const };
+    }
+  }
+  private candidate(item: unknown): ConnectionStage | undefined {
+    try {
+      const secret = secretSchema.parse(item);
+      const record = secret.metadata.annotations[`${prefix}stage`];
+      if (!record) {
+        return undefined;
+      }
+      const raw: unknown = JSON.parse(record);
+      const stage = checkedStage(raw);
+      // Use the keyed check to find a profile, never to establish the original UID.
+      if (this.verify(secret, stage)) {
+        return stage;
+      }
+      return undefined;
+    } catch {
+      // Retain damaged objects without blocking healthy neighbours or later pages.
+      return undefined;
     }
   }
   async remove(input: ConnectionStage, expected?: ConnectionIdentity): Promise<Result> {
