@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: {{ required "postgres pin" .Values.images.postgres | quote }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secrets.postgres | quote }} }
+          ports: [{ containerPort: 5432 }]
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, postgres]
+            periodSeconds: 5
+          resources:
+            limits: { cpu: 500m, memory: 384Mi }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 1Gi }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+spec:
+  serviceName: nats
+  replicas: 1
+  selector:
+    matchLabels: { app: nats }
+  template:
+    metadata:
+      labels: { app: nats }
+    spec:
+      containers:
+        - name: nats
+          image: {{ required "nats pin" .Values.images.nats | quote }}
+          args: [-c, /etc/nats/nats.conf]
+          envFrom:
+            - secretRef: { name: {{ .Values.secrets.nats | quote }} }
+          ports: [{ containerPort: 4222 }]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: settings, mountPath: /etc/nats, readOnly: true }
+            - { name: settings, mountPath: /tls, readOnly: true }
+          resources:
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: settings
+          secret: { secretName: {{ .Values.secrets.nats | quote }} }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 1Gi }

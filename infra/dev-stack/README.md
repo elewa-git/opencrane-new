@@ -19,7 +19,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
-  stack -->|runs checks; skips the approval journey| journeys["Journeys and timer<br/>browser checks, saved-data repeats and daily run"]
+  stack -->|keeps Helm installs owned| package["package<br/>local Helm install"]
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|uses local cluster| devbox
 ```
@@ -70,7 +70,8 @@ and call checks are being connected.
 the worktree, the claiming process id and the start time. A later claim reuses the same
 slot for this worktree. A claim stays reserved for at least 15 minutes so the stack
 has time to start. After that, another worktree can reclaim it if the claiming process
-has ended and no stack processes or containers are running. `status.sh` reports `free`
+has ended and no stack processes, containers or package namespace are running.
+Kubernetes errors keep a package slot busy. `status.sh` reports `free`
 for an unused slot and does not create its owner file. `down.sh` also leaves an unused
 slot alone.
 

@@ -18,6 +18,8 @@ import { envelope } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
+import { installPackage, packagedSlotIsBusy, preparePackage, removePackage,
+  verifyPackageOwner } from './packaged.ts';
 
 const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
@@ -147,6 +149,7 @@ async function slotIsFree() {
     return false;
   }
   if (await ownerProcessIsRunning(owner)) return false;
+  if (await packagedSlotIsBusy()) return false;
   return !await stackProcessIsRunning();
 }
 async function start(name: string, args: string[], env: Record<string, string>) {
@@ -529,7 +532,8 @@ async function status() {
 let prepared = false;
 try {
   const [action, flag, extra] = process.argv.slice(2);
-  if (extra || (flag && !(action === 'up' && flag === '--fresh'))) {
+  if (extra || (flag && !(action === 'up' && flag === '--fresh') &&
+      !(action === 'package-up' && flag))) {
     throw new Error('Usage: up.sh [--fresh], down.sh, status.sh, journey.sh');
   }
   const directoryPresent = await stat(directory).then(() => true, () => false);
@@ -559,7 +563,23 @@ try {
     console.log(stackId);
     process.exit(0);
   }
+  if (action?.startsWith('package-')) {
+    if (action === 'package-prepare') await preparePackage();
+    else if (action === 'package-up' && flag) await installPackage(flag);
+    else if (action === 'package-down') await removePackage();
+    else if (action === 'package-check') await verifyPackageOwner();
+    else throw new Error('Unknown package action');
+    process.exit(0);
+  }
+  if (action === 'down' && secondary && directoryPresent) {
+    const owner = await readStackOwner();
+    if (owner?.worktree !== root) throw new Error('This worktree does not own the slot');
+    await removePackage();
+  }
   if (action === 'up') {
+    if (secondary && await packagedSlotIsBusy()) {
+      throw new Error('A Helm package already uses this secondary slot');
+    }
     const ownerRecord = secondary
       ? await stackOwnerRecord(Number(process.env['DEV_STACK_CLAIM_PID'] ?? process.pid))
       : undefined;
@@ -590,6 +610,10 @@ try {
 } catch (error) {
   // Error causes may contain database passwords; never print raw dependency errors.
   if (prepared) await save('failure.log', String(error));
-  console.error(prepared ? `Dev stack failed; inspect private logs in ${directory}` : 'DEV_STACK_DIR must be an empty dedicated directory outside the repository, or owned by this worktree');
+  if (process.argv[2]?.startsWith('package-')) {
+    console.error('Package command refused; check pins, named secrets and slot ownership');
+  } else {
+    console.error(prepared ? `Dev stack failed; inspect private logs in ${directory}` : 'DEV_STACK_DIR must be an empty dedicated directory outside the repository, or owned by this worktree');
+  }
   process.exitCode = 1;
 }

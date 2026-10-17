@@ -1,0 +1,16 @@
+chartVersion: "0.1.0"
+images:
+  server: ""
+  web: ""
+  postgres: ""
+  nats: ""
+  openfga: ""
+secrets:
+  runtime: ""
+  postgres: ""
+  nats: ""
+  openfga: ""
+exposure:
+  ingress: false
+  loadBalancer: false
+  funnel: false
