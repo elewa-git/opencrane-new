@@ -108,7 +108,7 @@ export async function fetchRemovalStatus(memberId: string, commandId: string,
 }
 
 async function roleReply<T>(response: Response,
-  schema: typeof memberRoleReceiptSchema | typeof memberRoleStatusSchema,
+  schema: z.ZodType<T>,
 ): Promise<RoleResult<T>> {
   if (response.status === 401 || response.status === 403) {
     return { kind: 'denied', status: response.status };
@@ -127,7 +127,7 @@ async function roleReply<T>(response: Response,
     const raw: unknown = await response.json();
     const parsed = schema.safeParse(raw);
     if (!parsed.success) return { kind: 'failed' };
-    return { kind: 'ok', value: parsed.data as T };
+    return { kind: 'ok', value: parsed.data };
   } catch { return { kind: 'failed' }; }
 }
 

@@ -45,7 +45,9 @@ function mount(fetcher: typeof fetch): ComponentFixture<MemberDetailScreen> {
 
 function page(fixture: ComponentFixture<MemberDetailScreen>): HTMLElement {
   fixture.detectChanges();
-  return fixture.nativeElement as HTMLElement;
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Expected a member detail page');
+  return element;
 }
 
 function click(fixture: ComponentFixture<MemberDetailScreen>, label: string): void {
@@ -72,7 +74,8 @@ it('sends one exact role command on a double click, then reads status', async ()
     paths.push(url);
     if (url.endsWith('/access')) return Promise.resolve(reply(access));
     if (init?.method === 'POST') {
-      posts.push(JSON.parse(String(init.body)) as unknown);
+      if (typeof init.body !== 'string') throw new Error('Expected JSON command body');
+      posts.push(JSON.parse(init.body) as unknown);
       return Promise.resolve(reply(receipt));
     }
     if (url.endsWith('/changes/role-command')) {

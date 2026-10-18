@@ -98,7 +98,7 @@ async function capture(browser, width, frame) {
       await opener.click();
       await page.getByRole('heading', { name: /Change Alex Kim.*role/ }).waitFor();
       await page.getByRole('button', { name: 'Cancel' }).last().click();
-      assert(await opener.evaluate(element => element === document.activeElement));
+      assert(await opener.evaluate(element => element === globalThis.document.activeElement));
       await opener.click();
       await page.locator('input[value="admin"]').check();
     }
