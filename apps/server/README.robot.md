@@ -3272,3 +3272,12 @@ They cover recovery and a later command, and require the corrected fact to remai
 `test/memory.test.ts` covers HTTP, competing changes, restart and candidate custody with real
 NATS, PostgreSQL and OpenFGA. Existing ops tests cover cleanup and replay.
 Fresh-install qualification: NOT RUN.
+
+## Spending choice validation
+
+The existing POST `/api/org/models` sends its signed command to `configureBudget`.
+New commands now validate saved groups, shared assistants and the chosen default
+payer before checking current caller access. The budget integration test seeds real
+groups and a shared assistant; personal-assistant caps are refused. Exact saved
+retries retain their original receipts. The scope-choices GET remains the next
+part of P4-26 row 3, together with its protocol and pagination tests.

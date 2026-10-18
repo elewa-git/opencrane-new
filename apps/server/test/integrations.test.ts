@@ -599,6 +599,16 @@ it('budget commands are retryable while a current role waits for its IAM receipt
   retriesBudgetDuringIamLag);
 
 it('lets Owner and Admin configure the one budget actor, refuses others and replays every ceiling', async () => {
+  for (const teamId of ['personal-default', 'sales']) {
+    const group = fixture('team.created', `team-${teamId}`, {
+      teamId, name: 'Sales', createdBy: 'alice',
+    });
+    await append(group);
+  }
+  const shared = fixture('assistant.created', 'assistant-shared-sales', {
+    assistantId: 'shared-sales', ownerId: 'sales', kind: 'team', payingGroupId: 'sales',
+  });
+  await append(shared);
   const url = '/api/org/models';
   const payload = { commandId: 'budget-global', expectedSequence: actor.state.sequence, scope: 'global', ceilingCents: 30000, dailyCeilingCents: 2000, defaultPayingGroupId: 'personal-default' };
   for (const sub of ['oidc-bob', 'oidc-mallory']) expect((await app.inject({ method: 'POST', url, headers: { ...headers(sub), origin: new URL(config.redirectUri).origin }, payload })).statusCode).toBe(403);
@@ -608,12 +618,20 @@ it('lets Owner and Admin configure the one budget actor, refuses others and repl
   expect((await save('oidc-alice', payload)).statusCode).toBe(200);
   expect((await save('oidc-alice', payload)).statusCode).toBe(200);
   for (const scope of ['paying_group', 'assistant'] as const) {
-    expect((await save('oidc-amina', { commandId: `budget-${scope}`, expectedSequence: actor.state.sequence, scope, scopeId: scope === 'assistant' ? 'personal-alice' : 'sales', ceilingCents: 1000 })).statusCode).toBe(200);
+    const scopeId = scope === 'assistant' ? 'shared-sales' : 'sales';
+    const command = { commandId: `budget-${scope}`, expectedSequence: actor.state.sequence,
+      scope, scopeId, ceilingCents: 1000 };
+    expect((await save('oidc-amina', command)).statusCode).toBe(200);
   }
   const before = actor.state;
   await runner.rebuild(budgets); expect(await readBudget(pgDb(dbs.queue), 'test')).toEqual(before);
   const reply = await app.inject({ url, headers: headers('oidc-amina') });
-  expect(reply.json()).toMatchObject({ budget: { defaultPayingGroupId: 'personal-default', ceilings: [{ scope: 'paying_group', scopeId: 'sales', ceilingCents: 1000 }, { scope: 'assistant', scopeId: 'personal-alice', ceilingCents: 1000 }] } });
+  const ceilings = [
+    { scope: 'paying_group', scopeId: 'sales', ceilingCents: 1000 },
+    { scope: 'assistant', scopeId: 'shared-sales', ceilingCents: 1000 },
+  ];
+  expect(reply.json()).toMatchObject({ budget: { defaultPayingGroupId: 'personal-default',
+    ceilings } });
   const race = await Promise.all(['first', 'second'].map(commandId => save('oidc-alice', { ...payload, commandId, expectedSequence: actor.state.sequence, ceilingCents: 40000 })));
   expect(race.map(r => r.statusCode).sort()).toEqual([200, 409]);
   expect((await fetch(`${decision.url}/budgets`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })).status).toBe(403);

@@ -536,6 +536,15 @@ never erases usage or outstanding reservations. Global defaults remain 20,000
 monthly and 2,000 daily cents. Installation explicitly configures its personal
 paying group; there is no silo-id fallback.
 
+Before a new admin ceiling command appends, the models process checks the chosen
+group or shared assistant and any newly selected default payer against their saved
+events. Personal, inactive or retired assistants and unknown or foreign groups
+refuse without an append or a replacement choice. These histories load before the
+short write access check, which watches their exact streams for later changes.
+An exact saved retry checks current caller access and returns its original receipt
+before validating the old choice again. These checks add no event types or fields;
+the `budget.ceiling_set` registry entry and replay contract remain unchanged.
+
 `conversation.created` may hold an explicitly selected shared `payingGroupId`.
 At work admission, the server binds that group, or the installation's configured
 default for personal work, into `computer.turn_started.payingGroupId`. Retries

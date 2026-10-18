@@ -27,7 +27,8 @@ export function ceilingReceiptFromHistory(row: StoredEvent, rows: StoredEvent[])
 
 export async function prepareCeilingChange(
   actor: { store: EventStore; silo: string; state: BudgetState },
-  raw: unknown, commandId: string, expectedSequence?: number, fresh?: () => Promise<void>,
+  raw: unknown, commandId: string, expectedSequence?: number,
+  fresh?: (newCommand?: boolean) => Promise<void>,
 ) {
   const payload = budgetCeilingSetDataSchema.parse(raw);
   const subject = `budget-${actor.silo}`;
@@ -43,7 +44,8 @@ export async function prepareCeilingChange(
     receipt = ceilingReceiptFromHistory(prior, rows);
   }
   // Start the caller's write check only after history and queue waiting have finished.
-  await fresh?.();
+  // Keep saved retries independent of choices that have since become unavailable.
+  await fresh?.(!prior);
   if (prior) return receipt ?? { status: 'conflict' as const };
   // Keep reservation changes in this revision; a conflict need not mean another edit.
   if (expectedSequence !== undefined && expectedSequence !== actor.state.sequence) {
