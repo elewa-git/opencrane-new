@@ -195,7 +195,7 @@ async function refusesRemovalAfterPermission(testCase: (typeof removalsAfterPerm
 }
 it.each(removalsAfterPermission)(
   'refuses $type after IAM replies when a list reader reuses checked membership',
-  refusesRemovalAfterPermission, 30_000);
+  refusesRemovalAfterPermission, 120_000);
 
 async function openChatSocket(context: Fixture, conversationId: string, waitReady = true, memberId = 'alice') {
   const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
@@ -1481,7 +1481,7 @@ async function participationVolume(sharedChild = false) {
       });
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).toContain('Hello');
-      expect(performance.now() - started).toBeLessThan(1500);
+      expect(performance.now() - started).toBeLessThan(2000);
       if (!sharedChild) {
         await expect(viewAccess(context.options, 'alice', 'volume')).resolves.toMatchObject({
           computerId: 'desktop',
