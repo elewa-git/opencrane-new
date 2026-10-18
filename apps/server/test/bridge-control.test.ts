@@ -141,6 +141,10 @@ it('fails each queued input once after close and keeps the original messages', a
     conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
     ...test.keys.encrypt('test', 'chat', 'Another request'),
   });
+  await test.append('conversation-chat', 'message.posted', {
+    conversationId: 'chat', authorId: 'routine', authorKind: 'system', contentType: 'text',
+    ...test.keys.encrypt('test', 'chat', 'Routine update'),
+  });
   await test.append('conversation-chat', 'conversation.closed', {
     conversationId: 'chat', closedBy: 'alice',
   });
@@ -152,7 +156,7 @@ it('fails each queued input once after close and keeps the original messages', a
   const rows = await chatHistory(test.store, 'test', 'chat');
   const failures = rows.filter(isClosedFailure);
   expect(failures.map(turnIdOf)).toEqual([test.message.id, second.id]);
-  expect(rows.filter(isPosted)).toHaveLength(2);
+  expect(rows.filter(isPosted)).toHaveLength(3);
   expect(test.frames.filter(isTurnOrFile)).toEqual([]);
 });
 
