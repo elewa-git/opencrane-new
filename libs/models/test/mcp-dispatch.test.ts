@@ -1598,6 +1598,7 @@ async function acceptsCurrentAndCarriedGeneration() {
   const { setup, delivery } = context;
   expect(await gatewayCall(context)).toBe(200);
   expect(setup.received()).toBe(1);
+  await expectDispatchStarted(setup, context.record, 0);
   const next = await nextCarriedGeneration(context);
   expect(await gatewayCall(context)).toBe(403);
   const writing = delivery.deliver(next);
@@ -1612,6 +1613,7 @@ async function acceptsCurrentAndCarriedGeneration() {
   expect(old.status).toBe(403);
   expect(await gatewayCall(context)).toBe(200);
   expect(setup.received()).toBe(2);
+  await expectDispatchStarted(setup, next, 1);
   const rows = await history(setup.nats.store, 'mcp-fixture', 'test');
   function isReceipt(row: typeof rows[number]) {
     return row.event.type === 'mcp.configuration_observed';
@@ -1620,6 +1622,23 @@ async function acceptsCurrentAndCarriedGeneration() {
 }
 it('accepts only the current acknowledged generation, including a carried member',
   acceptsCurrentAndCarriedGeneration);
+
+async function expectDispatchStarted(setup: Fixture,
+  record: Awaited<ReturnType<typeof publishRestoration>>, requestIndex: number) {
+  const request = setup.providerRequests()[requestIndex]!;
+  const requestId = z.string().parse(request.correlationHeaders['x-request-id']);
+  const rows = await history(setup.nats.store, `decision-${requestId}`, 'test');
+  function isStarted(row: typeof rows[number]) {
+    return row.event.type === 'tool.dispatch_started';
+  }
+  const started = rows.filter(isStarted);
+  expect(started).toHaveLength(1);
+  expect(started[0]!.event.data).toEqual({ requestId, serverId: 'fixture',
+    connectionId: 'installed', generation: record.generation, recordDigest: record.recordDigest,
+    reviewRevision: record.members[0]!.entry.reviewRevision });
+  expect(rows[0]!.event.type).toBe('decision.recorded');
+  expect(started[0]!.sequence).toBeGreaterThan(rows[0]!.sequence);
+}
 
 const constantChanges = ['missing', 'generation', 'record-digest', 'server-id',
   'connection-id', 'review-revision', 'duplicate'] as const;
