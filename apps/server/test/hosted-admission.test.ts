@@ -259,3 +259,194 @@ async function appendCheckedFixture(payload: { serverId: string }) {
   const outcome = await nats.store.append({ event, expectedSequence });
   expect(outcome.status).toBe('appended');
 }
+
+async function checkInput(serverId: string) {
+  const saved = await registrations();
+  return { commandId: 'recheck-image', expectedSequence: await nats.store.head(`mcp-${serverId}`),
+    registrationRevision: saved[0]!.sequence, attemptId: 2,
+    imageDigest: digest, platform: command.platform };
+}
+async function requestCheck(serverId: string, payload: Record<string, unknown>, sub = 'alice',
+  origin?: string) {
+  return app.inject({ method: 'POST', url: `/api/org/integrations/${serverId}/checks`,
+    headers: headers(sub, origin), payload });
+}
+async function failedInstallation() {
+  const serverId = await installed();
+  const failed = { ...dated, verdict: 'fail', reasonCodes: ['unsigned'] };
+  const payload = { ...result(serverId), checks: { signature: failed,
+    licence: { verdict: 'not_run' }, vulnerability: { verdict: 'not_run' },
+    malware: { verdict: 'not_run' } } };
+  await appendCheckedFixture(payload);
+  return serverId;
+}
+async function recoversRequestedCheck() {
+  const serverId = await failedInstallation();
+  const input = await checkInput(serverId);
+  const append = nats.store.append.bind(nats.store);
+  async function lostReply(entry: Parameters<typeof append>[0]): ReturnType<typeof append> {
+    await append(entry);
+    throw new Error('Lost acknowledgement');
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(lostReply);
+  expect((await requestCheck(serverId, input)).statusCode).toBe(503);
+  const response = await requestCheck(serverId, input);
+  expect(response.statusCode).toBe(202);
+  const receipt = response.json();
+  expect(receipt).toMatchObject({ status: 'appended', serverId, attemptId: 2,
+    changeRef: 'chg_recheck-image' });
+  expect((await requestCheck(serverId, input)).json()).toEqual(receipt);
+  const saved = await registrations();
+  expect(saved).toHaveLength(3);
+  expect(saved[2]?.event).toMatchObject({ type: 'mcp.image_check_requested',
+    commandId: input.commandId, principal: { kind: 'human', id: 'alice' },
+    data: { serverId, attemptId: 2, registrationRevision: input.registrationRevision,
+      expectedSequence: input.expectedSequence, imageDigest: digest, platform: command.platform } });
+  expect((await status(serverId)).json()).toMatchObject({ status: 'checking', attemptId: 2 });
+  const next = { ...input, commandId: 'another', attemptId: 3,
+    expectedSequence: saved[2]!.sequence };
+  expect((await requestCheck(serverId, next)).statusCode).toBe(409);
+  for (const patch of [{ imageDigest: 'b'.repeat(64) }, { platform: 'linux/arm64' },
+    { expectedSequence: 0 }, { registrationRevision: 99 }, { attemptId: 3 }]) {
+    expect((await requestCheck(serverId, { ...input, ...patch })).statusCode).toBe(409);
+  }
+  expect((await requestCheck(serverId, input, 'amina')).statusCode).toBe(409);
+  await verifyRequestedReplay(serverId, saved[2]!.sequence, input.registrationRevision);
+  expect(await registrations()).toEqual(saved);
+}
+it('recovers one requested check after a lost append reply and rejects changed retries',
+  recoversRequestedCheck);
+
+async function verifyRequestedReplay(serverId: string, sequence: number, revision: number) {
+  const before = await readHostedAdmission(nats.store, 'test', serverId);
+  const db = pgDb(dbs.queue);
+  const runner = new ProjectionRunner(db, nats.reader,
+    createLogger('check-request-test', { level: 'silent' }));
+  await runner.initialise(mcpCatalogue);
+  await runner.run(mcpCatalogue);
+  const rows = await db.query('SELECT * FROM mcp_catalogue');
+  expect(rows.rows[0]?.['policy']).toMatchObject({ sequence, policyRevision: revision });
+  const env = { ...process.env, ...nats.env('projection'),
+    DATABASE_URL: String(dbs.queue.options.connectionString) };
+  const exec = promisify(execFile);
+  const replay = await exec('npm', ['run', 'replay', '--', 'mcp-catalogue', '--verify'], { env });
+  expect(replay.stdout).toContain('rebuilt state matched the live projection');
+  expect((await db.query('SELECT * FROM mcp_catalogue')).rows).toEqual(rows.rows);
+  expect(await readHostedAdmission(nats.store, 'test', serverId)).toEqual(before);
+  const workerApp = Fastify();
+  const resolve = vi.fn();
+  try {
+    await installWorker(workerApp, nats.store, 'test', { resolve }).discover(serverId);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(await discoveryStatus(nats.store, 'test', serverId)).toMatchObject({ state: 'checking' });
+  } finally {
+    await workerApp.close();
+  }
+}
+
+async function refusesUnfinishedCheck(state: 'pending' | 'admitted' | 'unavailable' | 'mixed') {
+  const serverId = await installed();
+  if (state !== 'pending') {
+    const valid = result(serverId);
+    let signature: Record<string, unknown> = dated;
+    if (state === 'unavailable' || state === 'mixed') {
+      signature = { ...dated, verdict: 'unavailable' };
+    }
+    let licence: Record<string, unknown> = dated;
+    if (state === 'mixed') licence = { ...dated, verdict: 'fail', reasonCodes: ['licence'] };
+    await appendCheckedFixture({ ...valid, checks: { ...valid.checks, signature, licence } });
+  }
+  const before = await registrations();
+  const response = await requestCheck(serverId, await checkInput(serverId));
+  expect(response.statusCode).toBe(409);
+  expect(await registrations()).toEqual(before);
+  if (state === 'unavailable' || state === 'mixed') {
+    expect((await status(serverId)).json()).toMatchObject({ status: 'unavailable' });
+  }
+}
+it.each(['pending', 'admitted', 'unavailable', 'mixed'] as const)(
+  'does not bypass a %s attempt', refusesUnfinishedCheck);
+
+async function advancesExpiredCheck() {
+  const serverId = await installed();
+  const old = new Date(Date.now() - 10_000);
+  const receipt = { ...dated, checkedAt: old.toISOString(),
+    expiresAt: new Date(old.getTime() + 1_000).toISOString() };
+  const scannedReceipt = { ...receipt, databaseDigest: digest, databaseUpdatedAt: old.toISOString() };
+  const payload = { ...result(serverId), checks: { signature: receipt, licence: receipt,
+    malware: scannedReceipt, vulnerability: scannedReceipt } };
+  await appendCheckedFixture(payload);
+  expect((await status(serverId)).json()).toMatchObject({ status: 'expired' });
+  expect((await requestCheck(serverId, await checkInput(serverId))).statusCode).toBe(202);
+  expect((await status(serverId)).json()).toMatchObject({ status: 'checking', attemptId: 2 });
+}
+it('queues the next attempt after dated evidence expires', advancesExpiredCheck);
+
+async function rejectsInvalidRequest() {
+  const serverId = await failedInstallation();
+  const input = await checkInput(serverId);
+  for (const patch of [{ imageDigest: 'latest' }, { locator: 'repo:latest' },
+    { imageDigest: 'b'.repeat(64) }, { platform: 'linux/arm64' },
+    { expectedSequence: 0 }, { registrationRevision: 99 }, { attemptId: 4 }]) {
+    const response = await requestCheck(serverId, { ...input, ...patch });
+    expect([400, 409]).toContain(response.statusCode);
+  }
+  expect((await requestCheck(serverId, input, 'bob')).statusCode).toBe(403);
+  expect((await requestCheck(serverId, input, 'alice', 'https://other.test')).statusCode).toBe(403);
+  expect((await requestCheck('unknown', input)).statusCode).toBe(404);
+  for (const [id, silo, kind] of [['foreign', 'other', 'hosted'], ['remote', 'test', 'remote']]) {
+    const data = { serverId: id, registeredBy: 'alice', kind,
+      locator: kind === 'hosted' ? command.locator : 'https://example.com' };
+    const event = envelope(silo!, `mcp-${id}`, 'mcp.server_registered', data);
+    event.principal = { kind: 'human', id: 'alice' };
+    await nats.store.append({ event, expectedSequence: 0 });
+    expect((await requestCheck(id!, input)).statusCode).toBe(404);
+  }
+  vi.spyOn(auth, 'applied').mockResolvedValue(false);
+  expect((await requestCheck(serverId, input)).statusCode).toBe(503);
+}
+it('requires exact hosted identity, origin and applied admin rights', rejectsInvalidRequest);
+
+async function serialisesRequests(sameCommand: boolean) {
+  const serverId = await failedInstallation();
+  const input = await checkInput(serverId);
+  const second = { ...input, commandId: sameCommand ? input.commandId : 'competing' };
+  const requests = [requestCheck(serverId, input), requestCheck(serverId, second)];
+  const responses = await Promise.all(requests);
+  const codes = [];
+  for (const response of responses) codes.push(response.statusCode);
+  codes.sort();
+  if (sameCommand) expect(codes).toEqual([202, 202]);
+  else expect(codes).toEqual([202, 409]);
+  expect(await registrations()).toHaveLength(3);
+}
+it.each([true, false])('serialises concurrent requests (same command: %s)', serialisesRequests);
+
+async function refusesPreparationChange(change: 'registration' | 'role') {
+  const serverId = await failedInstallation();
+  const input = await checkInput(serverId);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* changedHistory(...args: Parameters<typeof read>): ReturnType<typeof read> {
+    yield* read(...args);
+    if (args[0] !== `mcp-${serverId}`) return;
+    if (change === 'role') {
+      const event = envelope('test', 'member-alice', 'member.role_changed',
+        { memberId: 'alice', previousRole: 'admin', newRole: 'member', changedBy: 'amina' });
+      await nats.store.append({ event, expectedSequence: await nats.store.head('member-alice') });
+    } else {
+      const data = { serverId, kind: 'hosted', registeredBy: 'alice', locator: command.locator,
+        installation: { attemptId: 1, platform: command.platform, upstream: command.upstream } };
+      const event = envelope('test', `mcp-${serverId}`, 'mcp.server_registered', data);
+      event.principal = { kind: 'human', id: 'alice' };
+      await nats.store.append({ event, expectedSequence: input.expectedSequence });
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(changedHistory);
+  const response = await requestCheck(serverId, input);
+  expect(response.statusCode).toBe(change === 'role' ? 403 : 409);
+  vi.restoreAllMocks();
+  const rows = await registrations();
+  for (const row of rows) expect(row.event.type).not.toBe('mcp.image_check_requested');
+}
+it.each(['registration', 'role'] as const)(
+  'refuses a %s change during preparation', refusesPreparationChange);
