@@ -30,17 +30,35 @@ function render() {
 
 function resources() {
   const documents = parseAllDocuments(render());
-  return documents.map(function parsedResource(document) {
-    return document.toJS();
-  });
+  return documents.map(parsedResource);
+}
+
+function parsedResource(document) {
+  return document.toJS();
 }
 
 function namedResource(kind, name) {
-  const matches = resources().filter(function hasName(resource) {
-    return resource?.kind === kind && resource?.metadata?.name === name;
-  });
-  assert.equal(matches.length, 1);
-  return matches[0];
+  let match;
+  for (const resource of resources()) {
+    if (resource?.kind !== kind || resource?.metadata?.name !== name) continue;
+    assert.equal(match, undefined);
+    match = resource;
+  }
+  assert.ok(match);
+  return match;
+}
+
+function privateFileMount(mount) {
+  return mount.name === 'runtime-files' && mount.readOnly === true &&
+    mount.mountPath === '/run/opencrane/files';
+}
+
+function privateFileVolume(volume) {
+  return volume.name === 'runtime-files';
+}
+
+function privateFileImport(source) {
+  return source.secretRef.name === 'runtime-files';
 }
 
 test('the package runs member and conversation projections and a dispatcher', () => {
@@ -75,27 +93,40 @@ test('the computer can reach only the private gateway without DNS', () => {
 });
 
 test('a binary key stays in a mounted Secret and outside every environment import', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'package-key-'));
   const key = Buffer.alloc(32, 0x41);
   key[3] = 0;
-  const secret = { data: { 'conversation-wrap-key': key.toString('base64') } };
+  const keyFile = join(directory, 'conversation-wrap-key');
+  writeFileSync(keyFile, key);
+  let secret;
+  try {
+    const output = execFileSync('kubectl', ['create', 'secret', 'generic', 'runtime-files',
+      `--from-file=conversation-wrap-key=${keyFile}`, '--dry-run=client', '-o', 'json']);
+    secret = JSON.parse(output.toString('utf8'));
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
   assert.deepEqual(Buffer.from(secret.data['conversation-wrap-key'], 'base64'), key);
 
   const server = namedResource('Deployment', 'server');
   const containers = server.spec.template.spec.containers;
   for (const container of containers) {
     assert.deepEqual(container.envFrom, [{ secretRef: { name: 'runtime' } }]);
-    assert.ok(container.volumeMounts.some(function mountsPrivateFiles(mount) {
-      return mount.name === 'runtime-files' && mount.readOnly === true &&
-        mount.mountPath === '/run/opencrane/files';
-    }));
+    assert.ok(container.volumeMounts.some(privateFileMount));
+    assert.ok(!container.envFrom.some(privateFileImport));
   }
-  const files = server.spec.template.spec.volumes.find(function isPrivateFiles(volume) {
-    return volume.name === 'runtime-files';
-  });
+  const files = server.spec.template.spec.volumes.find(privateFileVolume);
   assert.deepEqual(files.secret, { secretName: 'runtime-files', defaultMode: 0o400 });
-  assert.ok(!containers.some(function importsPrivateFiles(container) {
-    return container.envFrom.some(function isPrivateFileImport(source) {
-      return source.secretRef.name === 'runtime-files';
-    });
-  }));
+
+  const bootstrap = namedResource('Job', 'bootstrap');
+  const bootstrapSpec = bootstrap.spec.template.spec;
+  assert.ok(bootstrapSpec.containers[0].volumeMounts.some(privateFileMount));
+  const bootstrapFiles = bootstrapSpec.volumes.find(privateFileVolume);
+  assert.deepEqual(bootstrapFiles.secret, { secretName: 'runtime-files', defaultMode: 0o400 });
+
+  const worker = namedResource('Deployment', 'worker-members');
+  const workerSpec = worker.spec.template.spec;
+  assert.ok(workerSpec.containers[0].volumeMounts.some(privateFileMount));
+  const workerFiles = workerSpec.volumes.find(privateFileVolume);
+  assert.deepEqual(workerFiles.secret, { secretName: 'runtime-files', defaultMode: 0o400 });
 });
