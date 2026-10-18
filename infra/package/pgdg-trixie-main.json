@@ -1,0 +1,52 @@
+{
+  "imagePin": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
+  "source": "https://apt.postgresql.org/pub/repos/apt/dists/trixie-pgdg/main/binary-amd64/Packages.gz",
+  "packagesSha256": "a3f950abbc70349df9319027bda0cf963a10e22535f6492b984e8ef1f7fc1965",
+  "packages": [
+    {
+      "name": "libpq5",
+      "version": "18.6-1.pgdg13+2",
+      "architecture": "amd64",
+      "filename": "pool/main/p/postgresql-18/libpq5_18.6-1.pgdg13+2_amd64.deb",
+      "sha256": "c6cc459bb499db4697686533e50bf5943f7e7d6929c04ef55eec184d5436859b",
+      "licence": "PostgreSQL",
+      "copyrightSha256": "afcc052a946b4117667527211b4ca303f07044f5585222f4c8f577e0764b2123"
+    },
+    {
+      "name": "postgresql-17",
+      "version": "17.11-1.pgdg13+2",
+      "architecture": "amd64",
+      "filename": "pool/main/p/postgresql-17/postgresql-17_17.11-1.pgdg13+2_amd64.deb",
+      "sha256": "4f8b42bd3202d24953996743afbc90b609d3337c90bb740568b52d06ebfdcb15",
+      "licence": "PostgreSQL",
+      "copyrightSha256": "afcc052a946b4117667527211b4ca303f07044f5585222f4c8f577e0764b2123"
+    },
+    {
+      "name": "postgresql-client-17",
+      "version": "17.11-1.pgdg13+2",
+      "architecture": "amd64",
+      "filename": "pool/main/p/postgresql-17/postgresql-client-17_17.11-1.pgdg13+2_amd64.deb",
+      "sha256": "c36408bb62178bc9193c113da65e30fc6a5237648de5e9db1ea594214df9ae4b",
+      "licence": "PostgreSQL",
+      "copyrightSha256": "afcc052a946b4117667527211b4ca303f07044f5585222f4c8f577e0764b2123"
+    },
+    {
+      "name": "postgresql-client-common",
+      "version": "293.pgdg13+1",
+      "architecture": "all",
+      "filename": "pool/main/p/postgresql-common/postgresql-client-common_293.pgdg13+1_all.deb",
+      "sha256": "70da21264140dfb34680cfec52973c7f10b5c8e3c78699a52b04e870b3dee71b",
+      "licence": "GPL-2.0-or-later",
+      "copyrightSha256": "292dcc67fc22ad11156da2b7a154da74b65e63e0f673f3d301a5ed6df85327fe"
+    },
+    {
+      "name": "postgresql-common",
+      "version": "293.pgdg13+1",
+      "architecture": "all",
+      "filename": "pool/main/p/postgresql-common/postgresql-common_293.pgdg13+1_all.deb",
+      "sha256": "c34ec06f618ed4bec388104d0183c7678876659dfa973e7a852046167288ac8c",
+      "licence": "GPL-2.0-or-later",
+      "copyrightSha256": "292dcc67fc22ad11156da2b7a154da74b65e63e0f673f3d301a5ed6df85327fe"
+    }
+  ]
+}

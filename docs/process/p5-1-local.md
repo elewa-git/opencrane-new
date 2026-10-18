@@ -100,3 +100,189 @@ infra/dev-stack/claim.test.ts infra/package/preflight.test.mjs`. These suites do
 not use PostgreSQL. Logs are `/tmp/p5-1-final-tests-1.log` and
 `/tmp/p5-1-final-tests-2.log`; the typecheck log is
 `/tmp/p5-1-final-typecheck.log`. The lint log is `/tmp/p5-1-final-lint.log`.
+
+## 18 October 2026: packaged runtime and licence review
+
+This follow-up used branch `work/p5-1b` and claimed secondary slot 1. The final
+fresh namespace was `opencrane-package-1`, UID
+`b1f7297a-5337-416d-a562-99e052e78164`. The chart and five image roles were
+fixed to reviewed digests. The website and server share one application image.
+Secrets were created from private files inside the claimed slot. No secret value
+was put in Helm values or this receipt.
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Worker and bootstrap chart tests before change | FAIL | The part a chart had no worker Deployments or owner bootstrap Job. The new render tests failed against it. |
+| Worker and bootstrap chart tests after change | PASS | The render now has the member, conversation, budget and dispatcher workers and the owner bootstrap Job. |
+| Fresh Helm install | PASS | The final pinned image started server, web, NATS, PostgreSQL, OpenFGA and eight workers. All Deployments reached Ready. The bootstrap Job completed on its first attempt. |
+| Separate owner user | PASS | The installed projection contained `jente-rosseel`, `jente@elewa.ke`, role `owner`, status `joined`. The Job confirmed its event-backed OpenFGA owner grant. The existing Zitadel user was not changed. |
+| Sign-in page and browser session | PASS | Loopback website returned HTTP 200 and sign-in redirected. A real browser signed in with the slot's separate CI user and `/auth/me` confirmed the session. |
+| Stub-model chat turn | FAIL | The signed-in workspace API returned HTTP 503. This minimal chart has no chat key directory, model gateway or computer runtime, so no turn was sent or completed. |
+| Outside-tailnet probe | PASS | A throwaway process on Docker's bridge network could not connect to the loopback forward on port 25106. The forward listened only on `127.0.0.1`; the chart exposed only ClusterIP services. |
+| Other installs and owner stack after cleanup | PASS | Package namespace and slot claim were removed. The owner and slot 2 namespace UIDs and the existing container names and IDs matched the snapshots from before cleanup. Port 44200 still listened on loopback; the package forward on 25106 was gone. |
+| Root suite | NOT RUN | This follow-up was instructed not to start the full root suite. |
+
+The signed-in installed page was captured at
+[1280px](p5-1-live/signed-in-1280.png) and
+[390px](p5-1-live/signed-in-390.png). These images show the successful browser
+session. The workspace did not pass the chat smoke.
+
+### Licence inventory
+
+Syft 1.54.0 scanned each final pinned runtime image. The application image has
+275 npm packages, 90 Go modules, 88 Debian packages and one Node binary: 454
+components.
+The same image serves the website. PostgreSQL has 142 Debian packages and four
+Go modules. The scratch NATS image has 11 Go modules and no operating-system
+packages. The scratch OpenFGA image has 143 Go modules and no operating-system
+packages. The exact names, versions, selected licences and evidence are in
+`infra/package/licence-inventory.json`. That file also records the OSI notices
+inside Node and the public-domain ICU time zone data notice with its reason.
+It records the downloaded kubectl binary separately because the scanner reports
+its Go modules but not the executable itself.
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Application licences | PASS | Every application dependency has an OSI-approved licence. The first-party packages use the root AGPL licence. The npm package with an MIT or CC0 choice uses MIT. |
+| Debian base packages | FAIL | All 88 Node image packages were found in bookworm main. Only 137 of 142 PostgreSQL image packages were found in trixie main. Five PostgreSQL packages came from PGDG, so the pinned image does not meet the Debian main rule. |
+| Go modules without embedded licences | PASS | Their source licence files were checked and recorded by hash. The pinned Kubernetes and gosu sources were checked against their official Apache-2.0 notices. |
+| Unknown and forbidden licence refusal | PASS | Synthetic checks refused `UNKNOWN`, BUSL and a package outside Debian main. A fresh Syft scan matched every reviewed image inventory entry. |
+
+The image inventory check ran against the final application digest
+`sha256:9789e2934c50e5fb04830036a0a6a98a7f49eaee0001edab783183db77bc9afe`.
+It also checked PostgreSQL
+`sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f`,
+NATS `sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3`
+and OpenFGA
+`sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796`.
+The chat journey remains incomplete.
+
+### Debian main check after review
+
+The checker now uses a small list of exact names and versions from the signed
+Debian main indexes. It checks each Debian package in every image inventory
+against the list for that image's base release. Lint does not download indexes.
+The checker also refuses a changed Debian-based image pin until the index list
+is reviewed for the new image.
+The list has 88 bookworm pairs and 137 trixie pairs. At that point, the remaining
+five packages in the PostgreSQL image were absent from trixie main:
+`libpq5 18.6-1.pgdg13+2`, `postgresql-17 17.11-1.pgdg13+2`,
+`postgresql-client-17 17.11-1.pgdg13+2`,
+`postgresql-client-common 293.pgdg13+1` and
+`postgresql-common 293.pgdg13+1`. That check refused the image until the
+PostgreSQL apt archive review below was added.
+
+One HTTPS download batch used Debian's snapshot archive. The bookworm files
+came from `snapshot.debian.org/archive/debian/20260713T000000Z/dists/bookworm/`;
+the trixie files came from
+`snapshot.debian.org/archive/debian/20260918T000000Z/dists/trixie/`.
+The signed releases are dated 11 July and 12 September 2026 respectively.
+`gpgv` accepted both `InRelease` signatures with the Debian archive keyring
+copied from the pinned PostgreSQL image. That keyring's SHA-256 was
+`506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017`.
+The bookworm stable release signing key was
+`4D64FEC119C2029067D6E791F8D2585B8783D481`; the trixie key was
+`41587F7DB8C774BCCF131416762F67A0B2C39DE4`.
+
+| Release | Signed `InRelease` SHA-256 | Extracted `Release` SHA-256 | Main `Packages.xz` SHA-256 |
+| --- | --- | --- | --- |
+| bookworm | `77737fa4b34f2693e982cc9ee35736816c35a7778fc2d326cc1bbf5b301fe1aa` | `abcf5882746e0f68171f41adbb4ac01b74b49d62d203379befb9265804311a4f` | `9e0b5aabb2465b3d2e7a7fe27f9913846277833f7a2826e7767acccff5b588c5` |
+| trixie | `0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675` | `ed56aac47e7911e65ee63aae8d67e29f20e023f840e49f8ed037043a33de138a` | `7778d3e3f303b7ddb8ce0fe7c8d57473a076c6bf2e8f241f75421d2396352498` |
+
+Each `Packages.xz` SHA-256 matched the SHA-256 entry in its signed `InRelease`
+file. Only `main/binary-amd64/Packages.xz` supplied the reviewed list. A new
+package, a different version, or a package outside main is refused until a
+new signed index is checked and the list is reviewed.
+
+| Source check after the index change | Result | Observation |
+| --- | --- | --- |
+| Missing package test before the fix | FAIL | A made-up package labelled `Debian-main` exited 0; the test required exit 1. |
+| Changed image pin test before its fix | FAIL | A changed base image reached the PostgreSQL package failure; the test required an earlier refusal of the new pin. |
+| Changed licence tests after both fixes | PASS | Ten tests passed on each of two runs. |
+| Typecheck | PASS | All workspaces and the package TypeScript check completed. |
+| Event catalogue | PASS | All 143 event types agreed. |
+| Knip | PASS | It exited 0 with two configuration hints. |
+| Changelog check | PASS | The branch fragment passed. |
+| Full lint | FAIL | Earlier lint steps passed. The package licence step refused PGDG `libpq5 18.6-1.pgdg13+2` in the pinned PostgreSQL image. |
+| Full root suite | NOT RUN | This round was limited to changed tests. |
+
+### Source checks in this follow-up
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| `npm ci` | PASS | The worktree installed from its lockfile. |
+| `npm run typecheck` | PASS | All workspaces and the package TypeScript check completed. |
+| `npm run check:events` | PASS | The 143 catalogue event types agreed. |
+| `npm run lint:unused` | PASS | Knip exited 0 with two configuration hints. |
+| `npm run lint:changelog` | PASS | The new branch fragment passed the gather check. |
+| Package render and refusal tests | PASS | Eleven Node tests passed twice, including the new worker and bootstrap render cases. |
+| Licence refusal tests | PASS | Unknown, BUSL, non-main, bundled notice and manual component cases passed twice. |
+| `helm lint` | PASS | The final chart rendered with reviewed pins and five named secret references. |
+| `npm run lint` | PASS | The full command completed with no errors and 20 existing function-length warnings outside this change. |
+
+### PostgreSQL apt archive review, 18 October 2026
+
+The pinned upstream `postgres:17` image is still
+`sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f`.
+Five of its 142 Debian packages came from the PostgreSQL project's apt archive
+(PGDG). The other 137 still match the signed trixie Debian main index. The
+checker now requires each PGDG package's exact name, version and licence to
+match [the reviewed extract](../../infra/package/pgdg-trixie-main.json). It
+refuses a PGDG label for an absent package. A PGDG package labelled as Debian
+main still fails the Debian check.
+
+One HTTPS retrieval batch read the `trixie-pgdg` `InRelease` and the `main`
+and `17` amd64 `Packages.gz` files from
+`https://apt.postgresql.org/pub/repos/apt/dists/trixie-pgdg/`. The signed
+release is dated 15 October 2026. The repository key came from
+`/usr/local/share/keyrings/postgres.gpg.asc` in the pinned image. Its SHA-256
+is `ab3ea5fa18220d88318cd9e41d1e4e709c9003c71494f9022cbd76353ba7c5e1`.
+Its fingerprint is `B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8`.
+`gpgv` reported a good `InRelease` signature from that key. The signed
+`InRelease` SHA-256 is
+`97fbcf24b43ff386ea077b1a4887199e4edbb5de38ee5a9fd1ab30a7d03dfb09`;
+the extracted `Release` SHA-256 is
+`10ffe4b0b5abc256f7174a346e5bc9bc0073b5e9f6d100927b0d77e0ef2c4628`.
+The downloaded `main/binary-amd64/Packages.gz` SHA-256 is
+`a3f950abbc70349df9319027bda0cf963a10e22535f6492b984e8ef1f7fc1965`.
+The downloaded `17/binary-amd64/Packages.gz` SHA-256 is
+`96cc182eeecbfaff9284c2a783febd9c06f55c054ddcc5077e7c550dafdb9c54`.
+Both hashes matched the SHA-256 entries in the signed Release. All five
+installed versions were present in the `main` index. The `17` index was not
+needed for the extract.
+
+The five package copyright files in that same image were checked separately.
+`libpq5`, `postgresql-17` and `postgresql-client-17` name the PostgreSQL
+License. Their copyright file SHA-256 is
+`afcc052a946b4117667527211b4ca303f07044f5585222f4c8f577e0764b2123`.
+`postgresql-common` and `postgresql-client-common` name GPL version 2 or
+later. Their copyright file SHA-256 is
+`292dcc67fc22ad11156da2b7a154da74b65e63e0f673f3d301a5ed6df85327fe`.
+The extract also records each package archive checksum from the signed index.
+No new image or dependency was added.
+
+The new refusal tests were committed before the checker change. Before it,
+the 13 licence tests had two failures: the PGDG case reported a
+five-field format error, and the unchanged real inventory was refused at
+`libpq5`. The Debian-main-labelled PGDG package already failed as required.
+No Helm install or live stack was started for this fix.
+
+| Check in this fix round | Result | Observation |
+| --- | --- | --- |
+| Rebase onto `origin/work/p5-1` at `ac8dbc7a` | PASS | The rebase finished, and that base is an ancestor of this branch. |
+| PGDG package and real inventory tests | PASS | All 13 licence tests passed twice. The checked inventory has 454 server, 454 web, 146 PostgreSQL, 11 NATS and 143 OpenFGA components. |
+| Changed slot and package tests | PASS | All 31 tests passed twice with `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and `nice -n 10`. |
+| Typecheck | PASS | The first run found an optional Helm Secret UID assignment in the rebase conflict resolution. After that was fixed, the full workspace and package typecheck passed. |
+| Event catalogue | PASS | All 143 event types agreed. |
+| Knip | PASS | The `lint:unused` stage of full lint exited 0 with two configuration hints. |
+| Changelog check | PASS | The branch fragment passed. |
+| Full lint | PASS | The first run found a missing blank line in this receipt. After the spacing fix, full lint passed, including package licences. ESLint reported 20 existing warnings and no errors. |
+| Full root suite | NOT RUN | This fix round ran the changed tests only. |
+| Live Helm install | NOT RUN | The pinned image and review data did not need a new install for this source fix. |
+
+Logs: `/tmp/p5-1b-changed-tests-final-1.log`,
+`/tmp/p5-1b-changed-tests-final-2.log`,
+`/tmp/p5-1b-licence-tests-final-1.log`,
+`/tmp/p5-1b-licence-tests-final-2.log`,
+`/tmp/p5-1b-typecheck-2.log`, `/tmp/p5-1b-events.log`,
+`/tmp/p5-1b-changelog.log` and `/tmp/p5-1b-lint-2.log`.

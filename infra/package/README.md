@@ -4,8 +4,9 @@
 
 This package defines a local Kubernetes install for the OpenCrane website,
 server and core services. It uses one of the two spare development slots.
-The application image is pinned in the local registry. A complete install still
-needs its named secrets and the remaining background services.
+The application image is pinned in the local registry. The package also runs
+the workers that keep the database up to date and a job that creates the first
+owner through events.
 Helm applies these Kubernetes resources as one named release.
 
 ## Where it fits
@@ -21,6 +22,8 @@ flowchart LR
   stack -->|checks the slot| package
   package -->|starts| apps["apps<br/>website and server"]
   package -->|starts| services["services<br/>NATS, PostgreSQL, OpenFGA"]
+  package -->|starts| workers["workers<br/>database updates"]
+  package -->|runs| bootstrap["bootstrap<br/>first owner"]
   package -->|runs in| devbox
 ```
 
@@ -30,6 +33,8 @@ flowchart LR
 - Refuse missing secrets and public network settings before installation.
 - Keep the package inside the slot owned by the current worktree.
 - Remove only the package owned by that worktree.
+- Check the licences of the pinned images against reviewed package sources before
+  they are shipped.
 
 ## Processes it handles
 
@@ -37,7 +42,8 @@ flowchart LR
    package creates a separate namespace in the local cluster. Preparation refuses
    while that slot's Compose stack is running.
 2. **The package starts.** The website and server run in separate Pods. NATS,
-   PostgreSQL and OpenFGA run in the same private namespace.
+   PostgreSQL, OpenFGA and the background workers run in the same private
+   namespace. A short job prepares the databases and creates the first owner.
 3. **A developer checks the website.** A loopback-only port forward makes the
    private website available to a browser on this machine.
 4. **A developer stops the package.** Cleanup checks the saved namespace and Helm

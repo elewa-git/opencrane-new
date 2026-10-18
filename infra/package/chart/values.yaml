@@ -10,6 +10,7 @@ secrets:
   postgres: ""
   nats: ""
   openfga: ""
+  bootstrap: ""
 exposure:
   ingress: false
   loadBalancer: false

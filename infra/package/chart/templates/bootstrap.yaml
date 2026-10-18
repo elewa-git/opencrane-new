@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: package-bootstrap
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: package-bootstrap
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [{{ .Values.secrets.runtime | quote }}]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [server, worker-members, worker-mcp-catalogue, worker-computers,
+      worker-conversations, worker-files, worker-budgets, worker-audit,
+      worker-dispatcher]
+    verbs: [patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: package-bootstrap
+subjects:
+  - { kind: ServiceAccount, name: package-bootstrap }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: package-bootstrap
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: package-worker
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: package-worker
+rules:
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: [sandboxclaims, sandboxtemplates]
+    verbs: [create, get]
+  - apiGroups: ["agents.x-k8s.io"]
+    resources: [sandboxes]
+    verbs: [get, patch, update]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims, pods, pods/proxy, pods/exec]
+    verbs: [get, list, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: package-worker
+subjects:
+  - { kind: ServiceAccount, name: package-worker }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: package-worker
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bootstrap
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      # Keep Kubernetes service variables from replacing the bootstrap's host port settings.
+      enableServiceLinks: false
+      serviceAccountName: package-bootstrap
+      restartPolicy: Never
+      containers:
+        - name: bootstrap
+          image: {{ .Values.images.server | quote }}
+          command: [node, --experimental-strip-types, infra/package/bootstrap.ts]
+          envFrom:
+            - secretRef: { name: {{ .Values.secrets.runtime | quote }} }
+            - secretRef: { name: {{ .Values.secrets.bootstrap | quote }} }
+          env:
+            - { name: RUNTIME_SECRET, value: {{ .Values.secrets.runtime | quote }} }
+            - name: KUBE_NAMESPACE
+              valueFrom:
+                fieldRef: { fieldPath: metadata.namespace }
+          volumeMounts:
+            - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+      volumes:
+        - name: runtime
+          secret: { secretName: {{ .Values.secrets.runtime | quote }} }

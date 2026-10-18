@@ -11,13 +11,15 @@
     "libs/*"
   ],
   "scripts": {
-    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures && npm run lint:changelog",
-    "typecheck": "npm run typecheck --workspaces",
+    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog",
+    "typecheck": "npm run typecheck --workspaces && npm run typecheck:package",
+    "typecheck:package": "tsc --noEmit -p infra/package/tsconfig.json",
     "pretest": "sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh",
     "test": "vitest run",
     "ops": "npm run ops -w apps/ops --",
     "replay": "npm run start -w apps/ops --",
     "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",
+    "check:package-licences": "python3 infra/package/check-licences.py",
     "check:docker-volume-cleanup": "node --experimental-strip-types scripts/check-docker-volume-cleanup.mjs",
     "changelog:gather": "node scripts/changelog-gather.mjs",
     "visual:org-admin": "node scripts/capture-org-admin.mjs",

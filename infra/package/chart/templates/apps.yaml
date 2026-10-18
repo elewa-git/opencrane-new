@@ -15,6 +15,7 @@ spec:
           image: {{ required "postgres pin" .Values.images.postgres | quote }}
           command: [sh, -c, "until pg_isready -h postgres -U postgres; do sleep 2; done"]
           resources:
+            requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 100m, memory: 64Mi }
         - name: migrate
           image: {{ required "OpenFGA pin" .Values.images.openfga | quote }}
@@ -22,6 +23,7 @@ spec:
           envFrom:
             - secretRef: { name: {{ .Values.secrets.openfga | quote }} }
           resources:
+            requests: { cpu: 50m, memory: 64Mi }
             limits: { cpu: 500m, memory: 256Mi }
       containers:
         - name: openfga
@@ -41,6 +43,7 @@ spec:
             httpGet: { path: /healthz, port: 8080 }
             periodSeconds: 5
           resources:
+            requests: { cpu: 50m, memory: 64Mi }
             limits: { cpu: 500m, memory: 256Mi }
 ---
 apiVersion: apps/v1
@@ -55,6 +58,15 @@ spec:
     metadata:
       labels: { app: server }
     spec:
+      initContainers:
+        - name: wait-for-binding
+          image: {{ .Values.images.server | quote }}
+          command: [sh, -c, 'until [ "$(cat /run/opencrane/OWNER_BOOTSTRAP_READY)" = ready ]; do sleep 2; done']
+          volumeMounts:
+            - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
       containers:
         - name: server
           image: {{ required "server pin" .Values.images.server | quote }}
@@ -71,6 +83,7 @@ spec:
             httpGet: { path: /healthz, port: 8080 }
             periodSeconds: 5
           resources:
+            requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
       volumes:
         - name: runtime
@@ -97,4 +110,5 @@ spec:
             httpGet: { path: /, port: 8080 }
             periodSeconds: 5
           resources:
+            requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
