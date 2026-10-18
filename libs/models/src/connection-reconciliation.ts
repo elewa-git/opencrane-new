@@ -13,13 +13,14 @@ const retained = { status: 'retained' as const };
 export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, 'lock'>,
   custody: Custody, stage: ConnectionStage) {
   async function reconcile() {
-    const recovered = await custody.recover(stage);
+    // Read under the lock before rebuilding missing private records from saved identities.
+    const subject = `connection-${stage.userId}-${stage.serverId}-${stage.profileId}`;
+    let rows = await history(store, subject, stage.siloId, performance.now() + 10_000);
+    const original = savedIdentity(rows, stage);
+    const recovered = await custody.recover(stage, original);
     if (recovered.status !== 'recovered' || !recovered.identity || stage.purpose !== 'personal') {
       return retained;
     }
-    // Read after acquiring the lock. An earlier snapshot could miss a completed save.
-    const subject = `connection-${stage.userId}-${stage.serverId}-${stage.profileId}`;
-    let rows = await history(store, subject, stage.siloId, performance.now() + 10_000);
     let state = foldConnection(rows);
     const reference = `secret:${recovered.identity.reference}`;
     if (state.data?.secretRef === reference || Date.now() <= stage.appendUntil) {
@@ -75,4 +76,56 @@ async function closeOperation(store: EventStore, stage: ConnectionStage,
     historyChecked: true as const, deadline: performance.now() + 10_000 };
   const result = await store.append(command);
   return result.status === 'appended';
+}
+
+function savedIdentity(rows: StoredEvent[], stage: ConnectionStage) {
+  function originalOperation(row: StoredEvent) {
+    return row.event.id === stage.operationId;
+  }
+  const index = rows.findIndex(originalOperation);
+  if (index < 0) {
+    return undefined;
+  }
+  const preceding = rows.slice(0, index + 1);
+  const saved = foldConnection(preceding).data;
+  if (!saved || saved.activation.operationId !== stage.operationId) {
+    return undefined;
+  }
+  const activation = saved.activation;
+  const recorded = { siloId: rows[index]!.event.silo, userId: saved.userId,
+    serverId: saved.serverId, profileId: saved.profile, connectionId: activation.connectionId,
+    purpose: activation.purpose, generation: activation.generation,
+    endpointDigest: activation.endpointDigest, operationId: activation.operationId,
+    expectedSequence: activation.expectedSequence, appendUntil: activation.appendUntil };
+  const supplied: Record<string, unknown> = stage;
+  for (const [field, value] of Object.entries(recorded)) {
+    if (value !== supplied[field]) {
+      return undefined;
+    }
+  }
+  return { reference: saved.secretRef.slice('secret:'.length), uid: activation.uid,
+    resourceVersion: activation.resourceVersion };
+}
+
+/** Advance one bounded live scan. Keep the continuation private and retry failed pages unchanged. */
+export async function reconcileConnectionPage(store: EventStore, db: Pick<Db, 'lock'>,
+  custody: Custody & Pick<ReturnType<typeof connectionCustody>, 'candidates'>,
+  continuation?: string) {
+  try {
+    const page = await custody.candidates(continuation);
+    if (page.status !== 'listed') {
+      return { status: 'unknown' as const };
+    }
+    let deleted = 0;
+    for (const stage of page.stages) {
+      const result = await reconcileConnectionStage(store, db, custody, stage);
+      if (result.status === 'deleted') {
+        deleted += 1;
+      }
+    }
+    return { status: 'scanned' as const, examined: page.stages.length,
+      deleted, continuation: page.continuation };
+  } catch {
+    return { status: 'unknown' as const };
+  }
 }

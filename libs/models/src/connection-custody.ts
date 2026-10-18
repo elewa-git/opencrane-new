@@ -27,6 +27,10 @@ const secretSchema = z.object({
   data: z.object({ token: z.string().max(11000) }),
 });
 type Secret = z.infer<typeof secretSchema>;
+const pageSchema = z.object({
+  metadata: z.object({ continue: z.string().max(4096).optional() }),
+  items: z.array(z.unknown()).max(25),
+});
 const prefix = 'opencrane.ai/';
 
 /** Keep credentials in one namespace reached through the server's private kubectl proxy. */
@@ -63,10 +67,13 @@ class ConnectionCustody {
     this.journal = connectionStageJournal(journalDirectory);
   }
 
-  private async request(method: string, name?: string, body?: object) {
+  private async request(method: string, name?: string, body?: object, query?: URLSearchParams) {
     let url = this.collection;
     if (name) {
       url += `/${name}`;
+    }
+    if (query) {
+      url += `?${query.toString()}`;
     }
     const options: RequestInit = { method, redirect: 'error', signal: AbortSignal.timeout(5000) };
     if (body) {
@@ -109,7 +116,8 @@ class ConnectionCustody {
     try {
       const checked = checkedStage(input);
       const name = nameFor(checked);
-      if (!await this.journal.prepared(recordFor(checked), false)) {
+      // Rebuild missing preparation only when the caller supplies independent identity evidence.
+      if (!await this.journal.prepared(recordFor(checked), expected !== undefined)) {
         return { status: 'conflict' };
       }
       const recorded = await this.journal.identity(name);
@@ -156,6 +164,7 @@ class ConnectionCustody {
       return this.recover(checked, expected, material);
     }
     const metadata = metadataFor(checked);
+    metadata.annotations[`${prefix}stage`] = JSON.stringify(checked);
     metadata.annotations[`${prefix}keyId`] = this.currentKeyId;
     const key = this.keys.get(this.currentKeyId)!;
     metadata.annotations[`${prefix}verifier`] = digest(key, checked, material);
@@ -193,6 +202,57 @@ class ConnectionCustody {
       return this.recoverCreate(checked, material);
     }
     return this.recoverCreate(checked, material);
+  }
+  /** Read one private maintenance page. Never expose its contents through a user API. */
+  async candidates(continuation?: string) {
+    try {
+      if (continuation !== undefined && continuation.length > 4096) {
+        return { status: 'unknown' as const };
+      }
+      const parameters = { limit: '25',
+        labelSelector: 'app.kubernetes.io/managed-by=opencrane-server' };
+      const query = new URLSearchParams(parameters);
+      if (continuation) {
+        query.set('continue', continuation);
+      }
+      const response = await this.request('GET', undefined, undefined, query);
+      if (!response.ok) {
+        await response.body?.cancel();
+        return { status: 'unknown' as const };
+      }
+      const body = await readResponse(response, 1_048_576);
+      const page = pageSchema.parse(body);
+      const stages: ConnectionStage[] = [];
+      for (const item of page.items) {
+        const stage = this.candidate(item);
+        if (stage) {
+          stages.push(stage);
+        }
+      }
+      return { status: 'listed' as const, stages,
+        continuation: page.metadata.continue || undefined };
+    } catch {
+      return { status: 'unknown' as const };
+    }
+  }
+  private candidate(item: unknown): ConnectionStage | undefined {
+    try {
+      const secret = secretSchema.parse(item);
+      const record = secret.metadata.annotations[`${prefix}stage`];
+      if (!record) {
+        return undefined;
+      }
+      const raw: unknown = JSON.parse(record);
+      const stage = checkedStage(raw);
+      // Use the keyed check to find a profile, never to establish the original UID.
+      if (this.verify(secret, stage)) {
+        return stage;
+      }
+      return undefined;
+    } catch {
+      // Retain damaged objects without blocking healthy neighbours or later pages.
+      return undefined;
+    }
   }
   async remove(input: ConnectionStage, expected?: ConnectionIdentity): Promise<Result> {
     if (!expected) {
@@ -254,7 +314,7 @@ class ConnectionCustody {
   }
 }
 
-function checkedStage(input: ConnectionStage): ConnectionStage {
+function checkedStage(input: unknown): ConnectionStage {
   const checked = stageSchema.safeParse(input);
   if (!checked.success) {
     throw new Error('Connection stage invalid');
@@ -303,7 +363,7 @@ function equalDigest(actual: string, expected: string) {
   const expectedBytes = Buffer.from(expected);
   return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
 }
-async function readResponse(response: Response): Promise<unknown> {
+async function readResponse(response: Response, maximumBytes = 32768): Promise<unknown> {
   if (!response.body) {
     throw new Error('Connection custody response invalid');
   }
@@ -317,7 +377,7 @@ async function readResponse(response: Response): Promise<unknown> {
         break;
       }
       size += chunk.value.length;
-      if (size > 32768) {
+      if (size > maximumBytes) {
         throw new Error('Connection custody response too large');
       }
       chunks.push(chunk.value);
