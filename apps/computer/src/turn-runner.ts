@@ -354,6 +354,8 @@ class TurnRunner {
         this.finishGrantInstall(turn.id);
       }
     }
+    // Keep the signed gate's renewal outcome after its own revocation finishes.
+    if (this.gate.closed) return;
     if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
       throw new Error('Turn ended');
     }
