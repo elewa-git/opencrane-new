@@ -2577,6 +2577,21 @@ Automatic reactions and active credential injection coordination are deferred to
 next part. Credentialed routes remain closed. Live Kubernetes/provider and fresh-install
 qualification: NOT RUN. No dependency, event field or API field was added.
 
+## Saved approval dates and cancellation reasons
+
+The [approval API](../../docs/api/approvals.md) defines the optional UTC fields,
+first-use retention and dated permit list. Dates come from approval event envelopes,
+not read tables or the read clock. `approval.cancelled` has its own strict schema
+with an optional `cancelReason`; old events still parse without one. Expiry uses
+`approval.expired` and has no cancellation reason. Reads preserve unknown outcomes.
+
+`apps/server/test/approvals.test.ts` checks restart, audit rebuild, delayed reads,
+recorded causes, old cancellations, retry history and identical hidden-id refusals.
+The reader recognises direct requester/assistant tool-grant revocations only.
+Other access refusals do not invent cancellation evidence. A missing turn and
+clock-only catalogue expiry still cancel without a reason. UI, native consent,
+retry delivery and fresh-install qualification remain outside this change.
+
 ## Hosted image check requests
 
 `requestHostedCheck` reuses saveToolCommand for current admin access and one conditional

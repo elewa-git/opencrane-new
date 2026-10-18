@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import { readFile, mkdir } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { z } from 'zod';
+import { parseEventByType } from '@opencrane/events';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { approvalCardsSchema, chatFeedSchema } from '@opencrane/protocol';
@@ -21,8 +22,16 @@ async function approvalFixture(stepUp = false) {
   await f.runner.initialise(auditTrail);
   await f.runner.run(auditTrail);
   const config = testAuthConfig({ expectedOrgId: 'org-test' });
-  const app = buildServer(config, { chat: { silo: 'test', store: f.nats.store, db: f.db, keys: f.keys, binding: f.binding,
-    feed: { memberId: (_silo, _issuer, sub) => Promise.resolve(sub) } } });
+  const chat = { silo: 'test', store: f.nats.store, db: f.db, keys: f.keys,
+    binding: f.binding, feed: { memberId: identity } };
+  function identity(_silo: string, _issuer: string, sub: string) {
+    return Promise.resolve(sub);
+  }
+  let app = buildServer(config, { chat });
+  async function restartReader() {
+    await app.close();
+    app = buildServer(config, { chat });
+  }
   const headers = (sub = 'alice', authTime = 0, approval?: string) => ({ origin: new URL(config.redirectUri).origin,
     cookie: `${config.cookieName}=${encodeSession(config, { sub, orgId: 'org-test', roles: [], authTime,
       exp: Math.floor(Date.now() / 1000) + 3600, ...(approval ? { stepUpApproval: approval } : {}) })}` });
@@ -70,7 +79,15 @@ async function approvalFixture(stepUp = false) {
     const { cards, csrf } = await read(session);
     return app.inject({ method: 'POST', url, headers: { ...session, 'x-csrf-token': csrf }, payload: { approvalId: cards[0]!.approvalId, decision, ...patch } });
   };
-  return { ...f, config, app, headers, read, decide, call, body, discover, close: async () => { await app.close(); await f.close(); } };
+  async function close() {
+    await app.close();
+    await f.close();
+  }
+  return { ...f, config, restartReader, headers, read, decide, call, body, discover, close,
+    get app() {
+      return app;
+    },
+  };
 }
 
 async function exactReviewFixture() {
@@ -265,6 +282,8 @@ it.each([
     await closeTurn('old-turn');
     expect((await f.read()).cards).toMatchObject([{ approvalId, state: 'approved' }]);
     await closeTurn('turn');
+    const cause = type === 'agent.turn_stop_requested' ? 'turn_stopped' : 'turn_ended';
+    expect((await f.read()).cards[0]).toHaveProperty('cancelReason', cause);
     expect((await f.read()).cards).toMatchObject([{ approvalId, state: 'cancelled', canDecide: false }]);
     expect((await f.call()).status).toBe(403);
     expect(f.received()).toBe(0);
@@ -1012,6 +1031,8 @@ it('returns the same refusal for missing and inaccessible approvals to one autho
       const siloApprovalId = 'd'.repeat(64);
       const foreignSilo = envelope('foreign', `approval-${siloApprovalId}`,
         'tool.approval_requested', { ...current.request, approvalId: siloApprovalId });
+      await setup.stopDispatch();
+      await setup.runtime.stop();
       await setup.nats.seed([foreignSilo]);
       const approvalIds = [requesterApprovalId, conversationApprovalId,
         siloApprovalId, 'a'.repeat(64)];
@@ -1047,6 +1068,9 @@ async function preservesApprovalDates(type: string, details: object, state: stri
   try {
     await setup.call();
     const initial = (await setup.read()).cards[0]!;
+    expect(initial).not.toHaveProperty('decidedAt');
+    expect(initial).not.toHaveProperty('usedAt');
+    expect(initial).not.toHaveProperty('endedAt');
     const approvalId = initial.approvalId;
     const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
     const saved = { ...rows[0]!.event, id: 'dated-approval-end', commandId: 'dated-end',
@@ -1057,6 +1081,7 @@ async function preservesApprovalDates(type: string, details: object, state: stri
     expect(before).not.toHaveProperty('cancelReason');
     await setup.restart();
     await setup.runner.rebuild(auditTrail);
+    await setup.restartReader();
     expect((await setup.read()).cards[0]).toEqual(before);
     const later = new Date(Date.now() + 60_000);
     const delayed = await readApproval(setup.nats.store, 'test', approvalId, { now: later });
@@ -1067,3 +1092,83 @@ async function preservesApprovalDates(type: string, details: object, state: stri
 }
 it.each(datedApprovalEnds)('keeps saved UTC dates for %s / %s after restart and replay',
   preservesApprovalDates, 40_000);
+
+const recordedCancellations = [
+  ['conversation.closed', { conversationId: 'conversation', closedBy: 'alice' },
+    'conversation-conversation', 'conversation_closed'],
+  ['message.posted', { conversationId: 'conversation', authorId: 'alice',
+    authorKind: 'human', contentType: 'text' },
+    'conversation-conversation', 'new_message'],
+  ['mcp.server_unpublished', { serverId: 'fixture', unpublishedBy: 'alice' },
+    'mcp-fixture', 'unpublished'],
+] as const;
+
+async function recordsCancellationCause(type: string, data: object, subject: string,
+  cancelReason: string) {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const approvalId = (await setup.read()).cards[0]!.approvalId;
+    let payload = data;
+    if (type === 'message.posted') {
+      const encrypted = setup.keys.encrypt('test', 'conversation', 'New request');
+      payload = { ...data, ...encrypted };
+    }
+    await setup.append(subject, type, payload);
+    const current = await readApproval(setup.nats.store, 'test', approvalId);
+    expect(current).toMatchObject({ state: 'cancelled', cancelReason });
+    const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+    const end = rows.at(-1)!.event;
+    expect(end.data).toEqual({ approvalId, cancelReason });
+    expect(current).toHaveProperty('endedAt', end.time);
+    await setup.restart();
+    await setup.runner.rebuild(auditTrail);
+    expect(await readApproval(setup.nats.store, 'test', approvalId)).toEqual(current);
+    for (const raw of ['secret-token', 'hello', 'order=42', '{"result":"done"}']) {
+      const unsafe = { ...end, data: { approvalId, cancelReason: raw } };
+      expect(parseEventByType(unsafe).success).toBe(false);
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it.each(recordedCancellations)('records only the saved cancellation cause for %s',
+  recordsCancellationCause, 40_000);
+
+async function changedConnection() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const data = { ...before.catalogue!, connectionId: 'replacement-connection' };
+    await setup.append('mcp-fixture', 'mcp.server_discovered', data);
+    const card = (await setup.read()).cards[0]!;
+    expect(card).toMatchObject({ state: 'cancelled', cancelReason: 'connection_changed' });
+    const rows = await history(setup.nats.store, `approval-${card.approvalId}`, 'test');
+    expect(rows.at(-1)!.event.data).toEqual({ approvalId: card.approvalId,
+      cancelReason: 'connection_changed' });
+  } finally {
+    await setup.close();
+  }
+}
+it('records a changed connection without exposing its value', changedConnection);
+
+async function omitsUnprovedCause() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const first = (await setup.read()).cards[0]!;
+    const current = await readApproval(setup.nats.store, 'test', first.approvalId);
+    const approvalId = 'e'.repeat(64);
+    const request = { ...current.request, approvalId, turnId: 'missing-turn' };
+    await setup.append(`approval-${approvalId}`, 'tool.approval_requested', request);
+    const cancelled = await readApproval(setup.nats.store, 'test', approvalId);
+    expect(cancelled.state).toBe('cancelled');
+    expect(cancelled).not.toHaveProperty('cancelReason');
+    const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+    expect(rows.at(-1)!.event.data).toEqual({ approvalId });
+  } finally {
+    await setup.close();
+  }
+}
+it('omits a cancellation cause when no saved event proves it', omitsUnprovedCause);

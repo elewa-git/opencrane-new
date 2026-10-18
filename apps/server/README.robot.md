@@ -3165,6 +3165,21 @@ Browser handling, call-status references and fresh-install qualification are NOT
 in this part. In particular, late browser callbacks after revocation still need
 screen-level proof; the server tests prove that a held read sends no late frame.
 
+## Saved approval dates and cancellation reasons
+
+The [approval API](../../docs/api/approvals.md) defines the optional UTC fields,
+first-use retention and dated permit list. Dates come from approval event envelopes,
+not read tables or the read clock. `approval.cancelled` has its own strict schema
+with an optional `cancelReason`; old events still parse without one. Expiry uses
+`approval.expired` and has no cancellation reason. Reads preserve unknown outcomes.
+
+`apps/server/test/approvals.test.ts` checks restart, audit rebuild, delayed reads,
+recorded causes, old cancellations, retry history and identical hidden-id refusals.
+The reader recognises direct requester/assistant tool-grant revocations only.
+Other access refusals do not invent cancellation evidence. A missing turn and
+clock-only catalogue expiry still cancel without a reason. UI, native consent,
+retry delivery and fresh-install qualification remain outside this change.
+
 ## Hosted image check requests (P3-6 PR 4c; Part of #47)
 
 `POST /api/org/integrations/:serverId/checks` requires same-origin session access,

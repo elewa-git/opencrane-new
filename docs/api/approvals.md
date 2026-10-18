@@ -8,6 +8,21 @@ Cards name absent reviewed arguments in `missingFields`. An incomplete review
 has `canApprove: false` and `canDeny: true` for its requester. Its target may be
 empty; other review text remains required. `canDecide` stays false for older clients.
 
+Cards carry `requestedAt`, `decidedAt`, `usedAt` and `endedAt` when the corresponding
+saved event exists. Each value is the original event envelope's UTC time. `decidedAt`
+and `usedAt` retain the first decision and use through retries. `uses` lists each
+consumed permit and its own `usedAt`, in event order. Use means `outcome_unknown`;
+it never proves that a tool succeeded. `endedAt` dates denial, expiry or cancellation.
+Expiry keeps its original `expiresAt` as well as the time expiry was recorded.
+
+`cancelReason` is an optional fixed code copied from `approval.cancelled`.
+Old cancellations have no reason. New cancellations distinguish stopped or ended
+turns, a new message or turn, conversation closure, unpublication, changed connection,
+policy, schema or profile, and a revoked direct requester or assistant tool grant.
+A missing turn or elapsed catalogue check without a saved cause has no reason.
+Removing a grant and later restoring it does not revive the old approval.
+These reasons contain no review values, arguments, tool results or credentials.
+
 `POST` to the same route accepts `{ approvalId, decision }`, with decisions
 `approved`, `rejected` and `retry`. Only the requester can act. Origin, CSRF and
 any required recent sign-in checks still apply. Missing fields block approval

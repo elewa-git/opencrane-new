@@ -171,6 +171,11 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
 async function readDecisionApproval(options: ChatOptions, approvalId: string) {
   const readOptions = { deadline: performance.now() + 10_000 };
   try {
+    const subject = `approval-${approvalId}`;
+    for await (const { event } of options.store.readStream(subject, 1, readOptions.deadline)) {
+      if (event.silo !== options.silo) throw new MemberRefusal(403, 'refused');
+      break;
+    }
     return await readApproval(options.store, options.silo, approvalId, readOptions);
   } catch (error) {
     // Hide missing approval records in the same way as another person's approval.

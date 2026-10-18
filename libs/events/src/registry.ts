@@ -1,3 +1,4 @@
+import { approvalCancelledDataSchema } from './approval-cancellation.ts';
 import { childPublicationEvent } from './child-publication.ts';
 import { childRequestEvent } from './child-request.ts';
 import {
@@ -350,7 +351,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     { approvalId: 'appr_1' },
   ),
   event('approval.cancelled', 'approval', 'The logical turn or reviewed binding closed.',
-    data.approvalExpiredDataSchema, { approvalId: 'appr_1' }),
+    approvalCancelledDataSchema, { approvalId: 'appr_1', cancelReason: 'turn_ended' }),
   event(
     'approval.used',
     'approval',
