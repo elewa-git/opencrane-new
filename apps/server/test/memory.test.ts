@@ -19,6 +19,7 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { readToolPolicy, reviewToolPolicy } from '@opencrane/models';
 import type { MemoryOptions } from '../src/memory/access.ts';
+import { commandReference } from '../src/memory/command-history.ts';
 import { reconcileCommands } from '../src/memory/commands.ts';
 import * as memoryAdmission from '../src/memory/admission.ts';
 import { buildServer } from '../src/server.ts';
@@ -240,6 +241,9 @@ describe('personal HTTP correction', function correctionCases() {
         expect((await correct(identity.memoryId, commandId)).json()).toEqual({ outcome: 'unknown' });
         const attemptedEvent = memoryCorrectedEventSchema.parse(attempted!.event);
         const journalPath = `${directory}/command-${attemptedEvent.id}.json`;
+        const reservationId = commandReference('acme', identity.scopeId, 'bob', identity.memoryId);
+        const reservationPath = `${directory}/command-fact-${reservationId}.json`;
+        await expect(access(reservationPath)).resolves.toBeUndefined();
         const raw = await readFile(journalPath, 'utf8');
         expect(raw).not.toMatch(/Correct replacement|ciphertext|keyId/);
         const entry = z.record(z.string(), z.unknown()).parse(JSON.parse(raw));
@@ -249,6 +253,12 @@ describe('personal HTTP correction', function correctionCases() {
         await app.ready();
         await reconcileCommands(memory);
         const statusUrl = `${path('bob')}/changes/${commandId}`;
+        if (mode === 'saved') {
+          await expect(access(journalPath)).rejects.toMatchObject({ code: 'ENOENT' });
+          await expect(access(reservationPath)).rejects.toMatchObject({ code: 'ENOENT' });
+        } else {
+          await expect(access(reservationPath)).resolves.toBeUndefined();
+        }
         if (mode === 'forgotten') {
           spy.mockRestore();
           const response = await forget(identity.memoryId, 'forget-uncertain', 3);
@@ -259,6 +269,7 @@ describe('personal HTTP correction', function correctionCases() {
               await memoryCleanupHandler(nats.store, keys).handle(row.event, memory.db);
             }
           }
+          await expect(access(reservationPath)).rejects.toMatchObject({ code: 'ENOENT' });
           const { deadline: _deadline, ...late } = attempted!;
           expect((await original(late)).status).toBe('conflict');
           await reconcileCommands(memory);
@@ -273,6 +284,9 @@ describe('personal HTTP correction', function correctionCases() {
           expect(keys.status({ ...identity, revision: 4 })).toBe('available');
           const { deadline: _deadline, ...delayed } = attempted!;
           expect((await original(delayed)).status).toBe('appended');
+          await rm(journalPath);
+          await reconcileCommands(memory);
+          await expect(access(reservationPath)).rejects.toMatchObject({ code: 'ENOENT' });
         }
         const status = await get(statusUrl);
         expect(status.json()).toMatchObject({ operation: 'correct', revision: 4,
