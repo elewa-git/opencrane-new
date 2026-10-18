@@ -101,4 +101,26 @@ describe('createServerLogger', () => {
     expect(JSON.parse(chunks.join('')) as unknown).toMatchObject({ req: { method: 'GET', url: '/x', host: 'h' } });
     expect(chunks.join('')).not.toContain('cookie');
   });
+
+  it('redacts member change ids in the actual server logger output', () => {
+    vi.stubEnv('LOG_LEVEL', 'info');
+    const chunks: string[] = [];
+    const destination: LogDestination = { write: (line: string) => void chunks.push(line) };
+    const logger = createServerLogger(destination);
+    const requestPath = '/api/members/private-member-canary/changes/private-command-canary';
+
+    logger.info({
+      req: { method: 'GET', url: requestPath, host: 'localhost:8080' },
+    }, 'incoming request');
+
+    const output = chunks.join('');
+
+    expect(output).not.toContain('private-member-canary');
+    expect(output).not.toContain('private-command-canary');
+    expect(JSON.parse(output) as unknown).toMatchObject({
+      req: {
+        url: '/api/members/:memberId/changes/:commandId',
+      },
+    });
+  });
 });
