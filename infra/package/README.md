@@ -24,7 +24,7 @@ flowchart LR
   package -->|starts with a private chat secret| apps["apps<br/>website and server"]
   package -->|starts| services["services<br/>NATS, PostgreSQL, OpenFGA"]
   package -->|runs| bootstrap["bootstrap<br/>first owner"]
-  package -->|starts| computer["computer<br/>chat turns"]
+  package -->|gives a private gateway address to| computer["computer<br/>chat turns"]
   package -->|runs in| devbox
 ```
 
@@ -36,6 +36,9 @@ flowchart LR
 - Remove only the package owned by that worktree.
 - Check the licences of the pinned images against reviewed package sources before
   they are shipped.
+- Give computers only the private model gateway address, with no DNS access.
+- Mount chat key files from a separate Kubernetes Secret. Pass only text settings
+  through environment variables.
 
 ## Processes it handles
 

@@ -16,11 +16,11 @@ APPLICATION_TYPES = {"npm", "go-module", "binary"}
 INDEX_IMAGE_PINS = {
     "server": (
         "k3d-ocn-registry:5000/opencrane/package@sha256:"
-        "9789e2934c50e5fb04830036a0a6a98a7f49eaee0001edab783183db77bc9afe"
+        "0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a"
     ),
     "web": (
         "k3d-ocn-registry:5000/opencrane/package@sha256:"
-        "9789e2934c50e5fb04830036a0a6a98a7f49eaee0001edab783183db77bc9afe"
+        "0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a"
     ),
     "postgres": (
         "postgres:17@sha256:"

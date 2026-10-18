@@ -73,6 +73,26 @@ spec:
       enableServiceLinks: false
       serviceAccountName: package-bootstrap
       restartPolicy: Never
+      securityContext: { fsGroup: 1000 }
+      initContainers:
+        - name: copy-private-files
+          image: {{ .Values.images.server | quote }}
+          command: [sh, -ec]
+          args:
+            - >-
+              cp /run/opencrane-source/* /run/opencrane/files/ &&
+              chown 1000:1000 /run/opencrane/files/* &&
+              chmod 0400 /run/opencrane/files/*
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: runtime-file-source, mountPath: /run/opencrane-source, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
       containers:
         - name: bootstrap
           image: {{ .Values.images.server | quote }}
@@ -87,9 +107,16 @@ spec:
                 fieldRef: { fieldPath: metadata.namespace }
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
       volumes:
         - name: runtime
           secret: { secretName: {{ .Values.secrets.runtime | quote }} }
+        - name: runtime-files
+          emptyDir: { medium: Memory }
+        - name: runtime-file-source
+          secret:
+            secretName: {{ .Values.secrets.runtimeFiles | quote }}
+            defaultMode: 256

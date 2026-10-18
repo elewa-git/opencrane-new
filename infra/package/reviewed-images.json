@@ -2,6 +2,7 @@
   "chartVersion": "0.1.0",
   "requiredSecrets": [
     "runtime",
+    "runtimeFiles",
     "postgres",
     "nats",
     "openfga",

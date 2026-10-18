@@ -17,10 +17,11 @@ async function command(program: string, args: string[]) {
   await execute(program, args, { cwd: root, timeout: 120_000 });
 }
 
-async function createSecret(name: string, environment: string, files: Record<string, string> = {}) {
+async function createSecret(name: string, environment?: string,
+    files: Record<string, string> = {}) {
   const source = await mkdtemp(`${directory}/package-secret-`);
   try {
-    const settings = await readEnv(environment);
+    const settings = environment ? await readEnv(environment) : {};
     for (const [key, value] of Object.entries(settings)) {
       await writeFile(`${source}/${key}`, value, { mode: 0o600 });
     }
@@ -57,10 +58,10 @@ async function prepareSettings() {
   await writeFile(`${directory}/model-stub-key`, 'dev-stack-stub-only', { mode: 0o600 });
   await writeFile(`${directory}/conversation-wrap-key`, randomBytes(32), { mode: 0o600 });
   const commandSettings = {
-    NATS_URL: 'tls://nats:4222', NATS_CA_FILE: '/run/opencrane/ca.crt',
-    NATS_CERT_FILE: '/run/opencrane/command.crt',
-    NATS_KEY_FILE: '/run/opencrane/command.key',
-    NATS_NKEY_SEED_FILE: '/run/opencrane/command.seed',
+    NATS_URL: 'tls://nats:4222', NATS_CA_FILE: '/run/opencrane/files/ca.crt',
+    NATS_CERT_FILE: '/run/opencrane/files/command.crt',
+    NATS_KEY_FILE: '/run/opencrane/files/command.key',
+    NATS_NKEY_SEED_FILE: '/run/opencrane/files/command.seed',
     NATS_INBOX_PREFIX: '_INBOX.command', NATS_REPLICAS: '1',
   };
   const serverDatabase = databaseUrl('server', passwords['server']!, 'projections');
@@ -70,22 +71,22 @@ async function prepareSettings() {
     .map(([name, value]) => [`COMMAND_${name}`, value]));
   await writeEnv('package-runtime', {
     ...auth, ...commandSettings, ...commandForDispatcher,
-    OIDC_CLIENT_SECRET_FILE: '/run/opencrane/zitadel-client-secret',
+    OIDC_CLIENT_SECRET_FILE: '/run/opencrane/files/zitadel-client-secret',
     DATABASE_URL: serverDatabase,
     PROJECTION_DATABASE_URL: projectionDatabase,
     HANDLER_DATABASE_URL: handlerDatabase,
     SILO_ID: 'dev', OPENFGA_API_URL: 'http://openfga:8080',
     OPENFGA_STORE_ID: 'pending', OPENFGA_MODEL_ID: 'pending',
     OWNER_BOOTSTRAP_READY: 'pending',
-    TOKEN_SIGNING_KEY_FILE: '/run/opencrane/token-signing-key.pem',
+    TOKEN_SIGNING_KEY_FILE: '/run/opencrane/files/token-signing-key.pem',
     TOKEN_ISSUER: `${localOrigin}/`,
     PACKAGE_OWNER_SUBJECT: identitySettings.users.owner.id,
     CONVERSATION_KEYS_DIR: '/var/lib/opencrane/conversation-keys',
-    CONVERSATION_WRAP_KEY_FILE: '/run/opencrane/conversation-wrap-key',
+    CONVERSATION_WRAP_KEY_FILE: '/run/opencrane/files/conversation-wrap-key',
     MODEL_DECISION_URL: 'http://server:43001',
     MODEL_STATE_DIR: '/var/lib/opencrane/models',
-    MODEL_JWKS_FILE: '/run/opencrane/model-jwks.json',
-    MODEL_KEY_FILE: '/run/opencrane/model-stub-key',
+    MODEL_JWKS_FILE: '/run/opencrane/files/model-jwks.json',
+    MODEL_KEY_FILE: '/run/opencrane/files/model-stub-key',
     MODEL_UPSTREAM: '127.0.0.1:43003',
     AGENTGATEWAY_BINARY: '/usr/local/bin/agentgateway',
     MODEL_GATEWAY_PORT: '43000', MODEL_DECISION_PORT: '43001',
@@ -116,7 +117,8 @@ async function provisionSecrets(names: Record<string, string>) {
   });
   await createSecret(names['openfga']!, 'package-openfga');
   await createSecret(names['bootstrap']!, 'package-bootstrap');
-  await createSecret(names['runtime']!, 'package-runtime', {
+  await createSecret(names['runtime']!, 'package-runtime');
+  await createSecret(names['runtimeFiles']!, undefined, {
     'ca.crt': `${directory}/ca.crt`,
     'command.crt': `${directory}/command.crt`,
     'command.key': `${directory}/command.key`,

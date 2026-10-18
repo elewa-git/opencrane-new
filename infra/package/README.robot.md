@@ -26,23 +26,24 @@ The owner bootstrap links the separate development sign-in account to the
 `jente@elewa.ke` owner member in this install. It does not edit the existing
 Zitadel user with that email.
 
-The `runtime` secret supplies the server and workers with NATS, PostgreSQL,
-OpenFGA and sign-in settings. It also holds the generated model public key,
-the local stub key and a fresh 32-byte conversation wrapping key. The server
-and model process share that Secret and a private volume. They wrap each
+The `runtime` secret supplies text settings to the server and workers. The
+`runtimeFiles` secret holds certificates, model files, the local stub key and
+a fresh 32-byte conversation wrapping key. An init container copies those
+files into memory, gives them to the `node` user and sets mode 0400. The
+server, model process, workers and bootstrap Job mount the copy read-only.
+The server and model process share a private volume. They wrap each
 conversation key before saving it on the volume, which stays with the claimed
-install when its Pod restarts. Preparing a new Secret for an existing volume
+install when its Pod restarts. Preparing a new key Secret for an existing volume
 would make its keys unreadable; a fresh install gets a fresh volume and Secret.
 The model can call only the local stub. The `postgres` secret holds PostgreSQL startup
 settings. The `nats` secret holds `nats.conf` and its private certificate files.
 The `openfga` secret holds its database settings. The `bootstrap` secret holds
-database setup credentials. The installer checks all five names and required
-fields before Helm
-applies resources. NATS, PostgreSQL and OpenFGA URLs must use the private service
+database setup credentials. The installer checks all six names and required
+fields before Helm applies resources. NATS, PostgreSQL and OpenFGA URLs must use the private service
 names in the chart.
 
 Pass a JSON values file, which Helm accepts as YAML, with the reviewed images,
-five secret names and all three exposure flags set to `false`:
+six secret names and all three exposure flags set to `false`:
 
 ```sh
 infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"
@@ -76,8 +77,11 @@ the computer warm pool.
 The chart runs the member, catalogue, computer, conversation, file, budget and
 audit workers, plus the dispatcher. It starts the model gateway beside the server
 and installs the checked computer template and a zero-size warm pool. A computer
-starts for each chat turn. The memory worker needs a private key directory and is
-not started by this package. Object storage and the scanner are outside this chart.
+starts for each chat turn. The installer reads the server Service ClusterIP and
+puts that IP in the computer ConfigMap. The computer policy permits only TCP
+port 43000 to the server Pod and has no DNS egress. The memory worker needs a
+private key directory and is not started by this package. Object storage and
+the scanner are outside this chart.
 The licence inventory lists the components found by Syft in the pinned images.
 `osi-licences.json` contains the OSI-approved IDs from SPDX licence list 3.28.0
 (source JSON SHA-256

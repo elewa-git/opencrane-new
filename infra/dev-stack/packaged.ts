@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { isIP } from 'node:net';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
@@ -19,11 +20,15 @@ const secretKeys: Record<string, string[]> = {
     'OIDC_EXPECTED_ORG_ID', 'OPENFGA_API_URL', 'OPENFGA_STORE_ID', 'OPENFGA_MODEL_ID',
     'PROJECTION_DATABASE_URL', 'HANDLER_DATABASE_URL', 'OWNER_BOOTSTRAP_READY',
     'CONVERSATION_KEYS_DIR', 'CONVERSATION_WRAP_KEY_FILE',
-    'conversation-wrap-key', 'MODEL_UPSTREAM', 'MODEL_KEY_FILE',
+    'MODEL_UPSTREAM', 'MODEL_KEY_FILE',
     'MODEL_JWKS_FILE', 'MODEL_DECISION_URL', 'PACKAGE_OWNER_SUBJECT',
+  ],
+  runtimeFiles: [
+    'conversation-wrap-key',
     'ca.crt', 'command.crt', 'command.key', 'command.seed',
     'projection.crt', 'projection.key', 'projection.seed',
     'dispatcher.crt', 'dispatcher.key', 'dispatcher.seed',
+    'token-signing-key.pem', 'zitadel-client-secret',
     'model-jwks.json', 'model-stub-key'],
   postgres: ['POSTGRES_PASSWORD'],
   nats: ['nats.conf', 'ca.crt', 'server.crt', 'server.key', 'NATS_LISTEN',
@@ -288,6 +293,18 @@ async function waitForBootstrap() {
   throw new Error('Package bootstrap Job timed out');
 }
 
+async function configureComputerGateway() {
+  const output = await kubectl(['-n', namespace, 'get', 'service', 'server', '-o', 'json']);
+  const service = JSON.parse(output) as { spec?: { type?: string; clusterIP?: string } };
+  const address = service.spec?.clusterIP;
+  if (service.spec?.type !== 'ClusterIP' || !address || isIP(address) === 0) {
+    throw new Error('The private gateway Service has no ClusterIP');
+  }
+  const patch = JSON.stringify({ data: { gateway: `http://${address}:43000` } });
+  await kubectl(['-n', namespace, 'patch', 'configmap', 'computer-runtime',
+    '--type=merge', '-p', patch]);
+}
+
 export async function installPackage(valuesFile: string) {
   const { values, review } = await readReviewedValues(valuesFile);
   const owner = await verifyPackageOwner();
@@ -314,6 +331,7 @@ export async function installPackage(valuesFile: string) {
   else delete owner.releaseSecretUid;
   if (!owner.releaseSecretUid) throw new Error('Helm did not record its release');
   await saveOwner(owner);
+  await configureComputerGateway();
   await waitForBootstrap();
   const deployments = [
     'server', 'web', 'worker-members', 'worker-mcp-catalogue', 'worker-computers',

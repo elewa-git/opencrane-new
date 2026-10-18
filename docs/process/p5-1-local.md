@@ -286,6 +286,7 @@ Logs: `/tmp/p5-1b-changed-tests-final-1.log`,
 `/tmp/p5-1b-licence-tests-final-2.log`,
 `/tmp/p5-1b-typecheck-2.log`, `/tmp/p5-1b-events.log`,
 `/tmp/p5-1b-changelog.log` and `/tmp/p5-1b-lint-2.log`.
+
 ## 18 October 2026: local chat turn
 
 This follow-up used branch `work/p5-1c` and claimed secondary slot 1. The final
@@ -331,3 +332,50 @@ pages were also captured at [1280px](p5-1-live/signed-in-1280.png) and
 | Typecheck | PASS | `npm run typecheck` completed for all workspaces and the package TypeScript project. |
 | Lint | PASS | `npm run lint` completed with no errors. ESLint reported 20 existing function-length warnings outside this change. |
 | Full root suite | NOT RUN | This follow-up was instructed not to run it. |
+
+## 18 October 2026: private computer network and key files
+
+This fix round rebased only this branch's two earlier commits onto
+`origin/work/p5-1b` at `74b84388`. The rebase finished and that parent is an
+ancestor of this branch. I claimed secondary slot 1 with `claim.sh`. The
+final fresh namespace was `opencrane-package-1`, UID
+`b1300b25-e1b0-49d2-b8f0-3c621de6390d`. The application and computer image
+digests did not change. The model still used the local stub.
+
+The new chart test first failed on the DNS allowance and missing file mount.
+A later test first failed when the bootstrap Job did not mount the file Secret.
+Another first failed on the workers' old certificate paths. The final mode
+test first failed because it needed a private copy of the mounted files.
+Each test was committed before its fix.
+
+| Live check | Result | Observation |
+| --- | --- | --- |
+| First install attempt | FAIL | The bootstrap Job could not read its NATS files because its file Secret was not mounted. That namespace was removed. |
+| Second install attempt | FAIL | Bootstrap completed, but the workers still used old NATS file paths. That namespace was removed. |
+| Final fresh install | PASS | Bootstrap completed and all eleven Deployments reached Ready in a newly prepared namespace. |
+| Computer network | PASS | The live policy permits one egress rule: TCP 43000 to the server Pod. It permits no port 53. The computer ConfigMap contained `http://10.43.70.32:43000`, the live server Service ClusterIP. |
+| Wrapping key files | PASS | The text runtime Secret had no key file entry. The separate file Secret held a fresh 32-byte key. The server key and worker NATS file were owned by user 1000 with actual mode 0400. Application mounts were read-only. A test key containing a NUL byte survived `kubectl` Secret rendering. No key value was logged. |
+| Browser chat at 1280px | PASS | The signed-in test owner sent “Say hello briefly.” The stub reply and Done appeared. [Capture](p5-1-live/chat-1280.png). |
+| Browser chat at 390px | PASS | The same turn completed at mobile width. [Capture](p5-1-live/chat-390.png). |
+| Licence check | PASS | All 88 server Debian name/version pairs matched the reviewed Bookworm main list. The digest-bound server and web review matched the current image, and the computer kept its separate 385-component inventory check. |
+| Cleanup | PASS | The package namespace and forward were removed, slot 1 reported free, and both owner namespace UIDs and all pre-existing container names and IDs matched the earlier snapshot. |
+| Existing person's own Zitadel login | NOT RUN | The browser used the separate development test owner. |
+| Full root suite | NOT RUN | This fix round was instructed to run changed tests only. |
+
+The final signed-in pages were also captured at
+[1280px](p5-1-live/signed-in-1280.png) and
+[390px](p5-1-live/signed-in-390.png). No Secret value was put in Helm values,
+this receipt or the captures.
+
+### Final source checks
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Changed Node tests | PASS | The 34 claim, chart and package preflight tests passed twice with `nice -n 10` and the supplied `PG_TEST_URL`. |
+| Licence tests | PASS | All 14 Python tests passed twice. `check:package-licences` accepted all six pinned image roles. |
+| Wrapped key tests | PASS | The two tests passed twice with a throwaway PostgreSQL container and `PG_TEST_URL`; the container and volume were removed. |
+| Typecheck | PASS | All workspaces and the package TypeScript project completed. |
+| Event catalogue | PASS | All 143 event types agreed. |
+| Knip | PASS | The command exited 0 with two configuration hints. |
+| Changelog check | PASS | The branch fragment passed. |
+| Full lint | PASS | The command completed, including package licences. ESLint reported 20 existing warnings and no errors. |

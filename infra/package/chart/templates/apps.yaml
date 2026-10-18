@@ -77,6 +77,24 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 50m, memory: 64Mi }
+        - name: copy-private-files
+          image: {{ .Values.images.server | quote }}
+          command: [sh, -ec]
+          args:
+            - >-
+              cp /run/opencrane-source/* /run/opencrane/files/ &&
+              chown 1000:1000 /run/opencrane/files/* &&
+              chmod 0400 /run/opencrane/files/*
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: runtime-file-source, mountPath: /run/opencrane-source, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
       containers:
         - name: server
           image: {{ required "server pin" .Values.images.server | quote }}
@@ -92,6 +110,7 @@ spec:
             - secretRef: { name: {{ .Values.secrets.runtime | quote }} }
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
             - { name: keys, mountPath: /var/lib/opencrane/conversation-keys }
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
           ports: [{ containerPort: 8080 }]
@@ -115,6 +134,7 @@ spec:
             - { name: NODE_OPTIONS, value: "--max-old-space-size=256" }
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
             - { name: keys, mountPath: /var/lib/opencrane/conversation-keys }
             - { name: model-state, mountPath: /var/lib/opencrane/models }
           ports:
@@ -129,6 +149,12 @@ spec:
       volumes:
         - name: runtime
           secret: { secretName: {{ .Values.secrets.runtime | quote }} }
+        - name: runtime-files
+          emptyDir: { medium: Memory }
+        - name: runtime-file-source
+          secret:
+            secretName: {{ .Values.secrets.runtimeFiles | quote }}
+            defaultMode: 256
         - name: keys
           persistentVolumeClaim: { claimName: conversation-keys }
         - name: model-state

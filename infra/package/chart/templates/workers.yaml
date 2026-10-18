@@ -14,6 +14,7 @@ spec:
       labels: { app: worker-{{ $mode }} }
     spec:
       serviceAccountName: package-worker
+      securityContext: { fsGroup: 1000 }
       initContainers:
         - name: kubeconfig
           image: {{ $root.Values.images.server | quote }}
@@ -31,6 +32,24 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 50m, memory: 64Mi }
+        - name: copy-private-files
+          image: {{ $root.Values.images.server | quote }}
+          command: [sh, -ec]
+          args:
+            - >-
+              cp /run/opencrane-source/* /run/opencrane/files/ &&
+              chown 1000:1000 /run/opencrane/files/* &&
+              chmod 0400 /run/opencrane/files/*
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: runtime-file-source, mountPath: /run/opencrane-source, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
       containers:
         - name: worker
           image: {{ $root.Values.images.server | quote }}
@@ -43,9 +62,9 @@ spec:
                 secretKeyRef:
                   name: {{ $root.Values.secrets.runtime | quote }}
                   key: {{ if eq $mode "dispatcher" }}HANDLER_DATABASE_URL{{ else }}PROJECTION_DATABASE_URL{{ end }}
-            - { name: NATS_CERT_FILE, value: "/run/opencrane/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.crt" }
-            - { name: NATS_KEY_FILE, value: "/run/opencrane/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.key" }
-            - { name: NATS_NKEY_SEED_FILE, value: "/run/opencrane/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.seed" }
+            - { name: NATS_CERT_FILE, value: "/run/opencrane/files/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.crt" }
+            - { name: NATS_KEY_FILE, value: "/run/opencrane/files/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.key" }
+            - { name: NATS_NKEY_SEED_FILE, value: "/run/opencrane/files/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.seed" }
             - { name: NATS_INBOX_PREFIX, value: "_INBOX.{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}" }
             - { name: MODEL_DECISION_URL, value: "http://server:43001" }
             - { name: KUBECONFIG, value: "/run/kubeconfig/config.json" }
@@ -54,6 +73,7 @@ spec:
                 fieldRef: { fieldPath: metadata.namespace }
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
           resources:
             requests: { cpu: 20m, memory: 64Mi }
@@ -61,6 +81,12 @@ spec:
       volumes:
         - name: runtime
           secret: { secretName: {{ $root.Values.secrets.runtime | quote }} }
+        - name: runtime-files
+          emptyDir: { medium: Memory }
+        - name: runtime-file-source
+          secret:
+            secretName: {{ $root.Values.secrets.runtimeFiles | quote }}
+            defaultMode: 256
         - name: kubeconfig
           emptyDir: { medium: Memory }
 {{- end }}

@@ -75,6 +75,8 @@ resources only when `quota.json` exists; that file is saved before the first
 Kubernetes call during computer setup. With neither record, teardown makes no
 Kubernetes calls.
 See [package operator notes](../package/README.robot.md).
+The package installer reads the server Service ClusterIP after Helm creates it.
+It writes that IP to the computer ConfigMap before waiting for the first owner.
 Old owner files containing only a worktree path count as claims started long ago.
 The next claim reports the reclaim on stderr and records the new owner. `status`
 prints `free` for an unused or stale slot, and `status` and `down` never create its

@@ -8,6 +8,7 @@ images:
   computer: ""
 secrets:
   runtime: ""
+  runtimeFiles: ""
   postgres: ""
   nats: ""
   openfga: ""
