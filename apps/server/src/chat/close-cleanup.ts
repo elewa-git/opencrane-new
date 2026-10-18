@@ -20,6 +20,7 @@ type Options = { silo: string; store: EventStore };
 type SavedTurns = { ended: Set<string>; cancelled: Set<string>; starts: Set<string> };
 const turnData = z.object({ turnId: z.string() });
 const computerData = z.object({ computerId: z.string() });
+const postedAuthor = z.object({ authorKind: z.enum(['human', 'agent', 'system']) });
 
 function terminalTurns(rows: ChatRows) {
   const ended = new Set<string>();
@@ -53,7 +54,8 @@ function reportedStarts(rows: ChatRows) {
 
 function postedInputs(rows: ChatRows) {
   function isPosted(row: ChatRows[number]) {
-    return row.event.type === 'message.posted';
+    return row.event.type === 'message.posted' &&
+      postedAuthor.parse(row.event.data).authorKind === 'human';
   }
   return rows.filter(isPosted);
 }
