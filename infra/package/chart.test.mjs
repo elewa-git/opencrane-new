@@ -5,13 +5,14 @@ import { readFileSync } from 'node:fs';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseAllDocuments } from 'yaml';
 
 const reviewed = JSON.parse(readFileSync('infra/package/reviewed-images.json', 'utf8'));
 const values = {
   chartVersion: reviewed.chartVersion,
   images: reviewed.images,
-  secrets: { runtime: 'runtime', postgres: 'postgres', nats: 'nats', openfga: 'openfga',
-    bootstrap: 'bootstrap' },
+  secrets: { runtime: 'runtime', runtimeFiles: 'runtime-files', postgres: 'postgres',
+    nats: 'nats', openfga: 'openfga', bootstrap: 'bootstrap' },
   exposure: { ingress: false, loadBalancer: false, funnel: false },
 };
 
@@ -25,6 +26,21 @@ function render() {
   } finally {
     rmSync(directory, { recursive: true });
   }
+}
+
+function resources() {
+  const documents = parseAllDocuments(render());
+  return documents.map(function parsedResource(document) {
+    return document.toJS();
+  });
+}
+
+function namedResource(kind, name) {
+  const matches = resources().filter(function hasName(resource) {
+    return resource?.kind === kind && resource?.metadata?.name === name;
+  });
+  assert.equal(matches.length, 1);
+  return matches[0];
 }
 
 test('the package runs member and conversation projections and a dispatcher', () => {
@@ -46,4 +62,40 @@ test('a chat turn has private keys, a stub model and a computer runtime', () => 
   assert.match(manifest, /infra\/dev-stack\/secondary-models\.ts/u);
   assert.match(manifest, /"kind": "SandboxTemplate"/u);
   assert.match(manifest, /name: computer-runtime/u);
+});
+
+test('the computer can reach only the private gateway without DNS', () => {
+  const policy = namedResource('NetworkPolicy', 'computer');
+  assert.deepEqual(policy.spec.egress, [{
+    to: [{ podSelector: { matchLabels: { app: 'server' } } }],
+    ports: [{ protocol: 'TCP', port: 43000 }],
+  }]);
+  const config = namedResource('ConfigMap', 'computer-runtime');
+  assert.doesNotMatch(config.data.gateway, /server|\.svc/u);
+});
+
+test('a binary key stays in a mounted Secret and outside every environment import', () => {
+  const key = Buffer.alloc(32, 0x41);
+  key[3] = 0;
+  const secret = { data: { 'conversation-wrap-key': key.toString('base64') } };
+  assert.deepEqual(Buffer.from(secret.data['conversation-wrap-key'], 'base64'), key);
+
+  const server = namedResource('Deployment', 'server');
+  const containers = server.spec.template.spec.containers;
+  for (const container of containers) {
+    assert.deepEqual(container.envFrom, [{ secretRef: { name: 'runtime' } }]);
+    assert.ok(container.volumeMounts.some(function mountsPrivateFiles(mount) {
+      return mount.name === 'runtime-files' && mount.readOnly === true &&
+        mount.mountPath === '/run/opencrane/files';
+    }));
+  }
+  const files = server.spec.template.spec.volumes.find(function isPrivateFiles(volume) {
+    return volume.name === 'runtime-files';
+  });
+  assert.deepEqual(files.secret, { secretName: 'runtime-files', defaultMode: 0o400 });
+  assert.ok(!containers.some(function importsPrivateFiles(container) {
+    return container.envFrom.some(function isPrivateFileImport(source) {
+      return source.secretRef.name === 'runtime-files';
+    });
+  }));
 });
