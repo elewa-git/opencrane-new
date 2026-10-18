@@ -27,6 +27,16 @@ type Connection = (computerId: string, assistantId: string) =>
 const computerData = z.object({ computerId: z.string() });
 const assistantKindData = z.object({ kind: z.enum(['personal', 'team']) });
 
+function canReuseProgress(previous: Progress, head: number, assistant: Snapshot,
+  currentConnectionId: number | undefined, computerHistoryUnavailable: boolean) {
+  if (computerHistoryUnavailable || previous.retry) return false;
+  const linkClosed = previous.connectionId !== undefined &&
+    previous.connectionId !== currentConnectionId;
+  return previous.head === head && previous.computerEventId === assistant.current?.id &&
+    previous.computerHead === assistant.computerHead && previous.kind === assistant.kind &&
+    !linkClosed;
+}
+
 export function assistantProcessor(options: WatchOptions, tokens: Tokens, refused: Set<string>,
   connection: Connection,
   connectionId: (assistantId: string) => number | undefined, logger: Logger) {
@@ -100,14 +110,10 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       const conversationId = conversation.conversationId;
       const head = await options.store.head(`conversation-${conversationId}`);
       const previous = seen.get(conversationId);
-      const linkClosed = previous?.connectionId !== undefined &&
-        previous.connectionId !== connectionId(conversation.assistantId);
       const computerEventId = assistant.current?.id;
-      const sameComputer = previous?.computerEventId === computerEventId &&
-        previous.computerHead === assistant.computerHead;
-      const sameKind = previous?.kind === assistant.kind;
-      if (!computerHistoryUnavailable && previous?.head === head && sameComputer && sameKind &&
-        !previous.retry && !linkClosed) {
+      const currentConnectionId = connectionId(conversation.assistantId);
+      if (previous && canReuseProgress(previous, head, assistant, currentConnectionId,
+        computerHistoryUnavailable)) {
         return previous.pending;
       }
       const result = await processConversation(options, tokens, conversation,

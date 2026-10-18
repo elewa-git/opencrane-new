@@ -332,11 +332,11 @@ function isComputerReady(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
 
 function isClosedFailure(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
   return row.event.type === 'agent.turn_failed' &&
-    (row.event.data as { reason?: string }).reason === 'conversation_closed';
+    z.object({ reason: z.string() }).parse(row.event.data).reason === 'conversation_closed';
 }
 
 function turnIdOf(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
-  return (row.event.data as { turnId: string }).turnId;
+  return z.object({ turnId: z.string() }).parse(row.event.data).turnId;
 }
 
 function isPosted(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
