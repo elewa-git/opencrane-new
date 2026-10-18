@@ -1,3 +1,4 @@
+import { recordToolObservation } from './tool-dispatch.ts';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
@@ -43,6 +44,7 @@ interface Permit {
   silo: string;
   route: Route;
   policyRevision: number;
+  reviewRevision: number | undefined;
   catalogueSequence: number;
   schemaDigest: string;
   toolRevision: string;
@@ -116,6 +118,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const binding = { requestId, silo, route: { ...route },
       ...(policy.gatewayBinding ? { gatewayBinding: policy.gatewayBinding } : {}),
       policyRevision: policy.policy.policyRevision, catalogueSequence: policy.policy.sequence,
+      reviewRevision: policy.policy.reviewRevision,
       schemaDigest: policy.schemaDigest,
       toolRevision: policy.revision, toolName: policy.name, bodyDigest: digest(body), expiresAt };
     const signedBinding = { ...binding, nonce: randomUUID() };
@@ -156,6 +159,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse, body: string) {
+    const startedAt = performance.now();
     const permit = consume(req, body);
     const expectedPath = `/dispatch/mcp/${permit.route.serverId}/${permit.route.connectionId}`;
     if (req.url !== expectedPath) throw new Error('MCP dispatch route refused');
@@ -183,12 +187,76 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireFreshDispatch(req, res, permit);
     }
     await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
-    await admit(req, res, permit, route, position, deadline);
+    const admittedPosition = await admit(req, res, permit, route, position, deadline);
+    if (permit.gatewayBinding) {
+      // Refuse changes found after admission before recording a start.
+      await requirePublishedPositions(permit, admittedPosition, deadline);
+      requireCurrentRoute(permit);
+      requireFreshDispatch(req, res, permit);
+    }
+    try {
+      await recordStarted(permit, deadline);
+      if (permit.gatewayBinding) {
+        await permit.confirmAccess();
+      }
+      await requirePublishedPositions(permit, admittedPosition, deadline);
+      // Allow this acknowledged generation if a replacement was saved after the last
+      // gateway-position read: that replacement is not live yet. Refuse changes visible
+      // at that read, then check local state and send without another read or a lock.
+      requireCurrentRoute(permit);
+      requireFreshDispatch(req, res, permit);
+    } catch (error) {
+      if (permit.gatewayBinding) {
+        // Close the saved start before replying. No upstream connection has been opened.
+        const observation = { id: permit.requestId, toolOutcome: 'not_dispatched' as const,
+          evidence: 'dispatch_refused' as const, observedAt: new Date().toISOString(),
+          durationMs: Math.ceil(performance.now() - startedAt) };
+        await recordToolObservation(actor, observation);
+      }
+      throw error;
+    }
+    forward(route, permit, body, res, memoryContext);
+  }
+
+  async function requirePublishedPositions(permit: Permit, admittedPosition: number,
+    deadline: number) {
+    if (!permit.gatewayBinding) {
+      return;
+    }
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
       acknowledged, deadline);
-    requireCurrentRoute(permit);
-    requireFreshDispatch(req, res, permit);
-    forward(route, permit, body, res, memoryContext);
+    const currentPosition = await store.head(`mcp-${permit.route.serverId}`, deadline);
+    if (currentPosition !== admittedPosition) {
+      throw new Error('MCP policy changed');
+    }
+    // Catch a saved replacement while the MCP read waited, even with an unchanged member.
+    await requireGatewayPosition(store, silo, permit.gatewayBinding,
+      acknowledged, deadline);
+  }
+
+  async function recordStarted(permit: Permit, deadline: number) {
+    const binding = permit.gatewayBinding;
+    if (!binding) {
+      return;
+    }
+    const subject = `decision-${permit.requestId}`;
+    const expectedSequence = await store.head(subject, deadline);
+    // Keep any saved outcome last, including one written after a gateway timeout.
+    const decision = await store.readEvent(expectedSequence, deadline);
+    if (decision.event.id !== permit.budget.decisionId) {
+      throw new Error('Tool dispatch decision changed');
+    }
+    const payload = { requestId: permit.requestId, serverId: permit.route.serverId,
+      connectionId: permit.route.connectionId, generation: binding.generation,
+      recordDigest: binding.recordDigest, reviewRevision: permit.reviewRevision };
+    const eventId = `${permit.requestId}:tool-dispatch-started`;
+    const event = envelope(silo, subject, 'tool.dispatch_started', payload, eventId);
+    // Consume once in this process. Never recover a failed save reply by sending later.
+    const command = { event, expectedSequence, deadline, historyChecked: true as const };
+    const result = await store.append(command);
+    if (result.status !== 'appended') {
+      throw new Error('Tool dispatch start unavailable');
+    }
   }
 
   function requireCurrentRoute(permit: Permit) {
@@ -217,11 +285,11 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
         acknowledged, deadline);
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
-      // Order sends with Block and quarantine writes on the same server stream.
-      // A later Block applies to later admissions, even if this send is still pending.
+      // Order admission with Block and quarantine writes on the same server stream.
+      // Published calls also recheck this position after saving their start.
       const command = { event, expectedSequence, deadline, historyChecked: true as const };
       const result = await store.append(command);
-      if (result.status === 'appended') return;
+      if (result.status === 'appended') return result.sequence;
       if (result.status !== 'conflict' || attempt === 2) {
         throw new Error('MCP admission refused');
       }
@@ -230,6 +298,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
         currentPosition, deadline);
       expectedSequence = currentPosition;
     }
+    throw new Error('MCP admission refused');
   }
 
   return { handle, bindPolicy, setPermit, acknowledged };

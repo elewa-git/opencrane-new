@@ -75,3 +75,19 @@ function validatesDecisionOutcome() {
   }
 }
 it('checks decision outcomes only on decision rows', validatesDecisionOutcome);
+
+function acceptsRefusedDispatchOutcome() {
+  const row = { id: 'refused', position: 3, type: 'tool.dispatch_recorded',
+    time: '2026-10-18T00:00:00Z', data: {
+      conversationId: 'conversation', turnId: 'turn', callId: 'call',
+      serverId: 'fixture', toolName: 'write',
+      requestId: '00000000-0000-4000-8000-000000000001',
+      logicalRequestId: 'a'.repeat(64), startedAt: '2026-10-18T00:00:00Z',
+      durationMs: 0, outcome: 'not_dispatched', evidence: 'dispatch_refused',
+    } };
+  expect(chatRowSchema.safeParse(row).success).toBe(true);
+  const message = { version: 1, topic: 'conversation', conversationId: 'conversation',
+    type: 'event', position: 3, generation: 1, row };
+  expect(chatMessageSchema.safeParse(message).success).toBe(true);
+}
+it('accepts a refused not-sent tool outcome in chat', acceptsRefusedDispatchOutcome);

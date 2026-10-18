@@ -22,11 +22,14 @@ A changed request, missing observation or uncertain outcome cannot grant a retry
 Conversation HTTP and socket rows include `tool.dispatch_recorded`, with
 `requestId`, `logicalRequestId`, `callId`, `serverId`, `toolName`, `startedAt`,
 `durationMs`, `outcome`, `evidence` and an `approvalId` for Ask calls. The row's
-`time` is the gateway's UTC observation time. Equal `logicalRequestId` values link
+`time` is the gateway's or models process's UTC observation time. Equal `logicalRequestId` values link
 attempts; Ask calls use their saved approval id. `responded` means an HTTP reply
 arrived; it does not claim success.
-Only the pinned Linux gateway's refused TCP connection proves `not_dispatched`.
-An HTTP error, tool error text or zero charge never proves this.
+The pinned Linux gateway's refused TCP connection proves `not_dispatched` with
+`evidence: connection_refused`. The models process also records `not_dispatched` with
+`evidence: dispatch_refused` when a check refuses after a confirmed saved start and
+before opening the upstream connection. This latter evidence does not enable an approval
+retry. An HTTP error, tool error text or zero charge never proves non-dispatch.
 
 `agent.native_consent_refused` rows record `mcpServer/elicitation/request`, naming
 the native request, server and bound turn. A known offered server supplies `serverId`.

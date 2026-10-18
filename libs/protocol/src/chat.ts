@@ -56,7 +56,7 @@ export const chatRowSchema = z.object({
     durationMs: z.int().nonnegative().optional(),
     logicalRequestId: z.string().optional(),
     startedAt: z.iso.datetime().optional(),
-    evidence: z.enum(['connection_refused', 'response_received', 'transport_uncertain']).optional(),
+    evidence: toolDispatchRecordedDataSchema.shape.evidence.optional(),
     outcome: z.string().optional(),
     requestId: z.string().optional(),
     approvalId: z.string().optional(),

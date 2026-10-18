@@ -4,7 +4,7 @@ import { envelope, history, type BudgetActor } from './actor.ts';
 
 export const toolObservationSchema = z.object({
   id: z.uuid(), toolOutcome: z.enum(['not_dispatched', 'responded', 'outcome_unknown']),
-  evidence: z.enum(['connection_refused', 'response_received', 'transport_uncertain']),
+  evidence: toolDispatchRecordedDataSchema.shape.evidence,
   observedAt: z.iso.datetime(), durationMs: z.int().nonnegative(),
 }).strict();
 
@@ -53,6 +53,13 @@ export async function recordToolObservation(actor: BudgetActor,
     return row.event.id === eventId;
   }
   if (rows.some(alreadyRecorded)) return;
+  const lastEvent = rows.at(-1)?.event;
+  const startId = `${observation.id}:tool-dispatch-started`;
+  // Close only this saved start, including when its append reply was lost.
+  if (observation.evidence === 'dispatch_refused' &&
+      (lastEvent?.type !== 'tool.dispatch_started' || lastEvent.id !== startId)) {
+    return;
+  }
   const dispatchDetails = {
     conversationId: decision.conversationId, turnId: decision.turnId,
     callId: decision.callId, serverId: decision.serverId, toolName: decision.toolName,

@@ -100,6 +100,8 @@ values, including saved/kept_existing for delivered uploads. `durationMs` is a
 non-negative integer. Tests parse all older conversation examples, HTTP feeds
 and live delivery messages.
 The browser receives these fields through the existing feed and live messages.
+Tool outcomes accept `evidence: dispatch_refused` for a refusal after a saved start and
+before sending. These rows retain `outcome: not_dispatched`.
 Running tool lines and attempt lists are not rendered yet. Tests are in
 `test/chat-mode.test.ts`.
 

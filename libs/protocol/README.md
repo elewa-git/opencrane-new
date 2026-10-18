@@ -14,7 +14,7 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies and live stop notices| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
-  protocol -.-> events["libs/events<br/>saved tool list and publication shapes"]
+  protocol -.-> events["libs/events<br/>saved tool lists, publications and not-sent outcomes"]
 ```
 
 Tool rule messages include saved tool lists and their check and expiry dates.
@@ -61,6 +61,9 @@ A saved receipt alone cannot prove that a gateway is still running.
 - Carry a tool server's saved hold after its catalogue changes.
 
 ## Processes it handles
+
+Tool outcome messages can say that the models process refused a call before sending,
+even when its start was already saved.
 
 Child requests carry reviewed choices and a signed review. Status replies show only
 the requester’s saved request and child id, without the source message text.

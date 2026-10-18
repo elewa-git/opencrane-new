@@ -2436,10 +2436,44 @@ Restoration checks refuse the unsupported conversations `--verify` command, then
 its supported offline rebuild and audit verification without new events or upstream calls.
 Conversations verification remains unsupported by the existing CLI. Existing authority tests remain unchanged.
 
-PARTIAL: this is steps 1–3 of row 4. Part b adds `tool.dispatch_started`, its conditional
-append and uncertain-reply tests, and the final access and MCP position checks after saving.
-No event contract changes belong to this first part. Row 5 still supplies the guarded
-destination; production routes remain empty. Fresh-install journey: SKIP.
+Part b adds `tool.dispatch_started` after `mcp.dispatch_admitted` for intent-backed
+publications only. Its fixed id is `<requestId>:tool-dispatch-started` on
+`decision-<requestId>`. One conditional append requires the decision to remain the
+latest event. An earlier outcome or any failed or uncertain save refuses the call.
+The permit is spent in memory before any await and cannot be retried or restored on restart.
+Before saving the start, dispatch checks the gateway position, the exact MCP admission
+position and then the gateway position again. This catches a newer saved generation
+while the MCP read waits, even when it carries the server unchanged. Such a refusal saves
+no start. After saving, dispatch rechecks access and repeats these position checks.
+A changed position refuses, including another intervening admission. Local
+acknowledgement, route and deadline checks follow the last await, immediately before send.
+The last exact gateway-position read is the ordering boundary. A newer generation visible
+at that read refuses the call. A generation saved after that read is not live yet: the
+gateway still runs the acknowledged generation. A call that passed every check may send
+once on that acknowledged generation. No extra read or lock extends this boundary.
+A refusal after a confirmed start saves `tool.dispatch_recorded` on the same decision
+stream with `outcome: not_dispatched` and `evidence: dispatch_refused`, before replying.
+The existing outcome writer keeps any already saved outcome and uses one conditional
+append. A failed outcome save still refuses the call; it never restores the spent permit.
+A lost or throwing start-save reply also refuses the call. The outcome writer closes
+that start only if the saved history ends with its exact event id and type. An absent
+start or unavailable history cannot be treated as a confirmed save.
+`tool.dispatch_recorded` remains the last outcome row for approval retry verification.
+The new evidence value does not enable an approval retry; existing retry checks still
+require `connection_refused`. Reusing the original permit always refuses.
+
+Tests hold the saved start reply while asserting zero upstream requests, lose that reply,
+withdraw publication or revoke access immediately after saving, and repeat a permit both
+in sequence and concurrently. They verify the saved gateway fields and later outcome order.
+Barriers save a carried generation during the MCP read both before and after the start.
+Both send nothing; the earlier refusal also saves no start, and the later one saves a
+not-sent outcome. A barrier on the final gateway read verifies that a save visible to
+that read refuses with zero upstream requests, while a later save sends exactly once
+on the acknowledged generation. Both cases refuse a retry of the same permit.
+Other checks cover a real
+competing outcome before the decision read or conditional append, expiry during the last
+MCP read, and each generated constant on a legacy publication.
+Row 5 still supplies the guarded destination; production routes remain empty. Fresh-install journey: SKIP.
 
 ## Saved reload approval cancellation (Part of #48)
 
