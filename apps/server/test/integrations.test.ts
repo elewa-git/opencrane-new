@@ -144,6 +144,10 @@ beforeEach(async () => {
     computerId: 'computer-alice', sandboxUid: 'sandbox-alice', generation: 1, tokenId: 'token:alice' }));
   await append(fixture('computer.ready', 'computer-personal-alice', { assistantId: 'personal-alice', computerId: 'computer-alice' }));
   await runner.run(computers);
+  const defaultPayer = fixture('team.created', 'team-personal-default', {
+    teamId: 'personal-default', name: 'Personal work', createdBy: 'alice',
+  });
+  await append(defaultPayer);
 
   const connectionString = String(dbs.queue.options.connectionString);
   feed = await connectMemberFeed(connectionString);
@@ -599,12 +603,10 @@ it('budget commands are retryable while a current role waits for its IAM receipt
   retriesBudgetDuringIamLag);
 
 it('lets Owner and Admin configure the one budget actor, refuses others and replays every ceiling', async () => {
-  for (const teamId of ['personal-default', 'sales']) {
-    const group = fixture('team.created', `team-${teamId}`, {
-      teamId, name: 'Sales', createdBy: 'alice',
-    });
-    await append(group);
-  }
+  const group = fixture('team.created', 'team-sales', {
+    teamId: 'sales', name: 'Sales', createdBy: 'alice',
+  });
+  await append(group);
   const shared = fixture('assistant.created', 'assistant-shared-sales', {
     assistantId: 'shared-sales', ownerId: 'sales', kind: 'team', payingGroupId: 'sales',
   });
