@@ -211,13 +211,13 @@ records the cache budget and the limits on cold reads.
 - MOD-04 needs non-admin read-only provider state. Current event-backed authority
   and OpenFGA `read: manage` restrict all reads to Owner/Admin; that state is not
   implemented yet.
-- Provider verification shares `MODEL_UPSTREAM` with ordinary model traffic.
-  The dev-stack model stub does not implement `GET /v1/models`; its 404 produces
-  failed reachability after dispatch. This stack cannot qualify real provider
-  reachability until the upstream binding is separated or the fixture implements it.
-- `PROVIDER_SECRETS_DIR` is not wired into the dev stack. Both the server and models
-  process need the same private secret directory before a fresh-install provider
-  journey can run. Missing wiring denies verification rather than proving it works.
+
+The dev stack now implements model-list reachability and non-streaming Responses
+with usage in its local stub. It creates the private provider directory before startup
+and shares it between server and models, read-only in the models container.
+Fresh starts with the dev Owner bootstrap connect and test the stub through these
+product APIs, select models and an explicit default, then drain and switch on before
+chat checks. Provider rows still contain no upstream address.
 
 ## Saved provider choices
 
@@ -247,8 +247,12 @@ and a saved key, successful reachability evidence and an enabled supported model
 every active binding. Automatic defaults need an explicit administrator choice first.
 Legacy chat turns must have closed or have a later computer loss, retirement or claim.
 Existing holds and send permissions also need confirmed settlement or release.
-Expired or unknown holds still block the command. Sends without reservations have
-no completion writer yet, so they remain refused.
+Expired or unknown holds still block the command. The only exception is a validated
+`provider-reachability` dispatch without a reservation: this check is free and needs
+no spending settlement. Its admission still records the access, stop and single-use
+checks. Existing reachability history works without adding a paid settlement.
+Every reserved dispatch and every other unreserved send still needs confirmed settlement.
+Other unreserved sends have no completion writer yet, so they remain refused.
 Success saves one `provider.managed_calls_enabled` event on `budget-<silo>` and ends draining.
 
 The existing changes GET returns its original receipt. A missing receipt remains
@@ -273,8 +277,14 @@ falls back to the deployment key. Startup and replay read no provider key.
 
 Spawned-process tests prove a checked call through the pinned gateway to a recording
 upstream, including after a configuration reload. They do not qualify a fresh install.
-Dev stacks still set `MODEL_KEY_FILE`, so switch-on stops their models process until
-PR 5d supplies custody wiring. Fresh-install qualification: NOT RUN.
+Dev stacks read the recorded mode at startup and omit `MODEL_KEY_FILE` after
+switch-on. Fresh setup restarts models and waits for readiness before its journey.
+The [dev-stack receipt](../process/p4-22-managed-dev-stack/receipt.md) records the
+single-slot fresh check. The provider reached ready, switch-on was accepted and a
+member who joined afterwards chatted through the explicit default. Models ran without
+`MODEL_KEY_FILE`; the stub counted only managed credentials after switch-on.
+The receipt records the complete journey and confidentiality checks separately.
+Twice-fresh qualification: NOT RUN (PR 5e).
 Managed history reads have a ten-second limit before a fresh two-second access check.
 The gateway still waits only two seconds for a decision, so slow cold history may
 refuse a call. Expired history returns a fixed refusal with no money held.

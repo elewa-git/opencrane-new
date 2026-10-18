@@ -108,3 +108,112 @@ test('the approval stub refuses startup without its catalogue revision',
   { timeout: 15_000 }, refusesMissingRevision);
 test('the wake Pod fixture starts the stub with only its packaged files',
   { timeout: 15_000 }, startsFromWakePodFixture);
+
+async function supportsManagedVerification() {
+  const folder = await mkdtemp('/tmp/managed-stub-');
+  const value = randomUUID();
+  const file = `${folder}/credential`;
+  await writeFile(file, value, { mode: 0o600 });
+  const environment = { ...process.env, MODEL_STUB_PORT: '0',
+    MODEL_STUB_MCP_GENERATION: randomUUID(),
+    MODEL_STUB_MCP_REVISION: catalogueDigest([approvalJourneyTool()]),
+    MODEL_STUB_MANAGED_FILE: file };
+  const stub = spawn(process.execPath, ['--experimental-strip-types', stubPath],
+    { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
+  let diagnostics = '';
+  function capture(chunk: Buffer) { diagnostics += chunk.toString(); }
+  stub.stderr.on('data', capture);
+  stub.stdout.on('data', capture);
+  try {
+    await once(stub.stdout, 'data');
+    const port = /Stub ready (\d+)/u.exec(diagnostics)?.[1];
+    assert(port);
+    const origin = `http://127.0.0.1:${port}`;
+    const headers = { authorization: `Bearer ${value}`, 'content-type': 'application/json' };
+    const list = await fetch(`${origin}/v1/models`, { headers });
+    assert.equal(list.status, 200);
+    const listed = await list.json() as { data: Array<{ id: string }> };
+    assert(listed.data.length > 0);
+    for (const model of listed.data) assert(model.id.length > 0);
+    const request = { method: 'POST', headers, body: JSON.stringify({ stream: false }) };
+    const reply = await fetch(`${origin}/v1/responses`, request);
+    assert.equal(reply.headers.get('content-type'), 'application/json');
+    const answer = await reply.json() as Record<string, unknown>;
+    assert.equal(answer['status'], 'completed');
+    assert.deepEqual(answer['usage'], { input_tokens: 10, output_tokens: 1, total_tokens: 11 });
+    assert.deepEqual(answer['output'], [{ type: 'message', role: 'assistant',
+      content: [{ type: 'output_text', text: 'OK' }] }]);
+    const streaming = { method: 'POST', body: JSON.stringify({ stream: true }) };
+    const stream = await fetch(`${origin}/v1/responses`, streaming);
+    const events = await stream.text();
+    assert.match(events, /event: response.completed/u);
+    assert.match(events, /Hello /u);
+    const counts = await fetch(`${origin}/provider-counts`);
+    assert.deepEqual(await counts.json(), { managed: 2, other: 1 });
+    const journey = await fetch(`${origin}/journey-counts`);
+    assert.deepEqual(await journey.json(), { modelRequests: 2 });
+    assert.equal(JSON.stringify(answer).includes(value), false);
+    assert.equal(events.includes(value), false);
+    assert.equal(diagnostics.includes(value), false);
+    assert.equal(diagnostics.includes(file), false);
+  } finally {
+    const stopped = once(stub, 'exit');
+    stub.kill('SIGTERM');
+    await stopped;
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+test('the stub verifies managed calls, counts credentials and keeps streaming',
+  { timeout: 15_000 }, supportsManagedVerification);
+
+async function handlesMissingCredential() {
+  const folder = await mkdtemp('/tmp/missing-stub-');
+  const file = `${folder}/private-credential-location`;
+  const value = randomUUID();
+  const environment = { ...process.env, MODEL_STUB_PORT: '0',
+    MODEL_STUB_MCP_GENERATION: randomUUID(),
+    MODEL_STUB_MCP_REVISION: catalogueDigest([approvalJourneyTool()]),
+    MODEL_STUB_MANAGED_FILE: file };
+  const stub = spawn(process.execPath, ['--experimental-strip-types', stubPath],
+    { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
+  let diagnostics = '';
+  function capture(chunk: Buffer) { diagnostics += chunk.toString(); }
+  stub.stderr.on('data', capture);
+  stub.stdout.on('data', capture);
+  try {
+    await once(stub.stdout, 'data');
+    const port = /Stub ready (\d+)/u.exec(diagnostics)?.[1];
+    assert(port);
+    const origin = `http://127.0.0.1:${port}`;
+    let other = 0;
+    for (const state of ['missing', 'empty']) {
+      if (state === 'empty') await writeFile(file, '', { mode: 0o600 });
+      for (const credential of [value, '']) {
+        const headers = { authorization: `Bearer ${credential}` };
+        const list = await fetch(`${origin}/v1/models`, { headers });
+        assert.equal(list.status, 200);
+        const listing = await list.text();
+        const input = { method: 'POST', headers, body: JSON.stringify({ stream: false }) };
+        const reply = await fetch(`${origin}/v1/responses`, input);
+        assert.equal(reply.status, 200);
+        const answer = await reply.text();
+        other += 2;
+        const counts = await fetch(`${origin}/provider-counts`);
+        assert.deepEqual(await counts.json(), { managed: 0, other });
+        assert.equal(listing.includes(value), false);
+        assert.equal(answer.includes(value), false);
+        assert.equal(listing.includes(file), false);
+        assert.equal(answer.includes(file), false);
+      }
+    }
+    assert.equal(diagnostics.includes(value), false);
+    assert.equal(diagnostics.includes(file), false);
+  } finally {
+    const stopped = once(stub, 'exit');
+    stub.kill('SIGTERM');
+    await stopped;
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+test('missing and empty credential files never match or disclose a bearer or file location',
+  { timeout: 15_000 }, handlesMissingCredential);

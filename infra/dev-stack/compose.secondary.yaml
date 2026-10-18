@@ -32,6 +32,7 @@ services:
     volumes:
       - ${DEV_STACK_ROOT}:${DEV_STACK_ROOT}:ro
       - ${DEV_STACK_DIR}:${DEV_STACK_DIR}
+      - ${DEV_STACK_DIR}/provider-secrets:${DEV_STACK_DIR}/provider-secrets:ro
     cpus: 1
     mem_limit: 768m
     init: true

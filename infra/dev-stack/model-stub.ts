@@ -1,5 +1,5 @@
 // Dev-stack qualification only: this process never contacts an external provider.
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -9,7 +9,33 @@ const approvalGeneration = process.env['MODEL_STUB_MCP_GENERATION'];
 if (!approvalGeneration) throw new Error('Approval stub generation is missing');
 const calls: Array<{ body: string; requestId: string }> = [];
 let modelRequests = 0;
+const providerCounts = { managed: 0, other: 0 };
+function countProviderRequest(authorization: string | undefined) {
+  const file = process.env['MODEL_STUB_MANAGED_FILE'];
+  let value: string | undefined;
+  try {
+    if (file) value = readFileSync(file, 'utf8');
+  } catch {
+    // Allow the stub to start before setup saves its credential.
+  }
+  if (value && authorization === `Bearer ${value}`) {
+    providerCounts.managed++;
+  } else {
+    providerCounts.other++;
+  }
+}
 const server = createServer((req, res) => {
+  if (req.method === 'GET' && req.url === '/provider-counts') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(providerCounts));
+    return;
+  }
+  if (req.method === 'GET' && req.url === '/v1/models') {
+    countProviderRequest(req.headers.authorization);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ object: 'list', data: [{ id: 'gpt-6.1-sol' }, { id: 'gpt-6-luna' }] }));
+    return;
+  }
   if (req.method === 'GET' && req.url === '/journey-counts') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ modelRequests }));
@@ -43,8 +69,17 @@ const server = createServer((req, res) => {
   if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
   req.on('end', () => { void (async () => {
     modelRequests += 1;
+    countProviderRequest(req.headers.authorization);
     if (process.env['MODEL_STUB_CAPTURE']) appendFileSync(process.env['MODEL_STUB_CAPTURE'], Buffer.concat(chunks).toString() + '\n', { mode: 0o600 });
-    const body = JSON.parse(Buffer.concat(chunks).toString()) as { input?: Array<{ type?: string; role?: string; content?: unknown; output?: unknown }> };
+    const body = JSON.parse(Buffer.concat(chunks).toString()) as { stream?: boolean; input?: Array<{ type?: string; role?: string; content?: unknown; output?: unknown }> };
+    if (body.stream === false) {
+      const content = [{ type: 'output_text', text: 'OK' }];
+      const output = [{ type: 'message', role: 'assistant', content }];
+      const usage = { input_tokens: 10, output_tokens: 1, total_tokens: 11 };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ status: 'completed', output, usage }));
+      return;
+    }
     const input = body.input ?? [];
     const user = input.findLastIndex(item => item.type === 'message' && item.role === 'user');
     const prompt = JSON.stringify(input[user]?.content ?? '');

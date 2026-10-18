@@ -642,3 +642,34 @@ at most 97 people, leaving space for its creator, silo and event receipt.
 sources only on this listener. `MODEL_MCP_ROUTES` is no longer supplied.
 The approval journey prints `SKIP approval journey: waits for #45 rows 4, 5 and 14`.
 It cannot report PASS through the former seeded startup route.
+
+## Managed model calls
+
+Fresh starts with the dev Owner bootstrap run `provider-setup.ts` after server health
+and before `journey.ts`. A five-minute dev-only session represents the bootstrapped
+Owner, `jente@elewa.ke`. Setup uses product HTTP routes with the configured Origin:
+create OpenAI connection, save random stub credential, check reachability, accept the
+quoted model test, enable `modelForTask('chat_turn')` and `gpt-6-luna`, explicitly
+select the silo default, drain, then switch on. Every write waits for its receipt.
+The first refusal stops startup with only the step and status. A refused fresh setup
+needs diagnosis and another fresh start; it does not retry writes or undo product checks.
+Token-bootstrap qualification (`DEV_OWNER_BOOTSTRAP=0`) skips this setup and the journey.
+
+The server and models share `PROVIDER_SECRETS_DIR`. Startup creates it as the host
+user with mode 0700 before either process starts. Secondary models mounts it read-only. Startup copies the pinned gateway binary into
+the mounted stack directory, so a host tool symlink can point outside the worktree.
+The stub reads a separate mode-0600 file and exposes only credential-match counts at
+`/provider-counts`: `managed` and `other`. `/journey-counts` keeps its existing response.
+The stub supports model-list and non-streaming verification as well as streamed chat.
+Provider rows contain no address; the existing `MODEL_UPSTREAM` selects the local stub.
+
+`modelsEnvironment` removes inherited `MODEL_KEY_FILE` settings. Before recorded
+switch-on it supplies the local stub file; afterwards it supplies only shared custody.
+The stack restarts models after setup and waits for readiness. Repeat starts read
+`managedProviderCallsEnabled` before choosing the environment. No paid calls are made.
+The [qualification receipt](../../docs/process/p4-22-managed-dev-stack/receipt.md)
+records the single-slot qualification. The provider reached ready and switch-on
+was accepted. A later-joining member chatted through the explicit default, with no
+legacy key-file setting and only managed credentials counted by the restarted stub.
+Free reachability admissions do not count as spending; all other unresolved sends
+still block switch-on. Twice-fresh qualification remains NOT RUN for PR 5e.

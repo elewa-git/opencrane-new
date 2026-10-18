@@ -1,0 +1,9 @@
+{
+  "source": "12e2b17941cd4eebbd836e6aa556a4f158896fad",
+  "slot": 2,
+  "startup": "FAIL",
+  "step": "create",
+  "httpStatus": 503,
+  "switchOn": "NOT RUN",
+  "chat": "NOT RUN"
+}

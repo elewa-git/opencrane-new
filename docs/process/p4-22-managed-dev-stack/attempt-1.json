@@ -1,0 +1,26 @@
+{
+  "source": "12e2b17941cd4eebbd836e6aa556a4f158896fad",
+  "slot": 2,
+  "providerReady": true,
+  "switchMarkers": 1,
+  "memberJoinedAfterSwitch": true,
+  "managedDefaultTurns": 11,
+  "completedReplies": 9,
+  "providerCountsBeforeJourney": {
+    "managed": 0,
+    "other": 0
+  },
+  "providerCounts": {
+    "managed": 12,
+    "other": 0
+  },
+  "modelsWithoutFallback": true,
+  "custodyReadOnly": true,
+  "custodyMode": "0700",
+  "credentialMode": "0600",
+  "eventsChecked": 303,
+  "fileLogsChecked": 15,
+  "modelContainerLogsChecked": true,
+  "noSensitiveData": true,
+  "modelsImage": "sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3"
+}

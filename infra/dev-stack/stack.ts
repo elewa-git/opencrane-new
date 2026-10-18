@@ -3,7 +3,7 @@ import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { open, readFile, realpath, rm, stat } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, open, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { setPriority } from 'node:os';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -14,9 +14,11 @@ import { checkPorts } from './ports.ts';
 import { modelFirewall } from './model-network.ts';
 import { createStore } from '@opencrane/authz';
 import { connectEventStore } from '@opencrane/event-store';
-import { envelope } from '@opencrane/models';
+import { envelope, managedProviderCallsEnabled } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
+import { modelsEnvironment } from './models-environment.ts';
+import { setupDevProvider } from './provider-setup.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
 import { installPackage, packagedSlotIsBusy, preparePackage, removePackage,
   verifyPackageOwner } from './packaged.ts';
@@ -308,6 +310,7 @@ async function removeComputers() {
   }
 }
 async function up(fresh: boolean) {
+  const firstStart = fresh || !await exists(`${directory}/settings.env`);
   const tail = secondary ? { Self: { DNSName: '', TailscaleIPs: [] } } : JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
   const origin = secondary ? localOrigin : `https://${tail.Self.DNSName.replace(/\.$/u, '')}`;
   await run('flock', ['--close', `/tmp/opencrane-dev-stack-zitadel-${process.getuid!()}.lock`,
@@ -330,6 +333,13 @@ async function up(fresh: boolean) {
     if (secondary) await writeEnv('models', {});
   }
   const settings = { ...defaultPorts, ...await readEnv('settings') };
+  // Create custody before Docker can create this mount as root.
+  try {
+    await mkdir(`${directory}/provider-secrets`, { recursive: true, mode: 0o700 });
+    await chmod(`${directory}/provider-secrets`, 0o700);
+  } catch {
+    throw new Error('Provider directory unavailable');
+  }
   await checkPorts(settings, await Promise.all(names.map(processId)), project);
   if (settings['ORIGIN'] !== origin) throw new Error('Tailnet name changed; use --fresh');
   await compose('up', '-d', '--wait', 'postgres', 'nats', 'minio', 'clamav');
@@ -398,6 +408,16 @@ async function up(fresh: boolean) {
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
   await save('model-jwks.json', JSON.stringify(issuer.jwks));
   await save('model-stub-key', 'dev-stack-stub-only');
+  const modeReader = await connectEventStore(await readEnv('command'));
+  let managed: boolean;
+  try {
+    managed = await managedProviderCallsEnabled(modeReader.store,
+      settings['SILO_ID']!, performance.now() + 10_000);
+  } catch {
+    throw new Error('Provider mode unavailable');
+  } finally {
+    await modeReader.close();
+  }
   const approvalRoute = { serverId: 'approval-journey', connectionId: 'installed',
     upstream: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, generation: randomUUID(),
     revisionHeader: 'x-opencrane-mcp-revision' };
@@ -405,13 +425,20 @@ async function up(fresh: boolean) {
   if (!secondary) await modelFirewall(true);
   if (!secondary) {
     const stubEnvironment = { MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,
+      MODEL_STUB_MANAGED_FILE: `${directory}/model-managed-stub`,
       MODEL_STUB_MCP_GENERATION: approvalRoute.generation,
       MODEL_STUB_MCP_REVISION: approvalRevision };
     await start('model-stub', ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
       stubEnvironment);
   }
   await run('flock', ['--close', `/tmp/opencrane-dev-stack-tools-${process.getuid!()}.lock`, 'bash', 'spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh']);
-  const models = {
+  let gatewayBinary = `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`;
+  if (secondary) {
+    // Copy the checked binary because a host tool symlink may point outside the container mounts.
+    await copyFile(gatewayBinary, `${directory}/agentgateway`);
+    gatewayBinary = `${directory}/agentgateway`;
+  }
+  const modelSettings = {
     ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
     DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default',
     MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
@@ -419,17 +446,30 @@ async function up(fresh: boolean) {
     MODEL_GATEWAY_CONTROL_PORT: settings['MODEL_GATEWAY_CONTROL_PORT']!,
     MODEL_STUB_MCP_GENERATION: approvalRoute.generation,
     MODEL_STUB_MCP_REVISION: approvalRevision,
-    MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, MODEL_KEY_FILE: `${directory}/model-stub-key`,
-    AGENTGATEWAY_BINARY: `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`,
+    MODEL_STUB_MANAGED_FILE: `${directory}/model-managed-stub`,
+    MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`,
+    AGENTGATEWAY_BINARY: gatewayBinary,
     MODEL_DECISION_PORT: settings['MODEL_DECISION_PORT']!, MODEL_GATEWAY_PORT: settings['MODEL_GATEWAY_PORT']!, MODEL_READINESS_PORT: settings['MODEL_READINESS_PORT']!, MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,
   };
-  if (secondary) {
-    const database = new URL(models.DATABASE_URL); database.hostname = 'postgres'; database.port = '5432';
-    await writeEnv('models', { ...base, ...models, DATABASE_URL: database.href, NATS_URL: 'tls://127.0.0.1:4222',
-      OPENFGA_API_URL: 'http://openfga:8080', MODEL_STUB_PAUSE_ON_STOP: '1', NODE_OPTIONS: '--max-old-space-size=256' });
-    await compose('up', '-d', 'models');
-  } else await start('models', ['--experimental-strip-types', 'apps/server/src/models-main.ts'], models);
-  await wait(() => healthy(`http://127.0.0.1:${settings['MODEL_READINESS_PORT']}/healthz/ready`), 'model gateway');
+  async function startModels() {
+    const models = modelsEnvironment(modelSettings, directory, managed);
+    if (secondary) {
+      const database = new URL(models['DATABASE_URL']!);
+      database.hostname = 'postgres';
+      database.port = '5432';
+      await writeEnv('models', { ...base, ...models, DATABASE_URL: database.href,
+        NATS_URL: 'tls://127.0.0.1:4222', OPENFGA_API_URL: 'http://openfga:8080',
+        MODEL_STUB_PAUSE_ON_STOP: '1', NODE_OPTIONS: '--max-old-space-size=256' });
+      await compose('up', '-d', 'models');
+    } else {
+      await start('models', ['--experimental-strip-types', 'apps/server/src/models-main.ts'], models);
+    }
+    function ready() {
+      return healthy(`http://127.0.0.1:${settings['MODEL_READINESS_PORT']}/healthz/ready`);
+    }
+    await wait(ready, 'model gateway');
+  }
+  await startModels();
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
     { ...await readEnv('dispatcher'), ...binding, MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
@@ -464,6 +504,15 @@ async function up(fresh: boolean) {
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');
+  if (!tokenBootstrap && !managed) {
+    if (!firstStart) throw new Error('Provider setup switch-on: required');
+    await setupDevProvider(settings);
+    if (secondary) await compose('stop', 'models');
+    else await stopProcesses(['models']);
+    managed = true;
+    await startModels();
+    console.log('PASS provider setup: switched on managed calls');
+  }
   await start('web', [`${root}/node_modules/@angular/cli/bin/ng.js`, 'serve', '--project', 'web', '--host', '127.0.0.1',
     '--port', settings['WEB_PORT']!, '--proxy-config', `${directory}/proxy.json`], { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname, ...(secondary ? { NG_BUILD_MAX_WORKERS: '2' } : {}) });
   await wait(() => healthy(`http://127.0.0.1:${settings['WEB_PORT']}/org/integrations`), 'web');
@@ -628,6 +677,8 @@ try {
 } catch (error) {
   // Error causes may contain database passwords; never print raw dependency errors.
   if (prepared) await save('failure.log', String(error));
+  const providerSetupFailure = error instanceof Error &&
+    /^Provider setup [a-z-]+: [a-z0-9]+$/u.test(error.message);
   if (process.argv[2]?.startsWith('package-')) {
     let message = 'Package command refused; check pins, named secrets and slot ownership';
     if (error instanceof Error &&
@@ -635,6 +686,8 @@ try {
       message = error.message;
     }
     console.error(message);
+  } else if (error instanceof Error && providerSetupFailure) {
+    console.error(error.message);
   } else {
     let message: string;
     if (error instanceof Error && error.message.startsWith('Compose stopped, but')) {
