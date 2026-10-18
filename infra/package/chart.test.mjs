@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import * as crypto from 'node:crypto';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync,
+  writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
+import { createRequire } from 'node:module';
+import ts from 'typescript';
 import { parseAllDocuments } from 'yaml';
 
 const reviewed = JSON.parse(readFileSync('infra/package/reviewed-images.json', 'utf8'));
@@ -74,6 +78,103 @@ function privateFileImport(source) {
   return source.secretRef.name === 'runtime-files';
 }
 
+function loadPrivateFunction(file, name, replacements) {
+  const source = readFileSync(file, 'utf8');
+  const startOfMain = source.indexOf('await main().catch(');
+  const body = startOfMain < 0 ? source : source.slice(0, startOfMain);
+  const testSource = `${body}\nexport { ${name} };`;
+  const compiled = ts.transpileModule(testSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  });
+  const moduleExports = {};
+  const nativeRequire = createRequire(import.meta.url);
+  function fixtureRequire(specifier) {
+    return replacements[specifier] ?? nativeRequire(specifier);
+  }
+  runInNewContext(compiled.outputText, {
+    exports: moduleExports, require: fixtureRequire, Buffer, URL, process, console,
+  }, { filename: file });
+  assert.equal(typeof moduleExports[name], 'function');
+  return moduleExports[name];
+}
+
+function secretFromDirectory(source) {
+  const files = {};
+  for (const name of readdirSync(source)) {
+    files[name] = readFileSync(join(source, name));
+  }
+  return files;
+}
+
+function isFileSourceArgument(argument) {
+  return argument.startsWith('--from-file=');
+}
+
+async function preparedSecretsFixture() {
+  const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
+  const settings = new Map();
+  const secrets = new Map();
+  const key = Buffer.alloc(32, 0x41);
+  key[3] = 0;
+  settings.set('postgres', { POSTGRES_PASSWORD: 'test-only' });
+  settings.set('nats', { NATS_LISTEN: '4222' });
+  async function generateFixture() {
+    const passwords = {
+      server: 'server-test', projection: 'projection-test', dispatcher: 'dispatcher-test',
+      postgres: 'postgres-test', openfga: 'openfga-test',
+    };
+    writeFileSync(join(directory, 'passwords.json'), JSON.stringify(passwords));
+    writeFileSync(join(directory, 'zitadel.json'),
+      JSON.stringify({ users: { owner: { id: 'test-owner' } } }));
+    for (const name of ['ca.crt', 'server.crt', 'server.key',
+      'command.crt', 'command.key', 'command.seed',
+      'projection.crt', 'projection.key', 'projection.seed', 'dispatcher.crt',
+      'dispatcher.key', 'dispatcher.seed', 'token-signing-key.pem',
+      'zitadel-client-secret']) {
+      writeFileSync(join(directory, name), `test-${name}`);
+    }
+  }
+  async function readFixture(name) {
+    return settings.get(name) ?? {};
+  }
+  async function writeFixture(name, value) {
+    settings.set(name, value);
+  }
+  function executeFixture(program, args, options, callback) {
+    assert.equal(program, 'kubectl');
+    const name = args[args.indexOf('generic') + 1];
+    const sourceArgument = args.find(isFileSourceArgument);
+    assert.ok(sourceArgument);
+    const source = sourceArgument.slice('--from-file='.length);
+    secrets.set(name, secretFromDirectory(source));
+    callback(null, { stdout: '', stderr: '' });
+  }
+  const replacements = {
+    'node:child_process': { execFile: executeFixture },
+    'node:crypto': { ...crypto, randomBytes: () => key },
+    '../../libs/event-store/test/certificates.ts': { issueCertificate: async () => {} },
+    '@opencrane/auth': { tokenIssuer: async () => ({ jwks: { keys: [] } }) },
+    '../dev-stack/config.ts': {
+      authEnv: async () => ({ OIDC_CLIENT_SECRET_ENV_VAR: 'OIDC_CLIENT_SECRET' }),
+      directory, generate: generateFixture, readEnv: readFixture,
+      root: process.cwd(), writeEnv: writeFixture,
+    },
+    '../dev-stack/identity.ts': { localOrigin: 'http://localhost:25106', stackId: 'test' },
+    '../dev-stack/packaged.ts': { verifyPackageOwner: async () => {} },
+  };
+  try {
+    const prepareSettings = loadPrivateFunction('infra/package/prepare.ts',
+      'prepareSettings', replacements);
+    const provisionSecrets = loadPrivateFunction('infra/package/prepare.ts',
+      'provisionSecrets', replacements);
+    await prepareSettings();
+    await provisionSecrets(values.secrets);
+    return { key, settings, secrets };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
 function assertPrivateFileDelivery(podSpec) {
   const source = podSpec.volumes.find(privateFileSourceVolume);
   assert.ok(source);
@@ -90,6 +191,31 @@ function assertPrivateFileDelivery(podSpec) {
   assert.ok(copy.volumeMounts.some(writablePrivateFileMount));
   assert.match(copy.args.join(' '), /chown 1000:1000/u);
   assert.match(copy.args.join(' '), /chmod 0400/u);
+  checkCopiedFile(copy.args.join(' '));
+}
+
+function checkCopiedFile(command) {
+  const directory = mkdtempSync(join(tmpdir(), 'package-file-copy-'));
+  const source = join(directory, 'source');
+  const destination = join(directory, 'files');
+  const key = Buffer.alloc(32, 0x41);
+  key[3] = 0;
+  try {
+    mkdirSync(source);
+    mkdirSync(destination);
+    writeFileSync(join(source, 'conversation-wrap-key'), key);
+    chmodSync(join(source, 'conversation-wrap-key'), 0o400);
+    const localCommand = command
+      .replaceAll('/run/opencrane-source', source)
+      .replaceAll('/run/opencrane/files', destination)
+      .replace('chown 1000:1000', ':');
+    execFileSync('sh', ['-ec', localCommand]);
+    const copiedKey = join(destination, 'conversation-wrap-key');
+    assert.deepEqual(readFileSync(copiedKey), key);
+    assert.equal(statSync(copiedKey).mode & 0o777, 0o400);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 test('the package runs member and conversation projections and a dispatcher', () => {
@@ -121,6 +247,54 @@ test('the computer can reach only the private gateway without DNS', () => {
   }]);
   const config = namedResource('ConfigMap', 'computer-runtime');
   assert.doesNotMatch(config.data.gateway, /server|\.svc/u);
+});
+
+test('the installer sets the computer gateway from a validated Service IP', async () => {
+  const installSource = readFileSync('infra/dev-stack/packaged.ts', 'utf8');
+  assert.match(installSource, /await configureComputerGateway\(\);\s*await waitForBootstrap\(\);/u);
+  let service = { spec: { type: 'ClusterIP', clusterIP: '10.43.0.27' } };
+  const patches = [];
+  function executeFixture(program, args, options, callback) {
+    assert.equal(program, 'kubectl');
+    if (args.includes('get') && args.includes('service')) {
+      callback(null, { stdout: JSON.stringify(service), stderr: '' });
+      return;
+    }
+    assert.ok(args.includes('patch'));
+    patches.push(JSON.parse(args[args.indexOf('-p') + 1]));
+    callback(null, { stdout: '', stderr: '' });
+  }
+  const configureGateway = loadPrivateFunction('infra/dev-stack/packaged.ts',
+    'configureComputerGateway', {
+      'node:child_process': { execFile: executeFixture },
+      './config.ts': { directory: '/tmp/package-test', root: process.cwd() },
+      './identity.ts': { secondary: true, stackId: 'test' },
+    });
+  await configureGateway();
+  assert.deepEqual(patches, [{ data: { gateway: 'http://10.43.0.27:43000' } }]);
+  assert.notEqual(patches[0].data.gateway, 'http://127.0.0.1:1');
+
+  service = { spec: { type: 'ClusterIP', clusterIP: 'not-an-ip' } };
+  await assert.rejects(configureGateway(), /no ClusterIP/u);
+  assert.equal(patches.length, 1);
+});
+
+test('preparation keeps the binary wrapping key in the file Secret', async () => {
+  const { key, settings, secrets } = await preparedSecretsFixture();
+  const runtime = settings.get('package-runtime');
+  const runtimeFiles = secrets.get('runtime-files');
+  const runtimeSecret = secrets.get('runtime');
+  assert.deepEqual(runtimeFiles['conversation-wrap-key'], key);
+  assert.equal(runtime.CONVERSATION_WRAP_KEY_FILE,
+    '/run/opencrane/files/conversation-wrap-key');
+  assert.equal(runtime['conversation-wrap-key'], undefined);
+  assert.equal(runtime.CONVERSATION_WRAP_KEY, undefined);
+  assert.equal(runtimeSecret['conversation-wrap-key'], undefined);
+  assert.equal(runtimeSecret.CONVERSATION_WRAP_KEY, undefined);
+  for (const value of Object.values(runtime)) {
+    assert.notEqual(value, key.toString('utf8'));
+    assert.notEqual(value, key.toString('base64'));
+  }
 });
 
 test('a binary key stays in a mounted Secret and outside every environment import', () => {
@@ -172,6 +346,30 @@ test('a binary key stays in a mounted Secret and outside every environment impor
         if (setting.name === name) path = setting.value;
       }
       assert.equal(path, `/run/opencrane/files/${identity}.${suffix}`);
+    }
+  }
+
+  const affectedPods = [server.spec.template.spec, bootstrapSpec];
+  for (const role of ['members', 'mcp-catalogue', 'computers', 'conversations',
+    'files', 'budgets', 'audit', 'dispatcher']) {
+    const deployment = namedResource('Deployment', `worker-${role}`);
+    affectedPods.push(deployment.spec.template.spec);
+  }
+  for (const pod of affectedPods) {
+    assertPrivateFileDelivery(pod);
+    for (const container of [...(pod.initContainers ?? []), ...pod.containers]) {
+      for (const source of container.envFrom ?? []) {
+        assert.notEqual(source.secretRef?.name, 'runtime-files');
+      }
+      for (const setting of container.env ?? []) {
+        assert.notEqual(setting.valueFrom?.secretKeyRef?.name, 'runtime-files');
+        assert.notEqual(setting.valueFrom?.secretKeyRef?.key, 'conversation-wrap-key');
+        assert.notEqual(setting.value, key.toString('utf8'));
+        assert.notEqual(setting.value, key.toString('base64'));
+      }
+    }
+    for (const container of pod.containers) {
+      assert.ok(container.volumeMounts.some(privateFileMount));
     }
   }
 });
