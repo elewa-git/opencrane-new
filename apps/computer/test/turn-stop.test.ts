@@ -25,6 +25,7 @@ async function stopFixture() {
   const open = new Map<string, ServerResponse>();
   const arrived = Promise.withResolvers<void>();
   const departed = Promise.withResolvers<void>();
+  const firstRequest = Promise.withResolvers<ServerResponse>();
   let closed = 0;
   function receive(incoming: IncomingMessage, response: ServerResponse) {
     const thread = String(incoming.headers['session-id']);
@@ -33,6 +34,7 @@ async function stopFixture() {
     open.set(name, response);
     response.writeHead(200, { 'content-type': 'application/json' });
     response.write(' ');
+    firstRequest.resolve(response);
     function disconnected() {
       if (thread === 'thread-1' && ++closed === 2) departed.resolve();
     }
@@ -54,6 +56,10 @@ async function stopFixture() {
   const rpc = computer.driver.rpc.bind(computer.driver);
   function recordRpc(method: string, params: Record<string, unknown>) {
     const result = rpc(method, params);
+    if (method === 'thread/resume') {
+      computer.loaded.add(String(params['threadId']));
+      return Promise.resolve({ thread: { id: params['threadId'] } });
+    }
     if (method === 'turn/start') started.get(String(params['threadId']))?.resolve();
     return result;
   }
@@ -75,10 +81,12 @@ async function stopFixture() {
   }
   computer.driver.catalogue = catalogue;
   computer.driver.dropCatalogue = dropCatalogue;
-  async function start(name: string, thread: string) {
+  async function start(name: string, thread: string, conversationId = name) {
     const barrier = Promise.withResolvers<void>();
     started.set(thread, barrier);
-    computer.start(name);
+    const frame = { type: 'turn', id: name, conversationId, assistantId: 'assistant',
+      text: 'Hello', token: 'initial', expiresAt: Date.now() + 60_000 };
+    computer.send(frame);
     await barrier.promise;
     await computer.flush();
   }
@@ -118,7 +126,8 @@ async function stopFixture() {
     await computer.close();
   }
   return { ...computer, local, start, stop, call, close, received, open,
-    arrived: arrived.promise, departed: departed.promise, revoked: revoked.promise };
+    arrived: arrived.promise, departed: departed.promise, revoked: revoked.promise,
+    firstRequest: firstRequest.promise };
 }
 
 async function abortsOnlyStoppedRequests() {
@@ -284,3 +293,51 @@ async function refusesModelBodyArrivingAfterStop() {
 }
 it('refuses a model request whose body finishes arriving after Stop',
   refusesModelBodyArrivingAfterStop);
+
+async function finishesOldInstallationBeforeReusingThread() {
+  const test = await stopFixture();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const grant = test.driver.grant.bind(test.driver);
+  async function heldGrant(thread: string, conversation: string, token: string, expires: number) {
+    if (token) {
+      entered.resolve();
+      await release.promise;
+    }
+    await grant(thread, conversation, token, expires);
+  }
+  function refused(error: unknown) { return error; }
+  try {
+    await test.start('first', 'thread-1');
+    test.driver.grant = heldGrant;
+    const renewing = test.channel.renew('thread-1').catch(refused);
+    await entered.promise;
+    test.stop();
+    await withinStopDeadline(test.revoked);
+    test.finish('thread-1');
+    test.finish('thread-1');
+    const beforeRetry = [...test.calls];
+    const next = { type: 'turn', id: 'next', conversationId: 'first', assistantId: 'assistant',
+      text: 'Hello', token: 'initial', expiresAt: Date.now() + 60_000 };
+    test.send(next);
+    await test.flush();
+    expect(test.calls).toEqual(beforeRetry);
+    release.resolve();
+    expect(await renewing).toEqual(new Error('Turn ended'));
+    test.driver.grant = grant;
+    await test.start('next', 'thread-1', 'first');
+    const response = test.call('thread-1', 'first', true);
+    const upstream = await test.firstRequest;
+    upstream.end('{}');
+    expect(await response).toBe('200: {}');
+    function firstTerminal(frame: Record<string, unknown>) {
+      return frame['type'] === 'agent.turn_completed' && frame['turnId'] === 'first';
+    }
+    expect(test.frames.filter(firstTerminal)).toHaveLength(1);
+  } finally {
+    release.resolve();
+    await test.close();
+  }
+}
+it('finishes an old grant installation before admitting another turn on its thread',
+  finishesOldInstallationBeforeReusingThread);
