@@ -100,3 +100,72 @@ infra/dev-stack/claim.test.ts infra/package/preflight.test.mjs`. These suites do
 not use PostgreSQL. Logs are `/tmp/p5-1-final-tests-1.log` and
 `/tmp/p5-1-final-tests-2.log`; the typecheck log is
 `/tmp/p5-1-final-typecheck.log`. The lint log is `/tmp/p5-1-final-lint.log`.
+## 18 October 2026: packaged runtime and licence review
+
+This follow-up used branch `work/p5-1b` and claimed secondary slot 1. The final
+fresh namespace was `opencrane-package-1`, UID
+`b1f7297a-5337-416d-a562-99e052e78164`. The chart and five image roles were
+fixed to reviewed digests. The website and server share one application image.
+Secrets were created from private files inside the claimed slot. No secret value
+was put in Helm values or this receipt.
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Worker and bootstrap chart tests before change | FAIL | The part a chart had no worker Deployments or owner bootstrap Job. The new render tests failed against it. |
+| Worker and bootstrap chart tests after change | PASS | The render now has the member, conversation, budget and dispatcher workers and the owner bootstrap Job. |
+| Fresh Helm install | PASS | The final pinned image started server, web, NATS, PostgreSQL, OpenFGA and eight workers. All Deployments reached Ready. The bootstrap Job completed on its first attempt. |
+| Separate owner user | PASS | The installed projection contained `jente-rosseel`, `jente@elewa.ke`, role `owner`, status `joined`. The Job confirmed its event-backed OpenFGA owner grant. The existing Zitadel user was not changed. |
+| Sign-in page and browser session | PASS | Loopback website returned HTTP 200 and sign-in redirected. A real browser signed in with the slot's separate CI user and `/auth/me` confirmed the session. |
+| Stub-model chat turn | FAIL | The signed-in workspace API returned HTTP 503. This minimal chart has no chat key directory, model gateway or computer runtime, so no turn was sent or completed. |
+| Outside-tailnet probe | PASS | A throwaway process on Docker's bridge network could not connect to the loopback forward on port 25106. The forward listened only on `127.0.0.1`; the chart exposed only ClusterIP services. |
+| Other installs and owner stack after cleanup | PASS | Package namespace and slot claim were removed. The owner and slot 2 namespace UIDs and the existing container names and IDs matched the snapshots from before cleanup. Port 44200 still listened on loopback; the package forward on 25106 was gone. |
+| Root suite | NOT RUN | This follow-up was instructed not to start the full root suite. |
+
+The signed-in installed page was captured at
+[1280px](p5-1-live/signed-in-1280.png) and
+[390px](p5-1-live/signed-in-390.png). These images show the successful browser
+session. The workspace did not pass the chat smoke.
+
+### Licence inventory
+
+Syft 1.54.0 scanned each final pinned runtime image. The application image has
+275 npm packages, 90 Go modules, 88 Debian packages and one Node binary: 454
+components.
+The same image serves the website. PostgreSQL has 142 Debian packages and four
+Go modules. The scratch NATS image has 11 Go modules and no operating-system
+packages. The scratch OpenFGA image has 143 Go modules and no operating-system
+packages. The exact names, versions, selected licences and evidence are in
+`infra/package/licence-inventory.json`. That file also records the OSI notices
+inside Node and the public-domain ICU time zone data notice with its reason.
+It records the downloaded kubectl binary separately because the scanner reports
+its Go modules but not the executable itself.
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Application licences | PASS | Every application dependency has an OSI-approved licence. The first-party packages use the root AGPL licence. The npm package with an MIT or CC0 choice uses MIT. |
+| Debian base packages | PASS | All 88 Node image and 142 PostgreSQL image package versions were found in signed Debian main package indexes. No version was missing. |
+| Go modules without embedded licences | PASS | Their source licence files were checked and recorded by hash. The pinned Kubernetes and gosu sources were checked against their official Apache-2.0 notices. |
+| Unknown and forbidden licence refusal | PASS | Synthetic checks refused `UNKNOWN`, BUSL and a package outside Debian main. A fresh Syft scan matched every reviewed image inventory entry. |
+
+The image inventory check ran against the final application digest
+`sha256:9789e2934c50e5fb04830036a0a6a98a7f49eaee0001edab783183db77bc9afe`.
+It also checked PostgreSQL
+`sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f`,
+NATS `sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3`
+and OpenFGA
+`sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796`.
+The chat journey remains incomplete.
+
+### Source checks in this follow-up
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| `npm ci` | PASS | The worktree installed from its lockfile. |
+| `npm run typecheck` | PASS | All workspaces and the package TypeScript check completed. |
+| `npm run check:events` | PASS | The 143 catalogue event types agreed. |
+| `npm run lint:unused` | PASS | Knip exited 0 with two configuration hints. |
+| `npm run lint:changelog` | PASS | The new branch fragment passed the gather check. |
+| Package render and refusal tests | PASS | Eleven Node tests passed twice, including the new worker and bootstrap render cases. |
+| Licence refusal tests | PASS | Unknown, BUSL, non-main, bundled notice and manual component cases passed twice. |
+| `helm lint` | PASS | The final chart rendered with reviewed pins and five named secret references. |
+| `npm run lint` | PASS | The full command completed with no errors and 20 existing function-length warnings outside this change. |

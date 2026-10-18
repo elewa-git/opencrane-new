@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFile, rm, writeFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { directory, root } from './config.ts';
 import { secondary, stackId } from './identity.ts';
@@ -15,19 +16,28 @@ const secretKeys: Record<string, string[]> = {
   runtime: ['NATS_URL', 'DATABASE_URL', 'SILO_ID', 'OIDC_ISSUER_URL',
     'OIDC_CLIENT_ID', 'OIDC_REDIRECT_URI', 'OIDC_COOKIE_SECRET',
     'OIDC_CLIENT_SECRET_ENV_VAR',
-    'OIDC_EXPECTED_ORG_ID', 'OPENFGA_API_URL', 'OPENFGA_STORE_ID', 'OPENFGA_MODEL_ID'],
+    'OIDC_EXPECTED_ORG_ID', 'OPENFGA_API_URL', 'OPENFGA_STORE_ID', 'OPENFGA_MODEL_ID',
+    'PROJECTION_DATABASE_URL', 'HANDLER_DATABASE_URL', 'OWNER_BOOTSTRAP_READY',
+    'ca.crt', 'command.crt', 'command.key', 'command.seed',
+    'projection.crt', 'projection.key', 'projection.seed',
+    'dispatcher.crt', 'dispatcher.key', 'dispatcher.seed'],
   postgres: ['POSTGRES_PASSWORD'],
   nats: ['nats.conf', 'ca.crt', 'server.crt', 'server.key', 'NATS_LISTEN',
     'NATS_STORE_DIR', 'NATS_CA_FILE', 'NATS_CERT_FILE', 'NATS_KEY_FILE',
     'NATS_COMMAND_NKEY', 'NATS_PROJECTION_NKEY', 'NATS_DISPATCHER_NKEY',
     'NATS_COMPUTER_NKEY', 'NATS_GATEWAY_NKEY'],
   openfga: ['OPENFGA_DATASTORE_ENGINE', 'OPENFGA_DATASTORE_URI'],
+  bootstrap: ['POSTGRES_ADMIN_URL', 'PROJECTION_PASSWORD', 'SERVER_PASSWORD',
+    'DISPATCHER_PASSWORD', 'OPENFGA_PASSWORD'],
 };
 const privateHosts: Record<string, string> = {
   NATS_URL: 'nats',
   DATABASE_URL: 'postgres',
   OPENFGA_API_URL: 'openfga',
   OPENFGA_DATASTORE_URI: 'postgres',
+  PROJECTION_DATABASE_URL: 'postgres',
+  HANDLER_DATABASE_URL: 'postgres',
+  POSTGRES_ADMIN_URL: 'postgres',
 };
 
 type Namespace = {
@@ -58,8 +68,8 @@ async function command(program: string, args: string[], timeoutMs = 120_000) {
   return result.stdout.trim();
 }
 
-async function kubectl(args: string[]) {
-  return command('kubectl', [`--context=${context}`, ...args]);
+async function kubectl(args: string[], timeoutMs = 120_000) {
+  return command('kubectl', [`--context=${context}`, ...args], timeoutMs);
 }
 
 async function readOwner() {
@@ -244,6 +254,31 @@ async function ownedReleaseSecretUid(owner: PackageOwner) {
   return secret.metadata.uid;
 }
 
+function completed(condition: { type: string; status: string }) {
+  return condition.type === 'Complete' && condition.status === 'True';
+}
+
+function failed(condition: { type: string; status: string }) {
+  return condition.type === 'Failed' && condition.status === 'True';
+}
+
+async function waitForBootstrap() {
+  const deadline = Date.now() + 600_000;
+  while (Date.now() < deadline) {
+    const output = await kubectl(['-n', namespace, 'get', 'job', 'bootstrap', '-o', 'json']);
+    const job = JSON.parse(output) as {
+      status?: { conditions?: Array<{ type: string; status: string }> };
+    };
+    const conditions = job.status?.conditions ?? [];
+    if (conditions.some(completed)) return;
+    if (conditions.some(failed)) {
+      throw new Error('Package bootstrap Job failed');
+    }
+    await delay(2000);
+  }
+  throw new Error('Package bootstrap Job timed out');
+}
+
 export async function installPackage(valuesFile: string) {
   const { values, review } = await readReviewedValues(valuesFile);
   const owner = await verifyPackageOwner();
@@ -257,15 +292,29 @@ export async function installPackage(valuesFile: string) {
     await command('helm', ['install', release, 'infra/package/chart',
       '--kube-context', context, '--namespace', namespace, '--values', valuesFile,
       '--labels', `${installIdLabel}=${owner.installId}`,
-      '--wait', '--timeout', '5m'], 360_000);
+      '--wait=false'], 180_000);
   } catch (error) {
-    owner.releaseSecretUid = await ownedReleaseSecretUid(owner);
+    const releaseUid = await ownedReleaseSecretUid(owner);
+    if (releaseUid) owner.releaseSecretUid = releaseUid;
+    else delete owner.releaseSecretUid;
     await saveOwner(owner);
     throw error;
   }
-  owner.releaseSecretUid = await ownedReleaseSecretUid(owner);
+  const releaseUid = await ownedReleaseSecretUid(owner);
+  if (releaseUid) owner.releaseSecretUid = releaseUid;
+  else delete owner.releaseSecretUid;
   if (!owner.releaseSecretUid) throw new Error('Helm did not record its release');
   await saveOwner(owner);
+  await waitForBootstrap();
+  const deployments = [
+    'server', 'web', 'worker-members', 'worker-mcp-catalogue', 'worker-computers',
+    'worker-conversations', 'worker-files', 'worker-budgets', 'worker-audit',
+    'worker-dispatcher',
+  ];
+  for (const deployment of deployments) {
+    await kubectl(['-n', namespace, 'rollout', 'status', `deployment/${deployment}`,
+      '--timeout=180s'], 240_000);
+  }
   await checkLiveExposure();
 }
 

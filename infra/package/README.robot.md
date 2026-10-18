@@ -7,7 +7,9 @@ no Ingress or Gateway. `preflight.mjs` compares every image with
 `reviewed-images.json` and requires the exact digest; the chart repeats the
 digest and exposure checks at render time. The server and website share one
 source image, pinned by the OCI index digest in the local registry. A missing
-entry always refuses installation. The runtime licence review remains open.
+entry always refuses installation. `npm run check:package-licences` checks the
+reviewed contents of every pinned image. It refuses unknown application licences,
+non-OSI application licences and operating-system packages outside Debian main.
 
 Claim a secondary slot with `infra/dev-stack/claim.sh`. Set `DEV_STACK_ID` to the
 returned id. `infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"` creates
@@ -15,21 +17,26 @@ only `opencrane-package-$DEV_STACK_ID` and records its Kubernetes UID, cluster,
 release name, worktree and heartbeat in the slot's private directory. An operator
 cannot prepare a package while that slot's Compose processes or containers run. The
 slot lock keeps these checks and the following operation together. An operator
-then creates the four named Kubernetes secrets in that namespace from existing
-secret files. Never put values in Helm values, command arguments or receipts.
+then runs `prepare.ts` with the private values file. That command creates five
+named Kubernetes secrets from files under the claimed slot. It also prepares the
+development sign-in app inside the OpenCrane 2 Dev organisation. Never put secret
+values in Helm values, command arguments or receipts.
 
-The `runtime` secret supplies the server's NATS, PostgreSQL, OpenFGA and sign-in
-settings. The `postgres` secret holds
-PostgreSQL startup settings. The `nats` secret holds `nats.conf` and its referenced
-private certificate files. The `openfga` secret holds its database settings. The
-installer checks that all four names and required fields exist before Helm
+The `runtime` secret supplies the server and workers with NATS, PostgreSQL,
+OpenFGA and sign-in settings. The `postgres` secret holds PostgreSQL startup
+settings. The `nats` secret holds `nats.conf` and its private certificate files.
+The `openfga` secret holds its database settings. The `bootstrap` secret holds
+database setup credentials. The installer checks all five names and required
+fields before Helm
 applies resources. NATS, PostgreSQL and OpenFGA URLs must use the private service
 names in the chart.
 
 Pass a JSON values file, which Helm accepts as YAML, with the reviewed images,
-four secret names and all three exposure flags set to `false`:
+five secret names and all three exposure flags set to `false`:
 
 ```sh
+infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"
+DEV_STACK_ID="$DEV_STACK_ID" node --experimental-strip-types infra/package/prepare.ts /private/values.json
 infra/dev-stack/run.sh package-up --id "$DEV_STACK_ID" --values /private/values.json
 DEV_STACK_ID="$DEV_STACK_ID" infra/package/forward.sh
 infra/dev-stack/run.sh package-down --id "$DEV_STACK_ID"
@@ -54,9 +61,16 @@ is refused. Older records without an install ID cannot authorise release removal
 If Kubernetes is unavailable during secondary
 `down`, Compose stops while the package record stays in place for a retry.
 
-The current chart does not yet provide all workers, object storage, scanner,
-model gateway, computer controller integration or the event-backed owner
-bootstrap. A core product journey, verified owner sign-in, outside-tailnet probe
-and runtime licence inventory are NOT RUN. The current package must not be
-described as a fresh qualified install. The licence inventory is deferred to
-part b because the code and chart exceed the row's line target.
+The chart runs the member, catalogue, computer, conversation, file, budget and
+audit workers, plus the dispatcher. The memory worker needs a private key
+directory and is not started by this minimal package. Object storage, scanner,
+model gateway and computer runtime are outside this chart. The sign-in page and
+owner creation can be checked live; a full chat turn needs those extra services.
+The licence inventory lists the components found by Syft in the pinned images.
+`osi-licences.json` contains the OSI-approved IDs from SPDX licence list 3.28.0
+(source JSON SHA-256
+`f728c534d8bd1044fc515a2ddb2292be99559021d830bfa3281be0bcd36302ee`).
+The Node and PostgreSQL package versions were checked against signed Debian
+main package indexes. Go modules without embedded licence metadata were checked
+against their source licence files. Pass Syft JSON scan paths as `ROLE PATH` pairs
+to `check-licences.py` to compare a fresh scan with the reviewed inventory.

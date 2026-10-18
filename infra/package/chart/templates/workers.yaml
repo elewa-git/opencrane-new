@@ -1,0 +1,53 @@
+{{- $root := . -}}
+{{- range $mode := list "members" "mcp-catalogue" "computers" "conversations" "files" "budgets" "audit" "dispatcher" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-{{ $mode }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: worker-{{ $mode }} }
+  template:
+    metadata:
+      labels: { app: worker-{{ $mode }} }
+    spec:
+      serviceAccountName: package-worker
+      initContainers:
+        - name: wait-for-binding
+          image: {{ $root.Values.images.server | quote }}
+          command: [sh, -c, 'until [ "$(cat /run/opencrane/OPENFGA_STORE_ID)" != pending ]; do sleep 2; done']
+          volumeMounts:
+            - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
+      containers:
+        - name: worker
+          image: {{ $root.Values.images.server | quote }}
+          command: [node, infra/package/worker.mjs, {{ $mode | quote }}]
+          envFrom:
+            - secretRef: { name: {{ $root.Values.secrets.runtime | quote }} }
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.secrets.runtime | quote }}
+                  key: {{ if eq $mode "dispatcher" }}HANDLER_DATABASE_URL{{ else }}PROJECTION_DATABASE_URL{{ end }}
+            - { name: NATS_CERT_FILE, value: "/run/opencrane/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.crt" }
+            - { name: NATS_KEY_FILE, value: "/run/opencrane/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.key" }
+            - { name: NATS_NKEY_SEED_FILE, value: "/run/opencrane/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.seed" }
+            - { name: NATS_INBOX_PREFIX, value: "_INBOX.{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}" }
+            - name: KUBE_NAMESPACE
+              valueFrom:
+                fieldRef: { fieldPath: metadata.namespace }
+          volumeMounts:
+            - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { cpu: 300m, memory: 384Mi }
+      volumes:
+        - name: runtime
+          secret: { secretName: {{ $root.Values.secrets.runtime | quote }} }
+{{- end }}
